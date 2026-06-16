@@ -1,0 +1,21 @@
+<!--
+    Puck.BareMetal proof-of-compile stub.
+
+    Compiles Program.cs with NativeAOT's ILC using Puck.Runtime as the system module, then
+    links a freestanding native executable against kernel32 only — no .NET runtime, no GC, no
+    BCL. The whole recipe lives in the shared, reusable build infra under ../../build; this
+    project just supplies its name. See ../../build/Puck.BareMetal.props.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.Hello</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

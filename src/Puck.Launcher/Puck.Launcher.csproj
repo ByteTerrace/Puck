@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <GlslcCommand>glslc</GlslcCommand>
+        <GlslcOptimization>-O</GlslcOptimization>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
+        <ProjectReference Include="..\Puck.Vulkan\Puck.Vulkan.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemDefinitionGroup>
+        <ShaderSource>
+            <TargetEnv>vulkan1.0</TargetEnv>
+        </ShaderSource>
+    </ItemDefinitionGroup>
+
+    <ItemGroup>
+        <ShaderSource Include="Assets\Shaders\**\*.frag" />
+        <ShaderSource Include="Assets\Shaders\**\*.vert" />
+    </ItemGroup>
+
+    <Target
+        BeforeTargets="PrepareForBuild"
+        Inputs="@(ShaderSource);$(MSBuildProjectFullPath)"
+        Name="CompileShaders"
+        Outputs="@(ShaderSource -> '%(RootDir)%(Directory)%(Filename)%(Extension).spv')"
+    >
+        <Exec
+            Command="&quot;$(GlslcCommand)&quot; --version"
+            ConsoleToMSBuild="true"
+            IgnoreExitCode="true"
+            StandardErrorImportance="High"
+            StandardOutputImportance="Low"
+        >
+            <Output
+                PropertyName="GlslcProbeExitCode"
+                TaskParameter="ExitCode"
+            />
+        </Exec>
+        <Error
+            Condition="'$(GlslcProbeExitCode)' != '0'"
+            Text="Puck.Launcher shader compilation requires '$(GlslcCommand)' to run successfully. Install the Vulkan SDK or pass /p:GlslcCommand=&quot;path\to\glslc&quot;."
+        />
+        <Exec
+            Condition="'$(GlslcProbeExitCode)' == '0'"
+            Command="&quot;$(GlslcCommand)&quot; $(GlslcOptimization) --target-env=%(ShaderSource.TargetEnv) &quot;%(ShaderSource.FullPath)&quot; -o &quot;%(ShaderSource.RootDir)%(ShaderSource.Directory)%(ShaderSource.Filename)%(ShaderSource.Extension).spv&quot;"
+        />
+    </Target>
+</Project>

@@ -1,0 +1,90 @@
+<!--
+    Shared build properties for a Puck.BareMetal UEFI application.
+
+    The EFI counterpart of Puck.BareMetal.props: it compiles a freestanding Puck.BareMetal program with
+    the stock .NET 10 NativeAOT ILC into a PE32+ UEFI application (subsystem EFI_APPLICATION) that
+    the firmware loads and calls at EfiEntry(EFI_HANDLE, EFI_SYSTEM_TABLE*). No GC, no BCL, no OS:
+    output, allocation, and time come from the firmware's boot/console services. Puck.Runtime
+    carries the managed UEFI paths (runtime/System/Platform.Efi.cs); this build activates them
+    (PuckRuntimePlatform=UEFI) and links freestanding.
+
+    A consuming project:
+
+        <Project Sdk="Microsoft.NET.Sdk">
+          <Import Project="..\..\build\Puck.BareMetal.Efi.props" />
+          <PropertyGroup><AssemblyName>My.Boot.App</AssemblyName></PropertyGroup>
+          <Import Project="..\..\build\Puck.BareMetal.Efi.targets" />
+        </Project>
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell). win-x64 only
+    selects the AMD64 PE machine + the environmental link tools; the result is firmware code,
+    not a Windows program.
+-->
+<Project>
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+        <NoStdLib>true</NoStdLib>
+        <NoConfig>true</NoConfig>
+        <RuntimeMetadataVersion>v4.0.30319</RuntimeMetadataVersion>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+        <!-- Puck.Runtime is the core library; the ILC emits the managed Main as __managed__Main.
+             The UEFI image's entry is the NATIVE EfiEntry (compat/native/puck-efi.c): it stashes
+             the firmware's system table then calls __managed__Main. A native entry is used because
+             a UEFI image carries no PE export table to define the managed entry symbol. -->
+        <PublishAot>true</PublishAot>
+        <IlcSystemModule>Puck.Runtime</IlcSystemModule>
+        <EntryPointSymbol>EfiEntry</EntryPointSymbol>
+
+        <StackTraceSupport>false</StackTraceSupport>
+        <EventSourceSupport>false</EventSourceSupport>
+        <DebuggerSupport>false</DebuggerSupport>
+        <UseSystemResourceKeys>true</UseSystemResourceKeys>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <OptimizationPreference>Size</OptimizationPreference>
+        <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+
+        <!-- Same correctness rationale as the hosted build: dehydration's startup hydration
+             routine never runs here, so frozen data must be emitted in-place. -->
+        <IlcDehydrate>false</IlcDehydrate>
+
+        <IlcUseEnvironmentalTools>true</IlcUseEnvironmentalTools>
+
+        <!-- size knobs (see Puck.BareMetal.props for the rationale) -->
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+        <NativeDebugSymbols>false</NativeDebugSymbols>
+        <EnableSourceLink>false</EnableSourceLink>
+        <IlcGenerateWin32Resources>false</IlcGenerateWin32Resources>
+
+        <!-- Activate Puck.Runtime's UEFI source paths in this program's own code too. -->
+        <DefineConstants>$(DefineConstants);UEFI</DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Puck.Runtime *is* the core library, built with its UEFI platform paths active. -->
+        <ProjectReference Include="$(MSBuildThisFileDirectory)..\runtime\Puck.Runtime.csproj"
+                          Properties="PuckRuntimePlatform=UEFI" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Direct-bind the statically-linked EFI native glue so the managed getter that reads
+             the firmware system table (Platform.Efi.cs -> PuckGetEfiSystemTable) and
+             any other [DllImport("puckefi")] resolve to our object at link time. There is no
+             "puckefi" DLL; the object is compiled and linked by Puck.BareMetal.Efi.targets. -->
+        <DirectPInvoke Include="puckefi" />
+        <!-- puck's lazy static-constructor helper is declared [DllImport("puckrt")]; bind it
+             directly to the EFI glue's PuckRunClassConstructor (again, no DLL). -->
+        <DirectPInvoke Include="puckrt" />
+    </ItemGroup>
+
+    <!-- A UEFI image imports nothing (no DLLs) and talks to the firmware through the
+         EFI_SYSTEM_TABLE pointer it is handed: no kernel32, no mimalloc, no CRT. -->
+
+</Project>

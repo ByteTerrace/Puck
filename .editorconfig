@@ -1,0 +1,160 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+# Keep `catch` on the same line as the preceding `}` (Egyptian/K&R bracing).
+csharp_new_line_before_catch = false
+# Keep `else` on the same line as the preceding `}`.
+csharp_new_line_before_else = false
+# Keep `finally` on the same line as the preceding `}`.
+csharp_new_line_before_finally = false
+# Open braces stay on the same line as their declaration/statement.
+csharp_new_line_before_open_brace = none
+# Require braces around all control-flow bodies, even single statements.
+csharp_prefer_braces = true:warning
+# Prefer expression-bodied property/event accessors.
+csharp_style_expression_bodied_accessors = true:suggestion
+# Prefer block bodies (not expression bodies) for methods.
+csharp_style_expression_bodied_methods = false:suggestion
+# Prefer expression-bodied properties.
+csharp_style_expression_bodied_properties = true:suggestion
+# Prefer target-typed `new()` where the type is apparent from context.
+csharp_style_implicit_object_creation_when_type_is_apparent = true:warning
+# Require file-scoped namespace declarations.
+csharp_style_namespace_declarations = file_scoped:warning
+# Do not push primary constructors; this codebase prefers explicit ctors.
+csharp_style_prefer_primary_constructors = false:silent
+# Use `var` even when the type is not apparent from the right-hand side.
+csharp_style_var_elsewhere = true:warning
+# Use `var` for built-in types (int, string, ...).
+csharp_style_var_for_built_in_types = true:warning
+# Use `var` when the type is apparent from the right-hand side.
+csharp_style_var_when_type_is_apparent = true:warning
+# CA1501: flag types that inherit from too many base types (deep hierarchies).
+dotnet_diagnostic.CA1501.severity = warning
+# CA1502: flag methods with excessive cyclomatic complexity.
+dotnet_diagnostic.CA1502.severity = warning
+# CA1505: flag members with a low maintainability index (hard to maintain).
+dotnet_diagnostic.CA1505.severity = warning
+# CA1506: flag excessive class coupling (too many type dependencies).
+dotnet_diagnostic.CA1506.severity = warning
+# IDE0005: flag unnecessary using directives.
+dotnet_diagnostic.IDE0005.severity = warning
+# Rule: const fields must be PascalCase.
+dotnet_naming_rule.constant_fields_pascal_case.severity = warning
+dotnet_naming_rule.constant_fields_pascal_case.style = pascal_case_style
+dotnet_naming_rule.constant_fields_pascal_case.symbols = constant_fields
+# Rule: interfaces must be prefixed with `I`.
+dotnet_naming_rule.interfaces_i_prefix.severity = warning
+dotnet_naming_rule.interfaces_i_prefix.style = interface_prefix_style
+dotnet_naming_rule.interfaces_i_prefix.symbols = interfaces
+# Rule: local constants must be PascalCase.
+dotnet_naming_rule.local_constants_pascal_case.severity = warning
+dotnet_naming_rule.local_constants_pascal_case.style = pascal_case_style
+dotnet_naming_rule.local_constants_pascal_case.symbols = local_constants
+# Rule: parameters and locals must be camelCase.
+dotnet_naming_rule.parameters_and_locals_camel_case.severity = warning
+dotnet_naming_rule.parameters_and_locals_camel_case.style = camel_case_style
+dotnet_naming_rule.parameters_and_locals_camel_case.symbols = parameters_and_locals
+# Rule: private instance fields must be prefixed with `m_`.
+dotnet_naming_rule.private_instance_fields_m_prefix.severity = warning
+dotnet_naming_rule.private_instance_fields_m_prefix.style = m_camel_case_style
+dotnet_naming_rule.private_instance_fields_m_prefix.symbols = private_instance_fields
+# Rule: private static fields must be PascalCase.
+dotnet_naming_rule.private_static_fields_pascal_case.severity = warning
+dotnet_naming_rule.private_static_fields_pascal_case.style = pascal_case_style
+dotnet_naming_rule.private_static_fields_pascal_case.symbols = private_static_fields
+# Rule: type parameters must be prefixed with `T`.
+dotnet_naming_rule.type_parameters_t_prefix.severity = warning
+dotnet_naming_rule.type_parameters_t_prefix.style = type_parameter_style
+dotnet_naming_rule.type_parameters_t_prefix.symbols = type_parameters
+# Rule: types and members must be PascalCase.
+dotnet_naming_rule.types_and_members_pascal_case.severity = warning
+dotnet_naming_rule.types_and_members_pascal_case.style = pascal_case_style
+dotnet_naming_rule.types_and_members_pascal_case.symbols = types_and_members
+# Style definition: camelCase.
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+# Style definition: PascalCase with a required `I` prefix.
+dotnet_naming_style.interface_prefix_style.capitalization = pascal_case
+dotnet_naming_style.interface_prefix_style.required_prefix = I
+# Style definition: camelCase with a required `m_` prefix.
+dotnet_naming_style.m_camel_case_style.capitalization = camel_case
+dotnet_naming_style.m_camel_case_style.required_prefix = m_
+# Style definition: PascalCase.
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+# Style definition: PascalCase with a required `T` prefix.
+dotnet_naming_style.type_parameter_style.capitalization = pascal_case
+dotnet_naming_style.type_parameter_style.required_prefix = T
+# Symbol group: all const fields (any accessibility).
+dotnet_naming_symbols.constant_fields.applicable_accessibilities = *
+dotnet_naming_symbols.constant_fields.applicable_kinds = field
+dotnet_naming_symbols.constant_fields.required_modifiers = const
+# Symbol group: all interfaces (any accessibility).
+dotnet_naming_symbols.interfaces.applicable_accessibilities = *
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+# Symbol group: local const declarations.
+dotnet_naming_symbols.local_constants.applicable_accessibilities = local
+dotnet_naming_symbols.local_constants.applicable_kinds = local
+dotnet_naming_symbols.local_constants.required_modifiers = const
+# Symbol group: parameters and local variables.
+dotnet_naming_symbols.parameters_and_locals.applicable_accessibilities = local
+dotnet_naming_symbols.parameters_and_locals.applicable_kinds = parameter, local
+# Symbol group: private instance (non-static) fields.
+dotnet_naming_symbols.private_instance_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_instance_fields.applicable_kinds = field
+# Symbol group: private static fields.
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+# Symbol group: generic type parameters.
+dotnet_naming_symbols.type_parameters.applicable_accessibilities = *
+dotnet_naming_symbols.type_parameters.applicable_kinds = type_parameter
+# Symbol group: types and most members (namespaces, methods, properties, events, ...).
+dotnet_naming_symbols.types_and_members.applicable_accessibilities = *
+dotnet_naming_symbols.types_and_members.applicable_kinds = namespace, class, struct, enum, delegate, method, local_function, property, event
+# Do not insert a blank line between import-directive groups.
+dotnet_separate_import_directive_groups = false
+# Sort `System.*` usings before other namespaces.
+dotnet_sort_system_directives_first = true
+# Require explicit accessibility modifiers except on interface members.
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+indent_size = 4
+indent_style = space
+
+# CS0419: ambiguous `<see cref>` reference; held at suggestion until the XML-doc pass runs.
+dotnet_diagnostic.CS0419.severity = suggestion
+# CS1573: parameter missing a `<param>` tag; held at suggestion until the XML-doc pass runs.
+dotnet_diagnostic.CS1573.severity = suggestion
+# CS1587: XML comment on an invalid element; held at suggestion until the XML-doc pass runs.
+dotnet_diagnostic.CS1587.severity = suggestion
+# CS1591: missing XML doc on a public member; held at suggestion until the XML-doc pass runs.
+dotnet_diagnostic.CS1591.severity = suggestion
+# CS1734: `<paramref>` with no matching parameter; held at suggestion until the XML-doc pass.
+dotnet_diagnostic.CS1734.severity = suggestion
+
+# CA1510: prefer ArgumentNullException.ThrowIfNull over an `if`-throw (statement form only).
+dotnet_diagnostic.CA1510.severity = warning
+# CA1511: prefer ArgumentException.ThrowIfNullOrEmpty over an `if`-throw (statement form only).
+dotnet_diagnostic.CA1511.severity = warning
+# CA1512: prefer ArgumentOutOfRangeException throw-helpers over an `if`-throw (statement form).
+dotnet_diagnostic.CA1512.severity = warning
+# CA1513: prefer ObjectDisposedException.ThrowIf over an `if`-throw (statement form only).
+dotnet_diagnostic.CA1513.severity = warning
+
+[*.{csproj,json,props,targets,slnx}]
+indent_style = space
+indent_size = 4
+
+# GLSL/Vulkan shader sources (glslc-compiled): 4-space, matching the C# tree.
+[*.{comp,frag,glsl,vert}]
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,md}]
+indent_style = space
+indent_size = 2

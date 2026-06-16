@@ -1,0 +1,21 @@
+<!--
+    Puck.BareMetal array-as-collection spike.
+
+    Demonstrates a raw single-dimensional array (T[]) used directly as a first-class
+    IEnumerable<T> / IReadOnlyList<T> on a freestanding puck build — fast mimalloc storage
+    that is also a generic collection, with no wrapper object. The whole recipe lives in the
+    shared, reusable build infra under ../../build; this project just supplies its name.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.ArraySpike</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

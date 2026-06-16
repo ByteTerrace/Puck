@@ -1,0 +1,20 @@
+<!--
+    Puck.BareMetal interface-dispatch spike.
+
+    Reproduces polymorphic interface dispatch (an interface with 2+ implementers, called
+    through the interface) on a freestanding puck build. The whole recipe lives in the
+    shared, reusable build infra under ../../build; this project just supplies its name.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.InterfaceSpike</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

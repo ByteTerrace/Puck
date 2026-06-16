@@ -1,0 +1,20 @@
+<!--
+    Puck.BareMetal lazy static-constructor spike.
+
+    Verifies that a type whose static .cctor cannot be preinitialized away runs that .cctor
+    LAZILY on first static access, exactly once, including for reference-typed (GC) statics —
+    i.e. the GC ClassConstructorRunner variant (compat/ClassConstructorRunner.Compat.cs) works.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.CctorSpike</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

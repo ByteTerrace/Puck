@@ -1,0 +1,32 @@
+<Project>
+
+    <!--
+        Build firewall — DO NOT add <Import> of the repository-root Directory.Build.props.
+
+        This file exists to STOP MSBuild's upward Directory.Build.props discovery at this folder,
+        so the freestanding companion does not inherit the engine's build context from the repo
+        root. Puck.BareMetal ships under the repository's license (see LICENSE and NOTICE.md);
+        vendored third-party components keep their own permissive licenses (NOTICE.md).
+
+        Settings here are intentionally minimal and suited to the freestanding (no-BCL,
+        not-nullable-annotated) source compiled against Puck.Runtime.
+    -->
+
+    <PropertyGroup>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Deterministic>true</Deterministic>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <Nullable>disable</Nullable>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+        <!-- Nothing in this freestanding companion is debugged through the managed runtime,
+             so emit no PDBs. For the puck library this keeps a stray puck.pdb out of
+             every consumer's publish output; for executables the bare-metal app props turns
+             native debug info off too (and DebugType=none keeps the SDK from forcing it
+             back on — see build/Puck.BareMetal.props). -->
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+    </PropertyGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+<!--
+    Puck.BareMetal collection / IEnumerable<T> spike.
+
+    Reproduces the DI "resolve IEnumerable<T> over N registrations" scenario on a freestanding
+    puck build: a dependency typed as IEnumerable<IService>, holding several IService
+    implementers, iterated with foreach (generic interface dispatch on GetEnumerator /
+    MoveNext / Current). Backed by a custom collection type (no array interface dispatch).
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.CollectionSpike</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

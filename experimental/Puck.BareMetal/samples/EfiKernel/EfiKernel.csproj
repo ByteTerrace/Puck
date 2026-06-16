@@ -1,0 +1,22 @@
+<!--
+    Puck.BareMetal UEFI kernel.
+
+    The "become the OS" step: the firmware loads this image, the native EfiEntry takes the
+    machine via ExitBootServices, and this managed program then runs SELF-HOSTED - allocating
+    from our own bump allocator over real RAM and printing through our own COM1 serial driver,
+    with no firmware and no operating system underneath.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+    Boot:   place the PE as EFI\BOOT\BOOTX64.EFI on a FAT volume and load it under UEFI.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.Efi.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.EfiKernel</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.Efi.targets" />
+
+</Project>

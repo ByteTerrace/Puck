@@ -1,0 +1,315 @@
+using System.Runtime.InteropServices;
+using Puck.Vulkan.Bindings;
+using Puck.Vulkan.Interfaces;
+using Puck.Vulkan.Interop;
+using Puck.Vulkan.Messages;
+
+namespace Puck.Vulkan;
+
+/// <summary>
+/// The native implementation of <see cref="IVulkanFramePresentationApi"/>, marshaling to the acquire,
+/// submit, and present entry points resolved from the Vulkan loader.
+/// </summary>
+public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresentationApi {
+    private const uint PipelineStageColorAttachmentOutputBit = 0x00000400;
+    private const uint StructureTypePresentInfoKhr = 1000001001;
+    private const uint StructureTypeSubmitInfo = 4;
+
+    private readonly Lock m_syncRoot = new();
+    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
+
+    /// <inheritdoc/>
+    public VkResult AcquireNextImage(VulkanFrameAcquireRequest request, out uint imageIndex) {
+        ValidateAcquireRequest(request: request);
+
+        var acquireNextImage = GetPointers(deviceHandle: request.DeviceHandle).AcquireNextImageKhr;
+
+        return acquireNextImage(
+            request.DeviceHandle,
+            request.SwapchainHandle,
+            request.TimeoutNanoseconds,
+            request.ImageAvailableSemaphoreHandle,
+            request.InFlightFenceHandle,
+            out imageIndex
+        );
+    }
+    /// <inheritdoc/>
+    public VkResult Present(VulkanPresentRequest request) {
+        if (0 == request.DeviceHandle) {
+            throw new ArgumentException(
+                message: "Vulkan logical-device handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.PresentQueueHandle) {
+            throw new ArgumentException(
+                message: "Vulkan present-queue handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.RenderFinishedSemaphoreHandle) {
+            throw new ArgumentException(
+                message: "Vulkan render-finished semaphore handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.SwapchainHandle) {
+            throw new ArgumentException(
+                message: "Vulkan swapchain handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        var queuePresent = GetPointers(deviceHandle: request.DeviceHandle).QueuePresentKhr;
+        var waitSemaphorePointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+        var swapchainPointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+        var imageIndexPointer = Puck.Memory.Allocator.Alloc(size: sizeof(uint));
+
+        try {
+            Marshal.WriteIntPtr(
+                ptr: waitSemaphorePointer,
+                val: request.RenderFinishedSemaphoreHandle
+            );
+            Marshal.WriteIntPtr(
+                ptr: swapchainPointer,
+                val: request.SwapchainHandle
+            );
+            Marshal.WriteInt32(
+                ptr: imageIndexPointer,
+                val: unchecked((int)request.ImageIndex)
+            );
+
+            var presentInfo = new VkPresentInfoKhr {
+                PImageIndices = imageIndexPointer,
+                PSwapchains = swapchainPointer,
+                PWaitSemaphores = waitSemaphorePointer,
+                SType = StructureTypePresentInfoKhr,
+                SwapchainCount = 1,
+                WaitSemaphoreCount = 1,
+            };
+
+            return queuePresent(
+                request.PresentQueueHandle,
+                in presentInfo
+            );
+        } finally {
+            Puck.Memory.Allocator.Free(ptr: waitSemaphorePointer);
+            Puck.Memory.Allocator.Free(ptr: swapchainPointer);
+            Puck.Memory.Allocator.Free(ptr: imageIndexPointer);
+        }
+    }
+    /// <inheritdoc/>
+    public VkResult Submit(VulkanFrameSubmitRequest request) {
+        if (0 == request.DeviceHandle) {
+            throw new ArgumentException(
+                message: "Vulkan logical-device handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.CommandBufferHandle) {
+            throw new ArgumentException(
+                message: "Vulkan command-buffer handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.FenceHandle) {
+            throw new ArgumentException(
+                message: "Vulkan fence handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.GraphicsQueueHandle) {
+            throw new ArgumentException(
+                message: "Vulkan graphics-queue handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        var queueSubmit = GetPointers(deviceHandle: request.DeviceHandle).QueueSubmit;
+        var waitSemaphorePointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+        var waitStagePointer = Puck.Memory.Allocator.Alloc(size: sizeof(uint));
+        var commandBufferPointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+        var signalSemaphorePointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+
+        try {
+            Marshal.WriteIntPtr(
+                ptr: waitSemaphorePointer,
+                val: request.ImageAvailableSemaphoreHandle
+            );
+            Marshal.WriteInt32(
+                ptr: waitStagePointer,
+                val: unchecked((int)PipelineStageColorAttachmentOutputBit)
+            );
+            Marshal.WriteIntPtr(
+                ptr: commandBufferPointer,
+                val: request.CommandBufferHandle
+            );
+            Marshal.WriteIntPtr(
+                ptr: signalSemaphorePointer,
+                val: request.RenderFinishedSemaphoreHandle
+            );
+
+            var submitInfo = new VkSubmitInfo {
+                CommandBufferCount = 1,
+                PCommandBuffers = commandBufferPointer,
+                PSignalSemaphores = signalSemaphorePointer,
+                PWaitDstStageMask = waitStagePointer,
+                PWaitSemaphores = waitSemaphorePointer,
+                SType = StructureTypeSubmitInfo,
+                SignalSemaphoreCount = 1,
+                WaitSemaphoreCount = 1,
+            };
+
+            return queueSubmit(
+                request.GraphicsQueueHandle,
+                1,
+                in submitInfo,
+                request.FenceHandle
+            );
+        } finally {
+            Puck.Memory.Allocator.Free(ptr: waitSemaphorePointer);
+            Puck.Memory.Allocator.Free(ptr: waitStagePointer);
+            Puck.Memory.Allocator.Free(ptr: commandBufferPointer);
+            Puck.Memory.Allocator.Free(ptr: signalSemaphorePointer);
+        }
+    }
+    /// <inheritdoc/>
+    public VkResult Submit(nint deviceHandle, nint graphicsQueueHandle, nint commandBufferHandle, nint fenceHandle) {
+        if (0 == deviceHandle) {
+            throw new ArgumentException(
+                message: "Vulkan logical-device handle must be non-zero.",
+                paramName: nameof(deviceHandle)
+            );
+        }
+
+        if (0 == graphicsQueueHandle) {
+            throw new ArgumentException(
+                message: "Vulkan graphics-queue handle must be non-zero.",
+                paramName: nameof(graphicsQueueHandle)
+            );
+        }
+
+        if (0 == commandBufferHandle) {
+            throw new ArgumentException(
+                message: "Vulkan command-buffer handle must be non-zero.",
+                paramName: nameof(commandBufferHandle)
+            );
+        }
+
+        if (0 == fenceHandle) {
+            throw new ArgumentException(
+                message: "Vulkan fence handle must be non-zero.",
+                paramName: nameof(fenceHandle)
+            );
+        }
+
+        var queueSubmit = GetPointers(deviceHandle: deviceHandle).QueueSubmit;
+        var commandBufferPointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+
+        try {
+            Marshal.WriteIntPtr(
+                ptr: commandBufferPointer,
+                val: commandBufferHandle
+            );
+
+            var submitInfo = new VkSubmitInfo {
+                CommandBufferCount = 1,
+                PCommandBuffers = commandBufferPointer,
+                PSignalSemaphores = 0,
+                PWaitDstStageMask = 0,
+                PWaitSemaphores = 0,
+                SType = StructureTypeSubmitInfo,
+                SignalSemaphoreCount = 0,
+                WaitSemaphoreCount = 0,
+            };
+
+            return queueSubmit(
+                graphicsQueueHandle,
+                1,
+                in submitInfo,
+                fenceHandle
+            );
+        } finally {
+            Puck.Memory.Allocator.Free(ptr: commandBufferPointer);
+        }
+    }
+
+    private unsafe struct DevicePointers {
+        public delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult> AcquireNextImageKhr;
+        public delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult> QueuePresentKhr;
+        public delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult> QueueSubmit;
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
+
+    private unsafe DevicePointers GetPointers(nint deviceHandle) {
+        if (m_pointers.TryGetValue(
+            key: deviceHandle,
+            value: out var pointers
+        )) {
+            return pointers;
+        }
+        var getAddr = GetDeviceProcAddr();
+        DevicePointers pNew = default;
+
+        fixed (byte* pName = "vkAcquireNextImageKHR"u8) {
+            pNew.AcquireNextImageKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)getAddr(
+                deviceHandle,
+                pName
+            );
+        }
+        fixed (byte* pName = "vkQueuePresentKHR"u8) {
+            pNew.QueuePresentKhr = (delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)getAddr(
+                deviceHandle,
+                pName
+            );
+        }
+        fixed (byte* pName = "vkQueueSubmit"u8) {
+            pNew.QueueSubmit = (delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)getAddr(
+                deviceHandle,
+                pName
+            );
+        }
+        m_pointers[deviceHandle] = pNew;
+        return pNew;
+    }
+    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
+        lock (m_syncRoot) {
+            if (m_getDeviceProcAddr is not null) {
+                return m_getDeviceProcAddr;
+            }
+            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
+
+            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
+            return m_getDeviceProcAddr;
+        }
+    }
+    private static unsafe void ValidateAcquireRequest(VulkanFrameAcquireRequest request) {
+        if (0 == request.DeviceHandle) {
+            throw new ArgumentException(
+                message: "Vulkan logical-device handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.ImageAvailableSemaphoreHandle) {
+            throw new ArgumentException(
+                message: "Vulkan image-available semaphore handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.SwapchainHandle) {
+            throw new ArgumentException(
+                message: "Vulkan swapchain handle must be non-zero.",
+                paramName: nameof(request)
+            );
+        }
+    }
+}

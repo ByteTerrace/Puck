@@ -1,0 +1,6 @@
+# Local UEFI boot-test artifacts (not source): the QEMU/OVMF firmware copies, the on-the-fly
+# EFI System Partition staging dir, and captured serial/error logs. See README for the recipe.
+esp/
+*.fd
+serial.log
+qemu.err

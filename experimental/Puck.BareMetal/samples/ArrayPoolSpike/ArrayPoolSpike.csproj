@@ -1,0 +1,16 @@
+<!--
+    Puck.BareMetal ArrayPool spike.
+
+    Verifies System.Buffers.ArrayPool<T> (rent/return/reuse, clear, Shared) on the freestanding
+    puck build. Pooling is how a no-GC host bounds transient-buffer memory.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.ArrayPoolSpike</AssemblyName>
+    </PropertyGroup>
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+</Project>

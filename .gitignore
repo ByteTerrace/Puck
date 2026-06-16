@@ -1,0 +1,48 @@
+# Build output
+bin/
+obj/
+artifacts/
+
+# Vendored native runtime binaries
+!lib/win-x64/mimalloc-3.3/bin/
+
+# Test and coverage output
+TestResults/
+coverage/
+coverage.cobertura.xml
+*.coverage
+*.coveragexml
+
+# Visual Studio and Rider
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Claude Code local-only files
+.claude/
+
+# VS Code local-only files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Assets
+__azurite_db_blob*.json
+__blobstorage__
+
+# DocFx generated assets
+docs/api/

@@ -1,0 +1,21 @@
+<!--
+    Puck.BareMetal pre-initialized GC static spike.
+
+    Verifies that a static reference field the ILC pre-initializes into a frozen object graph
+    (a HASPREINIT GC static) reads back its real values on a freestanding puck build — i.e.
+    the startup GC-static init copies the pre-init blob into the static's spine, rather than
+    leaving it zeroed/null.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.PreInitSpike</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

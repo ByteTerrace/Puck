@@ -1,0 +1,41 @@
+<Project>
+    <PropertyGroup>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <AnalysisLevel>latest</AnalysisLevel>
+        <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+        <Deterministic>true</Deterministic>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <Nullable>enable</Nullable>
+        <OptimizationPreference>Speed</OptimizationPreference>
+        <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+        <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+        <TargetFramework>net10.0</TargetFramework>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
+        <None
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll')"
+            CopyToOutputDirectory="PreserveNewest"
+            Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll"
+            Link="mimalloc.dll"
+        />
+        <None
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll')"
+            CopyToOutputDirectory="PreserveNewest"
+            Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll"
+            Link="mimalloc-redirect.dll"
+        />
+        <None
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3')"
+            CopyToOutputDirectory="PreserveNewest"
+            Include="$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3"
+            Link="libmimalloc.so"
+        />
+    </ItemGroup>
+</Project>

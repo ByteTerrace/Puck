@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        The signed-distance-function engine: the instruction ISA, the program representation, the fluent
+        authoring builder, and the GLSL interpreter (Shaders/sdf-vm.glsl), plus the GPU host that runs the
+        VM — cameras, viewports, split-screen compositing, and an SdfEngineNode that renders the world into
+        its own offscreen surface for a host to composite. The C# and the shaders are halves of one engine
+        and must stay in sync.
+    -->
+    <PropertyGroup>
+        <GlslcCommand>glslc</GlslcCommand>
+        <GlslcOptimization>-O</GlslcOptimization>
+        <!-- The VM interpreter (sdf-vm.glsl) lives alongside the host shaders now; this is an intra-project
+             include path (no longer a cross-project hack). -->
+        <SdfVmShaderIncludeDir>$(MSBuildThisFileDirectory)Shaders</SdfVmShaderIncludeDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Cameras\Puck.Cameras.csproj" />
+        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
+        <ProjectReference Include="..\Puck.Vulkan\Puck.Vulkan.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemDefinitionGroup>
+        <ShaderSource>
+            <TargetEnv>vulkan1.0</TargetEnv>
+        </ShaderSource>
+    </ItemDefinitionGroup>
+
+    <ItemGroup>
+        <ShaderInclude Include="$(SdfVmShaderIncludeDir)\**\*.glsl" />
+        <ShaderSource Include="Assets\Shaders\**\*.frag" />
+        <ShaderSource Include="Assets\Shaders\**\*.vert" />
+    </ItemGroup>
+
+    <Target
+        BeforeTargets="PrepareForBuild"
+        Inputs="@(ShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)"
+        Name="CompileShaders"
+        Outputs="@(ShaderSource -> '%(RootDir)%(Directory)%(Filename)%(Extension).spv')"
+    >
+        <Exec
+            Command="&quot;$(GlslcCommand)&quot; --version"
+            ConsoleToMSBuild="true"
+            IgnoreExitCode="true"
+            StandardErrorImportance="High"
+            StandardOutputImportance="Low"
+        >
+            <Output
+                PropertyName="GlslcProbeExitCode"
+                TaskParameter="ExitCode"
+            />
+        </Exec>
+        <Error
+            Condition="'$(GlslcProbeExitCode)' != '0'"
+            Text="Puck.SdfVm shader compilation requires '$(GlslcCommand)' to run successfully. Install the Vulkan SDK or pass /p:GlslcCommand=&quot;path\to\glslc&quot;."
+        />
+        <Exec
+            Condition="'$(GlslcProbeExitCode)' == '0'"
+            Command="&quot;$(GlslcCommand)&quot; $(GlslcOptimization) -I &quot;$(SdfVmShaderIncludeDir)&quot; --target-env=%(ShaderSource.TargetEnv) &quot;%(ShaderSource.FullPath)&quot; -o &quot;%(ShaderSource.RootDir)%(ShaderSource.Directory)%(ShaderSource.Filename)%(ShaderSource.Extension).spv&quot;"
+        />
+    </Target>
+</Project>

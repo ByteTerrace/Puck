@@ -1,0 +1,41 @@
+<!--
+    Puck.BareMetal VulkanWindow sample.
+
+    A freestanding puck program that opens a Win32 window and brings up Vulkan on it.
+    It REUSES Puck.Vulkan's blittable Vk* ABI bindings as source (no duplication) — only the
+    3 non-blittable wrapper types (record struct / throw, which puck can't compile) are
+    excluded. Vulkan function imports, Win32 interop, and the bring-up logic live here.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.VulkanWindow</AssemblyName>
+        <_PuckVulkanBindings>..\..\..\..\src\Puck.Vulkan\Bindings</_PuckVulkanBindings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Reuse Puck.Vulkan's blittable ABI bindings directly as source. The 3 rich wrapper
+             types (VkPhysicalDevice/VkQueue/VkQueueFamilyInfo: record struct + throw) are not
+             puck-compatible and are excluded; this sample uses raw handles instead. -->
+        <Compile Include="$(_PuckVulkanBindings)\**\*.cs"
+                 Exclude="$(_PuckVulkanBindings)\VkPhysicalDevice.cs;$(_PuckVulkanBindings)\VkQueue.cs;$(_PuckVulkanBindings)\VkQueueFamilyInfo.cs" />
+
+        <!-- The window talks to user32; vulkan-1 is loaded dynamically at runtime. -->
+        <DirectPInvoke Include="user32" />
+    </ItemGroup>
+
+    <!-- The shared minimal link strips the SDK's "user32.lib" arg; re-add it as /DEFAULTLIB
+         (which the strip's identity match doesn't touch, so target ordering is irrelevant). -->
+    <Target Name="KeepUser32Lib" BeforeTargets="LinkNative">
+        <ItemGroup>
+            <LinkerArg Include="/DEFAULTLIB:user32.lib" />
+        </ItemGroup>
+    </Target>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

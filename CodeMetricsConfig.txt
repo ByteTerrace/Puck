@@ -1,0 +1,8 @@
+CA1501: 5
+CA1502: 40
+CA1505: 10
+CA1506(Type): 120
+CA1506(Method): 55
+CA1506(Property): 40
+CA1506(Field): 40
+CA1506(Event): 40

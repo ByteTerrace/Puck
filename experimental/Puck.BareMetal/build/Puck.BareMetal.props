@@ -1,0 +1,113 @@
+<!--
+    Shared build properties for a Puck.BareMetal bare-metal executable.
+
+    This is the reusable recipe for compiling ANY freestanding puck program with the
+    stock .NET 10 NativeAOT ILC: no GC, no BCL, no .NET runtime. The sample under
+    samples/Hello imports it; the eventual "fake Linux host at boot" entry point will too.
+    A consuming project should be as small as:
+
+        <Project Sdk="Microsoft.NET.Sdk">
+          <Import Project="..\..\build\Puck.BareMetal.props" />
+          <PropertyGroup><AssemblyName>My.BareMetal.App</AssemblyName></PropertyGroup>
+          <Import Project="..\..\build\Puck.BareMetal.targets" />
+        </Project>
+
+    Import this near the TOP of the project (after the SDK's auto-imported Sdk.props) and
+    Puck.BareMetal.targets near the BOTTOM (before the SDK's Sdk.targets consume these
+    settings). Properties an app may legitimately override (AssemblyName, the size knobs
+    flagged below) are set with defaults a consumer can change.
+-->
+<Project>
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+        <!-- Not really .NET: no implicit BCL. Framework refs are resolved (so the ILC pack
+             resolves) then stripped in Puck.BareMetal.targets (TrimReferencesToPuck). -->
+        <NoStdLib>true</NoStdLib>
+        <NoConfig>true</NoConfig>
+        <RuntimeMetadataVersion>v4.0.30319</RuntimeMetadataVersion>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+        <!-- The crux: Puck.Runtime is the core library; the ILC exports the managed Main as
+             __managed__Main. The binary's OS entry is our native PuckStart (compat/native/
+             puck-rt.c), which initializes GC statics (the module init the stripped
+             bootstrapper would normally do) and then calls __managed__Main. EntryPointSymbol
+             only drives the linker /ENTRY; the ILC still generates __managed__Main. -->
+        <PublishAot>true</PublishAot>
+        <IlcSystemModule>Puck.Runtime</IlcSystemModule>
+        <EntryPointSymbol>PuckStart</EntryPointSymbol>
+
+        <!-- Puck.Runtime has none of the optional runtime features the AOT defaults assume. -->
+        <StackTraceSupport>false</StackTraceSupport>
+        <EventSourceSupport>false</EventSourceSupport>
+        <!-- No managed debugger contract; also avoids the exported DotNetRuntimeDebugHeader. -->
+        <DebuggerSupport>false</DebuggerSupport>
+        <UseSystemResourceKeys>true</UseSystemResourceKeys>
+        <!-- Puck.Runtime is culture-invariant; this also drops the globalization shim wiring. -->
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <OptimizationPreference>Size</OptimizationPreference>
+        <!-- Fold identical method bodies (one COMDAT per unique body). -->
+        <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+
+        <!-- CRITICAL (correctness, not size): dehydration packs frozen data (incl. string
+             literals) into a blob that a startup hydration routine expands into a zero-init
+             section at runtime. We strip the normal startup, so that routine never runs and
+             every frozen object would read as zero. Disable it so frozen data is emitted
+             in-place. (OptimizationPreference=Size turns dehydration on by default — see
+             Microsoft.NETCore.Native.targets.) -->
+        <IlcDehydrate>false</IlcDehydrate>
+
+        <!-- Use link.exe + LIB from the environment (run inside a VS Developer shell) rather
+             than the ILC findvcvarsall.bat probe, which shells out to vswhere. -->
+        <IlcUseEnvironmentalTools>true</IlcUseEnvironmentalTools>
+
+        <!-- ============================ size knobs ============================
+             Each of these strips bytes a freestanding boot binary does not need. They are
+             defaults, not laws: a consumer that wants e.g. shippable version metadata can
+             set the relevant property back to its SDK default in its own PropertyGroup.
+
+             * No debug info. DebugType=none keeps the SDK from forcing NativeDebugSymbols
+               back on (it does so whenever DebugType != none), which is what otherwise
+               re-adds ILC -g, the linker /DEBUG + /SOURCELINK, and a stray .pdb.
+             * No Win32 version resource (the default csc-synthesised VS_VERSION_INFO is
+               ~1.5 KB of its own PE section for a boot stub that nobody queries). -->
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+        <NativeDebugSymbols>false</NativeDebugSymbols>
+        <EnableSourceLink>false</EnableSourceLink>
+        <IlcGenerateWin32Resources>false</IlcGenerateWin32Resources>
+        <!-- ==================================================================== -->
+
+        <DefineConstants Condition="'$(OS)' == 'Windows_NT'">$(DefineConstants);WINDOWS</DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Puck.Runtime *is* the core library (the ILC system module). -->
+        <ProjectReference Include="$(MSBuildThisFileDirectory)..\runtime\Puck.Runtime.csproj"
+                          Properties="PuckRuntimePlatform=WINDOWS" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Resolve kernel32 P/Invokes statically and link its import lib. A freestanding
+             puck program talks to the OS through kernel32 (+ ucrt for memcpy/memmove). -->
+        <DirectPInvoke Include="kernel32" />
+        <NativeLibrary Include="kernel32.lib" />
+
+        <!-- mimalloc uses advapi32 for token privileges (large-OS-page opt-in) and, on some
+             Windows versions, OS randomness. Like kernel32 it is a core OS import library,
+             so linking it keeps the binary self-contained (no third-party runtime DLLs). -->
+        <NativeLibrary Include="advapi32.lib" />
+
+        <!-- Direct-bind the statically-linked native glue module so calls into it (e.g.
+             Puck.Runtime's allocator -> PuckAllocZeroed -> mimalloc) resolve to our objects
+             at link time instead of going through a LoadLibrary. The objects themselves are
+             compiled and linked by Puck.BareMetal.targets; there is no "puckrt" DLL. -->
+        <DirectPInvoke Include="puckrt" />
+    </ItemGroup>
+
+</Project>

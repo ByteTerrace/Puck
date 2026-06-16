@@ -1,0 +1,15 @@
+<!--
+    Puck.BareMetal "fake Linux" foothold.
+
+    The first Linux process on Puck: our self-hosted UEFI kernel loads a statically-linked Linux
+    x86-64 ELF and runs it, servicing its syscalls, with stdout wired to our serial.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <Import Project="..\..\build\Puck.BareMetal.Efi.props" />
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.EfiLinux</AssemblyName>
+    </PropertyGroup>
+    <Import Project="..\..\build\Puck.BareMetal.Efi.targets" />
+</Project>

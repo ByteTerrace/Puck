@@ -1,0 +1,20 @@
+<!--
+    Puck.BareMetal UEFI hello.
+
+    A freestanding puck UEFI application: the firmware loads it, calls EfiMain, and it prints
+    a banner through the EFI console (ConOut). No GC, no BCL, no OS.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+    Boot:   place the produced PE as EFI\BOOT\BOOTX64.EFI on a FAT volume and load it under UEFI.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.Efi.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.EfiHello</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.Efi.targets" />
+
+</Project>

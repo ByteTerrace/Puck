@@ -1,0 +1,20 @@
+<!--
+    Puck.BareMetal multi-threaded hardening spike.
+
+    Spawns N OS threads that simultaneously (1) first-access a lazy static .cctor and (2) allocate
+    heavily, to stress the race-safe class-constructor runner and the per-thread mimalloc init on
+    a freestanding puck build.
+
+    Build:  dotnet publish -r win-x64 -c Release   (from a VS Developer shell)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\build\Puck.BareMetal.props" />
+
+    <PropertyGroup>
+        <AssemblyName>Puck.BareMetal.ThreadSpike</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="..\..\build\Puck.BareMetal.targets" />
+
+</Project>

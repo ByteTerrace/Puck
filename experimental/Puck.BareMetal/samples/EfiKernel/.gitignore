@@ -1,0 +1,4 @@
+esp/
+*.fd
+serial.log
+qemu.err

@@ -1,0 +1,39 @@
+<!-- The freestanding core library (NativeAOT system module) for Puck.BareMetal. -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Library</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <AssemblyName>Puck.Runtime</AssemblyName>
+
+        <!-- This assembly *is* the core library: no implicit BCL, no framework references. -->
+        <NoStdLib>true</NoStdLib>
+        <NoConfig>true</NoConfig>
+        <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+        <RuntimeMetadataVersion>v4.0.30319</RuntimeMetadataVersion>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+        <!-- Runtime-layout types (MethodTable, Array, String) have fields populated by the
+             toolchain or read through unsafe pointers, so they look unused (CS0169) or
+             never-assigned (CS0649); the StelemRef helper has an unreferenced label (CS0164). -->
+        <NoWarn>$(NoWarn);CS0164;CS0169;CS0649;CS0660;CS0661</NoWarn>
+
+        <!-- Target platform: UEFI | WINDOWS | LINUX, selected by a consuming project through the
+             ProjectReference's global property (the EFI build sets PuckRuntimePlatform=UEFI). -->
+        <PuckRuntimePlatform Condition="'$(PuckRuntimePlatform)' == '' and '$(OS)' == 'Windows_NT'">WINDOWS</PuckRuntimePlatform>
+        <DefineConstants Condition="'$(PuckRuntimePlatform)' != ''">$(DefineConstants);$(PuckRuntimePlatform)</DefineConstants>
+
+        <!-- Architecture guards (span bounds checks etc.). Default x64; arm64 RID flips it. -->
+        <DefineConstants Condition="!$(RuntimeIdentifier.Contains('arm64'))">$(DefineConstants);X64</DefineConstants>
+        <DefineConstants Condition="$(RuntimeIdentifier.Contains('arm64'))">$(DefineConstants);ARM64</DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Shims satisfying the stock ILC runtime contract (see ../compat). -->
+        <Compile Include="..\compat\**\*.cs" />
+    </ItemGroup>
+
+</Project>

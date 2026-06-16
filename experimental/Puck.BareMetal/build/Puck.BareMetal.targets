@@ -1,0 +1,136 @@
+<!--
+    Shared build targets for a Puck.BareMetal bare-metal executable.
+
+    Companion to Puck.BareMetal.props. Import this near the BOTTOM of a consuming project.
+    It performs the four things the stock NativeAOT pipeline does not do for a puck (no
+    GC, no BCL) program:
+
+      1. TrimReferencesToPuck   — drop every reference assembly except puck.
+      2. ClearHostConfiguration    — drop AppContext switches that assume the full runtime.
+      3. BuildNativeRuntimeGlue    — compile compat/native/puck-rt.c (transition/poll
+                                     stubs + memset/memcpy/memmove the JIT lowers to).
+      4. LinkPuckMinimal        — strip the full NativeAOT runtime out of the link and
+                                     apply the freestanding size-oriented link flags.
+-->
+<Project>
+
+    <!-- The SDK adds framework reference assemblies; remove everything except puck so
+         the compile sees puck as the one and only library. -->
+    <Target Name="TrimReferencesToPuck"
+            BeforeTargets="BeforeCompile"
+            AfterTargets="FindReferenceAssembliesForReferences">
+        <ItemGroup>
+            <ReferencePathWithRefAssemblies Remove="@(ReferencePathWithRefAssemblies)" Condition="'%(FileName)' != 'Puck.Runtime'" />
+            <ReferencePath Remove="@(ReferencePath)" Condition="'%(FileName)' != 'Puck.Runtime'" />
+        </ItemGroup>
+    </Target>
+
+    <!-- ILC would mirror AppContext switches that require the full runtime. Prevent that. -->
+    <Target Name="ClearHostConfiguration"
+            BeforeTargets="WriteIlcRspFileForCompilation"
+            DependsOnTargets="PrepareForILLink">
+        <ItemGroup>
+            <RuntimeHostConfigurationOption Remove="@(RuntimeHostConfigurationOption)" />
+        </ItemGroup>
+    </Target>
+
+    <!--
+        Compile and link the freestanding native inputs. All are built /GS- (no CRT security
+        cookie) and /O1 (cl.exe's "minimise size", which already implies /Os and /Gy).
+        Requires a VS Developer shell so cl.exe is on PATH.
+
+          * compat/native/puck-rt.c — the JIT-transition / GC-poll stubs the stock ILC
+            does not root for a Puck.BareMetal build, plus the memset/memcpy/memmove intrinsics.
+          * mimalloc/src/static.c — the whole vendored mimalloc allocator as one TU. Built
+            against its own include/ with debug/stats/secure off for a lean release build,
+            and /W0 (it is vendored third-party source, not ours to lint).
+          * compat/native/mimalloc-glue.c — our freestanding bridge: the TLS directory, the
+            libc shims, and PuckAllocZeroed (the symbol puck's allocator binds to).
+
+        Per-file extra cl flags ride on %(ClFlags); the Exec batches once per input.
+    -->
+    <Target Name="BuildNativeRuntimeGlue" BeforeTargets="LinkNative">
+        <PropertyGroup>
+            <_MimallocInclude>$(MSBuildThisFileDirectory)..\mimalloc\include</_MimallocInclude>
+            <_MimallocDefines>/DMI_DEBUG=0 /DMI_STAT=0 /DMI_SECURE=0 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS</_MimallocDefines>
+        </PropertyGroup>
+        <ItemGroup>
+            <_PuckNativeInput Include="$(MSBuildThisFileDirectory)..\compat\native\puck-rt.c" />
+            <_PuckNativeInput Include="$(MSBuildThisFileDirectory)..\mimalloc\src\static.c">
+                <ClFlags>/W0 /I&quot;$(_MimallocInclude)&quot; $(_MimallocDefines)</ClFlags>
+            </_PuckNativeInput>
+            <_PuckNativeInput Include="$(MSBuildThisFileDirectory)..\compat\native\mimalloc-glue.c">
+                <ClFlags>/I&quot;$(_MimallocInclude)&quot;</ClFlags>
+            </_PuckNativeInput>
+        </ItemGroup>
+        <MakeDir Directories="$(NativeIntermediateOutputPath)" />
+        <Exec Command="cl.exe /nologo /c /GS- /O1 %(_PuckNativeInput.ClFlags) /Fo&quot;$(NativeIntermediateOutputPath)%(_PuckNativeInput.Filename).obj&quot; &quot;%(_PuckNativeInput.Identity)&quot;" />
+        <ItemGroup>
+            <LinkerArg Include="&quot;$(NativeIntermediateOutputPath)%(_PuckNativeInput.Filename).obj&quot;" />
+        </ItemGroup>
+
+        <!-- The polymorphic interface-dispatch entry stub (RhpInitialDynamicInterfaceDispatch)
+             must be hand-written assembly - it preserves the interface method's live argument
+             registers across the C resolver and tail-jumps to the resolved target. Assemble it
+             with ml64 (same VC bin dir as cl.exe; present in the VS Developer shell). -->
+        <ItemGroup>
+            <_PuckAsmInput Include="$(MSBuildThisFileDirectory)..\compat\native\interface-dispatch-x64.asm" />
+        </ItemGroup>
+        <Exec Command="ml64.exe /nologo /c /Fo&quot;$(NativeIntermediateOutputPath)%(_PuckAsmInput.Filename).obj&quot; &quot;%(_PuckAsmInput.Identity)&quot;" />
+        <ItemGroup>
+            <LinkerArg Include="&quot;$(NativeIntermediateOutputPath)%(_PuckAsmInput.Filename).obj&quot;" />
+        </ItemGroup>
+    </Target>
+
+    <!--
+        Minimal puck link. The SDK's SetupOSSpecificProps drags the FULL NativeAOT
+        runtime into the link: the bootstrapper, Workstation/Server GC, event pipe, vxsort,
+        standalone-GC/minipal shims, brotli/zlib, the globalization/compression AOT libs,
+        and a broad OS import-lib set (advapi32, bcrypt, ntdll, user32, ws2_32, ...). All of
+        it pulls a C/C++ runtime and a GC that puck intentionally does not have.
+
+        Rather than hand-maintain a list of names to strip, we DERIVE the removal set from
+        the SDK's own @(NativeLibrary)/@(SdkNativeLibrary) item lists (everything except the
+        OS import libs a puck app actually needs — see $(_PuckKeepLib)). If a future
+        SDK adds or renames a runtime library, this follows automatically. What remains is
+        exactly what the freestanding link needs plus mimalloc's needs: our objects + native glue + kernel32
+        + advapi32 + ucrt (memcpy/memmove).
+    -->
+    <Target Name="LinkPuckMinimal" BeforeTargets="LinkNative">
+        <ItemGroup>
+            <!-- The library LinkerArgs are emitted as quoted identities (see the SDK's
+                 Microsoft.NETCore.Native.Windows.targets); match that quoting to remove them.
+                 Keep only the core OS import libs a puck + mimalloc app needs. -->
+            <_PuckRuntimeLib Include="@(NativeLibrary)" Condition="'%(Filename)' != 'kernel32' and '%(Filename)' != 'advapi32'" />
+            <_PuckRuntimeLib Include="@(SdkNativeLibrary)" Condition="'%(Filename)' != 'kernel32' and '%(Filename)' != 'advapi32'" />
+            <LinkerArg Remove="@(_PuckRuntimeLib->'&quot;%(Identity)&quot;')" />
+
+            <!-- /NATVIS targets a PDB; with no debug info it only earns a linker warning. -->
+            <LinkerArg Remove="@(LinkerArg)" Condition="$([System.String]::Copy('%(Identity)').StartsWith('/NATVIS'))" />
+
+            <!-- LNK4210: mimalloc (static.obj) carries a .CRT$XIU process-init constructor and
+                 our glue carries .CRT$XL TLS callbacks. The TLS callbacks DO run (the OS loader
+                 invokes them); the C init constructor is intentionally not auto-run because
+                 there is no CRT startup — mimalloc is brought up explicitly via mi_process_init()
+                 in compat/native/mimalloc-glue.c instead. The warning is therefore expected. -->
+            <LinkerArg Include="/IGNORE:4210" />
+        </ItemGroup>
+        <ItemGroup>
+            <!-- Fold near-empty/standalone read-only sections into .rdata so the layout is
+                 just .text / .rdata / .data / .reloc — each section otherwise costs a full
+                 512-byte file block of mostly padding. The SDK already merges
+                 .managedcode/.text and hydrated/.bss; this finishes the job:
+                   * .modules — 8 bytes of module headers on their own section.
+                   * .pdata   — the SEH unwind (RUNTIME_FUNCTION) table. The data and the PE
+                                exception data-directory entry that points at it are both
+                                preserved by the merge (verified: the directory still
+                                resolves into .rdata), so OS unwinding is unaffected; only
+                                the separate section's padding is removed.
+                 .data (writable) and .reloc (ASLR fixups, un-mergeable) are deliberately
+                 kept as their own sections. -->
+            <LinkerArg Include="/MERGE:.modules=.rdata" />
+            <LinkerArg Include="/MERGE:.pdata=.rdata" />
+        </ItemGroup>
+    </Target>
+
+</Project>
