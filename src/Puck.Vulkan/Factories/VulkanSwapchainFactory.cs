@@ -5,17 +5,15 @@ using Puck.Vulkan.Messages;
 namespace Puck.Vulkan.Factories;
 
 /// <summary>
-/// The default <see cref="IVulkanSwapchainFactory"/>: it picks the surface's first format, prefers the
-/// mailbox then immediate then FIFO present mode, clamps the requested extent to the surface's range, and
-/// creates an owning <see cref="VulkanSwapchain"/>.
+/// The default <see cref="IVulkanSwapchainFactory"/>: it clamps the requested extent to the surface's
+/// range and creates an owning <see cref="VulkanSwapchain"/>. Format, present mode, and image usage may be
+/// requested by the caller; absent a (supported) preference it picks the surface's first format, prefers
+/// the mailbox then immediate then FIFO present mode, and uses color-attachment plus transfer-source usage.
 /// </summary>
 public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
     private const uint ColorAttachmentImageUsage = 0x00000010;
     private const uint ConcurrentSharingMode = 1;
     private const uint ExclusiveSharingMode = 0;
-    private const uint FifoPresentMode = 2;
-    private const uint ImmediatePresentMode = 0;
-    private const uint MailboxPresentMode = 1;
     private const uint OpaqueCompositeAlpha = 0x00000001;
     private const uint SpecialCurrentExtent = 0xFFFFFFFF;
     private const uint TransferSourceImageUsage = 0x00000001;
@@ -82,20 +80,31 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
                 ? capabilities.MaxImageCount
                 : imageCount);
     }
-    private static uint SelectPresentMode(IReadOnlyList<uint> presentModes) {
-        if (presentModes.Contains(value: MailboxPresentMode)) {
-            return MailboxPresentMode;
+    private static uint SelectPresentMode(IReadOnlyList<uint> presentModes, uint? preferredPresentMode) {
+        if (preferredPresentMode.HasValue && presentModes.Contains(value: preferredPresentMode.Value)) {
+            return preferredPresentMode.Value;
         }
 
-        if (presentModes.Contains(value: ImmediatePresentMode)) {
-            return ImmediatePresentMode;
+        if (presentModes.Contains(value: VulkanPresentMode.Mailbox)) {
+            return VulkanPresentMode.Mailbox;
         }
 
-        if (presentModes.Contains(value: FifoPresentMode)) {
-            return FifoPresentMode;
+        if (presentModes.Contains(value: VulkanPresentMode.Immediate)) {
+            return VulkanPresentMode.Immediate;
+        }
+
+        if (presentModes.Contains(value: VulkanPresentMode.Fifo)) {
+            return VulkanPresentMode.Fifo;
         }
 
         return presentModes[0];
+    }
+    private static VulkanSurfaceFormat SelectSurfaceFormat(IReadOnlyList<VulkanSurfaceFormat> surfaceFormats, VulkanSurfaceFormat? preferredSurfaceFormat) {
+        if (preferredSurfaceFormat.HasValue && surfaceFormats.Contains(value: preferredSurfaceFormat.Value)) {
+            return preferredSurfaceFormat.Value;
+        }
+
+        return surfaceFormats[0];
     }
 
     private readonly IVulkanSwapchainApi m_swapchainApi;
@@ -115,7 +124,10 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         VulkanSurface surface,
         VulkanSwapchainSupportDetails supportDetails,
         uint desiredWidth,
-        uint desiredHeight
+        uint desiredHeight,
+        uint? preferredPresentMode = null,
+        VulkanSurfaceFormat? preferredSurfaceFormat = null,
+        uint? imageUsage = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
         ArgumentNullException.ThrowIfNull(argument: surface);
@@ -131,12 +143,18 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         );
         var compositeAlpha = SelectCompositeAlpha(supportedCompositeAlpha: supportDetails.Capabilities.SupportedCompositeAlpha);
         var imageCount = SelectImageCount(capabilities: supportDetails.Capabilities);
-        var presentMode = SelectPresentMode(presentModes: supportDetails.PresentModes);
+        var presentMode = SelectPresentMode(
+            preferredPresentMode: preferredPresentMode,
+            presentModes: supportDetails.PresentModes
+        );
         var queueFamilyIndices = BuildQueueFamilyIndices(queueFamilySelection: logicalDevice.PhysicalDevice.QueueFamilySelection);
         var sharingMode = ((queueFamilyIndices.Count == 1)
             ? ExclusiveSharingMode
             : ConcurrentSharingMode);
-        var surfaceFormat = supportDetails.SurfaceFormats[0];
+        var surfaceFormat = SelectSurfaceFormat(
+            preferredSurfaceFormat: preferredSurfaceFormat,
+            surfaceFormats: supportDetails.SurfaceFormats
+        );
         var request = new VulkanSwapchainCreateRequest(
             CompositeAlpha: compositeAlpha,
             DeviceHandle: logicalDevice.Handle,
@@ -145,7 +163,7 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
             ImageExtentHeight: height,
             ImageExtentWidth: width,
             ImageFormat: surfaceFormat.Format,
-            ImageUsage: ColorAttachmentImageUsage | TransferSourceImageUsage,
+            ImageUsage: (imageUsage ?? (ColorAttachmentImageUsage | TransferSourceImageUsage)),
             PresentMode: presentMode,
             PreTransform: supportDetails.Capabilities.CurrentTransform,
             QueueFamilyIndices: queueFamilyIndices,

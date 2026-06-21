@@ -8,11 +8,14 @@ namespace Puck.SdfVm;
 public sealed class SdfProgram {
     private const int WordsPerVector = 4;
 
+    private readonly SdfInstruction[] m_instructions;
     private readonly uint[] m_words;
 
     public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
+
+        m_instructions = [.. instructions];
 
         var instructionCount = instructions.Count;
         var materialCount = materials.Count;
@@ -69,6 +72,10 @@ public sealed class SdfProgram {
     }
 
     public int InstructionCount { get; }
+    /// <summary>The typed instructions the program was built from, in order — the source the packed
+    /// <see cref="Words"/> are compiled from. Retained so a consumer (e.g. a ray-tracing instance extractor that
+    /// needs per-primitive world bounds) can read the scene structure without decoding the packed word layout.</summary>
+    public IReadOnlyList<SdfInstruction> Instructions => m_instructions;
     public ReadOnlySpan<uint> Words => m_words;
 
     private void WriteVector4(int baseIndex, float x, float y, float z, float w) {

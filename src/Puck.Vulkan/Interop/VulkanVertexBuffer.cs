@@ -5,7 +5,7 @@ namespace Puck.Vulkan.Interop;
 /// <summary>
 /// Owns a vertex buffer and its backing memory, freeing both when disposed.
 /// </summary>
-public sealed class VulkanVertexBuffer : IDisposable {
+public sealed class VulkanVertexBuffer : IGpuVertexBuffer {
     private bool m_disposed;
     private readonly IVulkanVertexBufferApi m_vertexBufferApi;
 

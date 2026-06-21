@@ -13,6 +13,7 @@ Puck is written from scratch, but very little of it was invented here. This file
 - **Dave Hoskins** — the "Hash without Sine" family of integer-free GPU hashes ([Shadertoy 4djSRW](https://www.shadertoy.com/view/4djSRW)). Every source of randomness in the shaders routes through these so captures stay bit-identical across hardware — `fract(sin(x) * k)` constructions have no cross-GPU precision guarantee.
 - **Martijn Steinrucken** (BigWings / "The Art of Code") — the rain-on-glass drop and trail height field, with refraction driven by the height-field gradient, from *Heartfelt* ([Shadertoy ltffzl](https://www.shadertoy.com/view/ltffzl)).
 - **The Khronos Group** — the Vulkan and SPIR-V specifications.
+- **Controller-input reverse engineering** — the USB HID protocols of the Nintendo Switch Pro, Sony DualSense, and Xbox controllers are not publicly specified, so the parsers were written against the community reverse-engineering record: dekuNukem's [Nintendo Switch Reverse Engineering](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering) (the Switch Pro handshake, the `0x30` input report, and HD rumble), the Linux kernel's `hid-playstation` driver (the DualSense report layout and factory IMU calibration), [SDL](https://github.com/libsdl-org/SDL)'s HIDAPI controller drivers (cross-referenced for scale factors and rumble safety limits), and Nielk1's [TriggerEffectGenerator](https://github.com/Nielk1/TriggerEffectGenerator) (the DualSense adaptive-trigger effect formats).
 
 ## Fonts
 
@@ -23,3 +24,5 @@ Puck is written from scratch, but very little of it was invented here. This file
 - **.NET** (Microsoft) — the runtime and scripting.
 - **APNG** — Mozilla's animated extension to the PNG specification (W3C/ISO).
 - **glslc / shaderc** (Google) and the **Vulkan SDK** (LunarG) — shader compilation and the validation layers.
+- **mimalloc** ([Microsoft](https://github.com/microsoft/mimalloc)) — the default unmanaged allocator behind `IAllocator`.
+- **CsWin32** (Microsoft) — the source-generated Win32 interop used by the platform layer (HID, windowing).

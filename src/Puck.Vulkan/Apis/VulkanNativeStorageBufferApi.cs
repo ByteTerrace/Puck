@@ -13,6 +13,9 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
     private const uint BufferUsageStorageBufferBit = 0x00000020;
     // Also a transfer source so a host-visible storage buffer can stage uploads (e.g. CPU pixels into an image).
     private const uint BufferUsageTransferSourceBit = 0x00000001;
+    // Lets the buffer back vkCmdDispatchIndirect / vkCmdDrawIndirect (the GPU reads the group/draw counts from it).
+    private const uint BufferUsageIndirectBufferBit = 0x00000100;
+    private const uint DeviceLocalMemoryPropertyBit = 0x00000001;
     private const uint HostCoherentMemoryPropertyBit = 0x00000004;
     private const uint HostVisibleMemoryPropertyBit = 0x00000002;
     private const uint StructureTypeMemoryAllocateInfo = 5;
@@ -41,6 +44,7 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
             bufferHandle = CreateBuffer(
                 createBuffer: createBuffer,
                 deviceHandle: request.DeviceHandle,
+                extraUsage: (request.IndirectArgs ? BufferUsageIndirectBufferBit : 0u),
                 size: request.SizeBytes
             );
             memoryHandle = AllocateAndBindMemory(
@@ -262,12 +266,12 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
             );
         }
     }
-    private static unsafe nint CreateBuffer(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong size) {
+    private static unsafe nint CreateBuffer(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong size, uint extraUsage) {
         return VulkanNativeBufferSupport.CreateBuffer(
             createBuffer: createBuffer,
             deviceHandle: deviceHandle,
             size: size,
-            usage: BufferUsageStorageBufferBit | BufferUsageTransferSourceBit
+            usage: BufferUsageStorageBufferBit | BufferUsageTransferSourceBit | extraUsage
         );
     }
     private static unsafe nint AllocateAndBindMemory(
@@ -291,7 +295,11 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
         var memoryTypeIndex = FindMemoryTypeIndex(
             memoryProperties: memoryProperties,
             memoryTypeBits: memoryRequirements.MemoryTypeBits,
-            requiredProperties: HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit
+            // Device-local memory is GPU-only (never host-mapped — the buffer's Map/Write is never called for it);
+            // the default host-visible+coherent memory backs buffers the CPU writes.
+            requiredProperties: (request.DeviceLocal
+                ? DeviceLocalMemoryPropertyBit
+                : (HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit))
         );
         var allocateInfo = new VkMemoryAllocateInfo {
             AllocationSize = memoryRequirements.Size,

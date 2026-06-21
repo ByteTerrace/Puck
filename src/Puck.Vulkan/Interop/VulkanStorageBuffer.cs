@@ -6,7 +6,7 @@ namespace Puck.Vulkan.Interop;
 /// Owns a host-visible storage buffer and its backing memory, with helpers to map, unmap, and write data;
 /// frees both when disposed.
 /// </summary>
-public sealed class VulkanStorageBuffer : IDisposable {
+public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
     private bool m_disposed;
     private readonly IVulkanStorageBufferApi m_storageBufferApi;
 

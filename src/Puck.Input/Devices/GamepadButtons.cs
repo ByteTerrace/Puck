@@ -1,0 +1,47 @@
+namespace Puck.Input.Devices;
+
+/// <summary>
+/// The digital buttons of a normalized controller, as a bit set. Face buttons use a platform-neutral
+/// South/East/West/North vocabulary so bindings stay family-agnostic: South is the bottom face button (Xbox A,
+/// PlayStation cross, Switch B-position), and so on clockwise.
+/// </summary>
+[Flags]
+public enum GamepadButtons : uint
+{
+    /// <summary>No buttons pressed.</summary>
+    None = 0u,
+    /// <summary>The bottom face button (Xbox A / PlayStation Cross / Switch B).</summary>
+    ButtonSouth = 1u << 0,
+    /// <summary>The right face button (Xbox B / PlayStation Circle / Switch A).</summary>
+    ButtonEast = 1u << 1,
+    /// <summary>The left face button (Xbox X / PlayStation Square / Switch Y).</summary>
+    ButtonWest = 1u << 2,
+    /// <summary>The top face button (Xbox Y / PlayStation Triangle / Switch X).</summary>
+    ButtonNorth = 1u << 3,
+    /// <summary>The up direction of the directional pad.</summary>
+    DpadUp = 1u << 4,
+    /// <summary>The down direction of the directional pad.</summary>
+    DpadDown = 1u << 5,
+    /// <summary>The left direction of the directional pad.</summary>
+    DpadLeft = 1u << 6,
+    /// <summary>The right direction of the directional pad.</summary>
+    DpadRight = 1u << 7,
+    /// <summary>The left shoulder (bumper) button.</summary>
+    LeftShoulder = 1u << 8,
+    /// <summary>The right shoulder (bumper) button.</summary>
+    RightShoulder = 1u << 9,
+    /// <summary>The left stick click.</summary>
+    LeftStickPress = 1u << 10,
+    /// <summary>The right stick click.</summary>
+    RightStickPress = 1u << 11,
+    /// <summary>The back / view / minus button.</summary>
+    Back = 1u << 12,
+    /// <summary>The start / menu / plus button.</summary>
+    Start = 1u << 13,
+    /// <summary>The guide / home button.</summary>
+    Guide = 1u << 14,
+    /// <summary>The touchpad click (DualShock 4 / DualSense); no equivalent on Xbox or Switch Pro pads.</summary>
+    Touchpad = 1u << 15,
+    /// <summary>The microphone mute button (DualSense); no equivalent on Xbox or Switch Pro pads.</summary>
+    Mute = 1u << 16,
+}

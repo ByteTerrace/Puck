@@ -11,6 +11,17 @@ namespace Puck.Vulkan;
 /// <c>vkCreateRenderPass</c> and <c>vkDestroyRenderPass</c> entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeRenderPassApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeRenderPassApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     // Color attachments are referenced in COLOR_ATTACHMENT_OPTIMAL during the subpass; this
     // is structural to "these are color attachments", not policy — the per-attachment
     // initial/final layouts come from the caller's VkAttachmentDescription.
@@ -51,11 +62,11 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
         var dependencyCount = dependencies.Count;
         var dependencyStride = Marshal.SizeOf<VkSubpassDependency>();
 
-        var attachmentsPointer = Puck.Memory.Allocator.Alloc(size: (attachmentStride * attachmentCount));
-        var referencesPointer = Puck.Memory.Allocator.Alloc(size: (referenceStride * attachmentCount));
-        var subpassPointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkSubpassDescription>());
+        var attachmentsPointer = m_allocator.Alloc(size: (attachmentStride * attachmentCount));
+        var referencesPointer = m_allocator.Alloc(size: (referenceStride * attachmentCount));
+        var subpassPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkSubpassDescription>());
         var dependencyPointer = ((dependencyCount > 0)
-            ? Puck.Memory.Allocator.Alloc(size: (dependencyStride * dependencyCount))
+            ? m_allocator.Alloc(size: (dependencyStride * dependencyCount))
             : nint.Zero);
 
         try {
@@ -110,11 +121,11 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
                 out renderPassHandle
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: attachmentsPointer);
-            Puck.Memory.Allocator.Free(ptr: referencesPointer);
-            Puck.Memory.Allocator.Free(ptr: subpassPointer);
+            m_allocator.Free(ptr: attachmentsPointer);
+            m_allocator.Free(ptr: referencesPointer);
+            m_allocator.Free(ptr: subpassPointer);
             if (0 != dependencyPointer) {
-                Puck.Memory.Allocator.Free(ptr: dependencyPointer);
+                m_allocator.Free(ptr: dependencyPointer);
             }
         }
     }

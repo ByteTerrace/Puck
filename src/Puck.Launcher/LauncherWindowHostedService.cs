@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Puck.Abstractions;
 using Puck.Commands;
 using Puck.Hosting;
-using Puck.Launcher.Vulkan;
-using Puck.Platform;
+using Puck.Input;
 
 namespace Puck.Launcher;
 
@@ -15,19 +15,16 @@ namespace Puck.Launcher;
 /// engine drives the terminal's lifecycle through the baton it was handed on the root host context; this
 /// loop merely drains the resulting exit request (and honors <c>--exit-after</c> for scripted runs).
 /// </summary>
-internal sealed class LauncherWindowHostedService : BackgroundService {
+public sealed class LauncherWindowHostedService : BackgroundService {
     // Below this much time remaining the pacer busy-waits for an accurate wake-up; above it, it sleeps.
     private const int SpinThresholdMilliseconds = 2;
-    // Render pacing cap (Hz); a divisor of EngineTicks.PerSecond so the period is a whole number of ticks.
-    private const uint TargetRenderRate = 60U;
     // Fixed simulation rate (Hz); a divisor of EngineTicks.PerSecond so the step is a whole number of ticks.
     private const uint TargetUpdateRate = 240U;
 
     private readonly IHostApplicationLifetime m_applicationLifetime;
-    private readonly SurfaceCompositor m_compositor;
     private readonly ILogger<LauncherWindowHostedService> m_logger;
     private readonly LauncherOptions m_options;
-    private readonly VulkanRenderer m_renderer;
+    private readonly ISurfacePresenter m_presenter;
     private readonly IRenderNode m_root;
     private readonly IHostContext m_rootHostContext;
     private readonly CommandShell m_shell;
@@ -36,10 +33,9 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
 
     public LauncherWindowHostedService(
         IHostApplicationLifetime applicationLifetime,
-        SurfaceCompositor compositor,
         ILogger<LauncherWindowHostedService> logger,
         LauncherOptions options,
-        VulkanRenderer renderer,
+        ISurfacePresenter presenter,
         IRenderNode root,
         IHostContext rootHostContext,
         CommandShell shell,
@@ -47,10 +43,9 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
         INativeWindowFactory windowFactory
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
-        ArgumentNullException.ThrowIfNull(compositor);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(renderer);
+        ArgumentNullException.ThrowIfNull(presenter);
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(rootHostContext);
         ArgumentNullException.ThrowIfNull(shell);
@@ -58,10 +53,9 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(windowFactory);
 
         m_applicationLifetime = applicationLifetime;
-        m_compositor = compositor;
         m_logger = logger;
         m_options = options;
-        m_renderer = renderer;
+        m_presenter = presenter;
         m_root = root;
         m_rootHostContext = rootHostContext;
         m_shell = shell;
@@ -70,9 +64,6 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) {
-        // Native windows and Vulkan presentation are single-thread affine: both the message pump and the
-        // renderer must live on the thread that created the window, and that work must not block host
-        // startup. So the loop owns a dedicated thread and bridges back via IHostApplicationLifetime.
         var pumpThread = new Thread(start: () => RunWindowLoop(stoppingToken: stoppingToken)) {
             IsBackground = true,
             Name = "Puck.Launcher Window Pump",
@@ -88,34 +79,46 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
             using var window = m_windowFactory.Create();
 
             try {
-                m_renderer.Initialize(window: window);
-                m_compositor.Initialize();
+                if (window is not INativeSurfaceSourceProvider surfaceSource) {
+                    throw new InvalidOperationException(message: "The launcher requires a window that can provide a native surface binding.");
+                }
 
-                m_logger.LogInformation(
-                    "Opened native window \"{Title}\" ({Width}x{Height}); hosting the primary SDF engine.",
-                    window.Title,
-                    window.Width,
-                    window.Height
+                if (window is not IWindowInputSource inputSource) {
+                    throw new InvalidOperationException(message: "The launcher requires a window that can provide input.");
+                }
+
+                m_presenter.Activate(
+                    binding: surfaceSource.CreateSurfaceBinding(),
+                    height: window.Height,
+                    width: window.Width
                 );
+
+                if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
+                    m_logger.LogInformation(
+                        "Opened native window \"{Title}\" ({Width}x{Height}); hosting the primary engine.",
+                        window.Title,
+                        window.Width,
+                        window.Height
+                    );
+                }
+
                 window.Show();
 
+                var accumulatorTicks = 0UL;
                 var clock = TickClock.Start();
-                var stepTicks = EngineTicks.PerRate(ratePerSecond: TargetUpdateRate);
-                // Cap a single frame's advance to a quarter second so a long stall (debugger break, GC pause,
-                // the machine sleeping) can't trigger an unbounded simulation catch-up — the "spiral of death".
-                var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
-
+                var elapsedTicks = 0UL;
                 var frequency = Stopwatch.Frequency;
-                var renderPeriod = (frequency / TargetRenderRate);
+                var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
+                var renderPeriod = ((m_options.TargetRenderRate is { } rate and > 0)
+                    ? (frequency / rate)
+                    : 0L);
                 var spinThreshold = ((frequency / 1000L) * SpinThresholdMilliseconds);
+                var stepTicks = EngineTicks.PerRate(ratePerSecond: TargetUpdateRate);
                 var startTimestamp = Stopwatch.GetTimestamp();
                 var nextRenderDeadline = startTimestamp;
-                var exitAfterTimestamp = ((m_options.ExitAfterSeconds is { } exitAfterSeconds)
-                    ? (startTimestamp + (long)(exitAfterSeconds * frequency))
+                var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
+                    ? (startTimestamp + (long)(exitAfter.TotalSeconds * frequency))
                     : (long?)null);
-
-                var accumulatorTicks = 0UL;
-                var elapsedTicks = 0UL;
 
                 while (
                     window.IsOpen &&
@@ -123,24 +126,30 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
                 ) {
                     window.PollEvents();
 
+                    // When the window is not focused, key/button releases are not delivered, so drop any held
+                    // inputs — otherwise a value down at the moment focus was lost would stay stuck.
+                    if (
+                        m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var heldFocus) &&
+                        !heldFocus.IsActiveFor(deviceId: default)
+                    ) {
+                        m_shell.ReleaseHeld();
+                    }
+
                     m_shell.BeginFrame();
 
-                    // Route the window's input only to the engine that holds input focus (the held
-                    // capability). With a single primary engine it always does; a hosted child granted focus
-                    // would receive input here instead, and an engine that has released focus receives none.
-                    if (
-                        m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus) &&
-                        inputFocus.IsActive
-                    ) {
-                        while (window.TryDequeueInput(inputEvent: out var inputEvent)) {
-                            m_shell.Enqueue(packet: inputEvent);
+                    while (inputSource.TryDequeueInput(inputEvent: out var windowInput)) {
+                        var signal = WindowInputMapper.ToInputSignal(inputEvent: in windowInput);
+
+                        if (
+                            m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus) &&
+                            inputFocus.IsActiveFor(signal.DeviceId)
+                        ) {
+                            m_shell.Enqueue(signal: signal);
                         }
                     }
 
                     m_shell.Collect();
 
-                    // The scripted-run deadline drives the terminal through the same baton the engine uses, so
-                    // a headless run exits down the identical path as a typed `quit`.
                     if (
                         (exitAfterTimestamp is { } deadline) &&
                         (Stopwatch.GetTimestamp() >= deadline)
@@ -156,20 +165,20 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
 
                     accumulatorTicks += deltaTicks;
 
-                    // Drain the accumulator in whole fixed steps: the simulation only ever advances by an exact
-                    // multiple of the fixed step, so timing is deterministic and never strobes. The sub-step
-                    // remainder stays in the accumulator and is handed to render as the interpolation alpha.
                     var consumedTicks = ((accumulatorTicks / stepTicks) * stepTicks);
 
                     accumulatorTicks -= consumedTicks;
                     elapsedTicks += consumedTicks;
 
-                    // BeginFrame may (re)create presentation resources, which rebuilds the compositor's blit
-                    // pipeline via PresentationResourcesRecreated.
-                    m_renderer.BeginFrame();
+                    var width = window.Width;
+                    var height = window.Height;
 
-                    var width = m_renderer.ViewportWidth;
-                    var height = m_renderer.ViewportHeight;
+                    // BeginFrame recreates presentation resources when the size changed and waits for the
+                    // previous frame's GPU work, so the node tree can safely reuse its per-frame resources.
+                    m_presenter.BeginFrame(
+                        height: height,
+                        width: width
+                    );
 
                     if (
                         (width > 0) &&
@@ -186,7 +195,7 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
                         );
                         var surface = m_root.ProduceFrame(context: in frameContext);
 
-                        m_compositor.Blit(surface: surface);
+                        m_presenter.Present(surface: surface);
                     }
 
                     if (m_terminal.TryConsumeExit()) {
@@ -195,23 +204,19 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
                         break;
                     }
 
-                    // Pace the render to the target cadence with a sleep-then-spin hybrid: sleep while there is
-                    // time to spare (which yields the core), then busy-wait the final sub-millisecond for an
-                    // accurate wake-up. Presentation is Mailbox/Immediate (non-blocking), so without this the
-                    // loop would peg a core at 100%.
-                    nextRenderDeadline += renderPeriod;
+                    if (renderPeriod > 0L) {
+                        nextRenderDeadline += renderPeriod;
 
-                    var nowTimestamp = Stopwatch.GetTimestamp();
+                        var nowTimestamp = Stopwatch.GetTimestamp();
 
-                    if ((nowTimestamp - nextRenderDeadline) > renderPeriod) {
-                        // Fell more than a full period behind (a stall): resync the cadence to now rather than
-                        // bursting a run of catch-up frames to "make up" the lost time.
-                        nextRenderDeadline = nowTimestamp;
-                    } else {
-                        PaceUntil(
-                            deadlineTimestamp: nextRenderDeadline,
-                            spinThreshold: spinThreshold
-                        );
+                        if ((nowTimestamp - nextRenderDeadline) > renderPeriod) {
+                            nextRenderDeadline = nowTimestamp;
+                        } else {
+                            WaitUntil(
+                                deadlineTimestamp: nextRenderDeadline,
+                                spinThreshold: spinThreshold
+                            );
+                        }
                     }
                 }
 
@@ -222,21 +227,14 @@ internal sealed class LauncherWindowHostedService : BackgroundService {
 
                 m_logger.LogInformation("Native window closed; shutting the host down.");
             } finally {
-                // Tear down the engine (and its renderer) and the compositor — each waits for device idle and
-                // frees its GPU resources — BEFORE the renderer that owns the device.
                 m_root.Dispose();
-                m_compositor.Dispose();
-                m_renderer.Dispose();
+                m_presenter.Dispose();
             }
         } finally {
             m_applicationLifetime.StopApplication();
         }
     }
-
-    // Waits until the deadline (a Stopwatch timestamp), sleeping while there is comfortable slack and
-    // busy-spinning the final stretch so the wake-up lands close to the deadline. Thread.Sleep granularity
-    // depends on the OS timer, so the spin tail — not the sleep — is what makes the cadence accurate.
-    private static void PaceUntil(long deadlineTimestamp, long spinThreshold) {
+    private static void WaitUntil(long deadlineTimestamp, long spinThreshold) {
         while (true) {
             var remaining = (deadlineTimestamp - Stopwatch.GetTimestamp());
 

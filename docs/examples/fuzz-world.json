@@ -1,0 +1,6 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Data-driven differential fuzzing: a single fuzz seed renders a generated scene on both backends and diffs it. No scene/viewports/graph needed (the gate generates its own scene). `Puck.Demo --run docs/examples/fuzz-world.json` -> exit 0 pass / 1 divergence. For a seed-range sweep use `tools fuzz`.",
+    "fuzzing": { "seed": 42, "bounds": { "maxPrimitives": 8 } }
+}

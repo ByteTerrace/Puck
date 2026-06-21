@@ -11,6 +11,17 @@ namespace Puck.Vulkan;
 /// enumeration and query entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDeviceApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativePhysicalDeviceApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativePhysicalDeviceApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     private const int PhysicalDevicePropertiesBufferSize = 2048;
     private const int PhysicalDeviceTypeOffset = (sizeof(uint) * 4);
     // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
@@ -46,7 +57,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             return [];
         }
 
-        var deviceBuffer = Puck.Memory.Allocator.Alloc(size: (IntPtr.Size * checked((int)physicalDeviceCount)));
+        var deviceBuffer = m_allocator.Alloc(size: (IntPtr.Size * checked((int)physicalDeviceCount)));
 
         try {
             result = enumeratePhysicalDevices(
@@ -67,7 +78,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
             return physicalDevices;
         } finally {
-            Puck.Memory.Allocator.Free(ptr: deviceBuffer);
+            m_allocator.Free(ptr: deviceBuffer);
         }
     }
     /// <inheritdoc/>
@@ -79,7 +90,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
         var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
 
-        var propertiesBuffer = Puck.Memory.Allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
+        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
 
         try {
             getPhysicalDeviceProperties(
@@ -98,7 +109,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                 ? (VkPhysicalDeviceType)deviceType
                 : VkPhysicalDeviceType.Other);
         } finally {
-            Puck.Memory.Allocator.Free(ptr: propertiesBuffer);
+            m_allocator.Free(ptr: propertiesBuffer);
         }
     }
     /// <inheritdoc/>
@@ -157,7 +168,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
 
         var structureSize = Marshal.SizeOf<VkQueueFamilyProperties>();
-        var queueFamilyBuffer = Puck.Memory.Allocator.Alloc(size: (structureSize * checked((int)queueFamilyCount)));
+        var queueFamilyBuffer = m_allocator.Alloc(size: (structureSize * checked((int)queueFamilyCount)));
 
         try {
             getQueueFamilyProperties(
@@ -183,7 +194,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
             return queueFamilies;
         } finally {
-            Puck.Memory.Allocator.Free(ptr: queueFamilyBuffer);
+            m_allocator.Free(ptr: queueFamilyBuffer);
         }
     }
     /// <inheritdoc/>
@@ -275,7 +286,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
 
         var structureSize = Marshal.SizeOf<VkSurfaceFormatKhr>();
-        var formatBuffer = Puck.Memory.Allocator.Alloc(size: (structureSize * checked((int)formatCount)));
+        var formatBuffer = m_allocator.Alloc(size: (structureSize * checked((int)formatCount)));
 
         try {
             result = getSurfaceFormats(
@@ -302,7 +313,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
             return surfaceFormats;
         } finally {
-            Puck.Memory.Allocator.Free(ptr: formatBuffer);
+            m_allocator.Free(ptr: formatBuffer);
         }
     }
     /// <inheritdoc/>
@@ -329,7 +340,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             return [];
         }
 
-        var modeBuffer = Puck.Memory.Allocator.Alloc(size: (sizeof(uint) * checked((int)modeCount)));
+        var modeBuffer = m_allocator.Alloc(size: (sizeof(uint) * checked((int)modeCount)));
 
         try {
             result = getPresentModes(
@@ -353,7 +364,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                 converter: static mode => unchecked((uint)mode)
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: modeBuffer);
+            m_allocator.Free(ptr: modeBuffer);
         }
     }
     /// <inheritdoc/>
@@ -373,7 +384,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         // it through a fully-typed prefix so the compiler computes the offset from the field
         // ABI (the hardcoded-offset style used for deviceType is fragile across that many
         // 8-byte-aligned members).
-        var propertiesBuffer = Puck.Memory.Allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
+        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
         float timestampPeriod;
 
         try {
@@ -383,7 +394,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             );
             timestampPeriod = ((VkPhysicalDeviceProperties*)propertiesBuffer)->Limits.TimestampPeriod;
         } finally {
-            Puck.Memory.Allocator.Free(ptr: propertiesBuffer);
+            m_allocator.Free(ptr: propertiesBuffer);
         }
 
         // Guard a layout/offset mistake from poisoning every measurement: timestampPeriod is
@@ -405,7 +416,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         );
         if (queueFamilyCount > 0) {
             var structureSize = Marshal.SizeOf<VkQueueFamilyProperties>();
-            var queueFamilyBuffer = Puck.Memory.Allocator.Alloc(size: (structureSize * checked((int)queueFamilyCount)));
+            var queueFamilyBuffer = m_allocator.Alloc(size: (structureSize * checked((int)queueFamilyCount)));
 
             try {
                 pointers.GetPhysicalDeviceQueueFamilyProperties(
@@ -422,7 +433,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                     validBits = properties.TimestampValidBits;
                 }
             } finally {
-                Puck.Memory.Allocator.Free(ptr: queueFamilyBuffer);
+                m_allocator.Free(ptr: queueFamilyBuffer);
             }
         }
 
@@ -502,7 +513,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
         var getPhysicalDeviceFeatures = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceFeatures;
         var featureBytes = (PhysicalDeviceFeatureCount * sizeof(uint));
-        var buffer = Puck.Memory.Allocator.Alloc(size: featureBytes);
+        var buffer = m_allocator.Alloc(size: featureBytes);
 
         try {
             getPhysicalDeviceFeatures(
@@ -521,7 +532,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
             return support;
         } finally {
-            Puck.Memory.Allocator.Free(ptr: buffer);
+            m_allocator.Free(ptr: buffer);
         }
     }
     /// <inheritdoc/>
@@ -541,11 +552,16 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         // { uint sType; nint pNext; VkBool32 <feature>; }, so the first feature flag sits
         // at offset 16 on the 64-bit ABI — probe it generically without naming the struct.
         const int FeatureFlagOffset = 16;
+        // vkGetPhysicalDeviceFeatures2 writes the WHOLE *FeaturesKHR struct for this structureType, not just the first
+        // flag — and some run well past 24 bytes (e.g. VkPhysicalDeviceAccelerationStructureFeaturesKHR is 40+). A
+        // 24-byte buffer let the driver write past the stack allocation; 256 matches the size already proven defensive
+        // in VulkanNativeLogicalDeviceApi (which documents the same prior bug).
+        const int FeatureBlockByteSize = 256;
 
-        var featureBlock = stackalloc byte[24];
+        var featureBlock = stackalloc byte[FeatureBlockByteSize];
 
         new Span<byte>(
-            length: 24,
+            length: FeatureBlockByteSize,
             pointer: featureBlock
         ).Clear();
         *(uint*)featureBlock = structureType;

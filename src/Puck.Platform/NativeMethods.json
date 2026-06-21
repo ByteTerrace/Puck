@@ -1,0 +1,8 @@
+{
+    "$schema": "https://aka.ms/CsWin32.schema.json",
+    "allowMarshaling": false,
+    "className": "PInvoke",
+    "public": false,
+    "useSafeHandles": true,
+    "wideCharOnly": true
+}

@@ -46,6 +46,23 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Scale
         );
     }
+    /// <summary>Applies a rigid transform (translation + orientation) sourced at evaluation time from per-frame dynamic
+    /// transform <paramref name="slot"/> — element <c>2*slot</c> is the position, <c>2*slot+1</c> the orientation
+    /// quaternion in the renderer's dynamic-transform buffer. The shape that follows is repositioned each frame by
+    /// updating that buffer, leaving this program (uploaded once) untouched. Honored only by the world render path
+    /// (shaders compiled with <c>SDF_DYNAMIC_TRANSFORMS</c>).</summary>
+    /// <param name="slot">The dynamic-transform slot index (0-based).</param>
+    public SdfProgramBuilder TransformDynamic(int slot) {
+        return Transform(
+            data0: new Vector4(
+                w: 0f,
+                x: slot,
+                y: 0f,
+                z: 0f
+            ),
+            op: SdfOp.TransformDynamic
+        );
+    }
     public SdfProgramBuilder Repeat(Vector3 spacing) {
         return Transform(
             data0: new Vector4(

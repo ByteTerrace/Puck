@@ -6,13 +6,17 @@ needs, and exposes everything through small, interface-driven APIs so the render
 (and tested) against seams rather than raw `vkXxx` calls.
 
 It carries **no windowing and no shader compilation**: native window handles arrive as
-`NativeSurfaceBinding`/`NativeDisplayKind` from `Puck.Platform`, and compiled SPIR-V arrives
+`NativeSurfaceBinding`/`NativeDisplayKind` from `Puck.Abstractions`, and compiled SPIR-V arrives
 as `ShaderStageInfo` from `Puck.Shaders`. This library consumes those and talks to the GPU.
+
+Unmanaged marshaling memory comes through an injected `IAllocator` (`Puck.Abstractions`): the native
+API classes take it via constructor, so this library has **no hard dependency on a concrete allocator
+or on `Puck.Platform`**. The composition root binds the concrete (e.g. `services.AddPuckAllocator()`).
 
 ```text
 namespaces  Puck.Vulkan (+ .Bindings, .Interop, .Interfaces, .Apis, .Factories, .Messages)
 target      net10.0
-deps        Puck.Platform (display / surface kinds), Puck.Shaders (shader stage info)
+deps        Puck.Abstractions (display / surface kinds, IAllocator), Puck.Shaders (shader stage info)
 ```
 
 > **Everything in this library is public by design.** It is the engine's low-level GPU
@@ -126,11 +130,11 @@ using Puck.Vulkan.Factories;
 // 1. Instance — picks the right surface extension for the display kind.
 VulkanInstance instance = instanceFactory.Create(
     applicationName: "Puck.Demo",
-    displayKind: NativeDisplayKind.Win32,   // from Puck.Platform
+    displayKind: NativeDisplayKind.Win32,   // from Puck.Abstractions
     enableValidation: true
 );
 
-// 2. Surface — from a native window binding (NativeSurfaceBinding, from Puck.Platform).
+// 2. Surface — from a native window binding (NativeSurfaceBinding, from Puck.Abstractions).
 VulkanSurface surface = surfaceFactory.Create(instanceHandle: instance.Handle, binding: nativeSurfaceBinding);
 
 // 3. Physical device — scored selection (see below).
@@ -242,9 +246,10 @@ before relying on a path, and fall back otherwise:
   on `OutOfDate` / `Suboptimal` / `NotReady`.
 - **Public is intentional.** Wide visibility is a deliberate design choice for this layer; a
   large public surface is not a smell here.
-- **Platform / shader inputs come from elsewhere.** `NativeDisplayKind` / `NativeSurfaceBinding`
-  are from `Puck.Platform`; `ShaderStageInfo` is from `Puck.Shaders`. This library doesn't open
-  windows or compile shaders — it consumes their outputs.
+- **Abstraction / shader inputs come from elsewhere.** `NativeDisplayKind` / `NativeSurfaceBinding`
+  and the `IAllocator` it marshals through are from `Puck.Abstractions`; `ShaderStageInfo` is from
+  `Puck.Shaders`. This library doesn't open windows, compile shaders, or pick a concrete allocator — it
+  consumes those, so it has no dependency on `Puck.Platform`.
 - **Bindings are spec-faithful mirrors.** A `Vk*` struct is a byte-identical ABI mirror of its
   `vulkan_core.h` counterpart (deviations are flagged `EXCEPTION` in the type's `<remarks>`);
   document and use fields by their Vulkan-spec meaning.

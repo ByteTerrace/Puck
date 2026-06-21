@@ -11,6 +11,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="Width">The image width, in texels.</param>
 /// <param name="Height">The image height, in texels.</param>
 /// <param name="Format">The image format, as a <c>VkFormat</c> value; must match the external resource.</param>
+/// <param name="UsageFlags">A bitmask of <c>VkImageUsageFlagBits</c> for the imported image; 0 uses the default SAMPLED | COLOR_ATTACHMENT (a sampled render target). A storage import (Vulkan producing INTO a foreign resource) wants STORAGE | SAMPLED, which requires the foreign resource to allow unordered access.</param>
 public readonly record struct VulkanExternalImageImportRequest(
     nint DeviceHandle,
     nint InstanceHandle,
@@ -18,5 +19,6 @@ public readonly record struct VulkanExternalImageImportRequest(
     nint SharedHandle,
     uint Width,
     uint Height,
-    uint Format
+    uint Format,
+    uint UsageFlags = 0
 );

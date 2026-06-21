@@ -1,6 +1,8 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Puck.Input;
 using Puck.Platform.Linux.Interop;
 
 namespace Puck.Platform.Linux;
@@ -10,7 +12,7 @@ namespace Puck.Platform.Linux;
 /// fixed set of navigation/function keys on the standard Linux evdev keymap). Full keysym
 /// text input and clipboard integration are out of scope; on the Steam Deck this path runs
 /// under XWayland, while the native Gamescope path is <see cref="WaylandNativeWindow"/>.</summary>
-internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvider {
+internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
     private const uint XcbAtomAtom = 4;
     private const uint XcbAtomString = 31;
     private const uint XcbAtomWmName = 39;
@@ -22,10 +24,12 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
     private const byte XcbDestroyNotify = 17;
     private const uint XcbEventMaskExposure = 32768;
     private const uint XcbEventMaskKeyPress = 1;
+    private const uint XcbEventMaskKeyRelease = 2;
     private const uint XcbEventMaskPointerMotion = 64;
     private const uint XcbEventMaskStructureNotify = 131072;
     private const byte XcbExpose = 12;
     private const byte XcbKeyPress = 2;
+    private const byte XcbKeyRelease = 3;
     private const byte XcbMotionNotify = 6;
     private const byte XcbPropModeReplace = 0;
     private const byte XcbResponseTypeMask = 0x7F;
@@ -48,7 +52,7 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
     private readonly nint m_connection;
     private readonly uint m_deleteWindowAtom;
     private readonly NativeWindowOptions m_options;
-    private readonly Queue<InputPacket> m_pendingInput = [];
+    private readonly Queue<WindowInputEvent> m_pendingInput = [];
     private readonly uint m_window;
     private bool m_disposed;
     private bool m_hasPainted;
@@ -56,6 +60,8 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
     private bool m_isVisible;
     private int? m_lastPointerX;
     private int? m_lastPointerY;
+    private byte? m_pendingReleaseKeycode;
+    private uint m_pendingReleaseTime;
 
     public XcbNativeWindow(IOptions<NativeWindowOptions> options) {
         ArgumentNullException.ThrowIfNull(options);
@@ -100,7 +106,7 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
             depth: XcbCopyFromParent,
             height: (ushort)m_options.Height,
             parent: rootWindow,
-            valueList: [0u, (XcbEventMaskExposure | XcbEventMaskKeyPress | XcbEventMaskPointerMotion | XcbEventMaskStructureNotify)],
+            valueList: [0u, (XcbEventMaskExposure | XcbEventMaskKeyPress | XcbEventMaskKeyRelease | XcbEventMaskPointerMotion | XcbEventMaskStructureNotify)],
             valueMask: XcbCwBackPixel | XcbCwEventMask,
             visual: rootVisual,
             width: (ushort)m_options.Width,
@@ -196,6 +202,13 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
                 Libc.free(pointer: eventPointer);
             }
         }
+
+        // A deferred release with no following repeat-press this batch was a real release; flush it. Auto-repeat
+        // release/press pairs are delivered together, so a genuine release never lingers past its own batch.
+        if (m_pendingReleaseKeycode is { } leftoverKeycode) {
+            m_pendingReleaseKeycode = null;
+            EmitKeyRelease(keycode: leftoverKeycode);
+        }
     }
     public void Show() {
         ObjectDisposedException.ThrowIf(
@@ -210,7 +223,7 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
         _ = Xcb.xcb_flush(connection: m_connection);
         m_isVisible = true;
     }
-    public bool TryDequeueInput(out InputPacket inputEvent) {
+    public bool TryDequeueInput(out WindowInputEvent inputEvent) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -295,6 +308,8 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
             ptr: eventPointer
         ) & XcbResponseTypeMask);
 
+        ReconcilePendingRelease(eventPointer: eventPointer, responseType: responseType);
+
         switch (responseType) {
             case XcbExpose:
                 m_hasPainted = true;
@@ -310,6 +325,11 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
                 return;
             case XcbKeyPress:
                 HandleKeyPress(eventPointer: eventPointer);
+                return;
+            case XcbKeyRelease:
+                // Defer the release by one event so an auto-repeat KeyPress can cancel it (see ReconcilePendingRelease).
+                m_pendingReleaseKeycode = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
+                m_pendingReleaseTime = (uint)Marshal.ReadInt32(ofs: 4, ptr: eventPointer);
                 return;
             case XcbDestroyNotify:
                 m_isOpen = false;
@@ -381,15 +401,38 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
                 (deltaX != 0) ||
                 (deltaY != 0)
             ) {
-                m_pendingInput.Enqueue(item: InputPacket.MouseMove(
-                    deltaX: deltaX,
-                    deltaY: deltaY
-                ));
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: new Vector2(
+                    x: deltaX,
+                    y: deltaY
+                )));
             }
         }
 
         m_lastPointerX = pointerX;
         m_lastPointerY = pointerY;
+    }
+    private void ReconcilePendingRelease(nint eventPointer, byte responseType) {
+        if (m_pendingReleaseKeycode is not { } pendingKeycode) {
+            return;
+        }
+
+        var keycode = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
+        var time = (uint)Marshal.ReadInt32(ofs: 4, ptr: eventPointer);
+
+        m_pendingReleaseKeycode = null;
+
+        // X11 auto-repeat: a held key arrives as KeyRelease immediately followed by a KeyPress with the same
+        // keycode and timestamp. Such a press cancels the deferred release (no up/down churn); the repeat
+        // KeyPress is then handled normally and emits another KeyDown, matching the Win32 repeat behavior.
+        if (
+            (responseType == XcbKeyPress) &&
+            (keycode == pendingKeycode) &&
+            (time == m_pendingReleaseTime)
+        ) {
+            return;
+        }
+
+        EmitKeyRelease(keycode: pendingKeycode);
     }
     private void HandleKeyPress(nint eventPointer) {
         var keycode = Marshal.ReadByte(
@@ -397,53 +440,36 @@ internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvi
             ptr: eventPointer
         );
 
+        if (TryMapKeycode(keycode: keycode, key: out var key)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: key));
+        }
+    }
+    private void EmitKeyRelease(byte keycode) {
+        if (TryMapKeycode(keycode: keycode, key: out var key)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(key: key));
+        }
+    }
+    private static bool TryMapKeycode(byte keycode, out KeyCode key) {
         if (
             (keycode >= KeycodeF1) &&
             (keycode <= KeycodeF8)
         ) {
-            m_pendingInput.Enqueue(item: FunctionKeyEvent(functionIndex: ((keycode - KeycodeF1) + 1)));
-            return;
+            key = (KeyCode)((int)KeyCode.F1 + (keycode - KeycodeF1));
+            return true;
         }
 
-        switch (keycode) {
-            case KeycodeEscape:
-                m_pendingInput.Enqueue(item: InputPacket.ToggleMainMenu());
-                return;
-            case KeycodeBackspace:
-                m_pendingInput.Enqueue(item: InputPacket.Backspace());
-                return;
-            case KeycodeReturn:
-                m_pendingInput.Enqueue(item: InputPacket.Submit());
-                return;
-            case KeycodeGrave:
-                m_pendingInput.Enqueue(item: InputPacket.ToggleConsole());
-                return;
-            case KeycodeUp:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowUp());
-                return;
-            case KeycodeDown:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowDown());
-                return;
-            case KeycodeLeft:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowLeft());
-                return;
-            case KeycodeRight:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowRight());
-                return;
-            default:
-                return;
-        }
-    }
-    private static InputPacket FunctionKeyEvent(int functionIndex) {
-        return functionIndex switch {
-            1 => InputPacket.Function1(),
-            2 => InputPacket.Function2(),
-            3 => InputPacket.Function3(),
-            4 => InputPacket.Function4(),
-            5 => InputPacket.Function5(),
-            6 => InputPacket.Function6(),
-            7 => InputPacket.Function7(),
-            _ => InputPacket.Function8()
+        key = keycode switch {
+            KeycodeEscape => KeyCode.Escape,
+            KeycodeBackspace => KeyCode.Backspace,
+            KeycodeReturn => KeyCode.Enter,
+            KeycodeGrave => KeyCode.Backtick,
+            KeycodeUp => KeyCode.ArrowUp,
+            KeycodeDown => KeyCode.ArrowDown,
+            KeycodeLeft => KeyCode.ArrowLeft,
+            KeycodeRight => KeyCode.ArrowRight,
+            _ => KeyCode.None,
         };
+
+        return (key != KeyCode.None);
     }
 }

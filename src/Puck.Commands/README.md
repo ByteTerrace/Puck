@@ -158,6 +158,7 @@ registry.AddSource(source: new TextCommandSource(
 registry.BeginFrame();
 inputs.Enqueue(input: new InputSignal(            // producer feeds raw input
     Source: "Keyboard.Space",
+    DeviceId: default,
     Value: CommandValue.Digital(active: true),
     Phase: CommandPhase.Started
 ));

@@ -1,59 +1,62 @@
-using Puck.Platform;
-
 namespace Puck.Commands;
 
 /// <summary>
 /// The per-frame input/command pump. It owns no input routing — that is the registry's job (sources in,
-/// handlers out). Each frame it clears the previous frame's transient values, adapts raw platform packets
-/// onto the keyboard source, and collects this frame's commands from every source (keyboard and stdin
-/// alike). Only the platform-packet-to-input adapter is application-specific; it is supplied at
-/// construction, so the shell itself stays model-agnostic.
+/// handlers out). Each frame it clears the previous frame's transient values, enqueues the platform's input
+/// signals onto the keyboard source, and collects this frame's commands from every source (keyboard and
+/// stdin alike). The platform emits <see cref="InputSignal"/>s directly, so the shell needs no adapter.
 /// </summary>
 public sealed class CommandShell {
-    private readonly Func<InputPacket, InputSignal?> m_inputAdapter;
     private readonly BindingCommandSource m_keyboardSource;
     private readonly CommandRegistry m_registry;
 
     /// <summary>Initializes a new instance of the <see cref="CommandShell"/> class.</summary>
     /// <param name="registry">The registry that collects each frame's commands.</param>
-    /// <param name="keyboardSource">The binding source raw input packets are enqueued onto.</param>
-    /// <param name="standardInputSource">The text source draining piped or typed command lines.</param>
-    /// <param name="inputAdapter">The application's adapter from a platform packet to an input signal.</param>
-    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    /// <param name="bindingSource">The binding source raw input signals are enqueued onto.</param>
+    /// <param name="textSource">The text source draining piped or typed command lines.</param>
+    /// <param name="additionalSources">
+    /// Extra sources to register, such as a gamepad source — each owns its own production (and may run its own
+    /// device threads); the registry simply pulls them every frame like the keyboard and text sources.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="registry"/>, <paramref name="bindingSource"/>, or <paramref name="textSource"/> is <see langword="null"/>.</exception>
     public CommandShell(
         CommandRegistry registry,
-        BindingCommandSource keyboardSource,
-        TextCommandSource standardInputSource,
-        Func<InputPacket, InputSignal?> inputAdapter
+        BindingCommandSource bindingSource,
+        TextCommandSource textSource,
+        IEnumerable<ICommandSource>? additionalSources = null
     ) {
-        ArgumentNullException.ThrowIfNull(inputAdapter);
-        ArgumentNullException.ThrowIfNull(keyboardSource);
+        ArgumentNullException.ThrowIfNull(bindingSource);
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(standardInputSource);
+        ArgumentNullException.ThrowIfNull(textSource);
 
-        m_inputAdapter = inputAdapter;
-        m_keyboardSource = keyboardSource;
+        m_keyboardSource = bindingSource;
         m_registry = registry;
 
-        // Keyboard first, then stdin: both are pulled every frame, the latter draining any piped or typed
-        // command lines through the registry's text path.
-        m_registry.AddSource(source: keyboardSource);
-        m_registry.AddSource(source: standardInputSource);
+        m_registry.AddSource(source: bindingSource);
+        m_registry.AddSource(source: textSource);
+
+        if (additionalSources is not null) {
+            foreach (var source in additionalSources) {
+                m_registry.AddSource(source: source);
+            }
+        }
     }
 
     /// <summary>Clears the previous frame's transient command values. Call before enqueuing input.</summary>
     public void BeginFrame() {
         m_registry.BeginFrame();
     }
-    /// <summary>Adapts a raw platform packet to an input signal and enqueues it on the keyboard source.</summary>
-    /// <param name="packet">The platform packet to adapt and enqueue.</param>
-    public void Enqueue(InputPacket packet) {
-        if (m_inputAdapter(arg: packet) is { } input) {
-            m_keyboardSource.Enqueue(input: input);
-        }
-    }
     /// <summary>Collects this frame's commands from every source.</summary>
     public void Collect() {
         m_registry.Collect();
+    }
+    /// <summary>Clears all held digital values, so nothing stays asserted (call on focus loss).</summary>
+    public void ReleaseHeld() {
+        m_registry.ReleaseHeld();
+    }
+    /// <summary>Enqueues a platform input signal on the keyboard source.</summary>
+    /// <param name="signal">The input signal to enqueue.</param>
+    public void Enqueue(InputSignal signal) {
+        m_keyboardSource.Enqueue(input: signal);
     }
 }

@@ -11,6 +11,17 @@ namespace Puck.Vulkan;
 /// framebuffer, and swapchain-image entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSetApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeFramebufferSetApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeFramebufferSetApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     private const uint AspectColorBit = 0x00000001;
     private const uint ComponentSwizzleIdentity = 0;
     private const uint StructureTypeFramebufferCreateInfo = 37;
@@ -52,7 +63,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
             return [];
         }
 
-        var imageBuffer = Puck.Memory.Allocator.Alloc(size: (IntPtr.Size * checked((int)imageCount)));
+        var imageBuffer = m_allocator.Alloc(size: (IntPtr.Size * checked((int)imageCount)));
 
         try {
             result = getSwapchainImages(
@@ -74,7 +85,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
 
             return imageHandles;
         } finally {
-            Puck.Memory.Allocator.Free(ptr: imageBuffer);
+            m_allocator.Free(ptr: imageBuffer);
         }
     }
     /// <inheritdoc/>
@@ -87,13 +98,17 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
         }
 
         var createFramebuffer = GetPointers(deviceHandle: request.DeviceHandle).CreateFramebuffer;
-        var attachmentsPointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+        var attachmentsPointer = m_allocator.Alloc(size: IntPtr.Size);
 
         try {
             Marshal.WriteIntPtr(
                 ptr: attachmentsPointer,
                 val: request.ImageViewHandle
             );
+            // SINGLE attachment, SINGLE layer: the request carries one image view, matching the swapchain's single
+            // color target. The render-pass API accepts multiple attachments, so if a multi-attachment pass (e.g. color
+            // + depth, or MRT) is ever paired with this framebuffer, the request must take an array of image views and
+            // AttachmentCount must equal the pass's attachment count — a mismatch creates an invalid framebuffer.
             var createInfo = new VkFramebufferCreateInfo {
                 AttachmentCount = 1,
                 Height = request.Height,
@@ -111,7 +126,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
                 out framebufferHandle
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: attachmentsPointer);
+            m_allocator.Free(ptr: attachmentsPointer);
         }
     }
     /// <inheritdoc/>

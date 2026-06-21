@@ -1,19 +1,24 @@
 <Solution>
     <Folder Name="/src/">
+        <Project Path="src/Puck.Abstractions/Puck.Abstractions.csproj" />
         <Project Path="src/Puck.Assets/Puck.Assets.csproj" />
         <Project Path="src/Puck.Cameras/Puck.Cameras.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
         <Project Path="src/Puck.Compositing/Puck.Compositing.csproj" />
         <Project Path="src/Puck.Demo/Puck.Demo.csproj" />
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
+        <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
         <Project Path="src/Puck.Hosting/Puck.Hosting.csproj" />
+        <Project Path="src/Puck.Input/Puck.Input.csproj" />
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />
         <Project Path="src/Puck.Platform/Puck.Platform.csproj" />
+        <Project Path="src/Puck.Scene/Puck.Scene.csproj" />
         <Project Path="src/Puck.SdfVm/Puck.SdfVm.csproj" />
         <Project Path="src/Puck.Shaders/Puck.Shaders.csproj" />
         <Project Path="src/Puck.Storage/Puck.Storage.csproj" />
         <Project Path="src/Puck.Text/Puck.Text.csproj" />
         <Project Path="src/Puck.Vulkan/Puck.Vulkan.csproj" />
+        <Project Path="src/Puck.Vulkan.Presentation/Puck.Vulkan.Presentation.csproj" />
     </Folder>
 </Solution>

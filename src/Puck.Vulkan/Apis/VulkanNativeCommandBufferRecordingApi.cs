@@ -11,6 +11,17 @@ namespace Puck.Vulkan;
 /// <c>vkCmd*</c> command-recording entry points resolved per device from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanCommandBufferRecordingApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeCommandBufferRecordingApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeCommandBufferRecordingApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     private const uint ComputePipelineBindPoint = 1;
     private const uint GraphicsPipelineBindPoint = 0;
     private const uint ImageAspectColorBit = 0x00000001;
@@ -270,6 +281,16 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
+    public void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong offset) {
+        var dispatchIndirect = GetPointers(deviceHandle: deviceHandle).CmdDispatchIndirect;
+
+        dispatchIndirect(
+            commandBufferHandle,
+            bufferHandle,
+            offset
+        );
+    }
+    /// <inheritdoc/>
     public void Draw(nint deviceHandle, nint commandBufferHandle, uint vertexCount, uint instanceCount, uint firstVertex, uint firstInstance) {
         if (0 == deviceHandle) {
             throw new ArgumentException(
@@ -327,7 +348,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 LevelCount = mipLevelCount,
             },
         };
-        var pointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkImageMemoryBarrier>());
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageMemoryBarrier>());
 
         try {
             Marshal.StructureToPtr(
@@ -348,7 +369,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 pointer
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: pointer);
+            m_allocator.Free(ptr: pointer);
         }
     }
     /// <inheritdoc/>
@@ -458,7 +479,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 MipLevel = 0,
             },
         };
-        var copyPointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkImageCopy>());
+        var copyPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageCopy>());
 
         try {
             Marshal.StructureToPtr(
@@ -476,7 +497,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 copyPointer
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: copyPointer);
+            m_allocator.Free(ptr: copyPointer);
         }
     }
     /// <inheritdoc/>
@@ -511,7 +532,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 MipLevel = 0,
             },
         };
-        var pointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
 
         try {
             Marshal.StructureToPtr(
@@ -528,7 +549,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 pointer
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: pointer);
+            m_allocator.Free(ptr: pointer);
         }
     }
     /// <inheritdoc/>
@@ -565,7 +586,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 MipLevel = 0,
             },
         };
-        var pointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
 
         try {
             Marshal.StructureToPtr(
@@ -582,7 +603,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 pointer
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: pointer);
+            m_allocator.Free(ptr: pointer);
         }
     }
     /// <inheritdoc/>
@@ -636,7 +657,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 MipLevel = sourceMipLevel,
             },
         };
-        var pointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkImageBlit>());
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageBlit>());
 
         try {
             Marshal.StructureToPtr(
@@ -655,7 +676,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 filter
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: pointer);
+            m_allocator.Free(ptr: pointer);
         }
     }
     /// <inheritdoc/>
@@ -819,7 +840,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 float32_3: 1f
             ),
         };
-        var clearValuePointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkClearValue>());
+        var clearValuePointer = m_allocator.Alloc(size: Marshal.SizeOf<VkClearValue>());
 
         try {
             Marshal.StructureToPtr(
@@ -852,7 +873,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 SubpassContentsInline
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: clearValuePointer);
+            m_allocator.Free(ptr: clearValuePointer);
         }
     }
 
@@ -864,6 +885,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         public delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void> CmdBeginRenderPass;
         public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void> CmdDraw;
         public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void> CmdDispatch;
+        public delegate* unmanaged[Cdecl]<nint, nint, ulong, void> CmdDispatchIndirect;
         public delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void> CmdSetScissor;
         public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void> CmdPipelineBarrier;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdClearColorImage;
@@ -968,6 +990,12 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
         fixed (byte* pName = "vkCmdDispatch"u8) {
             pNew.CmdDispatch = (delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)getAddr(
+                deviceHandle,
+                pName
+            );
+        }
+        fixed (byte* pName = "vkCmdDispatchIndirect"u8) {
+            pNew.CmdDispatchIndirect = (delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)getAddr(
                 deviceHandle,
                 pName
             );

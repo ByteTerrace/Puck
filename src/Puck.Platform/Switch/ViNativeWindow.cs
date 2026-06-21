@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Puck.Input;
 
 namespace Puck.Platform.Switch;
 
@@ -6,7 +7,7 @@ namespace Puck.Platform.Switch;
 /// <see cref="ISwitchViWindowBackend"/> (the licensed SDK shim) to the engine's window
 /// contract and emitting a <see cref="ViNativeSurfaceBinding"/> for Vulkan surface creation.
 /// HID/controller input is handled separately and is out of scope here.</summary>
-internal sealed class ViNativeWindow : INativeWindow, INativeSurfaceSourceProvider {
+internal sealed class ViNativeWindow : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
     private readonly ISwitchViWindowBackend m_backend;
     private readonly NativeWindowOptions m_options;
     private bool m_disposed;
@@ -88,7 +89,7 @@ internal sealed class ViNativeWindow : INativeWindow, INativeSurfaceSourceProvid
         // first paint is satisfied once the layer is shown.
         m_hasPainted = true;
     }
-    public bool TryDequeueInput(out InputPacket inputEvent) {
+    public bool TryDequeueInput(out WindowInputEvent inputEvent) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this

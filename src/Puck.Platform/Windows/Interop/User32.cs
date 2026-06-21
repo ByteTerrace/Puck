@@ -125,4 +125,9 @@ internal static partial class User32 {
     public static partial bool PrintWindow(nint windowHandle, nint deviceContextHandle, uint flags);
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial int ReleaseDC(nint windowHandle, nint deviceContextHandle);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool RegisterRawInputDevices(in RawInputDevice rawInputDevices, uint deviceCount, uint size);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial uint GetRawInputData(nint rawInput, uint command, out RawInput data, ref uint size, uint headerSize);
 }

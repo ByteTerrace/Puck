@@ -121,6 +121,43 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
         }
     }
     /// <inheritdoc/>
+    public long GetAdapterLuid(nint deviceHandle) {
+        if (0 == deviceHandle) {
+            throw new ArgumentException(
+                message: "Direct3D 12 device handle must be non-zero.",
+                paramName: nameof(deviceHandle)
+            );
+        }
+
+        // GetAdapterLuid reports the LUID of the adapter the device was created on; packing it the same way as a DXGI
+        // adapter description yields a value directly comparable to a Vulkan physical device's reported LUID. Like the
+        // descriptor-handle getters it returns a struct by value through the hidden-pointer x64 COM ABI the CsWin32
+        // wrapper omits, so invoke the vtable slot directly with the return-by-pointer signature.
+        var device = (ID3D12Device*)deviceHandle;
+        var vtable = *(void***)device;
+        LUID luid;
+
+        ((delegate* unmanaged[Stdcall]<ID3D12Device*, LUID*, void>)vtable[DirectXConstants.GetAdapterLuidSlot])(
+            device,
+            &luid
+        );
+
+        return DxgiInterop.ToLuid(luid: in luid);
+    }
+    /// <inheritdoc/>
+    public int GetDeviceRemovedReason(nint deviceHandle) {
+        if (0 == deviceHandle) {
+            return 0;
+        }
+
+        // CsWin32 maps GetDeviceRemovedReason's HRESULT into a throwing void-returning friendly overload, discarding the
+        // exact reason — so invoke the vtable slot directly to read the raw HRESULT (e.g. DXGI_ERROR_DEVICE_HUNG).
+        var device = (ID3D12Device*)deviceHandle;
+        var vtable = *(void***)device;
+
+        return ((delegate* unmanaged[Stdcall]<ID3D12Device*, int>)vtable[DirectXConstants.GetDeviceRemovedReasonSlot])(device);
+    }
+    /// <inheritdoc/>
     public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) {
         var factory = DxgiInterop.CreateFactory();
 

@@ -1,0 +1,801 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "host": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "backend": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer"
+          }
+        },
+        "presentMode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "surfaceFormat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exitAfterSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "renderRate": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rayQuery": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "timing": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "scene": {
+      "type": "object",
+      "properties": {
+        "materials": {
+          "type": "array",
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "albedo": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "shape"
+            ],
+            "anyOf": [
+              {
+                "properties": {
+                  "shape": {
+                    "const": "sphere"
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "required": [
+                        "op"
+                      ],
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "translate"
+                            },
+                            "offset": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "rotate"
+                            },
+                            "rotation": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "scale"
+                            },
+                            "scale": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "repeat"
+                            },
+                            "spacing": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "repeatLimited"
+                            },
+                            "spacing": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "limit": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "symmetryX"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "symmetryY"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "symmetryZ"
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "box"
+                  },
+                  "halfExtents": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "round": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "torus"
+                  },
+                  "majorRadius": {
+                    "type": "number"
+                  },
+                  "minorRadius": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "plane"
+                  },
+                  "normal": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "offset": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "roundCone"
+                  },
+                  "lowerRadius": {
+                    "type": "number"
+                  },
+                  "upperRadius": {
+                    "type": "number"
+                  },
+                  "height": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "screenSlab"
+                  },
+                  "halfExtents": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "round": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "viewports": {
+      "type": "array",
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "camera": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "properties": {
+                  "$type": {
+                    "const": "orbit"
+                  },
+                  "angularSpeed": {
+                    "type": "number"
+                  },
+                  "azimuth": {
+                    "type": "number"
+                  },
+                  "fieldOfView": {
+                    "type": "number"
+                  },
+                  "height": {
+                    "type": "number"
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "target": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "$type": {
+                    "const": "perspective"
+                  },
+                  "fieldOfView": {
+                    "type": "number"
+                  },
+                  "position": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "target": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "region": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "graph": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "properties": {
+            "$type": {
+              "const": "showcase"
+            },
+            "produce": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "capture": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "$type": {
+              "const": "world"
+            },
+            "child": {
+              "type": "boolean"
+            },
+            "produce": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "capture": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "$type": {
+              "const": "rt"
+            },
+            "produce": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "capture": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "validation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "gate": {
+          "type": "string"
+        },
+        "thresholds": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "maxChannelDelta": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "maxPercentDiffering": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "minUnitDeltaFraction": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "minIsolatedFraction": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "maxMeanAbsError": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "artifactDir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixedFrame": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "child": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "fuzzing": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "seedRange": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer"
+          }
+        },
+        "timeoutSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bounds": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "maxMaterials": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "maxPrimitives": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "translation": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "scale": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "smooth": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "sphereRadius": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "boxHalfExtent": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "boxRound": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "torusMajorRadius": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "torusMinorRadius": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "roundConeLowerRadius": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "roundConeUpperRadius": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            },
+            "roundConeHeight": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

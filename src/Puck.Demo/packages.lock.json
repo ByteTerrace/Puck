@@ -32,12 +32,6 @@
           "Microsoft.Extensions.Options": "10.0.9"
         }
       },
-      "System.CommandLine": {
-        "type": "Direct",
-        "requested": "[2.0.9, )",
-        "resolved": "2.0.9",
-        "contentHash": "SW0WhEk4NFVZ4lOnsLrHQOV/7s0eTidezNybHQWXfqhuXWB17X3RXbrifeWBbUx1iu+NcYchVSufmW7svjUEnA=="
-      },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
         "resolved": "10.0.9",
@@ -293,6 +287,11 @@
         "resolved": "10.0.9",
         "contentHash": "dk5HKolAR9bBxlL4dl6Koaf0s/Q47QApog+/o341LSuvWGW6ig4q5fTsgYG0MrK//l2Slv6mygncMK/8lgXVDg=="
       },
+      "System.CommandLine": {
+        "type": "Transitive",
+        "resolved": "2.0.9",
+        "contentHash": "SW0WhEk4NFVZ4lOnsLrHQOV/7s0eTidezNybHQWXfqhuXWB17X3RXbrifeWBbUx1iu+NcYchVSufmW7svjUEnA=="
+      },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
         "resolved": "10.0.9",
@@ -306,6 +305,9 @@
           "Microsoft.Win32.SystemEvents": "10.0.9"
         }
       },
+      "puck.abstractions": {
+        "type": "Project"
+      },
       "puck.assets": {
         "type": "Project",
         "dependencies": {
@@ -318,42 +320,79 @@
       "puck.commands": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.Platform": "[1.0.0, )",
-          "System.CommandLine": "[2.0.9, )"
+          "System.CommandLine": "[2.*, )"
         }
       },
       "puck.compositing": {
         "type": "Project",
         "dependencies": {
-          "Puck.Hosting": "[1.0.0, )",
-          "Puck.Vulkan": "[1.0.0, )"
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Assets": "[1.0.0, )"
         }
       },
       "puck.directx": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
+      "puck.directx.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.Hosting": "[10.*, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.DirectX": "[1.0.0, )",
+          "Puck.Hosting": "[1.0.0, )"
+        }
       },
       "puck.hosting": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Commands": "[1.0.0, )"
+        }
+      },
+      "puck.input": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Commands": "[1.0.0, )"
+        }
       },
       "puck.launcher": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.Assets": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )",
-          "Puck.Compositing": "[1.0.0, )",
+          "Puck.Abstractions": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Platform": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )",
-          "Puck.Vulkan": "[1.0.0, )"
+          "Puck.Input": "[1.0.0, )",
+          "Puck.Platform.Abstractions": "[1.0.0, )"
         }
       },
       "puck.platform": {
         "type": "Project",
         "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
           "Microsoft.Extensions.Options": "[10.*, )",
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Commands": "[1.0.0, )",
+          "Puck.Input": "[1.0.0, )",
+          "Puck.Platform.Abstractions": "[1.0.0, )",
           "System.Drawing.Common": "[10.*, )"
+        }
+      },
+      "puck.platform.abstractions": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Input": "[1.0.0, )"
+        }
+      },
+      "puck.scene": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Cameras": "[1.0.0, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )"
         }
       },
       "puck.sdfvm": {
@@ -363,8 +402,7 @@
           "Puck.Cameras": "[1.0.0, )",
           "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )",
-          "Puck.Vulkan": "[1.0.0, )"
+          "Puck.Shaders": "[1.0.0, )"
         }
       },
       "puck.shaders": {
@@ -376,8 +414,19 @@
       "puck.vulkan": {
         "type": "Project",
         "dependencies": {
-          "Puck.Platform": "[1.0.0, )",
+          "Puck.Abstractions": "[1.0.0, )",
           "Puck.Shaders": "[1.0.0, )"
+        }
+      },
+      "puck.vulkan.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.Hosting": "[10.*, )",
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.Hosting": "[1.0.0, )",
+          "Puck.Shaders": "[1.0.0, )",
+          "Puck.Vulkan": "[1.0.0, )"
         }
       }
     }

@@ -1,17 +1,20 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
+using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
+using Windows.Win32.Security;
 using Windows.Win32.System.Com;
 
 namespace Puck.DirectX.Interop;
 
 /// <summary>
 /// Owns a Direct3D 12 device and a direct command queue, and exposes them as an
-/// <see cref="IDirectXDeviceContext"/>. This is the Direct3D 12 analog of the Vulkan renderer that owns and
-/// publishes the shared device chain: a host creates one and publishes it through the capability seam so every
-/// DirectX node in its subtree resolves — and shares — the same device.
+/// <see cref="IDirectXDeviceContext"/> and <see cref="IGpuDeviceContext"/>. This is the Direct3D 12 analog of
+/// the Vulkan renderer that owns and publishes the shared device chain: a host creates one and publishes it
+/// through the capability seam so every DirectX node in its subtree resolves — and shares — the same device.
 /// <para>
 /// The device is created lazily on first use, on the adapter identified by <c>adapterLuid</c> (so it can be
 /// matched to another backend's GPU for resource sharing) — falling back to the default adapter when the LUID
@@ -19,13 +22,17 @@ namespace Puck.DirectX.Interop;
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IDisposable {
+public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDeviceContext, IDisposable {
     private readonly long m_adapterLuid;
     private readonly IDirectXDeviceApi m_deviceApi;
     private readonly Func<long>? m_adapterLuidProvider;
     private nint m_commandQueue;
     private DirectXDevice? m_device;
     private bool m_disposed;
+    private nint m_idleFence;
+    private nint m_infoQueue;
+    private HANDLE m_idleFenceEvent;
+    private ulong m_idleFenceValue;
 
     /// <summary>Initializes a new instance that creates its device on the default adapter at feature level 11.0.</summary>
     public DirectXDeviceContext()
@@ -64,6 +71,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IDispos
     }
 
     /// <inheritdoc />
+    public nint DeviceHandle {
+        get {
+            EnsureCreated();
+
+            return m_device!.Handle;
+        }
+    }
+    /// <inheritdoc />
     public nint CommandQueueHandle {
         get {
             EnsureCreated();
@@ -94,6 +109,23 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IDispos
             return;
         }
 
+        // Enable the Direct3D 12 debug layer BEFORE device creation so it validates this device and feeds the
+        // [d3d12-debug] drain. OPT-IN via PUCK_D3D12_DEBUG: on some configurations (observed on a Windows 11
+        // build 26200 / RTX 4070 with a mismatched Graphics Tools layer) EnableDebugLayer poisons the process
+        // so the very next D3D12CreateDevice fails with DXGI_ERROR_DEVICE_RESET (0x887A0007) — and the layer
+        // cannot be turned off once enabled in a process, so there is no in-process recovery. Defaulting off
+        // keeps device creation working everywhere; set PUCK_D3D12_DEBUG=1 to get the validation drain on
+        // machines where the layer is healthy.
+        if (Environment.GetEnvironmentVariable("PUCK_D3D12_DEBUG") is not null) {
+            void* debugInterface;
+            var debugIid = ID3D12Debug.IID_Guid;
+
+            if (PInvoke.D3D12GetDebugInterface(riid: in debugIid, ppvDebug: &debugInterface).Succeeded) {
+                ((ID3D12Debug*)debugInterface)->EnableDebugLayer();
+                _ = ((IUnknown*)debugInterface)->Release();
+            }
+        }
+
         var adapterLuid = (m_adapterLuidProvider?.Invoke() ?? m_adapterLuid);
 
         m_device = ((0 != adapterLuid)
@@ -102,6 +134,15 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IDispos
                 minimumFeatureLevel: FeatureLevel
             )
             : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel));
+
+        // The info queue (present only when the debug layer loaded) lets DrainDebugMessages surface validation
+        // messages to the console instead of only OutputDebugString.
+        void* infoQueuePtr;
+        var infoQueueIid = ID3D12InfoQueue.IID_Guid;
+
+        if (((IUnknown*)m_device.Handle)->QueryInterface(in infoQueueIid, out infoQueuePtr).Succeeded) {
+            m_infoQueue = (nint)infoQueuePtr;
+        }
 
         var queueDesc = new D3D12_COMMAND_QUEUE_DESC {
             Type = D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -113,6 +154,28 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IDispos
             ppCommandQueue: out var commandQueue
         );
         m_commandQueue = (nint)commandQueue;
+
+        ((ID3D12Device*)m_device.Handle)->CreateFence(
+            InitialValue: 0,
+            Flags: default,
+            riid: ID3D12Fence.IID_Guid,
+            ppFence: out var idleFence
+        );
+        m_idleFence = (nint)idleFence;
+        m_idleFenceValue = 1;
+        m_idleFenceEvent = PInvoke.CreateEvent(
+            lpEventAttributes: (SECURITY_ATTRIBUTES*)null,
+            bManualReset: false,
+            bInitialState: false,
+            lpName: default(PCWSTR)
+        );
+
+        if (m_idleFenceEvent.IsNull) {
+            throw new DirectXException(
+                operation: "CreateEventW",
+                result: Marshal.GetHRForLastWin32Error()
+            );
+        }
     }
     private static DirectXDevice CreateDefaultDevice(DirectXFeatureLevel minimumFeatureLevel) {
         void* device;
@@ -131,17 +194,97 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IDispos
         );
     }
 
+    /// <inheritdoc/>
+    public void WaitIdle() {
+        EnsureCreated();
+
+        var fence = (ID3D12Fence*)m_idleFence;
+        var value = m_idleFenceValue;
+
+        ((ID3D12CommandQueue*)m_commandQueue)->Signal(fence, value);
+        m_idleFenceValue++;
+
+        if (fence->GetCompletedValue() < value) {
+            fence->SetEventOnCompletion(value, m_idleFenceEvent);
+            _ = PInvoke.WaitForSingleObject(hHandle: m_idleFenceEvent, dwMilliseconds: uint.MaxValue);
+        }
+
+        DrainDebugMessages();
+    }
+
+    // Surface any Direct3D 12 debug-layer messages accumulated since the last drain to the console, then clear them.
+    // A no-op when the debug layer / info queue is unavailable.
+    private void DrainDebugMessages() {
+        if (0 == m_infoQueue) {
+            return;
+        }
+
+        var infoQueue = (ID3D12InfoQueue*)m_infoQueue;
+        var count = infoQueue->GetNumStoredMessages();
+
+        for (var index = 0UL; (index < count); index++) {
+            nuint length = 0;
+
+            // First call (null message) returns the byte length the message + its description need.
+            infoQueue->GetMessage(MessageIndex: index, pMessage: null, pMessageByteLength: &length);
+
+            if (0 == length) {
+                continue;
+            }
+
+            var buffer = new byte[(int)length];
+
+            fixed (byte* pointer = buffer) {
+                var message = (D3D12_MESSAGE*)pointer;
+
+                infoQueue->GetMessage(MessageIndex: index, pMessage: message, pMessageByteLength: &length);
+
+                var description = new string(
+                    value: (sbyte*)message->pDescription,
+                    startIndex: 0,
+                    length: (int)((message->DescriptionByteLength > 0) ? (message->DescriptionByteLength - 1) : 0)
+                );
+
+                Console.Error.WriteLine(value: $"[d3d12-debug] {message->Severity}: {description}");
+            }
+        }
+
+        infoQueue->ClearStoredMessages();
+    }
+
     /// <summary>Releases the command queue and the owned device. Safe to call more than once.</summary>
     public void Dispose() {
         if (m_disposed) {
             return;
         }
 
+        if (
+            (0 != m_commandQueue) &&
+            (0 != m_idleFence)
+        ) {
+            WaitIdle();
+        }
+
         m_disposed = true;
+
+        if (0 != m_idleFence) {
+            _ = ((IUnknown*)m_idleFence)->Release();
+            m_idleFence = 0;
+        }
+
+        if (!m_idleFenceEvent.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_idleFenceEvent);
+            m_idleFenceEvent = HANDLE.Null;
+        }
 
         if (0 != m_commandQueue) {
             _ = ((IUnknown*)m_commandQueue)->Release();
             m_commandQueue = 0;
+        }
+
+        if (0 != m_infoQueue) {
+            _ = ((IUnknown*)m_infoQueue)->Release();
+            m_infoQueue = 0;
         }
 
         m_device?.Dispose();

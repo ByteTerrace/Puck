@@ -1,17 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <!--
         The signed-distance-function engine: the instruction ISA, the program representation, the fluent
-        authoring builder, and the GLSL interpreter (Shaders/sdf-vm.glsl), plus the GPU host that runs the
-        VM — cameras, viewports, split-screen compositing, and an SdfEngineNode that renders the world into
-        its own offscreen surface for a host to composite. The C# and the shaders are halves of one engine
-        and must stay in sync.
+        authoring builder, and the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
+        view/composite/fullscreen stages), plus the GPU host that runs the VM — cameras, viewports,
+        split-screen compositing, and an SdfEngineNode that renders the world into its own offscreen surface
+        for a host to composite. The C# and the shaders are halves of one engine and must stay in sync.
     -->
     <PropertyGroup>
-        <GlslcCommand>glslc</GlslcCommand>
-        <GlslcOptimization>-O</GlslcOptimization>
-        <!-- The VM interpreter (sdf-vm.glsl) lives alongside the host shaders now; this is an intra-project
-             include path (no longer a cross-project hack). -->
-        <SdfVmShaderIncludeDir>$(MSBuildThisFileDirectory)Shaders</SdfVmShaderIncludeDir>
+        <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the single
+             HLSL source to both SPIR-V (Vulkan) and DXIL (DirectX). Override with /p:DxcCommand="path\to\dxc". -->
+        <DxcCommand>dxc</DxcCommand>
     </PropertyGroup>
 
     <ItemGroup>
@@ -20,50 +18,67 @@
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
-        <ProjectReference Include="..\Puck.Vulkan\Puck.Vulkan.csproj" />
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Ship the compiled bytecode: SPIR-V for the Vulkan SDF renderer, DXIL for the DirectX SDF producer. -->
         <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets\Shaders\**\*.dxil" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
-
-    <ItemDefinitionGroup>
-        <ShaderSource>
-            <TargetEnv>vulkan1.0</TargetEnv>
-        </ShaderSource>
-    </ItemDefinitionGroup>
 
     <ItemGroup>
-        <ShaderInclude Include="$(SdfVmShaderIncludeDir)\**\*.glsl" />
-        <ShaderSource Include="Assets\Shaders\**\*.frag" />
-        <ShaderSource Include="Assets\Shaders\**\*.vert" />
+        <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
+        <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
+        <!-- The ray-query kernels (*.rq.comp.hlsl) need Shader Model 6.5 (inline RayQuery) and the vulkan1.2 SPIR-V
+             target, so they have their own rule below; EXCLUDE them from the cs_6_0 compute batch. They compile to
+             BOTH SPIR-V (Vulkan) and DXIL (Direct3D 12 DXR 1.1) — inline ray tracing is expressible in both. -->
+        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" Exclude="Assets\Shaders\**\*.rq.comp.hlsl" />
+        <RayQueryComputeShaderSource Include="Assets\Shaders\**\*.rq.comp.hlsl" />
+        <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
     </ItemGroup>
 
+    <!-- Compile each *.vert.hlsl / *.frag.hlsl to BOTH SPIR-V (Vulkan; entry renamed to "main") and DXIL
+         (DirectX). DXC resolves #include relative to the source directory. The vk:: binding/push-constant
+         attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. -->
     <Target
         BeforeTargets="PrepareForBuild"
-        Inputs="@(ShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)"
+        Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)"
         Name="CompileShaders"
-        Outputs="@(ShaderSource -> '%(RootDir)%(Directory)%(Filename)%(Extension).spv')"
+        Outputs="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')"
     >
         <Exec
-            Command="&quot;$(GlslcCommand)&quot; --version"
+            Command="&quot;$(DxcCommand)&quot; --version"
             ConsoleToMSBuild="true"
             IgnoreExitCode="true"
             StandardErrorImportance="High"
             StandardOutputImportance="Low"
         >
             <Output
-                PropertyName="GlslcProbeExitCode"
+                PropertyName="DxcProbeExitCode"
                 TaskParameter="ExitCode"
             />
         </Exec>
         <Error
-            Condition="'$(GlslcProbeExitCode)' != '0'"
-            Text="Puck.SdfVm shader compilation requires '$(GlslcCommand)' to run successfully. Install the Vulkan SDK or pass /p:GlslcCommand=&quot;path\to\glslc&quot;."
+            Condition="'$(DxcProbeExitCode)' != '0'"
+            Text="Puck.SdfVm shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;."
         />
-        <Exec
-            Condition="'$(GlslcProbeExitCode)' == '0'"
-            Command="&quot;$(GlslcCommand)&quot; $(GlslcOptimization) -I &quot;$(SdfVmShaderIncludeDir)&quot; --target-env=%(ShaderSource.TargetEnv) &quot;%(ShaderSource.FullPath)&quot; -o &quot;%(ShaderSource.RootDir)%(ShaderSource.Directory)%(ShaderSource.Filename)%(ShaderSource.Extension).spv&quot;"
-        />
+        <!-- The per-item-type Condition guards (FullPath != '') keep a partial incremental build robust: when
+             only one shader stage changed, MSBuild runs the target with the other stage's batch empty, and an
+             unguarded Exec would invoke dxc with no input file. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T vs_6_0 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T vs_6_0 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <!-- Compute kernels: SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX). The vk:: binding/push-constant
+             attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings; the register()
+             slots drive the Direct3D 12 root signature. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T cs_6_0 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T cs_6_0 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <!-- Ray-query kernels compile to BOTH backends at Shader Model 6.5: SPIR-V (Vulkan; the vulkan1.2 target env
+             enables SPV_KHR_ray_query, entry renamed to "main") and DXIL (Direct3D 12 DXR 1.1 inline ray tracing). The
+             vk:: binding/push-constant/image-format attributes are SPIR-V-only, so the DXIL pass suppresses the
+             "attribute ignored" warnings; the register() slots drive the Direct3D 12 root signature. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.2 -fspv-entrypoint-name=main -T cs_6_5 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).spv&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T cs_6_5 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).dxil&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
     </Target>
 </Project>

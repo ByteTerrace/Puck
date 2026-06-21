@@ -43,6 +43,3 @@ Desktop.ini
 # Assets
 __azurite_db_blob*.json
 __blobstorage__
-
-# DocFx generated assets
-docs/api/

@@ -60,27 +60,34 @@ public sealed unsafe class DirectXNativeVertexBufferApi : IDirectXVertexBufferAp
 
         var buffer = (ID3D12Resource*)resource;
 
-        void* mapped;
+        try {
+            void* mapped;
 
-        buffer->Map(
-            0,
-            (D3D12_RANGE*)null,
-            &mapped
-        );
-        request.VertexData.Span.CopyTo(destination: new Span<byte>(
-            pointer: mapped,
-            length: (int)sizeBytes
-        ));
-        buffer->Unmap(
-            0,
-            (D3D12_RANGE*)null
-        );
+            buffer->Map(
+                0,
+                (D3D12_RANGE*)null,
+                &mapped
+            );
+            request.VertexData.Span.CopyTo(destination: new Span<byte>(
+                pointer: mapped,
+                length: (int)sizeBytes
+            ));
+            buffer->Unmap(
+                0,
+                (D3D12_RANGE*)null
+            );
 
-        return new DirectXVertexBufferCreateResult(
-            BufferHandle: (nint)resource,
-            GpuVirtualAddress: buffer->GetGPUVirtualAddress(),
-            SizeBytes: sizeBytes
-        );
+            return new DirectXVertexBufferCreateResult(
+                BufferHandle: (nint)resource,
+                GpuVirtualAddress: buffer->GetGPUVirtualAddress(),
+                SizeBytes: sizeBytes
+            );
+        } catch {
+            // The committed resource is created; release it if mapping/copying the vertex bytes fails.
+            _ = ((IUnknown*)resource)->Release();
+
+            throw;
+        }
     }
     /// <inheritdoc/>
     public void DestroyVertexBuffer(nint bufferHandle) {

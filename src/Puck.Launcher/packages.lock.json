@@ -305,6 +305,9 @@
           "Microsoft.Win32.SystemEvents": "10.0.9"
         }
       },
+      "puck.abstractions": {
+        "type": "Project"
+      },
       "puck.assets": {
         "type": "Project",
         "dependencies": {
@@ -314,39 +317,46 @@
       "puck.commands": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.Platform": "[1.0.0, )",
-          "System.CommandLine": "[2.0.9, )"
+          "System.CommandLine": "[2.*, )"
         }
       },
       "puck.compositing": {
         "type": "Project",
         "dependencies": {
-          "Puck.Hosting": "[1.0.0, )",
-          "Puck.Vulkan": "[1.0.0, )"
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Assets": "[1.0.0, )"
         }
       },
       "puck.hosting": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Commands": "[1.0.0, )"
+        }
+      },
+      "puck.input": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Commands": "[1.0.0, )"
+        }
       },
       "puck.platform": {
         "type": "Project",
         "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
           "Microsoft.Extensions.Options": "[10.*, )",
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Commands": "[1.0.0, )",
+          "Puck.Input": "[1.0.0, )",
+          "Puck.Platform.Abstractions": "[1.0.0, )",
           "System.Drawing.Common": "[10.*, )"
         }
       },
-      "puck.shaders": {
+      "puck.platform.abstractions": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )"
-        }
-      },
-      "puck.vulkan": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Platform": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )"
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Input": "[1.0.0, )"
         }
       }
     }

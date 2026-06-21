@@ -6,6 +6,8 @@ namespace Puck.Vulkan;
 public static class VulkanPipelineStageFlags {
     /// <summary>The <c>VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT</c> value.</summary>
     public const uint TopOfPipe = 0x00000001;
+    /// <summary>The <c>VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT</c> value (where indirect dispatch/draw args are consumed).</summary>
+    public const uint DrawIndirect = 0x00000002;
     /// <summary>The <c>VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT</c> value.</summary>
     public const uint FragmentShader = 0x00000080;
     /// <summary>The <c>VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT</c> value.</summary>

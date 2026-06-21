@@ -100,6 +100,12 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="groupCountY">The number of local work groups dispatched in the y dimension.</param>
     /// <param name="groupCountZ">The number of local work groups dispatched in the z dimension.</param>
     void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ);
+    /// <summary>Records an indirect compute dispatch (<c>vkCmdDispatchIndirect</c>): the group counts are read from a <c>VkDispatchIndirectCommand</c> in the buffer.</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
+    /// <param name="bufferHandle">The native <c>VkBuffer</c> handle holding the group counts (must carry <c>VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT</c>).</param>
+    /// <param name="offset">The byte offset into <paramref name="bufferHandle"/> of the <c>VkDispatchIndirectCommand</c>.</param>
+    void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong offset);
 
     // Low-level synchronization and transfer primitives: no barriers are implied, so the
     // caller sequences layouts and access/stage masks. All operate on 2D, single-layer,

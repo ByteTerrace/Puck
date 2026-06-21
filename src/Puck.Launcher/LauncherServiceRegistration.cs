@@ -1,18 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Puck.Assets;
+using Puck.Abstractions;
 using Puck.Commands;
-using Puck.Compositing;
 using Puck.Hosting;
 using Puck.Launcher.Commands;
-using Puck.Launcher.Vulkan;
-using Puck.Platform;
-using Puck.Platform.Windows;
-using Puck.Shaders;
-using Puck.Vulkan;
-using Puck.Vulkan.Apis;
-using Puck.Vulkan.Factories;
-using Puck.Vulkan.Interfaces;
 
 namespace Puck.Launcher;
 
@@ -20,69 +11,56 @@ namespace Puck.Launcher;
 /// against the Puck.* libraries — no engine-wide bring-up helper. Grouped by concern so the composition
 /// root stays readable.</summary>
 public static class LauncherServiceRegistration {
-    /// <summary>The engine-agnostic terminal: the native window + Vulkan swapchain owner, its surface-blit
-    /// compositor, the terminal-control <em>baton</em>, the command pump, and the run loop. It carries no
-    /// engine type — it drives whichever root <see cref="IRenderNode"/> the developer registers and blits
-    /// its one surface to the swapchain. The developer supplies (in their composition root): the root
-    /// <see cref="IRenderNode"/>, a <see cref="BindingCommandSource"/> (key bindings) and an
-    /// <c>InputPacket → InputSignal?</c> adapter for the pump, and any engine-specific
-    /// <see cref="ICommandModule"/>s. The root <see cref="IHostContext"/> is registered with
-    /// <c>TryAddSingleton</c> (publishing the Vulkan device + baton), so a developer whose root needs extra
-    /// capabilities can register their own instead.</summary>
+    /// <summary>The backend-neutral terminal: the terminal-control <em>baton</em>, the command pump, and the window
+    /// run loop. It carries no graphics backend AND no platform windowing — the run loop drives an
+    /// <see cref="ISurfacePresenter"/>, whichever root <see cref="IRenderNode"/> the developer registers, and the
+    /// <c>INativeWindowFactory</c> the composition root supplies. The composition root supplies a backend (e.g.
+    /// <c>AddVulkanPresenter</c>, which also provides the default root <see cref="IHostContext"/>), the native windowing
+    /// (e.g. <c>AddPlatformWindowing</c>), the root <see cref="IRenderNode"/>, a <see cref="BindingCommandSource"/> (the
+    /// key bindings the pump reads), and any engine-specific <see cref="ICommandModule"/>s.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddLauncherTerminal(this IServiceCollection services) {
-        var blitShaderDirectory = Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Shaders"
-        );
-
-        services
-            .AddLauncherPlatformWindowing()
-            .AddLauncherVulkan();
-
-        // The terminal's device/swapchain owner + its surface-blit compositor.
-        services.TryAddSingleton(new VulkanRendererOptions {
-            ApplicationName = "Puck.Launcher",
-        });
-        services.TryAddSingleton<VulkanRenderer>();
-        // Publish the device context as a public interface so a consumer can compose its own root
-        // IHostContext (e.g. adding a DirectX device) without referencing the internal renderer type.
-        services.TryAddSingleton<IVulkanDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
-        services.TryAddSingleton<VulkanQueueSubmitter>();
-        services.TryAddSingleton(implementationFactory: sp => new SurfaceCompositor(
-            commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
-            commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
-            descriptorApi: sp.GetRequiredService<IVulkanDescriptorApi>(),
-            framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
-            graphicsPipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>(),
-            offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
-            queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),
-            renderer: sp.GetRequiredService<VulkanRenderer>(),
-            shaderDirectory: blitShaderDirectory,
-            shaderModuleFactory: sp.GetRequiredService<IVulkanShaderModuleFactory>(),
-            shaderModuleLoader: sp.GetRequiredService<IShaderModuleLoader>(),
-            storageBufferFactory: sp.GetRequiredService<IVulkanStorageBufferFactory>(),
-            vertexBufferFactory: sp.GetRequiredService<IVulkanVertexBufferFactory>()
-        ));
-
         // The terminal's held capabilities, both backed by the one TerminalControl: the baton (terminal
-        // ownership/lifecycle) and input focus (the right to receive input). They are published as HELD on
-        // the root host context, so the root engine holds them via HoldsCapability and hosted children do
-        // not — the capability-permission system. The window loop drains exit + routes input through them.
+        // ownership/lifecycle) and input focus (the right to receive input). The backend's root host context
+        // publishes them as HELD on the root context, so the root engine holds them via HoldsCapability and
+        // hosted children do not — the capability-permission system. The window loop drains exit + routes
+        // input through them.
         services.TryAddSingleton<LauncherOptions>();
         services.TryAddSingleton<TerminalControl>();
         services.TryAddSingleton<ITerminalControl>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
         services.TryAddSingleton<IInputFocus>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
-        services.TryAddSingleton<IHostContext>(implementationFactory: static sp => new HostContext(
-            capabilities: new Dictionary<Type, object> {
-                [typeof(IVulkanDeviceContext)] = sp.GetRequiredService<VulkanRenderer>(),
-            },
-            heldCapabilities: new Dictionary<Type, object> {
-                [typeof(IInputFocus)] = sp.GetRequiredService<IInputFocus>(),
-                [typeof(ITerminalControl)] = sp.GetRequiredService<ITerminalControl>(),
-            }
+
+        // Contribute the terminal's held capabilities (the baton + input focus) to the root host context, and
+        // register the aggregator that assembles that context from every module's contributions — the device
+        // capability from whichever graphics backend is composed in, plus these — so neither side references
+        // the other. Registered with TryAdd so a composition root may publish its own root context instead.
+        services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
+            CapabilityType: typeof(IInputFocus),
+            Instance: sp.GetRequiredService<IInputFocus>(),
+            IsHeld: true
         ));
+        services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
+            CapabilityType: typeof(ITerminalControl),
+            Instance: sp.GetRequiredService<ITerminalControl>(),
+            IsHeld: true
+        ));
+        services.TryAddSingleton<IHostContext>(implementationFactory: static sp => {
+            var heldCapabilities = new Dictionary<Type, object>();
+            var inheritedCapabilities = new Dictionary<Type, object>();
+
+            foreach (var contribution in sp.GetServices<HostCapabilityContribution>()) {
+                var target = (contribution.IsHeld
+                    ? heldCapabilities
+                    : inheritedCapabilities);
+
+                _ = target.TryAdd(contribution.CapabilityType, contribution.Instance);
+            }
+
+            return new HostContext(
+                capabilities: inheritedCapabilities,
+                heldCapabilities: heldCapabilities
+            );
+        });
 
         // Command pump: the registry, the stdin text source (results echoed to stdout so scripted runs are
         // assertable), and the per-frame shell. The keyboard binding source and the input adapter are
@@ -97,10 +75,13 @@ public static class LauncherServiceRegistration {
             registry: provider.GetRequiredService<CommandRegistry>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new CommandShell(
-            inputAdapter: sp.GetRequiredService<Func<InputPacket, InputSignal?>>(),
-            keyboardSource: sp.GetRequiredService<BindingCommandSource>(),
+            // Any source registered as ICommandSource (e.g. the gamepad source) is pulled each frame alongside
+            // the keyboard and text sources; the keyboard/text sources are registered by concrete type, so they
+            // are not double-added here.
+            additionalSources: sp.GetServices<ICommandSource>(),
+            bindingSource: sp.GetRequiredService<BindingCommandSource>(),
             registry: sp.GetRequiredService<CommandRegistry>(),
-            standardInputSource: sp.GetRequiredService<TextCommandSource>()
+            textSource: sp.GetRequiredService<TextCommandSource>()
         ));
 
         // The terminal's own command surface (just `quit`, which drives the baton) and the two hosted
@@ -115,87 +96,35 @@ public static class LauncherServiceRegistration {
         return services;
     }
 
-    /// <summary>Platform: the native window + surface stack (à la carte; no engine host).</summary>
-    public static IServiceCollection AddLauncherPlatformWindowing(this IServiceCollection services) {
-        services.TryAddSingleton<INativeDisplayEnvironment, NativeDisplayEnvironment>();
-        services.TryAddSingleton<INativeWindowPlatformSupport, NativeWindowPlatformSupport>();
-        services.TryAddSingleton<IClipboardService>(static sp =>
-            ((sp.GetRequiredService<INativeWindowPlatformSupport>().CurrentDisplayKind == NativeDisplayKind.Win32)
-                ? new Win32ClipboardService()
-                : new NullClipboardService()));
-        services.TryAddSingleton<INativeImageCaptureService>(static sp =>
-            ((sp.GetRequiredService<INativeWindowPlatformSupport>().CurrentDisplayKind == NativeDisplayKind.Win32)
-                ? new Win32NativeImageCaptureService()
-                : new NullNativeImageCaptureService()));
-        services.TryAddSingleton<INativeSurfaceFactory, ConfiguredNativeSurfaceFactory>();
-        services.TryAddSingleton<INativeWindowFactory, NativeWindowFactory>();
+    /// <summary>Registers the generic backend switch: it fronts every contributed <see cref="SurfacePresenterDescriptor"/>
+    /// through a <see cref="BackendSwitcher"/> (preferring <paramref name="preferredBackend"/>), replaces the root
+    /// <see cref="ISurfacePresenter"/> with it so the run loop presents through the active backend, and adds the
+    /// <c>backend</c> toggle command. The composition root contributes one <see cref="SurfacePresenterDescriptor"/> per
+    /// backend, so the launcher itself never names a concrete backend.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="preferredBackend">The display name of the backend to start active; falls back to the first contributed when absent.</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="preferredBackend"/> is <see langword="null"/>.</exception>
+    public static IServiceCollection AddBackendSwitcher(this IServiceCollection services, string preferredBackend) {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(preferredBackend);
 
-        return services;
-    }
+        services.AddSingleton(implementationFactory: sp => {
+            var descriptors = new List<SurfacePresenterDescriptor>(collection: sp.GetServices<SurfacePresenterDescriptor>());
 
-    /// <summary>Puck.Vulkan + Puck.Shaders: the native APIs, factories, and shader loader the terminal and
-    /// the engine node compose over.</summary>
-    public static IServiceCollection AddLauncherVulkan(this IServiceCollection services) {
-        return services
-            .AddLauncherVulkanNativeApis()
-            .AddLauncherVulkanFactories();
-    }
+            if (descriptors.Count == 0) {
+                throw new InvalidOperationException(message: "No surface presenters were registered; contribute at least one SurfacePresenterDescriptor before calling AddBackendSwitcher.");
+            }
 
-    /// <summary>Puck.Vulkan: one native API per Vulkan capability the terminal and engine use.</summary>
-    public static IServiceCollection AddLauncherVulkanNativeApis(this IServiceCollection services) {
-        services.TryAddSingleton<IVulkanCommandBufferRecordingApi>(static _ => new VulkanNativeCommandBufferRecordingApi());
-        services.TryAddSingleton<IVulkanCommandResourcesApi>(static _ => new VulkanNativeCommandResourcesApi());
-        services.TryAddSingleton<IVulkanDescriptorApi>(static _ => new VulkanNativeDescriptorApi());
-        services.TryAddSingleton<IVulkanFramebufferSetApi>(static _ => new VulkanNativeFramebufferSetApi());
-        services.TryAddSingleton<IVulkanFrameReadbackApi>(static _ => new VulkanNativeFrameReadbackApi());
-        services.TryAddSingleton<IVulkanFramePresentationApi>(static _ => new VulkanNativeFramePresentationApi());
-        services.TryAddSingleton<IVulkanFrameSynchronizationApi>(static _ => new VulkanNativeFrameSynchronizationApi());
-        services.TryAddSingleton<IVulkanGraphicsPipelineApi>(static _ => new VulkanNativeGraphicsPipelineApi());
-        services.TryAddSingleton<IVulkanInstanceApi>(static _ => new VulkanNativeInstanceApi());
-        services.TryAddSingleton<IVulkanLogicalDeviceApi>(static _ => new VulkanNativeLogicalDeviceApi());
-        services.TryAddSingleton<IVulkanOffscreenImageApi>(static _ => new VulkanNativeOffscreenImageApi());
-        services.TryAddSingleton<IVulkanPhysicalDeviceApi>(static _ => new VulkanNativePhysicalDeviceApi());
-        services.TryAddSingleton<IVulkanRenderPassApi>(static _ => new VulkanNativeRenderPassApi());
-        services.TryAddSingleton<IVulkanShaderModuleApi>(static _ => new VulkanNativeShaderModuleApi());
-        services.TryAddSingleton<IVulkanStorageBufferApi>(static _ => new VulkanNativeStorageBufferApi());
-        services.TryAddSingleton<IVulkanSurfaceApi>(static _ => new VulkanNativeSurfaceApi());
-        services.TryAddSingleton<IVulkanSwapchainApi>(static _ => new VulkanNativeSwapchainApi());
-        services.TryAddSingleton<IVulkanVertexBufferApi>(static _ => new VulkanNativeVertexBufferApi());
+            var preferred = (descriptors.Find(match: descriptor => string.Equals(descriptor.Name, preferredBackend, StringComparison.OrdinalIgnoreCase)) ?? descriptors[0]);
+            var other = descriptors.Find(match: descriptor => !ReferenceEquals(descriptor, preferred));
 
-        return services;
-    }
-
-    /// <summary>Puck.Vulkan + Puck.Shaders: the factories, command-buffer recorder, and shader loader the
-    /// terminal and engine compose over the native APIs.</summary>
-    public static IServiceCollection AddLauncherVulkanFactories(this IServiceCollection services) {
-        services.TryAddSingleton<IVulkanInstanceFactory>(static sp => new VulkanInstanceFactory(sp.GetRequiredService<IVulkanInstanceApi>()));
-        services.TryAddSingleton<IVulkanSurfaceFactory>(static sp => new VulkanSurfaceFactory(sp.GetRequiredService<IVulkanSurfaceApi>()));
-        services.TryAddSingleton<IVulkanPhysicalDeviceSelector>(static sp => new VulkanPhysicalDeviceSelector(sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
-        services.TryAddSingleton<IVulkanLogicalDeviceFactory>(static sp =>
-            new VulkanLogicalDeviceFactory(
-                sp.GetRequiredService<IVulkanLogicalDeviceApi>(),
-                sp.GetRequiredService<IVulkanPhysicalDeviceApi>()
-            ));
-        services.TryAddSingleton<IVulkanSwapchainSupportApi>(static sp => new VulkanSwapchainSupportApi(sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
-        services.TryAddSingleton<IVulkanSwapchainFactory>(static sp => new VulkanSwapchainFactory(sp.GetRequiredService<IVulkanSwapchainApi>()));
-        services.TryAddSingleton<IVulkanRenderPassFactory>(static sp => new VulkanRenderPassFactory(sp.GetRequiredService<IVulkanRenderPassApi>()));
-        services.TryAddSingleton<IVulkanFramebufferSetFactory>(static sp => new VulkanFramebufferSetFactory(sp.GetRequiredService<IVulkanFramebufferSetApi>()));
-        services.TryAddSingleton<IVulkanCommandResourcesFactory>(static sp => new VulkanCommandResourcesFactory(sp.GetRequiredService<IVulkanCommandResourcesApi>()));
-        services.TryAddSingleton<IVulkanFrameSynchronizationFactory>(static sp => new VulkanFrameSynchronizationFactory(sp.GetRequiredService<IVulkanFrameSynchronizationApi>()));
-        services.TryAddSingleton<IVulkanFramePresenter>(static sp =>
-            new VulkanFramePresenter(
-                sp.GetRequiredService<IVulkanFramePresentationApi>(),
-                sp.GetRequiredService<IVulkanFrameSynchronizationApi>()
-            ));
-        services.TryAddSingleton<IVulkanGraphicsPipelineFactory>(static sp => new VulkanGraphicsPipelineFactory(sp.GetRequiredService<IVulkanGraphicsPipelineApi>()));
-        services.TryAddSingleton<IVulkanShaderModuleFactory>(static sp => new VulkanShaderModuleFactory(sp.GetRequiredService<IVulkanShaderModuleApi>()));
-        services.TryAddSingleton<IVulkanStorageBufferFactory>(static sp => new VulkanStorageBufferFactory(sp.GetRequiredService<IVulkanStorageBufferApi>()));
-        services.TryAddSingleton<IVulkanVertexBufferFactory>(static sp => new VulkanVertexBufferFactory(sp.GetRequiredService<IVulkanVertexBufferApi>()));
-
-        // The renderer's command-buffer recorder, the content-addressed asset source, and the shader loader.
-        services.TryAddSingleton<IVulkanCommandBufferRecorder>(static sp => new VulkanCommandBufferRecorder(sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()));
-        services.TryAddSingleton<IAssetSource, FileSystemAssetSource>();
-        services.TryAddSingleton<IShaderModuleLoader, ShaderModuleLoader>();
+            return (other is null)
+                ? new BackendSwitcher(current: preferred.Presenter, currentName: preferred.Name, other: null, otherName: null)
+                : new BackendSwitcher(current: preferred.Presenter, currentName: preferred.Name, other: other.Presenter, otherName: other.Name);
+        });
+        services.Replace(ServiceDescriptor.Singleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<BackendSwitcher>()));
+        services.AddSingleton<ICommandModule, BackendCommandModule>();
 
         return services;
     }

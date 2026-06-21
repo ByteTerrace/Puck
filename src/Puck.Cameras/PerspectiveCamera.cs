@@ -11,6 +11,9 @@ public sealed class PerspectiveCamera : ICamera {
     );
     public Vector3 Target { get; set; } = Vector3.Zero;
 
+    public void Advance(float deltaSeconds) {
+        // A fixed look-at camera carries no time-varying state.
+    }
     public CameraSnapshot Capture(uint viewportWidth, uint viewportHeight) {
         return CameraSnapshot.LookAt(
             fieldOfViewRadians: FieldOfViewRadians,

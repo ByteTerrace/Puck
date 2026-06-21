@@ -1,0 +1,8 @@
+namespace Puck.Abstractions;
+
+public interface INativeDisplayEnvironment {
+    PlatformID CurrentPlatform { get; }
+    bool IsWindows { get; }
+    string? WaylandDisplay { get; }
+    string? XdgSessionType { get; }
+}

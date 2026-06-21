@@ -1,0 +1,10 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "A data-driven fuzz sweep: `tools fuzz -Run docs/examples/fuzz-sweep.json` spawns one isolated child per seed in seedRange, each running `Puck.Demo --run <doc> --fuzz-seed N` so the bounds below drive generation. A divergence/crash/timeout is a finding.",
+    "fuzzing": {
+        "seedRange": [0, 2],
+        "timeoutSeconds": 30,
+        "bounds": { "maxPrimitives": 8, "maxMaterials": 4 }
+    }
+}

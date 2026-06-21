@@ -11,6 +11,7 @@
         <InvariantGlobalization>true</InvariantGlobalization>
         <Nullable>enable</Nullable>
         <OptimizationPreference>Speed</OptimizationPreference>
+        <PlatformTarget>x64</PlatformTarget>
         <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
         <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
         <TargetFramework>net10.0</TargetFramework>

@@ -1,0 +1,291 @@
+using Puck.Abstractions;
+using Puck.Assets;
+using Puck.Vulkan.Bindings;
+using Puck.Vulkan.Interfaces;
+using Puck.Vulkan.Interop;
+using Puck.Vulkan.Messages;
+
+namespace Puck.Vulkan.Presentation;
+
+/// <summary>
+/// A generic, window-bound frame orchestrator: it boots the Vulkan instance/surface/device for a native
+/// window and owns the swapchain lifecycle (swapchain, render pass, framebuffers, command buffers and
+/// synchronization), recreating them on resize. It knows nothing about <em>what</em> is drawn — callers
+/// build their own pipelines against <see cref="RenderPass"/>/<see cref="Swapchain"/> (rebuilding them
+/// when <see cref="PresentationResourcesRecreated"/> fires) and hand <see cref="Present"/> the draw
+/// commands plus the pipelines they reference. Single-thread affine: create and drive it on the window's
+/// pump thread.
+/// </summary>
+public sealed class VulkanRenderer(
+    VulkanRendererOptions options,
+    PresentationOptions presentationOptions,
+    IVulkanInstanceFactory instanceFactory,
+    IVulkanSurfaceFactory surfaceFactory,
+    IVulkanPhysicalDeviceSelector physicalDeviceSelector,
+    IVulkanLogicalDeviceFactory logicalDeviceFactory,
+    IVulkanSwapchainSupportApi swapchainSupportApi,
+    IVulkanSwapchainFactory swapchainFactory,
+    IVulkanRenderPassFactory renderPassFactory,
+    IVulkanFramebufferSetFactory framebufferSetFactory,
+    IVulkanCommandResourcesFactory commandResourcesFactory,
+    IVulkanFrameSynchronizationFactory frameSynchronizationFactory,
+    IVulkanFramePresenter framePresenter,
+    IVulkanCommandBufferRecorder commandBufferRecorder
+) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext {
+    private VulkanCommandResources? m_commandResources;
+    private VulkanLogicalDevice? m_device;
+    private VulkanFramebufferSet? m_framebufferSet;
+    private uint m_height;
+    private VulkanInstance? m_instance;
+    private bool m_needsRecreate;
+    private VkPhysicalDevice m_physicalDevice;
+    private VulkanRenderPass? m_renderPass;
+    private VulkanSurface? m_surface;
+    private VulkanSwapchain? m_swapchain;
+    private VulkanFrameSynchronization? m_synchronization;
+    private uint m_width;
+
+    /// <summary>Raised after the swapchain-dependent resources are (re)created — on the first frame and
+    /// after every resize. Callers rebuild any pipelines or descriptor sets bound to
+    /// <see cref="RenderPass"/>/<see cref="Swapchain"/> here.</summary>
+    public event Action? PresentationResourcesRecreated;
+
+    /// <summary>The Vulkan instance, valid after <see cref="Initialize"/>.</summary>
+    public VulkanInstance Instance => (m_instance ?? throw new InvalidOperationException(message: "The renderer must be initialized before its instance is used."));
+
+    /// <summary>The logical device, valid after <see cref="Initialize"/>.</summary>
+    public VulkanLogicalDevice Device => (m_device ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
+
+    /// <summary>The logical device as the shared device-context view (alias of <see cref="Device"/>).</summary>
+    public VulkanLogicalDevice LogicalDevice => Device;
+
+    /// <summary>The selected physical device; valid after <see cref="Initialize"/>.</summary>
+    public VkPhysicalDevice PhysicalDevice => m_physicalDevice;
+
+    /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>
+    public VulkanSurface Surface => (m_surface ?? throw new InvalidOperationException(message: "The renderer must be initialized before its surface is used."));
+
+    /// <summary>Whether the device chain has been initialized.</summary>
+    public bool IsInitialized => (m_device is not null);
+
+    /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
+    /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
+    public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
+
+    /// <summary>The current swapchain; valid after the first <see cref="BeginFrame"/> and replaced on
+    /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
+    public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
+
+    /// <summary>Boots the Vulkan instance, surface, and device for a native surface binding at the given
+    /// initial size. Presentation resources are created lazily on the first <see cref="BeginFrame"/>.</summary>
+    /// <param name="binding">The native surface binding to present into.</param>
+    /// <param name="width">The initial render-target width in pixels.</param>
+    /// <param name="height">The initial render-target height in pixels.</param>
+    public void Initialize(NativeSurfaceBinding binding, uint width, uint height) {
+        if (!binding.HasSurfacePayload) {
+            throw new InvalidOperationException(message: $"The native surface binding carries no payload for display kind '{binding.DisplayKind}'.");
+        }
+
+        m_height = height;
+        m_width = width;
+
+        try {
+            m_instance = instanceFactory.Create(
+                applicationName: options.ApplicationName,
+                displayKind: binding.DisplayKind,
+                enableValidation: true
+            );
+            m_surface = surfaceFactory.Create(
+                binding: binding,
+                instanceHandle: m_instance.Handle
+            );
+            m_physicalDevice = physicalDeviceSelector.Select(
+                instance: m_instance,
+                surface: m_surface
+            );
+            m_device = logicalDeviceFactory.Create(
+                instance: m_instance,
+                physicalDevice: m_physicalDevice
+            );
+        } catch {
+            m_device?.Dispose();
+            m_device = null;
+            m_surface?.Dispose();
+            m_surface = null;
+            m_instance?.Dispose();
+            m_instance = null;
+            throw;
+        }
+    }
+
+    /// <summary>Prepares the next frame: (re)creates presentation resources when this is the first frame, the
+    /// target size changed, or the last present reported the swapchain out of date.</summary>
+    /// <param name="width">The current render-target width in pixels.</param>
+    /// <param name="height">The current render-target height in pixels.</param>
+    public void BeginFrame(uint width, uint height) {
+        if (
+            (m_device is null) ||
+            (width == 0) ||
+            (height == 0)
+        ) {
+            return;
+        }
+
+        if (
+            (m_swapchain is null) ||
+            m_needsRecreate ||
+            (width != m_width) ||
+            (height != m_height)
+        ) {
+            m_height = height;
+            m_width = width;
+
+            DisposePresentationResources();
+            EnsurePresentationResources(
+                height: height,
+                width: width
+            );
+            m_needsRecreate = false;
+        }
+    }
+
+    /// <summary>Records and presents one frame from caller-supplied draw commands and the pipelines they
+    /// reference. A no-op until the first successful <see cref="BeginFrame"/>.</summary>
+    public void Present(
+        IReadOnlyList<VulkanDrawCommand> drawCommands,
+        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines
+    ) {
+        ArgumentNullException.ThrowIfNull(drawCommands);
+        ArgumentNullException.ThrowIfNull(graphicsPipelines);
+
+        if (
+            (m_device is null) ||
+            (m_swapchain is null)
+        ) {
+            return;
+        }
+
+        var outcome = framePresenter.Present(
+            commandResources: m_commandResources!,
+            frameSynchronization: m_synchronization!,
+            logicalDevice: m_device,
+            recordAcquiredImage: imageIndex => commandBufferRecorder.RecordImage(
+                commandResources: m_commandResources!,
+                drawCommands: drawCommands,
+                framebufferSet: m_framebufferSet!,
+                graphicsPipelines: graphicsPipelines,
+                imageIndex: (int)imageIndex,
+                renderPass: m_renderPass!,
+                swapchain: m_swapchain
+            ),
+            swapchain: m_swapchain
+        );
+
+        if (outcome.Result == VulkanFramePresentationResult.RecreatePresentationResources) {
+            m_needsRecreate = true;
+        }
+    }
+    public void WaitForGpuIdle() {
+        if (m_device is null) {
+            return;
+        }
+
+        m_device.WaitIdle();
+    }
+
+    nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Handle;
+
+    void IGpuDeviceContext.WaitIdle() => WaitForGpuIdle();
+
+    private void EnsurePresentationResources(uint width, uint height) {
+        var device = m_device!;
+        var supportDetails = swapchainSupportApi.Query(
+            instance: m_instance!,
+            physicalDevice: m_physicalDevice,
+            surface: m_surface!
+        );
+
+        if (!supportDetails.IsComplete) {
+            throw new InvalidOperationException(message: "The selected Vulkan device does not support presenting to the window surface.");
+        }
+
+        // Map the neutral presentation preferences to Vulkan: the present mode to a VkPresentModeKHR, and the
+        // surface format to whichever supported (format, color-space) pair matches the desired VkFormat. Both are
+        // passed as preferences — the factory falls back (mailbox/immediate/FIFO; formats[0]) when unsupported.
+        var preferredPresentMode = presentationOptions.PresentMode switch {
+            PresentMode.Vsync => (uint?)VulkanPresentMode.Fifo,
+            PresentMode.Mailbox => VulkanPresentMode.Mailbox,
+            PresentMode.Immediate => VulkanPresentMode.Immediate,
+            _ => null,
+        };
+        var desiredVkFormat = presentationOptions.SurfaceFormat switch {
+            SurfaceFormat.R8G8B8A8Unorm => (uint?)VulkanFormat.R8G8B8A8Unorm,
+            SurfaceFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
+            _ => null,
+        };
+        VulkanSurfaceFormat? preferredSurfaceFormat = null;
+
+        if (desiredVkFormat is uint vkFormat) {
+            foreach (var format in supportDetails.SurfaceFormats) {
+                if (format.Format == vkFormat) {
+                    preferredSurfaceFormat = format;
+
+                    break;
+                }
+            }
+        }
+
+        m_swapchain = swapchainFactory.Create(
+            desiredHeight: height,
+            desiredWidth: width,
+            logicalDevice: device,
+            preferredPresentMode: preferredPresentMode,
+            preferredSurfaceFormat: preferredSurfaceFormat,
+            supportDetails: supportDetails,
+            surface: m_surface!
+        );
+        m_renderPass = renderPassFactory.Create(
+            logicalDevice: device,
+            swapchain: m_swapchain
+        );
+        m_framebufferSet = framebufferSetFactory.Create(
+            logicalDevice: device,
+            renderPass: m_renderPass,
+            swapchain: m_swapchain
+        );
+        m_commandResources = commandResourcesFactory.Create(
+            commandBufferCount: (uint)m_framebufferSet.FramebufferHandles.Count,
+            logicalDevice: device
+        );
+        m_synchronization = frameSynchronizationFactory.Create(
+            logicalDevice: device,
+            renderFinishedSemaphoreCount: m_commandResources.CommandBufferHandles.Count
+        );
+
+        PresentationResourcesRecreated?.Invoke();
+    }
+    private void DisposePresentationResources() {
+        m_device?.WaitIdle();
+
+        m_synchronization?.Dispose();
+        m_synchronization = null;
+        m_commandResources?.Dispose();
+        m_commandResources = null;
+        m_framebufferSet?.Dispose();
+        m_framebufferSet = null;
+        m_renderPass?.Dispose();
+        m_renderPass = null;
+        m_swapchain?.Dispose();
+        m_swapchain = null;
+    }
+
+    public void Dispose() {
+        DisposePresentationResources();
+        m_device?.Dispose();
+        m_device = null;
+        m_surface?.Dispose();
+        m_surface = null;
+        m_instance?.Dispose();
+        m_instance = null;
+    }
+}

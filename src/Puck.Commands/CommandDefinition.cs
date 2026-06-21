@@ -35,6 +35,10 @@ public sealed record CommandDefinition(
     Func<ParseResult, CommandValue>? ValueSelector = null,
     string Map = CommandMaps.Global
 ) {
+    /// <summary>Gets the alternate names that also resolve to this command, on both the text and
+    /// source-driven paths. Empty by default.</summary>
+    public IReadOnlyList<string> Aliases { get; init; } = [];
+
     /// <summary>Creates a definition whose text command is a bare verb with no arguments or options.</summary>
     /// <param name="name">The unique name used to identify and dispatch the command.</param>
     /// <param name="description">A human-readable description shown in help output.</param>
@@ -43,13 +47,15 @@ public sealed record CommandDefinition(
     /// <param name="map">
     /// The command map that gates source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.
     /// </param>
+    /// <param name="aliases">Optional alternate names that also resolve to the command.</param>
     /// <returns>A new <see cref="CommandDefinition"/> backed by a bare-verb text command.</returns>
     public static CommandDefinition Verb(
         string name,
         string description,
         CommandValueKind valueKind,
         Func<CommandContext, CommandResult> handler,
-        string map = CommandMaps.Global
+        string map = CommandMaps.Global,
+        IReadOnlyList<string>? aliases = null
     ) {
         return new CommandDefinition(
             Name: name,
@@ -61,6 +67,8 @@ public sealed record CommandDefinition(
             ),
             Handler: handler,
             Map: map
-        );
+        ) {
+            Aliases = (aliases ?? []),
+        };
     }
 }

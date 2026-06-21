@@ -1,3 +1,5 @@
+using Puck.Abstractions;
+
 namespace Puck.Hosting;
 
 /// <summary>

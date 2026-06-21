@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Options;
 
+using Puck.Input;
+
 namespace Puck.Platform;
 
-internal sealed class ConfiguredNativeWindow(IOptions<NativeWindowOptions> options) : INativeWindow, INativeSurfaceSourceProvider {
+internal sealed class ConfiguredNativeWindow(IOptions<NativeWindowOptions> options) : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
     private bool m_disposed;
     private readonly NativeWindowOptions m_options = options.Value;
     private bool m_visible;
@@ -50,7 +52,7 @@ internal sealed class ConfiguredNativeWindow(IOptions<NativeWindowOptions> optio
 
         m_visible = true;
     }
-    public bool TryDequeueInput(out InputPacket inputEvent) {
+    public bool TryDequeueInput(out WindowInputEvent inputEvent) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this

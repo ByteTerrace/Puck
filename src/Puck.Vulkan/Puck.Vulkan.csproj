@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Abstractions" />
     </ItemGroup>
 </Project>

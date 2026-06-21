@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        The data-driven layer: a single versioned JSON document (PuckRunDocument) is the source of truth for a run.
+        This project is the BACKEND-NEUTRAL half — the document model, its System.Text.Json source-generation
+        context, a thick parse->validate->build pipeline, and the engine-pure builders that turn the document into an
+        SdfProgram + cameras + an ISdfFrameSource. It references only the engine-pure projects (SdfVm/Cameras/
+        Compositing); anything that resolves backend GPU services (the composition graph -> IRenderNode) lives in
+        Puck.Demo, which references this project.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Cameras\Puck.Cameras.csproj" />
+        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
+        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+    </ItemGroup>
+</Project>

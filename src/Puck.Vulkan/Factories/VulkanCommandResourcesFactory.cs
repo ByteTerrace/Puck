@@ -11,14 +11,18 @@ namespace Puck.Vulkan.Factories;
 /// <see cref="VulkanCommandResources"/>.
 /// </summary>
 public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFactory {
+    private readonly IAllocator m_allocator;
     private readonly IVulkanCommandResourcesApi m_commandResourcesApi;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanCommandResourcesFactory"/> class.</summary>
     /// <param name="commandResourcesApi">The command-resources API used to create the pool and allocate buffers.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandResourcesApi"/> is <see langword="null"/>.</exception>
-    public VulkanCommandResourcesFactory(IVulkanCommandResourcesApi commandResourcesApi) {
+    /// <param name="allocator">The unmanaged allocator used to marshal the native command-buffer handle array.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="commandResourcesApi"/> or <paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanCommandResourcesFactory(IVulkanCommandResourcesApi commandResourcesApi, IAllocator allocator) {
         ArgumentNullException.ThrowIfNull(argument: commandResourcesApi);
+        ArgumentNullException.ThrowIfNull(argument: allocator);
 
+        m_allocator = allocator;
         m_commandResourcesApi = commandResourcesApi;
     }
 
@@ -47,7 +51,7 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
         var buffer = IntPtr.Zero;
 
         try {
-            buffer = Memory.Allocator.Alloc(size: (IntPtr.Size * checked((int)commandBufferCount)));
+            buffer = m_allocator.Alloc(size: (IntPtr.Size * checked((int)commandBufferCount)));
 
             var allocateRequest = new VulkanCommandBufferAllocateRequest(
                 CommandBufferCount: commandBufferCount,
@@ -89,7 +93,7 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
             throw;
         } finally {
             if (0 != buffer) {
-                Memory.Allocator.Free(ptr: buffer);
+                m_allocator.Free(ptr: buffer);
             }
         }
     }

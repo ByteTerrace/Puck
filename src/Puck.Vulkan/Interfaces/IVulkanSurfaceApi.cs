@@ -1,4 +1,3 @@
-using Puck.Platform;
 using Puck.Vulkan.Bindings;
 
 namespace Puck.Vulkan.Interfaces;

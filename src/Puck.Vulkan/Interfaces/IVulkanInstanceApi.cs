@@ -15,4 +15,15 @@ public interface IVulkanInstanceApi {
     /// <summary>Destroys a Vulkan instance.</summary>
     /// <param name="instanceHandle">The native <c>VkInstance</c> handle to destroy.</param>
     void DestroyInstance(nint instanceHandle);
+    /// <summary>Creates a <c>VK_EXT_debug_utils</c> messenger that surfaces validation messages to the console, so
+    /// the Vulkan backend reports them like the Direct3D 12 info queue does. Best-effort: returns zero when the
+    /// extension (or its entry point) is unavailable.</summary>
+    /// <param name="instanceHandle">The native <c>VkInstance</c> the messenger reports for.</param>
+    /// <returns>The native <c>VkDebugUtilsMessengerEXT</c> handle, or zero when one could not be created.</returns>
+    nint CreateDebugMessenger(nint instanceHandle);
+    /// <summary>Destroys a debug-utils messenger created by <see cref="CreateDebugMessenger"/>. A no-op when either
+    /// handle is zero.</summary>
+    /// <param name="instanceHandle">The native <c>VkInstance</c> the messenger belongs to.</param>
+    /// <param name="messengerHandle">The native <c>VkDebugUtilsMessengerEXT</c> handle to destroy.</param>
+    void DestroyDebugMessenger(nint instanceHandle, nint messengerHandle);
 }

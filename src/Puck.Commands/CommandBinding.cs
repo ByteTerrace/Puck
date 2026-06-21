@@ -11,4 +11,11 @@ namespace Puck.Commands;
 /// </remarks>
 /// <param name="Command">The name of the command to activate.</param>
 /// <param name="Value">The constant value to send, or <see langword="null"/> to pass the input's value through.</param>
-public readonly record struct CommandBinding(string Command, CommandValue? Value = null);
+/// <param name="RequiredModifiers">The modifiers the input must carry for this binding to fire — the chord
+/// it answers (e.g. <see cref="InputModifiers.Control"/> for <c>Ctrl+C</c>). Defaults to
+/// <see cref="InputModifiers.None"/>, i.e. the unmodified key.</param>
+/// <param name="ActivateOn">The phase the input must be in for this binding to fire. <see langword="null"/>
+/// (the default) fires on a press or a continuous update (<see cref="CommandPhase.Started"/> or
+/// <see cref="CommandPhase.Active"/>) and ignores releases, so a key-release never re-fires a press-bound
+/// command; set it to a specific phase (such as <see cref="CommandPhase.Completed"/>) to bind that edge only.</param>
+public readonly record struct CommandBinding(string Command, CommandValue? Value = null, InputModifiers RequiredModifiers = InputModifiers.None, CommandPhase? ActivateOn = null);

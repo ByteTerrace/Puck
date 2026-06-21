@@ -1,7 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
-        <PackageReference Include="Microsoft.Windows.CsWin32" Version="[0.3.183, )">
+        <PackageReference Include="Microsoft.Windows.CsWin32" Version="[0.3.183,)">
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Abstractions" />
     </ItemGroup>
 </Project>

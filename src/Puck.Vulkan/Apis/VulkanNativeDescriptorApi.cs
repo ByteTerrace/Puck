@@ -14,6 +14,7 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
     private const uint StructureTypeDescriptorSetAllocateInfo = 34;
     private const uint StructureTypeSamplerCreateInfo = 31;
     private const uint StructureTypeWriteDescriptorSet = 35;
+    private const uint StructureTypeWriteDescriptorSetAccelerationStructureKhr = 1000150007;
 
     private readonly Lock m_syncRoot = new();
     private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
@@ -131,6 +132,36 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
         GetPointers(deviceHandle: deviceHandle).DestroySampler(
             deviceHandle,
             samplerHandle,
+            0
+        );
+    }
+    /// <inheritdoc/>
+    public void WriteAccelerationStructure(VulkanDescriptorAccelerationStructureWriteRequest request) {
+        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
+        // The acceleration structure handle is not passed through an info array; it rides a dedicated
+        // pNext-chained struct (the descriptor type carries no PImageInfo/PBufferInfo). Both the handle and
+        // the chain struct are kept alive on the stack for the duration of the vkUpdateDescriptorSets call.
+        var accelerationStructureHandle = request.AccelerationStructureHandle;
+        var accelerationWrite = new VkWriteDescriptorSetAccelerationStructureKhr {
+            AccelerationStructureCount = 1,
+            PAccelerationStructures = (nint)(&accelerationStructureHandle),
+            SType = StructureTypeWriteDescriptorSetAccelerationStructureKhr,
+        };
+        var write = new VkWriteDescriptorSet {
+            DescriptorCount = 1,
+            DescriptorType = VulkanDescriptorType.AccelerationStructure,
+            DstArrayElement = 0,
+            DstBinding = request.Binding,
+            DstSet = request.DescriptorSetHandle,
+            PNext = (nint)(&accelerationWrite),
+            SType = StructureTypeWriteDescriptorSet,
+        };
+
+        pointers.UpdateDescriptorSets(
+            request.DeviceHandle,
+            1,
+            (nint)(&write),
+            0,
             0
         );
     }

@@ -6,6 +6,7 @@ using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.Security;
+using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX.Interop;
 
@@ -20,11 +21,6 @@ namespace Puck.DirectX.Interop;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXSurfaceUpload : IDisposable {
-    private const uint BytesPerPixel = 4;
-    private const int GetCpuDescriptorHandleSlot = 9;
-    private const int GetGpuDescriptorHandleSlot = 10;
-    private const uint TextureRowPitchAlignment = 256;
-
     private readonly IDirectXDeviceContext m_deviceContext;
     private nint m_commandAllocator;
     private nint m_commandList;
@@ -98,6 +94,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     public nint DescriptorHeapHandle => m_srvHeap;
     /// <summary>Gets the GPU descriptor handle (<c>D3D12_GPU_DESCRIPTOR_HANDLE.ptr</c>) of the texture's SRV.</summary>
     public ulong GpuDescriptorPointer => m_gpuDescriptorPointer;
+    /// <summary>Gets the native <c>ID3D12Resource</c> handle of the uploaded texture, or zero before the first <see cref="Upload"/>.</summary>
+    public nint TextureHandle => m_texture;
+    /// <summary>Gets the <c>DXGI_FORMAT</c> the texture was last uploaded as.</summary>
+    public DXGI_FORMAT TextureFormat => m_format;
 
     /// <summary>Copies tightly packed pixels into the SRV texture and leaves it sampleable.</summary>
     /// <param name="pixels">The tightly packed source pixels; at least <paramref name="width"/> × <paramref name="height"/> × 4 bytes.</param>
@@ -120,7 +120,8 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             throw new ArgumentException(message: "Texture dimensions must be non-zero.");
         }
 
-        var packedRowBytes = checked((int)(width * BytesPerPixel));
+        var dxgiFormat = ToDxgiFormat(format: format);
+        var packedRowBytes = checked((int)(width * FormatByteSize(format: dxgiFormat)));
 
         if (pixels.Length < (packedRowBytes * height)) {
             throw new ArgumentException(
@@ -130,7 +131,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         }
 
         EnsureResources(
-            format: ToDxgiFormat(format: format),
+            format: dxgiFormat,
             height: height,
             width: width
         );
@@ -245,7 +246,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         D3D12_GPU_DESCRIPTOR_HANDLE handle;
         var vtable = *(void***)heap;
 
-        // Same return-by-hidden-pointer ABI workaround as the CPU handle (see DirectXSwapChainRenderer).
+        // Same return-by-hidden-pointer ABI workaround as the CPU handle above (see DirectXConstants.GetCpuDescriptorHandleSlot).
         ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_GPU_DESCRIPTOR_HANDLE*, void>)vtable[GetGpuDescriptorHandleSlot])(
             heap,
             &handle
@@ -258,6 +259,20 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             _ = ((Windows.Win32.System.Com.IUnknown*)pointer)->Release();
             pointer = 0;
         }
+    }
+    // The byte size of one pixel for a supported upload format. Deriving it from the format (rather than assuming 4)
+    // keeps the row-pitch + buffer-size math correct if a wider format is ever added — a hardcoded 4 would under-size
+    // the upload buffer for, say, an R16G16B16A16 surface and overflow the copy.
+    private static uint FormatByteSize(DXGI_FORMAT format) {
+        return format switch {
+            DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM => 4u,
+            DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM => 4u,
+            _ => throw new ArgumentOutOfRangeException(
+                actualValue: format,
+                message: "The pixel format has no known byte size.",
+                paramName: nameof(format)
+            ),
+        };
     }
     private static DXGI_FORMAT ToDxgiFormat(DirectXPixelFormat format) {
         return format switch {
@@ -312,7 +327,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         m_texture = (nint)texture;
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
 
-        m_paddedRowPitch = (((width * BytesPerPixel) + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
+        m_paddedRowPitch = (((width * FormatByteSize(format: format)) + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
 
         var uploadHeapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
@@ -359,8 +374,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = format,
-            // D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING — identity RGBA swizzle.
-            Shader4ComponentMapping = 5768,
+            Shader4ComponentMapping = DefaultShader4ComponentMapping,
             ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D,
         };
 

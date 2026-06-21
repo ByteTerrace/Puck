@@ -6,7 +6,7 @@ namespace Puck.Vulkan.Interop;
 /// Owns a native graphics pipeline (<c>VkPipeline</c>) handle together with its pipeline layout and
 /// descriptor set layout, and destroys all three when disposed.
 /// </summary>
-public sealed class VulkanGraphicsPipeline : IDisposable {
+public sealed class VulkanGraphicsPipeline : IGpuPipeline {
     private bool m_disposed;
     private readonly IVulkanGraphicsPipelineApi m_graphicsPipelineApi;
 

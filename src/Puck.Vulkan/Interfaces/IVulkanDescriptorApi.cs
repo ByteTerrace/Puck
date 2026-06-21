@@ -27,6 +27,9 @@ public interface IVulkanDescriptorApi {
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the sampler.</param>
     /// <param name="samplerHandle">The native <c>VkSampler</c> handle to destroy.</param>
     void DestroySampler(nint deviceHandle, nint samplerHandle);
+    /// <summary>Updates a descriptor set with a top-level acceleration structure (TLAS) binding. Vulkan-only.</summary>
+    /// <param name="request">The write parameters identifying the destination binding and the acceleration structure.</param>
+    void WriteAccelerationStructure(VulkanDescriptorAccelerationStructureWriteRequest request);
     /// <summary>Updates a descriptor set with a buffer binding.</summary>
     /// <param name="request">The write parameters identifying the destination binding and the buffer.</param>
     void WriteBuffer(VulkanDescriptorBufferWriteRequest request);

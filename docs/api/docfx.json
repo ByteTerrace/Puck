@@ -1,0 +1,58 @@
+{
+    "$schema": "https://raw.githubusercontent.com/dotnet/docfx/main/schemas/docfx.schema.json",
+    "build": {
+        "content": [
+            {
+                "files": [
+                    "api/**.yml",
+                    "api/index.md",
+                    "index.md",
+                    "toc.yml"
+                ]
+            }
+        ],
+        "globalMetadata": {
+            "_appFooter": "Puck — Maths · Commands · Input · Text · Abstractions · Vulkan · Assets",
+            "_appName": "Puck",
+            "_appTitle": "Puck API Reference",
+            "_disableContribution": true,
+            "_enableSearch": true,
+            "pdf": false
+        },
+        "output": "_site",
+        "resource": [
+            {
+                "files": [
+                    "images/**"
+                ]
+            }
+        ],
+        "template": [
+            "default",
+            "modern"
+        ]
+    },
+    "metadata": [
+        {
+            "dest": "api",
+            "enumSortOrder": "declaringOrder",
+            "memberLayout": "separatePages",
+            "namespaceLayout": "nested",
+            "outputFormat": "mref",
+            "src": [
+                {
+                    "files": [
+                        "Puck.Abstractions/Puck.Abstractions.csproj",
+                        "Puck.Assets/Puck.Assets.csproj",
+                        "Puck.Commands/Puck.Commands.csproj",
+                        "Puck.Input/Puck.Input.csproj",
+                        "Puck.Maths/Puck.Maths.csproj",
+                        "Puck.Text/Puck.Text.csproj",
+                        "Puck.Vulkan/Puck.Vulkan.csproj"
+                    ],
+                    "src": "../../src"
+                }
+            ]
+        }
+    ]
+}

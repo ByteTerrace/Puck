@@ -1,0 +1,18 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "chat.tools.terminal.autoApprove": {
+            "dotnet build": true,
+            "dotnet format": true,
+            "dotnet test": true,
+            "git diff": true,
+            "git log": true,
+            "git ls-files": true,
+            "git status": true
+        }
+    }
+}

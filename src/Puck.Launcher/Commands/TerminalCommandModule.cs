@@ -11,6 +11,7 @@ internal sealed class TerminalCommandModule(
 ) : ICommandModule {
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.Verb(
+            aliases: ["exit"],
             description: "Exits the terminal. Bound to Escape.",
             handler: _ => {
                 terminal.RequestExit();

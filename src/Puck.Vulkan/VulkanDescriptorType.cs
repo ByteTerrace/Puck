@@ -10,4 +10,7 @@ public static class VulkanDescriptorType {
     public const uint StorageImage = 3;
     /// <summary>The <c>VK_DESCRIPTOR_TYPE_STORAGE_BUFFER</c> value.</summary>
     public const uint StorageBuffer = 7;
+    /// <summary>The <c>VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR</c> value — a top-level acceleration structure
+    /// (TLAS) bound to a ray-query compute shader. Vulkan-only (no Direct3D 12 / DXIL equivalent).</summary>
+    public const uint AccelerationStructure = 1000150000;
 }

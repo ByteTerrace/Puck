@@ -1,0 +1,123 @@
+# Backend Feature Parity: Vulkan vs Direct3D 12
+
+Grounded comparison of `Puck.Vulkan` (+ `Puck.Vulkan.Presentation`) and `Puck.DirectX` / Direct3D 12
+(+ `Puck.DirectX.Presentation`) against the neutral seam in `Puck.Abstractions`. Every row is read from the actual
+code and classified, so no-op sentinels show as stubs, not features.
+
+A capability the two APIs simply model differently (D3D12's static samplers, its Win32-only surfaces, the
+single D3D12-openable shared-handle type) is marked ◆ **by design** — that cell is _correct as written_, not work to
+be done. Reach for ⦿/❌/🟡 only when there is a real gap a future change could close.
+
+_Last updated: 2026-06-21 (gate sweep re-verified on the NVIDIA RTX 4070, Win11 26200)._
+
+**Legend:** ✅ full · 🟡 partial (real, closeable gap) · ⦿ stub (no-op/sentinel/throws) · ❌ absent (not built) · ◆ by design (intrinsic API difference — correct as-is, not a gap)
+
+### Device / Adapter / Instance
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Device + queue creation | ✅ | ✅ | Symmetric |
+| Adapter selection | ✅ | ✅ | VK scored selector; DX selects purely by caller LUID |
+| LUID extraction + cross-backend match | ✅ | ✅ | VK is the LUID producer, DX the consumer |
+| WARP / software fallback | ◆ | ✅ | DX exposes `EnumWarpAdapter`; Vulkan has no software-adapter concept in its model — ◆ by design, not a feature VK is missing |
+| Feature-level / version probing | ✅ | ✅ | VK probes `vkEnumerateInstanceVersion` and requests the loader's max (floored at the 1.2 the engine needs — 1.4 on the RTX 4070); DX walks 12.2→11.0 |
+| Lazy/deferred device + `Func<luid>` | ◆ | ✅ | DX defers device creation to await the cross-backend match; VK is the LUID *producer*, so it has nothing to wait on — ◆ by design, not a missing path |
+| Validation / debug layer | ✅ | ✅ | Both fully wired and drained to the console (`[vulkan-debug]` / `[d3d12-debug]`). **VK validation is on by default**; **DX validation is opt-in via `PUCK_D3D12_DEBUG`, off by default** — `EnableDebugLayer` poisons the next `D3D12CreateDevice` (`0x887A0007`) on this RTX 4070 / Win11 26200, so the layer (and any `[d3d12-debug]` output) only exists when the env var is set. With it set, the full gate sweep **and** the live cross-API present are clean (the only `[vulkan-debug]` line is an unrelated Epic/EOS duplicate-layer warning). A non-NVIDIA driver previously under-advertised the D3D12-resource handle as importable and logged two import errors there despite the import working — driver-specific, not a code defect. |
+| Debug message callback | ✅ | ✅ | VK `VK_EXT_debug_utils` messenger (registered when validation is on, destroyed before the instance); DX `ID3D12InfoQueue` drained to the console on every `WaitIdle` |
+
+### Presentation / Swapchain
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Windowed present | ✅ | ✅ | Symmetric `ISurfacePresenter` |
+| Swapchain resize | ✅ | ✅ | VK also handles out-of-date/suboptimal |
+| Present-mode select (vsync/mailbox) | ✅ | ✅ | Neutral `PresentationOptions.PresentMode` (Vsync/Mailbox/Immediate) honored by both — VK maps to FIFO/MAILBOX/IMMEDIATE and feeds the selector; DX maps to the `Present` sync interval (1/0) plus an `ALLOW_TEARING` swapchain+present for Immediate where the display supports it |
+| Surface-format select | ✅ | ✅ | Neutral `PresentationOptions.SurfaceFormat` honored by both — VK picks the supported surface format matching the desired `VkFormat`; DX sets the swapchain, resize, and blit-PSO render-target format |
+| Host non-Win32 windows (Wayland/Xcb) | ✅ | ◆ | D3D12 is a Win32 API — Wayland/Xcb aren't in its model; throws on non-Win32 surfaces — ◆ by design, not an unfinished port |
+| Live VK↔DX backend swap | ✅ | ✅ | `BackendSwitcher`, backend-neutral (a live cross-backend producer can't survive the swap — it needs the host's LUID) |
+
+### Graphics / Raster
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Graphics pipeline (vtx+frag) | ✅ | ✅ | DX hardcodes topology/cull/blend; VK from request |
+| Offscreen render target | ✅ | ✅ | Both sampleable |
+| Render pass / framebuffer | ✅ | ✅ | DX now uses first-class render passes (`BeginRenderPass`/`EndRenderPass` with a PRESERVE store op) on Windows 10 1809+ (`ID3D12GraphicsCommandList4`); `OMSetRenderTargets` emulation is the fallback below. The RENDER_TARGET state transition stays a barrier either way — D3D12 render passes do not move resource state |
+| Draw verbs + dynamic scissor | ✅ | ✅ | `BindGraphicsPipeline`/`BindVertexBuffer`/`BindDescriptorSet`/`SetScissor`/`Draw` on both. Scissor is dynamic (VK `vkCmdSetScissor` + dynamic state; DX `RSSetScissorRects`); `Draw` → `vkCmdDraw` / `DrawInstanced`. Topology is fixed triangle-list and there is no neutral `SetViewport` — VK bakes the viewport into the pipeline, DX re-sets it from the render-pass extent |
+| Graphics-pipeline texture + storage-buffer binding | ✅ | ✅ | Both bind N image-samplers + a storage buffer to the **graphics** pipeline. VK: combined-image-sampler array + `STORAGE_BUFFER` (vtx+frag). DX: SRV descriptor table (`t0..tN-1`) + a static sampler at `s0`, with the storage buffer as a read-only SRV `StructuredBuffer` (the upload heap forbids UAVs and `u0` is the render target) |
+| Depth / stencil | ❌ | ❌ | Unmodeled (SDF needs none) |
+
+### Compute
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Compute pipeline + dispatch | ✅ | ✅ | DX folds set-layout/layout/pipeline into one token |
+| Indirect compute dispatch | ✅ | ✅ | `IGpuComputeRecorder.DispatchIndirect` reads the (x,y,z) group counts from a GPU buffer (`CreateIndirectArgs`): VK `vkCmdDispatchIndirect`; DX `ExecuteIndirect` + a cached DISPATCH command signature. The 12-byte `VkDispatchIndirectCommand`/`D3D12_DISPATCH_ARGUMENTS` layout is identical. GPU-verified by `--validate-indirect` (`Dispatch` == `DispatchIndirect` **bit-for-bit** on both backends) and wired into the LIVE render path — `WorldProducerNode`'s Stage-2 composite dispatches indirectly from a host-written args buffer; the captured `--world` frame is byte-identical to the prior direct-dispatch capture on both backends, and the `world` parity gate stays green. (Indirect *draw* is still absent — see below.) |
+| GPU-driven cull (indirect dispatch from a GPU-computed grid) | ✅ | ✅ | `WorldProducerNode`'s beam prepass + a single-thread cull-args reduction compute the surviving-tile bounding box **on the GPU** and write it into the Stage-1 "views" **indirect** dispatch args (a device-local buffer) plus a bbox-origin buffer; the SDF march then covers only that bbox (the all-empty sky margin is never dispatched) and the source-agnostic compositor flattens the remaining empty tiles to a constant — no CPU readback in the frame loop. GPU-verified: `--validate-world` / `--validate-world-child` stay green cross-backend (≤ ±1-LSB), the live `--world --backend directx` runs without device-removal, and `PUCK_TIMING` confirms the views pass is bounded to the bbox. |
+| Storage image | ✅ | ✅ | VK STORAGE+SAMPLED; DX UAV texture |
+| Device-local GPU-writable buffer | ✅ | ✅ | VK's `CreateDeviceLocal` now allocates **device-local** (not host-visible) backing memory — a GPU-only storage buffer never host-mapped, matching the D3D12 default-heap UAV buffer |
+| Image-layout transition | ✅ | ✅ | DX now uses **Enhanced Barriers** (`OPTIONS12`) — a texture barrier carrying real sync + access scopes (from the neutral stage/access masks) and first-class layouts (the neutral `oldLayout` honored directly; `Undefined` → `LAYOUT_UNDEFINED` + discard), the Vulkan image-layout peer. The legacy resource-state barrier (per-resource state dict) is the fallback when Enhanced Barriers are unsupported |
+| Memory / UAV barrier | ✅ | ✅ | DX now uses an **Enhanced Barriers** global barrier carrying real sync + access scopes from the neutral masks (the Vulkan `VkMemoryBarrier` peer); the legacy scopeless UAV barrier is the fallback |
+| Inline ray tracing / acceleration structures | ✅ | ✅ | **Both**: a per-frame TLAS over the SDF scene drives ray-query culling + soft shadows inside the SDF march, from one neutral node (`--world-rt`). VK `VK_KHR_ray_query`; DX DXR 1.1 (`ID3D12GraphicsCommandList4`). Neutral seam: `GpuComputeBindingKind.AccelerationStructure` + `IGpuAccelerationStructure` |
+| Descriptor-array binding (Count>1) | ✅ | ✅ | `GpuComputeBinding.Count` — both write per array element |
+| GPU performance counters (timestamp queries) | ✅ | ✅ | Neutral timing seam (`IGpuTimingPool`/`Factory`/`Recorder` + `GpuTimestampCapabilities`). VK wraps the now-wired `VkQueryPool` timestamp API; DX is net-new (`ID3D12QueryHeap` + `ResolveQueryData`→READBACK buffer + `GetTimestampFrequency`). `WorldProducerNode` brackets per-pass GPU-ms + share-of-frame (`PUCK_TIMING=1`), double-buffered read (no stall), pixel-neutral. Both report period 1ns/64-bit on the RTX 4070; views pass ~85% (march-bound). The foundation for performance validation. Pipeline-statistics queries are a future extension behind the same seam |
+| Host the compute world on-screen (same-device) | ✅ | ✅ | Both host `WorldProducerNode` on their own device and blit its storage image to their own swapchain — **no cross-API import**. Vulkan is the default; `--world[...] --backend directx` runs it same-device on the D3D12 host (`DirectXComputeWorldHostNode`). Cross-backend *composition* — one backend's content presented by the other host — is also live in **both** directions (zero-copy import); see asymmetry 1. |
+
+### Descriptors / Samplers
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Storage-image / buffer writes | ✅ | ✅ | — |
+| Combined-image-sampler write | ✅ | ◆ | DX writes only the SRV; the sampler is static in the root sig — ◆ idiomatic D3D12, not a defect |
+| Sampled-image binding in **compute** seam | ✅ | ✅ | A read-only texture filtered through a sampler inside a compute kernel (`GpuComputeBindingKind.SampledImage`) — the compute analogue of the graphics texture binding, for scaling/filtering an arbitrary-resolution source into a differently sized destination. VK: a combined-image-sampler set-layout binding (the existing `WriteCombinedImageSampler` path) with a `CreateSampler(filter)`-chosen `VkSampler`. DX: an SRV (`t0`) plus one CLAMP **static sampler** baked into the compute root signature at `s0` (filter from the pipeline's `samplerFilter`). GPU-verified: `--validate-resample` shows a nearest identity resample == source bit-for-bit and a 2x linear upscale matching cross-backend (≤ ±1 LSB) on both backends. The foundation for filtered / arbitrary-res viewport sources (`ResampleNode`). |
+| Dynamic sampler object | ✅ | ◆ | DX `CreateSampler` returns sentinel `1`, Destroy is a no-op — samplers are static in D3D12 — ◆ by design, not a stub to fill in |
+| Multiple independent sets per pool | ✅ | ✅ | **D3D12 `AllocateSet` now sub-allocates the heap (bump cursor + per-layout slot span); was single-set-per-pool** |
+| Push / root constants | ✅ | ✅ | Small inline pipeline data via the neutral `GpuPushConstantBinding` (compute **and** graphics recorders). VK native `vkCmdPushConstants` (range in the pipeline layout); DX maps it to root 32-bit constants at `b0` via `Set{Graphics,Compute}Root32BitConstants` (byte offset/size → dword counts) — idiomatic mechanism difference, functionally complete on both |
+
+### Surface Sharing / Transfer
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Exportable render target + storage image | ✅ | ✅ | — |
+| Shared-handle **export** | ◆ | ✅ | VK exports OPAQUE_WIN32 only (Vulkan-openable); a D3D12-openable export isn't in Vulkan's model, so cross-backend sharing routes through a D3D12-owned resource instead — ◆ by design. DX's handle is openable by both |
+| **Import a foreign backend's handle** | ✅ | ◆ | VK imports D3D12 handles (sampled **and** writable storage); DX has no Vulkan-handle path because Vulkan's OPAQUE_WIN32 isn't D3D12-openable — ◆ by design. The VK→D3D direction is reached instead by making the resource **D3D12-owned** and having Vulkan import it writable, not by D3D opening a VK handle |
+| GPU readback / CPU upload | ✅ | ✅ | — |
+
+### Buffers / Shaders / Memory
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Host-visible / device-local buffers | ✅ | ✅ | Both host-visible and device-local now real on each backend |
+| Vertex buffer (create + upload) | ✅ | ✅ | Create-and-upload in one call (no separate `Write`): VK buffer + host-visible/coherent `VkDeviceMemory` (map/copy); DX committed UPLOAD-heap resource (map/copy), the handle carrying the `D3D12_VERTEX_BUFFER_VIEW` |
+| Shader module | ✅ | ✅ | VK compiles SPIR-V; DX pins DXIL/DXBC blob |
+| Bytecode validation + content-hash | ✅ | ✅ | Both backends' `Create` now validates the bytecode format up front (`ShaderBytecode.ValidateFormat` — SPIR-V / DXBC-container magic + size), rejecting malformed bytecode instead of forwarding it to the driver; content-addressed caching of file loads remains the shader loader's role |
+| Pooled (VMA-style) device allocator | ❌ | ❌ | Neither pools; raw alloc per resource |
+
+### Absent on both (shared ceiling, not a portability gap)
+| Capability | VK | DX | Note |
+|---|---|---|---|
+| Indirect *draw* | ❌ | ❌ | Indirect compute **dispatch** is wired and at parity (see Compute); indirect *draw* (`vkCmdDrawIndirect` / graphics `ExecuteIndirect`) is unbuilt — no GPU-driven-geometry consumer in the SDF showcase to verify it against |
+| Async compute / multi-queue / timeline | ❌ | ❌ | Single graphics queue, binary fences |
+
+## The asymmetries that actually matter for plug-and-play
+
+1. **Cross-API zero-copy is live in BOTH directions.** Both directions are GPU-verified as live present paths, and both
+   route through a **D3D12-owned** shared resource, because a D3D12 `CreateSharedHandle` NT handle is the only one both
+   backends can open (Vulkan's `OPAQUE_WIN32` export is Vulkan-only).
+   - **Forward** (D3D12 produces → Vulkan imports + presents): plain `--world` on Windows runs the SDF world on a
+     LUID-matched D3D12 device and the Vulkan host blits the imported handle zero-copy.
+   - **Reverse** (Vulkan produces → D3D12 host presents): `--world --backend directx --produce vulkan` runs the SDF
+     world on a bespoke surface-less Vulkan device LUID-matched to the D3D12 host adapter, rendering into a
+     **host-owned** shared image the Vulkan device imports writable; the D3D12 host then blits its own image zero-copy.
+     The producer-queue block + the host's per-frame device wait order it (no D3D12↔Vulkan shared timeline). GPU-verified
+     on the RTX 4070: the captured frame is **bit-identical** to the same-device Vulkan render and within the world's
+     benign FP-codegen baseline (0.48%, all ±1) of the same-device D3D12 render. (The `--validate-reverse-share` gate
+     remains the offscreen primitive-level proof: Vulkan dispatches `gradient.comp` into a D3D12-owned shared image and
+     Direct3D 12 reads it back `0→251`.)
+2. **The D3D12 descriptor model — one idiomatic divergence remains.** Static samplers, no dynamic sampler object
+   (idiomatic D3D12, not a defect). The single-shared-heap **single-set-per-pool** limit that once bit the two-stage
+   compositor is fixed: `AllocateSet` bump-allocates each set its own heap region, so N independent sets per pool behave
+   like Vulkan.
+3. **"Plug any backend as the window host" holds for both graphics and compute — and now cross-backend in both
+   directions.** Either backend hosts the SDF world on-screen same-device (Vulkan as the default, or Direct3D 12 via
+   `--backend directx`, no cross-API import); and either backend hosts the OTHER's content via zero-copy import —
+   Vulkan-host + D3D12-content (`--world`) and D3D12-host + Vulkan-content (`--world --backend directx --produce
+   vulkan`) are both live (see asymmetry 1).
+4. **Absent on *both* (a shared ceiling, not a portability gap):** indirect *draw* (indirect compute *dispatch* is now
+   wired and at parity — `--validate-indirect`), async/multi-queue/timeline, depth/stencil, and a VMA-style pooled
+   allocator. The sampled-image compute binding is **no longer** in this list — it is wired and at parity on both
+   (`--validate-resample`; see Descriptors / Samplers). Hardware ray tracing is **not**
+   in this list either — it is present and at parity on both via the inline ray-query world.

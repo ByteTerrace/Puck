@@ -23,13 +23,17 @@ public sealed class VulkanStorageBufferFactory : IVulkanStorageBufferFactory {
     public VulkanStorageBuffer Create(
         VulkanInstance vulkanInstance,
         VulkanLogicalDevice logicalDevice,
-        ulong sizeBytes
+        ulong sizeBytes,
+        bool deviceLocal = false,
+        bool indirectArgs = false
     ) {
         ArgumentNullException.ThrowIfNull(argument: vulkanInstance);
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
 
         var handles = m_storageBufferApi.CreateStorageBuffer(request: new(
             DeviceHandle: logicalDevice.Handle,
+            DeviceLocal: deviceLocal,
+            IndirectArgs: indirectArgs,
             InstanceHandle: vulkanInstance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
             SizeBytes: sizeBytes

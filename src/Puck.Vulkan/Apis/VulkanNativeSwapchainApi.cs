@@ -11,6 +11,17 @@ namespace Puck.Vulkan;
 /// <c>vkCreateSwapchainKHR</c> and <c>vkDestroySwapchainKHR</c> entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeSwapchainApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeSwapchainApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     private const uint IdentitySurfaceTransform = 0x00000001;
     private const uint TrueValue = 1;
     private const uint VkStructureTypeSwapchainCreateInfoKhr = 1000001000;
@@ -71,7 +82,7 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
             );
         } finally {
             if (0 != queueIndicesBuffer) {
-                Puck.Memory.Allocator.Free(ptr: queueIndicesBuffer);
+                m_allocator.Free(ptr: queueIndicesBuffer);
             }
         }
     }
@@ -136,12 +147,12 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
             return m_getDeviceProcAddr;
         }
     }
-    private static unsafe nint MarshalQueueFamilyIndices(IReadOnlyList<uint> queueFamilyIndices) {
+    private unsafe nint MarshalQueueFamilyIndices(IReadOnlyList<uint> queueFamilyIndices) {
         if (0 == queueFamilyIndices.Count) {
             return 0;
         }
 
-        var buffer = Puck.Memory.Allocator.Alloc(size: (sizeof(uint) * queueFamilyIndices.Count));
+        var buffer = m_allocator.Alloc(size: (sizeof(uint) * queueFamilyIndices.Count));
 
         for (var index = 0; (index < queueFamilyIndices.Count); index++) {
             Marshal.WriteInt32(

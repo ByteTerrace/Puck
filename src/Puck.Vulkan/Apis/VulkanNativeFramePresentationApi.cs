@@ -11,6 +11,17 @@ namespace Puck.Vulkan;
 /// submit, and present entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresentationApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeFramePresentationApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeFramePresentationApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     private const uint PipelineStageColorAttachmentOutputBit = 0x00000400;
     private const uint StructureTypePresentInfoKhr = 1000001001;
     private const uint StructureTypeSubmitInfo = 4;
@@ -64,9 +75,9 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         }
 
         var queuePresent = GetPointers(deviceHandle: request.DeviceHandle).QueuePresentKhr;
-        var waitSemaphorePointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
-        var swapchainPointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
-        var imageIndexPointer = Puck.Memory.Allocator.Alloc(size: sizeof(uint));
+        var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
+        var swapchainPointer = m_allocator.Alloc(size: IntPtr.Size);
+        var imageIndexPointer = m_allocator.Alloc(size: sizeof(uint));
 
         try {
             Marshal.WriteIntPtr(
@@ -96,9 +107,9 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 in presentInfo
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: waitSemaphorePointer);
-            Puck.Memory.Allocator.Free(ptr: swapchainPointer);
-            Puck.Memory.Allocator.Free(ptr: imageIndexPointer);
+            m_allocator.Free(ptr: waitSemaphorePointer);
+            m_allocator.Free(ptr: swapchainPointer);
+            m_allocator.Free(ptr: imageIndexPointer);
         }
     }
     /// <inheritdoc/>
@@ -132,16 +143,20 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         }
 
         var queueSubmit = GetPointers(deviceHandle: request.DeviceHandle).QueueSubmit;
-        var waitSemaphorePointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
-        var waitStagePointer = Puck.Memory.Allocator.Alloc(size: sizeof(uint));
-        var commandBufferPointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
-        var signalSemaphorePointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+        var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
+        var waitStagePointer = m_allocator.Alloc(size: sizeof(uint));
+        var commandBufferPointer = m_allocator.Alloc(size: IntPtr.Size);
+        var signalSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
 
         try {
             Marshal.WriteIntPtr(
                 ptr: waitSemaphorePointer,
                 val: request.ImageAvailableSemaphoreHandle
             );
+            // This submission IS the present-path graphics blit, so the acquired image is first touched at
+            // COLOR_ATTACHMENT_OUTPUT — the correct wait stage for this path. (A compute-first submission would wait at
+            // a different stage; the presenter never issues one, so this stage is fixed by the path's purpose, not an
+            // assumption that could silently break.)
             Marshal.WriteInt32(
                 ptr: waitStagePointer,
                 val: unchecked((int)PipelineStageColorAttachmentOutputBit)
@@ -173,10 +188,10 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 request.FenceHandle
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: waitSemaphorePointer);
-            Puck.Memory.Allocator.Free(ptr: waitStagePointer);
-            Puck.Memory.Allocator.Free(ptr: commandBufferPointer);
-            Puck.Memory.Allocator.Free(ptr: signalSemaphorePointer);
+            m_allocator.Free(ptr: waitSemaphorePointer);
+            m_allocator.Free(ptr: waitStagePointer);
+            m_allocator.Free(ptr: commandBufferPointer);
+            m_allocator.Free(ptr: signalSemaphorePointer);
         }
     }
     /// <inheritdoc/>
@@ -210,7 +225,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         }
 
         var queueSubmit = GetPointers(deviceHandle: deviceHandle).QueueSubmit;
-        var commandBufferPointer = Puck.Memory.Allocator.Alloc(size: IntPtr.Size);
+        var commandBufferPointer = m_allocator.Alloc(size: IntPtr.Size);
 
         try {
             Marshal.WriteIntPtr(
@@ -236,7 +251,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 fenceHandle
             );
         } finally {
-            Puck.Memory.Allocator.Free(ptr: commandBufferPointer);
+            m_allocator.Free(ptr: commandBufferPointer);
         }
     }
 

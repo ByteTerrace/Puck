@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the single
+             HLSL source to SPIR-V. Override with /p:DxcCommand="path\to\dxc". -->
+        <DxcCommand>dxc</DxcCommand>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
+        <ProjectReference Include="..\Puck.Vulkan\Puck.Vulkan.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
+        <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
+        <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
+    </ItemGroup>
+
+    <!-- Compile each *.vert.hlsl / *.frag.hlsl to SPIR-V via DXC. The Vulkan pipeline binds the entry point by
+         the fixed name "main", so the SPIR-V entry is renamed regardless of the HLSL entry function. -->
+    <Target BeforeTargets="PrepareForBuild" Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)" Name="CompileShaders" Outputs="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+        <Exec Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
+            <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
+        </Exec>
+        <Error Condition="'$(DxcProbeExitCode)' != '0'" Text="Puck.Vulkan.Presentation shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T vs_6_0 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+    </Target>
+</Project>

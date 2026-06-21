@@ -1,29 +1,22 @@
 // The repository's verification toolbox: one .NET 10 file-based app, subcommand-dispatched.
-// Flags are case-insensitive (-Bless == --bless). Exit codes: 0 pass, 1 gate failure, 2
+// Flags are case-insensitive (-NoBuild == --nobuild). Exit codes: 0 pass, 1 gate failure, 2
 // usage/build/run failure. Capture runs open hands-off windows that self-terminate.
 //
-// validate [-Bless] [-BlessMissing] [-NoBuild] [-AllowShaderDrift]
-//   Determinism gate. Builds, asserts the three shipping .spv kernels are byte-identical in
-//   git, then runs one capture per tier (rt, tile, rt-split, tile-split, feed-split) with the
-//   world-debug JSONL on (no APNG) and compares it — wall-clock stripped — byte-for-byte
-//   against tools/baselines/. A tier passes on zero invariant/parity violations, the expected
-//   frame count, and an exact baseline match. -Bless rewrites all baselines; -BlessMissing
-//   writes only absent ones; -AllowShaderDrift permits changed kernels; -NoBuild skips the
-//   build. Baselines are GPU/display-specific (RTX 4070).
+// parity [-NoBuild]
+//   Cross-backend parity gate. Builds, then runs the
+//   Puck.Demo --validate gate: it renders the SDF scene on both the Vulkan and Direct3D 12 backends offscreen,
+//   diffs them tolerance-aware, writes artifacts/parity/ (the two PNGs, an amplified diff heatmap, report.json),
+//   and exits 0 pass / 1 gate-fail / 2 infra-fail. -NoBuild skips the build.
 //
-// bench [-Release] [-Frames N] [-Modes a,b,...] [-Tiers rt,tile] [-Pin s] [-Wg edge] [-NoBuild]
-//   Performance measurement, not a gate. One real-engine run per (tier x mode) with capture
-//   off, reporting per-frame CPU/GPU timing. -Pin freezes the scene clock at second s; -Wg
-//   sets the compute-world workgroup edge.
+// schema [<out=schema/run.schema.json>] [-NoBuild]
+//   Emits the data-driven run-document JSON Schema by running the demo's headless --emit-schema. The schema is
+//   exported from the live System.Text.Json source-gen model, so it cannot drift from the document types. -NoBuild
+//   skips the build.
 //
-// capture-parity [-Label name] [-WithJsonl] [-BaselineRt h] [-BaselineTile h] [-BaselineJsonl h]
-//   Shipping-pixel parity gate. Captures twice (ray-query and tile), prints each APNG's SHA256
-//   (and the utc-normalized JSONL hash with -WithJsonl), and exits 1 on mismatch against a
-//   supplied baseline — drivable by `git bisect run`.
-//
-// cost-split <world-debug.jsonl> [-Mode off] [-Bench bench.json] [-Tier rt]
-//   Reports the march-cost composition (static terrain/sky vs dynamic creature area) for one
-//   mode. -Bench frames worldCompute GPU ms by static area as a coarse upper band.
+// scene-words [<run.json=docs/examples/world-single.json>] [-NoBuild]
+//   Determinism gate for the data-driven scene path: runs the demo's headless --check-run to assert a run document's
+//   SdfProgram words are bit-identical to the hand-authored showcase scene (the data-driven path never bakes a
+//   different program than the flag path). Exits 0 match / 1 mismatch / 2 load-or-build failure. -NoBuild skips the build.
 //
 // compare-frames <a.png> <b.png>                       Pixel-diff two APNG captures frame-by-frame.
 // extract-frame <capture.png> <frameIndex> <out.png>   Composite frames 0..index into one PNG.
@@ -103,20 +96,20 @@ namespace Puck.Tools
             var commandArguments = args[1..];
             switch (args[0].ToLowerInvariant())
             {
-                case "validate":
-                    return ValidateGate.Run(
+                case "parity":
+                    return Parity(
                         commandArguments
                     );
-                case "bench":
-                    return BenchHarness.Run(
+                case "schema":
+                    return SchemaCommand(
                         commandArguments
                     );
-                case "capture-parity":
-                    return CaptureParityGate.Run(
+                case "scene-words":
+                    return SceneWordsCommand(
                         commandArguments
                     );
-                case "cost-split":
-                    return CostSplitCommand.Run(
+                case "fuzz":
+                    return Fuzz(
                         commandArguments
                     );
                 case "compare-frames":
@@ -145,6 +138,499 @@ namespace Puck.Tools
                     );
                     PrintUsage();
                     return 2;
+            }
+        }
+
+        // Cross-backend parity gate: builds the solution, runs the
+        // demo's --validate, and propagates its exit code (0 pass / 1 gate-fail / 2 infra-fail), re-printing the
+        // report.json failures for the CI log.
+        private static int Parity(string[] arguments)
+        {
+            var noBuild = arguments.Any(
+                static argument => string.Equals(
+                argument,
+                "-NoBuild",
+                StringComparison.OrdinalIgnoreCase
+            )
+            );
+            if (!noBuild)
+            {
+                var buildExit = EngineRun.Build(
+                    "Debug"
+                );
+                if (buildExit != 0)
+                {
+                    Console.Error.WriteLine(
+                        "ERROR: build failed."
+                    );
+                    return 2;
+                }
+            }
+
+            var exitCode = EngineRun.RunDemoParity();
+            ReprintParityFailures();
+            return exitCode;
+        }
+
+        // Emits the data-driven run-document JSON Schema by running the demo's headless --emit-schema (so the schema
+        // is exported from the live System.Text.Json source-gen model and can never drift from the types). The first
+        // positional argument overrides the output path (default schema/run.schema.json); -NoBuild skips the build.
+        private static int SchemaCommand(string[] arguments)
+        {
+            var output = arguments.FirstOrDefault(
+                static argument => !argument.StartsWith(
+                "-",
+                StringComparison.Ordinal
+            )
+            ) ?? Path.Combine(
+                EngineRun.RepositoryRoot,
+                "schema",
+                "run.schema.json"
+            );
+
+            if (!ToolsNoBuild(arguments) && (EngineRun.Build("Debug") != 0))
+            {
+                Console.Error.WriteLine(
+                    "ERROR: build failed."
+                );
+                return 2;
+            }
+
+            return EngineRun.RunDemo(
+                "--emit-schema",
+                output
+            );
+        }
+
+        // Determinism gate for the data-driven scene path: runs the demo's headless --check-run to assert a run
+        // document's SdfProgram words are bit-identical to the hand-authored showcase scene (0 match / 1 mismatch /
+        // 2 load-or-build error). The first positional argument overrides the document (default world-single example).
+        private static int SceneWordsCommand(string[] arguments)
+        {
+            var document = arguments.FirstOrDefault(
+                static argument => !argument.StartsWith(
+                "-",
+                StringComparison.Ordinal
+            )
+            ) ?? Path.Combine(
+                EngineRun.RepositoryRoot,
+                "docs",
+                "examples",
+                "world-single.json"
+            );
+
+            if (!ToolsNoBuild(arguments) && (EngineRun.Build("Debug") != 0))
+            {
+                Console.Error.WriteLine(
+                    "ERROR: build failed."
+                );
+                return 2;
+            }
+
+            return EngineRun.RunDemo(
+                "--check-run",
+                document
+            );
+        }
+
+        private static bool ToolsNoBuild(string[] arguments) =>
+            arguments.Any(
+                static argument => string.Equals(
+                argument,
+                "-NoBuild",
+                StringComparison.OrdinalIgnoreCase
+            )
+            );
+
+        // The most seeds a -Run sweep may span; mirrors Puck.Scene's FuzzingDocument.MaxSeedSpan (this file-based
+        // toolbox does not reference Puck.Scene, so the ceiling is restated rather than imported).
+        private const int FuzzMaxSeedSpan = 100_000;
+
+        // Cross-backend DIFFERENTIAL FUZZER. Spawns one ISOLATED child per seed running the demo's
+        // `--validate-world --fuzz-seed <n>` (a fuzz-generated SDF program rendered identically on both backends and
+        // diffed by the parity oracle), under a hard wall-clock timeout. With `-Run <doc.json>` the seed range + per-seed
+        // timeout come from the document's fuzzing section and each child runs `--run <doc> --fuzz-seed <n>` instead, so
+        // the document's bounds drive generation (the data-driven seed-range loop). Process isolation is mandatory: a malformed
+        // program can device-loss / TDR / hang the GPU or native-crash, which would otherwise take down the harness.
+        // A child that diverges (exit 1), throws (exit 2), native-crashes (other exit), or hangs (timeout -> killed)
+        // is a finding: its seed, verdict line, captured output, and the parity PNGs are preserved to artifacts/fuzz/.
+        // Exits 0 when no findings, 1 otherwise.
+        private static int Fuzz(string[] arguments)
+        {
+            var count = FuzzIntArg(arguments, "-Count", 64);
+            var start = FuzzIntArg(arguments, "-Start", 0);
+            var timeoutSeconds = FuzzIntArg(arguments, "-Timeout", 30);
+            var configuration = FuzzStringArg(arguments, "-Config", "Debug");
+            var runDocument = FuzzStringArg(arguments, "-Run", string.Empty);
+            var noBuild = arguments.Any(
+                static argument => string.Equals(
+                argument,
+                "-NoBuild",
+                StringComparison.OrdinalIgnoreCase
+            )
+            );
+
+            // -Run <doc>: data-driven mode. The seed range and per-seed timeout come from the document's fuzzing
+            // section, and each child runs `--run <doc> --fuzz-seed N` (its bounds drive generation) instead of the
+            // hardcoded `--validate-world`.
+            if (!string.IsNullOrEmpty(runDocument))
+            {
+                try
+                {
+                    var (rangeStart, rangeCount, rangeTimeout) = FuzzRunRange(
+                        runDocument
+                    );
+                    start = rangeStart;
+                    // The document's seedRange drives the sweep; an explicit -Count caps it (to dry-run a prefix of a
+                    // large range) but never extends it.
+                    count = (FuzzHasFlag(
+                        arguments,
+                        "-Count"
+                    )
+                        ? Math.Min(count, rangeCount)
+                        : rangeCount);
+                    if (rangeTimeout is int documentTimeout)
+                    {
+                        timeoutSeconds = documentTimeout;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine(
+                        $"ERROR: could not read fuzzing.seedRange from '{runDocument}': {exception.Message}"
+                    );
+                    return 2;
+                }
+            }
+
+            if (!noBuild)
+            {
+                var buildExit = EngineRun.Build(
+                    configuration
+                );
+                if (buildExit != 0)
+                {
+                    Console.Error.WriteLine(
+                        "ERROR: build failed."
+                    );
+                    return 2;
+                }
+            }
+
+            var demoExecutable = Path.Combine(
+                EngineRun.RepositoryRoot,
+                "src",
+                "Puck.Demo",
+                "bin",
+                configuration,
+                "net10.0",
+                "Puck.Demo.exe"
+            );
+            if (!File.Exists(
+                demoExecutable
+            ))
+            {
+                Console.Error.WriteLine(
+                    $"ERROR: demo executable not found at {demoExecutable} (build first)."
+                );
+                return 2;
+            }
+
+            var fuzzDirectory = Path.Combine(
+                EngineRun.RepositoryRoot,
+                "artifacts",
+                "fuzz"
+            );
+            Directory.CreateDirectory(
+                fuzzDirectory
+            );
+
+            var timeoutMilliseconds = (timeoutSeconds * 1000);
+            var passes = 0;
+            var divergences = 0;
+            var crashes = 0;
+            var timeouts = 0;
+            var infra = 0;
+            var findings = new List<string>();
+
+            Console.WriteLine(
+                $"FUZZ start | {count} seeds from {start} | timeout {timeoutSeconds}s/iter | {configuration}"
+            );
+
+            for (var index = 0; (index < count); index++)
+            {
+                var seed = (start + index);
+                var seedText = seed.ToString(
+                    CultureInfo.InvariantCulture
+                );
+                var demoArguments = (string.IsNullOrEmpty(runDocument)
+                    ? new[] { "--validate-world", "--fuzz-seed", seedText }
+                    : new[] { "--run", runDocument, "--fuzz-seed", seedText });
+                var (exitCode, timedOut, output) = ToolProcess.RunWithTimeout(
+                    timeoutMilliseconds,
+                    demoExecutable,
+                    demoArguments
+                );
+
+                string classification;
+                var finding = true;
+                if (timedOut)
+                {
+                    classification = "TIMEOUT (hang/TDR)";
+                    timeouts++;
+                }
+                else
+                {
+                    switch (exitCode)
+                    {
+                        case 0:
+                            classification = "pass";
+                            passes++;
+                            finding = false;
+                            break;
+                        case 1:
+                            classification = "DIVERGENCE";
+                            divergences++;
+                            break;
+                        case 2:
+                            classification = "infra/throw";
+                            infra++;
+                            break;
+                        default:
+                            classification = $"CRASH (exit {exitCode})";
+                            crashes++;
+                            break;
+                    }
+                }
+
+                var verdictLine = FuzzVerdictLine(
+                    output
+                );
+                Console.WriteLine(
+                    $"  seed {seed,7}: {classification,-18} {verdictLine}"
+                );
+
+                if (finding)
+                {
+                    findings.Add(
+                        $"seed {seed}: {classification} | {verdictLine}"
+                    );
+                    File.WriteAllText(
+                        Path.Combine(
+                            fuzzDirectory,
+                            $"seed-{seed}-output.txt"
+                        ),
+                        output
+                    );
+                    FuzzPreserveArtifacts(
+                        fuzzDirectory,
+                        seed
+                    );
+                }
+            }
+
+            var summary =
+                $"FUZZ summary | {count} runs from {start} | pass {passes} | divergence {divergences} | timeout {timeouts} | crash {crashes} | infra {infra} | findings {findings.Count}";
+            Console.WriteLine(
+                summary
+            );
+            File.WriteAllText(
+                Path.Combine(
+                    fuzzDirectory,
+                    "findings.txt"
+                ),
+                (summary + Environment.NewLine + Environment.NewLine + string.Join(
+                    Environment.NewLine,
+                    findings
+                ))
+            );
+            return ((findings.Count == 0) ? 0 : 1);
+        }
+
+        private static int FuzzIntArg(string[] arguments, string name, int fallback)
+        {
+            for (var index = 0; (index < (arguments.Length - 1)); index++)
+            {
+                if (string.Equals(
+                    arguments[index],
+                    name,
+                    StringComparison.OrdinalIgnoreCase
+                ) && int.TryParse(
+                    arguments[index + 1],
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var value
+                ))
+                {
+                    return value;
+                }
+            }
+
+            return fallback;
+        }
+        private static string FuzzStringArg(string[] arguments, string name, string fallback)
+        {
+            for (var index = 0; (index < (arguments.Length - 1)); index++)
+            {
+                if (string.Equals(
+                    arguments[index],
+                    name,
+                    StringComparison.OrdinalIgnoreCase
+                ))
+                {
+                    return arguments[index + 1];
+                }
+            }
+
+            return fallback;
+        }
+        // Reads the seed range + per-seed timeout from a run document's fuzzing section (via reflection-free
+        // JsonDocument, honoring the toolbox's no-reflection-JSON canary). Returns the inclusive [start, end] as a
+        // (start, count) plus the optional timeout. Throws when the fuzzing.seedRange is absent/malformed.
+        private static (int Start, int Count, int? Timeout) FuzzRunRange(string documentPath)
+        {
+            using var stream = File.OpenRead(
+                documentPath
+            );
+            using var json = JsonDocument.Parse(
+                stream
+            );
+
+            var fuzzing = json.RootElement.GetProperty(
+                "fuzzing"
+            );
+            var range = fuzzing.GetProperty(
+                "seedRange"
+            );
+            var start = range[0].GetInt32();
+            var end = range[1].GetInt32();
+
+            // The same invariants FuzzingDocument.Validate enforces in-process — but tools fuzz -Run never constructs a
+            // RunDocument, so re-assert them here (a reversed/empty range would otherwise spawn zero children yet exit 0,
+            // and an unbounded span would launch a runaway number of GPU processes). Thrown errors surface as exit 2.
+            if ((start < 0) || (end < start))
+            {
+                throw new InvalidOperationException(
+                    $"fuzzing.seedRange [{start}, {end}] must satisfy 0 <= start <= end"
+                );
+            }
+
+            var span = (((long)end - start) + 1);
+            if (span > FuzzMaxSeedSpan)
+            {
+                throw new InvalidOperationException(
+                    $"fuzzing.seedRange [{start}, {end}] spans {span} seeds; the limit is {FuzzMaxSeedSpan}"
+                );
+            }
+
+            int? timeout = (fuzzing.TryGetProperty(
+                "timeoutSeconds",
+                out var timeoutElement
+            )
+                ? timeoutElement.GetInt32()
+                : null);
+
+            return (start, (int)span, timeout);
+        }
+        // Whether a bare flag (with or without a following value) is present in the argument list.
+        private static bool FuzzHasFlag(string[] arguments, string name) =>
+            arguments.Any(
+                argument => string.Equals(
+                    argument,
+                    name,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
+        private static string FuzzVerdictLine(string output)
+        {
+            foreach (var line in output.Split(
+                '\n'
+            ))
+            {
+                if (line.Contains(
+                    "WORLD-FUZZ",
+                    StringComparison.Ordinal
+                ))
+                {
+                    return line.Trim();
+                }
+            }
+
+            return "(no verdict line)";
+        }
+        private static void FuzzPreserveArtifacts(string fuzzDirectory, int seed)
+        {
+            foreach (var (source, suffix) in new[] {
+                ("parity-world-vulkan.png", "vulkan"),
+                ("parity-world-directx.png", "directx"),
+                ("parity-world-diff.png", "diff"),
+            })
+            {
+                var sourcePath = Path.Combine(
+                    EngineRun.RepositoryRoot,
+                    "artifacts",
+                    source
+                );
+                if (File.Exists(
+                    sourcePath
+                ))
+                {
+                    File.Copy(
+                        sourcePath,
+                        Path.Combine(
+                            fuzzDirectory,
+                            $"seed-{seed}-{suffix}.png"
+                        ),
+                        overwrite: true
+                    );
+                }
+            }
+        }
+
+        // Echoes the verdict and any tripped thresholds from the last parity run's report.json, so the gate's
+        // reason for failing is in the tool's own output even if the child's stdout scrolled past.
+        private static void ReprintParityFailures()
+        {
+            var reportPath = Path.Combine(
+                EngineRun.RepositoryRoot,
+                "artifacts",
+                "parity",
+                "report.json"
+            );
+            if (!File.Exists(
+                reportPath
+            ))
+            {
+                Console.Error.WriteLine(
+                    $"WARNING: no parity report at {reportPath}."
+                );
+                return;
+            }
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllText(
+                reportPath
+            )
+            );
+            var root = document.RootElement;
+            var verdict = root.TryGetProperty(
+                "verdict",
+                out var verdictElement
+            ) ? verdictElement.GetString() : "?";
+            Console.WriteLine(
+                $"parity verdict: {verdict}"
+            );
+            if (root.TryGetProperty(
+                "failures",
+                out var failures
+            ) && failures.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var failure in failures.EnumerateArray())
+                {
+                    Console.WriteLine(
+                        $"  tripped: {failure.GetString()}"
+                    );
+                }
             }
         }
 
@@ -238,16 +724,16 @@ namespace Puck.Tools
                 "usage: dotnet run tools/Tools.cs -- <command> [options]"
             );
             Console.Error.WriteLine(
-                "  validate        [-Bless] [-BlessMissing] [-NoBuild] [-AllowShaderDrift]"
+                "  parity          [-NoBuild]"
             );
             Console.Error.WriteLine(
-                "  bench           [-Release] [-Frames N] [-Modes a,b,...] [-Tiers rt,tile] [-Pin seconds] [-Wg edge] [-NoBuild]"
+                "  schema          [<out=schema/run.schema.json>] [-NoBuild]"
             );
             Console.Error.WriteLine(
-                "  capture-parity  [-Label <name>] [-WithJsonl] [-BaselineRt <hash>] [-BaselineTile <hash>] [-BaselineJsonl <hash>]"
+                "  scene-words     [<run.json=docs/examples/world-single.json>] [-NoBuild]"
             );
             Console.Error.WriteLine(
-                "  cost-split      <world-debug.jsonl> [-Mode off] [-Bench <bench.json>] [-Tier rt]"
+                "  fuzz            [-Run <doc.json>] [-Count N] [-Start S] [-Timeout secs] [-Config Debug] [-NoBuild]"
             );
             Console.Error.WriteLine(
                 "  compare-frames  <captureA.png> <captureB.png>"
@@ -263,655 +749,6 @@ namespace Puck.Tools
             );
             Console.Error.WriteLine(
                 "  format          [<root=src>] [-Check] [-Only attr-order,member-spacing,member-order,null-pattern,paren-clarity,logical-lines,arg-lines,ternary-lines,init-order,trailing-comma,decl-spacing,literal-var,named-args]"
-            );
-        }
-    }
-
-    internal sealed class ValidateGate
-    {
-        // Every captured frame is one schedule slot; the long `off` head feeds the
-        // CPU-GPU parity probes and pins the default (passthrough) pixels, the invariant
-        // modes must hold zero counters, and the cost modes feed the march/cull
-        // telemetry that pixel hashes are blind to. cull-parity exists on the rt tiers
-        // only.
-        //
-        // Coverage is deliberately TIERED to keep the gate lean: the full-length rt and
-        // tile runs own all kernel-math coverage (every visual/cost/invariant mode plus
-        // the 17-group wallpaper sweep) — once per culling tier, because the culling
-        // source is what actually forks the kernels. The -split tiers exist to prove
-        // layout and feed invariance ("split screen is scene data only"), which the
-        // kernel-math sweeps cannot strengthen — so they run SHORT schedules of only
-        // the layout-sensitive modes: off (per-layout parity probes + default pixels,
-        // including the fed pane's external pixels on feed-split), tiles (pane
-        // borders/extent decode under per-pane scissors), the always-on invariants, and
-        // cull-parity where ray query exists. WideOverTwo is reachable for manual
-        // sweeps (Puck_AvatarDebug__ViewConfiguration=WideOverTwo).
-        private static readonly Dictionary<string, string> ModeSchedules = new()
-        {
-            // Full tiers sum to 96 and end with a 17-frame wallpaper segment: the group
-            // is keyed on the absolute captured frame (frame % 17), so any 17
-            // consecutive frames sweep all 17 wallpaper groups exactly once per tier.
-            // The single shape-gallery frame (every pure-math shape primitive at three
-            // pinned parameter sets, with in-shader gradient self-checks) is carved out
-            // of each off head, so every later segment keeps its absolute frame index.
-            ["rt"] = "off:11,shape-gallery:1,depth:5,normals:5,raydir:5,tiles:5,terrain-cost:7,creature-cost:8,beam-check:8,bounds-check:6,nan-check:5,chart:5,cull-parity:8,wallpaper:17",
-            ["tile"] = "off:13,shape-gallery:1,depth:5,normals:5,raydir:5,tiles:5,terrain-cost:8,creature-cost:8,beam-check:10,bounds-check:9,nan-check:5,chart:5,wallpaper:17",
-            // Split tiers sum to 32 (FrameCounts below).
-            ["rt-split"] = "off:8,tiles:6,bounds-check:5,nan-check:4,cull-parity:9",
-            ["tile-split"] = "off:10,tiles:8,bounds-check:8,nan-check:6",
-            // feed-split: FourWaySplit with the bottom-right pane externally fed (the
-            // deterministic test-card producer fills feed slot 3, the other panes'
-            // in-world screens watch it) — pins the whole external-feed path: slot
-            // region upload, skipped dispatch/feed-copy for the feed pane, and both
-            // consumers' sampling.
-            ["feed-split"] = "off:12,tiles:6,bounds-check:5,nan-check:4,cull-parity:5"
-        };
-
-        // Per-tier capture lengths: the full tiers need the whole 96-frame sweep, the
-        // layout/feed tiers prove their invariance in a third of that (the wall-clock
-        // win of the tiered coverage above — runs are frame-count-bound, not
-        // schedule-bound).
-        private static readonly Dictionary<string, int> FrameCounts = new()
-        {
-            ["rt"] = 96,
-            ["tile"] = 96,
-            ["rt-split"] = 32,
-            ["tile-split"] = 32,
-            ["feed-split"] = 32
-        };
-
-        // Every tier pins its layout explicitly: an explicit ViewConfiguration wins
-        // over (and disables) the appsettings.Debug.json showcase schedule
-        // (AvatarDebug:ViewConfigurationSchedule), which would otherwise rotate layouts
-        // mid-run and break the single-layout baselines.
-        private static readonly Dictionary<string, string> ViewConfigurations = new()
-        {
-            ["rt"] = "Standard",
-            ["tile"] = "Standard",
-            ["rt-split"] = "FourWaySplit",
-            ["tile-split"] = "FourWaySplit",
-            ["feed-split"] = "FourWaySplitFeed"
-        };
-
-        private static readonly Regex SummaryKindPattern = new(
-            "\"kind\":\\s*\"summary\""
-        );
-        private readonly string m_baselineDirectory;
-        private readonly bool m_bless;
-        private readonly bool m_blessMissing;
-        private readonly string m_repositoryRoot;
-
-        private ValidateGate(string repositoryRoot, string baselineDirectory, bool bless, bool blessMissing)
-        {
-            m_repositoryRoot = repositoryRoot;
-            m_baselineDirectory = baselineDirectory;
-            m_bless = bless;
-            m_blessMissing = blessMissing;
-        }
-
-        public static int Run(string[] args)
-        {
-            var scanner = new ArgScanner().Flag(
-                "AllowShaderDrift"
-            ).Flag(
-                "Bless"
-            ).Flag(
-                "BlessMissing"
-            ).Flag(
-                "NoBuild"
-            );
-            if (!scanner.Parse(
-                args
-            ))
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: {scanner.Error}"
-                );
-                return 2;
-            }
-
-            var allowShaderDrift = scanner.Has(
-                "AllowShaderDrift"
-            );
-            var bless = scanner.Has(
-                "Bless"
-            );
-            var blessMissing = scanner.Has(
-                "BlessMissing"
-            );
-
-            var toolsDirectory = ToolProcess.GetToolsDirectory();
-            var repositoryRoot = Path.GetDirectoryName(
-                toolsDirectory
-            )!;
-            var gate = new ValidateGate(
-                repositoryRoot,
-                Path.Combine(
-                toolsDirectory,
-                "baselines"
-            ),
-                bless,
-                blessMissing
-            );
-
-            if (!scanner.Has(
-                "NoBuild"
-            ) && EngineRun.Build(
-                "Debug"
-            ) != 0)
-            {
-                return 2;
-            }
-
-            if (!gate.CheckShippingKernelIdentity(
-                allowShaderDrift
-            ))
-            {
-                return 1;
-            }
-
-            var allPassed = true;
-            foreach (var tier in (string[])["rt", "tile", "rt-split", "tile-split", "feed-split"])
-            {
-                var logPath = gate.InvokeValidationRun(
-                    tier
-                );
-                if (logPath is null)
-                {
-                    return 2;
-                }
-
-                allPassed &= gate.TestValidationLog(
-                    tier,
-                    logPath
-                );
-            }
-
-            Console.WriteLine(
-                allPassed ? "validate: PASS" : "validate: FAIL"
-            );
-            return allPassed ? 0 : 1;
-        }
-
-        // Tier 0: shipping-kernel byte identity. The debug hosts may change freely; the
-        // three shipping kernels changing means either an intentional visual change
-        // (-AllowShaderDrift) or debug code leaked outside #ifdef Puck_DEBUG_VIZ.
-        private bool CheckShippingKernelIdentity(bool allowShaderDrift)
-        {
-            var shaderDrift = ToolProcess.RunCaptured(
-                "git",
-                "-C",
-                m_repositoryRoot,
-                "status",
-                "--porcelain",
-                "--",
-                "src/Puck.Avatars/Assets/Shaders/Compute/world-view.comp.spv",
-                "src/Puck.Avatars/Assets/Shaders/Compute/world-view-beam.comp.spv",
-                "src/Puck.Avatars/Assets/Shaders/Compute/world-view-rt.comp.spv"
-            ).Trim();
-            if (shaderDrift.Length == 0)
-            {
-                return true;
-            }
-
-            if (allowShaderDrift)
-            {
-                Console.Error.WriteLine(
-                    $"WARNING: Shipping kernels changed (allowed by -AllowShaderDrift):\n{shaderDrift}"
-                );
-                return true;
-            }
-
-            Console.Error.WriteLine(
-                $"ERROR: Shipping kernels changed — debug code leaked outside Puck_DEBUG_VIZ, or pass -AllowShaderDrift for an intentional change:\n{shaderDrift}"
-            );
-            return false;
-        }
-
-        // Runs one capture with the tier's schedule/layout pinned through the CHILD
-        // process environment only (nothing global to leak if the run dies) and returns
-        // the run's new world-debug JSONL, or null on infrastructure failure.
-        private string? InvokeValidationRun(string tier)
-        {
-            var existingLogs = EngineRun.SnapshotWorldDebugLogs();
-
-            var environment = new Dictionary<string, string>
-            {
-                ["Puck_AvatarDebug__WorldDebugLog"] = "true",
-                ["Puck_AvatarDebug__WorldDebugModeSchedule"] = ModeSchedules[tier],
-                ["Puck_AvatarDebug__ViewConfiguration"] = ViewConfigurations[tier],
-                ["Puck_TerminalCapture__Format"] = "Null",
-                ["Puck_TerminalCapture__MaxFrames"] = FrameCounts[tier].ToString(
-                    CultureInfo.InvariantCulture
-                ),
-                ["Puck_TerminalCapture__OutputPath"] = Path.Combine(
-                    Path.GetTempPath(),
-                    $"Puck-validate-{tier}.png"
-                )
-            };
-            if (tier.StartsWith(
-                "tile",
-                StringComparison.Ordinal
-            ))
-            {
-                environment["Puck_RAY_QUERY"] = "0";
-            }
-
-            var runExitCode = EngineRun.RunAvatars(
-                "Debug",
-                environment
-            );
-            if (runExitCode != 0)
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: {tier} run exited with code {runExitCode}."
-                );
-                return null;
-            }
-
-            var newLog = EngineRun.NewestWorldDebugJsonl(
-                existingLogs
-            );
-            if (newLog is null)
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: {tier} run produced no world-debug JSONL in {EngineRun.WorldDebugDirectory}."
-                );
-                return null;
-            }
-
-            return newLog.FullName;
-        }
-
-        private bool TestValidationLog(string tier, string logPath)
-        {
-            var failures = new List<string>();
-            var normalizedLines = File.ReadAllLines(
-                logPath
-            )
-                .Select(
-                    WorldDebugJsonl.Normalize
-                )
-                .ToArray();
-
-            CheckSummary(
-                normalizedLines,
-                FrameCounts[tier],
-                failures
-            );
-            CheckBaseline(
-                tier,
-                normalizedLines,
-                failures
-            );
-
-            if (failures.Count == 0)
-            {
-                Console.WriteLine(
-                    $"[{tier}] PASS ({logPath})"
-                );
-                return true;
-            }
-
-            Console.WriteLine(
-                $"[{tier}] FAIL ({logPath})"
-            );
-            foreach (var failure in failures)
-            {
-                Console.WriteLine(
-                    $"  - {failure}"
-                );
-            }
-
-            return false;
-        }
-
-        private static void CheckSummary(string[] normalizedLines, int expectedFrames, List<string> failures)
-        {
-            var summaryLine = normalizedLines.LastOrDefault(
-                line => SummaryKindPattern.IsMatch(
-                line
-            )
-            );
-            if (summaryLine is null)
-            {
-                failures.Add(
-                    "no summary record was written"
-                );
-                return;
-            }
-
-            using var summary = JsonDocument.Parse(
-                summaryLine
-            );
-            var ticks = GetCounter(
-                summary,
-                "ticks"
-            );
-            if (ticks is null || ticks < 1)
-            {
-                failures.Add(
-                    "summary has no ticks"
-                );
-            }
-
-            var captureFrames = GetCounter(
-                summary,
-                "captureFrames"
-            );
-            if (captureFrames != expectedFrames)
-            {
-                failures.Add(
-                    $"captured {captureFrames} frames, expected {expectedFrames}"
-                );
-            }
-
-            foreach (var counter in (string[])["totalNanPixels", "totalInfPixels", "totalBeamViolations", "totalBoundsViolations", "totalCullParityViolations", "parityFailureTicks"])
-            {
-                var value = GetCounter(
-                    summary,
-                    counter
-                );
-                if (value != 0)
-                {
-                    failures.Add(
-                        $"{counter} = {value?.ToString() ?? "<missing>"}, expected 0"
-                    );
-                }
-            }
-        }
-
-        private void CheckBaseline(string tier, string[] normalizedLines, List<string> failures)
-        {
-            var baselinePath = Path.Combine(
-                m_baselineDirectory,
-                $"validate-{tier}.jsonl"
-            );
-            if (m_bless || (m_blessMissing && !File.Exists(
-                baselinePath
-            )))
-            {
-                Directory.CreateDirectory(
-                    m_baselineDirectory
-                );
-                File.WriteAllText(
-                    baselinePath,
-                    string.Join(
-                    '\n',
-                    normalizedLines
-                ),
-                    new UTF8Encoding(
-                    encoderShouldEmitUTF8Identifier: false
-                )
-                );
-                Console.WriteLine(
-                    $"[{tier}] blessed baseline -> {baselinePath}"
-                );
-                return;
-            }
-
-            if (!File.Exists(
-                baselinePath
-            ))
-            {
-                failures.Add(
-                    $"no baseline at {baselinePath} (run with -Bless to record one, or -BlessMissing to record only absent tiers)"
-                );
-                return;
-            }
-
-            // Baselines are blessed with LF endings but git's autocrlf may rewrite the
-            // checkout to CRLF; split on either so the comparison sees content, not
-            // endings.
-            var baselineLines = Regex.Split(
-                File.ReadAllText(
-                baselinePath
-            ),
-                "\r?\n"
-            );
-            var lineCount = Math.Max(
-                baselineLines.Length,
-                normalizedLines.Length
-            );
-            var diffCount = 0;
-            for (var lineIndex = 0; lineIndex < lineCount; lineIndex++)
-            {
-                var baselineLine = lineIndex < baselineLines.Length ? baselineLines[lineIndex] : "<missing>";
-                var currentLine = lineIndex < normalizedLines.Length ? normalizedLines[lineIndex] : "<missing>";
-                if (!string.Equals(
-                    baselineLine,
-                    currentLine,
-                    StringComparison.Ordinal
-                ))
-                {
-                    diffCount++;
-                    if (diffCount <= 3)
-                    {
-                        failures.Add(
-                            $"line {lineIndex + 1} drifted from baseline\n  baseline: {baselineLine}\n  current:  {currentLine}"
-                        );
-                    }
-                }
-            }
-
-            if (diffCount > 3)
-            {
-                failures.Add(
-                    $"...and {diffCount - 3} more drifted lines"
-                );
-            }
-        }
-
-        private static long? GetCounter(JsonDocument summary, string propertyName)
-            => summary.RootElement.TryGetProperty(
-                propertyName,
-                out var property
-            ) && property.ValueKind == JsonValueKind.Number
-                ? property.GetInt64()
-                : null;
-    }
-
-    internal sealed class CaptureParityGate
-    {
-        private readonly bool m_withJsonl;
-
-        private CaptureParityGate(bool withJsonl)
-        {
-            m_withJsonl = withJsonl;
-        }
-
-        public static int Run(string[] args)
-        {
-            var scanner = new ArgScanner()
-                .Value(
-                    "Label"
-                ).Value(
-                    "BaselineRt"
-                ).Value(
-                    "BaselineTile"
-                ).Value(
-                    "BaselineJsonl"
-                ).Flag(
-                    "WithJsonl"
-                );
-            if (!scanner.Parse(
-                args
-            ))
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: {scanner.Error}"
-                );
-                return 2;
-            }
-
-            var label = scanner.Get(
-                "Label",
-                "check"
-            );
-            var baselineRt = scanner.Get(
-                "BaselineRt"
-            );
-            var baselineTile = scanner.Get(
-                "BaselineTile"
-            );
-            var baselineJsonl = scanner.Get(
-                "BaselineJsonl"
-            );
-            var withJsonl = scanner.Has(
-                "WithJsonl"
-            );
-
-            var outputDirectory = Path.Combine(
-                Path.GetTempPath(),
-                "Puck-parity"
-            );
-            Directory.CreateDirectory(
-                outputDirectory
-            );
-
-            if (EngineRun.Build(
-                "Debug"
-            ) != 0)
-            {
-                return 2;
-            }
-
-            var gate = new CaptureParityGate(
-                withJsonl
-            );
-            var rayQueryPath = Path.Combine(
-                outputDirectory,
-                $"{label}-rt.png"
-            );
-            var tilePath = Path.Combine(
-                outputDirectory,
-                $"{label}-tile.png"
-            );
-            if (gate.InvokeCapture(
-                rayQueryPath,
-                rayQuery: true
-            ) != 0 || gate.InvokeCapture(
-                tilePath,
-                rayQuery: false
-            ) != 0)
-            {
-                return 2;
-            }
-
-            var rayQueryHash = HashFile(
-                rayQueryPath
-            );
-            var tileHash = HashFile(
-                tilePath
-            );
-            Console.WriteLine(
-                $"rt    {rayQueryHash}"
-            );
-            Console.WriteLine(
-                $"tile  {tileHash}"
-            );
-            var jsonlHash = gate.HashWorldDebugJsonl();
-
-            return Drifted(
-                baselineRt,
-                rayQueryHash,
-                "rt"
-            ) || Drifted(
-                baselineTile,
-                tileHash,
-                "tile"
-            ) || Drifted(
-                baselineJsonl,
-                jsonlHash,
-                "jsonl"
-            )
-                ? 1
-                : 0;
-        }
-
-        private int InvokeCapture(string outputPath, bool rayQuery)
-        {
-            var environment = new Dictionary<string, string> { ["Puck_TerminalCapture__OutputPath"] = outputPath };
-            if (m_withJsonl)
-            {
-                environment["Puck_AvatarDebug__WorldDebugLog"] = "true";
-            }
-
-            if (!rayQuery)
-            {
-                environment["Puck_RAY_QUERY"] = "0";
-            }
-
-            return EngineRun.RunAvatars(
-                "Debug",
-                environment
-            );
-        }
-
-        // The latest world-debug JSONL (the tile run's, when both runs logged) with the
-        // wall-clock fields stripped — the same normalization the validate gate uses.
-        private string? HashWorldDebugJsonl()
-        {
-            if (!m_withJsonl)
-            {
-                return null;
-            }
-
-            var logFile = EngineRun.NewestWorldDebugJsonl();
-            if (logFile is null)
-            {
-                Console.Error.WriteLine(
-                    "WARNING: WorldDebugLog was requested but no world-debug JSONL was produced."
-                );
-                return null;
-            }
-
-            var normalized = WorldDebugJsonl.Normalize(
-                File.ReadAllText(
-                logFile.FullName
-            )
-            );
-            var jsonlHash = Convert.ToHexString(
-                SHA256.HashData(
-                Encoding.UTF8.GetBytes(
-                normalized
-            )
-            )
-            );
-            Console.WriteLine(
-                $"jsonl {jsonlHash} ({logFile.Name})"
-            );
-            return jsonlHash;
-        }
-
-        private static bool Drifted(string? baseline, string? currentHash, string name)
-        {
-            if (string.IsNullOrEmpty(
-                baseline
-            ) || string.Equals(
-                baseline,
-                currentHash,
-                StringComparison.OrdinalIgnoreCase
-            ))
-            {
-                return false;
-            }
-
-            Console.Error.WriteLine(
-                $"ERROR: {name} hash drifted from baseline {baseline}"
-            );
-            return true;
-        }
-
-        private static string HashFile(string path)
-        {
-            using var stream = File.OpenRead(
-                path
-            );
-            return Convert.ToHexString(
-                SHA256.HashData(
-                stream
-            )
             );
         }
     }
@@ -939,8 +776,8 @@ namespace Puck.Tools
         public readonly record struct CaptureComparison(int Width, int Height, int FrameCount, List<FrameDiff> Diffs);
 
         /// <summary>Walks two captures in lockstep, compositing each frame and diffing
-        /// the RGBA canvases — the quantitative companion to the validate gate's
-        /// hash-only verdict (how FAR did drifted frames move, not just whether).</summary>
+        /// the RGBA canvases — the quantitative companion to a hash-only verdict
+        /// (how FAR did drifted frames move, not just whether).</summary>
         public static CaptureComparison CompareCaptures(string apngPathA, string apngPathB)
         {
             ParseApng(
@@ -1406,757 +1243,6 @@ namespace Puck.Tools
             }
 
             return crc;
-        }
-    }
-
-    internal static class WorldDebugJsonl
-    {
-        // Strips the wall-clock field; everything else in the log is uint atomics,
-        // schedule state, and shortest-round-trip floats, so identical runs match
-        // byte-for-byte. Shared by the validate baselines and the capture-parity jsonl
-        // hash — the two must never normalize differently.
-        private static readonly Regex UtcFieldPattern = new(
-            "\"utc\":\\s*\"[^\"]*\",?"
-        );
-
-        public static string Normalize(string text) => UtcFieldPattern.Replace(
-            text,
-            string.Empty
-        );
-    }
-
-    // Performance benchmark harness — NOT a gate (wall-clock figures are noisy and
-    // machine-specific, so nothing here is asserted against a baseline). For each
-    // (culling tier, view mode) it drives one self-terminating REAL-ENGINE run and reads
-    // that run's perf JSON. Modes are pinned one-per-run, so mode `off` benches the
-    // shipping kernel (the real engine) and a debug mode benches its debug kernel.
-    //
-    // It benches the ENGINE, not the capture/readback infrastructure: capture is OFF (no
-    // per-frame framebuffer readback — a render-scale sweep proved the readback is a
-    // fixed ~30 ms floor that buries the real render cost). Instead the run sets
-    // PresentEveryFrame (defeats the skip-presentation floor so every frame renders) and
-    // WaitForGpuEachFrame (a per-frame full GPU sync) so the frame-work figure is the
-    // REAL serialized engine frame cost: world march + present blit, GPU-complete. The
-    // cadence is uncapped, so wall fps == the render rate. The GPU sync removes CPU/GPU
-    // overlap (so this is a frame-COST measurement, slightly conservative vs a pipelined
-    // production run — a true overlapped-throughput or per-dispatch GPU-timestamp number
-    // is the documented next step). See docs/debug-visualization.md "Performance
-    // benchmark".
-    internal sealed class BenchHarness
-    {
-        private static readonly string[] DefaultModes =
-            ["off", "terrain-cost", "creature-cost", "beam-check", "chart", "wallpaper", "shape-gallery"];
-
-        private static readonly string[] DefaultTiers = ["rt", "tile"];
-        private readonly string m_configuration;
-        private readonly string m_perfDirectory;
-
-        private BenchHarness(string configuration)
-        {
-            m_configuration = configuration;
-            m_perfDirectory = Path.Combine(
-                EngineRun.RepositoryRoot,
-                "artifacts",
-                "perf"
-            );
-        }
-
-        public static int Run(string[] args)
-        {
-            var scanner = new ArgScanner()
-                .Flag(
-                    "Release"
-                ).Flag(
-                    "NoBuild"
-                )
-                .Value(
-                    "Pin"
-                ).Value(
-                    "Wg"
-                ).Value(
-                    "Frames"
-                ).Value(
-                    "Modes"
-                ).Value(
-                    "Tiers"
-                );
-            if (!scanner.Parse(
-                args
-            ))
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: {scanner.Error}"
-                );
-                return 2;
-            }
-
-            var configuration = scanner.Has(
-                "Release"
-            ) ? "Release" : "Debug";
-            var frames = scanner.TryGetInt(
-                "Frames",
-                out var parsedFrames
-            ) ? Math.Max(
-                8,
-                parsedFrames
-            ) : 64;
-            var modes = scanner.Get(
-                "Modes"
-            ) is { } modesValue
-                ? modesValue.Split(
-                    ',',
-                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-                )
-                : DefaultModes;
-            var tiers = scanner.Get(
-                "Tiers"
-            ) is { } tiersValue
-                ? tiersValue.Split(
-                    ',',
-                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-                )
-                : DefaultTiers;
-            // Freeze the scene timeline at -Pin <second> so every frame is an identical
-            // workload (stable A/B target for GPU timing); -Wg sets the compute-world
-            // workgroup edge (occupancy A/B), 0 = the composition default.
-            var pinSeconds = scanner.TryGetDouble(
-                "Pin",
-                out var parsedPin
-            ) ? Math.Max(
-                0.0,
-                parsedPin
-            ) : -1.0;
-            var workgroupEdge = scanner.TryGetUInt(
-                "Wg",
-                out var parsedWg
-            ) ? parsedWg : 0u;
-
-            var harness = new BenchHarness(
-                configuration
-            );
-            Directory.CreateDirectory(
-                harness.m_perfDirectory
-            );
-
-            if (!scanner.Has(
-                "NoBuild"
-            ) && EngineRun.Build(
-                configuration
-            ) != 0)
-            {
-                return 2;
-            }
-
-            var rows = new List<BenchRow>();
-            foreach (var tier in tiers)
-            {
-                foreach (var mode in modes)
-                {
-                    var row = harness.RunCase(
-                        tier,
-                        mode,
-                        frames,
-                        pinSeconds,
-                        workgroupEdge
-                    );
-                    if (row is null)
-                    {
-                        return 2;
-                    }
-
-                    rows.Add(
-                        row
-                    );
-                }
-            }
-
-            harness.WriteReport(
-                rows,
-                frames
-            );
-            return 0;
-        }
-
-        private BenchRow? RunCase(string tier, string mode, int frames, double pinSeconds, uint workgroupEdge)
-        {
-            var perfPath = Path.Combine(
-                m_perfDirectory,
-                $"run-{m_configuration}-{tier}-{mode}.json"
-            );
-            if (File.Exists(
-                perfPath
-            ))
-            {
-                File.Delete(
-                    perfPath
-                );
-            }
-
-            var environment = new Dictionary<string, string>
-            {
-                ["Puck_AvatarDebug__WorldDebugMode"] = mode,
-                ["Puck_OperatorStatus__EnablePerformanceSummary"] = "true",
-                ["Puck_OperatorStatus__PerformanceSummaryPath"] = perfPath,
-                // Capture OFF: bench the engine, not the readback. Render every frame
-                // (defeat the skip floor) and GPU-sync each frame so the timer captures
-                // the real engine frame cost. Uncapped cadence -> wall fps == render rate.
-                // The frame limit self-terminates the otherwise-endless interactive run.
-                ["Puck_TerminalCapture__Enabled"] = "false",
-                ["Puck_AvatarDebug__PresentEveryFrame"] = "true",
-                ["Puck_AvatarDebug__WaitForGpuEachFrame"] = "true",
-                // Per-pass GPU timestamps (read under the WaitForGpuEachFrame device-idle);
-                // pixel-neutral, so the shipping kernel and capture-hash gate are untouched.
-                ["Puck_AvatarDebug__EnableGpuTimestamps"] = "true",
-                ["Puck_AvatarDebug__InteractiveFrameCadenceHz"] = "0",
-                ["Puck_AvatarDebug__InteractiveFrameLimit"] = frames.ToString(
-                    CultureInfo.InvariantCulture
-                ),
-                // Off so the bench times the pure engine, not the overlay (it is ON by
-                // default in Release via appsettings.Release.json).
-                ["Puck_AvatarDebug__ShowFpsOverlay"] = "false"
-            };
-            if (pinSeconds >= 0.0)
-            {
-                // Freeze the scene timeline so every frame is an identical workload (steady
-                // A/B target); the orbit angle at second t is t·2π/24.
-                environment["Puck_AvatarDebug__PinnedSceneTimeSeconds"] =
-                    pinSeconds.ToString(
-                        CultureInfo.InvariantCulture
-                    );
-            }
-
-            if (workgroupEdge > 0)
-            {
-                environment["Puck_AvatarDebug__WorldComputeWorkgroupEdge"] =
-                    workgroupEdge.ToString(
-                        CultureInfo.InvariantCulture
-                    );
-            }
-
-            // Cost-split ablation modes (Layer 2a): force the debug kernel (via the log)
-            // rendering normally (mode off) with one subsystem removed, so worldCompute ms
-            // isolates that subsystem by difference from the 'ablate-none' debug baseline.
-            // Run e.g. -Modes ablate-none,ablate-creatures,ablate-shadows. NOTE these are
-            // the DEBUG kernel (stats overhead is constant, so only the deltas are clean).
-            if (mode.StartsWith(
-                "ablate-",
-                StringComparison.Ordinal
-            ))
-            {
-                environment["Puck_AvatarDebug__WorldDebugMode"] = "off";
-                environment["Puck_AvatarDebug__WorldDebugLog"] = "true";
-                var ablationTarget = mode["ablate-".Length..];
-                if (ablationTarget is "creatures" or "both")
-                {
-                    environment["Puck_AvatarDebug__AblateCreatures"] = "true";
-                }
-
-                if (ablationTarget is "shadows" or "both")
-                {
-                    environment["Puck_AvatarDebug__AblateShadows"] = "true";
-                }
-            }
-
-            if (tier.StartsWith(
-                "tile",
-                StringComparison.Ordinal
-            ))
-            {
-                environment["Puck_RAY_QUERY"] = "0";
-            }
-
-            Console.WriteLine(
-                $"[bench] {m_configuration} {tier} {mode} ({frames} frames)..."
-            );
-            var exitCode = EngineRun.RunAvatars(
-                m_configuration,
-                environment
-            );
-            if (exitCode != 0)
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: bench run {tier}/{mode} exited with code {exitCode}."
-                );
-                return null;
-            }
-
-            if (!File.Exists(
-                perfPath
-            ))
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: bench run {tier}/{mode} produced no perf summary at {perfPath}."
-                );
-                return null;
-            }
-
-            using var document = JsonDocument.Parse(
-                File.ReadAllText(
-                perfPath
-            )
-            );
-            var root = document.RootElement;
-            var work = root.GetProperty(
-                "frameWorkMilliseconds"
-            );
-            // GPU per-pass timing is present only when EnableGpuTimestamps produced results
-            // (device supports timestamps + WaitForGpuEachFrame's idle ran); 0 means untimed.
-            var gpuFrameMsMean = 0.0;
-            var gpuWorldComputeMsMean = 0.0;
-            if (root.TryGetProperty(
-                "gpu",
-                out var gpu
-            )
-                && gpu.ValueKind == JsonValueKind.Object
-                && gpu.GetProperty(
-                    "frames"
-                ).GetInt32() > 0)
-            {
-                gpuFrameMsMean = gpu.GetProperty(
-                    "frameMilliseconds"
-                ).GetProperty(
-                    "mean"
-                ).GetDouble();
-                gpuWorldComputeMsMean = GpuPassMean(
-                    gpu,
-                    "worldCompute"
-                );
-            }
-
-            return new BenchRow(
-                tier,
-                mode,
-                root.GetProperty(
-                    "frames"
-                ).GetInt32(),
-                root.GetProperty(
-                    "sustainableFramesPerSecond"
-                ).GetDouble(),
-                root.GetProperty(
-                    "wallFramesPerSecond"
-                ).GetDouble(),
-                work.GetProperty(
-                    "p50"
-                ).GetDouble(),
-                work.GetProperty(
-                    "p99"
-                ).GetDouble(),
-                root.GetProperty(
-                    "presentMillisecondsMean"
-                ).GetDouble(),
-                StageMean(
-                    root,
-                    "VulkanCommandRecording"
-                ),
-                gpuFrameMsMean,
-                gpuWorldComputeMsMean
-            );
-        }
-
-        private static double GpuPassMean(JsonElement gpu, string passName)
-        {
-            foreach (var pass in gpu.GetProperty(
-                "passes"
-            ).EnumerateArray())
-            {
-                if (pass.GetProperty(
-                    "pass"
-                ).GetString() == passName)
-                {
-                    return pass.GetProperty(
-                        "meanMilliseconds"
-                    ).GetDouble();
-                }
-            }
-
-            return 0.0;
-        }
-
-        private static string Json(double value) => value.ToString(
-            "0.######",
-            CultureInfo.InvariantCulture
-        );
-
-        private static double StageMean(JsonElement root, string stageName)
-        {
-            foreach (var stage in root.GetProperty(
-                "stages"
-            ).EnumerateArray())
-            {
-                if (stage.GetProperty(
-                    "stage"
-                ).GetString() == stageName)
-                {
-                    return stage.GetProperty(
-                        "meanMilliseconds"
-                    ).GetDouble();
-                }
-            }
-
-            return 0.0;
-        }
-
-        private void WriteReport(IReadOnlyList<BenchRow> rows, int frames)
-        {
-            Console.WriteLine();
-            Console.WriteLine(
-                $"Performance benchmark ({m_configuration}, {frames} frames, real engine — no capture, GPU-synced, RTX 4070 box — wall-clock)"
-            );
-            Console.WriteLine(
-                "  frame ms = serialized CPU frame-work cost (1000/p50 = fps); gpuFrame/gpuWorld ms = GPU timestamp"
-            );
-            Console.WriteLine(
-                "  totals (gpuWorld = the world-compute march, the reprojection target). 0 = device gave no timestamps."
-            );
-            Console.WriteLine(
-                $"{"tier",-6} {"mode",-14} {"p50 ms",8} {"p99 ms",8} {"fps",6} {"present",8} {"record",8} {"gpuFrame",9} {"gpuWorld",9}"
-            );
-            foreach (var row in rows)
-            {
-                Console.WriteLine(
-                    $"{row.Tier,-6} {row.Mode,-14} {row.WorkMsP50,8:F2} {row.WorkMsP99,8:F2} {row.SustainableFps,6:F0} {row.PresentMsMean,8:F2} {row.RecordMsMean,8:F2} {row.GpuFrameMsMean,9:F3} {row.GpuWorldComputeMsMean,9:F3}"
-                );
-            }
-
-            // Built by hand: the file-based app's trimming/AOT analyzers reject the
-            // reflection-based JsonSerializer.Serialize, and the rest of the toolbox only
-            // ever READS json (JsonDocument). One row per object, invariant-culture
-            // round-trip floats.
-            var reportPath = Path.Combine(
-                m_perfDirectory,
-                $"bench-{m_configuration}.json"
-            );
-            var builder = new StringBuilder();
-            builder.Append(
-                "{\n"
-            );
-            builder.Append(
-                "  \"kind\": \"perfBench\",\n"
-            );
-            builder.Append(
-                $"  \"configuration\": \"{m_configuration}\",\n"
-            );
-            builder.Append(
-                $"  \"frames\": {frames},\n"
-            );
-            builder.Append(
-                "  \"rows\": [\n"
-            );
-            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-            {
-                var row = rows[rowIndex];
-                builder.Append(
-                    "    {"
-                );
-                builder.Append(
-                    $"\"tier\": \"{row.Tier}\", \"mode\": \"{row.Mode}\", \"frames\": {row.Frames}, "
-                );
-                builder.Append(
-                    $"\"fps\": {Json(
-                    row.SustainableFps
-                )}, \"wallFps\": {Json(
-                    row.WallFps
-                )}, "
-                );
-                builder.Append(
-                    $"\"frameWorkMsP50\": {Json(
-                    row.WorkMsP50
-                )}, \"frameWorkMsP99\": {Json(
-                    row.WorkMsP99
-                )}, "
-                );
-                builder.Append(
-                    $"\"presentMsMean\": {Json(
-                    row.PresentMsMean
-                )}, \"recordMsMean\": {Json(
-                    row.RecordMsMean
-                )}, "
-                );
-                builder.Append(
-                    $"\"gpuFrameMsMean\": {Json(
-                    row.GpuFrameMsMean
-                )}, \"gpuWorldComputeMsMean\": {Json(
-                    row.GpuWorldComputeMsMean
-                )}"
-                );
-                builder.Append(
-                    rowIndex + 1 < rows.Count ? "},\n" : "}\n"
-                );
-            }
-
-            builder.Append(
-                "  ]\n}\n"
-            );
-            File.WriteAllText(
-                reportPath,
-                builder.ToString()
-            );
-            Console.WriteLine();
-            Console.WriteLine(
-                $"bench: wrote {reportPath}"
-            );
-        }
-
-        private sealed record BenchRow(
-            string Tier,
-            string Mode,
-            int Frames,
-            double SustainableFps,
-            double WallFps,
-            double WorkMsP50,
-            double WorkMsP99,
-            double PresentMsMean,
-            double RecordMsMean,
-            double GpuFrameMsMean,
-            double GpuWorldComputeMsMean
-        );
-    }
-
-    // Layer 2b cost split: reads a world-debug JSONL and reports the march-cost
-    // composition for one mode — how much of the frame is static, reprojection-friendly
-    // geometry (terrain/sky) vs dynamic creatures. The ROBUST signal is screen AREA
-    // (creature-hit pixel fraction). The raw step/test counts are reported too but are NOT
-    // directly ms-comparable across kinds (one creature "test" runs a full SDF-VM march
-    // internally — far heavier than one terrain height-field step), so the ms-exact split
-    // needs ablation (debug-word toggles timed by GPU timestamps) or an Nsight per-region
-    // capture. With -Bench it frames the worldCompute GPU ms (the 98%-of-frame cost center)
-    // by static screen area as a coarse upper band, NOT a measured split.
-    internal static class CostSplitCommand
-    {
-        public static int Run(string[] arguments)
-        {
-            var scanner = new ArgScanner().Value(
-                "Mode"
-            ).Value(
-                "Bench"
-            ).Value(
-                "Tier"
-            );
-            if (!scanner.Parse(
-                arguments
-            ))
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: {scanner.Error}"
-                );
-                return 2;
-            }
-
-            if (scanner.Positionals.Count == 0)
-            {
-                Console.Error.WriteLine(
-                    "ERROR: usage: cost-split <world-debug.jsonl> [-Mode off] [-Bench <bench.json>] [-Tier rt]"
-                );
-                return 2;
-            }
-
-            var jsonlPath = Path.GetFullPath(
-                scanner.Positionals[0]
-            );
-            var mode = scanner.Get(
-                "Mode",
-                "off"
-            );
-            var benchPath = scanner.Get(
-                "Bench"
-            ) is { } benchValue ? Path.GetFullPath(
-                benchValue
-            ) : null;
-            var tier = scanner.Get(
-                "Tier",
-                "rt"
-            ).ToLowerInvariant();
-
-            if (!File.Exists(
-                jsonlPath
-            ))
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: world-debug JSONL not found: {jsonlPath}"
-                );
-                return 2;
-            }
-
-            long ticks = 0, pixels = 0, terrainSkipped = 0, terrainHitPixels = 0;
-            long terrainIterTotal = 0, creaturesTested = 0, creatureHits = 0, terrainIterMax = 0;
-            foreach (var line in File.ReadLines(
-                jsonlPath
-            ))
-            {
-                if (string.IsNullOrWhiteSpace(
-                    line
-                ))
-                {
-                    continue;
-                }
-
-                using var document = JsonDocument.Parse(
-                    line
-                );
-                var record = document.RootElement;
-                if (!record.TryGetProperty(
-                    "kind",
-                    out var kind
-                ) || kind.GetString() != "tick")
-                {
-                    continue;
-                }
-
-                if (!record.TryGetProperty(
-                    "mode",
-                    out var modeProperty
-                )
-                    || !string.Equals(
-                        modeProperty.GetString(),
-                        mode,
-                        StringComparison.OrdinalIgnoreCase
-                    ))
-                {
-                    continue;
-                }
-
-                ticks++;
-                pixels += record.GetProperty(
-                    "pixels"
-                ).GetInt64();
-                terrainSkipped += record.GetProperty(
-                    "terrainSkipped"
-                ).GetInt64();
-                terrainHitPixels += record.GetProperty(
-                    "terrainHitPixels"
-                ).GetInt64();
-                terrainIterTotal += record.GetProperty(
-                    "terrainIterTotal"
-                ).GetInt64();
-                creaturesTested += record.GetProperty(
-                    "creaturesTested"
-                ).GetInt64();
-                creatureHits += record.GetProperty(
-                    "creatureHits"
-                ).GetInt64();
-                terrainIterMax = Math.Max(
-                    terrainIterMax,
-                    record.GetProperty(
-                    "terrainIterMax"
-                ).GetInt64()
-                );
-            }
-
-            if (ticks == 0)
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: no tick records for mode '{mode}' in {jsonlPath} (enable the world-debug log with stats — e.g. a validate run, or WorldDebugLog=true)."
-                );
-                return 2;
-            }
-
-            var marchedPixels = pixels - terrainSkipped;
-            var creatureCoverage = pixels > 0 ? (double)creatureHits / pixels : 0.0;
-            var terrainCoverage = pixels > 0 ? (double)terrainHitPixels / pixels : 0.0;
-            var skippedCoverage = pixels > 0 ? (double)terrainSkipped / pixels : 0.0;
-            var staticCoverage = 1.0 - creatureCoverage;
-            var meanTerrainSteps = marchedPixels > 0 ? (double)terrainIterTotal / marchedPixels : 0.0;
-            var creatureTestsPerPixel = pixels > 0 ? (double)creaturesTested / pixels : 0.0;
-
-            Console.WriteLine(
-                $"Cost split — mode '{mode}', {ticks} ticks, {pixels:N0} pixel-invocations (summed over views)"
-            );
-            Console.WriteLine();
-            Console.WriteLine(
-                "  Screen coverage (the reprojection-relevant signal — robust):"
-            );
-            Console.WriteLine(
-                $"    dynamic (creature surface) {creatureCoverage,8:P2}  -> must re-march every frame"
-            );
-            Console.WriteLine(
-                $"    static  (terrain/sky/slab) {staticCoverage,8:P2}  -> reprojection-friendly under the orbit"
-            );
-            Console.WriteLine(
-                $"      of which terrain hit       {terrainCoverage,8:P2}"
-            );
-            Console.WriteLine(
-                $"      of which sky / skipped     {skippedCoverage,8:P2}"
-            );
-            Console.WriteLine();
-            Console.WriteLine(
-                "  March work (raw counters — NOT directly ms-comparable across kinds):"
-            );
-            Console.WriteLine(
-                $"    terrain march steps   {terrainIterTotal,15:N0}  (mean {meanTerrainSteps:F1}/marched px, max {terrainIterMax})"
-            );
-            Console.WriteLine(
-                $"    creature march tests  {creaturesTested,15:N0}  (mean {creatureTestsPerPixel:F2}/px, {creatureHits:N0} surface hits)"
-            );
-            Console.WriteLine();
-
-            if (benchPath is not null && File.Exists(
-                benchPath
-            ))
-            {
-                using var benchDocument = JsonDocument.Parse(
-                    File.ReadAllText(
-                    benchPath
-                )
-                );
-                var worldComputeMs = 0.0;
-                foreach (var row in benchDocument.RootElement.GetProperty(
-                    "rows"
-                ).EnumerateArray())
-                {
-                    if (string.Equals(
-                        row.GetProperty(
-                        "tier"
-                    ).GetString(),
-                        tier,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                        && string.Equals(
-                            row.GetProperty(
-                            "mode"
-                        ).GetString(),
-                            "off",
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                        && row.TryGetProperty(
-                            "gpuWorldComputeMsMean",
-                            out var worldElement
-                        ))
-                    {
-                        worldComputeMs = worldElement.GetDouble();
-                    }
-                }
-
-                if (worldComputeMs > 0)
-                {
-                    Console.WriteLine(
-                        $"  worldCompute GPU cost (tier {tier}, mode off): {worldComputeMs:F3} ms/frame"
-                    );
-                    Console.WriteLine(
-                        $"    Static geometry is {staticCoverage:P0} of screen area. IF march cost tracked area,"
-                    );
-                    Console.WriteLine(
-                        $"    reprojecting it would cap savings near {worldComputeMs * staticCoverage:F3} ms — but creature"
-                    );
-                    Console.WriteLine(
-                        "    pixels are heavier per pixel and the orbit creates disocclusion bands, so"
-                    );
-                    Console.WriteLine(
-                        "    this is an UPPER band, not a measured split (see NOTE)."
-                    );
-                    Console.WriteLine();
-                }
-            }
-
-            Console.WriteLine(
-                "  NOTE: the ms-exact terrain/creature/shadow split needs ablation (debug-word"
-            );
-            Console.WriteLine(
-                "  toggles measured by GPU timestamps) or an Nsight per-region capture. These"
-            );
-            Console.WriteLine(
-                "  counters give the robust screen-area signal and relative march magnitudes only."
-            );
-            return 0;
         }
     }
 
@@ -2889,7 +1975,7 @@ namespace Puck.Tools
         // anyway — and a fully-aliased/using-static primitive may slip through. The axes
         // are disjoint, so no node is counted twice (a Lock field and the lock() that uses
         // it are two distinct sites, by design). Same -Grouped work-list, -Jsonl sink, and
-        // stderr summary as comment-scan; like the bench report it hand-writes its json.
+        // stderr summary as comment-scan; like the other analyzers it hand-writes its json.
 
         // Static synchronization classes whose member calls are themselves the lock site.
         private static readonly Dictionary<string, string> StaticLockClasses = new(
@@ -6622,8 +5708,8 @@ namespace Puck.Tools
 
     // One case-insensitive argument parser for every subcommand: bool flags, valued flags
     // (-Name value) and bare positionals. Names are canonicalized the way the old gates did
-    // it (leading dashes trimmed, inner dashes dropped, lowercased), so -Bless == --bless
-    // and -Baseline-Rt == -BaselineRt.
+    // it (leading dashes trimmed, inner dashes dropped, lowercased), so -NoBuild == --nobuild
+    // and -Out-Dir == -OutDir.
     internal sealed class ArgScanner
     {
         private readonly Dictionary<string, bool> m_spec = new(
@@ -6826,28 +5912,13 @@ namespace Puck.Tools
         }
     }
 
-    // The build + Avatars-run + world-debug-log discovery shared by validate, bench and
-    // capture-parity. Wraps ToolProcess so each gate stops re-spelling the dotnet
-    // invocation and the "newest JSONL" scan.
+    // The build + demo-run helpers shared by the parity, schema and scene-words gates. Wraps
+    // ToolProcess so each gate stops re-spelling the dotnet invocation.
     internal static class EngineRun
     {
         public static string RepositoryRoot => Path.GetDirectoryName(
             ToolProcess.GetToolsDirectory()
         )!;
-
-        public static string AvatarsProject =>
-            Path.Combine(
-                RepositoryRoot,
-                "src",
-                "Puck.Avatars",
-                "Puck.Avatars.csproj"
-            );
-
-        public static string WorldDebugDirectory => Path.Combine(
-            RepositoryRoot,
-            "artifacts",
-            "world-debug"
-        );
 
         public static int Build(string configuration) =>
             ToolProcess.RunStreamed(
@@ -6862,74 +5933,50 @@ namespace Puck.Tools
                 configuration
             );
 
-        public static int RunAvatars(string configuration, IReadOnlyDictionary<string, string> environment) =>
+        public static string DemoProject =>
+            Path.Combine(
+                RepositoryRoot,
+                "src",
+                "Puck.Demo",
+                "Puck.Demo.csproj"
+            );
+
+        // Runs the demo's cross-backend parity gate (--validate); the demo writes artifacts/parity/ relative
+        // to the working directory and exits 0 pass / 1 gate-fail / 2 infra-fail.
+        public static int RunDemoParity() =>
             ToolProcess.RunStreamed(
-                environment,
+                null,
                 "dotnet",
                 "run",
-                "-c",
-                configuration,
                 "--no-build",
                 "--project",
-                AvatarsProject
+                DemoProject,
+                "--",
+                "--validate"
             );
 
-        // File names of the world-debug logs present now — pass the result to
-        // NewestWorldDebugJsonl after a run to ignore everything that predates it.
-        public static HashSet<string> SnapshotWorldDebugLogs()
+        // Runs the (already-built) demo with arbitrary arguments — used by the headless data-driven utilities
+        // (--emit-schema, --check-run), which short-circuit before any window is created.
+        public static int RunDemo(params string[] demoArguments)
         {
-            var existing = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase
+            var arguments = new List<string>
+            {
+                "run",
+                "--no-build",
+                "--project",
+                DemoProject,
+                "--",
+            };
+
+            arguments.AddRange(
+                demoArguments
             );
-            if (Directory.Exists(
-                WorldDebugDirectory
-            ))
-            {
-                foreach (var path in Directory.GetFiles(
-                    WorldDebugDirectory,
-                    "world-debug-*.jsonl"
-                ))
-                {
-                    existing.Add(
-                        Path.GetFileName(
-                        path
-                    )
-                    );
-                }
-            }
 
-            return existing;
-        }
-
-        public static FileInfo? NewestWorldDebugJsonl(ISet<string>? exclude = null)
-        {
-            if (!Directory.Exists(
-                WorldDebugDirectory
-            ))
-            {
-                return null;
-            }
-
-            return Directory.GetFiles(
-                WorldDebugDirectory,
-                "world-debug-*.jsonl"
-            )
-                .Where(
-                    path => exclude is null || !exclude.Contains(
-                    Path.GetFileName(
-                    path
-                )
-                )
-                )
-                .Select(
-                    static path => new FileInfo(
-                    path
-                )
-                )
-                .OrderBy(
-                    static file => file.LastWriteTimeUtc
-                )
-                .LastOrDefault();
+            return ToolProcess.RunStreamed(
+                null,
+                "dotnet",
+                arguments.ToArray()
+            );
         }
     }
 
@@ -7245,6 +6292,97 @@ namespace Puck.Tools
             );
             process.WaitForExit();
             return process.ExitCode;
+        }
+
+        // Spawns a child, captures stdout+stderr, and enforces a hard wall-clock timeout — the watchdog the fuzzer
+        // needs (the engine has no GPU-wait timeout, so a hung/TDR'd child is killed here). Async event-based reads
+        // avoid the full-buffer deadlock. Returns (exitCode, timedOut, combinedOutput); on timeout exitCode is -1 and
+        // the entire process tree is killed.
+        public static (int ExitCode, bool TimedOut, string Output) RunWithTimeout(int timeoutMilliseconds, string fileName, params string[] arguments)
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            };
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(
+                    argument
+                );
+            }
+
+            var output = new StringBuilder();
+            using var process = new Process { StartInfo = startInfo };
+            process.OutputDataReceived += (_, eventArguments) =>
+            {
+                if (eventArguments.Data is not null)
+                {
+                    lock (output)
+                    {
+                        output.AppendLine(
+                            eventArguments.Data
+                        );
+                    }
+                }
+            };
+            process.ErrorDataReceived += (_, eventArguments) =>
+            {
+                if (eventArguments.Data is not null)
+                {
+                    lock (output)
+                    {
+                        output.AppendLine(
+                            eventArguments.Data
+                        );
+                    }
+                }
+            };
+
+            if (!process.Start())
+            {
+                throw new InvalidOperationException(
+                    $"Failed to start {fileName}."
+                );
+            }
+
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            if (!process.WaitForExit(
+                timeoutMilliseconds
+            ))
+            {
+                try
+                {
+                    process.Kill(
+                        entireProcessTree: true
+                    );
+                }
+                catch
+                {
+                    // The process may have exited between the timeout and the kill; ignore.
+                }
+
+                process.WaitForExit(
+                    5000
+                );
+
+                lock (output)
+                {
+                    return (-1, true, output.ToString());
+                }
+            }
+
+            // Drain the async read handlers (overload with no timeout flushes them after exit).
+            process.WaitForExit();
+
+            lock (output)
+            {
+                return (process.ExitCode, false, output.ToString());
+            }
         }
 
         public static string RunCaptured(string fileName, params string[] arguments)

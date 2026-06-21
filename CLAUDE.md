@@ -3,15 +3,15 @@
 ## `src/Puck/Puck.csproj` is INSPIRATION ONLY
 
 Never reference `Puck.csproj` from any project. All functionality is being split
-out into the separate `Puck.*` projects which you can freely use: Puck.Commands,
-Puck.Maths, Puck.Platform, Puck.Shaders, Puck.Storage, and Puck.Vulkan. Read the
-old `Puck` project for reference only; build the real thing in the split projects.
+out into the separate `Puck.*` projects which you can freely use. Read the
+old `Puck` and `Puck.Avatars` projects for reference only; build the real thing
+in the split projects.
 
 Our main focus right now is putting together a new minimal showcase in Puck.Demo.
 
-## After ANY code generation, format in two steps (in order)
+## Controller input
 
-```powershell
-dotnet run tools/Tools.cs -- format   # 1. repo formatter in ./tools
-dotnet format                         # 2. then dotnet format
-```
+The controller-input subsystem (Switch Pro / Xbox Series / PS5 DualSense, all flowing through
+`Puck.Commands`) lives in `src/Puck.Input`. See [`src/Puck.Input/README.md`](src/Puck.Input/README.md)
+for its architecture, the cross-family feature matrix, hardware-verified status, deferred work,
+and debugging notes — it is the handoff doc for picking the work up on another machine.

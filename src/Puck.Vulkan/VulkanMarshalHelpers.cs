@@ -8,11 +8,14 @@ namespace Puck.Vulkan;
 public static class VulkanMarshalHelpers {
     /// <summary>Allocates unmanaged memory and marshals the given structure into it.</summary>
     /// <typeparam name="T">The blittable structure type to marshal.</typeparam>
+    /// <param name="allocator">The unmanaged allocator that provides the memory.</param>
     /// <param name="value">The structure value to copy into unmanaged memory.</param>
     /// <returns>A pointer to the unmanaged copy. The caller owns the allocation and must free it.</returns>
-    public static nint AllocateStruct<T>(T value)
+    public static nint AllocateStruct<T>(IAllocator allocator, T value)
         where T : struct {
-        var pointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<T>());
+        ArgumentNullException.ThrowIfNull(allocator);
+
+        var pointer = allocator.Alloc(size: Marshal.SizeOf<T>());
 
         Marshal.StructureToPtr(
             fDeleteOld: false,

@@ -7,6 +7,7 @@ using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.Security;
 using Windows.Win32.System.Com;
+using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX.Interop;
 
@@ -19,11 +20,8 @@ namespace Puck.DirectX.Interop;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXSharedTexture : IDisposable {
-    private const uint AllSubresources = 0xFFFFFFFF;
-    private const uint GenericAll = 0x10000000;
-    private const int GetCpuDescriptorHandleSlot = 9;
-
     private readonly IDirectXDeviceContext m_deviceContext;
+    private readonly DXGI_FORMAT m_format;
     private readonly uint m_height;
     private readonly uint m_width;
     private nint m_commandAllocator;
@@ -38,12 +36,13 @@ public sealed unsafe class DirectXSharedTexture : IDisposable {
 
     /// <summary>Initializes a new instance of the <see cref="DirectXSharedTexture"/> class.</summary>
     /// <param name="deviceContext">The shared device context whose device and queue the texture is created and cleared on.</param>
+    /// <param name="format">The texture's DXGI format. The importing backend MUST view the shared handle with the matching format, or it reinterprets the pixels.</param>
     /// <param name="width">The texture width in pixels.</param>
     /// <param name="height">The texture height in pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
-    public DirectXSharedTexture(IDirectXDeviceContext deviceContext, uint width, uint height) {
+    public DirectXSharedTexture(IDirectXDeviceContext deviceContext, DXGI_FORMAT format, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
         if (
@@ -54,12 +53,15 @@ public sealed unsafe class DirectXSharedTexture : IDisposable {
         }
 
         m_deviceContext = deviceContext;
+        m_format = format;
         m_height = height;
         m_width = width;
 
         Initialize();
     }
 
+    /// <summary>Gets the texture's DXGI format.</summary>
+    public DXGI_FORMAT Format => m_format;
     /// <summary>Gets the texture height in pixels.</summary>
     public uint Height => m_height;
     /// <summary>Gets the NT handle to the shared resource, for import by another backend.</summary>
@@ -107,7 +109,7 @@ public sealed unsafe class DirectXSharedTexture : IDisposable {
             DepthOrArraySize = 1,
             Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
             Flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
-            Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
+            Format = m_format,
             Height = m_height,
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN,
             MipLevels = 1,

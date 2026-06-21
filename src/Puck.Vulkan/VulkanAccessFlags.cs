@@ -4,6 +4,8 @@ namespace Puck.Vulkan;
 /// Common <c>VkAccessFlagBits</c> values used in pipeline barriers and layout transitions. Combine with bitwise OR.
 /// </summary>
 public static class VulkanAccessFlags {
+    /// <summary>The <c>VK_ACCESS_INDIRECT_COMMAND_READ_BIT</c> value.</summary>
+    public const uint IndirectCommandRead = 0x00000001;
     /// <summary>The <c>VK_ACCESS_SHADER_READ_BIT</c> value.</summary>
     public const uint ShaderRead = 0x00000020;
     /// <summary>The <c>VK_ACCESS_SHADER_WRITE_BIT</c> value.</summary>

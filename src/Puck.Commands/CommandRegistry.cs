@@ -26,24 +26,39 @@ public sealed class CommandRegistry : ICommandSink {
         name: "help",
         description: "Lists the available commands."
     );
+    private readonly ICommandObserver[] m_observers;
     private readonly RootCommand m_root = new(description: "Puck commands.");
     private readonly List<ICommandSource> m_sources = [];
     private readonly Dictionary<string, CommandValue> m_state = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CommandValue> m_held = new(comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandRegistry"/> class, registering the commands
     /// supplied by the given modules.
     /// </summary>
     /// <param name="modules">The modules whose command definitions are aggregated.</param>
+    /// <param name="observers">Observers notified after each command dispatch; defaults to none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="modules"/> is <see langword="null"/>.</exception>
-    public CommandRegistry(IEnumerable<ICommandModule> modules) {
+    public CommandRegistry(
+        IEnumerable<ICommandModule> modules,
+        IEnumerable<ICommandObserver>? observers = null
+    ) {
         ArgumentNullException.ThrowIfNull(modules);
+
+        m_observers = ((observers is null)
+            ? []
+            : (observers as ICommandObserver[]) ?? observers.ToArray());
 
         foreach (var module in modules) {
             foreach (var definition in module.GetCommands()) {
                 m_root.Subcommands.Add(definition.TextCommand);
                 m_byTextCommand[definition.TextCommand] = definition;
                 m_byName[definition.Name] = definition;
+
+                foreach (var alias in definition.Aliases) {
+                    m_byName[alias] = definition;
+                    definition.TextCommand.Aliases.Add(item: alias);
+                }
             }
         }
 
@@ -84,10 +99,25 @@ public sealed class CommandRegistry : ICommandSink {
 
         _ = m_activeMaps.Add(item: map);
     }
-    /// <summary>Clears all transient per-frame command values.</summary>
+    /// <summary>Clears all transient per-frame command values, then re-seeds the held ones.</summary>
     /// <remarks>Call once at the start of each frame, before <see cref="Collect"/>.</remarks>
     public void BeginFrame() {
         m_state.Clear();
+
+        // Re-seed held digital inputs so a continuous consumer polling GetValue sees them asserted every frame
+        // they remain down, without the source re-pushing them. Handlers do not re-run — only the value is set.
+        foreach (var held in m_held) {
+            m_state[held.Key] = held.Value;
+        }
+    }
+    /// <summary>Clears all held digital values so nothing stays asserted.</summary>
+    /// <remarks>
+    /// Call on focus loss: when the window is not focused, key/button releases are not delivered, so a value
+    /// held down at the moment focus was lost would otherwise stay stuck until the input is pressed and
+    /// released again.
+    /// </remarks>
+    public void ReleaseHeld() {
+        m_held.Clear();
     }
     /// <summary>Pulls the current frame's activations from every registered source, in registration order.</summary>
     public void Collect() {
@@ -158,13 +188,60 @@ public sealed class CommandRegistry : ICommandSink {
         }
 
         m_state[signal.Name] = signal.Value;
-        _ = definition.Handler(arg: new CommandContext(
+
+        // A held digital input persists its polled value until released; a release (or cancel) clears it, so a
+        // continuous consumer can poll "is it down" across frames. The dispatch gate below keeps the handler
+        // firing only on the edges the binding answers, so a held key never re-runs a press-driven handler.
+        if (
+            (signal.Phase == CommandPhase.Started) &&
+            signal.Value.IsActive &&
+            (signal.Text is null)
+        ) {
+            m_held[signal.Name] = signal.Value;
+        } else if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
+            _ = m_held.Remove(key: signal.Name);
+        }
+
+        if (!signal.Dispatch) {
+            return;
+        }
+
+        var context = new CommandContext(
+            DeviceId: signal.DeviceId,
             Parse: null,
             Phase: signal.Phase,
             Registry: this,
             Text: signal.Text,
             Value: signal.Value
-        ));
+        );
+
+        _ = Dispatch(
+            context: in context,
+            definition: definition
+        );
+    }
+
+    /// <summary>Runs a command's handler and notifies every observer of the dispatch.</summary>
+    /// <param name="context">The invocation state passed to the handler.</param>
+    /// <param name="definition">The command being dispatched.</param>
+    /// <returns>The result the handler returned.</returns>
+    private CommandResult Dispatch(in CommandContext context, CommandDefinition definition) {
+        var result = definition.Handler(arg: context);
+
+        if (m_observers.Length != 0) {
+            var activation = new CommandActivation(
+                Name: definition.Name,
+                Phase: context.Phase,
+                Result: result,
+                Text: context.Text
+            );
+
+            for (var index = 0; index < m_observers.Length; index++) {
+                m_observers[index].OnCommand(activation: in activation);
+            }
+        }
+
+        return result;
     }
     /// <summary>Registers a producer to be pulled on each <see cref="Collect"/>.</summary>
     /// <param name="source">The source to register. Sources are pulled in registration order.</param>
@@ -211,6 +288,9 @@ public sealed class CommandRegistry : ICommandSink {
             var value = (definition.ValueSelector?.Invoke(arg: parseResult) ?? ImpulseValue(kind: definition.ValueKind));
 
             m_state[definition.Name] = value;
+
+            // The text path returns its result to the caller, so it is not observed (the caller displays
+            // it); observers exist for the source-driven path, which has no return value to inspect.
             return definition.Handler(arg: new CommandContext(
                 Parse: parseResult,
                 Phase: CommandPhase.Completed,

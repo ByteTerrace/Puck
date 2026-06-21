@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
+using Puck.Input;
 using Puck.Platform.Linux.Interop;
 
 namespace Puck.Platform.Linux;
@@ -13,7 +14,7 @@ namespace Puck.Platform.Linux;
 /// <remarks>Unverified off-device — the protocol glue (hand-built xdg-shell tables, the
 /// non-blocking dispatch in <see cref="PollEvents"/>) is expected to need on-device
 /// iteration.</remarks>
-internal sealed unsafe class WaylandNativeWindow : INativeWindow, INativeSurfaceSourceProvider {
+internal sealed unsafe class WaylandNativeWindow : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
     private const uint WlCompositorMaxVersion = 4;
     private const uint XdgWmBaseMaxVersion = 1;
 
@@ -167,7 +168,7 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, INativeSurface
         WaylandClient.Commit(surface: m_surface);
         _ = WaylandClient.wl_display_flush(display: m_display);
     }
-    public bool TryDequeueInput(out InputPacket inputEvent) {
+    public bool TryDequeueInput(out WindowInputEvent inputEvent) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this

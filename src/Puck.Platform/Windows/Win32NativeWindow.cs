@@ -1,11 +1,14 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.Options;
+using Puck.Commands;
+using Puck.Input;
 using Puck.Platform.Windows.Interop;
 
 namespace Puck.Platform.Windows;
 
-internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceSourceProvider, INativeWindowLoadingPresenter {
+internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceSourceProvider, INativeWindowLoadingPresenter, IWindowInputSource {
     private const int BkModeTransparent = 1;
     private const int CwUseDefault = unchecked((int)0x80000000);
     private const uint DtCenter = 0x00000001;
@@ -27,6 +30,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
     private const int VkBack = 0x08;
     private const int VkC = 0x43;
     private const int VkControl = 0x11;
+    private const int VkLWin = 0x5B;
+    private const int VkRWin = 0x5C;
+    private const int VkShift = 0x10;
     private const int VkD = 0x44;
     private const int VkDown = 0x28;
     private const int VkE = 0x45;
@@ -57,7 +63,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
     private const uint WmClose = 0x0010;
     private const uint WmDestroy = 0x0002;
     private const uint WmEraseBkgnd = 0x0014;
+    private const uint WmInput = 0x00FF;
     private const uint WmKeyDown = 0x0100;
+    private const uint WmKeyUp = 0x0101;
     private const uint WmMouseMove = 0x0200;
     private const uint WmNcCreate = 0x0081;
     private const uint WmNcDestroy = 0x0082;
@@ -66,6 +74,13 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
     private const uint WmShowWindow = 0x0018;
     private const uint WmSize = 0x0005;
     private const uint WmSysKeyDown = 0x0104;
+    private const uint WmSysKeyUp = 0x0105;
+    // Raw Input (WM_INPUT): un-accelerated, full-rate relative mouse motion, summed pump-level per frame.
+    private const uint RidInput = 0x10000003;
+    private const uint RimTypeMouse = 0;
+    private const ushort RiMouseMoveAbsolute = 0x01;
+    private const ushort HidUsagePageGeneric = 0x01;
+    private const ushort HidUsageGenericMouse = 0x02;
     private const uint WsOverlappedWindow = 0x00CF0000;
     private const uint WsPopup = 0x80000000;
     private const uint WsVisible = 0x10000000;
@@ -77,15 +92,20 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
     private static bool WindowClassRegistered;
     private readonly IClipboardService m_clipboardService;
     private readonly NativeWindowOptions m_options;
-    private readonly Queue<InputPacket> m_pendingInput = [];
+    private readonly Queue<WindowInputEvent> m_pendingInput = [];
     private readonly GCHandle m_selfHandle;
     private bool m_disposed;
     private bool m_isFullscreen;
     private bool m_hasPainted;
     private bool m_isOpen = true;
     private bool m_isVisible;
+    private Vector2 m_frameMouseDelta;
+    private bool m_pointerPositionDirty;
+    private bool m_rawMouseRegistered;
     private int? m_lastMouseX;
     private int? m_lastMouseY;
+    private int? m_lastRawAbsoluteX;
+    private int? m_lastRawAbsoluteY;
     private string m_loadingFrameDetail = string.Empty;
     private string m_loadingFrameHeading = string.Empty;
     private string? m_loadingFrameImagePath;
@@ -209,8 +229,31 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             User32.TranslateMessage(message: in message);
             _ = User32.DispatchMessage(message: in message);
         }
+
+        FlushPointerFrame();
     }
-    public bool TryDequeueInput(out InputPacket inputEvent) {
+    private void FlushPointerFrame() {
+        // Emit at most one pointer.move (the frame's summed relative motion) and one pointer.position per
+        // frame, so a high-rate mouse that produced many WM_INPUT packets collapses to a single delta the
+        // command registry records correctly (its polled value is last-wins; one signal makes that exact).
+        if (m_frameMouseDelta != Vector2.Zero) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: m_frameMouseDelta));
+            m_frameMouseDelta = Vector2.Zero;
+        }
+
+        if (
+            m_pointerPositionDirty &&
+            (m_lastMouseX is { } absoluteX) &&
+            (m_lastMouseY is { } absoluteY)
+        ) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(position: new Vector2(
+                x: absoluteX,
+                y: absoluteY
+            )));
+            m_pointerPositionDirty = false;
+        }
+    }
+    public bool TryDequeueInput(out WindowInputEvent inputEvent) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -363,7 +406,26 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             throw new InvalidOperationException(message: $"CreateWindowExW failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
 
+        RegisterRawMouse(windowHandle: windowHandle);
+
         return windowHandle;
+    }
+    private void RegisterRawMouse(nint windowHandle) {
+        // Register the generic mouse for raw input (flags 0 = follow focus, foreground only). The launcher
+        // focus-gates anyway. On failure, m_rawMouseRegistered stays false and HandleMouseMove derives the
+        // delta from WM_MOUSEMOVE instead — feeding the same pump-level accumulator, never both.
+        var device = new RawInputDevice {
+            Flags = 0,
+            TargetWindowHandle = windowHandle,
+            Usage = HidUsageGenericMouse,
+            UsagePage = HidUsagePageGeneric,
+        };
+
+        m_rawMouseRegistered = User32.RegisterRawInputDevices(
+            deviceCount: 1,
+            rawInputDevices: in device,
+            size: (uint)Marshal.SizeOf<RawInputDevice>()
+        );
     }
     private nint HandleMessage(nint windowHandle, uint message, nint wParam, nint lParam) {
         if (ShouldSuppressBackgroundErase(message: message)) {
@@ -374,6 +436,21 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             case WmKeyDown:
             case WmSysKeyDown:
                 return HandleKeyDown(
+                    lParam: lParam,
+                    message: message,
+                    wParam: wParam,
+                    windowHandle: windowHandle
+                );
+            case WmKeyUp:
+            case WmSysKeyUp:
+                return HandleKeyUp(
+                    lParam: lParam,
+                    message: message,
+                    wParam: wParam,
+                    windowHandle: windowHandle
+                );
+            case WmInput:
+                return HandleRawInput(
                     lParam: lParam,
                     message: message,
                     wParam: wParam,
@@ -852,7 +929,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
         }
 
         if (!char.IsControl(c: character)) {
-            m_pendingInput.Enqueue(item: InputPacket.TextInput(text: character.ToString()));
+            m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(text: character.ToString()));
         }
 
         return 0;
@@ -873,86 +950,78 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             return 0;
         }
 
-        var controlKeyState = User32.GetKeyState(virtualKey: VkControl);
+        var modifiers = ComputeModifiers();
 
-        if (IsControlTabGesture(
-            controlKeyState: controlKeyState,
-            message: message,
-            wParam: wParam
-        )) {
-            m_pendingInput.Enqueue(item: InputPacket.CycleFocus());
+        // Ctrl+V pastes: the clipboard text flows through the text pipeline. (Copy/select-all/cycle-focus
+        // are emitted below as first-class chords for the app to bind.)
+        if (
+            (modifiers == InputModifiers.Control) &&
+            (wParam.ToInt64() == VkV) &&
+            m_clipboardService.TryGetText(text: out var clipboardText) &&
+            (clipboardText.Length > 0)
+        ) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(text: clipboardText));
             return 0;
-        }
-
-        if (IsControlPressed(controlKeyState: controlKeyState)) {
-            switch (wParam.ToInt64()) {
-                case VkA:
-                    m_pendingInput.Enqueue(item: InputPacket.SelectAll());
-                    return 0;
-                case VkC:
-                    m_pendingInput.Enqueue(item: InputPacket.CopyInput());
-                    return 0;
-                case VkV:
-                    if (
-                        m_clipboardService.TryGetText(text: out var clipboardText) &&
-                        (clipboardText.Length > 0)
-                    ) {
-                        m_pendingInput.Enqueue(item: InputPacket.TextInput(text: clipboardText));
-                    }
-
-                    return 0;
-            }
         }
 
         switch (wParam.ToInt64()) {
             case VkOem3:
-                m_pendingInput.Enqueue(item: InputPacket.ToggleConsole());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backtick, modifiers: modifiers));
                 m_suppressNextCharacterInput = true;
                 return 0;
             case VkBack:
-                m_pendingInput.Enqueue(item: InputPacket.Backspace());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Backspace, modifiers: modifiers));
                 return 0;
             case VkEscape:
-                m_pendingInput.Enqueue(item: InputPacket.ToggleMainMenu());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Escape, modifiers: modifiers));
                 return 0;
             case VkReturn:
-                m_pendingInput.Enqueue(item: InputPacket.Submit());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Enter, modifiers: modifiers));
                 return 0;
             case VkF1:
-                m_pendingInput.Enqueue(item: InputPacket.Function1());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F1, modifiers: modifiers));
                 return 0;
             case VkF2:
-                m_pendingInput.Enqueue(item: InputPacket.Function2());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F2, modifiers: modifiers));
                 return 0;
             case VkF3:
-                m_pendingInput.Enqueue(item: InputPacket.Function3());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F3, modifiers: modifiers));
                 return 0;
             case VkF4:
-                m_pendingInput.Enqueue(item: InputPacket.Function4());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F4, modifiers: modifiers));
                 return 0;
             case VkF5:
-                m_pendingInput.Enqueue(item: InputPacket.Function5());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F5, modifiers: modifiers));
                 return 0;
             case VkF6:
-                m_pendingInput.Enqueue(item: InputPacket.Function6());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F6, modifiers: modifiers));
                 return 0;
             case VkF7:
-                m_pendingInput.Enqueue(item: InputPacket.Function7());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F7, modifiers: modifiers));
                 return 0;
             case VkF8:
-                m_pendingInput.Enqueue(item: InputPacket.Function8());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.F8, modifiers: modifiers));
                 return 0;
             case VkUp:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowUp());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowUp, modifiers: modifiers));
                 return 0;
             case VkDown:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowDown());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowDown, modifiers: modifiers));
                 return 0;
             case VkLeft:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowLeft());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowLeft, modifiers: modifiers));
                 return 0;
             case VkRight:
-                m_pendingInput.Enqueue(item: InputPacket.ArrowRight());
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowRight, modifiers: modifiers));
+                return 0;
+            case VkTab when (modifiers != InputModifiers.None):
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Tab, modifiers: modifiers));
+                return 0;
+            case VkA when (modifiers != InputModifiers.None):
+                m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(character: 'a', modifiers: modifiers));
+                return 0;
+            case VkC when (modifiers != InputModifiers.None):
+                m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(character: 'c', modifiers: modifiers));
                 return 0;
             default:
                 return User32.DefWindowProc(
@@ -963,30 +1032,124 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
                 );
         }
     }
+    private nint HandleKeyUp(nint windowHandle, uint message, nint wParam, nint lParam) {
+        // Release edges for the named navigation/function/special keys. Letter chords (Ctrl+A/Ctrl+C) are
+        // one-shot press actions, so they have no useful release edge. Releases are inert by default
+        // (CommandBinding.ActivateOn ignores Completed) — they exist so a future held-key feature needs no
+        // seam re-cut. Modifiers are not recomputed: a key-up carries no chord intent.
+        var virtualKey = wParam.ToInt64();
+
+        if (TryMapNamedKey(virtualKey: virtualKey, key: out var key)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(key: key));
+            return 0;
+        }
+
+        return User32.DefWindowProc(
+            lParam: lParam,
+            message: message,
+            wParam: wParam,
+            windowHandle: windowHandle
+        );
+    }
+    private static bool TryMapNamedKey(long virtualKey, out KeyCode key) {
+        key = virtualKey switch {
+            VkOem3 => KeyCode.Backtick,
+            VkBack => KeyCode.Backspace,
+            VkEscape => KeyCode.Escape,
+            VkReturn => KeyCode.Enter,
+            VkTab => KeyCode.Tab,
+            VkUp => KeyCode.ArrowUp,
+            VkDown => KeyCode.ArrowDown,
+            VkLeft => KeyCode.ArrowLeft,
+            VkRight => KeyCode.ArrowRight,
+            VkF1 => KeyCode.F1,
+            VkF2 => KeyCode.F2,
+            VkF3 => KeyCode.F3,
+            VkF4 => KeyCode.F4,
+            VkF5 => KeyCode.F5,
+            VkF6 => KeyCode.F6,
+            VkF7 => KeyCode.F7,
+            VkF8 => KeyCode.F8,
+            _ => KeyCode.None,
+        };
+
+        return (key != KeyCode.None);
+    }
+    private nint HandleRawInput(nint windowHandle, uint message, nint wParam, nint lParam) {
+        var size = (uint)Marshal.SizeOf<RawInput>();
+
+        if (User32.GetRawInputData(
+            command: RidInput,
+            data: out var raw,
+            headerSize: (uint)Marshal.SizeOf<RawInputHeader>(),
+            rawInput: lParam,
+            size: ref size
+        ) == unchecked((uint)-1)) {
+            return DefaultRawInput(lParam: lParam, message: message, wParam: wParam, windowHandle: windowHandle);
+        }
+
+        if (raw.Header.Type == RimTypeMouse) {
+            AccumulateRawMouse(mouse: in raw.Mouse);
+        }
+
+        // WM_INPUT must always reach DefWindowProc for system cleanup (per the Raw Input contract).
+        return DefaultRawInput(lParam: lParam, message: message, wParam: wParam, windowHandle: windowHandle);
+    }
+    private nint DefaultRawInput(nint windowHandle, uint message, nint wParam, nint lParam) {
+        return User32.DefWindowProc(
+            lParam: lParam,
+            message: message,
+            wParam: wParam,
+            windowHandle: windowHandle
+        );
+    }
+    private void AccumulateRawMouse(in RawMouse mouse) {
+        // Absolute mode (RDP / VMs / tablets / touch-as-mouse): lLastX/lLastY are absolute normalized coords,
+        // not deltas — derive the delta from the previous absolute sample instead of summing garbage.
+        if ((mouse.Flags & RiMouseMoveAbsolute) != 0) {
+            if (
+                (m_lastRawAbsoluteX is { } previousX) &&
+                (m_lastRawAbsoluteY is { } previousY)
+            ) {
+                m_frameMouseDelta += new Vector2(
+                    x: (mouse.LastX - previousX),
+                    y: (mouse.LastY - previousY)
+                );
+            }
+
+            m_lastRawAbsoluteX = mouse.LastX;
+            m_lastRawAbsoluteY = mouse.LastY;
+            return;
+        }
+
+        m_lastRawAbsoluteX = null;
+        m_lastRawAbsoluteY = null;
+        m_frameMouseDelta += new Vector2(
+            x: mouse.LastX,
+            y: mouse.LastY
+        );
+    }
     private nint HandleMouseMove(nint lParam) {
         var mouseX = GetSignedLowWord(value: lParam);
         var mouseY = GetSignedHighWord(value: lParam);
 
+        // WM_MOUSEMOVE owns the absolute position (pointer.position). It only owns the relative delta as a
+        // fallback when raw input could not be registered — otherwise WM_INPUT is the single delta emitter,
+        // so the two never both feed the pump-level accumulator for the same motion.
         if (
+            !m_rawMouseRegistered &&
             (m_lastMouseX is { } lastMouseX) &&
             (m_lastMouseY is { } lastMouseY)
         ) {
-            var deltaX = (mouseX - lastMouseX);
-            var deltaY = (mouseY - lastMouseY);
-
-            if (
-                (deltaX != 0) ||
-                (deltaY != 0)
-            ) {
-                m_pendingInput.Enqueue(item: InputPacket.MouseMove(
-                    deltaX: deltaX,
-                    deltaY: deltaY
-                ));
-            }
+            m_frameMouseDelta += new Vector2(
+                x: (mouseX - lastMouseX),
+                y: (mouseY - lastMouseY)
+            );
         }
 
         m_lastMouseX = mouseX;
         m_lastMouseY = mouseY;
+        m_pointerPositionDirty = true;
         return 0;
     }
 
@@ -995,13 +1158,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             (message == WmSysKeyDown) &&
             (wParam.ToInt64() == VkReturn) &&
             ((altKeyState & 0x8000) != 0)
-        );
-    }
-    internal static bool IsControlTabGesture(uint message, nint wParam, short controlKeyState) {
-        return (
-            (message == WmKeyDown) &&
-            (wParam.ToInt64() == VkTab) &&
-            IsControlPressed(controlKeyState: controlKeyState)
         );
     }
     internal static nint CreateFullscreenWindowStyle(nint currentStyle) {
@@ -1106,7 +1262,31 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             throw new InvalidOperationException(message: $"SetWindowPos failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
     }
-    private static bool IsControlPressed(short controlKeyState) {
-        return ((controlKeyState & 0x8000) != 0);
+    private static bool IsKeyDown(int virtualKey) {
+        return ((User32.GetKeyState(virtualKey: virtualKey) & 0x8000) != 0);
+    }
+    private static InputModifiers ComputeModifiers() {
+        var modifiers = InputModifiers.None;
+
+        if (IsKeyDown(virtualKey: VkControl)) {
+            modifiers |= InputModifiers.Control;
+        }
+
+        if (IsKeyDown(virtualKey: VkShift)) {
+            modifiers |= InputModifiers.Shift;
+        }
+
+        if (IsKeyDown(virtualKey: VkMenu)) {
+            modifiers |= InputModifiers.Alt;
+        }
+
+        if (
+            IsKeyDown(virtualKey: VkLWin) ||
+            IsKeyDown(virtualKey: VkRWin)
+        ) {
+            modifiers |= InputModifiers.Super;
+        }
+
+        return modifiers;
     }
 }

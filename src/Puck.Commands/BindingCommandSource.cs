@@ -44,7 +44,18 @@ public sealed class BindingCommandSource : ICommandSource {
             }
 
             foreach (var binding in bindings) {
+                // A binding answers exactly its chord: the input's modifiers must match those the binding
+                // requires (e.g. a Ctrl+C binding ignores a plain C, and vice versa).
+                if (binding.RequiredModifiers != input.Modifiers) {
+                    continue;
+                }
+
+                // Every matching activation is pushed so the registry can track held state across frames, but
+                // the handler runs only on the edge the binding answers (ActivateOn). The default ignores
+                // releases, so a key-up updates the held value without re-firing a press-bound command.
                 sink.Push(signal: new CommandSignal(
+                    DeviceId: input.DeviceId,
+                    Dispatch: ActivatesOnPhase(binding: binding, phase: input.Phase),
                     Name: binding.Command,
                     Phase: input.Phase,
                     Text: input.Text,
@@ -54,5 +65,12 @@ public sealed class BindingCommandSource : ICommandSource {
         }
 
         m_pending.Clear();
+    }
+
+    /// <summary>Determines whether a binding fires for an input's phase, applying its <see cref="CommandBinding.ActivateOn"/> filter.</summary>
+    private static bool ActivatesOnPhase(in CommandBinding binding, CommandPhase phase) {
+        return ((binding.ActivateOn is { } required)
+            ? (phase == required)
+            : (phase is CommandPhase.Started or CommandPhase.Active));
     }
 }

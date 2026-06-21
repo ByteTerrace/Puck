@@ -12,6 +12,17 @@ namespace Puck.Vulkan;
 /// pipeline-layout, and descriptor-set-layout entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipelineApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeGraphicsPipelineApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeGraphicsPipelineApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     private const uint False = 0;
     private const uint LogicOpCopy = 3;
     private const uint ShaderStageFragmentBit = 0x00000010;
@@ -57,11 +68,11 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
 
         if (descriptorBindings.Count > 0) {
             setLayoutCount = 1;
-            setLayoutsPointer = Puck.Memory.Allocator.Alloc(size: (IntPtr.Size * setLayoutCount));
+            setLayoutsPointer = m_allocator.Alloc(size: (IntPtr.Size * setLayoutCount));
 
             var bindingStride = Marshal.SizeOf<VkDescriptorSetLayoutBinding>();
 
-            descriptorSetLayoutBindingPointer = Puck.Memory.Allocator.Alloc(size: (bindingStride * descriptorBindings.Count));
+            descriptorSetLayoutBindingPointer = m_allocator.Alloc(size: (bindingStride * descriptorBindings.Count));
 
             for (var index = 0; (index < descriptorBindings.Count); index++) {
                 Marshal.StructureToPtr(
@@ -114,7 +125,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 );
             }
 
-            pushConstantRangePointer = AllocateStruct(value: new VkPushConstantRange {
+            pushConstantRangePointer = AllocateStruct(allocator: m_allocator, value: new VkPushConstantRange {
                 Offset = 0,
                 Size = request.PushConstantSize,
                 StageFlags = request.PushConstantStageFlags,
@@ -154,7 +165,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             pipelineHandle = 0;
             mainEntryPoint = Marshal.StringToCoTaskMemUTF8(s: "main");
 
-            stagesPointer = Puck.Memory.Allocator.Alloc(size: (Marshal.SizeOf<VkPipelineShaderStageCreateInfo>() * 2));
+            stagesPointer = m_allocator.Alloc(size: (Marshal.SizeOf<VkPipelineShaderStageCreateInfo>() * 2));
             var vertexStage = new VkPipelineShaderStageCreateInfo {
                 Module = request.VertexShaderModuleHandle,
                 PName = mainEntryPoint,
@@ -192,7 +203,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
 
             if (vertexBindings.Count > 0) {
                 var stride = Marshal.SizeOf<VkVertexInputBindingDescription>();
-                var bindingsPointer = Puck.Memory.Allocator.Alloc(size: (stride * vertexBindings.Count));
+                var bindingsPointer = m_allocator.Alloc(size: (stride * vertexBindings.Count));
 
                 for (var index = 0; (index < vertexBindings.Count); index++) {
                     Marshal.StructureToPtr(
@@ -208,7 +219,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
 
             if (vertexAttributes.Count > 0) {
                 var stride = Marshal.SizeOf<VkVertexInputAttributeDescription>();
-                var attributesPointer = Puck.Memory.Allocator.Alloc(size: (stride * vertexAttributes.Count));
+                var attributesPointer = m_allocator.Alloc(size: (stride * vertexAttributes.Count));
 
                 for (var index = 0; (index < vertexAttributes.Count); index++) {
                     Marshal.StructureToPtr(
@@ -228,7 +239,11 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 Topology = request.Topology,
             };
 
-            viewportPointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkViewport>());
+            // SINGLE viewport + scissor: the request carries one Width/Height, so this allocates exactly one of each and
+            // sets ViewportCount/ScissorCount = 1 below. If multi-viewport rendering is ever added, the request must
+            // grow an array of viewport definitions AND these allocations must size to that count (Alloc(sizeof * count))
+            // — a count > 1 against these single-element allocations would write past them.
+            viewportPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkViewport>());
             Marshal.StructureToPtr(
                 fDeleteOld: false,
                 ptr: viewportPointer,
@@ -241,7 +256,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                     y: 0f
                 )
             );
-            scissorPointer = Puck.Memory.Allocator.Alloc(size: Marshal.SizeOf<VkRect2D>());
+            scissorPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkRect2D>());
             Marshal.StructureToPtr(
                 fDeleteOld: false,
                 ptr: scissorPointer,
@@ -268,7 +283,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             var dynamicStateCount = dynamicStates.Count;
 
             if (dynamicStateCount > 0) {
-                dynamicStatesPointer = Puck.Memory.Allocator.Alloc(size: (sizeof(uint) * dynamicStateCount));
+                dynamicStatesPointer = m_allocator.Alloc(size: (sizeof(uint) * dynamicStateCount));
                 for (var index = 0; (index < dynamicStateCount); index++) {
                     Marshal.WriteInt32(
                         ofs: (index * sizeof(uint)),
@@ -292,7 +307,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 LogicOp = LogicOpCopy,
                 LogicOpEnable = False,
                 PAttachments = ((colorBlendAttachments.Count > 0)
-                    ? Puck.Memory.Allocator.Alloc(size: (colorBlendStride * colorBlendAttachments.Count))
+                    ? m_allocator.Alloc(size: (colorBlendStride * colorBlendAttachments.Count))
                     : nint.Zero),
                 SType = StructureTypePipelineColorBlendStateCreateInfo,
             };
@@ -310,21 +325,21 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                     BasePipelineHandle = 0,
                     BasePipelineIndex = -1,
                     Layout = pipelineLayoutHandle,
-                    PColorBlendState = AllocateStruct(value: colorBlendState),
-                    PDynamicState = AllocateStruct(value: dynamicState),
-                    PInputAssemblyState = AllocateStruct(value: inputAssemblyState),
-                    PMultisampleState = AllocateStruct(value: multisampleState),
-                    PRasterizationState = AllocateStruct(value: rasterizationState),
+                    PColorBlendState = AllocateStruct(allocator: m_allocator, value: colorBlendState),
+                    PDynamicState = AllocateStruct(allocator: m_allocator, value: dynamicState),
+                    PInputAssemblyState = AllocateStruct(allocator: m_allocator, value: inputAssemblyState),
+                    PMultisampleState = AllocateStruct(allocator: m_allocator, value: multisampleState),
+                    PRasterizationState = AllocateStruct(allocator: m_allocator, value: rasterizationState),
                     PStages = stagesPointer,
-                    PVertexInputState = AllocateStruct(value: vertexInputState),
-                    PViewportState = AllocateStruct(value: viewportState),
+                    PVertexInputState = AllocateStruct(allocator: m_allocator, value: vertexInputState),
+                    PViewportState = AllocateStruct(allocator: m_allocator, value: viewportState),
                     RenderPass = request.RenderPassHandle,
                     SType = StructureTypeGraphicsPipelineCreateInfo,
                     StageCount = 2,
                     Subpass = 0,
                 };
 
-                pipelineCreateInfoPointer = AllocateStruct(value: pipelineCreateInfo);
+                pipelineCreateInfoPointer = AllocateStruct(allocator: m_allocator, value: pipelineCreateInfo);
                 var result = createGraphicsPipelines(
                     request.DeviceHandle,
                     0,
@@ -353,7 +368,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 return result;
             } finally {
                 if (0 != colorBlendState.PAttachments) {
-                    Puck.Memory.Allocator.Free(ptr: colorBlendState.PAttachments);
+                    m_allocator.Free(ptr: colorBlendState.PAttachments);
                 }
             }
         } finally {
@@ -511,7 +526,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             return m_getDeviceProcAddr;
         }
     }
-    private static unsafe void FreeIfAllocated(nint pointer, Type? structureType) {
+    private unsafe void FreeIfAllocated(nint pointer, Type? structureType) {
         if (0 == pointer) {
             return;
         }
@@ -571,7 +586,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             );
         }
 
-        Puck.Memory.Allocator.Free(ptr: pointer);
+        m_allocator.Free(ptr: pointer);
     }
     private static unsafe void ValidateRequest(VulkanGraphicsPipelineCreateRequest request) {
         if (0 == request.DeviceHandle) {

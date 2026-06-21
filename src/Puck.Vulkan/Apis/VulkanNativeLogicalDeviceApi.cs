@@ -13,6 +13,17 @@ namespace Puck.Vulkan;
 /// queue-retrieval, and wait-idle entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceApi {
+    private readonly IAllocator m_allocator;
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeLogicalDeviceApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeLogicalDeviceApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
     private const uint VkStructureTypeDeviceCreateInfo = 3;
     private const uint VkStructureTypeDeviceQueueCreateInfo = 2;
     // Values verified against the Vulkan SDK 1.4.350 header (vulkan_core.h).
@@ -22,11 +33,19 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     private const int PhysicalDeviceFeatureCount = 55;
 
     // Every chained VkPhysicalDevice*Features struct shares the layout
-    // { uint sType; nint pNext; VkBool32 <feature>; ... } — sType at 0, pNext one pointer
+    // { uint sType; nint pNext; VkBool32 flags[N]; ... } — sType at 0, pNext one pointer
     // in, the first feature flag two pointers in, the whole thing pointer-aligned.
     private static readonly int FeatureStructurePNextOffset = IntPtr.Size;
     private static readonly int FeatureStructureFlagOffset = (IntPtr.Size * 2);
-    private static readonly int FeatureStructureByteSize = (IntPtr.Size * 3);
+
+    // A single over-sized, zeroed block per chained struct. We only enable the FIRST VkBool32 (the primary
+    // feature) and require every trailing flag to read VK_FALSE; the driver reads exactly sizeof(struct) bytes
+    // keyed off sType, so over-allocating is harmless but UNDER-allocating lets it read uninitialized memory
+    // past the block. The previous one-flag assumption (IntPtr.Size * 3 = 24 bytes) was too small for structs
+    // with several flags — e.g. VkPhysicalDeviceAccelerationStructureFeaturesKHR is 5 flags / 40 bytes — and
+    // the driver read the adjacent block's sType as a bogus VkBool32, tripping a validation error. 256 bytes
+    // comfortably exceeds any current Vulkan feature struct (even the aggregate VkPhysicalDeviceVulkan1xFeatures).
+    private const int FeatureStructureByteSize = 256;
     private readonly Lock m_syncRoot = new();
     private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
     private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
@@ -111,7 +130,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
 
         var queueInfos = request.Queues.ToArray();
         var queueInfoSize = Marshal.SizeOf<VkDeviceQueueCreateInfo>();
-        var queueInfoBuffer = Puck.Memory.Allocator.Alloc(size: (queueInfoSize * queueInfos.Length));
+        var queueInfoBuffer = m_allocator.Alloc(size: (queueInfoSize * queueInfos.Length));
         var extensionBuffer = MarshalStringArray(values: request.ExtensionNames);
 
         var featureIndices = request.EnabledFeatureIndices;
@@ -127,7 +146,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
 
         try {
             for (var index = 0; (index < queueInfos.Length); index++) {
-                var queuePriority = Puck.Memory.Allocator.Alloc(size: sizeof(float));
+                var queuePriority = m_allocator.Alloc(size: sizeof(float));
 
                 Marshal.Copy(
                     destination: queuePriority,
@@ -174,7 +193,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                 nint chainHead = 0;
 
                 for (var index = 0; (index < featureStructureTypes.Count); index++) {
-                    var block = Puck.Memory.Allocator.Alloc(size: FeatureStructureByteSize);
+                    var block = m_allocator.Alloc(size: FeatureStructureByteSize);
 
                     featureBlocks[index] = block;
                     new Span<byte>(
@@ -208,7 +227,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                 features2.PNext = chainHead;
                 createInfo.PNext = (nint)(&features2);
             } else if (featureIndices.Count > 0) {
-                enabledFeaturesBuffer = Puck.Memory.Allocator.Alloc(size: (PhysicalDeviceFeatureCount * sizeof(uint)));
+                enabledFeaturesBuffer = m_allocator.Alloc(size: (PhysicalDeviceFeatureCount * sizeof(uint)));
                 new Span<byte>(
                     length: (PhysicalDeviceFeatureCount * sizeof(uint)),
                     pointer: (void*)enabledFeaturesBuffer
@@ -238,20 +257,20 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                 ));
 
                 if (0 != queueInfo.PQueuePriorities) {
-                    Puck.Memory.Allocator.Free(ptr: queueInfo.PQueuePriorities);
+                    m_allocator.Free(ptr: queueInfo.PQueuePriorities);
                 }
             }
 
-            Puck.Memory.Allocator.Free(ptr: queueInfoBuffer);
+            m_allocator.Free(ptr: queueInfoBuffer);
             extensionBuffer.Dispose();
             foreach (var block in featureBlocks) {
                 if (0 != block) {
-                    Puck.Memory.Allocator.Free(ptr: block);
+                    m_allocator.Free(ptr: block);
                 }
             }
 
             if (0 != enabledFeaturesBuffer) {
-                Puck.Memory.Allocator.Free(ptr: enabledFeaturesBuffer);
+                m_allocator.Free(ptr: enabledFeaturesBuffer);
             }
         }
     }
@@ -332,16 +351,17 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
             return cached;
         }
     }
-    private static MarshalledStringArray MarshalStringArray(IReadOnlyList<string> values) {
+    private MarshalledStringArray MarshalStringArray(IReadOnlyList<string> values) {
         if (0 == values.Count) {
             return new MarshalledStringArray(
+                Allocator: m_allocator,
                 Entries: [],
                 Pointer: 0
             );
         }
 
         var pointers = new nint[values.Count];
-        var buffer = Puck.Memory.Allocator.Alloc(size: (IntPtr.Size * values.Count));
+        var buffer = m_allocator.Alloc(size: (IntPtr.Size * values.Count));
 
         for (var index = 0; (index < values.Count); index++) {
             pointers[index] = MarshalUtf8(value: values[index]);
@@ -353,13 +373,14 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         }
 
         return new MarshalledStringArray(
+            Allocator: m_allocator,
             Entries: pointers,
             Pointer: buffer
         );
     }
-    private static nint MarshalUtf8(string value) {
+    private nint MarshalUtf8(string value) {
         var bytes = Encoding.UTF8.GetBytes(s: (value + '\0'));
-        var pointer = Puck.Memory.Allocator.Alloc(size: bytes.Length);
+        var pointer = m_allocator.Alloc(size: bytes.Length);
 
         Marshal.Copy(
             destination: pointer,
@@ -370,16 +391,16 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         return pointer;
     }
 
-    private readonly record struct MarshalledStringArray(nint Pointer, IReadOnlyList<nint> Entries) : IDisposable {
+    private readonly record struct MarshalledStringArray(nint Pointer, IReadOnlyList<nint> Entries, IAllocator Allocator) : IDisposable {
         public void Dispose() {
             foreach (var entry in Entries) {
                 if (0 != entry) {
-                    Puck.Memory.Allocator.Free(ptr: entry);
+                    Allocator.Free(ptr: entry);
                 }
             }
 
             if (0 != Pointer) {
-                Puck.Memory.Allocator.Free(ptr: Pointer);
+                Allocator.Free(ptr: Pointer);
             }
         }
     }
