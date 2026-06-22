@@ -497,7 +497,10 @@ public sealed class Ppu : IClockedComponent {
         }
 
         m_enabled = enabling;
-        m_dot = 0;
+        // The first scanline after the LCD is enabled runs ~4 dots short (the documented first-frame lateness), so
+        // LY advances slightly earlier than a normal 456-dot line. (Verified against lcdon_timing-GS's LY and
+        // STAT-mode sample points; the remaining lcdon coincidence-bit and OAM/VRAM-access edges are still open.)
+        m_dot = (enabling ? 4 : 0);
         m_line = 0;
 
         // The LCD-enable first-frame quirk: line 0 has NO OAM-scan phase — it begins directly in mode 0, then

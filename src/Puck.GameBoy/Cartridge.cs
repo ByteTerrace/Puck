@@ -13,9 +13,11 @@ public static class Cartridge {
 
         var header = CartridgeHeader.Decode(rom: rom);
 
-        // Mappers are added in their build phase; until then only the no-mapper types load.
         return header.CartridgeType switch {
             0x00 or 0x08 or 0x09 => new RomOnlyCartridge(rom: rom, ramByteCount: header.RamByteCount),
+            0x01 or 0x02 or 0x03 => new Mbc1(rom: rom, ramByteCount: header.RamByteCount),
+            // 0x19-0x1E are MBC5 with various RAM/rumble combinations; the rumble motor bit is ignored.
+            >= 0x19 and <= 0x1E => new Mbc5(rom: rom, ramByteCount: header.RamByteCount),
             _ => throw new NotSupportedException(
                 message: $"Cartridge type 0x{header.CartridgeType:X2} is not yet implemented."
             ),

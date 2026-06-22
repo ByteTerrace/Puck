@@ -12,6 +12,16 @@ try {
                 romPath: args[index + 1]
             );
         }
+
+        // --run <romPath> <frames> <outputPng>: boot a game and dump a framebuffer PNG.
+        if ((args[index] == "--run") && (index + 3 < args.Length)) {
+            return GameRunner.Run(
+                frames: int.Parse(s: args[index + 2]),
+                output: Console.Out,
+                outputPath: args[index + 3],
+                romPath: args[index + 1]
+            );
+        }
     }
 
     var failures = 0;
@@ -24,6 +34,8 @@ try {
         ("Timer", TimerSmokeTests.All),
         ("OAM DMA", OamDmaSmokeTests.All),
         ("PPU", PpuSmokeTests.All),
+        ("Cartridge", CartridgeSmokeTests.All),
+        ("Joypad/Serial", IoSmokeTests.All),
     ];
 
     foreach (var (suite, tests) in smokeSuites) {

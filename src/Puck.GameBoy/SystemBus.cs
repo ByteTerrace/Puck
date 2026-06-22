@@ -18,6 +18,8 @@ public sealed class SystemBus : ICpuBus {
     private readonly ICartridge m_cartridge;
     private readonly byte[] m_highRam = new byte[0x7F];
     private readonly InterruptController m_interrupts = new();
+    private readonly Joypad m_joypad;
+    private readonly Serial m_serial;
     private readonly byte[]? m_bootRom;
     private readonly ConsoleModel m_model;
     private readonly byte[] m_oam = new byte[0xA0];
@@ -93,11 +95,21 @@ public sealed class SystemBus : ICpuBus {
 
         m_ppu = new Ppu(interrupts: m_interrupts, videoRam: m_videoRam, objectAttributeMemory: m_oam);
         Attach(component: m_ppu);
+
+        m_joypad = new Joypad(interrupts: m_interrupts);
+        m_serial = new Serial(interrupts: m_interrupts);
+        Attach(component: m_serial);
     }
 
     /// <summary>Gets the picture processing unit, for the host to present its framebuffer.</summary>
     public Ppu Ppu =>
         m_ppu;
+    /// <summary>Gets the joypad, for the host to feed button input.</summary>
+    public Joypad Joypad =>
+        m_joypad;
+    /// <summary>Gets the serial port, for capturing serial output.</summary>
+    public Serial Serial =>
+        m_serial;
 
     /// <summary>Registers a component to be advanced each machine cycle in its clock domain.</summary>
     /// <param name="component">The component to clock alongside the CPU.</param>
@@ -264,6 +276,9 @@ public sealed class SystemBus : ICpuBus {
         // unmapped addresses fall through to 0xFF.
         address switch {
             MemoryMap.InterruptFlag => m_interrupts.InterruptFlag,
+            MemoryMap.Joypad => m_joypad.Read(),
+            MemoryMap.SerialData => m_serial.ReadData(),
+            MemoryMap.SerialControl => m_serial.ReadControl(),
             >= MemoryMap.Divider and <= MemoryMap.TimerControl => m_timer.ReadRegister(address: address),
             MemoryMap.OamDmaStart => m_oamDma.Page,
             >= MemoryMap.LcdControl and <= MemoryMap.WindowX => m_ppu.ReadRegister(address: address),
@@ -281,6 +296,18 @@ public sealed class SystemBus : ICpuBus {
         switch (address) {
             case MemoryMap.InterruptFlag:
                 m_interrupts.InterruptFlag = value;
+
+                break;
+            case MemoryMap.Joypad:
+                m_joypad.Write(value: value);
+
+                break;
+            case MemoryMap.SerialData:
+                m_serial.WriteData(value: value);
+
+                break;
+            case MemoryMap.SerialControl:
+                m_serial.WriteControl(value: value);
 
                 break;
             case >= MemoryMap.Divider and <= MemoryMap.TimerControl:
