@@ -66,7 +66,7 @@ internal sealed record ParityThresholdsReport {
 
 /// <summary>The source-generation context for <see cref="ParityReport"/> — the reflection-free serializer the gate
 /// writes <c>report.json</c> through.</summary>
-[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ParityReport))]
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class ParityReportJsonContext : JsonSerializerContext {
 }

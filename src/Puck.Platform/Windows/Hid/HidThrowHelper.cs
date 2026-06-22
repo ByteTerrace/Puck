@@ -6,29 +6,22 @@ using Windows.Win32.Foundation;
 
 namespace Puck.Platform.Windows.Hid;
 
-internal static class HidThrowHelper
-{
+internal static class HidThrowHelper {
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     private static ExternalException CreateHumanInterfaceDeviceException(NTSTATUS ntStatus) {
         if (ntStatus == NTSTATUS.HIDP_STATUS_BUFFER_TOO_SMALL) {
             return new ExternalException(message: "The target buffer is too small.");
-        }
-        else if (ntStatus == NTSTATUS.HIDP_STATUS_INCOMPATIBLE_REPORT_ID) {
+        } else if (ntStatus == NTSTATUS.HIDP_STATUS_INCOMPATIBLE_REPORT_ID) {
             return new ExternalException(message: "The report id is not valid.");
-        }
-        else if (ntStatus == NTSTATUS.HIDP_STATUS_INVALID_PREPARSED_DATA) {
+        } else if (ntStatus == NTSTATUS.HIDP_STATUS_INVALID_PREPARSED_DATA) {
             return new ExternalException(message: "The preparsed data is not valid.");
-        }
-        else if (ntStatus == NTSTATUS.HIDP_STATUS_INVALID_REPORT_LENGTH) {
+        } else if (ntStatus == NTSTATUS.HIDP_STATUS_INVALID_REPORT_LENGTH) {
             return new ExternalException(message: "The report length is not valid.");
-        }
-        else if (ntStatus == NTSTATUS.HIDP_STATUS_INVALID_REPORT_TYPE) {
+        } else if (ntStatus == NTSTATUS.HIDP_STATUS_INVALID_REPORT_TYPE) {
             return new ExternalException(message: "The specified report type is not valid.");
-        }
-        else if (ntStatus == NTSTATUS.HIDP_STATUS_USAGE_NOT_FOUND) {
+        } else if (ntStatus == NTSTATUS.HIDP_STATUS_USAGE_NOT_FOUND) {
             return new ExternalException(message: "The specified usage is not valid.");
-        }
-        else {
+        } else {
             return new ExternalException(message: $"Unknown HID status code: {ntStatus}.");
         }
     }

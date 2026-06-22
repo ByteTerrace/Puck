@@ -171,7 +171,6 @@ internal static class DemoRootNode {
             "resample" => new ResampleValidationNode(result: result, serviceProvider: serviceProvider),
             "viewports" => new ViewportParityNode(result: result, serviceProvider: serviceProvider),
             "pixelate" => new PixelateParityNode(result: result, serviceProvider: serviceProvider),
-            "capture" => new CaptureValidationNode(result: result, serviceProvider: serviceProvider),
             "mini-action" => new MiniAction.MiniActionDeterminismNode(result: result),
             "world" => new WorldParityNode(
                 artifactDir: validation.ArtifactDir,

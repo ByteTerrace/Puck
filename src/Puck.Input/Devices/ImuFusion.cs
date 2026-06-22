@@ -8,8 +8,7 @@ namespace Puck.Input.Devices;
 /// gravity vector at rest, corrects the slow drift that integration accumulates. Without a magnetometer the yaw
 /// is unreferenced (it tracks turns but drifts over time); pitch and roll stay anchored to gravity.
 /// </summary>
-internal static class ImuFusion
-{
+internal static class ImuFusion {
     // How hard each step pulls the estimated up toward the measured (accelerometer) up. Small enough to ignore
     // transient linear acceleration, large enough to cancel gyro drift within a fraction of a second.
     private const float AccelerometerTrust = 0.02f;

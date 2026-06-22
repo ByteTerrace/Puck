@@ -1,8 +1,7 @@
 namespace Puck.Input.Devices;
 
 /// <summary>Identifies a recognized controller family, used to pick a parser and per-type binding overrides.</summary>
-public enum GamepadType
-{
+public enum GamepadType {
     /// <summary>An unrecognized device, or one not yet identified.</summary>
     Unknown = 0,
     /// <summary>A Microsoft Xbox One controller.</summary>

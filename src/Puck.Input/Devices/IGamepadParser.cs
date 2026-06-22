@@ -5,8 +5,7 @@ namespace Puck.Input.Devices;
 /// implementation exists per controller family; it owns any device-specific initialization (handshakes,
 /// sensor enablement) and the report-byte layout, so the rest of the engine never sees raw reports.
 /// </summary>
-public interface IGamepadParser
-{
+public interface IGamepadParser {
     /// <summary>The controller family this parser handles.</summary>
     GamepadType Type { get; }
 

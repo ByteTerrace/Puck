@@ -37,7 +37,6 @@ internal sealed class RtWorldProducerNode : IRenderNode {
     private readonly byte[] m_pushConstant = new byte[PushConstantByteLength];
     private readonly IServiceProvider m_serviceProvider;
     private readonly uint m_width;
-
     private IGpuAccelerationStructure? m_acceleration;
     private bool m_blasBuilt;
     private bool m_captured;
@@ -249,7 +248,6 @@ internal sealed class RtWorldProducerNode : IRenderNode {
         floats[16] = camera.Forward.X; floats[17] = camera.Forward.Y; floats[18] = camera.Forward.Z; floats[19] = 0f;
         floats[20] = m_groundPlane.X; floats[21] = m_groundPlane.Y; floats[22] = m_groundPlane.Z; floats[23] = m_groundPlane.W;
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;
@@ -310,7 +308,6 @@ internal sealed class RtWorldProducerNode : IRenderNode {
         m_blasBuilt = true;
         m_imageInitialized = true;
     }
-
     private ReadOnlyMemory<byte> ReadPixels() {
         m_readback ??= m_gpu!.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext!);
 

@@ -126,7 +126,6 @@ internal sealed class ResampleValidationNode : IRenderNode {
 
         Console.Out.WriteLine(value: $"RESAMPLE pass | {SourceSize}x{SourceSize} sdf-child sampled in compute on Vulkan (combined-image-sampler) AND Direct3D 12 (SRV + static sampler): nearest identity == source bit-for-bit, 2x linear upscale matches cross-backend (≤ {maxDelta} LSB)");
     }
-
     private T Resolve<T>() => (T)m_serviceProvider.GetService(serviceType: typeof(T))!;
 
     // Runs both checks on one backend: (a) source vs nearest identity resample (must be bit-identical), and (b) the
@@ -249,7 +248,6 @@ internal sealed class ResampleValidationNode : IRenderNode {
             gpu.DescriptorAllocator.DestroyPool(deviceHandle: deviceHandle, poolHandle: pool);
         }
     }
-
     private static int MaxAbsDelta(byte[] a, byte[] b) {
         if (a.Length != b.Length) {
             return int.MaxValue;

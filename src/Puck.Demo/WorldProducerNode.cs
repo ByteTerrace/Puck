@@ -42,7 +42,6 @@ internal sealed class WorldProducerNode : IRenderNode {
     private const ulong TimingReportInterval = 60; // print the digest roughly once per second at 60 fps
 
     private static readonly IReadOnlyDictionary<int, IRenderNode> EmptyChildren = new Dictionary<int, IRenderNode>();
-
     private readonly ReadOnlyMemory<byte> m_beamBytecode;
     private readonly nint[] m_boundSourceViews = new nint[MaxViewports];
     private readonly ReadOnlyMemory<byte> m_cullArgsBytecode;
@@ -63,7 +62,6 @@ internal sealed class WorldProducerNode : IRenderNode {
     private readonly uint m_tileGridY;
     private readonly ReadOnlyMemory<byte> m_viewsBytecode;
     private readonly uint m_width;
-
     private IGpuComputePipeline? m_beamPipeline;
     private nint m_beamSet;
     private IGpuShaderModule? m_beamShaderModule;
@@ -275,7 +273,6 @@ internal sealed class WorldProducerNode : IRenderNode {
             m_boundSourceViews[element] = view;
         }
     }
-
     private nint SourceViewForSlot(int slot) {
         if (IsChildSlot(slot: slot)) {
             var view = m_childSurfaces[slot].ImageViewHandle;
@@ -289,7 +286,6 @@ internal sealed class WorldProducerNode : IRenderNode {
 
         return m_sourceTextures[slot]!.ImageViewHandle;
     }
-
     private bool IsChildSlot(int slot) =>
         (0u != (m_childMask & (1u << slot)));
 
@@ -337,7 +333,6 @@ internal sealed class WorldProducerNode : IRenderNode {
             floats[b + 4] = transform.Orientation.X; floats[b + 5] = transform.Orientation.Y; floats[b + 6] = transform.Orientation.Z; floats[b + 7] = transform.Orientation.W;
         }
     }
-
     private void EnsureResources(IGpuDeviceContext gpuDevice, SdfFrame frame) {
         if (m_resourcesReady) {
             return;
@@ -619,7 +614,6 @@ internal sealed class WorldProducerNode : IRenderNode {
             floats[b + 0] = region.X; floats[b + 1] = region.Y; floats[b + 2] = region.Width; floats[b + 3] = region.Height;
         }
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;
@@ -845,7 +839,6 @@ internal sealed class WorldProducerNode : IRenderNode {
     }
     private static int Percent(double part, double whole) =>
         (int)Math.Round(a: ((100.0 * part) / whole));
-
     private void WriteStorageBuffer(nint set, uint binding, IGpuStorageBuffer buffer) {
         m_descriptorAllocator!.WriteStorageBuffer(
             binding: binding,

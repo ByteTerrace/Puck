@@ -30,7 +30,6 @@ internal sealed class PixelateNode : IRenderNode {
     private readonly uint m_quantizeLevels;
     private readonly IServiceProvider m_serviceProvider;
     private readonly IRenderNode m_source;
-
     private nint m_boundSourceView;
     private IGpuComputeCommandPool? m_commandPool;
     private IGpuComputePipeline? m_pipeline;
@@ -166,7 +165,6 @@ internal sealed class PixelateNode : IRenderNode {
         m_width = width;
         m_resourcesReady = true;
     }
-
     private void BindSource() {
         if (m_sourceSurface.ImageViewHandle == m_boundSourceView) {
             return;
@@ -175,7 +173,6 @@ internal sealed class PixelateNode : IRenderNode {
         m_descriptorAllocator!.WriteStorageImage(arrayElement: 0, binding: SourceBindingIndex, descriptorSetHandle: m_set, deviceHandle: m_deviceHandle, imageViewHandle: m_sourceSurface.ImageViewHandle);
         m_boundSourceView = m_sourceSurface.ImageViewHandle;
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;

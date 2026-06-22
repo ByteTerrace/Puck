@@ -43,7 +43,6 @@ internal sealed class ViewportCompositorNode : IRenderNode {
     private readonly IReadOnlyList<ViewportPane> m_panes;
     private readonly IServiceProvider m_serviceProvider;
     private readonly uint m_width;
-
     private bool m_captured;
     private byte[]? m_capturedPixels;
     private Surface[] m_childSurfaces = [];
@@ -144,7 +143,6 @@ internal sealed class ViewportCompositorNode : IRenderNode {
             });
         }
     }
-
     private void EnsureResources(IGpuDeviceContext gpuDevice) {
         if (m_resourcesReady) {
             return;
@@ -202,7 +200,6 @@ internal sealed class ViewportCompositorNode : IRenderNode {
             m_boundSourceViews[element] = view;
         }
     }
-
     private nint SourceViewForSlot(int slot) {
         var view = m_childSurfaces[slot].ImageViewHandle;
 
@@ -234,7 +231,6 @@ internal sealed class ViewportCompositorNode : IRenderNode {
             floats[b + 3] = region.Height;
         }
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;
@@ -298,7 +294,6 @@ internal sealed class ViewportCompositorNode : IRenderNode {
         m_queueSubmitter!.SubmitAndWait(commandBufferHandles: [commandBuffer], deviceContext: m_deviceContext!);
         m_outputInitialized = true;
     }
-
     private ReadOnlyMemory<byte> ReadPixels() {
         m_readback ??= m_gpu!.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext!);
 

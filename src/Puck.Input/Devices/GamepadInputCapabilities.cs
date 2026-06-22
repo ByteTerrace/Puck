@@ -7,8 +7,7 @@ namespace Puck.Input.Devices;
 /// sensor — Xbox pads report no gyro, the Switch Pro's shoulder triggers are digital, and so on.
 /// </summary>
 [Flags]
-public enum GamepadInputCapabilities
-{
+public enum GamepadInputCapabilities {
     /// <summary>No optional input features beyond the buttons and sticks every family provides.</summary>
     None = 0,
     /// <summary>A motion sensor reporting angular velocity (gyro), in radians/second.</summary>

@@ -8,9 +8,9 @@ namespace Puck.Scene;
 /// authored in DEGREES (converted to the engine's radians at build time, exactly as the demo's hand-authored cameras
 /// do). Adding a camera kind is a new derived record carrying its own <see cref="Build"/> and <see cref="Validate"/>.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(OrbitCameraDocument), typeDiscriminator: "orbit")]
 [JsonDerivedType(typeof(PerspectiveCameraDocument), typeDiscriminator: "perspective")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record CameraDocument {
     // Degrees -> radians using the EXACT expression the demo uses, so a JSON camera reproduces a hand-authored one
     // bit-for-bit (float rounding included).

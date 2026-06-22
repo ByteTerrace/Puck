@@ -4,8 +4,7 @@ namespace Puck.Input.Output;
 /// The canonical per-player indicator colors, shared so a controller's light bar and anything that mirrors it
 /// (an on-screen player cursor, a scoreboard swatch) stay in agreement. Four distinct hues cycle by player slot.
 /// </summary>
-public static class GamepadPlayerColors
-{
+public static class GamepadPlayerColors {
     private static readonly LedColor[] Palette = [
         new(Red: 0x00, Green: 0x00, Blue: 0x40), // player 1 — blue
         new(Red: 0x40, Green: 0x00, Blue: 0x00), // player 2 — red

@@ -37,7 +37,6 @@ internal sealed class ResampleNode : IRenderNode {
     private readonly ReadOnlyMemory<byte> m_resampleBytecode;
     private readonly byte[] m_resamplePush = new byte[ResamplePushByteLength];
     private readonly IServiceProvider m_serviceProvider;
-
     private IGpuComputeCommandPool? m_commandPool;
     private IGpuComputeRecorder? m_computeRecorder;
     private IGpuComputePipeline? m_childPipeline;
@@ -200,7 +199,6 @@ internal sealed class ResampleNode : IRenderNode {
         m_width = width;
         m_resourcesReady = true;
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;

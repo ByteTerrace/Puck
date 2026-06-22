@@ -107,7 +107,6 @@ internal sealed class ViewportParityNode : IRenderNode {
             Console.Error.WriteLine(value: $"VIEWPORTS failure | cross-backend max channel delta {maxDelta} > 1 — the generic compositor or the compute sampler diverged across backends");
         }
     }
-
     [SupportedOSPlatform("windows10.0.10240")]
     private byte[] RenderDirectX() {
         using var directX = new DirectXComputeWorldDevice(hostProvider: m_serviceProvider);
@@ -156,10 +155,8 @@ internal sealed class ViewportParityNode : IRenderNode {
             width: ViewportWidth
         );
     }
-
     private static string ShaderPath(string folder) =>
         Path.Combine(AppContext.BaseDirectory, "Assets", "Shaders", folder);
-
     private static int MaxAbsDelta(byte[] a, byte[] b) {
         if (a.Length != b.Length) {
             return int.MaxValue;
@@ -173,7 +170,6 @@ internal sealed class ViewportParityNode : IRenderNode {
 
         return max;
     }
-
     private static int CountDiffering(byte[] a, byte[] b, int tolerance) {
         if (a.Length != b.Length) {
             return int.MaxValue;

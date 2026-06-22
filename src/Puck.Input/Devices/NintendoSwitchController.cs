@@ -5,8 +5,7 @@ using Puck.Input.Hid;
 
 namespace Puck.Input.Devices;
 
-internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser
-{
+internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     // Standard full input report layout (report id 0x30); byte offsets per the Switch Pro report format.
     private const byte StandardInputReportId = 0x30;
     private const int ButtonsRightOffset = 3;   // Y, X, B, A, SR, SL, R, ZR

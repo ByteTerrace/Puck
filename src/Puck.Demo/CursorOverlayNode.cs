@@ -14,8 +14,7 @@ namespace Puck.Demo;
 /// same-device producer); the inner node is configured to block on submit so its result is complete before this
 /// pass samples it.
 /// </summary>
-internal sealed class CursorOverlayNode : IRenderNode
-{
+internal sealed class CursorOverlayNode : IRenderNode {
     private const int MaxCursors = 4;
     // Push constant: float4 header (count, radius, gizmoLength, lineWidth) + per cursor a float4 (x, y, packed
     // color, _) and a float4 orientation quaternion = (1 + 2*MaxCursors) float4s = 144 bytes.

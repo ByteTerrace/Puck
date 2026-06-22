@@ -105,7 +105,6 @@ internal sealed class PixelateParityNode : IRenderNode {
             Console.Error.WriteLine(value: $"PIXELATE failure | cross-backend max channel delta {maxDelta} > 1 — the pixelate decorator diverged across backends");
         }
     }
-
     [SupportedOSPlatform("windows10.0.10240")]
     private byte[] RenderDirectX() {
         using var directX = new DirectXComputeWorldDevice(hostProvider: m_serviceProvider);
@@ -160,10 +159,8 @@ internal sealed class PixelateParityNode : IRenderNode {
             width: ViewportWidth
         );
     }
-
     private static string ShaderPath(string folder) =>
         Path.Combine(AppContext.BaseDirectory, "Assets", "Shaders", folder);
-
     private static int MaxAbsDelta(byte[] a, byte[] b) {
         if (a.Length != b.Length) {
             return int.MaxValue;

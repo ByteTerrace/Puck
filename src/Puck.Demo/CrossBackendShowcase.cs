@@ -150,7 +150,6 @@ internal static class CrossBackendShowcase {
             width: RenderSize
         );
     }
-
     private static SdfProducerNode CreateVulkanProducer(SdfProducerServices services, string shaderDirectory, IShaderModuleLoader shaderLoader, string? capturePath, bool submitAndWait) {
         return new SdfProducerNode(
             capturePath: capturePath,
@@ -162,7 +161,6 @@ internal static class CrossBackendShowcase {
             width: RenderSize
         );
     }
-
     private static SdfProducerServices BuildVulkanServices(IServiceProvider serviceProvider) {
         T Resolve<T>() => (T)serviceProvider.GetService(serviceType: typeof(T))!;
 

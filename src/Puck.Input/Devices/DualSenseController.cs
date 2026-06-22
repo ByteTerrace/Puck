@@ -13,8 +13,7 @@ namespace Puck.Input.Devices;
 /// no handshake — it streams the full report immediately. Bluetooth output (report 0x31 with a trailing CRC32)
 /// and the Bluetooth full-mode request are not implemented, so rumble is USB-only.
 /// </summary>
-internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser
-{
+internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser {
     private const byte UsbInputReportId = 0x01;
     private const byte BluetoothInputReportId = 0x31;
     private const byte UsbOutputReportId = 0x02;

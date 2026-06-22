@@ -6,8 +6,7 @@ namespace Puck.Input.Hid;
 /// a platform backend (e.g. the Windows <c>Win32</c> transport in <c>Puck.Platform</c>); nothing in
 /// <c>Puck.Input</c> binds to a specific OS.
 /// </summary>
-public interface IHidDevice : IDisposable
-{
+public interface IHidDevice : IDisposable {
     /// <summary>The device interface path that opened this device (a transport-unique identity).</summary>
     string DevicePath { get; }
 

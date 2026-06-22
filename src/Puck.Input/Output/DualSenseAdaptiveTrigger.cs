@@ -23,8 +23,7 @@ namespace Puck.Input.Output;
 /// function and are the simplest to drive.
 /// </para>
 /// </remarks>
-public static class DualSenseAdaptiveTrigger
-{
+public static class DualSenseAdaptiveTrigger {
     // Length of the USB output report (id byte + common block). Bluetooth's 0x31 report is larger.
     private const int UsbOutputReportLength = 64;
     private const byte UsbOutputReportId = 0x02;

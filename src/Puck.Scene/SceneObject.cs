@@ -10,13 +10,13 @@ namespace Puck.Scene;
 /// <see cref="SdfProgramBuilder"/> rather than the raw packed instruction lanes. Adding a shape is a new derived
 /// record (carrying its own <see cref="EmitShape"/> and <see cref="ValidateShape"/>), never an edit to a switch.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "shape")]
 [JsonDerivedType(typeof(SphereObject), typeDiscriminator: "sphere")]
 [JsonDerivedType(typeof(BoxObject), typeDiscriminator: "box")]
 [JsonDerivedType(typeof(TorusObject), typeDiscriminator: "torus")]
 [JsonDerivedType(typeof(PlaneObject), typeDiscriminator: "plane")]
 [JsonDerivedType(typeof(RoundConeObject), typeDiscriminator: "roundCone")]
 [JsonDerivedType(typeof(ScreenSlabObject), typeDiscriminator: "screenSlab")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "shape")]
 public abstract record SceneObject {
     /// <summary>The transform chain applied to the point before the shape is evaluated, in order.</summary>
     public IReadOnlyList<TransformOp> Ops { get; init; } = [];
@@ -82,7 +82,6 @@ public abstract record SceneObject {
             errors.Add(path: $"{path}.material", message: $"material {Material} is out of range; the scene declares {materialCount} material(s) (valid ids 0..{materialCount - 1})");
         }
     }
-
     private protected abstract void EmitShape(SdfProgramBuilder builder);
     private protected abstract void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors);
 }

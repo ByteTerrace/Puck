@@ -8,8 +8,7 @@ namespace Puck.Input.Output;
 /// device's liveness, then enqueues a <see cref="GamepadOutputCommand"/> for the device's I/O loop to write —
 /// it never touches the native handle directly, so callers on any thread are safe.
 /// </summary>
-public sealed class GamepadOutput : IGamepadOutput
-{
+public sealed class GamepadOutput : IGamepadOutput {
     private readonly ConcurrentQueue<GamepadOutputCommand> m_queue;
     private volatile bool m_alive = true;
 

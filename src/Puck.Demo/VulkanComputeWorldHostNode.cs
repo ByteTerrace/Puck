@@ -44,7 +44,6 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
     private readonly IGpuQueueSubmitter m_hostSubmitter = new DirectXGpuQueueSubmitter();
     private readonly WorldProducerNode m_inner;
     private readonly uint m_width;
-
     private bool m_disposed;
     private IGpuComputeCommandPool? m_hostCommandPool;
     // The Direct3D 12 image is created in UNORDERED_ACCESS, which the neutral recorder maps from General.

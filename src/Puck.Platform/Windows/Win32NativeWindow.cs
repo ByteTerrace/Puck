@@ -232,6 +232,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
 
         FlushPointerFrame();
     }
+
     private void FlushPointerFrame() {
         // Emit at most one pointer.move (the frame's summed relative motion) and one pointer.position per
         // frame, so a high-rate mouse that produced many WM_INPUT packets collapses to a single delta the
@@ -253,6 +254,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             m_pointerPositionDirty = false;
         }
     }
+
     public bool TryDequeueInput(out WindowInputEvent inputEvent) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,

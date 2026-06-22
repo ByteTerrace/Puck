@@ -24,7 +24,6 @@ public sealed class CameraDirector {
 
     private static readonly Vector3 ChaseOffset = new(0f, 6.5f, 11f);
     private static readonly Vector3 TargetLift = new(0f, 0.4f, 0f);
-
     private bool m_initialized;
     private bool m_split;
     private float m_transition;

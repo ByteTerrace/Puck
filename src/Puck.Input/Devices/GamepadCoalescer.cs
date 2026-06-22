@@ -9,8 +9,7 @@ namespace Puck.Input.Devices;
 /// never lost, and gyro samples are averaged so the reported angular velocity is frame-rate independent. All
 /// access is guarded so the two threads never tear a read.
 /// </summary>
-public sealed class GamepadCoalescer
-{
+public sealed class GamepadCoalescer {
     private readonly object m_gate = new();
     private Vector3 m_gyro;
     private int m_gyroSamples;

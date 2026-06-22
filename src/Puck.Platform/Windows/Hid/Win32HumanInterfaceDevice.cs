@@ -18,8 +18,7 @@ namespace Puck.Platform.Windows.Hid;
 /// <c>CreateFile</c> I/O, <c>HidP</c> caps). Created and enumerated through <see cref="Win32HidDeviceSource"/>.
 /// </summary>
 [SupportedOSPlatform(platformName: "windows5.1.2600")]
-internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32HumanInterfaceDevice>
-{
+internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32HumanInterfaceDevice> {
     private const uint DISPOSED_FALSE = uint.MinValue;
     private const uint DISPOSED_TRUE = 1U;
 
@@ -83,8 +82,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 fileStream: fileStream,
                 preparsedData: preparsedData
             );
-        }
-        catch {
+        } catch {
             if (nint.Zero != preparsedData) {
                 _ = PInvoke.HidD_FreePreparsedData(PreparsedData: preparsedData);
             }
@@ -94,6 +92,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             return null;
         }
     }
+
     [SupportedOSPlatform(platformName: "windows5.1.2600")]
     private static FileStream? GetFileStream(
         string devicePath,
@@ -217,14 +216,12 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                         RequiredSize: &deviceInterfaceDetailDataSize
                     )) {
                         errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
-                    }
-                    else {
+                    } else {
                         devicePath = new string(value: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((char*)Unsafe.AsPointer(ref deviceInterfaceDetail->DevicePath.e0))));
                         errorCode = WIN32_ERROR.NO_ERROR;
                     }
                 }
-            }
-            finally {
+            } finally {
                 ArrayPool<byte>.Shared.Return(array: deviceInterfaceDetailDataBuffer);
             }
         }
@@ -440,8 +437,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                     buffer: buffer,
                     cancellationToken: linkedCancellationTokenSource.Token
                 );
-            }
-            catch (OperationCanceledException) when (limitCancellationTokenSource.IsCancellationRequested) {
+            } catch (OperationCanceledException) when (limitCancellationTokenSource.IsCancellationRequested) {
                 if (throwOnTimeout) {
                     throw;
                 }

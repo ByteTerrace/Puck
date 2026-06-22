@@ -2,8 +2,7 @@ namespace Puck.Input.Output;
 
 /// <summary>The output features a controller supports. Callers branch on these before issuing an effect.</summary>
 [Flags]
-public enum GamepadOutputCapabilities
-{
+public enum GamepadOutputCapabilities {
     /// <summary>No output features.</summary>
     None = 0,
     /// <summary>Dual-motor (low/high frequency) rumble.</summary>

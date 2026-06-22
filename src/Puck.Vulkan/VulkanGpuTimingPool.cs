@@ -9,7 +9,6 @@ namespace Puck.Vulkan;
 public sealed class VulkanGpuTimingPool : IGpuTimingPool {
     private readonly nint m_deviceHandle;
     private readonly IVulkanQueryPoolApi m_queryPoolApi;
-
     private bool m_disposed;
     private nint m_poolHandle;
 

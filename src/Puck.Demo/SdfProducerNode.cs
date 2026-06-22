@@ -272,8 +272,7 @@ public sealed class SdfProducerNode : IRenderNode, IDebugViewTarget {
                 commandBufferHandles: commandBuffers,
                 deviceContext: m_deviceContext
             );
-        }
-        else {
+        } else {
             m_queueSubmitter.Submit(
                 commandBufferHandles: commandBuffers,
                 deviceContext: m_deviceContext

@@ -9,8 +9,7 @@ namespace Puck.Input.Devices;
 /// accumulates the fused pose. Callers feed gyro (rad/s) and accelerometer (g) already expressed in a
 /// right-handed frame (X = right, Y = up, Z = back); each device parser maps its own sensor axes into that frame.
 /// </summary>
-internal sealed class ImuOrientationTracker
-{
+internal sealed class ImuOrientationTracker {
     // Below this rotation rate (with steady ~1g) the device is treated as still, so the gyro bias is learned and
     // subtracted — otherwise the unreferenced yaw would drift on that bias. dt is clamped to a sane report cadence.
     private const float GyroStationaryThreshold = 0.10f; // rad/s
@@ -42,8 +41,7 @@ internal sealed class ImuOrientationTracker
             var deltaSeconds = Math.Clamp(value: ((float)((now - m_lastSampleTicks) / (double)Stopwatch.Frequency)), max: MaxIntegrationSeconds, min: MinIntegrationSeconds);
 
             m_orientation = ImuFusion.Integrate(orientation: m_orientation, gyroRadiansPerSecond: (gyroRadiansPerSecond - m_gyroBias), accelerometerG: accelerometerG, deltaSeconds: deltaSeconds);
-        }
-        else {
+        } else {
             m_hasSample = true;
         }
 

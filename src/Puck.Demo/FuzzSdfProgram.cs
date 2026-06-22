@@ -62,25 +62,25 @@ internal static class FuzzSdfProgram {
 
             switch (random.Next(minValue: 0, maxValue: 4)) {
                 case 0: {
-                    _ = builder.Sphere(blend: blend, material: material, radius: Range(random: random, range: bounds.SphereRadius), smooth: smooth);
+                        _ = builder.Sphere(blend: blend, material: material, radius: Range(random: random, range: bounds.SphereRadius), smooth: smooth);
 
-                    break;
-                }
+                        break;
+                    }
                 case 1: {
-                    _ = builder.Box(blend: blend, halfExtents: RandomVector(random: random, range: bounds.BoxHalfExtent), material: material, round: Range(random: random, range: bounds.BoxRound), smooth: smooth);
+                        _ = builder.Box(blend: blend, halfExtents: RandomVector(random: random, range: bounds.BoxHalfExtent), material: material, round: Range(random: random, range: bounds.BoxRound), smooth: smooth);
 
-                    break;
-                }
+                        break;
+                    }
                 case 2: {
-                    _ = builder.Torus(blend: blend, majorRadius: Range(random: random, range: bounds.TorusMajorRadius), material: material, minorRadius: Range(random: random, range: bounds.TorusMinorRadius), smooth: smooth);
+                        _ = builder.Torus(blend: blend, majorRadius: Range(random: random, range: bounds.TorusMajorRadius), material: material, minorRadius: Range(random: random, range: bounds.TorusMinorRadius), smooth: smooth);
 
-                    break;
-                }
+                        break;
+                    }
                 default: {
-                    _ = builder.RoundCone(blend: blend, height: Range(random: random, range: bounds.RoundConeHeight), lowerRadius: Range(random: random, range: bounds.RoundConeLowerRadius), material: material, smooth: smooth, upperRadius: Range(random: random, range: bounds.RoundConeUpperRadius));
+                        _ = builder.RoundCone(blend: blend, height: Range(random: random, range: bounds.RoundConeHeight), lowerRadius: Range(random: random, range: bounds.RoundConeLowerRadius), material: material, smooth: smooth, upperRadius: Range(random: random, range: bounds.RoundConeUpperRadius));
 
-                    break;
-                }
+                        break;
+                    }
             }
         }
 

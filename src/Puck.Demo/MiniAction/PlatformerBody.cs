@@ -13,6 +13,7 @@ public sealed class PlatformerBody {
     public Vector3 Velocity;
     public bool Grounded;
     public float FacingYaw;
+
     private float m_jumpBuffer;
     private float m_coyote;
 

@@ -105,7 +105,6 @@ internal sealed class IndirectDispatchValidationNode : IRenderNode {
 
         Console.Out.WriteLine(value: $"INDIRECT pass | {RenderSize}x{RenderSize} sdf-child | Dispatch == DispatchIndirect ({Groups}x{Groups}x1) bit-for-bit on Vulkan (vkCmdDispatchIndirect) AND Direct3D 12 (ExecuteIndirect)");
     }
-
     private T Resolve<T>() => (T)m_serviceProvider.GetService(serviceType: typeof(T))!;
 
     // Renders sdf-child once directly and once indirectly on one backend and reports whether the two readbacks match

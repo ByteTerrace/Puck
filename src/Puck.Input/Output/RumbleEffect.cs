@@ -9,8 +9,7 @@ namespace Puck.Input.Output;
 /// <param name="LowFrequency">The low-frequency motor intensity, 0..1.</param>
 /// <param name="HighFrequency">The high-frequency motor intensity, 0..1.</param>
 /// <param name="DurationMilliseconds">How long the effect plays before the motors return to rest.</param>
-public readonly record struct RumbleEffect(float LowFrequency, float HighFrequency, uint DurationMilliseconds)
-{
+public readonly record struct RumbleEffect(float LowFrequency, float HighFrequency, uint DurationMilliseconds) {
     /// <summary>A request that stops all rumble.</summary>
     public static RumbleEffect Off => new(LowFrequency: 0f, HighFrequency: 0f, DurationMilliseconds: 0u);
 }

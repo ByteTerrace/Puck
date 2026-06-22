@@ -31,7 +31,6 @@ internal sealed class ChildSurfaceNode : IRenderNode {
     );
     private readonly byte[] m_pushConstant = new byte[PushConstantByteLength];
     private readonly IServiceProvider m_serviceProvider;
-
     private IGpuComputeCommandPool? m_commandPool;
     private IGpuComputeRecorder? m_computeRecorder;
     private IGpuComputeServices? m_gpu;
@@ -169,7 +168,6 @@ internal sealed class ChildSurfaceNode : IRenderNode {
         m_resourcesReady = true;
         m_width = width;
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;

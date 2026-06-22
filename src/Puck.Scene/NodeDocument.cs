@@ -9,11 +9,11 @@ namespace Puck.Scene;
 /// services, applying OS/feature gates) is the GraphBuilder's job in Puck.Demo. Adding a node kind is a new derived
 /// record. Validation-gate node kinds (parity/export/compute/reverse) and per-slot child graphs arrive in later phases.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(ShowcaseNode), typeDiscriminator: "showcase")]
 [JsonDerivedType(typeof(WorldNode), typeDiscriminator: "world")]
 [JsonDerivedType(typeof(RtNode), typeDiscriminator: "rt")]
 [JsonDerivedType(typeof(MiniActionNode), typeDiscriminator: "mini-action")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record NodeDocument {
     /// <summary>The backend this node renders on: <c>"vulkan"</c> or <c>"directx"</c>. When null the builder picks the
     /// default for the node kind (the same default the equivalent flag used).</summary>

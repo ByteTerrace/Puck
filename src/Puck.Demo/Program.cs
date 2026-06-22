@@ -74,9 +74,6 @@ var validateViewportsOption = new Option<bool>(name: "--validate-viewports") {
 var validatePixelateOption = new Option<bool>(name: "--validate-pixelate") {
     Description = "Retro-pixelation gate: composites a raw pane beside the same pattern wrapped in a PixelateNode (cell-blocked + posterized) through ViewportCompositorNode on BOTH backends, capturing each to a PNG and asserting they agree within 1 LSB. Exits (0 pass, 1 cross-backend diff, 2 infra-fail). Forces a Vulkan host.",
 };
-var validateCaptureOption = new Option<bool>(name: "--validate-capture") {
-    Description = "Live screen-capture gate: grabs one desktop frame via the DXGI Desktop Duplication API into a shared (NT-handle) BGRA GPU texture, reads it back to artifacts/capture-desktop.png, and asserts it carries real signal. Exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
-};
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
     Description = "With --validate-world, renders a fuzz-generated SDF scene program (deterministic from this seed, identical on both backends) instead of the showcase — one cross-backend differential-fuzzing iteration. A negative value (default) disables fuzzing.",
@@ -122,7 +119,6 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validateResampleOption,
     validateViewportsOption,
     validatePixelateOption,
-    validateCaptureOption,
     validateWorldOption,
     validateWorldChildOption,
     worldOption,
@@ -133,17 +129,13 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
 var parseResult = launchCommand.Parse(args);
 // Headless utilities short-circuit before any window/host is created.
 var emitSchemaPath = parseResult.GetValue(emitSchemaOption);
-
 if (emitSchemaPath is not null) {
     return DemoRootNode.EmitSchema(path: emitSchemaPath);
 }
-
 var checkRunPath = parseResult.GetValue(checkRunOption);
-
 if (checkRunPath is not null) {
     return DemoRootNode.CheckRunDocument(runPath: checkRunPath);
 }
-
 var backend = parseResult.GetValue(backendOption) ?? "vulkan";
 var capturePath = parseResult.GetValue(captureOption);
 var exitAfterSeconds = parseResult.GetValue(exitAfterSecondsOption);
@@ -175,7 +167,6 @@ var runDocument = (runPath is not null)
         ValidateResample = parseResult.GetValue(validateResampleOption),
         ValidateViewports = parseResult.GetValue(validateViewportsOption),
         ValidatePixelate = parseResult.GetValue(validatePixelateOption),
-        ValidateCapture = parseResult.GetValue(validateCaptureOption),
         ValidateWorld = parseResult.GetValue(validateWorldOption),
         ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
         World = parseResult.GetValue(worldOption),

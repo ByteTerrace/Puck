@@ -17,8 +17,7 @@ namespace Puck.Input;
 /// GameInput Xbox backend — are supplied as an <see cref="IGamepadAcquisitionSource"/> that owns its own thread
 /// and publishes connections through the manager's registry.
 /// </remarks>
-public sealed class GamepadManager : IDisposable
-{
+public sealed class GamepadManager : IDisposable {
     private const ushort VendorMicrosoft = 1118;
     private const ushort VendorSony = 1356;
     private const ushort VendorNintendo = 1406;
@@ -121,8 +120,7 @@ public sealed class GamepadManager : IDisposable
             while (await timer.WaitForNextTickAsync(cancellationToken: cancellationToken)) {
                 Rescan();
             }
-        }
-        catch (OperationCanceledException) {
+        } catch (OperationCanceledException) {
             // Expected on disposal.
         }
     }
@@ -134,8 +132,7 @@ public sealed class GamepadManager : IDisposable
 
         try {
             candidates = EnumerateControllerInterfaces();
-        }
-        catch (Exception exception) {
+        } catch (Exception exception) {
             m_diagnostics?.Invoke($"[gamepad] enumeration failed: {exception.GetType().Name}: {exception.Message}");
 
             return;
@@ -164,8 +161,7 @@ public sealed class GamepadManager : IDisposable
 
                 try {
                     hid = m_hidSource.Open(devicePath: candidate.Path);
-                }
-                catch {
+                } catch {
                     hid = null;
                 }
 
@@ -442,8 +438,7 @@ public sealed class GamepadManager : IDisposable
 
         try {
             loop?.Wait(timeout: TimeSpan.FromMilliseconds(value: 500));
-        }
-        catch (AggregateException) {
+        } catch (AggregateException) {
             // The rescan loop faulted or was canceled during teardown; nothing actionable here.
         }
 
@@ -466,8 +461,7 @@ public sealed class GamepadManager : IDisposable
 
     // The surface handed to an acquisition source: it allocates a player slot, builds the connection, and tracks
     // it atomically under the gate, mirroring how the HID rescan opens and registers a device.
-    private sealed class Registry : IGamepadConnectionRegistry
-    {
+    private sealed class Registry : IGamepadConnectionRegistry {
         private readonly GamepadManager m_owner;
 
         public Registry(GamepadManager owner) {

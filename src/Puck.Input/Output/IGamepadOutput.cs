@@ -9,8 +9,7 @@ namespace Puck.Input.Output;
 /// <see langword="false"/> when the feature is unsupported (see <see cref="Capabilities"/>) or the device has
 /// disconnected.
 /// </summary>
-public interface IGamepadOutput
-{
+public interface IGamepadOutput {
     /// <summary>The device this handle drives.</summary>
     InputDeviceId DeviceId { get; }
 

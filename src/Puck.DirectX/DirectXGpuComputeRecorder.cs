@@ -469,7 +469,6 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
 
         return access;
     }
-
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         (DirectXCommandBufferState)GCHandle.FromIntPtr(commandBufferHandle).Target!;
     private static D3D12_RESOURCE_STATES ToResourceState(uint layout) {

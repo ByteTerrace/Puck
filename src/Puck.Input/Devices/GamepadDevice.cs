@@ -12,8 +12,7 @@ namespace Puck.Input.Devices;
 /// reads and writes for a device are serialized on it; input flows handle → coalescer, output flows queue →
 /// handle.
 /// </summary>
-internal sealed class GamepadDevice : IGamepadConnection
-{
+internal sealed class GamepadDevice : IGamepadConnection {
     private const int ReportBufferSize = 64;            // fallback when the device reports no input length
     private const int StartupPollMilliseconds = 100;    // bound reads before streaming starts so the watchdog can fire
 
@@ -122,15 +121,13 @@ internal sealed class GamepadDevice : IGamepadConnection
                         cancellationToken: cancellationToken,
                         timeoutInMilliseconds: StartupPollMilliseconds
                     );
-                }
-                else if (m_rumbleActive && (m_rumbleExpiry != long.MaxValue)) {
+                } else if (m_rumbleActive && (m_rumbleExpiry != long.MaxValue)) {
                     read = await m_hid.ReadAsync(
                         buffer: buffer,
                         cancellationToken: cancellationToken,
                         timeoutInMilliseconds: RemainingMilliseconds(expiryTimestamp: m_rumbleExpiry)
                     );
-                }
-                else {
+                } else {
                     read = await m_hid.ReadAsync(
                         buffer: buffer,
                         cancellationToken: cancellationToken
@@ -145,8 +142,7 @@ internal sealed class GamepadDevice : IGamepadConnection
                             firstParsed = true;
                             m_diagnostics?.Invoke($"[gamepad] {Type} streaming (first parsed report, len={read})");
                         }
-                    }
-                    else if (!loggedUnparsed) {
+                    } else if (!loggedUnparsed) {
                         // Data is arriving but not in the expected report shape — e.g. the report-mode subcommand
                         // didn't take and the controller is still sending its simple (0x3F) report.
                         loggedUnparsed = true;
@@ -161,11 +157,9 @@ internal sealed class GamepadDevice : IGamepadConnection
                     throw new TimeoutException(message: $"{Type} did not begin streaming within {StreamingDeadlineTicks / Stopwatch.Frequency}s of init");
                 }
             }
-        }
-        catch (OperationCanceledException) {
+        } catch (OperationCanceledException) {
             // Expected on disposal.
-        }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested) {
+        } catch (Exception exception) when (!cancellationToken.IsCancellationRequested) {
             // The device disconnected, errored mid-I/O (e.g. ERROR_DEVICE_NOT_CONNECTED), or never streamed.
             // Mark it faulted so the manager prunes it instead of leaving a zombie that replays stale state.
             m_faulted = true;
@@ -225,8 +219,7 @@ internal sealed class GamepadDevice : IGamepadConnection
         if ((0f >= effect.HighFrequency) && (0f >= effect.LowFrequency)) {
             m_rumbleActive = false;
             m_rumbleExpiry = long.MaxValue;
-        }
-        else {
+        } else {
             m_rumbleActive = true;
             m_rumbleExpiry = ((0u < effect.DurationMilliseconds)
                 ? (Stopwatch.GetTimestamp() + ((long)(effect.DurationMilliseconds * (Stopwatch.Frequency / 1000.0))))
@@ -240,8 +233,7 @@ internal sealed class GamepadDevice : IGamepadConnection
 
         try {
             m_loop?.Wait(timeout: TimeSpan.FromMilliseconds(value: 250));
-        }
-        catch (AggregateException) {
+        } catch (AggregateException) {
             // The loop faulted or was canceled during teardown; nothing actionable here.
         }
 

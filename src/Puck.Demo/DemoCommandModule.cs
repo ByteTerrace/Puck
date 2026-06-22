@@ -162,7 +162,6 @@ internal sealed class DemoCommandModule(
             valueKind: CommandValueKind.Digital
         );
     }
-
     private IEnumerable<CommandDefinition> GetControllerCommands() {
         yield return CommandDefinition.Verb(
             description: "Logs a Switch Pro south-face button press (controller input proof).",
@@ -429,7 +428,6 @@ internal sealed class DemoCommandModule(
         );
 
     }
-
     private IEnumerable<CommandDefinition> GetDebugViewCommands() {
         var viewModeArgument = new Argument<string>(name: "mode") {
             Description = $"One of: {string.Join(separator: ", ", values: DebugViewModes.Names)}.",

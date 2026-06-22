@@ -11,8 +11,7 @@ namespace Puck.Demo;
 /// stick/tilt nudge it; the fused orientation updates each report) and the render thread snapshots, so all access
 /// is gated. Entries that stop updating (a disconnected controller) are pruned so stale cursors/gauges disappear.
 /// </summary>
-internal sealed class CursorStore
-{
+internal sealed class CursorStore {
     /// <summary>One controller's cursor, as handed to the renderer.</summary>
     /// <param name="Position">The normalized screen position, 0..1, origin top-left.</param>
     /// <param name="Color">The cursor color, 0..1 per channel.</param>
@@ -22,12 +21,10 @@ internal sealed class CursorStore
     private static readonly Cursor Default = new(Position: new Vector2(x: 0.5f, y: 0.5f), Color: Vector3.One, Orientation: Quaternion.Identity);
     // A connected controller streams continuously; one that's gone this long without an update is pruned.
     private static readonly long StaleTicks = Stopwatch.Frequency;
-
     private readonly Dictionary<InputDeviceId, Entry> m_cursors = [];
     private readonly object m_gate = new();
 
-    private struct Entry
-    {
+    private struct Entry {
         public Cursor Cursor;
         public long UpdatedTicks;
     }

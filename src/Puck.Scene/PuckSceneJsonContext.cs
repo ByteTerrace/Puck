@@ -8,10 +8,10 @@ namespace Puck.Scene;
 /// trimming/AOT-clean, honoring the toolbox's reflection-JSON canary. Enums serialize BY NAME (the SDF opcodes are
 /// non-sequential and must match the shader), and the camelCase policy matches the authored JSON.
 /// </summary>
+[JsonSerializable(typeof(PuckRunDocument))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true
 )]
-[JsonSerializable(typeof(PuckRunDocument))]
 internal sealed partial class PuckSceneJsonContext : JsonSerializerContext {
 }

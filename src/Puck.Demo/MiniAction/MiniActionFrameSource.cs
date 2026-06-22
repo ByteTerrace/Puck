@@ -90,7 +90,6 @@ public sealed class MiniActionFrameSource : ISdfFrameSource {
 
         return builder.Build();
     }
-
     private static void AddWall(SdfProgramBuilder builder, Vector3 center, Vector3 halfExtents, int material) {
         _ = builder.ResetPoint().Translate(offset: center).Box(halfExtents: halfExtents, round: 0f, material: material);
     }

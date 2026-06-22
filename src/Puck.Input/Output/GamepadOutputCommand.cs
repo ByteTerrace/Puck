@@ -1,8 +1,7 @@
 namespace Puck.Input.Output;
 
 /// <summary>The kind of output effect a <see cref="GamepadOutputCommand"/> carries.</summary>
-public enum GamepadOutputKind : byte
-{
+public enum GamepadOutputKind : byte {
     Rumble = 0,
     TriggerRumble = 1,
     Led = 2,

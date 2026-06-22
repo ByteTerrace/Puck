@@ -10,8 +10,7 @@ namespace Puck.Demo;
 
 /// <summary>Composition-root wiring for the demo's controller support, kept out of the top-level program to
 /// keep its class coupling in check.</summary>
-internal static class GamepadDemoRegistration
-{
+internal static class GamepadDemoRegistration {
     /// <summary>
     /// Registers the gamepad manager, optionally a focus-gated <see cref="GamepadInputSource"/> (picked up by the
     /// command shell as an additional source), the demo's gamepad bindings, and the hosted service that governs device

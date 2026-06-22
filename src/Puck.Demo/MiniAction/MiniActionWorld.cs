@@ -23,7 +23,6 @@ public sealed class MiniActionWorld {
     // Free slots park their box far below the floor, outside every camera frustum, so a fixed count of boxes can be
     // built into the program once and the inactive ones simply march against nothing visible.
     private static readonly Vector3 HiddenPosition = new(0f, -1000f, 0f);
-
     private readonly MiniActionRoom m_room;
     private readonly PlatformerTuning m_tuning;
     private readonly float m_tickSeconds;
@@ -185,7 +184,6 @@ public sealed class MiniActionWorld {
 
         return -1;
     }
-
     private static void HashFloat(ref ulong hash, float value) {
         HashU32(hash: ref hash, value: BitConverter.SingleToUInt32Bits(value: value));
     }

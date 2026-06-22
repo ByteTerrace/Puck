@@ -81,7 +81,6 @@ public static class MiniActionDeterminism {
             (720u, new RosterEvent(Kind: RosterEventKind.Join,  PlayerId: players[1], Slot: 1)),
         ];
     }
-
     private static ulong[] Simulate(uint seed, IReadOnlyList<Guid> initialRoster, IPlayerIntentSource intents, IRosterEventSource roster, int ticks, out ReplayRecorder recorder) {
         var world = new MiniActionWorld(room: MiniActionRoom.Default, tuning: PlatformerTuning.Default, tickSeconds: TickSeconds, seed: seed);
 
@@ -116,7 +115,6 @@ public static class MiniActionDeterminism {
 
         return hashes;
     }
-
     private static int FirstDivergence(ulong[] a, ulong[] b) {
         var count = Math.Min(a.Length, b.Length);
 
@@ -128,7 +126,6 @@ public static class MiniActionDeterminism {
 
         return ((a.Length == b.Length) ? -1 : count);
     }
-
     private static Guid DeterministicGuid(uint salt) {
         var bytes = new byte[16];
 

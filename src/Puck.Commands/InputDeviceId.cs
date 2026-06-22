@@ -42,7 +42,6 @@ public readonly record struct InputDeviceId(Guid Value) {
         // Hashed once per device connection, so the small allocation here is immaterial.
         return FromContent(content: Encoding.UTF8.GetBytes(s: key));
     }
-
     public override string ToString() {
         return $"input/{Value:n}";
     }

@@ -7,8 +7,7 @@ namespace Puck.Platform.Windows.Hid;
 /// interfaces via CsWin32 (SetupAPI / overlapped <c>CreateFile</c>). On a non-Windows OS it reports no devices,
 /// so the manager simply finds nothing rather than failing.
 /// </summary>
-public sealed class Win32HidDeviceSource : IHidDeviceSource
-{
+public sealed class Win32HidDeviceSource : IHidDeviceSource {
     /// <inheritdoc />
     public IEnumerable<HidDeviceInfo> EnumerateInterfaces() {
         return (OperatingSystem.IsWindowsVersionAtLeast(major: 5, minor: 1, build: 2600)

@@ -106,7 +106,6 @@ public static class RunDocumentValidator {
             }
         }
     }
-
     private static void ValidateScene(SceneDocument scene, ShapeBounds bounds, bool required, ValidationErrors errors) {
         var materials = (scene.Materials ?? []);
         var objects = (scene.Objects ?? []);
@@ -172,7 +171,6 @@ public static class RunDocumentValidator {
             errors.Add(path: "scene.objects", message: $"places {primitiveCount} non-plane primitives; the limit is {bounds.MaxPrimitives}");
         }
     }
-
     private static void ValidateViewports(IReadOnlyList<Viewport> viewports, bool required, ValidationErrors errors) {
         if (required && (viewports.Count == 0)) {
             errors.Add(path: "viewports", message: "at least one viewport is required");

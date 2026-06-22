@@ -23,7 +23,6 @@ internal sealed class MiniActionRenderNode : IRenderNode {
         Name: "mini-action",
         SurfaceId: SurfaceId.New()
     );
-
     private MiniActionWorld? m_world;
     private IPlayerIntentSource? m_intentSource;
     private IRosterEventSource? m_rosterSource;
@@ -102,7 +101,6 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             width: m_width
         );
     }
-
     private void AdvanceSimulation(in FrameContext context) {
         if (context.StepTicks == 0UL) {
             return;
@@ -131,7 +129,6 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             m_world.Advance(intentsBySlot: intents);
         }
     }
-
     private static int DebugPlayerCount() {
         return ((int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_MINIACTION_DEBUG_PLAYERS"), out var count))
             ? Math.Clamp(count, 0, MiniActionWorld.MaxPlayers)
@@ -147,7 +144,6 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             JumpReleased: false
         );
     }
-
     private static Guid DeterministicGuid(uint salt) {
         var bytes = new byte[16];
 

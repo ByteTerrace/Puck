@@ -146,7 +146,6 @@ internal sealed partial class ExportRoundTripNode : IRenderNode {
             _ = CloseHandle(handle: export.SharedHandle);
         }
     }
-
     private void ValidateDirectX() {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
             Console.Out.WriteLine(value: "DX-EXPORT skip | Direct3D 12 requires Windows 10.0.10240+");
@@ -156,7 +155,6 @@ internal sealed partial class ExportRoundTripNode : IRenderNode {
 
         ValidateDirectXCore();
     }
-
     [SupportedOSPlatform("windows10.0.10240")]
     private void ValidateDirectXCore() {
         var deviceContext = (DirectXDeviceContext)m_serviceProvider.GetService(serviceType: typeof(DirectXDeviceContext))!;
@@ -216,7 +214,6 @@ internal sealed partial class ExportRoundTripNode : IRenderNode {
 
         ValidateDirectXExportableStorageImage();
     }
-
     [SupportedOSPlatform("windows10.0.10240")]
     private void ValidateDirectXExportableStorageImage() {
         var deviceContext = (DirectXDeviceContext)m_serviceProvider.GetService(serviceType: typeof(DirectXDeviceContext))!;
@@ -234,7 +231,6 @@ internal sealed partial class ExportRoundTripNode : IRenderNode {
 
         Console.Out.WriteLine(value: $"DX-STORAGE-EXPORT pass | {RenderSize}x{RenderSize} R8G8B8A8 | shared D3D12 UAV-texture handle 0x{storageImage.SharedHandle:X}");
     }
-
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CloseHandle(nint handle);

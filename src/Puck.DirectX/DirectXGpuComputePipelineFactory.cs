@@ -97,7 +97,6 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
 
         return slotByBinding;
     }
-
     private static nint CreateRootSignature(
         ID3D12Device* device,
         IReadOnlyList<GpuComputeBinding> bindings,
