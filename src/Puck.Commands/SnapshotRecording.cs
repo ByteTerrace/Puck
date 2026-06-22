@@ -1,9 +1,8 @@
 using System.Collections.Immutable;
 using System.Numerics;
 using System.Text;
-using Puck.Commands;
 
-namespace Puck.Demo.Replay;
+namespace Puck.Commands;
 
 /// <summary>
 /// A complete, replayable recording of a session's input: the simulation seed plus the per-tick

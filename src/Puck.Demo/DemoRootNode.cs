@@ -174,6 +174,7 @@ internal static class DemoRootNode {
             "capture" => new CaptureValidationNode(result: result, serviceProvider: serviceProvider),
             "mini-action" => new MiniAction.MiniActionDeterminismNode(result: result),
             "determinism" => new Replay.DeterminismGateNode(result: result),
+            "cli-determinism" => new Replay.CliDeterminismGateNode(result: result),
             "world" => new WorldParityNode(
                 artifactDir: validation.ArtifactDir,
                 frameSourceFactory: () => RunDocument.CreateFrameSource(document: document),

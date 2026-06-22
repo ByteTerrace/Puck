@@ -1,6 +1,4 @@
-using Puck.Commands;
-
-namespace Puck.Demo.Replay;
+namespace Puck.Commands;
 
 /// <summary>
 /// Accumulates a session's per-tick <see cref="CommandSnapshot"/> stream, plus the seed, into a

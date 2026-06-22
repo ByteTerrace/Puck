@@ -47,6 +47,7 @@ internal static class GamepadDemoRegistration {
                     [InputSources.Gamepad.Start] = [new(Command: "gamepad-start")],
                     [InputSources.Gamepad.DpadUp] = [new(Command: "gamepad-trigger-effect")],
                     [InputSources.Gamepad.DpadDown] = [new(Command: "gamepad-trigger-effect-off")],
+                    [InputSources.Gamepad.LeftShoulder] = [new(Command: "gamepad-trigger-schedule")],
                     [InputSources.Gamepad.Touchpad] = [new(Command: "gamepad-touchpad")],
                     [InputSources.Gamepad.Mute] = [new(Command: "gamepad-mute")],
                     [InputSources.Gamepad.Touchpad0] = [new(Command: "gamepad-touch0"), new(Command: "cursor-touch")],

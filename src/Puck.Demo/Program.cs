@@ -41,6 +41,9 @@ var validateMiniActionOption = new Option<bool>(name: "--validate-mini-action") 
 var validateDeterminismOption = new Option<bool>(name: "--validate-determinism") {
     Description = "Runs the engine determinism + replay self-check (pure CPU): verifies the fixed-point sim is correct, then records a per-tick CommandSnapshot stream, round-trips it through the neutral binary format, and replays it — asserting identical per-tick state hashes and that every command value kind survives the round-trip. Exits (0 pass, 1 divergence, 2 infra-fail).",
 };
+var validateCliDeterminismOption = new Option<bool>(name: "--validate-cli-determinism") {
+    Description = "Runs the deterministic command-line/STDIN sim-control self-check (pure CPU): drives the fixed-point sim from a scripted console session of real text commands (Submit->inject->snapshot), asserting two identical sessions produce identical per-tick state hashes, a record->binary round-trip->replay reproduces them bit-for-bit, and the console input measurably drove the sim. Exits (0 pass, 1 divergence, 2 infra-fail).",
+};
 var miniActionOption = new Option<bool>(name: "--mini-action") {
     Description = "Renders the live MiniAction prototype: a controller-driven player box running around a room on a Vulkan host. Move with the left stick, jump with the South (A / Cross / B) button.",
 };
@@ -120,6 +123,7 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validateComputeOption,
     validateMiniActionOption,
     validateDeterminismOption,
+    validateCliDeterminismOption,
     miniActionOption,
     validateReverseShareOption,
     validateIndirectOption,
@@ -169,6 +173,7 @@ var runDocument = (runPath is not null)
         ValidateCompute = parseResult.GetValue(validateComputeOption),
         ValidateMiniAction = parseResult.GetValue(validateMiniActionOption),
         ValidateDeterminism = parseResult.GetValue(validateDeterminismOption),
+        ValidateCliDeterminism = parseResult.GetValue(validateCliDeterminismOption),
         MiniAction = parseResult.GetValue(miniActionOption),
         ValidateExport = parseResult.GetValue(validateExportOption),
         ValidateReverseShare = parseResult.GetValue(validateReverseShareOption),

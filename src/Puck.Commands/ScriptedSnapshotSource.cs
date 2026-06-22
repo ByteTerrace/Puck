@@ -1,6 +1,4 @@
-using Puck.Commands;
-
-namespace Puck.Demo.Replay;
+namespace Puck.Commands;
 
 /// <summary>
 /// An <see cref="ISnapshotSource"/> whose snapshots come from a pure function of the tick — no capture, no clock.

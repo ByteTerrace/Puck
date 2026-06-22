@@ -93,7 +93,7 @@ internal static class DemoRunDocuments {
         // produce:"vulkan" is the REVERSE cross-backend live path (a bespoke Vulkan producer the host imports). It is
         // dropped only for a Direct3D 12 SHOWCASE host, which has no reverse cross-backend path (it would yield a blank
         // window — the validator rejects that combination).
-        var offscreen = (flags.Validate || flags.ValidateExport || flags.ValidateCompute || flags.ValidateMiniAction || flags.ValidateDeterminism || flags.ValidateReverseShare || flags.ValidateIndirect || flags.ValidateResample || flags.ValidateViewports || flags.ValidatePixelate || flags.ValidateCapture || flags.ValidateWorld || flags.ValidateWorldChild);
+        var offscreen = (flags.Validate || flags.ValidateExport || flags.ValidateCompute || flags.ValidateMiniAction || flags.ValidateDeterminism || flags.ValidateCliDeterminism || flags.ValidateReverseShare || flags.ValidateIndirect || flags.ValidateResample || flags.ValidateViewports || flags.ValidatePixelate || flags.ValidateCapture || flags.ValidateWorld || flags.ValidateWorldChild);
         var directXHost = (!offscreen && string.Equals(flags.Backend, "directx", StringComparison.OrdinalIgnoreCase));
         var directXShowcaseHost = (directXHost && !flags.World && !flags.WorldSplit && !flags.WorldChild && !flags.WorldRt);
         var host = new HostDocument {
@@ -196,6 +196,7 @@ internal static class DemoRunDocuments {
         if (flags.ValidateCompute) { return "compute"; }
         if (flags.ValidateMiniAction) { return "mini-action"; }
         if (flags.ValidateDeterminism) { return "determinism"; }
+        if (flags.ValidateCliDeterminism) { return "cli-determinism"; }
         if (flags.ValidateReverseShare) { return "reverse"; }
         if (flags.ValidateIndirect) { return "indirect"; }
         if (flags.ValidateResample) { return "resample"; }

@@ -265,26 +265,27 @@ Input has captured).
 
 ### DualSense adaptive triggers
 
-Adaptive triggers have no portable cross-family shape, so they ride the **raw effect channel**
-(`IGamepadOutput.SendEffect` → `GamepadOutputKind.Raw` → direct HID write) rather than a typed capability.
-`Output/DualSenseAdaptiveTrigger.cs` builds the complete USB output report (id `0x02`):
+Adaptive triggers are a **typed, first-class capability** (`ITriggerEffectParser` → `SetTriggerEffect`), not a
+raw escape hatch. A caller builds a validated, allocation-free `TriggerEffectSpec` per trigger and the DualSense
+composes both into its **normal `0x02` output report**, alongside rumble and the light bar — so resistance,
+rumble, and the LED coexist in one write. `Output/DualSenseAdaptiveTrigger.cs` encodes one `TriggerEffectSpec`
+into one trigger block; `DualSenseController` writes the right (R2 `[11]`) and left (L2 `[22]`) blocks.
 
-- It asserts **only** the trigger-FFB bits in `valid_flag0` (`0x04` right, `0x08` left). These are disjoint from
-  the vibration bits (`0x01`/`0x02`) and the light-bar flag (`valid_flag1` `0x04`), so a trigger write and a
-  rumble/LED write never clobber each other even though all three multiplex into one report.
-- Trigger blocks are a mode byte + params at `report[11]` (right) and `report[22]` (left) — the same layout the
-  player-LED (`[44]`) and light-bar (`[45..47]`) offsets in `DualSenseController` come from.
-- **Official zone-packed effects** (recommended, range-validated): `Feedback(position 0..9, strength 0..8)`
-  (`0x21`), `Weapon(start 2..7, end >start..8, strength 0..8)` (`0x25`), `Vibration(position 0..9, amplitude
-  0..8, frequency)` (`0x26`). Zones index the pull in 10 steps; the 3-bit-per-zone strength array is bit-packed
-  into `[+1..+6]` (Vibration's frequency rides `[+9]`).
-- **Legacy "simple" modes** (raw `0..255` params, unvalidated firmware leftovers): `0x00` off; `0x01`
-  `Simple_Feedback` = `Resistance(position, force)` → `[+1]=position, [+2]=force`; `0x02` `Simple_Weapon` =
-  `Section(start, end, strength)` → `[+1]=start, [+2]=end, [+3]=strength`. The `strength` byte (`[+3]`) is
-  **mandatory** for `0x02`; without it the band exerts no force.
+- **One multiplexed report.** `valid_flag0` asserts the vibration bits (`0x01`/`0x02`) **and** the trigger-FFB
+  bits (`0x04` right / `0x08` left); these are disjoint from each other and from the light-bar flag
+  (`valid_flag1` `0x04`), so the firmware applies every set section and no write clobbers another. The two
+  11-byte trigger blocks at `[11]`/`[22]` sit just before the player-LED (`[44]`) and light-bar (`[45..47]`)
+  offsets. `DualSenseController` re-emits the persisted per-trigger effects in every report, so a later rumble or
+  LED write keeps them alive.
+- **`TriggerEffectSpec` factories** (zones index the pull in 10 steps; strength `0..8`): `Feedback(position,
+  strength)` — uniform resistance (`0x21`); `Weapon(start 2..7, end >start..8, strength)` — a band that gives way
+  (`0x25`); `Vibration(position, amplitude, frequency)` (`0x26`); `ContinuousCurve(zoneStrengths)` — a per-zone
+  resistance curve (the general form of `Feedback`, also `0x21`); and `Off`. A zero-strength effect resolves to
+  `Off`, so the 3-bit per-zone field only ever holds `strength − 1` for an active zone.
 
-The effect persists in the controller until replaced (e.g. by `Off`). USB-only, like rumble and LED — the report
-is sized for the `0x02` USB report, not Bluetooth's `0x31`.
+The effect persists in the controller until replaced. USB-only, like rumble and LED — the report is sized for the
+`0x02` USB report, not Bluetooth's `0x31`. (Genuinely device-specific effects without a typed shape — Switch
+HD-rumble waveforms, say — still ride the raw `SendEffect` channel.)
 
 ### Rumble coalescing
 
@@ -384,14 +385,14 @@ cursor/gauge concept leaks into the reusable SDF engine.
 | `Devices/IGamepadAcquisitionSource.cs` / `IGamepadConnectionRegistry.cs` | the seam a non-HID backend (the Xbox poll loop) uses to publish connections |
 | `Devices/IGamepadConnection.cs` | the uniform connection surface both transports implement |
 | `Devices/GamepadDevice.cs` | HID connection: hosts a parser, owns its read/write I/O loop, stamps arrival time, services rumble/LED |
-| `Devices/IGamepadParser.cs` / `IRumbleParser.cs` / `ILedParser.cs` | per-family parse + rumble + LED contracts |
+| `Devices/IGamepadParser.cs` / `IRumbleParser.cs` / `ILedParser.cs` / `ITriggerEffectParser.cs` | per-family parse + rumble + LED + adaptive-trigger contracts |
 | `Devices/NintendoSwitchController.cs` | Switch Pro: UART handshake, IMU enable, `0x30` parse, `0x10` rumble (throttled + LRA-clamped), player LEDs |
 | `Devices/DualSenseController.cs` | DualSense: `0x01` parse (sticks/triggers/buttons/gyro + sensor timestamp), `0x02` rumble + light bar + player LEDs |
 | `Devices/GamepadCoalescer.cs` / `GamepadDrain.cs` / `GamepadButtonEdges.cs` | high-rate I/O → per-frame bridge (latest axes / press edges + per-button edge times / mean gyro) |
 | `Devices/GamepadState.cs` / `GamepadButtons.cs` / `GamepadTouchPoint.cs` / `GamepadType.cs` / `GamepadInputCapabilities.cs` | the normalized input model (state carries `ArrivalTicks` / `SensorTimestamp` / `SequenceNumber`) |
 | `Devices/ImuFusion.cs` / `Devices/ImuOrientationTracker.cs` | complementary gyro+accel orientation filter + shared per-device state (bias learning; `dt` supplied per call) |
-| `Output/*` | `IGamepadOutput` queue façade, `GamepadOutputCapabilities`, `RumbleEffect` / `TriggerRumbleEffect` / `LedColor` |
-| `Output/DualSenseAdaptiveTrigger.cs` | builds DualSense adaptive-trigger `0x02` reports — official `Feedback` / `Weapon` / `Vibration` + legacy `Resistance` / `Section` |
+| `Output/*` | `IGamepadOutput` queue façade, `GamepadOutputCapabilities`, `RumbleEffect` / `TriggerRumbleEffect` / `LedColor` / `TriggerEffectSpec` |
+| `Output/DualSenseAdaptiveTrigger.cs` | encodes a `TriggerEffectSpec` into one DualSense trigger block — `Feedback` / `Weapon` / `Vibration` / per-zone `ContinuousCurve` |
 
 **`Puck.Platform` (Windows implementations of the above):**
 

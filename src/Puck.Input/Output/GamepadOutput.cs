@@ -99,6 +99,22 @@ public sealed class GamepadOutput : IGamepadOutput {
         );
     }
     /// <inheritdoc />
+    public bool SetTriggerEffectAt(in TriggerEffectSpec left, in TriggerEffectSpec right, ulong fireAtTick) {
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                Kind: GamepadOutputKind.TriggerEffect,
+                Led: default,
+                Raw: null,
+                Rumble: default,
+                TriggerRumble: default,
+                TriggerEffectLeft: left,
+                TriggerEffectRight: right,
+                ScheduleTick: fireAtTick
+            ),
+            required: GamepadOutputCapabilities.TriggerEffect
+        );
+    }
+    /// <inheritdoc />
     public bool SendEffect(ReadOnlySpan<byte> data) {
         return TryEnqueue(
             command: new GamepadOutputCommand(

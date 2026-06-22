@@ -29,6 +29,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private volatile bool m_faulted;
     private bool m_rumbleActive;
     private long m_rumbleExpiry = long.MaxValue;
+    private bool m_scheduledTriggerActive;
+    private ulong m_scheduledTriggerFireTick;
+    private TriggerEffectSpec m_scheduledTriggerLeft;
+    private TriggerEffectSpec m_scheduledTriggerRight;
     private ulong m_sequence;
     private Task? m_loop;
 
@@ -205,7 +209,19 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
                     break;
                 case GamepadOutputKind.TriggerEffect when (m_parser is ITriggerEffectParser triggerEffect):
-                    await triggerEffect.SetTriggerEffectAsync(left: command.TriggerEffectLeft, right: command.TriggerEffectRight, cancellationToken: cancellationToken);
+                    // Apply immediately when unscheduled, the clock is absent, or its fire tick has already passed;
+                    // otherwise hold it until the capture clock reaches that tick (serviced below). A new effect
+                    // supersedes any still-pending schedule.
+                    if ((command.ScheduleTick == 0UL) || (m_clock is null) || (m_clock.NowTicks >= command.ScheduleTick)) {
+                        m_scheduledTriggerActive = false;
+
+                        await triggerEffect.SetTriggerEffectAsync(left: command.TriggerEffectLeft, right: command.TriggerEffectRight, cancellationToken: cancellationToken);
+                    } else {
+                        m_scheduledTriggerActive = true;
+                        m_scheduledTriggerFireTick = command.ScheduleTick;
+                        m_scheduledTriggerLeft = command.TriggerEffectLeft;
+                        m_scheduledTriggerRight = command.TriggerEffectRight;
+                    }
 
                     break;
                 case GamepadOutputKind.Raw when (command.Raw is { } raw):
@@ -222,6 +238,14 @@ internal sealed class GamepadDevice : IGamepadConnection {
         // Honor a finite rumble duration by returning the motors to rest once it elapses.
         if (m_rumbleActive && (Stopwatch.GetTimestamp() >= m_rumbleExpiry)) {
             await ApplyRumbleAsync(effect: RumbleEffect.Off, cancellationToken: cancellationToken);
+        }
+
+        // Fire a scheduled trigger effect once the capture clock reaches its tick. This runs each loop iteration
+        // (≈ once per arriving report, so sub-frame on a streaming pad); the device clock is the timing authority.
+        if (m_scheduledTriggerActive && (m_clock is not null) && (m_clock.NowTicks >= m_scheduledTriggerFireTick) && (m_parser is ITriggerEffectParser scheduledParser)) {
+            m_scheduledTriggerActive = false;
+
+            await scheduledParser.SetTriggerEffectAsync(left: m_scheduledTriggerLeft, right: m_scheduledTriggerRight, cancellationToken: cancellationToken);
         }
     }
     private async ValueTask ApplyRumbleAsync(RumbleEffect effect, CancellationToken cancellationToken) {

@@ -15,32 +15,42 @@ namespace Puck.Commands;
 /// (re-asserted every tick as <see cref="CommandPhase.Active"/>) until its release, while axes and text are
 /// transient (present only in the ticks a signal arrived). Dispatch is <em>not</em> performed here — the
 /// router only produces the deterministic per-tick state; the consumer runs handlers from the snapshot.
+/// Pre-resolved commands (a console / STDIN line, a peer, an AI) enter through <see cref="Inject"/> and fold into
+/// the same lanes as captured signals, in one deterministic capture order — so command-line input is recorded and
+/// replayed by the same machinery, with no separate path.
 /// </remarks>
-public sealed class InputRouter : ISnapshotSource {
+public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
     private readonly IInputBindings m_bindings;
     private readonly Lock m_captureGate = new();
     private readonly List<Captured> m_captured = [];
+    private readonly IInputClock? m_clock;
     private readonly Dictionary<int, Dictionary<ushort, CommandEntry>> m_heldBySlot = [];
     private readonly CommandRegistry m_registry;
     private readonly Func<InputDeviceId, int> m_slotResolver;
     private ulong m_sequence;
 
-    private readonly record struct Captured(ulong Sequence, InputSignal Signal);
+    // One captured item carries EITHER a raw signal (still needs a binding lookup) or a pre-resolved injection
+    // (a console/peer command, already bound). Both share the capture tick + sequence, so they sort into one
+    // deterministic order regardless of which kind they are.
+    private readonly record struct Captured(ulong Sequence, ulong CaptureTick, InputSignal? Signal, CommandInjection? Injection);
 
     /// <summary>Initializes a new instance of the <see cref="InputRouter"/> class.</summary>
     /// <param name="registry">The registry that interns command ids and gates by map.</param>
     /// <param name="bindings">The slot-aware binding resolver (per-player mappings layered over a default).</param>
     /// <param name="slotResolver">Maps a device to a logical player slot; defaults to a single local slot (<c>0</c>).</param>
+    /// <param name="clock">The shared capture clock used to stamp an injected command that arrives without an explicit capture tick; optional.</param>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/> or <paramref name="bindings"/> is <see langword="null"/>.</exception>
     public InputRouter(
         CommandRegistry registry,
         IInputBindings bindings,
-        Func<InputDeviceId, int>? slotResolver = null
+        Func<InputDeviceId, int>? slotResolver = null,
+        IInputClock? clock = null
     ) {
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(registry);
 
         m_bindings = bindings;
+        m_clock = clock;
         m_registry = registry;
         m_slotResolver = (slotResolver ?? (static _ => 0));
     }
@@ -49,7 +59,23 @@ public sealed class InputRouter : ISnapshotSource {
     /// <param name="signal">The timestamped input signal to capture.</param>
     public void Capture(in InputSignal signal) {
         lock (m_captureGate) {
-            m_captured.Add(item: new Captured(Sequence: m_sequence++, Signal: signal));
+            m_captured.Add(item: new Captured(Sequence: m_sequence++, CaptureTick: signal.CaptureTick, Signal: signal, Injection: null));
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Inject(in CommandInjection injection) {
+        // An injection's effect mutates the simulation, so it must attribute to a fixed-step tick. An explicit
+        // capture tick (a deterministic script / replay harness) is honored; otherwise the shared capture clock
+        // stamps it now, exactly as a backend stamps a physical signal — making console input share one timeline
+        // with controllers. Determinism comes from recording the resulting snapshot, not from reproducing the
+        // live arrival time (the same guarantee a gamepad press already has).
+        var captureTick = ((injection.CaptureTick != 0UL)
+            ? injection.CaptureTick
+            : (m_clock?.NowTicks ?? 0UL));
+
+        lock (m_captureGate) {
+            m_captured.Add(item: new Captured(Sequence: m_sequence++, CaptureTick: captureTick, Signal: null, Injection: injection));
         }
     }
 
@@ -61,7 +87,7 @@ public sealed class InputRouter : ISnapshotSource {
         var due = DrainDue(windowEndTick: windowEndTick);
 
         due.Sort(comparison: static (left, right) => {
-            var byTime = left.Signal.CaptureTick.CompareTo(value: right.Signal.CaptureTick);
+            var byTime = left.CaptureTick.CompareTo(value: right.CaptureTick);
 
             return ((byTime != 0)
                 ? byTime
@@ -82,7 +108,11 @@ public sealed class InputRouter : ISnapshotSource {
         }
 
         foreach (var captured in due) {
-            Apply(workingBySlot: workingBySlot, signal: captured.Signal);
+            if (captured.Signal is InputSignal signal) {
+                ApplySignal(workingBySlot: workingBySlot, signal: signal);
+            } else if (captured.Injection is CommandInjection injection) {
+                ApplyInjection(workingBySlot: workingBySlot, injection: injection);
+            }
         }
 
         return Build(tick: tick, workingBySlot: workingBySlot);
@@ -101,7 +131,7 @@ public sealed class InputRouter : ISnapshotSource {
             for (var index = 0; (index < m_captured.Count); index++) {
                 var captured = m_captured[index];
 
-                if (captured.Signal.CaptureTick < windowEndTick) {
+                if (captured.CaptureTick < windowEndTick) {
                     due.Add(item: captured);
                 } else {
                     m_captured[kept++] = captured;
@@ -114,7 +144,16 @@ public sealed class InputRouter : ISnapshotSource {
         return due;
     }
 
-    private void Apply(Dictionary<int, Dictionary<ushort, CommandEntry>> workingBySlot, InputSignal signal) {
+    // Folds a pre-resolved command directly into its slot's lane for this tick — no binding lookup (it is already
+    // bound) and no held bookkeeping: an injection is one-shot, present only in the tick its capture window placed
+    // it, with the caller-chosen edge. A held console input is expressed as an explicit Started/Completed pair.
+    private static void ApplyInjection(Dictionary<int, Dictionary<ushort, CommandEntry>> workingBySlot, CommandInjection injection) {
+        var working = WorkingFor(workingBySlot: workingBySlot, slot: injection.Slot);
+
+        working[injection.CommandId] = new CommandEntry(CommandId: injection.CommandId, Device: default, Phase: injection.Phase, Value: injection.Value);
+    }
+
+    private void ApplySignal(Dictionary<int, Dictionary<ushort, CommandEntry>> workingBySlot, InputSignal signal) {
         // Resolve the device's slot first, then ask for THAT slot's bindings — so each player's mapping (an
         // optional override layered over the engine default) drives their own input.
         var slot = m_slotResolver(arg: signal.DeviceId);

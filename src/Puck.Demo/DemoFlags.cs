@@ -26,6 +26,8 @@ internal sealed record DemoFlags {
     public required bool ValidateMiniAction { get; init; }
     /// <summary>The <c>--validate-determinism</c> pure-CPU fixed-point + engine command-snapshot record/replay self-check.</summary>
     public required bool ValidateDeterminism { get; init; }
+    /// <summary>The <c>--validate-cli-determinism</c> pure-CPU deterministic command-line/STDIN sim-control self-check.</summary>
+    public required bool ValidateCliDeterminism { get; init; }
     /// <summary>The <c>--mini-action</c> live controller-driven action demo (Vulkan host).</summary>
     public required bool MiniAction { get; init; }
     /// <summary>The <c>--validate-export</c> same-device export/import gate.</summary>

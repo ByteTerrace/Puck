@@ -42,6 +42,17 @@ public interface IGamepadOutput {
     bool SetTriggerEffect(in TriggerEffectSpec left, in TriggerEffectSpec right);
 
     /// <summary>
+    /// Schedules an adaptive-trigger effect (as <see cref="SetTriggerEffect"/>) to be applied when the shared
+    /// capture clock (<see cref="IInputClock"/>) reaches <paramref name="fireAtTick"/> — rhythm-grade haptics
+    /// timed against the same clock that stamps input. A tick already in the past applies immediately.
+    /// </summary>
+    /// <param name="left">The left trigger's effect.</param>
+    /// <param name="right">The right trigger's effect.</param>
+    /// <param name="fireAtTick">The capture-clock engine tick to apply the effect at.</param>
+    /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
+    bool SetTriggerEffectAt(in TriggerEffectSpec left, in TriggerEffectSpec right, ulong fireAtTick);
+
+    /// <summary>
     /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as
     /// Switch HD-rumble waveforms).
     /// </summary>

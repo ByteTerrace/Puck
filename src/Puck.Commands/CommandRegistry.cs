@@ -36,6 +36,9 @@ public sealed class CommandRegistry : ICommandSink {
     // hashable, wire-compact identity in a CommandSnapshot — strings stay on the text/config side.
     private readonly Dictionary<string, ushort> m_idByName = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly string[] m_nameById;
+    // The deterministic-input sink a Simulation-class submitted command is folded into instead of running inline;
+    // null until a host wires one (the live console-driving registry), so every other registry keeps the inline path.
+    private ICommandInjectionSink? m_injectionSink;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandRegistry"/> class, registering the commands
@@ -353,13 +356,28 @@ public sealed class CommandRegistry : ICommandSink {
 
         m_sources.Add(item: source);
     }
+    /// <summary>
+    /// Routes <see cref="CommandRouting.Simulation"/>-class submitted commands to a deterministic input sink instead
+    /// of running them inline — the seam that makes a console / STDIN line drive the simulation deterministically.
+    /// </summary>
+    /// <param name="sink">The sink (the host's <see cref="InputRouter"/>) folded-into per tick; <see langword="null"/> restores inline execution.</param>
+    /// <remarks>Wire this only on the host's live console-driving registry; an unwired registry runs every submitted command inline.</remarks>
+    public void RouteSimulationTo(ICommandInjectionSink? sink) {
+        m_injectionSink = sink;
+    }
     /// <summary>Parses a command line, runs the matching handler, and returns its transcript output.</summary>
     /// <param name="line">The command line to parse and execute.</param>
     /// <returns>
     /// The handler's result; <see cref="CommandResult.None"/> for an empty or whitespace line; the help
-    /// listing for the <c>help</c> command; or a message describing parse errors or an unknown command.
+    /// listing for the <c>help</c> command; a queued acknowledgement for a simulation command routed to the
+    /// deterministic input path; or a message describing parse errors or an unknown command.
     /// </returns>
-    /// <remarks>This path is never gated by command maps; it is the deliberate console entry point.</remarks>
+    /// <remarks>
+    /// This path is never gated by command maps; it is the deliberate console entry point. A
+    /// <see cref="CommandRouting.Simulation"/> command is injected into the per-tick <see cref="CommandSnapshot"/>
+    /// (so it is tick-aligned, recorded, and replayed) when a sink is wired via <see cref="RouteSimulationTo"/>;
+    /// otherwise — and for every <see cref="CommandRouting.Immediate"/> command — the handler runs inline.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
     public CommandResult Submit(string line) {
         ArgumentNullException.ThrowIfNull(line);
@@ -388,6 +406,18 @@ public sealed class CommandRegistry : ICommandSink {
             value: out var definition
         )) {
             var value = (definition.ValueSelector?.Invoke(arg: parseResult) ?? ImpulseValue(kind: definition.ValueKind));
+
+            // A simulation command's effect mutates the deterministic sim, so it must be tick-aligned and recorded:
+            // fold it into the snapshot stream rather than run it here. The handler still runs — later, when the
+            // host applies that tick's snapshot — so a recording reproduces it. Console impulses inject as a Started
+            // edge (the press the snapshot dispatch fires on) on the local slot.
+            if ((definition.Routing == CommandRouting.Simulation) &&
+                (m_injectionSink is { } sink) &&
+                TryGetId(name: definition.Name, id: out var commandId)) {
+                sink.Inject(injection: new CommandInjection(CommandId: commandId, Value: value, Phase: CommandPhase.Started));
+
+                return new CommandResult($"[queued: {definition.Name}]");
+            }
 
             m_state[definition.Name] = value;
 

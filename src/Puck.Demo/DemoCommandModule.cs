@@ -18,6 +18,7 @@ internal sealed class DemoCommandModule(
     DemoConsole console,
     CursorStore cursors,
     GamepadManager gamepads,
+    IInputClock inputClock,
     IRenderNode rootNode
 ) : ICommandModule {
     private const string TextMap = "text";
@@ -289,6 +290,27 @@ internal sealed class DemoCommandModule(
                 return new CommandResult(accepted ? "[trigger-effect: cleared]" : "[trigger-effect: rejected]");
             },
             name: "gamepad-trigger-effect-off",
+            valueKind: CommandValueKind.Digital
+        );
+        yield return CommandDefinition.Verb(
+            description: "Schedules a DualSense trigger buzz one second out (clock-timed haptics); press, wait, feel it land. D-pad Down clears it.",
+            handler: context => {
+                if (!gamepads.TryGetOutput(deviceId: context.DeviceId, output: out var output)) {
+                    return new CommandResult("[trigger-schedule: no device]");
+                }
+
+                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.TriggerEffect)) {
+                    return new CommandResult("[trigger-schedule: unsupported]");
+                }
+
+                // Schedule a buzz to land one second from now against the SAME capture clock that stamps input, so
+                // the effect arrives on a precise tick rather than whenever the write happens to be serviced.
+                var buzz = TriggerEffectSpec.Vibration(position: 2, amplitude: 6, frequency: 30);
+                var accepted = output.SetTriggerEffectAt(left: buzz, right: buzz, fireAtTick: (inputClock.NowTicks + EngineTicks.PerSecond));
+
+                return new CommandResult(accepted ? "[trigger-schedule: buzz in 1s]" : "[trigger-schedule: rejected]");
+            },
+            name: "gamepad-trigger-schedule",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
