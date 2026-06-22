@@ -35,6 +35,15 @@ public sealed class Timer : IClockedComponent {
         m_interrupts = interrupts;
     }
 
+    /// <summary>Seeds the 16-bit internal counter (whose high byte is <c>DIV</c>), establishing the post-boot
+    /// divider phase. The edge-detector baseline is resynchronized to the seeded counter so the seed itself
+    /// never fabricates a falling edge (and thus never spuriously ticks <c>TIMA</c>).</summary>
+    /// <param name="value">The internal counter value.</param>
+    public void SetInternalCounter(ushort value) {
+        m_internalCounter = value;
+        m_lastTimerSignal = TimerSignal();
+    }
+
     /// <inheritdoc />
     public void Step(int tCycles) {
         // Cleared at the start of each machine cycle's stepping; set if the reload lands this cycle, so a

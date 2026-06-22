@@ -104,6 +104,9 @@ public sealed class SystemBus : ICpuBus {
     /// <summary>Gets the picture processing unit, for the host to present its framebuffer.</summary>
     public Ppu Ppu =>
         m_ppu;
+    /// <summary>Gets the timer and divider, for seeding the post-boot divider phase.</summary>
+    public Timer Timer =>
+        m_timer;
     /// <summary>Gets the joypad, for the host to feed button input.</summary>
     public Joypad Joypad =>
         m_joypad;

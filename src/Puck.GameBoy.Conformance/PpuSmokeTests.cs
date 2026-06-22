@@ -210,6 +210,31 @@ internal static class PpuSmokeTests {
                     ? null
                     : $"sprite=0x{spritePixel:X8} bg=0x{backgroundPixel:X8} (expected sprite black, bg light gray)";
             }),
+            ("the presented frame is latched at vblank, never torn mid-draw", static () => {
+                var videoRam = new byte[0x2000];
+
+                FillSolidTile(videoRam: videoRam, tileIndex: 0, colorIndex: 1); // frame 1 paints light gray
+
+                var ppu = new Ppu(interrupts: new InterruptController(), videoRam: videoRam, objectAttributeMemory: new byte[0xA0]);
+
+                ppu.WriteRegister(address: BackgroundPalette, value: 0xE4);
+                ppu.WriteRegister(address: LcdControl, value: 0x91); // LCD on, 0x8000 tiles, 0x9800 map, BG on
+                ppu.Step(tCycles: FrameDots); // render frame 1 and latch it at its vertical blank
+
+                var presentedAfterFrame1 = ppu.Framebuffer[0];
+
+                // Repaint the tile black, then advance only a few scanlines into frame 2 — not far enough to reach
+                // the next vertical blank. Those lines land in the back buffer; the presented (front) buffer must
+                // not change until the frame completes.
+                FillSolidTile(videoRam: videoRam, tileIndex: 0, colorIndex: 3); // frame 2 would paint black
+                ppu.Step(tCycles: (DotsPerLine * 5));
+
+                var presentedMidFrame2 = ppu.Framebuffer[0];
+
+                return ((presentedAfterFrame1 == LightGray) && (presentedMidFrame2 == LightGray))
+                    ? null
+                    : $"afterFrame1=0x{presentedAfterFrame1:X8} midFrame2=0x{presentedMidFrame2:X8} (expected both light gray 0x{LightGray:X8})";
+            }),
             ("a transparent sprite pixel (color 0) shows the background", static () => {
                 var videoRam = new byte[0x2000];
 

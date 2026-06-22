@@ -36,6 +36,10 @@ public sealed class Ppu : IClockedComponent {
     private readonly byte[] m_objectAttributeMemory;
     private readonly byte[] m_videoRam;
     private readonly uint[] m_framebuffer = new uint[ScreenWidth * ScreenHeight];
+    // The front buffer: a stable snapshot of the most recently completed frame, latched from the back buffer at
+    // vertical blank. Presenting from this (rather than the live back buffer the PPU paints into scanline by
+    // scanline) means a host that stops the machine mid-frame never sees a torn, half-drawn picture.
+    private readonly uint[] m_presentBuffer = new uint[ScreenWidth * ScreenHeight];
     // The background/window color index (0-3) chosen per pixel on the current line, used for sprite-to-background
     // priority (a sprite with the priority bit set is hidden behind background colors 1-3).
     private readonly byte[] m_lineColorIndex = new byte[ScreenWidth];
@@ -71,9 +75,11 @@ public sealed class Ppu : IClockedComponent {
     /// <summary>Gets the current scanline (<c>LY</c>), 0-153.</summary>
     public int Line =>
         m_line;
-    /// <summary>Gets the latched frame's pixels (32-bit RGBA, row-major, 160&#215;144). Painted by a later stage.</summary>
+    /// <summary>Gets the latched frame's pixels (32-bit RGBA, row-major, 160&#215;144): the most recently completed
+    /// frame, snapshotted at vertical blank, so the picture is always whole even when read while the next frame is
+    /// mid-draw. (Empty — all zero — until the first frame completes.)</summary>
     public ReadOnlySpan<uint> Framebuffer =>
-        m_framebuffer;
+        m_presentBuffer;
     /// <summary>Gets whether VRAM is currently accessible to the CPU — true unless the PPU is drawing. Follows the
     /// reported (machine-cycle-lagged) mode, so the lock tracks what a CPU read observes.</summary>
     public bool IsVideoRamAccessible =>
@@ -251,10 +257,12 @@ public sealed class Ppu : IClockedComponent {
         }
 
         if (m_line == ScreenHeight) {
-            // Entering vertical blank: the frame is complete and the vertical-blank interrupt fires. The window's
-            // internal line counter resets here, ready for the next frame.
+            // Entering vertical blank: the frame is complete and the vertical-blank interrupt fires. The finished
+            // back buffer is latched into the front buffer so it can be presented whole while the next frame draws.
+            // The window's internal line counter resets here, ready for the next frame.
             SetMode(mode: PpuMode.VerticalBlank);
             m_interrupts.Request(kind: InterruptKind.VBlank);
+            Array.Copy(sourceArray: m_framebuffer, destinationArray: m_presentBuffer, length: m_framebuffer.Length);
             m_frameReady = true;
             m_windowLineCounter = 0;
         }

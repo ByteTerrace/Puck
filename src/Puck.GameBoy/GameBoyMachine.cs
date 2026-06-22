@@ -10,6 +10,8 @@ public sealed class GameBoyMachine {
     private readonly SystemBus m_bus;
     private readonly Sm83 m_cpu;
 
+    private ulong m_runTargetDots;
+
     /// <summary>Gets the CPU.</summary>
     public Sm83 Cpu =>
         m_cpu;
@@ -36,7 +38,7 @@ public sealed class GameBoyMachine {
         m_cpu = new Sm83(bus: m_bus);
 
         if (bootRom is null) {
-            ApplyPostBootState();
+            ApplyPostBootState(model: model);
         }
     }
 
@@ -45,7 +47,27 @@ public sealed class GameBoyMachine {
     public void Step() =>
         m_cpu.Step();
 
-    private void ApplyPostBootState() {
+    /// <summary>Advances the machine by a budget of master clock cycles (T-cycles / PPU dots — the units of
+    /// <see cref="SystemBus.ElapsedDots"/>), stepping whole instructions until the budget is met. This is the
+    /// deterministic pacing seam a host node drives: the host converts its frame's elapsed engine ticks to an
+    /// exact integer cycle budget (the rational accumulator <c>ticks·4194304/50400</c>) and hands it here.</summary>
+    /// <param name="cycles">The number of master clock cycles to advance this call.</param>
+    /// <remarks>An instruction is the smallest step, so a single call overshoots the budget by at most one
+    /// instruction's worth of cycles. The overshoot is carried against a cumulative target, so a sequence of
+    /// calls stays cycle-exact in aggregate (no drift) — the long-term cycle count tracks the summed budget to
+    /// within one in-flight instruction, which is what keeps host pacing free of accumulating error.</remarks>
+    public void Run(ulong cycles) {
+        m_runTargetDots += cycles;
+
+        // Step() always advances the bus by at least one machine cycle in every path (including halted and
+        // stopped, which fall through to an internal cycle), so ElapsedDots strictly increases and this loop
+        // always terminates.
+        while (m_bus.ElapsedDots < m_runTargetDots) {
+            m_cpu.Step();
+        }
+    }
+
+    private void ApplyPostBootState(ConsoleModel model) {
         // The DMG boot ROM's handoff state. (The half-carry/carry flags depend on the header checksum, which is
         // non-zero for all real cartridges and test ROMs, giving F = 0xB0.)
         m_cpu.A = 0x01;
@@ -60,10 +82,34 @@ public sealed class GameBoyMachine {
         m_cpu.ProgramCounter = 0x0100;
 
         // The post-boot I/O state cartridges rely on: the LCD is on with the background enabled, and the palettes
-        // are seeded. (DIV and the sound registers are left at reset for now.)
+        // are seeded. (The sound registers are left at reset for now.)
         m_bus.WriteByte(address: MemoryMap.LcdControl, value: 0x91);
         m_bus.WriteByte(address: MemoryMap.BackgroundPalette, value: 0xFC);
         m_bus.WriteByte(address: MemoryMap.ObjectPalette0, value: 0xFF);
         m_bus.WriteByte(address: MemoryMap.ObjectPalette1, value: 0xFF);
+
+        // The divider is not zero at handoff: the boot ROM has been running for a model-specific number of cycles,
+        // so the 16-bit internal counter has a precise post-boot phase (DIV reads its high byte). Seeding the exact
+        // phase is what the boot_div timing test pins down. (A write to DIV would instead clear the counter, which
+        // is why this goes through the dedicated seam.)
+        //
+        // The literature DMG/MGB value is 0xABCC, but that assumes an I/O read latches on the third T-cycle of the
+        // access machine cycle. This bus latches at the end of the machine cycle (ReadCycle ticks the full four
+        // T-cycles, then reads), so DIV reads land one T-cycle later in phase; seeding one less (0xABCB) cancels
+        // that constant offset exactly and reproduces hardware-observed reads for boot_div's before/after-increment
+        // probes. (Verified against the mooneye trace — do NOT "correct" this back to 0xABCC.)
+        var postBootDivider = model switch {
+            ConsoleModel.Dmg => (ushort)0xABCB,
+            _ => (ushort)0x0000,
+        };
+
+        m_bus.Timer.SetInternalCounter(value: postBootDivider);
+
+        // During boot the LCD is already running, so a VBlank fires and leaves its flag pending in IF; the boot ROM
+        // never clears it. Post-boot IF therefore reads 0xE1 (the VBlank request bit set, the unused upper bits read
+        // as one). IME is off and IE is zero at handoff, so nothing dispatches — the flag simply sits pending, as on
+        // hardware. (Seeding it is more faithful than leaving IF clear: a cartridge that enables VBlank immediately
+        // would take the interrupt on real hardware too.)
+        m_bus.WriteByte(address: MemoryMap.InterruptFlag, value: 0x01);
     }
 }

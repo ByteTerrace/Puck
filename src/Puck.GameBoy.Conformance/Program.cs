@@ -36,6 +36,7 @@ try {
         ("PPU", PpuSmokeTests.All),
         ("Cartridge", CartridgeSmokeTests.All),
         ("Joypad/Serial", IoSmokeTests.All),
+        ("Host pacing", HostPacingSmokeTests.All),
     ];
 
     foreach (var (suite, tests) in smokeSuites) {
