@@ -17,11 +17,26 @@ public static class VulkanResultExtensions {
     /// <param name="operation">The name of the operation that produced the result, included in the exception message.</param>
     /// <exception cref="VulkanException"><paramref name="result"/> is not a success code.</exception>
     public static void ThrowIfFailed(this VkResult result, string operation) {
-        if (!result.IsSuccess()) {
-            throw new VulkanException(
-                operation: operation,
-                result: result
+        if (result.IsSuccess()) {
+            return;
+        }
+
+        // A lost device/surface is a RECOVERABLE signal, not an ordinary failure: surface it as the neutral
+        // DeviceLostException (from any call site — wait-for-idle, a node's own submit, present) so the host pump's
+        // device-loss recovery catches it uniformly rather than as a backend-specific VulkanException.
+        if (
+            (result == VkResult.ErrorDeviceLost) ||
+            (result == VkResult.ErrorSurfaceLostKhr)
+        ) {
+            throw new DeviceLostException(
+                message: $"{operation} failed: {result} (graphics device lost).",
+                reasonCode: (long)result
             );
         }
+
+        throw new VulkanException(
+            operation: operation,
+            result: result
+        );
     }
 }

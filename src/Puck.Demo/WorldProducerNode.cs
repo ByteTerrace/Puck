@@ -95,6 +95,7 @@ internal sealed class WorldProducerNode : IRenderNode {
     private IGpuQueueSubmitter? m_queueSubmitter;
     private IGpuSurfaceReadback? m_readback;
     private bool m_resourcesReady;
+    private bool m_programUploadPending;
     private IGpuStorageImage?[] m_sourceTextures = [];
     private IGpuStorageImage? m_storageImage;
     private GpuTimestampCapabilities m_timingCapabilities;
@@ -179,8 +180,9 @@ internal sealed class WorldProducerNode : IRenderNode {
         EnsureResources(gpuDevice: gpuDevice, frame: frame);
         BindSources();
 
-        if (frame.ProgramChanged) {
+        if (frame.ProgramChanged || m_programUploadPending) {
             m_programBuffer!.Write<uint>(data: frame.Program.Words);
+            m_programUploadPending = false;
         }
 
         PackViewports(frame: frame);
@@ -424,6 +426,10 @@ internal sealed class WorldProducerNode : IRenderNode {
         m_exportMode = (m_exportableImage is not null);
 
         m_programBuffer = storageBufferFactory.Create(deviceContext: gpuDevice, sizeBytes: ((ulong)frame.Program.Words.Length * sizeof(uint)));
+        // The program is normally uploaded only when frame.ProgramChanged (it is static after the first frame). A freshly
+        // (re)created buffer — first build OR a device-loss rebuild — is empty, so force the next ProduceFrame to upload
+        // it even when ProgramChanged is false; otherwise a recovered device would render an empty scene (clear color).
+        m_programUploadPending = true;
         m_viewportBuffer = storageBufferFactory.Create(deviceContext: gpuDevice, sizeBytes: (ulong)m_viewportScratch.Length);
         m_dynamicTransformBuffer = storageBufferFactory.Create(deviceContext: gpuDevice, sizeBytes: (ulong)m_dynamicTransformScratch.Length);
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
@@ -897,39 +903,96 @@ internal sealed class WorldProducerNode : IRenderNode {
             child.Dispose();
         }
 
+        ReleaseGpuResources();
+    }
+
+    /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // Device-loss recovery: reset the subtree on the still-valid (lost) device, child-first (children are device
+        // children too, and must be torn down before the device is). Unlike Dispose there is NO idle drain — the device
+        // is lost, so nothing in flight will ever complete, and the host pump recreates the device immediately after.
+        // The next ProduceFrame re-runs EnsureResources (the latch is cleared below) against the recreated device,
+        // re-reading the device handle from the context, so every resource is rebuilt fresh.
+        foreach (var child in m_children.Values) {
+            child.OnDeviceLost();
+        }
+
+        ReleaseGpuResources();
+
+        Array.Clear(array: m_boundSourceViews);
+        m_deviceHandle = 0;
+        m_imageInitialized = false;
+        m_resourcesReady = false;
+        // Re-arm the one-shot capture so a --capture run writes a POST-recovery frame (lets device-loss recovery be
+        // visually verified from the readback; harmless when no capture path is set).
+        m_captured = false;
+    }
+
+    // The device-resource teardown shared by Dispose and OnDeviceLost: the body of Dispose MINUS the idle drain and the
+    // child handling (which differ — Dispose disposes children, OnDeviceLost resets them). Every field is nulled after
+    // release so a rebuild starts clean and a repeat call is a harmless no-op. Wait-free, so it is safe to call against a
+    // lost device. The descriptor pool is destroyed via the still-current m_deviceHandle BEFORE the caller clears it.
+    private void ReleaseGpuResources() {
         if (m_timingPools is not null) {
             foreach (var pool in m_timingPools) {
                 pool.Dispose();
             }
+
+            m_timingPools = null;
         }
 
         m_readback?.Dispose();
+        m_readback = null;
         m_commandPool?.Dispose();
+        m_commandPool = null;
         m_tileBuffer?.Dispose();
+        m_tileBuffer = null;
         m_compositeArgsBuffer?.Dispose();
+        m_compositeArgsBuffer = null;
         m_viewsArgsBuffer?.Dispose();
+        m_viewsArgsBuffer = null;
         m_cullBoundsBuffer?.Dispose();
+        m_cullBoundsBuffer = null;
         m_viewportBuffer?.Dispose();
+        m_viewportBuffer = null;
         m_dynamicTransformBuffer?.Dispose();
+        m_dynamicTransformBuffer = null;
         m_programBuffer?.Dispose();
+        m_programBuffer = null;
         m_beamPipeline?.Dispose();
+        m_beamPipeline = null;
         m_cullArgsPipeline?.Dispose();
+        m_cullArgsPipeline = null;
         m_viewsPipeline?.Dispose();
+        m_viewsPipeline = null;
         m_compositePipeline?.Dispose();
+        m_compositePipeline = null;
 
         if ((0 != m_pool) && (m_descriptorAllocator is not null)) {
             m_descriptorAllocator.DestroyPool(deviceHandle: m_deviceHandle, poolHandle: m_pool);
             m_pool = 0;
         }
 
+        m_beamSet = 0;
+        m_cullArgsSet = 0;
+        m_viewsSet = 0;
+        m_compositeSet = 0;
+
         foreach (var source in m_sourceTextures) {
             source?.Dispose();
         }
 
+        m_sourceTextures = [];
+
         m_storageImage?.Dispose();
+        m_storageImage = null;
         m_beamShaderModule?.Dispose();
+        m_beamShaderModule = null;
         m_cullArgsShaderModule?.Dispose();
+        m_cullArgsShaderModule = null;
         m_viewsShaderModule?.Dispose();
+        m_viewsShaderModule = null;
         m_compositeShaderModule?.Dispose();
+        m_compositeShaderModule = null;
     }
 }

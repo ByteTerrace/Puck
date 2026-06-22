@@ -62,6 +62,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
     private const uint WmChar = 0x0102;
     private const uint WmClose = 0x0010;
     private const uint WmDestroy = 0x0002;
+    private const uint WmDisplayChange = 0x007E;
+    private const uint WmWindowPosChanged = 0x0047;
     private const uint WmEraseBkgnd = 0x0014;
     private const uint WmInput = 0x00FF;
     private const uint WmKeyDown = 0x0100;
@@ -476,6 +478,26 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
                 }
 
                 return 0;
+            case WmDisplayChange:
+                // Display mode/topology changed — the VRR range may differ now; let the pacer re-query. Still forward to
+                // DefWindowProc so any default processing runs.
+                OnDisplayConfigurationChanged();
+                return User32.DefWindowProc(
+                    lParam: lParam,
+                    message: message,
+                    wParam: wParam,
+                    windowHandle: windowHandle
+                );
+            case WmWindowPosChanged:
+                // A move/resize/z-order change; bump the refresh-config version only if the window crossed to a different
+                // monitor. MUST forward to DefWindowProc so it still generates WM_SIZE/WM_MOVE (the resize path depends on it).
+                OnWindowPositionChanged(windowHandle: windowHandle);
+                return User32.DefWindowProc(
+                    lParam: lParam,
+                    message: message,
+                    wParam: wParam,
+                    windowHandle: windowHandle
+                );
             case WmPaint:
                 _ = User32.BeginPaint(
                     paintStruct: out var paintStruct,

@@ -38,4 +38,9 @@ public interface IVulkanFramePresentationApi {
     /// <param name="timeoutNanoseconds">A bound, in nanoseconds, so a missed present can never hang the caller.</param>
     /// <returns><see cref="VkResult.Success"/> when the present was confirmed; <see cref="VkResult.Timeout"/> or a swapchain status code otherwise.</returns>
     VkResult WaitForPresent(nint deviceHandle, nint swapchainHandle, ulong presentId, ulong timeoutNanoseconds);
+    /// <summary>Drops any cached per-device function pointers for <paramref name="deviceHandle"/>, so a later device reusing
+    /// the same handle value re-resolves them rather than calling through pointers bound to the destroyed device. Safe to
+    /// call with a handle that was never cached (a no-op).</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle whose cached entry points should be discarded.</param>
+    void InvalidateDevice(nint deviceHandle);
 }

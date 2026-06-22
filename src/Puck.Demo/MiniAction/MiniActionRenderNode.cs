@@ -168,6 +168,12 @@ internal sealed class MiniActionRenderNode : IRenderNode {
     }
 
     /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // Forward to the SDF producer (which owns all the GPU resources); the CPU-only world simulation is untouched.
+        m_producer?.OnDeviceLost();
+    }
+
+    /// <inheritdoc/>
     public void Dispose() {
         m_producer?.Dispose();
     }

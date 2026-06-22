@@ -8,7 +8,7 @@ namespace Puck.Vulkan.Presentation;
 /// fullscreen surface blit), so the host loop drives Vulkan presentation through the backend-neutral seam
 /// without referencing either concrete type.
 /// </summary>
-public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback {
+public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable {
     private readonly SurfaceCompositor m_compositor;
     private readonly VulkanRenderer m_renderer;
 
@@ -54,6 +54,22 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
     /// <inheritdoc/>
     public void Present(Surface surface) {
         m_compositor.Blit(surface: surface);
+    }
+    /// <inheritdoc/>
+    public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
+        // Release the compositor's device-level blit resources on the OLD device BEFORE it is destroyed — they are not
+        // swapchain resources, so RecreateDevice would otherwise leave them dangling on the device it destroys (a
+        // validation error + crash). The compositor stays subscribed and rebuilds them on the new device at the next
+        // BeginFrame's PresentationResourcesRecreated.
+        m_compositor.ReleaseForDeviceLoss();
+
+        // Recreate the lost device IN PLACE on the renderer (keeping object identity so the device-context capability and
+        // node references stay valid; nodes + compositor rebuild against the new handle).
+        m_renderer.RecreateDevice(
+            binding: binding,
+            height: height,
+            width: width
+        );
     }
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming =>

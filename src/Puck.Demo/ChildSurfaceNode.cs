@@ -226,15 +226,36 @@ internal sealed class ChildSurfaceNode : IRenderNode {
         m_disposed = true;
         // The per-frame submits are fire-and-forget, so a frame may still be in flight at teardown.
         m_deviceContext?.WaitIdle();
+        ReleaseGpuResources();
+    }
+
+    /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // Reset on the still-valid (lost) device, wait-free (nothing in flight can complete). The next ProduceFrame
+        // re-runs EnsureResources (latch cleared) and rebuilds against the recreated device.
+        ReleaseGpuResources();
+        m_deviceHandle = 0;
+        m_imageInitialized = false;
+        m_resourcesReady = false;
+    }
+
+    // Device-resource teardown shared by Dispose and OnDeviceLost (the body of Dispose minus the idle drain). Wait-free,
+    // idempotent (fields nulled), safe against a lost device; destroys the pool via the still-current m_deviceHandle.
+    private void ReleaseGpuResources() {
         m_commandPool?.Dispose();
+        m_commandPool = null;
         m_pipeline?.Dispose();
+        m_pipeline = null;
 
         if ((0 != m_pool) && (m_descriptorAllocator is not null)) {
             m_descriptorAllocator.DestroyPool(deviceHandle: m_deviceHandle, poolHandle: m_pool);
             m_pool = 0;
         }
 
+        m_set = 0;
         m_storageImage?.Dispose();
+        m_storageImage = null;
         m_shaderModule?.Dispose();
+        m_shaderModule = null;
     }
 }

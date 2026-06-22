@@ -82,6 +82,13 @@ internal sealed class DirectXComputeWorldHostNode : IRenderNode {
     }
 
     /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // The host D3D12 device is recreated in place by the presenter (its capability identity is preserved), so the
+        // inner producer just releases + rebuilds its own resources against the new device next frame.
+        m_inner.OnDeviceLost();
+    }
+
+    /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {
             return;

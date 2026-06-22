@@ -33,12 +33,17 @@ path never executed):
    `Closed-loop present timing live: measured interval ~16.9 ms (~59 Hz)` (phase-locked to the 60 Hz present clamp),
    `vkWaitForPresentKHR` returns `Success` every sample, and the Khronos validation layer reports **zero** errors.
 
-### DirectX nuance discovered
-DX closed-loop timing (`GetFrameStatistics.SyncQPCTime`) works under **vsync** (verified: `~8.45 ms / 118 Hz`) but is
-**unavailable under `--present-mode adaptive`** — tearing presents have no vsync sync-point, so `SyncQPCTime` stays 0
-(persistent `DISJOINT`). This is inherent DXGI behaviour, not a bug: on DX, adaptive/tearing and `GetFrameStatistics`
-phase-locking are mutually exclusive. Vulkan does *not* share this limitation — `present_wait` confirms present-id
-*display*, independent of vsync, so its closed loop works under adaptive.
+### DirectX closed loop — now full parity across present modes (2026-06-22)
+DX closed-loop timing has TWO mechanisms, picked by present mode:
+- **Vsync/Mailbox**: `GetFrameStatistics.SyncQPCTime` (a true display-scanout timestamp). Verified `~8.45 ms / 118 Hz`.
+- **Immediate/Adaptive**: `GetFrameStatistics` is dead there (tearing presents at sync interval 0 have no vsync
+  sync-point → `SyncQPCTime` stays 0 / `DISJOINT`). So those modes now drive a **frame-latency-waitable** swap chain
+  (`DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT` + `SetMaximumFrameLatency(1)`) and phase-lock to the waitable —
+  the DX analogue of Vulkan's `vkWaitForPresentKHR`. `DirectXSurfaceCompositor.BeginFrame` waits (bounded 100 ms) on it at
+  the top of the frame and timestamps the return (`Stopwatch.GetTimestamp()`, same QPC clock as `SyncQPCTime`); the pacer
+  uses the inter-sample delta so the CPU-proxy offset cancels. Verified live: 60 Hz clamped, 117 Hz uncapped, tracking
+  **90–112 Hz under 4K GPU-bound load** (no halving — the top-of-frame wait overlaps the deadline wait), zero validation/
+  device-removed errors. So DX adaptive is no longer open-loop; it matches Vulkan adaptive.
 
 ### Step 6 — CONFIRMED end-to-end on the Samsung Frame (2026-06-22)
 Done. A borderless-fullscreen, `--present-mode adaptive`, **uncapped** (`renderRate: 0`) run on the Samsung Frame (Game
@@ -53,11 +58,34 @@ normal DWM-composited desktop window cannot enter VRR; borderless-fullscreen tak
 the panel follow. See `docs/examples/world-vrr-fullscreen.json`. NOTE: our Vulkan adaptive path maps to `FIFO_RELAXED` and
 that was sufficient for VRR to engage here — `IMMEDIATE`/mailbox was NOT required.
 
-### Still open
-- **Fullscreen-EXCLUSIVE** present path (DXGI `SetFullscreenState` / Vulkan exclusive-fullscreen). Borderless-fullscreen is
-  now wired and VRR-confirmed, which covers the modern path; true exclusive remains optional/unimplemented.
-- **Multi-monitor**: the refresh range is queried once at startup — re-query on `WM_DISPLAYCHANGE` when the window changes
-  monitors.
+### Multi-monitor refresh re-query — DONE (2026-06-22)
+The refresh range is no longer queried only once. `IDisplayRefreshInfo` gained `RefreshConfigurationVersion`; the Win32
+wndproc bumps it on `WM_DISPLAYCHANGE` (mode/topology change) and on a `WM_WINDOWPOSCHANGED` that crosses to a different
+monitor (`MonitorFromWindow` change), and the launcher loop re-queries + re-clamps `renderPeriod` when the version
+advances. A transient `Unknown` during a topology change is ignored (keeps the prior good clamp rather than free-running).
+
+### Vulkan present-wait device hardening — DONE (2026-06-22, targeted)
+`m_presentWaitSupported` and the present-API's per-device function-pointer cache are now re-resolved/invalidated when the
+VkDevice handle changes (mirrors the per-swapchain id reset). Behavior-neutral on the normal single-device path; this is
+foundation for a future device-lost recovery (which is still NOT wired — `ResetVulkanResources` is produced but consumed
+nowhere). Residual gap documented in the code: it keys on the handle VALUE, so a recycled-equal handle would need an
+epoch counter.
+
+### Fullscreen-EXCLUSIVE — WON'T DO (decided 2026-06-22)
+Deliberately skipped. The shipped flip-model path (FLIP_DISCARD + ALLOW_TEARING + frame-latency waitable) already delivers
+full VRR/G-SYNC in borderless-fullscreen (confirmed on the Frame). True exclusive (`SetFullscreenState` /
+`VK_EXT_full_screen_exclusive`) adds only a real resolution/refresh MODE change + legacy gamma/overlay control — none of
+which VRR needs — while fighting the `NO_ALT_ENTER` association, being incompatible with `ALLOW_TEARING` vsync, risking
+device-removed churn, and (Vulkan) requiring a large new extension surface. Microsoft treats `SetFullscreenState` as
+legacy. Not worth the risk/complexity for zero VRR gain.
+
+### Device-lost recovery — IN PROGRESS (2026-06-22): full seamless recovery, both backends
+Detect `DXGI_ERROR_DEVICE_REMOVED`/`DEVICE_RESET` (DX) and `VK_ERROR_DEVICE_LOST` (Vulkan, already classified into the
+`ResetVulkanResources` outcome that was consumed nowhere), recreate the device + all GPU resources + the node tree, and
+resume rendering in place — without touching the fixed-step sim. Architecture: neutral `DeviceLostException` +
+`IDeviceLostRecoverable` presenter capability; a default-method `IRenderNode.OnDeviceLost()` (no-op default, overridden by
+live GPU/composite nodes to release device resources so the next ProduceFrame rebuilds them); pump-loop recovery
+orchestration. Test: Device Manager → disable+re-enable the RTX 4070.
 
 The original handoff content below is preserved for context; its "sType constants" checklist line was the one that was
 **wrong** (see bug 1; that line is now corrected in place).

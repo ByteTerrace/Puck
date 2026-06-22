@@ -12,7 +12,7 @@ namespace Puck.DirectX.Presentation;
 /// render target that this presenter then blits.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback {
+public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable {
     private readonly DirectXSurfaceCompositor m_compositor;
     private readonly DirectXDeviceContext m_deviceContext;
 
@@ -61,6 +61,21 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentTimingF
         m_compositor.Blit(
             deviceContext: m_deviceContext,
             surface: surface
+        );
+    }
+    /// <inheritdoc/>
+    public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
+        // Release the compositor's swap chain / heaps / blit resources on the OLD (removed) device — COM Release is safe
+        // on a removed device's objects, and these are not recreated by the device context. Then recreate the device IN
+        // PLACE (preserving the shared capability's identity so the compute node resolving it stays valid), and
+        // re-initialize the compositor against the new device. The node tree rebuilds its own resources next frame.
+        m_compositor.Dispose();
+        m_deviceContext.Recreate();
+        m_compositor.Initialize(
+            deviceContext: m_deviceContext,
+            binding: binding,
+            height: height,
+            width: width
         );
     }
     /// <inheritdoc/>

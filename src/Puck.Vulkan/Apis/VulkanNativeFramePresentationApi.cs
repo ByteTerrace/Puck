@@ -151,6 +151,10 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         return (GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr != null);
     }
     /// <inheritdoc/>
+    public void InvalidateDevice(nint deviceHandle) {
+        m_pointers.TryRemove(key: deviceHandle, value: out _);
+    }
+    /// <inheritdoc/>
     public VkResult WaitForPresent(nint deviceHandle, nint swapchainHandle, ulong presentId, ulong timeoutNanoseconds) {
         var waitForPresent = GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr;
 

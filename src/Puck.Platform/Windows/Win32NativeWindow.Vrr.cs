@@ -13,6 +13,14 @@ internal sealed partial class Win32NativeWindow : IDisplayRefreshInfo, IPrecisio
 
     private Win32HighResolutionWaitableTimer? m_precisionTimer;
     private bool m_precisionTimerResolved;
+    // Bumped (on the message-pump thread) when the refresh range may have changed: a WM_DISPLAYCHANGE (mode/topology) or
+    // the window crossing to a different monitor. The pacer polls RefreshConfigurationVersion and re-queries only on a
+    // change. m_lastMonitorHandle is the monitor QueryRefreshRange last reported on — the baseline for move detection.
+    private ulong m_refreshConfigurationVersion;
+    private nint m_lastMonitorHandle;
+
+    /// <inheritdoc/>
+    public ulong RefreshConfigurationVersion => m_refreshConfigurationVersion;
 
     /// <inheritdoc/>
     public DisplayRefreshRange QueryRefreshRange() {
@@ -28,6 +36,10 @@ internal sealed partial class Win32NativeWindow : IDisplayRefreshInfo, IPrecisio
         if (monitor == 0) {
             return DisplayRefreshRange.Unknown;
         }
+
+        // Record the monitor this range was read from, so a later window-position change that lands on a DIFFERENT
+        // monitor is recognized as a configuration change (and not a same-monitor move).
+        m_lastMonitorHandle = monitor;
 
         var monitorInfo = new MonitorInfoEx { Size = ((uint)System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfoEx>()) };
 
@@ -96,6 +108,30 @@ internal sealed partial class Win32NativeWindow : IDisplayRefreshInfo, IPrecisio
         }
 
         return true;
+    }
+
+    // WM_DISPLAYCHANGE: a display mode/topology change (resolution, refresh rate, monitor added/removed). The range the
+    // window sees may differ now, so advance the version; the pacer re-queries on its next loop iteration.
+    private void OnDisplayConfigurationChanged() {
+        ++m_refreshConfigurationVersion;
+    }
+    // WM_WINDOWPOSCHANGED fires for every move/resize/z-order change; only a move that lands on a DIFFERENT monitor than
+    // the one QueryRefreshRange last read can change the refresh range, so bump only then (avoids re-querying on every
+    // drag pixel). Cheap MonitorFromWindow call on the pump thread.
+    private void OnWindowPositionChanged(nint windowHandle) {
+        if (windowHandle == 0) {
+            return;
+        }
+
+        var monitor = User32.MonitorFromWindow(windowHandle: windowHandle, flags: MonitorDefaultToNearest);
+
+        if (
+            (monitor != 0) &&
+            (monitor != m_lastMonitorHandle)
+        ) {
+            m_lastMonitorHandle = monitor;
+            ++m_refreshConfigurationVersion;
+        }
     }
 
     private static bool TryEnumDisplaySettings(string deviceName, uint modeNumber, out DevMode mode) {

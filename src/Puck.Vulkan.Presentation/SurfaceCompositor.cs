@@ -194,13 +194,18 @@ public sealed class SurfaceCompositor : IDisposable {
 
     private void OnPresentationResourcesRecreated() {
         var device = m_renderer.Device;
-        var resourceDevice = (m_resourceDevice ?? device);
 
-        DisposeFrameResources(device: resourceDevice);
-
-        if (resourceDevice.Handle != device.Handle) {
-            DisposeDeviceResources(device: resourceDevice);
+        if (m_resourceDevice is null) {
+            // Device resources were pre-released during device-loss recovery (ReleaseForDeviceLoss); the frame resources
+            // went with them, so there is nothing to dispose — just rebuild the device resources on the new device.
             CreateDeviceResources(device: device);
+        } else {
+            DisposeFrameResources(device: m_resourceDevice);
+
+            if (m_resourceDevice.Handle != device.Handle) {
+                DisposeDeviceResources(device: m_resourceDevice);
+                CreateDeviceResources(device: device);
+            }
         }
 
         m_resourceDevice = device;
@@ -367,6 +372,34 @@ public sealed class SurfaceCompositor : IDisposable {
         }
 
         return vertexData;
+    }
+
+    /// <summary>Releases the compositor's device-derived blit resources on the CURRENT resource device during device-loss
+    /// recovery — BEFORE that device is destroyed, so they don't leak (they are not swapchain resources, so the renderer's
+    /// device-recreate does not free them, and destroying a device with live children is a validation error and can
+    /// crash). The compositor STAYS subscribed to <c>PresentationResourcesRecreated</c>, which rebuilds the resources on
+    /// the new device at the next BeginFrame (the null <see cref="m_resourceDevice"/> signals a from-scratch rebuild).
+    /// Tolerant of an already-lost device: a faulting drain is swallowed (the host pump drained earlier when it could).</summary>
+    public void ReleaseForDeviceLoss() {
+        if (!m_initialized || (m_resourceDevice is null)) {
+            return;
+        }
+
+        var device = m_resourceDevice;
+
+        try {
+            device.WaitIdle();
+        } catch (DeviceLostException) {
+            // Device already lost; nothing in flight to drain.
+        }
+
+        m_rootUpload?.Dispose();
+        m_rootUpload = null;
+        m_sharedImport?.Dispose();
+        m_sharedImport = null;
+        DisposeFrameResources(device: device);
+        DisposeDeviceResources(device: device);
+        m_resourceDevice = null;
     }
 
     public void Dispose() {
