@@ -14,6 +14,9 @@ internal static class PpuSmokeTests {
     private const ushort LcdLine = 0xFF44;
     private const ushort LcdLineCompare = 0xFF45;
     private const ushort BackgroundPalette = 0xFF47;
+    private const ushort ObjectPalette0 = 0xFF48;
+    private const ushort WindowY = 0xFF4A;
+    private const ushort WindowX = 0xFF4B;
     private const int DotsPerLine = 456;
     private const int FrameDots = 70224;
     private const uint White = 0xFFFFFFFFu;
@@ -127,7 +130,7 @@ internal static class PpuSmokeTests {
                     : $"first=0x{first:X8} last=0x{last:X8} (expected 0x{LightGray:X8})";
             }),
             ("background disabled clears to the lightest shade", static () => {
-                var ppu = new Ppu(interrupts: new InterruptController(), videoRam: new byte[0x2000]);
+                var ppu = new Ppu(interrupts: new InterruptController(), videoRam: new byte[0x2000], objectAttributeMemory: new byte[0xA0]);
 
                 ppu.WriteRegister(address: BackgroundPalette, value: 0xE4);
                 // LCD on, but BG disabled (bit 0 clear).
@@ -152,10 +155,94 @@ internal static class PpuSmokeTests {
                     ? null
                     : $"px0=0x{ppu.Framebuffer[0]:X8} px1=0x{ppu.Framebuffer[1]:X8} (expected black, white)";
             }),
+            ("window overlays the background when enabled", static () => {
+                var videoRam = new byte[0x2000];
+
+                FillSolidTile(videoRam: videoRam, tileIndex: 0, colorIndex: 1); // background tile -> color 1
+                FillSolidTile(videoRam: videoRam, tileIndex: 1, colorIndex: 3); // window tile -> color 3
+
+                // Window map at 0x9C00 selects tile 1 everywhere; background map at 0x9800 stays tile 0.
+                for (var cell = 0; cell < (32 * 32); cell += 1) {
+                    videoRam[0x1C00 + cell] = 1;
+                }
+
+                var ppu = new Ppu(interrupts: new InterruptController(), videoRam: videoRam, objectAttributeMemory: new byte[0xA0]);
+
+                ppu.WriteRegister(address: BackgroundPalette, value: 0xE4);
+                ppu.WriteRegister(address: WindowY, value: 0x00);
+                ppu.WriteRegister(address: WindowX, value: 0x07); // window covers the whole screen from x=0
+                // LCD on + window map 0x9C00 + window on + 0x8000 tiles + BG on.
+                ppu.WriteRegister(address: LcdControl, value: 0xF1);
+                ppu.Step(tCycles: FrameDots);
+
+                var first = ppu.Framebuffer[0];
+                var mid = ppu.Framebuffer[(100 * 160) + 50];
+
+                return ((first == Black) && (mid == Black))
+                    ? null
+                    : $"first=0x{first:X8} mid=0x{mid:X8} (expected window color 0x{Black:X8})";
+            }),
+            ("a sprite draws over the background", static () => {
+                var videoRam = new byte[0x2000];
+
+                FillSolidTile(videoRam: videoRam, tileIndex: 0, colorIndex: 1); // background -> color 1 (light gray)
+                FillSolidTile(videoRam: videoRam, tileIndex: 2, colorIndex: 3); // sprite tile -> color 3
+
+                var oam = new byte[0xA0];
+
+                oam[0] = 16;   // Y = 16 -> top row at screen y=0
+                oam[1] = 8;    // X = 8 -> left column at screen x=0
+                oam[2] = 2;    // tile 2
+                oam[3] = 0x00; // OBP0, no flip, in front of background
+
+                var ppu = new Ppu(interrupts: new InterruptController(), videoRam: videoRam, objectAttributeMemory: oam);
+
+                ppu.WriteRegister(address: BackgroundPalette, value: 0xE4);
+                ppu.WriteRegister(address: ObjectPalette0, value: 0xE4);
+                // LCD on + 0x8000 tiles + sprites on (0x02) + BG on (0x01).
+                ppu.WriteRegister(address: LcdControl, value: 0x93);
+                ppu.Step(tCycles: FrameDots);
+
+                var spritePixel = ppu.Framebuffer[0];                 // covered by the sprite
+                var backgroundPixel = ppu.Framebuffer[(50 * 160) + 80]; // outside the sprite
+
+                return ((spritePixel == Black) && (backgroundPixel == LightGray))
+                    ? null
+                    : $"sprite=0x{spritePixel:X8} bg=0x{backgroundPixel:X8} (expected sprite black, bg light gray)";
+            }),
+            ("a transparent sprite pixel (color 0) shows the background", static () => {
+                var videoRam = new byte[0x2000];
+
+                FillSolidTile(videoRam: videoRam, tileIndex: 0, colorIndex: 1); // background -> color 1
+                FillSolidTile(videoRam: videoRam, tileIndex: 2, colorIndex: 0); // sprite tile -> color 0 (transparent)
+
+                var oam = new byte[0xA0];
+
+                oam[0] = 16;
+                oam[1] = 8;
+                oam[2] = 2;
+                oam[3] = 0x00;
+
+                var ppu = new Ppu(interrupts: new InterruptController(), videoRam: videoRam, objectAttributeMemory: oam);
+
+                ppu.WriteRegister(address: BackgroundPalette, value: 0xE4);
+                ppu.WriteRegister(address: ObjectPalette0, value: 0xE4);
+                ppu.WriteRegister(address: LcdControl, value: 0x93);
+                ppu.Step(tCycles: FrameDots);
+
+                // Under the (fully transparent) sprite, the background still shows.
+                return (ppu.Framebuffer[0] == LightGray)
+                    ? null
+                    : $"px0=0x{ppu.Framebuffer[0]:X8} (expected background light gray through transparent sprite)";
+            }),
         ];
 
-    private static Ppu RenderFrame(byte[] videoRam, byte palette) {
-        var ppu = new Ppu(interrupts: new InterruptController(), videoRam: videoRam);
+    private static Ppu RenderFrame(byte[] videoRam, byte palette, byte[]? oam = null) {
+        var ppu = new Ppu(
+            interrupts: new InterruptController(),
+            objectAttributeMemory: (oam ?? new byte[0xA0]),
+            videoRam: videoRam
+        );
 
         ppu.WriteRegister(address: BackgroundPalette, value: palette);
         ppu.WriteRegister(address: ScrollX, value: 0x00);
@@ -167,15 +254,27 @@ internal static class PpuSmokeTests {
         return ppu;
     }
 
+    // Fills the given tile (16 bytes at tileIndex*16 in video RAM) so every pixel is the given 2-bit color index.
+    private static void FillSolidTile(byte[] videoRam, int tileIndex, int colorIndex) {
+        var baseAddress = (tileIndex * 16);
+
+        for (var row = 0; row < 8; row += 1) {
+            videoRam[baseAddress + (row * 2)] = (byte)(((colorIndex & 1) != 0) ? 0xFF : 0x00);
+            videoRam[baseAddress + (row * 2) + 1] = (byte)(((colorIndex & 2) != 0) ? 0xFF : 0x00);
+        }
+    }
+
     private static (Ppu Ppu, InterruptController Interrupts) Enabled() {
         var interrupts = new InterruptController();
-        var ppu = new Ppu(interrupts: interrupts, videoRam: new byte[0x2000]);
+        var ppu = new Ppu(interrupts: interrupts, videoRam: new byte[0x2000], objectAttributeMemory: new byte[0xA0]);
 
         ppu.WriteRegister(address: LcdControl, value: 0x80);
 
         return (ppu, interrupts);
     }
 
+    // The actual PPU mode (the STAT register's mode bits lag this by a machine cycle, which is verified against
+    // the mooneye suite rather than here).
     private static int CurrentMode(Ppu ppu) =>
-        (ppu.ReadRegister(address: LcdStatus) & 0x03);
+        (int)ppu.Mode;
 }

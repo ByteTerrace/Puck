@@ -33,8 +33,12 @@ public sealed class Ppu : IClockedComponent {
     private static readonly uint[] Shades = [0xFFFFFFFFu, 0xFFAAAAAAu, 0xFF555555u, 0xFF000000u];
 
     private readonly InterruptController m_interrupts;
+    private readonly byte[] m_objectAttributeMemory;
     private readonly byte[] m_videoRam;
     private readonly uint[] m_framebuffer = new uint[ScreenWidth * ScreenHeight];
+    // The background/window color index (0-3) chosen per pixel on the current line, used for sprite-to-background
+    // priority (a sprite with the priority bit set is hidden behind background colors 1-3).
+    private readonly byte[] m_lineColorIndex = new byte[ScreenWidth];
 
     private bool m_coincidence;
     private bool m_enabled;
@@ -43,7 +47,10 @@ public sealed class Ppu : IClockedComponent {
     private int m_dot;
     private int m_line;
     private int m_mode0StartDot = (OamScanDots + DrawingDots);
+    private int m_reportedModeDelay;
+    private int m_windowLineCounter;
     private PpuMode m_mode = PpuMode.HorizontalBlank;
+    private PpuMode m_reportedMode = PpuMode.HorizontalBlank;
     private byte m_backgroundPalette;
     private byte m_lcdControl;
     private byte m_lineCompare;
@@ -67,24 +74,29 @@ public sealed class Ppu : IClockedComponent {
     /// <summary>Gets the latched frame's pixels (32-bit RGBA, row-major, 160&#215;144). Painted by a later stage.</summary>
     public ReadOnlySpan<uint> Framebuffer =>
         m_framebuffer;
-    /// <summary>Gets whether VRAM is currently accessible to the CPU — true unless the PPU is drawing.</summary>
+    /// <summary>Gets whether VRAM is currently accessible to the CPU — true unless the PPU is drawing. Follows the
+    /// reported (machine-cycle-lagged) mode, so the lock tracks what a CPU read observes.</summary>
     public bool IsVideoRamAccessible =>
-        (!m_enabled || (m_mode != PpuMode.Drawing));
-    /// <summary>Gets whether OAM is currently accessible to the CPU — true outside the OAM-scan and drawing modes.</summary>
+        (!m_enabled || (m_reportedMode != PpuMode.Drawing));
+    /// <summary>Gets whether OAM is currently accessible to the CPU — true outside the OAM-scan and drawing modes,
+    /// tracking the reported (lagged) mode.</summary>
     public bool IsObjectMemoryAccessible =>
-        (!m_enabled || (m_mode is PpuMode.HorizontalBlank or PpuMode.VerticalBlank));
+        (!m_enabled || (m_reportedMode is PpuMode.HorizontalBlank or PpuMode.VerticalBlank));
 
     /// <summary>Initializes the PPU wired to the interrupt controller and the video RAM it fetches tiles and maps
     /// from. The PPU reads video RAM directly (it is the component that locks it from the CPU), so the access is
     /// not subject to the mode lock.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
     /// <param name="videoRam">The video RAM backing store the bus owns.</param>
+    /// <param name="objectAttributeMemory">The 160-byte OAM backing store the bus owns, scanned for sprites.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Ppu(InterruptController interrupts, byte[] videoRam) {
+    public Ppu(InterruptController interrupts, byte[] videoRam, byte[] objectAttributeMemory) {
         ArgumentNullException.ThrowIfNull(interrupts);
         ArgumentNullException.ThrowIfNull(videoRam);
+        ArgumentNullException.ThrowIfNull(objectAttributeMemory);
 
         m_interrupts = interrupts;
+        m_objectAttributeMemory = objectAttributeMemory;
         m_videoRam = videoRam;
     }
 
@@ -192,6 +204,18 @@ public sealed class Ppu : IClockedComponent {
     }
 
     private void TickDot() {
+        // The STAT register's mode bits lag the actual mode transition by one machine cycle: the interrupt fires
+        // at the transition, but a CPU read sees the new mode 4 dots later. (The interrupt-to-interrupt deltas
+        // stay exact; only the polled view is delayed.) Decremented at the top so a transition later in this dot
+        // schedules a full 4-dot delay.
+        if (m_reportedModeDelay > 0) {
+            m_reportedModeDelay -= 1;
+
+            if (m_reportedModeDelay == 0) {
+                m_reportedMode = m_mode;
+            }
+        }
+
         m_dot += 1;
 
         if (m_dot >= DotsPerLine) {
@@ -227,10 +251,12 @@ public sealed class Ppu : IClockedComponent {
         }
 
         if (m_line == ScreenHeight) {
-            // Entering vertical blank: the frame is complete and the vertical-blank interrupt fires.
+            // Entering vertical blank: the frame is complete and the vertical-blank interrupt fires. The window's
+            // internal line counter resets here, ready for the next frame.
             SetMode(mode: PpuMode.VerticalBlank);
             m_interrupts.Request(kind: InterruptKind.VBlank);
             m_frameReady = true;
+            m_windowLineCounter = 0;
         }
         else if (m_line < ScreenHeight) {
             SetMode(mode: PpuMode.OamScan);
@@ -242,51 +268,189 @@ public sealed class Ppu : IClockedComponent {
 
     private void SetMode(PpuMode mode) {
         m_mode = mode;
+        // The interrupt is evaluated now (at the transition); the STAT mode bits update 4 dots later.
+        m_reportedModeDelay = 4;
         UpdateStatInterrupt();
     }
 
     private void RenderScanline() {
-        // Scanline-based background rendering using the registers as they stand at pixel-transfer end. The
-        // dot-accurate fetcher/FIFO (which lets mid-scanline register changes take effect) is a later stage;
-        // window and sprites are also still to come.
-        RenderBackground(line: m_line);
+        // Scanline-based rendering using the registers as they stand at pixel-transfer end. The dot-accurate
+        // fetcher/FIFO (which lets mid-scanline register changes take effect) is a later stage.
+        RenderBackgroundAndWindow(line: m_line);
+        RenderSprites(line: m_line);
     }
 
-    private void RenderBackground(int line) {
+    private void RenderBackgroundAndWindow(int line) {
         var rowBase = (line * ScreenWidth);
 
-        // On the DMG, LCDC bit 0 clears the background to the lightest shade when zero.
+        // On the DMG, LCDC bit 0 disables both background and window, clearing the line to the lightest shade.
         if ((m_lcdControl & 0x01) == 0) {
             for (var x = 0; x < ScreenWidth; x += 1) {
                 m_framebuffer[rowBase + x] = Shades[0];
+                m_lineColorIndex[x] = 0;
             }
 
             return;
         }
 
-        var mapBase = (((m_lcdControl & 0x08) != 0) ? TileMap1 : TileMap0);
+        var backgroundMap = (((m_lcdControl & 0x08) != 0) ? TileMap1 : TileMap0);
+        var windowMap = (((m_lcdControl & 0x40) != 0) ? TileMap1 : TileMap0);
         var unsignedTiles = ((m_lcdControl & 0x10) != 0);
-        var backgroundY = ((m_scrollY + line) & 0xFF);
-        var tileRow = (backgroundY >> 3);
-        var tileLine = (backgroundY & 7);
+        var windowActive = (((m_lcdControl & 0x20) != 0) && (line >= m_windowY));
+        var windowStartX = (m_windowX - 7);
+        var windowShown = false;
 
         for (var x = 0; x < ScreenWidth; x += 1) {
-            var backgroundX = ((m_scrollX + x) & 0xFF);
-            var tileColumn = (backgroundX >> 3);
-            var tileNumber = ReadVideoRam(address: (ushort)(mapBase + (tileRow * 32) + tileColumn));
+            int colorIndex;
 
-            // The 0x8000 method indexes tiles unsigned from 0x8000; the 0x8800 method indexes signed from 0x9000.
-            var tileDataAddress = (unsignedTiles
-                ? (0x8000 + (tileNumber * 16))
-                : (0x9000 + ((sbyte)tileNumber * 16)));
-            var rowAddress = (ushort)(tileDataAddress + (tileLine * 2));
-            var low = ReadVideoRam(address: rowAddress);
-            var high = ReadVideoRam(address: (ushort)(rowAddress + 1));
-            var bit = (7 - (backgroundX & 7));
-            var colorIndex = ((((high >> bit) & 1) << 1) | ((low >> bit) & 1));
+            if (windowActive && (x >= windowStartX)) {
+                // The window has its own map and an internal line counter (it advances only on lines it appears).
+                colorIndex = FetchTileColor(
+                    mapBase: windowMap,
+                    pixelX: (x - windowStartX),
+                    pixelY: m_windowLineCounter,
+                    unsignedTiles: unsignedTiles
+                );
+                windowShown = true;
+            }
+            else {
+                colorIndex = FetchTileColor(
+                    mapBase: backgroundMap,
+                    pixelX: ((m_scrollX + x) & 0xFF),
+                    pixelY: ((m_scrollY + line) & 0xFF),
+                    unsignedTiles: unsignedTiles
+                );
+            }
+
+            m_lineColorIndex[x] = (byte)colorIndex;
+
             var shade = ((m_backgroundPalette >> (colorIndex * 2)) & 3);
 
             m_framebuffer[rowBase + x] = Shades[shade];
+        }
+
+        // The window's internal line counter advances once per line the window was actually drawn.
+        if (windowShown) {
+            m_windowLineCounter += 1;
+        }
+    }
+
+    private int FetchTileColor(ushort mapBase, int pixelX, int pixelY, bool unsignedTiles) {
+        var tileNumber = ReadVideoRam(address: (ushort)(mapBase + ((pixelY >> 3) * 32) + (pixelX >> 3)));
+
+        // The 0x8000 method indexes tiles unsigned from 0x8000; the 0x8800 method indexes signed from 0x9000.
+        var tileDataAddress = (unsignedTiles
+            ? (0x8000 + (tileNumber * 16))
+            : (0x9000 + ((sbyte)tileNumber * 16)));
+        var rowAddress = (ushort)(tileDataAddress + ((pixelY & 7) * 2));
+        var low = ReadVideoRam(address: rowAddress);
+        var high = ReadVideoRam(address: (ushort)(rowAddress + 1));
+        var bit = (7 - (pixelX & 7));
+
+        return ((((high >> bit) & 1) << 1) | ((low >> bit) & 1));
+    }
+
+    private void RenderSprites(int line) {
+        // Objects (sprites) are disabled by LCDC bit 1.
+        if ((m_lcdControl & 0x02) == 0) {
+            return;
+        }
+
+        var rowBase = (line * ScreenWidth);
+        var spriteHeight = (((m_lcdControl & 0x04) != 0) ? 16 : 8);
+
+        // OAM scan: the first 10 objects (in OAM order) whose vertical span covers this line.
+        Span<int> selected = stackalloc int[10];
+        var count = 0;
+
+        for (var index = 0; (index < 40) && (count < 10); index += 1) {
+            var objectY = (m_objectAttributeMemory[index * 4] - 16);
+
+            if ((line >= objectY) && (line < (objectY + spriteHeight))) {
+                selected[count] = index;
+                count += 1;
+            }
+        }
+
+        // DMG object priority: a smaller X draws on top, ties broken by the smaller OAM index. Draw lowest priority
+        // first (largest X, then largest index) so the highest-priority object overwrites.
+        SortByDrawOrder(
+            selected: selected[..count]
+        );
+
+        foreach (var index in selected[..count]) {
+            DrawSprite(
+                line: line,
+                oamIndex: index,
+                rowBase: rowBase,
+                spriteHeight: spriteHeight
+            );
+        }
+    }
+
+    private void SortByDrawOrder(Span<int> selected) {
+        // Insertion sort by object X descending, then OAM index descending (small span, at most 10 entries).
+        for (var i = 1; i < selected.Length; i += 1) {
+            var current = selected[i];
+            var currentX = m_objectAttributeMemory[(current * 4) + 1];
+            var j = (i - 1);
+
+            while ((j >= 0) && IsHigherDrawPriority(candidate: selected[j], candidateX: m_objectAttributeMemory[(selected[j] * 4) + 1], referenceX: currentX, referenceIndex: current)) {
+                selected[j + 1] = selected[j];
+                j -= 1;
+            }
+
+            selected[j + 1] = current;
+        }
+    }
+
+    private static bool IsHigherDrawPriority(int candidate, int candidateX, int referenceX, int referenceIndex) =>
+        // "Earlier in draw order" means lower priority: larger X, or equal X with larger OAM index.
+        ((candidateX < referenceX) || ((candidateX == referenceX) && (candidate < referenceIndex)));
+
+    private void DrawSprite(int line, int oamIndex, int rowBase, int spriteHeight) {
+        var oamAddress = (oamIndex * 4);
+        var objectY = (m_objectAttributeMemory[oamAddress] - 16);
+        var objectX = (m_objectAttributeMemory[oamAddress + 1] - 8);
+        var tile = (int)m_objectAttributeMemory[oamAddress + 2];
+        var attributes = m_objectAttributeMemory[oamAddress + 3];
+        var palette = (((attributes & 0x10) != 0) ? m_objectPalette1 : m_objectPalette0);
+        var behindBackground = ((attributes & 0x80) != 0);
+
+        var rowInSprite = (line - objectY);
+
+        if ((attributes & 0x40) != 0) {
+            rowInSprite = (spriteHeight - 1 - rowInSprite);
+        }
+
+        if (spriteHeight == 16) {
+            // In 8x16 mode the low bit of the tile number is ignored; the two stacked tiles are addressed by the row.
+            tile &= 0xFE;
+        }
+
+        var rowAddress = (ushort)(0x8000 + (tile * 16) + (rowInSprite * 2));
+        var low = ReadVideoRam(address: rowAddress);
+        var high = ReadVideoRam(address: (ushort)(rowAddress + 1));
+        var flipX = ((attributes & 0x20) != 0);
+
+        for (var pixel = 0; pixel < 8; pixel += 1) {
+            var screenX = (objectX + pixel);
+
+            if ((screenX < 0) || (screenX >= ScreenWidth)) {
+                continue;
+            }
+
+            var bit = (flipX ? pixel : (7 - pixel));
+            var colorIndex = ((((high >> bit) & 1) << 1) | ((low >> bit) & 1));
+
+            // Color 0 is transparent; a priority object is also hidden behind non-zero background pixels.
+            if ((colorIndex == 0) || (behindBackground && (m_lineColorIndex[screenX] != 0))) {
+                continue;
+            }
+
+            var shade = ((palette >> (colorIndex * 2)) & 3);
+
+            m_framebuffer[rowBase + screenX] = Shades[shade];
         }
     }
 
@@ -297,8 +461,8 @@ public sealed class Ppu : IClockedComponent {
         // The coincidence bit is latched here (it is frozen while the LCD is off, since this is not called then),
         // so STAT reads return the held value rather than a fresh LY=LYC compare.
         m_coincidence = (m_line == m_lineCompare);
-        // The OAM (mode 2) STAT source also asserts at the start of vertical blank (line 144) on the DMG, even
-        // though the PPU enters mode 1 there.
+        // The OAM (mode 2) STAT source asserts during mode 2 and also at the start of vertical blank (line 144,
+        // a DMG quirk).
         var oamSource = (((m_mode == PpuMode.OamScan) || (m_line == ScreenHeight)) && ((m_statEnables & StatOamInterrupt) != 0));
         var line = (
             ((m_mode == PpuMode.HorizontalBlank) && ((m_statEnables & StatHBlankInterrupt) != 0)) ||
@@ -316,10 +480,11 @@ public sealed class Ppu : IClockedComponent {
     }
 
     private byte ReadStatus() {
-        // The latched coincidence bit (frozen while the LCD is off) rather than a live LY=LYC compare.
+        // The latched coincidence bit (frozen while the LCD is off) and the lagged mode bits, rather than a live
+        // compare or the instantaneous mode.
         var coincidence = (m_coincidence ? 0x04 : 0x00);
 
-        return (byte)(0x80 | m_statEnables | coincidence | (int)m_mode);
+        return (byte)(0x80 | m_statEnables | coincidence | (int)m_reportedMode);
     }
 
     private void SetLcdControl(byte value) {
@@ -337,8 +502,11 @@ public sealed class Ppu : IClockedComponent {
 
         // The LCD-enable first-frame quirk: line 0 has NO OAM-scan phase — it begins directly in mode 0, then
         // mode 3 at dot 80, then mode 0 (so OAM and VRAM stay accessible until mode 3). Lines 1+ run normally.
-        // Turning the LCD off also parks it in mode 0 with LY=0.
+        // Turning the LCD off also parks it in mode 0 with LY=0. The reported mode is set immediately (no lag).
         m_mode = PpuMode.HorizontalBlank;
+        m_reportedMode = PpuMode.HorizontalBlank;
+        m_reportedModeDelay = 0;
+        m_windowLineCounter = 0;
 
         // On re-enable, recompute the STAT line for LY=0 and fire only on a genuine rising edge carried from the
         // value held while the LCD was off — resetting it to false would fabricate a spurious edge. On disable,

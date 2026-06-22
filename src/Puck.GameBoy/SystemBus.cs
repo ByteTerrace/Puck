@@ -91,7 +91,7 @@ public sealed class SystemBus : ICpuBus {
         m_oamDma = new OamDma(oam: m_oam, readSource: ReadDmaSource);
         Attach(component: m_oamDma);
 
-        m_ppu = new Ppu(interrupts: m_interrupts, videoRam: m_videoRam);
+        m_ppu = new Ppu(interrupts: m_interrupts, videoRam: m_videoRam, objectAttributeMemory: m_oam);
         Attach(component: m_ppu);
     }
 

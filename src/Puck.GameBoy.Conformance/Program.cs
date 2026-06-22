@@ -4,6 +4,16 @@ using Puck.GameBoy.Conformance;
 // Test ROM / vector assets are read from the PUCK_GB_TESTROMS environment variable or a --roms <dir> argument;
 // suites whose assets are absent are skipped (reported), so the runner still exercises the asset-free gates.
 try {
+    // Diagnostic mode: --trace <romPath> runs one ROM to its breakpoint and dumps CPU + high-RAM diagnostics.
+    for (var index = 0; index < (args.Length - 1); index += 1) {
+        if (args[index] == "--trace") {
+            return MooneyeTrace.Run(
+                output: Console.Out,
+                romPath: args[index + 1]
+            );
+        }
+    }
+
     var failures = 0;
     var passes = 0;
 
