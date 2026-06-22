@@ -111,5 +111,9 @@ public sealed class GameBoyMachine {
         // hardware. (Seeding it is more faithful than leaving IF clear: a cartridge that enables VBlank immediately
         // would take the interrupt on real hardware too.)
         m_bus.WriteByte(address: MemoryMap.InterruptFlag, value: 0x01);
+
+        // The boot ROM's startup chime leaves the APU powered with a known register state (and channel 1 sounding);
+        // seed it directly so the audio block reads match hardware without replaying the chime.
+        m_bus.Apu.InitializePostBoot();
     }
 }

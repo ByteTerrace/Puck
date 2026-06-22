@@ -14,6 +14,7 @@ public sealed class SystemBus : ICpuBus {
     private const int WorkRamBankSize = 0x1000;
     private const int VideoRamBankSize = 0x2000;
 
+    private readonly Apu m_apu;
     private readonly List<IClockedComponent> m_clockedComponents = [];
     private readonly ICartridge m_cartridge;
     private readonly byte[] m_highRam = new byte[0x7F];
@@ -97,8 +98,12 @@ public sealed class SystemBus : ICpuBus {
         Attach(component: m_ppu);
 
         m_joypad = new Joypad(interrupts: m_interrupts);
-        m_serial = new Serial(interrupts: m_interrupts);
+        // The serial shift clock is divided from the timer's system counter, so transfers align to its phase.
+        m_serial = new Serial(interrupts: m_interrupts, systemCounter: () => m_timer.InternalCounter);
         Attach(component: m_serial);
+
+        m_apu = new Apu();
+        Attach(component: m_apu);
     }
 
     /// <summary>Gets the picture processing unit, for the host to present its framebuffer.</summary>
@@ -113,6 +118,9 @@ public sealed class SystemBus : ICpuBus {
     /// <summary>Gets the serial port, for capturing serial output.</summary>
     public Serial Serial =>
         m_serial;
+    /// <summary>Gets the audio processing unit, for the host to drain sample output.</summary>
+    public Apu Apu =>
+        m_apu;
 
     /// <summary>Registers a component to be advanced each machine cycle in its clock domain.</summary>
     /// <param name="component">The component to clock alongside the CPU.</param>
@@ -282,6 +290,7 @@ public sealed class SystemBus : ICpuBus {
             MemoryMap.Joypad => m_joypad.Read(),
             MemoryMap.SerialData => m_serial.ReadData(),
             MemoryMap.SerialControl => m_serial.ReadControl(),
+            >= MemoryMap.AudioBase and <= MemoryMap.WaveRamEnd => m_apu.Read(address: address),
             >= MemoryMap.Divider and <= MemoryMap.TimerControl => m_timer.ReadRegister(address: address),
             MemoryMap.OamDmaStart => m_oamDma.Page,
             >= MemoryMap.LcdControl and <= MemoryMap.WindowX => m_ppu.ReadRegister(address: address),
@@ -311,6 +320,13 @@ public sealed class SystemBus : ICpuBus {
                 break;
             case MemoryMap.SerialControl:
                 m_serial.WriteControl(value: value);
+
+                break;
+            case >= MemoryMap.AudioBase and <= MemoryMap.WaveRamEnd:
+                m_apu.Write(
+                    address: address,
+                    value: value
+                );
 
                 break;
             case >= MemoryMap.Divider and <= MemoryMap.TimerControl:

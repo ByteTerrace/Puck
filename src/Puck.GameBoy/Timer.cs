@@ -25,6 +25,11 @@ public sealed class Timer : IClockedComponent {
     /// <inheritdoc />
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+    /// <summary>Gets the 16-bit internal counter (the system divider whose high byte is <c>DIV</c>). Other clocks
+    /// (the serial shift clock, and later the APU frame sequencer) are divided from this same counter, so they
+    /// stay phase-aligned to it and to <c>DIV</c> resets.</summary>
+    public int InternalCounter =>
+        m_internalCounter;
 
     /// <summary>Initializes the timer wired to the interrupt controller it raises the timer interrupt through.</summary>
     /// <param name="interrupts">The interrupt controller.</param>

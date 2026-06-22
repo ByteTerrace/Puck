@@ -51,11 +51,19 @@ internal static class IoSmokeTests {
             }),
             ("serial transfer completes, interrupts, and shifts in ones", static () => {
                 var interrupts = new InterruptController();
-                var serial = new Serial(interrupts: interrupts);
+                var counter = 0;
+                var serial = new Serial(interrupts: interrupts, systemCounter: () => counter);
 
                 serial.WriteData(value: 0x42);
                 serial.WriteControl(value: 0x81); // start + internal clock
-                serial.Step(tCycles: 4096); // 8 bits x 512 T-cycles
+
+                // The shift clock is the system counter's bit 8 (a falling edge every 512 T-cycles), so the eight
+                // bits complete after 8 x 512 = 4096 T-cycles. Drive the counter a machine cycle at a time, as the
+                // bus does (the timer advances it before the serial samples it).
+                for (var cycle = 0; cycle < 4096; cycle += 4) {
+                    counter = ((counter + 4) & 0xFFFF);
+                    serial.Step(tCycles: 4);
+                }
 
                 var finished = ((serial.ReadControl() & 0x80) == 0);
                 var raised = ((interrupts.InterruptFlag & (byte)InterruptKind.Serial) != 0);
@@ -66,7 +74,7 @@ internal static class IoSmokeTests {
                     : $"finished={finished} irq={raised} SB=0x{serial.ReadData():X2}";
             }),
             ("serial surfaces the transmitted byte", static () => {
-                var serial = new Serial(interrupts: new InterruptController());
+                var serial = new Serial(interrupts: new InterruptController(), systemCounter: static () => 0);
                 var captured = (byte)0;
 
                 serial.ByteTransmitted = value => captured = value;

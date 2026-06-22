@@ -54,6 +54,14 @@ public static class MemoryMap {
     public const ushort TimerControl = 0xFF07;
     /// <summary>The interrupt-flag register (<c>IF</c>).</summary>
     public const ushort InterruptFlag = 0xFF0F;
+    /// <summary>The first address of the audio register block (<c>NR10</c>, <c>0xFF10</c>).</summary>
+    public const ushort AudioBase = 0xFF10;
+    /// <summary>The master sound control register (<c>NR52</c>): bit&#160;7 powers the APU, bits&#160;0-3 report channel activity.</summary>
+    public const ushort AudioMasterControl = 0xFF26;
+    /// <summary>The first address of wave-pattern RAM (channel&#160;3 sample table, <c>0xFF30</c>-<c>0xFF3F</c>).</summary>
+    public const ushort WaveRamBase = 0xFF30;
+    /// <summary>The last address of wave-pattern RAM, and of the audio block the APU claims (<c>0xFF10</c>-<c>0xFF3F</c>).</summary>
+    public const ushort WaveRamEnd = 0xFF3F;
     /// <summary>The LCD control register (<c>LCDC</c>).</summary>
     public const ushort LcdControl = 0xFF40;
     /// <summary>The LCD status register (<c>STAT</c>).</summary>

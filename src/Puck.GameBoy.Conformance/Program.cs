@@ -36,6 +36,7 @@ try {
         ("PPU", PpuSmokeTests.All),
         ("Cartridge", CartridgeSmokeTests.All),
         ("Joypad/Serial", IoSmokeTests.All),
+        ("APU", ApuSmokeTests.All),
         ("Host pacing", HostPacingSmokeTests.All),
     ];
 
