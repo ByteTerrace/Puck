@@ -5,8 +5,9 @@ namespace Puck.Demo.MiniAction;
 
 /// <summary>
 /// The fixed-point collision surfaces the simulation resolves against, derived ONCE from the authored (float)
-/// <see cref="MiniActionRoom"/> via deterministic rounding. The avatar's box half-extents are already folded in,
-/// so these are the exact planes a body's center clamps to.
+/// <see cref="MiniActionRoom"/> via deterministic rounding. Both the wall half-thickness AND the avatar's box
+/// half-extents are folded in, so these are the exact planes a body's center clamps to — a body's face then rests
+/// flush against the wall's inner face, not buried to the wall centerline.
 /// </summary>
 /// <param name="FloorTop">The world Y the body's center rests at on the floor.</param>
 /// <param name="MinX">The minimum X the body's center may reach.</param>
@@ -23,13 +24,17 @@ public readonly record struct FixedRoom(FixedQ4816 FloorTop, FixedQ4816 MinX, Fi
         var halfX = FixedQ4816.FromDouble(value: room.PlayerHalfExtents.X);
         var halfY = FixedQ4816.FromDouble(value: room.PlayerHalfExtents.Y);
         var halfZ = FixedQ4816.FromDouble(value: room.PlayerHalfExtents.Z);
+        // The perimeter wall boxes are CENTERED on the bounds, so a wall's inner face sits one wall-half-thickness inside
+        // the bound. Fold BOTH that thickness AND the player half-extent into the center clamp, so the body's face rests
+        // flush against the inner face (bound ∓ wall) instead of sinking to the wall centerline (the old bug).
+        var wall = FixedQ4816.FromDouble(value: room.WallThickness);
 
         return new FixedRoom(
             FloorTop: (FixedQ4816.FromDouble(value: room.FloorY) + halfY),
-            MaxX: (FixedQ4816.FromDouble(value: room.BoundsMax.X) - halfX),
-            MaxZ: (FixedQ4816.FromDouble(value: room.BoundsMax.Y) - halfZ),
-            MinX: (FixedQ4816.FromDouble(value: room.BoundsMin.X) + halfX),
-            MinZ: (FixedQ4816.FromDouble(value: room.BoundsMin.Y) + halfZ)
+            MaxX: (FixedQ4816.FromDouble(value: room.BoundsMax.X) - wall - halfX),
+            MaxZ: (FixedQ4816.FromDouble(value: room.BoundsMax.Y) - wall - halfZ),
+            MinX: (FixedQ4816.FromDouble(value: room.BoundsMin.X) + wall + halfX),
+            MinZ: (FixedQ4816.FromDouble(value: room.BoundsMin.Y) + wall + halfZ)
         );
     }
 }

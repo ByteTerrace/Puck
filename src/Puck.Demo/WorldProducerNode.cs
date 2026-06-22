@@ -96,6 +96,11 @@ internal sealed class WorldProducerNode : IRenderNode {
     private IGpuSurfaceReadback? m_readback;
     private bool m_resourcesReady;
     private bool m_programUploadPending;
+    private int m_produceFrameIndex;
+
+    private static int CaptureDelayFrames() {
+        return (int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_CAPTURE_FRAME"), out var frame) && (frame > 0)) ? frame : 0;
+    }
     private IGpuStorageImage?[] m_sourceTextures = [];
     private IGpuStorageImage? m_storageImage;
     private GpuTimestampCapabilities m_timingCapabilities;
@@ -189,11 +194,19 @@ internal sealed class WorldProducerNode : IRenderNode {
         m_viewportBuffer!.Write<byte>(data: m_viewportScratch);
         PackDynamicTransforms(frame: frame);
         m_dynamicTransformBuffer!.Write<byte>(data: m_dynamicTransformScratch);
+        // Rebuild the Stage-2 composite rects from the LIVE regions every frame — the camera director animates the
+        // split layout, so a frozen first-frame layout composited stale/blank rects mid-transition.
+        BuildCompositePush(frame: frame);
         Render();
+
+        // PUCK_CAPTURE_FRAME=N delays the one-shot --capture to the Nth produced frame (default 0 = first), so a capture
+        // can grab a post-transition frame (e.g. an animated split-screen settled) instead of frame 1. Diagnostic aid.
+        ++m_produceFrameIndex;
 
         if (
             (m_capturePath is not null) &&
-            !m_captured
+            !m_captured &&
+            (m_produceFrameIndex > CaptureDelayFrames())
         ) {
             // Retain a copy of the readback (the readback buffer is reused across calls) so a parity gate can diff
             // two backends' output without a second GPU read.
@@ -387,33 +400,31 @@ internal sealed class WorldProducerNode : IRenderNode {
 
         pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = m_viewportCount; pushWords[5] = m_childMask;
 
-        BuildCompositePush(frame: frame);
+        // NOTE: the Stage-2 composite rects (BuildCompositePush) are rebuilt EVERY frame in ProduceFrame, not here — the
+        // camera director ANIMATES the per-view regions, so freezing them to this first frame blanked panes mid-transition.
 
         m_beamShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_beamBytecode);
         m_cullArgsShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_cullArgsBytecode);
         m_viewsShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_viewsBytecode);
         m_compositeShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_compositeBytecode);
 
-        // One rect-sized source texture per NON-child viewport — Stage 1 renders into it, Stage 2 copies it into its
-        // region. Child slots stay null: their source is the hosted child's storage image (bound in BindSources), and
-        // the child owns that image's layout, so the parent never creates or transitions one. Sized from this (first)
-        // frame's regions; the demo's layouts are stable for the run.
+        // One FULL-SIZE source texture per NON-child viewport — Stage 1 renders the viewport's region-extent into it,
+        // Stage 2 copies that into the screen region. Sized to the FULL frame extent (the largest any region can reach),
+        // NOT this first frame's region: the camera director animates regions every frame, so a frozen region-sized
+        // texture (e.g. 1x1 from a zero-area first frame, or a half-width split) under-allocated the pane and blanked it
+        // when the layout grew. Writes/reads stay within the live region (≤ full), so full-size is always in-bounds.
+        // Child slots stay null: their source is the hosted child's storage image (bound in BindSources), and the child
+        // owns that image's layout, so the parent never creates or transitions one.
         m_sourceTextures = new IGpuStorageImage?[(int)m_viewportCount];
+        m_maxRectWidth = m_width;
+        m_maxRectHeight = m_height;
 
         for (var index = 0; (index < (int)m_viewportCount); index++) {
-            // Child slots are excluded from the Stage 1 max-rect too: Stage 1 skips them via childMask, so its
-            // dispatch never needs to cover their extent.
             if (IsChildSlot(slot: index)) {
                 continue;
             }
 
-            var region = frame.Views[index].Region;
-            var rectWidth = Math.Max(1u, (uint)(region.Width * m_width));
-            var rectHeight = Math.Max(1u, (uint)(region.Height * m_height));
-
-            m_sourceTextures[index] = storageImageFactory.Create(deviceContext: gpuDevice, format: Format, height: rectHeight, width: rectWidth);
-            m_maxRectWidth = Math.Max(m_maxRectWidth, rectWidth);
-            m_maxRectHeight = Math.Max(m_maxRectHeight, rectHeight);
+            m_sourceTextures[index] = storageImageFactory.Create(deviceContext: gpuDevice, format: Format, height: m_height, width: m_width);
         }
 
         // The output image is either a plain same-device storage image (resolved from the neutral factory) or an

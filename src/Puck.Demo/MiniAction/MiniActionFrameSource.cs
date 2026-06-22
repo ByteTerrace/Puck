@@ -150,9 +150,11 @@ public sealed class MiniActionFrameSource : ISdfFrameSource {
         // equation dot(p, n) + offset must still vanish there, so offset = origin.Y − FloorY (= −FloorY when origin = 0).
         _ = builder.ResetPoint().Plane(normal: Vector3.UnitY, offset: (origin.Y - m_room.FloorY), material: floorMaterial);
 
-        // Four perimeter walls as thin tall boxes.
+        // Four perimeter walls as thin tall boxes. The half-thickness is the room's single source of truth, so these
+        // visual walls and the collision clamp planes (FixedRoom.From) stay locked — a body rests flush against the
+        // inner face drawn here.
         var wallHeight = 1.5f;
-        var wallThickness = 0.3f;
+        var wallThickness = m_room.WallThickness;
         var minX = m_room.BoundsMin.X;
         var maxX = m_room.BoundsMax.X;
         var minZ = m_room.BoundsMin.Y;

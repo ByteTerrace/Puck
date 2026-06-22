@@ -16,6 +16,11 @@ public sealed record MiniActionRoom {
     public Vector2 BoundsMax { get; init; } = new(8f, 8f);
     /// <summary>The player avatar box half-extents (x = half width, y = half height, z = half depth).</summary>
     public Vector3 PlayerHalfExtents { get; init; } = new(0.35f, 0.5f, 0.35f);
+    /// <summary>The half-thickness of the perimeter walls, whose boxes are CENTERED on <see cref="BoundsMin"/>/
+    /// <see cref="BoundsMax"/>. The single source of truth shared by the collision planes (<see cref="MiniActionRoom"/>
+    /// → <c>FixedRoom</c>) and the visual walls (the frame source), so a body rests flush against a wall's INNER face
+    /// (<c>bound ∓ WallThickness</c>) rather than burying its edge to the wall centerline.</summary>
+    public float WallThickness { get; init; } = 0.3f;
 
     /// <summary>The default 16×16 walled room with a 0.7×1.0×0.7 player box.</summary>
     public static MiniActionRoom Default { get; } = new();
