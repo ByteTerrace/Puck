@@ -22,6 +22,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private const uint TargetUpdateRate = 240U;
 
     private readonly IHostApplicationLifetime m_applicationLifetime;
+    private readonly IInputClock m_inputClock;
     private readonly ILogger<LauncherWindowHostedService> m_logger;
     private readonly LauncherOptions m_options;
     private readonly ISurfacePresenter m_presenter;
@@ -33,6 +34,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
     public LauncherWindowHostedService(
         IHostApplicationLifetime applicationLifetime,
+        IInputClock inputClock,
         ILogger<LauncherWindowHostedService> logger,
         LauncherOptions options,
         ISurfacePresenter presenter,
@@ -43,6 +45,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         INativeWindowFactory windowFactory
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
+        ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(presenter);
@@ -53,6 +56,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(windowFactory);
 
         m_applicationLifetime = applicationLifetime;
+        m_inputClock = inputClock;
         m_logger = logger;
         m_options = options;
         m_presenter = presenter;
@@ -138,7 +142,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     m_shell.BeginFrame();
 
                     while (inputSource.TryDequeueInput(inputEvent: out var windowInput)) {
-                        var signal = WindowInputMapper.ToInputSignal(inputEvent: in windowInput);
+                        // Stamp at the pump: the wndproc dispatched these during PollEvents above, so capture
+                        // time ≈ now. Monotonic and sufficient to attribute the input to a fixed-step tick;
+                        // per-event OS-event-time (GetMessageTime via OsTimeCorrelator) is a later refinement.
+                        var signal = WindowInputMapper.ToInputSignal(inputEvent: in windowInput) with {
+                            CaptureTick = m_inputClock.NowTicks,
+                        };
 
                         if (
                             m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus) &&
@@ -227,6 +236,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                 m_logger.LogInformation("Native window closed; shutting the host down.");
             } finally {
+                // The loop's final Present submitted GPU work that the NEXT frame's BeginFrame would normally
+                // wait on — but there is no next frame. Drain the device here so node/presenter teardown below
+                // can't destroy resources still referenced by that last in-flight frame.
+                if (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
+                    deviceContext.WaitIdle();
+                }
+
                 m_root.Dispose();
                 m_presenter.Dispose();
             }

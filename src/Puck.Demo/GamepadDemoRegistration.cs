@@ -27,10 +27,12 @@ internal static class GamepadDemoRegistration {
 
         // Per-controller cursor state: command handlers write it, the cursor overlay node reads it.
         services.AddSingleton<CursorStore>();
-        services.AddSingleton(implementationFactory: static _ => new GamepadManager(
+        services.AddSingleton(implementationFactory: static sp => new GamepadManager(
             // The Windows HID transport and the Windows Xbox (XInput + GameInput) backend live in Puck.Platform;
             // a Linux build would inject hidraw / evdev implementations of the same abstractions instead.
             acquisitionSource: new Win32XboxAcquisitionSource(diagnostics: static message => Console.Error.WriteLine(value: message)),
+            // The shared capture clock so each HID report is stamped with its true arrival time on the I/O thread.
+            clock: sp.GetService<IInputClock>(),
             diagnostics: static message => Console.Error.WriteLine(value: message),
             hidSource: new Win32HidDeviceSource()
         ));

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm;
 
 namespace Puck.Demo.MiniAction;
@@ -22,10 +23,10 @@ public sealed class MiniActionWorld {
 
     // Free slots park their box far below the floor, outside every camera frustum, so a fixed count of boxes can be
     // built into the program once and the inactive ones simply march against nothing visible.
-    private static readonly Vector3 HiddenPosition = new(0f, -1000f, 0f);
-    private readonly MiniActionRoom m_room;
+    private static readonly FixedVector3 HiddenPosition = new(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: -1000L), Z: FixedQ4816.Zero);
+    private readonly FixedRoom m_collision;
     private readonly PlatformerTuning m_tuning;
-    private readonly float m_tickSeconds;
+    private readonly FixedQ4816 m_dt;
     private readonly PlayerSlot?[] m_slots = new PlayerSlot?[MaxPlayers];
     private readonly Dictionary<Guid, int> m_slotByPlayer = [];
     private ulong m_tick;
@@ -37,9 +38,11 @@ public sealed class MiniActionWorld {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(tuning);
 
-        m_room = room;
+        // Resolve the authored room to fixed-point collision planes and the tick period to a fixed dt ONCE, so the
+        // per-tick step touches no float and is bit-identical across machines.
+        m_collision = FixedRoom.From(room: room);
         m_tuning = tuning;
-        m_tickSeconds = tickSeconds;
+        m_dt = FixedQ4816.FromDouble(value: tickSeconds);
         m_rng = ((seed == 0u) ? 0x9E3779B9u : seed); // a zero seed would freeze xorshift; nudge to a fixed non-zero
     }
 
@@ -64,11 +67,11 @@ public sealed class MiniActionWorld {
             return -1;
         }
 
-        var floorTop = (m_room.FloorY + m_room.PlayerHalfExtents.Y);
-        var spawn = new Vector3(
-            x: (((slot % 2) * 8f) - 4f),
-            y: floorTop,
-            z: (((slot / 2) * 8f) - 4f)
+        // The spawn is a deterministic function of the slot: a fixed grid offset on the floor.
+        var spawn = new FixedVector3(
+            X: FixedQ4816.FromInteger(value: (((slot % 2) * 8) - 4)),
+            Y: m_collision.FloorTop,
+            Z: FixedQ4816.FromInteger(value: (((slot / 2) * 8) - 4))
         );
 
         m_slots[slot] = new PlayerSlot(Id: playerId, Body: new PlatformerBody(position: spawn));
@@ -119,7 +122,7 @@ public sealed class MiniActionWorld {
 
             var intent = ((slot < intentsBySlot.Count) ? intentsBySlot[slot] : PlayerIntent.None);
 
-            player.Body.Step(intent: intent, tuning: m_tuning, dt: m_tickSeconds, room: m_room);
+            player.Body.Step(intent: intent, tuning: m_tuning, dt: m_dt, room: m_collision);
         }
 
         m_tick++;
@@ -134,8 +137,8 @@ public sealed class MiniActionWorld {
             var player = m_slots[slot];
 
             transforms[slot] = ((player is null)
-                ? new DynamicTransform(Position: HiddenPosition, Orientation: Quaternion.Identity)
-                : new DynamicTransform(Position: player.Body.Position, Orientation: player.Body.Orientation));
+                ? new DynamicTransform(Position: HiddenPosition.ToVector3(), Orientation: Quaternion.Identity)
+                : new DynamicTransform(Position: player.Body.PresentationPosition, Orientation: player.Body.Orientation));
         }
 
         return transforms;
@@ -146,15 +149,15 @@ public sealed class MiniActionWorld {
     /// unchanged) and, when active, its body. The identity Guid is NOT hashed — the sim is identity-agnostic; replay
     /// validates the roster separately.</summary>
     public ulong StateHash() {
-        var hash = 14695981039346656037UL;
+        var hash = Fnv1aHash.Create();
 
-        HashU64(hash: ref hash, value: m_tick);
-        HashU32(hash: ref hash, value: m_rng);
+        hash.Add(value: m_tick);
+        hash.Add(value: m_rng);
 
         for (var slot = 0; (slot < MaxPlayers); slot++) {
             var player = m_slots[slot];
 
-            HashU32(hash: ref hash, value: ((player is null) ? 0u : 1u));
+            hash.Add(value: ((player is null) ? 0u : 1u));
 
             if (player is null) {
                 continue;
@@ -162,17 +165,19 @@ public sealed class MiniActionWorld {
 
             var body = player.Body;
 
-            HashFloat(hash: ref hash, value: body.Position.X);
-            HashFloat(hash: ref hash, value: body.Position.Y);
-            HashFloat(hash: ref hash, value: body.Position.Z);
-            HashFloat(hash: ref hash, value: body.Velocity.X);
-            HashFloat(hash: ref hash, value: body.Velocity.Y);
-            HashFloat(hash: ref hash, value: body.Velocity.Z);
-            HashFloat(hash: ref hash, value: body.FacingYaw);
-            HashU32(hash: ref hash, value: (body.Grounded ? 1u : 0u));
+            // The body is fixed-point, so its raw storage is folded directly — exact integers, no float bit
+            // reinterpretation, deterministic on every machine.
+            hash.Add(value: body.Position.X.Value);
+            hash.Add(value: body.Position.Y.Value);
+            hash.Add(value: body.Position.Z.Value);
+            hash.Add(value: body.Velocity.X.Value);
+            hash.Add(value: body.Velocity.Y.Value);
+            hash.Add(value: body.Velocity.Z.Value);
+            hash.Add(value: body.FacingYaw.Value);
+            hash.Add(value: (body.Grounded ? 1u : 0u));
         }
 
-        return hash;
+        return hash.Value;
     }
 
     private int LowestFreeSlot() {
@@ -183,21 +188,6 @@ public sealed class MiniActionWorld {
         }
 
         return -1;
-    }
-    private static void HashFloat(ref ulong hash, float value) {
-        HashU32(hash: ref hash, value: BitConverter.SingleToUInt32Bits(value: value));
-    }
-    private static void HashU32(ref ulong hash, uint value) {
-        for (var index = 0; (index < 4); index++) {
-            hash ^= (byte)(value >> (index * 8));
-            hash *= 1099511628211UL;
-        }
-    }
-    private static void HashU64(ref ulong hash, ulong value) {
-        for (var index = 0; (index < 8); index++) {
-            hash ^= (byte)(value >> (index * 8));
-            hash *= 1099511628211UL;
-        }
     }
 }
 

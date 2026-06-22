@@ -9,7 +9,7 @@ public enum GamepadType {
     /// <summary>A Microsoft Xbox Series X|S controller.</summary>
     XboxSeries = 2,
     /// <summary>A Sony PlayStation 5 DualSense controller.</summary>
-    Ps5 = 3,
+    PlayStation5 = 3,
     /// <summary>A Nintendo Switch Pro controller.</summary>
     SwitchPro = 4,
 }

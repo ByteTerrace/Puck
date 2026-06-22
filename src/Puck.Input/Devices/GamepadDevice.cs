@@ -19,6 +19,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private static readonly long StreamingDeadlineTicks = (5L * Stopwatch.Frequency);  // fault if never streaming
     private readonly GamepadCoalescer m_coalescer = new();
     private readonly CancellationTokenSource m_cancellation = new();
+    private readonly IInputClock? m_clock;
     private readonly Action<string>? m_diagnostics;
     private readonly IHidDevice m_hid;
     private readonly GamepadOutput m_output;
@@ -28,6 +29,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private volatile bool m_faulted;
     private bool m_rumbleActive;
     private long m_rumbleExpiry = long.MaxValue;
+    private ulong m_sequence;
     private Task? m_loop;
 
     public GamepadDevice(
@@ -35,7 +37,8 @@ internal sealed class GamepadDevice : IGamepadConnection {
         IGamepadParser parser,
         InputDeviceId deviceId,
         int playerIndex,
-        Action<string>? diagnostics = null
+        Action<string>? diagnostics = null,
+        IInputClock? clock = null
     ) {
         ArgumentNullException.ThrowIfNull(hid);
         ArgumentNullException.ThrowIfNull(parser);
@@ -44,6 +47,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
         DeviceId = deviceId;
         PlayerIndex = playerIndex;
+        m_clock = clock;
         m_diagnostics = diagnostics;
         m_hid = hid;
         m_output = new GamepadOutput(
@@ -82,6 +86,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
         if (parser is ILedParser) {
             capabilities |= GamepadOutputCapabilities.Led;
+        }
+
+        if (parser is ITriggerEffectParser) {
+            capabilities |= GamepadOutputCapabilities.TriggerEffect;
         }
 
         return capabilities;
@@ -136,6 +144,13 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
                 if (0 < read) {
                     if (m_parser.TryParse(report: buffer.AsSpan(start: 0, length: read), state: out var state)) {
+                        // Stamp the report's arrival on the I/O thread — the earliest accurate point — and a
+                        // per-device sequence, so the coalescer can carry true sub-frame edge times forward and a
+                        // drain can order what it folded. The parser stays pure; timing is layered on here.
+                        state = state with {
+                            ArrivalTicks = (m_clock?.NowTicks ?? 0UL),
+                            SequenceNumber = ++m_sequence,
+                        };
                         m_coalescer.Update(state: in state);
 
                         if (!firstParsed) {
@@ -187,6 +202,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
                     break;
                 case GamepadOutputKind.Led when (m_parser is ILedParser led):
                     await led.SetLedAsync(color: command.Led, cancellationToken: cancellationToken);
+
+                    break;
+                case GamepadOutputKind.TriggerEffect when (m_parser is ITriggerEffectParser triggerEffect):
+                    await triggerEffect.SetTriggerEffectAsync(left: command.TriggerEffectLeft, right: command.TriggerEffectRight, cancellationToken: cancellationToken);
 
                     break;
                 case GamepadOutputKind.Raw when (command.Raw is { } raw):

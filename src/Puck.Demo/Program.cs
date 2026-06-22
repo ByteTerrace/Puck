@@ -38,6 +38,9 @@ var validateComputeOption = new Option<bool>(name: "--validate-compute") {
 var validateMiniActionOption = new Option<bool>(name: "--validate-mini-action") {
     Description = "Runs the MiniAction determinism + replay self-check (pure CPU: a scripted input run twice must produce identical per-tick state hashes, and a record->replay must reproduce them bit-for-bit) and exits (0 pass, 1 divergence, 2 infra-fail).",
 };
+var validateDeterminismOption = new Option<bool>(name: "--validate-determinism") {
+    Description = "Runs the engine determinism + replay self-check (pure CPU): verifies the fixed-point sim is correct, then records a per-tick CommandSnapshot stream, round-trips it through the neutral binary format, and replays it — asserting identical per-tick state hashes and that every command value kind survives the round-trip. Exits (0 pass, 1 divergence, 2 infra-fail).",
+};
 var miniActionOption = new Option<bool>(name: "--mini-action") {
     Description = "Renders the live MiniAction prototype: a controller-driven player box running around a room on a Vulkan host. Move with the left stick, jump with the South (A / Cross / B) button.",
 };
@@ -73,6 +76,9 @@ var validateViewportsOption = new Option<bool>(name: "--validate-viewports") {
 };
 var validatePixelateOption = new Option<bool>(name: "--validate-pixelate") {
     Description = "Retro-pixelation gate: composites a raw pane beside the same pattern wrapped in a PixelateNode (cell-blocked + posterized) through ViewportCompositorNode on BOTH backends, capturing each to a PNG and asserting they agree within 1 LSB. Exits (0 pass, 1 cross-backend diff, 2 infra-fail). Forces a Vulkan host.",
+};
+var validateCaptureOption = new Option<bool>(name: "--validate-capture") {
+    Description = "Native image-capture gate: drives the backend-neutral capture pipeline end to end (a GDI screen grab through IFrameCaptureSource into a CaptureSink + frame hash), writing artifacts/capture-desktop.png. Lenient about signal (a headless/secure desktop yields nothing); exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
 };
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
@@ -113,12 +119,14 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validateExportOption,
     validateComputeOption,
     validateMiniActionOption,
+    validateDeterminismOption,
     miniActionOption,
     validateReverseShareOption,
     validateIndirectOption,
     validateResampleOption,
     validateViewportsOption,
     validatePixelateOption,
+    validateCaptureOption,
     validateWorldOption,
     validateWorldChildOption,
     worldOption,
@@ -160,6 +168,7 @@ var runDocument = (runPath is not null)
         Validate = parseResult.GetValue(validateOption),
         ValidateCompute = parseResult.GetValue(validateComputeOption),
         ValidateMiniAction = parseResult.GetValue(validateMiniActionOption),
+        ValidateDeterminism = parseResult.GetValue(validateDeterminismOption),
         MiniAction = parseResult.GetValue(miniActionOption),
         ValidateExport = parseResult.GetValue(validateExportOption),
         ValidateReverseShare = parseResult.GetValue(validateReverseShareOption),
@@ -167,6 +176,7 @@ var runDocument = (runPath is not null)
         ValidateResample = parseResult.GetValue(validateResampleOption),
         ValidateViewports = parseResult.GetValue(validateViewportsOption),
         ValidatePixelate = parseResult.GetValue(validatePixelateOption),
+        ValidateCapture = parseResult.GetValue(validateCaptureOption),
         ValidateWorld = parseResult.GetValue(validateWorldOption),
         ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
         World = parseResult.GetValue(worldOption),

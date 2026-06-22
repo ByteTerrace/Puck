@@ -93,7 +93,7 @@ internal static class DemoRunDocuments {
         // produce:"vulkan" is the REVERSE cross-backend live path (a bespoke Vulkan producer the host imports). It is
         // dropped only for a Direct3D 12 SHOWCASE host, which has no reverse cross-backend path (it would yield a blank
         // window — the validator rejects that combination).
-        var offscreen = (flags.Validate || flags.ValidateExport || flags.ValidateCompute || flags.ValidateMiniAction || flags.ValidateReverseShare || flags.ValidateIndirect || flags.ValidateResample || flags.ValidateViewports || flags.ValidatePixelate || flags.ValidateWorld || flags.ValidateWorldChild);
+        var offscreen = (flags.Validate || flags.ValidateExport || flags.ValidateCompute || flags.ValidateMiniAction || flags.ValidateDeterminism || flags.ValidateReverseShare || flags.ValidateIndirect || flags.ValidateResample || flags.ValidateViewports || flags.ValidatePixelate || flags.ValidateCapture || flags.ValidateWorld || flags.ValidateWorldChild);
         var directXHost = (!offscreen && string.Equals(flags.Backend, "directx", StringComparison.OrdinalIgnoreCase));
         var directXShowcaseHost = (directXHost && !flags.World && !flags.WorldSplit && !flags.WorldChild && !flags.WorldRt);
         var host = new HostDocument {
@@ -104,40 +104,10 @@ internal static class DemoRunDocuments {
         };
         var produce = (directXShowcaseHost ? null : flags.Produce);
 
-        if (flags.Validate) {
-            return Gate(host: host, gate: "parity");
-        }
-
-        if (flags.ValidateExport) {
-            return Gate(host: host, gate: "export");
-        }
-
-        if (flags.ValidateCompute) {
-            return Gate(host: host, gate: "compute");
-        }
-
-        if (flags.ValidateMiniAction) {
-            return Gate(host: host, gate: "mini-action");
-        }
-
-        if (flags.ValidateReverseShare) {
-            return Gate(host: host, gate: "reverse");
-        }
-
-        if (flags.ValidateIndirect) {
-            return Gate(host: host, gate: "indirect");
-        }
-
-        if (flags.ValidateResample) {
-            return Gate(host: host, gate: "resample");
-        }
-
-        if (flags.ValidateViewports) {
-            return Gate(host: host, gate: "viewports");
-        }
-
-        if (flags.ValidatePixelate) {
-            return Gate(host: host, gate: "pixelate");
+        // The self-contained gates (each a full-frame offscreen smoke test) map one flag to one gate name; collapsing
+        // them into a single lookup keeps this synthesizer's branching in check as gates are added.
+        if (SelfContainedGateName(flags: flags) is string selfContainedGate) {
+            return Gate(host: host, gate: selfContainedGate);
         }
 
         if (flags.ValidateWorldChild) {
@@ -218,6 +188,23 @@ internal static class DemoRunDocuments {
         return builder.Build();
     }
 
+    // Maps the self-contained validation flags (each a full-frame offscreen smoke test) to their gate name, in the
+    // historic precedence order; null when none is set (the caller falls through to the world gates / live producers).
+    private static string? SelfContainedGateName(DemoFlags flags) {
+        if (flags.Validate) { return "parity"; }
+        if (flags.ValidateExport) { return "export"; }
+        if (flags.ValidateCompute) { return "compute"; }
+        if (flags.ValidateMiniAction) { return "mini-action"; }
+        if (flags.ValidateDeterminism) { return "determinism"; }
+        if (flags.ValidateReverseShare) { return "reverse"; }
+        if (flags.ValidateIndirect) { return "indirect"; }
+        if (flags.ValidateResample) { return "resample"; }
+        if (flags.ValidateViewports) { return "viewports"; }
+        if (flags.ValidatePixelate) { return "pixelate"; }
+        if (flags.ValidateCapture) { return "capture"; }
+
+        return null;
+    }
     private static PuckRunDocument Gate(HostDocument host, string gate) {
         return new PuckRunDocument {
             Host = host,

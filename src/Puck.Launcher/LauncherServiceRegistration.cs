@@ -26,6 +26,12 @@ public static class LauncherServiceRegistration {
         // hosted children do not — the capability-permission system. The window loop drains exit + routes
         // input through them.
         services.TryAddSingleton<LauncherOptions>();
+
+        // The shared monotonic capture clock: every input backend stamps CaptureTick from this one instance, and
+        // the window pump uses it to time-stamp drained input. One origin so all stamps are comparable.
+        services.TryAddSingleton<InputClock>(implementationFactory: static _ => InputClock.Start());
+        services.TryAddSingleton<IInputClock>(implementationFactory: static sp => sp.GetRequiredService<InputClock>());
+
         services.TryAddSingleton<TerminalControl>();
         services.TryAddSingleton<ITerminalControl>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
         services.TryAddSingleton<IInputFocus>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());

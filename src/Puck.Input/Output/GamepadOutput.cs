@@ -84,6 +84,21 @@ public sealed class GamepadOutput : IGamepadOutput {
         );
     }
     /// <inheritdoc />
+    public bool SetTriggerEffect(in TriggerEffectSpec left, in TriggerEffectSpec right) {
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                Kind: GamepadOutputKind.TriggerEffect,
+                Led: default,
+                Raw: null,
+                Rumble: default,
+                TriggerRumble: default,
+                TriggerEffectLeft: left,
+                TriggerEffectRight: right
+            ),
+            required: GamepadOutputCapabilities.TriggerEffect
+        );
+    }
+    /// <inheritdoc />
     public bool SendEffect(ReadOnlySpan<byte> data) {
         return TryEnqueue(
             command: new GamepadOutputCommand(

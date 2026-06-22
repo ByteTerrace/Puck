@@ -32,8 +32,18 @@ public interface IGamepadOutput {
     bool SetLed(in LedColor color);
 
     /// <summary>
-    /// Sends a raw, device-specific output report (the escape hatch for DualSense adaptive triggers, Switch
-    /// HD-rumble waveforms, and other effects without a portable shape).
+    /// Applies a typed adaptive-trigger effect to each trigger (L2 = <paramref name="left"/>, R2 =
+    /// <paramref name="right"/>), as on the DualSense. The effect is composed into the controller's normal output
+    /// report, so it coexists with rumble and the LED. Pass <see cref="TriggerEffectSpec.Off"/> to clear a trigger.
+    /// </summary>
+    /// <param name="left">The left trigger's effect.</param>
+    /// <param name="right">The right trigger's effect.</param>
+    /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
+    bool SetTriggerEffect(in TriggerEffectSpec left, in TriggerEffectSpec right);
+
+    /// <summary>
+    /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as
+    /// Switch HD-rumble waveforms).
     /// </summary>
     /// <param name="data">The raw report payload, in the device's report format.</param>
     /// <returns><see langword="true"/> if the device has a raw channel and the payload was accepted; otherwise <see langword="false"/>.</returns>

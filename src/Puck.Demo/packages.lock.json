@@ -317,6 +317,12 @@
       "puck.cameras": {
         "type": "Project"
       },
+      "puck.capture": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
       "puck.commands": {
         "type": "Project",
         "dependencies": {
@@ -364,9 +370,11 @@
           "Microsoft.Extensions.Hosting": "[10.*, )",
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Input": "[1.0.0, )",
-          "Puck.Platform.Abstractions": "[1.0.0, )"
+          "Puck.Input": "[1.0.0, )"
         }
+      },
+      "puck.maths": {
+        "type": "Project"
       },
       "puck.platform": {
         "type": "Project",
@@ -376,15 +384,7 @@
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Commands": "[1.0.0, )",
           "Puck.Input": "[1.0.0, )",
-          "Puck.Platform.Abstractions": "[1.0.0, )",
           "System.Drawing.Common": "[10.*, )"
-        }
-      },
-      "puck.platform.abstractions": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Input": "[1.0.0, )"
         }
       },
       "puck.scene": {

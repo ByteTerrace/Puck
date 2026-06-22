@@ -40,7 +40,7 @@ public sealed class MiniActionFrameSource : ISdfFrameSource {
 
         foreach (var slot in m_world.Slots) {
             if (slot is not null) {
-                activePositions.Add(item: slot.Body.Position);
+                activePositions.Add(item: slot.Body.PresentationPosition);
             }
         }
 

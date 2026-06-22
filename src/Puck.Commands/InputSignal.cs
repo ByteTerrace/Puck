@@ -18,17 +18,24 @@ namespace Puck.Commands;
 /// <param name="Phase">The transition the activation represents.</param>
 /// <param name="Modifiers">The modifier keys held when the activation fired (for chords).</param>
 /// <param name="Text">An optional text payload, such as typed characters.</param>
+/// <param name="CaptureTick">
+/// The monotonic capture time, in engine ticks (<see cref="IInputClock"/>), stamped at the earliest accurate
+/// point in the producing backend. <c>0</c> means unstamped (legacy). This is the authority for attributing
+/// the input to a fixed-step simulation tick and for rhythm-grade edge timing.
+/// </param>
 public readonly record struct InputSignal(
     string Source,
     InputDeviceId DeviceId,
     CommandValue Value,
     CommandPhase Phase,
     InputModifiers Modifiers = InputModifiers.None,
-    string? Text = null
+    string? Text = null,
+    ulong CaptureTick = 0UL
 ) {
     /// <summary>A digital press of a control (<see cref="CommandPhase.Started"/>, digital value).</summary>
-    public static InputSignal Press(string source, InputModifiers modifiers = InputModifiers.None, InputDeviceId deviceId = default) {
+    public static InputSignal Press(string source, InputModifiers modifiers = InputModifiers.None, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         return new InputSignal(
+            CaptureTick: captureTick,
             DeviceId: deviceId,
             Modifiers: modifiers,
             Phase: CommandPhase.Started,
@@ -37,8 +44,9 @@ public readonly record struct InputSignal(
         );
     }
     /// <summary>A digital release of a control (<see cref="CommandPhase.Completed"/>, inactive digital value).</summary>
-    public static InputSignal Release(string source, InputModifiers modifiers = InputModifiers.None, InputDeviceId deviceId = default) {
+    public static InputSignal Release(string source, InputModifiers modifiers = InputModifiers.None, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         return new InputSignal(
+            CaptureTick: captureTick,
             DeviceId: deviceId,
             Modifiers: modifiers,
             Phase: CommandPhase.Completed,
@@ -47,8 +55,9 @@ public readonly record struct InputSignal(
         );
     }
     /// <summary>A two-dimensional axis activation (for example, a pointer delta), as a continuous update.</summary>
-    public static InputSignal Axis(string source, Vector2 value, InputModifiers modifiers = InputModifiers.None, InputDeviceId deviceId = default) {
+    public static InputSignal Axis(string source, Vector2 value, InputModifiers modifiers = InputModifiers.None, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         return new InputSignal(
+            CaptureTick: captureTick,
             DeviceId: deviceId,
             Modifiers: modifiers,
             Phase: CommandPhase.Active,
@@ -57,10 +66,11 @@ public readonly record struct InputSignal(
         );
     }
     /// <summary>A text activation carrying typed characters.</summary>
-    public static InputSignal Typed(string source, string text, InputDeviceId deviceId = default) {
+    public static InputSignal Typed(string source, string text, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         ArgumentNullException.ThrowIfNull(text);
 
         return new InputSignal(
+            CaptureTick: captureTick,
             DeviceId: deviceId,
             Phase: CommandPhase.Started,
             Source: source,

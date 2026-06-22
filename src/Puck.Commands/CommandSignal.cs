@@ -25,4 +25,9 @@ namespace Puck.Commands;
 /// a binding sets it to <see langword="false"/> for an edge it tracks for state (a held value) but does not
 /// fire on — for example a key-release, which updates the polled value without re-running a press handler.
 /// </param>
-public readonly record struct CommandSignal(string Name, CommandValue Value, CommandPhase Phase, string? Text = null, InputDeviceId DeviceId = default, bool Dispatch = true);
+/// <param name="CaptureTick">
+/// The monotonic capture time, in engine ticks (<see cref="IInputClock"/>), carried through from the
+/// originating <see cref="InputSignal"/> so a fixed-step consumer can attribute the activation to a tick and a
+/// rhythm consumer can read the precise edge time. <c>0</c> means unstamped.
+/// </param>
+public readonly record struct CommandSignal(string Name, CommandValue Value, CommandPhase Phase, string? Text = null, InputDeviceId DeviceId = default, bool Dispatch = true, ulong CaptureTick = 0UL);

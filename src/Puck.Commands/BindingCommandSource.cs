@@ -54,6 +54,7 @@ public sealed class BindingCommandSource : ICommandSource {
                 // the handler runs only on the edge the binding answers (ActivateOn). The default ignores
                 // releases, so a key-up updates the held value without re-firing a press-bound command.
                 sink.Push(signal: new CommandSignal(
+                    CaptureTick: input.CaptureTick,
                     DeviceId: input.DeviceId,
                     Dispatch: ActivatesOnPhase(binding: binding, phase: input.Phase),
                     Name: binding.Command,

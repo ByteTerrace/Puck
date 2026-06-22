@@ -16,6 +16,7 @@ public sealed class GamepadCoalescer {
     private bool m_hasSample;
     private GamepadState m_latest = GamepadState.Neutral;
     private GamepadButtons m_pressed;
+    private GamepadButtonEdges m_pressEdges;
     private GamepadButtons m_released;
     private GamepadButtons m_previousButtons;
 
@@ -29,7 +30,21 @@ public sealed class GamepadCoalescer {
             // (CommandBinding.ActivateOn ignores Completed), so it updates held state without re-firing a
             // press-driven handler.
             if (m_hasSample) {
-                m_pressed |= (state.Buttons & ~m_previousButtons);
+                var newlyPressed = (state.Buttons & ~m_previousButtons);
+
+                // Stamp each button's FIRST press in this window with the report's arrival time, so a snapshot
+                // capture gives every press its true sub-frame edge time. Bits already pressed this window keep
+                // their first stamp.
+                var fresh = (uint)(newlyPressed & ~m_pressed);
+
+                while (fresh != 0u) {
+                    var index = BitOperations.TrailingZeroCount(value: fresh);
+
+                    m_pressEdges[index] = state.ArrivalTicks;
+                    fresh &= (fresh - 1u);
+                }
+
+                m_pressed |= newlyPressed;
                 m_released |= (~state.Buttons & m_previousButtons);
             }
 
@@ -50,17 +65,24 @@ public sealed class GamepadCoalescer {
     /// (rather than summing) keeps the value a true angular velocity, independent of how many reports happened
     /// to land in the frame.
     /// </param>
+    /// <param name="pressEdges">
+    /// The arrival-time stamp of each button's first press since the last drain, indexed by button bit; a zero
+    /// slot means that button did not press this window. Lets a consumer stamp each press edge at its true
+    /// sub-frame time.
+    /// </param>
     /// <returns><see langword="true"/> once at least one report has been seen; otherwise <see langword="false"/>.</returns>
     public bool Drain(
         out GamepadState latest,
         out GamepadButtons pressed,
         out GamepadButtons released,
-        out Vector3 gyro
+        out Vector3 gyro,
+        out GamepadButtonEdges pressEdges
     ) {
         lock (m_gate) {
             latest = m_latest;
             pressed = m_pressed;
             released = m_released;
+            pressEdges = m_pressEdges;
             gyro = ((m_gyroSamples > 0)
                 ? (m_gyro / m_gyroSamples)
                 : Vector3.Zero);
@@ -68,6 +90,7 @@ public sealed class GamepadCoalescer {
             m_gyro = Vector3.Zero;
             m_gyroSamples = 0;
             m_pressed = GamepadButtons.None;
+            m_pressEdges = default;
             m_released = GamepadButtons.None;
 
             return m_hasSample;

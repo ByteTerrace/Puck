@@ -26,6 +26,7 @@ public sealed class GamepadManager : IDisposable {
 
     private static readonly TimeSpan RescanInterval = TimeSpan.FromSeconds(value: 1.5);
     private readonly IGamepadAcquisitionSource? m_acquisitionSource;
+    private readonly IInputClock? m_clock;
     private readonly Action<string>? m_diagnostics;
     private readonly List<IGamepadConnection> m_devices = [];
     private readonly object m_gate = new();
@@ -50,15 +51,22 @@ public sealed class GamepadManager : IDisposable {
     /// An optional sink for human-readable lifecycle/diagnostic messages (device discovery, handshake, read
     /// errors). Useful for hardware bring-up; pass <see langword="null"/> to disable.
     /// </param>
+    /// <param name="clock">
+    /// The shared capture clock the HID I/O loops stamp each report's arrival from (sub-frame timing authority).
+    /// Pass <see langword="null"/> to leave reports unstamped (arrival ticks zero); the snapshot capture then
+    /// falls back to a per-frame stamp.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="hidSource"/> is <see langword="null"/>.</exception>
     public GamepadManager(
         IHidDeviceSource hidSource,
         IGamepadAcquisitionSource? acquisitionSource = null,
-        Action<string>? diagnostics = null
+        Action<string>? diagnostics = null,
+        IInputClock? clock = null
     ) {
         ArgumentNullException.ThrowIfNull(hidSource);
 
         m_acquisitionSource = acquisitionSource;
+        m_clock = clock;
         m_diagnostics = diagnostics;
         m_hidSource = hidSource;
         m_registry = new Registry(owner: this);
@@ -196,6 +204,7 @@ public sealed class GamepadManager : IDisposable {
                     // Content-addressed from the device path: the same physical port yields the same id across
                     // reconnects (and restarts), so a controller that briefly drops keeps its identity, while
                     // two identical controllers on different ports stay distinct.
+                    clock: m_clock,
                     deviceId: InputDeviceId.FromKey(key: candidate.Path),
                     diagnostics: m_diagnostics,
                     hid: hid,
@@ -319,6 +328,7 @@ public sealed class GamepadManager : IDisposable {
                     gyro: out var gyro,
                     latest: out var latest,
                     pressed: out var pressed,
+                    pressEdges: out var pressEdges,
                     released: out var released
                 )) {
                     buffer.Add(item: new GamepadDrain(
@@ -326,6 +336,7 @@ public sealed class GamepadManager : IDisposable {
                         Gyro: gyro,
                         Latest: latest,
                         Pressed: pressed,
+                        PressEdges: pressEdges,
                         Released: released
                     ));
                 }

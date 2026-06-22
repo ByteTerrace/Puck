@@ -24,6 +24,8 @@ internal sealed record DemoFlags {
     public required bool ValidateCompute { get; init; }
     /// <summary>The <c>--validate-mini-action</c> pure-CPU determinism + replay self-check for the action demo.</summary>
     public required bool ValidateMiniAction { get; init; }
+    /// <summary>The <c>--validate-determinism</c> pure-CPU fixed-point + engine command-snapshot record/replay self-check.</summary>
+    public required bool ValidateDeterminism { get; init; }
     /// <summary>The <c>--mini-action</c> live controller-driven action demo (Vulkan host).</summary>
     public required bool MiniAction { get; init; }
     /// <summary>The <c>--validate-export</c> same-device export/import gate.</summary>
@@ -38,6 +40,8 @@ internal sealed record DemoFlags {
     public required bool ValidateViewports { get; init; }
     /// <summary>The <c>--validate-pixelate</c> cross-backend retro-pixelation-decorator gate.</summary>
     public required bool ValidatePixelate { get; init; }
+    /// <summary>The <c>--validate-capture</c> native (GDI) image-capture pipeline gate.</summary>
+    public required bool ValidateCapture { get; init; }
     /// <summary>The <c>--validate-world</c> cross-backend compute-world parity gate.</summary>
     public required bool ValidateWorld { get; init; }
     /// <summary>The <c>--validate-world-child</c> compute-world parity gate with a hosted child viewport.</summary>

@@ -254,19 +254,19 @@ internal sealed class DemoCommandModule(
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
-            description: "Arms DualSense adaptive-trigger resistance on the pressing pad (raw-effect proof); pull L2/R2 to feel it.",
+            description: "Arms DualSense adaptive-trigger resistance on the pressing pad (typed trigger effect); pull L2/R2 to feel it.",
             handler: context => {
                 if (!gamepads.TryGetOutput(deviceId: context.DeviceId, output: out var output)) {
                     return new CommandResult("[trigger-effect: no device]");
                 }
 
-                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.RawEffect)) {
+                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.TriggerEffect)) {
                     return new CommandResult("[trigger-effect: unsupported]");
                 }
 
-                // Strong resistance from roughly the first third of the pull to the end — felt on a DualSense,
-                // a silent no-op on a pad that ignores the report (no portable trigger-effect shape exists).
-                var accepted = output.SendEffect(data: DualSenseAdaptiveTrigger.Resistance(startPosition: 90, force: 255));
+                // Strong, uniform resistance from roughly the first third of the pull to the end, on both triggers.
+                var resistance = TriggerEffectSpec.Feedback(position: 3, strength: 8);
+                var accepted = output.SetTriggerEffect(left: resistance, right: resistance);
 
                 return new CommandResult(accepted ? "[trigger-effect: resistance armed]" : "[trigger-effect: rejected]");
             },
@@ -280,11 +280,11 @@ internal sealed class DemoCommandModule(
                     return new CommandResult("[trigger-effect: no device]");
                 }
 
-                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.RawEffect)) {
+                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.TriggerEffect)) {
                     return new CommandResult("[trigger-effect: unsupported]");
                 }
 
-                var accepted = output.SendEffect(data: DualSenseAdaptiveTrigger.Off());
+                var accepted = output.SetTriggerEffect(left: TriggerEffectSpec.Off, right: TriggerEffectSpec.Off);
 
                 return new CommandResult(accepted ? "[trigger-effect: cleared]" : "[trigger-effect: rejected]");
             },

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions;
+using Puck.Commands;
 using Puck.Hosting;
 using Puck.Input;
 
@@ -75,10 +76,17 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             m_intentSource = new ScriptedIntentSource(script: DebugScript);
             m_rosterSource = new ScriptedRosterEventSource(schedule: []);
         } else if (m_serviceProvider.GetService(serviceType: typeof(GamepadManager)) is GamepadManager manager) {
-            // Live: controllers join/leave at runtime; each binds to a player and drives it per-device.
+            // Live: controllers join/leave at runtime; each binds to a player and drives it per-device. Input
+            // flows through the engine's deterministic router (RouterIntentSource) when the capture clock is
+            // available; LocalIntentSource (the direct manager drain) remains the fallback.
             var registry = new ControllerPlayerRegistry();
 
-            m_intentSource = new LocalIntentSource(manager: manager, registry: registry, world: m_world);
+            if (m_serviceProvider.GetService(serviceType: typeof(IInputClock)) is IInputClock clock) {
+                m_intentSource = new RouterIntentSource(clock: clock, manager: manager, registry: registry, world: m_world);
+            } else {
+                m_intentSource = new LocalIntentSource(manager: manager, registry: registry, world: m_world);
+            }
+
             m_rosterSource = new LocalRosterEventSource(manager: manager, registry: registry);
         } else {
             // No gamepad service: an empty room (overview camera) until input is available.

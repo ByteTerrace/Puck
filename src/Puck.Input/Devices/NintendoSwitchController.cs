@@ -16,6 +16,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     private const int ImuOffset = 13;   // three 12-byte samples (accel xyz, gyro xyz; int16 LE)
     private const int ImuSampleSize = 12;
     private const int ImuSampleCount = 3;
+    private const float ImuSampleSeconds = 0.005f; // each of the three IMU sub-samples spans a fixed 5 ms
     private const int StickCenter = 2048;  // nominal center of a 12-bit axis before calibration
     private const float StickRange = 1800f; // nominal half-travel; clamped to ±1 after scaling
     private const float StickDeadzone = 0.12f;
@@ -384,7 +385,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             Gyro: gyro,
             LeftStick: ReadStick(report: report, offset: LeftStickOffset),
             LeftTrigger: ((0 != (buttonsLeft & 0x80)) ? 1f : 0f),   // ZL is digital
-            Orientation: m_tracker.Update(gyroRadiansPerSecond: ToFusionFrame(sensor: gyro), accelerometerG: ToFusionFrame(sensor: accelerometer)),
+            Orientation: FuseImu(report: report),
             RightStick: ReadStick(report: report, offset: RightStickOffset),
             RightTrigger: ((0 != (buttonsRight & 0x80)) ? 1f : 0f)  // ZR is digital
         );
@@ -395,6 +396,30 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     // Maps the Switch's (right-handed) IMU axes into the fusion frame (X=right, Y=up, Z=back).
     private static Vector3 ToFusionFrame(Vector3 sensor) {
         return new Vector3(x: -sensor.Y, y: sensor.Z, z: -sensor.X);
+    }
+    // Integrates the three IMU sub-samples this report carries into the fused orientation, one tracker step per
+    // sub-sample at the fixed 5 ms cadence each spans — so the fusion is timed by the sensor's own constant sample
+    // rate, not a wall clock, and stays correct regardless of how fast reports arrive. (The Gyro/Accelerometer
+    // state fields keep the averaged value, which is the frame-rate-independent angular velocity a consumer reads;
+    // bias learning therefore runs once per sub-sample, harmless since it is a slow still-only adaptation.)
+    private Quaternion FuseImu(ReadOnlySpan<byte> report) {
+        for (var sample = 0; (sample < ImuSampleCount); ++sample) {
+            var baseOffset = (ImuOffset + (sample * ImuSampleSize));
+            var accelerometer = (new Vector3(
+                x: BinaryPrimitives.ReadInt16LittleEndian(source: report[baseOffset..]),
+                y: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 2)..]),
+                z: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 4)..])
+            ) * AccelerometerGPerLsb);
+            var gyro = (new Vector3(
+                x: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 6)..]),
+                y: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 8)..]),
+                z: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 10)..])
+            ) * GyroRadiansPerSecondPerLsb);
+
+            _ = m_tracker.Update(gyroRadiansPerSecond: ToFusionFrame(sensor: gyro), accelerometerG: ToFusionFrame(sensor: accelerometer), deltaSeconds: ImuSampleSeconds);
+        }
+
+        return m_tracker.Orientation;
     }
     private static Vector3 ReadAccelerometer(ReadOnlySpan<byte> report) {
         var sum = Vector3.Zero;

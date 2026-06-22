@@ -11,6 +11,8 @@ public enum GamepadOutputCapabilities {
     TriggerRumble = 1 << 1,
     /// <summary>A settable RGB indicator (DualSense light bar, etc.).</summary>
     Led = 1 << 2,
-    /// <summary>A raw device-specific effect channel (adaptive triggers, HD rumble waveforms).</summary>
+    /// <summary>A raw device-specific effect channel (HD rumble waveforms, and other effects without a typed shape).</summary>
     RawEffect = 1 << 3,
+    /// <summary>Typed adaptive-trigger effects (DualSense), via <see cref="IGamepadOutput.SetTriggerEffect"/>.</summary>
+    TriggerEffect = 1 << 4,
 }
