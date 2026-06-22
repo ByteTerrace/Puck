@@ -320,9 +320,16 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         try {
             swapChain->GetFrameStatistics(out var statistics);
 
+            // GetFrameStatistics reflects only frames the display actually scanned out, so two presents faster than the
+            // refresh return an UNCHANGED PresentCount (and the same SyncQPCTime). Availability must therefore require the
+            // count to ADVANCE — otherwise the seam would report a stale sample as "available", which a consumer that does
+            // not change-detect (the pacer does) could mis-read as a fresh present. SyncQPCTime > 0 still gates out the
+            // DISJOINT/no-vsync case (e.g. tearing presents at sync interval 0).
+            var advanced = (statistics.PresentCount != m_lastPresentCount);
+
             m_lastPresentCount = statistics.PresentCount;
             m_lastPresentQpcTicks = statistics.SyncQPCTime;
-            m_presentTimingAvailable = (statistics.SyncQPCTime > 0L);
+            m_presentTimingAvailable = (advanced && (statistics.SyncQPCTime > 0L));
         } catch {
             m_presentTimingAvailable = false;
         }

@@ -26,6 +26,11 @@ public sealed record HostDocument {
     public int? ExitAfterSeconds { get; init; }
     /// <summary>The target render rate in Hz; 0 uncaps the framerate. Defaults to 60.</summary>
     public int? RenderRate { get; init; }
+    /// <summary>Whether the window starts borderless-fullscreen (covering the monitor). Defaults to <see langword="false"/>
+    /// (a normal desktop window). Borderless-fullscreen is what lets the swapchain take an independent flip, which is the
+    /// prerequisite for a variable-refresh (VRR/G-SYNC/FreeSync) display to actually follow the present cadence — a normal
+    /// desktop window is composited by the DWM at a fixed rate. Pairs with <c>presentMode: "adaptive"</c> for VRR.</summary>
+    public bool? Fullscreen { get; init; }
     /// <summary>Whether the ray-query path is permitted (the <c>PUCK_RAY_QUERY</c> toggle); when false the ray-query
     /// world falls back to the compute beam path. When omitted the environment/default decides.</summary>
     public bool? RayQuery { get; init; }

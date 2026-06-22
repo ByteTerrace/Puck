@@ -52,6 +52,12 @@
             "null"
           ]
         },
+        "fullscreen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "rayQuery": {
           "type": [
             "boolean",

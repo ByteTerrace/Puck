@@ -51,7 +51,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private const uint StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr = 1000150013;
     private const uint StructureTypePhysicalDevicePipelineExecutablePropertiesFeaturesKhr = 1000269000;
     private const uint StructureTypePhysicalDeviceRayQueryFeaturesKhr = 1000348013;
-    private const uint StructureTypePhysicalDevicePresentIdFeaturesKhr = 1000294000;
+    // CAUTION: the present_id block has TWO adjacent sTypes that are easy to transpose —
+    // VK_STRUCTURE_TYPE_PRESENT_ID_KHR = 1000294000 (the present-info struct, used at present time in
+    // VulkanNativeFramePresentationApi) and VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR = 1000294001
+    // (the FEATURE struct, used here). Swapping them silently breaks the feature query AND device creation. (1000294001)
+    private const uint StructureTypePhysicalDevicePresentIdFeaturesKhr = 1000294001;
     private const uint StructureTypePhysicalDevicePresentWaitFeaturesKhr = 1000248000;
 
     // 0-based VkPhysicalDeviceFeatures flag indices for storage-image read/write without a

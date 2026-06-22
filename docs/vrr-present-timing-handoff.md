@@ -3,6 +3,67 @@
 This document is **in the repo on purpose** — it travels with the branch so the work can resume on another
 machine without the local session memory. Branch: `features/input-refinement`.
 
+## ✅ RESOLVED (2026-06-22, NVIDIA RTX 4070 / driver 596.49 / Vulkan 1.4, `present_wait`-capable)
+
+The Vulkan closed loop is now **verified live, wiring-correct, and validation-clean**, with determinism preserved
+(mini-action hash still `0x55C7B177544D426A`, determinism hash `0xA68E049DC156F422`). Verification on this machine
+exposed **three real bugs** that the origin machine could never have hit (its driver lacked `present_wait`, so the
+path never executed):
+
+1. **Transposed `present_id` sTypes (the blocker).** The two adjacent `present_id` structure types were swapped in
+   our constants. The *correct* header values (`C:\VulkanSDK\1.4.350.0\Include\vulkan\vulkan_core.h`) are:
+   - `VK_STRUCTURE_TYPE_PRESENT_ID_KHR = 1000294000` (the present-INFO struct → `VulkanNativeFramePresentationApi`)
+   - `VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR = 1000294001` (the FEATURE struct → `VulkanLogicalDeviceFactory`)
+
+   We had them reversed. This single transposition produced all of: the feature query returning `presentId=false`
+   (we queried `1000294000`, which is not a feature struct, so the driver left the bool zero — while `vulkaninfo`,
+   using the correct `1000294001`, reported `true`); a `vkCreateDevice` validation error (feature chain carried
+   `1000294000` = a present-info sType); and a `vkQueuePresentKHR` validation error (present chain carried
+   `1000294001` = a feature sType). **NOTE: the original "debug checklist" below documented these backwards** — that
+   wrong note is what the code matched. Fixed in both files; both sites now carry a "do not transpose" caution.
+
+2. **`BackendSwitcher` did not forward present timing.** The launcher presents through `BackendSwitcher` (an
+   `ISurfacePresenter` fronting the active backend), and `m_presenter as IPresentTimingFeedback` was therefore always
+   `null` — so even with the closed loop running and `vkWaitForPresentKHR` returning `Success`, the samples never
+   reached the pacer. `BackendSwitcher` now implements `IPresentTimingFeedback` and forwards `LastPresentTiming` to the
+   active backend. **This also enabled DirectX present timing to reach the pacer for the first time** — it had the same
+   `null` gap, so the prior "DX closed loop verified active" claim was only true at the capture layer, never end-to-end.
+
+3. **(Knock-on, now confirmed working.)** With (1) and (2) fixed: Vulkan logs `ENABLED`, emits periodic
+   `Closed-loop present timing live: measured interval ~16.9 ms (~59 Hz)` (phase-locked to the 60 Hz present clamp),
+   `vkWaitForPresentKHR` returns `Success` every sample, and the Khronos validation layer reports **zero** errors.
+
+### DirectX nuance discovered
+DX closed-loop timing (`GetFrameStatistics.SyncQPCTime`) works under **vsync** (verified: `~8.45 ms / 118 Hz`) but is
+**unavailable under `--present-mode adaptive`** — tearing presents have no vsync sync-point, so `SyncQPCTime` stays 0
+(persistent `DISJOINT`). This is inherent DXGI behaviour, not a bug: on DX, adaptive/tearing and `GetFrameStatistics`
+phase-locking are mutually exclusive. Vulkan does *not* share this limitation — `present_wait` confirms present-id
+*display*, independent of vsync, so its closed loop works under adaptive.
+
+### Step 6 — CONFIRMED end-to-end on the Samsung Frame (2026-06-22)
+Done. A borderless-fullscreen, `--present-mode adaptive`, **uncapped** (`renderRate: 0`) run on the Samsung Frame (Game
+Mode VRR) drove a continuously-variable confirmed-present cadence sweeping **~59–101 Hz** within the VRR window, and the
+**NVIDIA G-SYNC on-screen indicator showed VRR ACTIVE** for the duration — i.e. the panel's refresh followed the present
+cadence within `[Vmin, Vmax−3]` (the brief dip to 59 Hz, just under Vmin=60, is absorbed by the driver's Low Framerate
+Compensation). Closed loop live + Vulkan-validation-clean throughout.
+
+Prerequisite added to get here: a `fullscreen` field on the run document's host section (`schema/run.schema.json` +
+`HostDocument` + `HostSettings` → `NativeWindowOptions.StartFullscreen` → the existing borderless `EnterFullscreen`). A
+normal DWM-composited desktop window cannot enter VRR; borderless-fullscreen takes an independent flip, which is what lets
+the panel follow. See `docs/examples/world-vrr-fullscreen.json`. NOTE: our Vulkan adaptive path maps to `FIFO_RELAXED` and
+that was sufficient for VRR to engage here — `IMMEDIATE`/mailbox was NOT required.
+
+### Still open
+- **Fullscreen-EXCLUSIVE** present path (DXGI `SetFullscreenState` / Vulkan exclusive-fullscreen). Borderless-fullscreen is
+  now wired and VRR-confirmed, which covers the modern path; true exclusive remains optional/unimplemented.
+- **Multi-monitor**: the refresh range is queried once at startup — re-query on `WM_DISPLAYCHANGE` when the window changes
+  monitors.
+
+The original handoff content below is preserved for context; its "sType constants" checklist line was the one that was
+**wrong** (see bug 1; that line is now corrected in place).
+
+---
+
 ## Why this handoff exists
 
 The full VRR + planet-scale + closed-loop present-timing stack is **implemented and builds green**, and
@@ -77,9 +138,11 @@ Both gates are GPU-independent and must pass on any machine.
 The Vulkan path mirrors the codebase's existing hand-written P/Invoke patterns, but was never exercised live. Check, in
 order of likelihood:
 
-- **sType constants** (`VkPresentIdKHR` = `1000294001` in `VulkanNativeFramePresentationApi`; feature sTypes
-  `present_id` = `1000294000`, `present_wait` = `1000248000` in `VulkanLogicalDeviceFactory`). A wrong sType makes the
-  driver misread the struct — validation will flag it.
+- **sType constants** — CORRECTED (these were the transposed bug; see the RESOLVED block at the top). The right values,
+  matching `vulkan_core.h` 1.4.350: `VkPresentIdKHR` (the present-INFO struct) = `1000294000` in
+  `VulkanNativeFramePresentationApi`; feature sTypes `present_id` (`VkPhysicalDevicePresentIdFeaturesKHR`) = `1000294001`,
+  `present_wait` (`VkPhysicalDevicePresentWaitFeaturesKHR`) = `1000248000` in `VulkanLogicalDeviceFactory`. The two
+  `present_id` values are trivially transposed; a wrong sType makes the driver misread the struct — validation will flag it.
 - **`VkPresentIdKHR` layout** (`src/Puck.Vulkan/Bindings/VkPresentIdKhr.cs`): `{ uint sType; nint pNext; uint
   swapchainCount; nint pPresentIds; }`, `Sequential`, natural alignment (matches the existing `VkPresentInfoKhr`). The
   present-id is a single `uint64` in its own unmanaged block, pointed to by `pPresentIds`.

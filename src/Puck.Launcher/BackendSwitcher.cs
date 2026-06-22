@@ -9,7 +9,7 @@ namespace Puck.Launcher;
 /// no-op. It is backend-neutral (it knows only <see cref="ISurfacePresenter"/> + a display name), so it lives in the
 /// generic launcher; the composition root supplies the concrete presenters via <see cref="SurfacePresenterDescriptor"/>.
 /// </summary>
-public sealed class BackendSwitcher : ISurfacePresenter {
+public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback {
     private ISurfacePresenter m_current;
     private string m_currentName;
     private ISurfacePresenter? m_other;
@@ -38,6 +38,15 @@ public sealed class BackendSwitcher : ISurfacePresenter {
 
     /// <summary>Gets the active backend's display name.</summary>
     public string ActiveBackendName => m_currentName;
+
+    /// <inheritdoc/>
+    /// <remarks>Forwards to the active backend when it reports present timing (closed-loop pacing); a backend that does
+    /// not implement <see cref="IPresentTimingFeedback"/> yields <see cref="PresentTimingSample.Unavailable"/>, so the
+    /// pacer stays open-loop until/unless a switch makes a timing-capable backend active.</remarks>
+    public PresentTimingSample LastPresentTiming =>
+        ((m_current is IPresentTimingFeedback feedback)
+            ? feedback.LastPresentTiming
+            : PresentTimingSample.Unavailable);
 
     /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {

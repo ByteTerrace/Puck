@@ -121,9 +121,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // makes the pacer hit the cadence accurately. Both are resolved once here.
                 var refreshRange = ((window is IDisplayRefreshInfo refreshInfo) ? refreshInfo.QueryRefreshRange() : DisplayRefreshRange.Unknown);
                 var precisionWaiter = (window as IPrecisionWaiter);
-                // CLOSED-LOOP present timing: when the presenter reports display-confirmed present times, phase-lock the
-                // deadline to them instead of free-accumulating the period (which drifts from the real vblank). Absent it,
-                // the pacer stays open-loop. Render-side only — never touches the fixed-step sim.
+                // CLOSED-LOOP present timing: when the presenter reports a present-confirmation rhythm, phase-lock the
+                // deadline to it instead of free-accumulating the period (which drifts from the display). The anchor is a
+                // backend-specific present-confirmation time, NOT necessarily an exact vblank: DirectX feeds a true display
+                // timestamp (GetFrameStatistics.SyncQPCTime), whereas Vulkan feeds the CPU instant vkWaitForPresentKHR
+                // returned for the PRIOR present — lagged by one present plus wake jitter. The consecutive-sample DELTA is
+                // the present interval in both cases (the constant offset cancels), which is what the pacer locks to.
+                // Absent any feedback the pacer stays open-loop. Render-side only — never touches the fixed-step sim.
                 var presentTiming = (m_presenter as IPresentTimingFeedback);
                 var lastObservedPresentCount = 0u;
                 var presentTimingPrimed = false;
@@ -231,11 +235,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     }
 
                     if (renderPeriod > 0L) {
-                        // Closed loop: when the presenter confirms a NEW present, re-anchor the deadline to the display's
-                        // actual present timestamp (QPC == Stopwatch ticks) so the cadence phase-locks to vblank rather
-                        // than drifting on the computed period. Guarded against a stale/absurd sample (the catch-up clamp
-                        // below also absorbs it). When no present-timing capability is present, this is a no-op and the
-                        // pacer stays open-loop.
+                        // Closed loop: when the presenter confirms a NEW present, re-anchor the deadline to that present's
+                        // confirmation timestamp (QPC == Stopwatch ticks) so the cadence phase-locks to the present rhythm
+                        // rather than drifting on the computed period. A constant phase offset from true vblank (Vulkan's
+                        // wait-return lag) does not matter — re-anchoring each present keeps the PERIOD correct. Guarded
+                        // against a stale/absurd sample (the catch-up clamp below also absorbs it). When no present-timing
+                        // capability is present, this is a no-op and the pacer stays open-loop.
                         if (presentTiming is not null) {
                             var sample = presentTiming.LastPresentTiming;
 

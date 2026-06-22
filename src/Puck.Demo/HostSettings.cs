@@ -30,6 +30,8 @@ internal sealed class HostSettings {
     public required TimeSpan? ExitAfter { get; init; }
     /// <summary>The target render rate in Hz, or <see langword="null"/> to uncap.</summary>
     public required uint? RenderRate { get; init; }
+    /// <summary>Whether the window starts borderless-fullscreen (the prerequisite for a VRR display to follow the present cadence).</summary>
+    public required bool Fullscreen { get; init; }
     /// <summary>Whether the document/flags request a Direct3D 12 host (subject to OS availability).</summary>
     public required bool HostBackendIsDirectX { get; init; }
     /// <summary>The ray-query toggle to push to <c>PUCK_RAY_QUERY</c>, or <see langword="null"/> to leave the env/default.</summary>
@@ -52,6 +54,7 @@ internal sealed class HostSettings {
 
         return new HostSettings {
             ExitAfter = ToExitAfter(seconds: (host?.ExitAfterSeconds ?? flagExitAfterSeconds)),
+            Fullscreen = (host?.Fullscreen ?? false),
             Height = (hasSize ? (uint)size![1] : DefaultHeight),
             HostBackendIsDirectX = IsDirectX(backend: (host?.Backend ?? flagBackend)),
             PresentMode = (host?.PresentMode ?? flagPresentMode),
@@ -70,10 +73,12 @@ internal sealed class HostSettings {
 
         var height = Height;
         var width = Width;
+        var fullscreen = Fullscreen;
 
         services.Configure<NativeWindowOptions>(configureOptions: options => {
             options.Height = height;
             options.Mode = NativeWindowMode.PlatformWindow;
+            options.StartFullscreen = fullscreen;
             options.Title = "Puck: Demo";
             options.Width = width;
         });
