@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the POST's local
+             compute smoke kernel to SPIR-V (Vulkan). Override with /p:DxcCommand="path\to\dxc". -->
+        <DxcCommand>dxc</DxcCommand>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
+        <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Ship the compiled compute bytecode alongside the POST (committed too, so a clean build copies it before the
+             compile target regenerates it). -->
+        <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
+    </ItemGroup>
+
+    <!-- Compile each *.comp.hlsl to SPIR-V (Vulkan; entry CSMain renamed to "main"), mirroring Puck.Demo / Puck.SdfVm. -->
+    <Target
+        BeforeTargets="PrepareForBuild"
+        Inputs="@(ComputeShaderSource);$(MSBuildProjectFullPath)"
+        Name="CompileShaders"
+        Outputs="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')"
+    >
+        <Exec
+            Command="&quot;$(DxcCommand)&quot; --version"
+            ConsoleToMSBuild="true"
+            IgnoreExitCode="true"
+            StandardErrorImportance="High"
+            StandardOutputImportance="Low"
+        >
+            <Output
+                PropertyName="DxcProbeExitCode"
+                TaskParameter="ExitCode"
+            />
+        </Exec>
+        <Error
+            Condition="'$(DxcProbeExitCode)' != '0'"
+            Text="Puck.Post shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;."
+        />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T cs_6_0 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+    </Target>
+</Project>
