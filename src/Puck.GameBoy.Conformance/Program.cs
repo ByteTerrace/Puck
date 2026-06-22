@@ -13,6 +13,14 @@ try {
             );
         }
 
+        // --blargg <romPathOrDir>: run a Blargg test ROM (or a directory of them) and report the serial result.
+        if (args[index] == "--blargg") {
+            return BlarggRunner.Run(
+                output: Console.Out,
+                path: args[index + 1]
+            );
+        }
+
         // --run <romPath> <frames> <outputPng>: boot a game and dump a framebuffer PNG.
         if ((args[index] == "--run") && (index + 3 < args.Length)) {
             return GameRunner.Run(

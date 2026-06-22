@@ -102,7 +102,8 @@ public sealed class SystemBus : ICpuBus {
         m_serial = new Serial(interrupts: m_interrupts, systemCounter: () => m_timer.InternalCounter);
         Attach(component: m_serial);
 
-        m_apu = new Apu();
+        // The APU's frame sequencer is divided from the same system counter as the serial clock.
+        m_apu = new Apu(systemCounter: () => m_timer.InternalCounter);
         Attach(component: m_apu);
     }
 

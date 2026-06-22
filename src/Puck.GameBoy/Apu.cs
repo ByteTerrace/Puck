@@ -1,23 +1,23 @@
 namespace Puck.GameBoy;
 
 /// <summary>
-/// The audio processing unit: four sound channels (two pulse, one wave, one noise) plus the master control
-/// registers (<c>NR50</c>-<c>NR52</c>) and the channel-3 wave-pattern RAM, occupying <c>0xFF10</c>-<c>0xFF3F</c>.
-/// <para>
-/// This stage models the register plane — the hardware read masks (each register exposes only some bits; the
-/// rest read as one), the <c>NR52</c> power switch (clearing the APU zeroes every register and silences the
-/// channels, and while powered down the registers are read-only at their masks), and wave RAM. The frame
-/// sequencer and channel waveform generation build on top of it.
-/// </para>
+/// The audio processing unit: four sound channels (two pulse, one wave, one noise), the master control registers
+/// (<c>NR50</c>-<c>NR52</c>), and channel-3 wave-pattern RAM, occupying <c>0xFF10</c>-<c>0xFF3F</c>. It owns the
+/// frame sequencer — a 512&#160;Hz timeline divided from the system counter that clocks the length counters
+/// (256&#160;Hz), the volume envelopes (64&#160;Hz), and the channel-1 frequency sweep (128&#160;Hz). Each register
+/// exposes only some bits (the rest read as one), and the <c>NR52</c> power switch silences and zeroes everything
+/// while it is off.
 /// </summary>
 public sealed class Apu : IClockedComponent {
     // The audio register block 0xFF10-0xFF26 (NR10..NR52), indexed from 0xFF10.
     private const int RegisterCount = 23;
-    private const int WaveRamSize = 16;
     private const int MasterControlIndex = (MemoryMap.AudioMasterControl - MemoryMap.AudioBase);
+    private const int Volume = 0xFF24;     // NR50
+    private const int Panning = 0xFF25;    // NR51
+    // The system-counter bit whose falling edge advances the frame sequencer (512 Hz at single speed).
+    private const int FrameSequencerBit = 0x1000;
 
-    // Per-register read OR-masks: the bits that always read as one (write-only or unused bits). Indexed from
-    // 0xFF10. NR52 (the last) is assembled separately from the power bit and the live channel-status bits.
+    // Per-register read OR-masks: the bits that always read as one (write-only or unused bits), indexed from 0xFF10.
     private static readonly byte[] s_readMasks = [
         0x80, 0x3F, 0x00, 0xFF, 0xBF, // NR10 NR11 NR12 NR13 NR14
         0xFF,                         // 0xFF15 (unused)
@@ -28,11 +28,26 @@ public sealed class Apu : IClockedComponent {
         0x00, 0x00, 0x70,             // NR50 NR51 NR52
     ];
 
-    private readonly byte[] m_registers = new byte[RegisterCount];
-    private readonly byte[] m_waveRam = new byte[WaveRamSize];
-    private readonly bool[] m_channelActive = new bool[4];
+    private readonly Func<int> m_systemCounter;
+    private readonly PulseChannel m_channel1 = new(hasSweep: true);
+    private readonly PulseChannel m_channel2 = new(hasSweep: false);
+    private readonly WaveChannel m_channel3 = new();
+    private readonly NoiseChannel m_channel4 = new();
 
     private bool m_powered;
+    private bool m_lastFrameSequencerBit;
+    private int m_frameSequencerStep;
+    private byte m_volume;
+    private byte m_panning;
+
+    /// <summary>Initializes the APU wired to the system counter its frame sequencer is divided from.</summary>
+    /// <param name="systemCounter">Reads the shared 16-bit system counter (the timer's internal divider).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="systemCounter"/> is <see langword="null"/>.</exception>
+    public Apu(Func<int> systemCounter) {
+        ArgumentNullException.ThrowIfNull(systemCounter);
+
+        m_systemCounter = systemCounter;
+    }
 
     /// <inheritdoc />
     public ClockDomain Domain =>
@@ -43,7 +58,7 @@ public sealed class Apu : IClockedComponent {
     /// <returns>The value with hardware read-as-one bits applied.</returns>
     public byte Read(ushort address) {
         if (address >= MemoryMap.WaveRamBase) {
-            return m_waveRam[address - MemoryMap.WaveRamBase];
+            return m_channel3.ReadWaveRam(offset: (address - MemoryMap.WaveRamBase));
         }
 
         var index = (address - MemoryMap.AudioBase);
@@ -57,7 +72,7 @@ public sealed class Apu : IClockedComponent {
             return ReadMasterControl();
         }
 
-        return (byte)(m_registers[index] | s_readMasks[index]);
+        return (byte)(RawRegister(address: address) | s_readMasks[index]);
     }
     /// <summary>Writes an audio register or wave-RAM byte (<c>0xFF10</c>-<c>0xFF3F</c>).</summary>
     /// <param name="address">The address to write.</param>
@@ -65,7 +80,7 @@ public sealed class Apu : IClockedComponent {
     public void Write(ushort address, byte value) {
         if (address >= MemoryMap.WaveRamBase) {
             // Wave RAM stays accessible regardless of the power state.
-            m_waveRam[address - MemoryMap.WaveRamBase] = value;
+            m_channel3.WriteWaveRam(offset: (address - MemoryMap.WaveRamBase), value: value);
 
             return;
         }
@@ -82,9 +97,32 @@ public sealed class Apu : IClockedComponent {
             return;
         }
 
-        // While powered down every register but NR52 is inert and ignores writes.
         if (m_powered) {
-            m_registers[index] = value;
+            WriteRegister(address: address, value: value);
+        }
+        else {
+            // While powered down the registers are inert — except that on the DMG the length-load registers
+            // (NRx1) remain writable (length portion only), and the length counters survive the power cycle.
+            switch (address) {
+                case 0xFF11:
+                    m_channel1.WriteLengthLoad(value: value);
+
+                    break;
+                case 0xFF16:
+                    m_channel2.WriteLengthLoad(value: value);
+
+                    break;
+                case 0xFF1B:
+                    m_channel3.WriteLengthLoad(value: value);
+
+                    break;
+                case 0xFF20:
+                    m_channel4.WriteLengthLoad(value: value);
+
+                    break;
+                default:
+                    break;
+            }
         }
     }
 
@@ -94,37 +132,50 @@ public sealed class Apu : IClockedComponent {
     public void InitializePostBoot() {
         m_powered = true;
 
-        // NR10..NR51 (indices 0-21) as left by the boot ROM. The 0xFF entries are the write-only / unused slots.
-        byte[] postBoot = [
-            0x80, 0xBF, 0xF3, 0xFF, 0xBF, // NR10 NR11 NR12 NR13 NR14
-            0xFF,                         // 0xFF15
-            0x3F, 0x00, 0xFF, 0xBF,       // NR21 NR22 NR23 NR24
-            0x7F, 0xFF, 0x9F, 0xFF, 0xBF, // NR30 NR31 NR32 NR33 NR34
-            0xFF,                         // 0xFF1F
-            0xFF, 0x00, 0x00, 0xBF,       // NR41 NR42 NR43 NR44
-            0x77, 0xF3,                   // NR50 NR51
-        ];
-
-        Array.Copy(sourceArray: postBoot, destinationArray: m_registers, length: postBoot.Length);
-
-        // The boot chime leaves channel 1 sounding, so NR52 reports it active (bit 0).
-        m_channelActive[0] = true;
+        // The documented post-boot register values. Channels 2-4 land with their DACs off, so the channel-1
+        // trigger in NR14 leaves only channel 1 sounding (NR52 = 0xF1).
+        Write(address: 0xFF10, value: 0x80); // NR10
+        Write(address: 0xFF11, value: 0xBF); // NR11
+        Write(address: 0xFF12, value: 0xF3); // NR12
+        Write(address: 0xFF14, value: 0xBF); // NR14 (triggers channel 1)
+        Write(address: 0xFF16, value: 0x3F); // NR21
+        Write(address: 0xFF19, value: 0xBF); // NR24
+        Write(address: 0xFF1A, value: 0x7F); // NR30 (DAC off)
+        Write(address: 0xFF1C, value: 0x9F); // NR32
+        Write(address: 0xFF1E, value: 0xBF); // NR34
+        Write(address: 0xFF23, value: 0xBF); // NR44
+        Write(address: Volume, value: 0x77); // NR50
+        Write(address: Panning, value: 0xF3); // NR51
     }
 
     /// <inheritdoc />
     public void Step(int tCycles) {
-        // The frame sequencer and channel waveform generation are a later stage; the register plane is clocked
-        // by nothing yet.
+        if (!m_powered) {
+            return;
+        }
+
+        // The frame sequencer is clocked by the falling edge of a system-counter bit (sampled per machine cycle,
+        // after the timer has advanced the counter this cycle).
+        var bit = ((m_systemCounter() & FrameSequencerBit) != 0);
+
+        if (m_lastFrameSequencerBit && !bit) {
+            StepFrameSequencer();
+        }
+
+        m_lastFrameSequencerBit = bit;
+
+        m_channel1.Step(cycles: tCycles);
+        m_channel2.Step(cycles: tCycles);
+        m_channel3.Step(cycles: tCycles);
+        m_channel4.Step(cycles: tCycles);
     }
 
     private byte ReadMasterControl() {
-        var status = 0;
-
-        for (var channel = 0; channel < m_channelActive.Length; channel += 1) {
-            if (m_channelActive[channel]) {
-                status |= (1 << channel);
-            }
-        }
+        var status =
+            (m_channel1.Enabled ? 0x01 : 0x00) |
+            (m_channel2.Enabled ? 0x02 : 0x00) |
+            (m_channel3.Enabled ? 0x04 : 0x00) |
+            (m_channel4.Enabled ? 0x08 : 0x00);
 
         return (byte)(s_readMasks[MasterControlIndex] | (m_powered ? 0x80 : 0x00) | status);
     }
@@ -132,12 +183,97 @@ public sealed class Apu : IClockedComponent {
         var powerOn = ((value & 0x80) != 0);
 
         if (!powerOn && m_powered) {
-            // Powering down zeroes every register (NR10-NR51) and silences the channels. NR52's own bit and wave
-            // RAM are preserved.
-            Array.Clear(array: m_registers);
-            Array.Clear(array: m_channelActive);
+            // Powering down zeroes every register and silences the channels; wave RAM is preserved.
+            m_channel1.PowerOff();
+            m_channel2.PowerOff();
+            m_channel3.PowerOff();
+            m_channel4.PowerOff();
+            m_volume = 0;
+            m_panning = 0;
+        }
+        else if (powerOn && !m_powered) {
+            // Powering up restarts the frame-sequencer timeline.
+            m_frameSequencerStep = 0;
         }
 
         m_powered = powerOn;
+    }
+
+    private byte RawRegister(ushort address) =>
+        address switch {
+            >= 0xFF10 and <= 0xFF14 => m_channel1.ReadRegister(register: (address - 0xFF10)),
+            >= 0xFF16 and <= 0xFF19 => m_channel2.ReadRegister(register: (address - 0xFF15)),
+            >= 0xFF1A and <= 0xFF1E => m_channel3.ReadRegister(register: (address - 0xFF1A)),
+            >= 0xFF20 and <= 0xFF23 => m_channel4.ReadRegister(register: (address - 0xFF1F)),
+            Volume => m_volume,
+            Panning => m_panning,
+            _ => 0x00, // 0xFF15 / 0xFF1F unused; the read mask makes them 0xFF
+        };
+    private void WriteRegister(ushort address, byte value) {
+        // The frame sequencer's next step clocks the length counter on its even steps; channels need this for the
+        // obscure extra-length-clock behavior when length is enabled or the channel is triggered.
+        var nextStepClocksLength = ((m_frameSequencerStep & 0x01) == 0);
+
+        switch (address) {
+            case >= 0xFF10 and <= 0xFF14:
+                m_channel1.WriteRegister(register: (address - 0xFF10), value: value, nextStepClocksLength: nextStepClocksLength);
+
+                break;
+            case >= 0xFF16 and <= 0xFF19:
+                m_channel2.WriteRegister(register: (address - 0xFF15), value: value, nextStepClocksLength: nextStepClocksLength);
+
+                break;
+            case >= 0xFF1A and <= 0xFF1E:
+                m_channel3.WriteRegister(register: (address - 0xFF1A), value: value, nextStepClocksLength: nextStepClocksLength);
+
+                break;
+            case >= 0xFF20 and <= 0xFF23:
+                m_channel4.WriteRegister(register: (address - 0xFF1F), value: value, nextStepClocksLength: nextStepClocksLength);
+
+                break;
+            case Volume:
+                m_volume = value;
+
+                break;
+            case Panning:
+                m_panning = value;
+
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void StepFrameSequencer() {
+        // The eight-step 512 Hz sequence: length at 256 Hz, sweep at 128 Hz, envelope at 64 Hz.
+        switch (m_frameSequencerStep) {
+            case 0:
+            case 4:
+                ClockLength();
+
+                break;
+            case 2:
+            case 6:
+                ClockLength();
+                m_channel1.StepSweep();
+
+                break;
+            case 7:
+                m_channel1.StepEnvelope();
+                m_channel2.StepEnvelope();
+                m_channel4.StepEnvelope();
+
+                break;
+            default:
+                break;
+        }
+
+        m_frameSequencerStep = ((m_frameSequencerStep + 1) & 0x07);
+    }
+    private void ClockLength() {
+        m_channel1.StepLength();
+        m_channel2.StepLength();
+        m_channel3.StepLength();
+        m_channel4.StepLength();
     }
 }
