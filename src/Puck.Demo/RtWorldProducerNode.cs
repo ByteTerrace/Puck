@@ -103,7 +103,7 @@ internal sealed class RtWorldProducerNode : IRenderNode {
             return default;
         }
 
-        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds);
+        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds, interpolationAlpha: (float)context.InterpolationAlpha);
 
         EnsureResources(gpuDevice: gpuDevice, frame: frame);
 

@@ -124,7 +124,14 @@ public static class CliDeterminismGate {
             clock.NowTicks = window;
 
             foreach (var line in script(arg: tick)) {
-                _ = registry.Submit(line: line);
+                // Every scripted line must resolve to an injection ("[queued: ...]"). Asserting it closes a silent
+                // hole: a line the parser rejected (e.g. a mishandled negative axis) would otherwise be dropped, and
+                // the gate would still pass on the surviving inputs while proving less than it claims.
+                var result = registry.Submit(line: line);
+
+                if (!result.Output.StartsWith(value: "[queued:", comparisonType: StringComparison.Ordinal)) {
+                    throw new InvalidOperationException(message: $"Console line did not queue as a simulation command: '{line}' -> '{result.Output}'.");
+                }
             }
 
             // Pull the tick's snapshot (folding the just-injected commands, whose capture tick precedes the window

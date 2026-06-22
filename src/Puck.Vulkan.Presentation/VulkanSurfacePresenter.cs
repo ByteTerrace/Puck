@@ -8,7 +8,7 @@ namespace Puck.Vulkan.Presentation;
 /// fullscreen surface blit), so the host loop drives Vulkan presentation through the backend-neutral seam
 /// without referencing either concrete type.
 /// </summary>
-public sealed class VulkanSurfacePresenter : ISurfacePresenter {
+public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback {
     private readonly SurfaceCompositor m_compositor;
     private readonly VulkanRenderer m_renderer;
 
@@ -55,6 +55,11 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter {
     public void Present(Surface surface) {
         m_compositor.Blit(surface: surface);
     }
+    /// <inheritdoc/>
+    public PresentTimingSample LastPresentTiming =>
+        (m_renderer.TryGetPresentTiming(out var presentCount, out var presentTimestampTicks)
+            ? new PresentTimingSample(PresentCount: presentCount, PresentTimestampTicks: presentTimestampTicks)
+            : PresentTimingSample.Unavailable);
     /// <inheritdoc/>
     public void Dispose() {
         Deactivate();

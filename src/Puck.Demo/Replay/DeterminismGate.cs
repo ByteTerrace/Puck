@@ -36,6 +36,10 @@ public static class DeterminismGate {
             return new Result(Message: $"FIXED-POINT incorrect: {fixedPointDetail}", Passed: false);
         }
 
+        if (!WorldCoord3SelfTest.Run(out var worldCoordDetail)) {
+            return new Result(Message: $"WORLDCOORD3 incorrect: {worldCoordDetail}", Passed: false);
+        }
+
         var registry = new CommandRegistry(modules: [new MiniActionCommandModule()]);
 
         if (!registry.TryGetId(name: MiniActionInput.MoveCommand, id: out var moveId) ||

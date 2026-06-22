@@ -40,30 +40,65 @@ public readonly record struct FixedRoom(FixedQ4816 FloorTop, FixedQ4816 MinX, Fi
 /// buffering. The state and the step are FIXED-POINT (<see cref="FixedQ4816"/>): the step is a pure function of
 /// <c>(this state, intent, fixed dt, room)</c> with no float, no clock, no allocation, and no randomness — so a
 /// recorded intent stream replays bit-identically, on every machine. Float appears only at the seams: the input
-/// intent is converted in, and <see cref="PresentationPosition"/> / <see cref="Orientation"/> are converted out for
-/// the renderer (presentation never feeds back into the sim).
+/// intent is converted in, and <see cref="RenderRelativePositionAt"/> / <see cref="OrientationAt"/> are converted out
+/// for the renderer (presentation never feeds back into the sim).
 /// </summary>
 public sealed class PlatformerBody {
-    public FixedVector3 Position;
+    public WorldCoord3 Position;
     public FixedVector3 Velocity;
     public bool Grounded;
     public FixedQ4816 FacingYaw;
 
     private FixedQ4816 m_jumpBuffer;
     private FixedQ4816 m_coyote;
+    // The previous tick's presentation state, snapshotted at the top of each Step so the renderer can interpolate
+    // toward the current tick by the frame's InterpolationAlpha. PRESENTATION ONLY — mirrors Position/FacingYaw, is
+    // never folded into StateHash, and is never read back by the fixed-point step.
+    private WorldCoord3 m_previousPosition;
+    private FixedQ4816 m_previousFacingYaw;
 
-    public PlatformerBody(FixedVector3 position) {
+    public PlatformerBody(WorldCoord3 position) {
         Position = position;
+        m_previousPosition = position; // pre-step state == spawn until the first Step, so alpha-lerp is a no-op
     }
 
-    /// <summary>The position as a single-precision vector for the renderer's dynamic-transform buffer (presentation only).</summary>
-    public Vector3 PresentationPosition => Position.ToVector3();
-    /// <summary>The orientation quaternion (yaw about world up) for the dynamic-transform buffer (presentation only).</summary>
-    public Quaternion Orientation => Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: ((float)FacingYaw));
+    /// <summary>The position relative to <paramref name="renderOrigin"/>, interpolated between the previous and current
+    /// fixed tick by <paramref name="alpha"/>, as a single-precision vector for the renderer's dynamic-transform buffer.
+    /// The rebase subtraction happens in FIXED POINT before the float cast, so the renderer only ever sees small
+    /// camera-relative coordinates (precise no matter how far the body sits from the world origin); the interpolation is
+    /// pure presentation (never hashed, never fed back into the sim).</summary>
+    /// <param name="renderOrigin">The per-frame world anchor the position is expressed relative to (the cell-aware delta is taken in fixed point before the float cast).</param>
+    /// <param name="alpha">The fraction in <c>[0, 1)</c> between the previous and current fixed tick (the frame's <c>InterpolationAlpha</c>).</param>
+    /// <returns>The render-relative, interpolated position.</returns>
+    public Vector3 RenderRelativePositionAt(WorldCoord3 renderOrigin, float alpha) =>
+        Vector3.Lerp(
+            amount: alpha,
+            value1: m_previousPosition.ToRenderRelative(origin: renderOrigin),
+            value2: Position.ToRenderRelative(origin: renderOrigin)
+        );
+    /// <summary>The orientation quaternion (yaw about world up), interpolated between the previous and current fixed tick
+    /// by <paramref name="alpha"/> along the SHORTEST arc — the yaw is an <c>Atan2</c> angle, so the delta is wrapped into
+    /// <c>[-π, π]</c> to avoid spinning the long way across the wrap. PRESENTATION ONLY.</summary>
+    /// <param name="alpha">The fraction in <c>[0, 1)</c> between the previous and current fixed tick.</param>
+    /// <returns>The interpolated yaw orientation.</returns>
+    public Quaternion OrientationAt(float alpha) {
+        var previousYaw = ((float)m_previousFacingYaw);
+        var delta = (((float)FacingYaw) - previousYaw);
+
+        delta -= (MathF.Tau * MathF.Round(x: (delta / MathF.Tau))); // wrap the delta into [-π, π] for the shortest arc
+
+        return Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (previousYaw + (delta * alpha)));
+    }
 
     /// <summary>Advances one FIXED simulation tick. <paramref name="dt"/> is the constant tick period in seconds.</summary>
     public void Step(in PlayerIntent intent, PlatformerTuning tuning, FixedQ4816 dt, in FixedRoom room) {
         ArgumentNullException.ThrowIfNull(argument: tuning);
+
+        // Snapshot the pre-step presentation state so the renderer can interpolate from the previous tick to this one by
+        // the frame's alpha. Captured at the TOP of every Step, so across a multi-tick frame the previous state is the
+        // one tick behind current (the two most-recent states) — PRESENTATION ONLY, never enters the state hash.
+        m_previousPosition = Position;
+        m_previousFacingYaw = FacingYaw;
 
         // The intent is the float input seam; convert it into the fixed sim once, here.
         var move = new FixedVector2(
@@ -110,12 +145,12 @@ public sealed class PlatformerBody {
 
         Velocity = (Velocity with { Y = FixedQ4816.Max(x: (Velocity.Y - (gravity * dt)), y: -tuning.MaxFallSpeed) });
 
-        // Integrate, then resolve against the floor and the four walls (per-axis clamp; this prototype's room is convex
-        // and axis-aligned, so a clamp is exact).
-        var next = (Position + (Velocity * dt));
+        // Integrate and resolve collisions in the body's CELL-LOCAL frame (the room planes are expressed there, and the
+        // body shares the room's cell). Per-axis clamp — this prototype's room is convex and axis-aligned, so it's exact.
+        var nextLocal = (Position.Local + (Velocity * dt));
 
-        if (next.Y <= room.FloorTop) {
-            next = (next with { Y = room.FloorTop });
+        if (nextLocal.Y <= room.FloorTop) {
+            nextLocal = (nextLocal with { Y = room.FloorTop });
 
             if (Velocity.Y < FixedQ4816.Zero) {
                 Velocity = (Velocity with { Y = FixedQ4816.Zero });
@@ -126,12 +161,16 @@ public sealed class PlatformerBody {
             Grounded = false;
         }
 
-        if (next.X < room.MinX) { next = (next with { X = room.MinX }); Velocity = (Velocity with { X = FixedQ4816.Max(x: Velocity.X, y: FixedQ4816.Zero) }); }
-        if (next.X > room.MaxX) { next = (next with { X = room.MaxX }); Velocity = (Velocity with { X = FixedQ4816.Min(x: Velocity.X, y: FixedQ4816.Zero) }); }
-        if (next.Z < room.MinZ) { next = (next with { Z = room.MinZ }); Velocity = (Velocity with { Z = FixedQ4816.Max(x: Velocity.Z, y: FixedQ4816.Zero) }); }
-        if (next.Z > room.MaxZ) { next = (next with { Z = room.MaxZ }); Velocity = (Velocity with { Z = FixedQ4816.Min(x: Velocity.Z, y: FixedQ4816.Zero) }); }
+        if (nextLocal.X < room.MinX) { nextLocal = (nextLocal with { X = room.MinX }); Velocity = (Velocity with { X = FixedQ4816.Max(x: Velocity.X, y: FixedQ4816.Zero) }); }
+        if (nextLocal.X > room.MaxX) { nextLocal = (nextLocal with { X = room.MaxX }); Velocity = (Velocity with { X = FixedQ4816.Min(x: Velocity.X, y: FixedQ4816.Zero) }); }
+        if (nextLocal.Z < room.MinZ) { nextLocal = (nextLocal with { Z = room.MinZ }); Velocity = (Velocity with { Z = FixedQ4816.Max(x: Velocity.Z, y: FixedQ4816.Zero) }); }
+        if (nextLocal.Z > room.MaxZ) { nextLocal = (nextLocal with { Z = room.MaxZ }); Velocity = (Velocity with { Z = FixedQ4816.Min(x: Velocity.Z, y: FixedQ4816.Zero) }); }
 
-        Position = next;
+        // Re-anchor (carry the offset into the cell index if it ever leaves the centred range). The room planes are
+        // expressed in the SPAWN cell's local frame, so this single-room prototype assumes the body stays in that cell —
+        // which the clamp guarantees, making Normalize a no-op here. A room SPANNING cells would first have to rebase the
+        // planes into the body's current cell (via Delta) before the clamp above.
+        Position = (Position with { Local = nextLocal }).Normalize();
     }
 
     private static FixedVector2 MoveToward(FixedVector2 current, FixedVector2 target, FixedQ4816 maxDelta) {

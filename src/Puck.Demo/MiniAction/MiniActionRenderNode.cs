@@ -61,8 +61,12 @@ internal sealed class MiniActionRenderNode : IRenderNode {
 
         var tickSeconds = (float)EngineTicks.ToSeconds(ticks: context.StepTicks);
         var room = MiniActionRoom.Default;
+        // PUCK_MINIACTION_CELL places the whole room at a far world cell (applied to X and Z) to demonstrate the
+        // planet-scale coordinate path: the sim is cell-agnostic (identical local motion) and the floating-origin render
+        // seam keeps it crisp. Default 0 = the origin cell.
+        var farCell = DebugSpawnCell();
 
-        m_world = new MiniActionWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u);
+        m_world = new MiniActionWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u, spawnCellX: farCell, spawnCellZ: farCell);
 
         var debugPlayers = DebugPlayerCount();
 
@@ -141,6 +145,9 @@ internal sealed class MiniActionRenderNode : IRenderNode {
         return ((int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_MINIACTION_DEBUG_PLAYERS"), out var count))
             ? Math.Clamp(count, 0, MiniActionWorld.MaxPlayers)
             : 0);
+    }
+    private static long DebugSpawnCell() {
+        return (long.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_MINIACTION_CELL"), out var cell) ? cell : 0L);
     }
 
     // Each debug player walks toward its corner so the swarm spreads past the split threshold.

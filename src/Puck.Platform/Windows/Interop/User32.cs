@@ -65,6 +65,14 @@ internal static partial class User32 {
     [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetMonitorInfo(nint monitorHandle, ref MonitorInfo monitorInfo);
+    // MonitorInfoEx and DevMode embed ByValTStr fields (non-blittable), so these stay classic DllImports — the
+    // LibraryImport source generator cannot marshal the inline fixed-size strings.
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetMonitorInfoEx(nint monitorHandle, ref MonitorInfoEx monitorInfo);
+    [DllImport("user32.dll", EntryPoint = "EnumDisplaySettingsW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumDisplaySettings(string? deviceName, uint modeNumber, ref DevMode devMode);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ShowWindow(nint windowHandle, int command);

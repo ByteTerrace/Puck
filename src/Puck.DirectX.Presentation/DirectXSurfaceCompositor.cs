@@ -81,6 +81,13 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private uint m_swapChainFlags;
     private nint m_swapChain;
     private uint m_width;
+    // Closed-loop present timing: the last display-confirmed present count + its QPC timestamp (Stopwatch ticks), read
+    // from GetFrameStatistics after each present. Unavailable is signalled by m_presentTimingAvailable = false when the
+    // statistics are momentarily disjoint (e.g. just after a resize), so the host pacer falls back to open-loop. Read on
+    // the same pump thread that presents, like the rest of the path.
+    private uint m_lastPresentCount;
+    private long m_lastPresentQpcTicks;
+    private bool m_presentTimingAvailable;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfaceCompositor"/> class.</summary>
     /// <param name="commandListRecorder">Records draw commands into the per-frame command list.</param>
@@ -291,6 +298,34 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(1, &executable);
         swapChain->Present(m_syncInterval, (DXGI_PRESENT)m_presentFlags).ThrowIfFailed(operation: "IDXGISwapChain3::Present");
+        CapturePresentTiming(swapChain: swapChain);
+    }
+
+    /// <summary>Gets the last display-confirmed present count and its QPC timestamp (Stopwatch ticks); <see langword="false"/> when unavailable.</summary>
+    /// <param name="presentCount">The most recent confirmed present count.</param>
+    /// <param name="presentQpcTicks">The QPC timestamp the present was shown at.</param>
+    /// <returns><see langword="true"/> when a usable sample is available.</returns>
+    internal bool TryGetPresentTiming(out uint presentCount, out long presentQpcTicks) {
+        presentCount = m_lastPresentCount;
+        presentQpcTicks = m_lastPresentQpcTicks;
+
+        return m_presentTimingAvailable;
+    }
+
+    // Reads the display's frame statistics after a present so the host pacer can phase-lock to the real present rhythm.
+    // GetFrameStatistics returns DXGI_ERROR_FRAME_STATISTICS_DISJOINT right after creation/resize/mode-change (normal),
+    // so ALL failure is caught and treated as "no timing this frame" — present timing is render-side only and must never
+    // throw out of the present path.
+    private void CapturePresentTiming(IDXGISwapChain3* swapChain) {
+        try {
+            swapChain->GetFrameStatistics(out var statistics);
+
+            m_lastPresentCount = statistics.PresentCount;
+            m_lastPresentQpcTicks = statistics.SyncQPCTime;
+            m_presentTimingAvailable = (statistics.SyncQPCTime > 0L);
+        } catch {
+            m_presentTimingAvailable = false;
+        }
     }
 
     /// <inheritdoc/>
@@ -389,10 +424,13 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var dxgiFactory = (IDXGIFactory4*)factory;
 
         try {
-            // Immediate present needs an ALLOW_TEARING swap chain (carried into Present too) AND a display that
-            // supports tearing; detect once so Vsync/Mailbox are unaffected and Immediate degrades to no-vsync when
-            // unsupported. Vsync/Mailbox leave both flags zero.
-            if ((PresentMode.Immediate == m_presentMode) && SupportsTearing(factory: dxgiFactory)) {
+            // Immediate and Adaptive (VRR) present need an ALLOW_TEARING swap chain (carried into Present too) AND a
+            // display that supports tearing; detect once so Vsync/Mailbox are unaffected and the tearing modes degrade
+            // to no-vsync when unsupported. Vsync/Mailbox leave both flags zero.
+            if (
+                ((PresentMode.Immediate == m_presentMode) || (PresentMode.Adaptive == m_presentMode)) &&
+                SupportsTearing(factory: dxgiFactory)
+            ) {
                 m_swapChainFlags = DxgiSwapChainFlagAllowTearing;
                 m_presentFlags = DxgiPresentAllowTearing;
             }

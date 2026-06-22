@@ -24,6 +24,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
 
     private const uint PipelineStageColorAttachmentOutputBit = 0x00000400;
     private const uint StructureTypePresentInfoKhr = 1000001001;
+    private const uint StructureTypePresentIdKhr = 1000294001;
     private const uint StructureTypeSubmitInfo = 4;
 
     private readonly Lock m_syncRoot = new();
@@ -78,6 +79,12 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
         var swapchainPointer = m_allocator.Alloc(size: IntPtr.Size);
         var imageIndexPointer = m_allocator.Alloc(size: sizeof(uint));
+        // Closed-loop present timing: chain a VkPresentIdKHR (the present id plus its single-element id array) ONLY when
+        // a non-zero id is requested — i.e. only when VK_KHR_present_id/present_wait are enabled. A zero id leaves the
+        // present byte-for-byte unchanged (PNext stays 0).
+        var hasPresentId = (request.PresentId != 0UL);
+        var presentIdValuePointer = (hasPresentId ? m_allocator.Alloc(size: sizeof(ulong)) : 0);
+        var presentIdPointer = (hasPresentId ? m_allocator.Alloc(size: Marshal.SizeOf<VkPresentIdKhr>()) : 0);
 
         try {
             Marshal.WriteIntPtr(
@@ -102,6 +109,25 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 WaitSemaphoreCount = 1,
             };
 
+            if (hasPresentId) {
+                Marshal.WriteInt64(
+                    ptr: presentIdValuePointer,
+                    val: unchecked((long)request.PresentId)
+                );
+                Marshal.StructureToPtr(
+                    fDeleteOld: false,
+                    ptr: presentIdPointer,
+                    structure: new VkPresentIdKhr {
+                        PNext = 0,
+                        PPresentIds = presentIdValuePointer,
+                        SType = StructureTypePresentIdKhr,
+                        SwapchainCount = 1,
+                    }
+                );
+
+                presentInfo.PNext = presentIdPointer;
+            }
+
             return queuePresent(
                 request.PresentQueueHandle,
                 in presentInfo
@@ -110,7 +136,26 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
             m_allocator.Free(ptr: waitSemaphorePointer);
             m_allocator.Free(ptr: swapchainPointer);
             m_allocator.Free(ptr: imageIndexPointer);
+
+            if (hasPresentId) {
+                m_allocator.Free(ptr: presentIdValuePointer);
+                m_allocator.Free(ptr: presentIdPointer);
+            }
         }
+    }
+    /// <inheritdoc/>
+    public bool SupportsPresentWait(nint deviceHandle) {
+        return (GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr != null);
+    }
+    /// <inheritdoc/>
+    public VkResult WaitForPresent(nint deviceHandle, nint swapchainHandle, ulong presentId, ulong timeoutNanoseconds) {
+        var waitForPresent = GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr;
+
+        // Null only if the function pointer never loaded (extension absent); callers gate on SupportsPresentWait, so this
+        // is purely defensive — report a benign timeout rather than dereferencing null.
+        return ((waitForPresent == null)
+            ? VkResult.Timeout
+            : waitForPresent(deviceHandle, swapchainHandle, presentId, timeoutNanoseconds));
     }
     /// <inheritdoc/>
     public VkResult Submit(VulkanFrameSubmitRequest request) {
@@ -259,6 +304,8 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         public delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult> AcquireNextImageKhr;
         public delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult> QueuePresentKhr;
         public delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult> QueueSubmit;
+        // Null when VK_KHR_present_wait was not enabled — the closed-loop present-timing path stays off in that case.
+        public delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult> WaitForPresentKhr;
     }
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
@@ -287,6 +334,14 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         }
         fixed (byte* pName = "vkQueueSubmit"u8) {
             pNew.QueueSubmit = (delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)getAddr(
+                deviceHandle,
+                pName
+            );
+        }
+        // Optional: present (VK_KHR_present_wait). vkGetDeviceProcAddr returns null when the extension was not enabled,
+        // which the present-timing path treats as "unsupported" and falls back to open-loop pacing.
+        fixed (byte* pName = "vkWaitForPresentKHR"u8) {
+            pNew.WaitForPresentKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)getAddr(
                 deviceHandle,
                 pName
             );

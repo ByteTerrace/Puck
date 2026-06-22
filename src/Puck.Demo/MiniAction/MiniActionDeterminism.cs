@@ -70,7 +70,19 @@ public static class MiniActionDeterminism {
             return new Result(Message: $"REPLAY DIVERGED from the recorded run at tick {replayDivergence}.", Passed: false);
         }
 
-        return new Result(Message: $"determinism + replay verified over {ticks} ticks with scheduled join/leave/recycle (peak {MiniActionWorld.MaxPlayers} players; final hash 0x{first[^1]:X16})", Passed: true);
+        // Planet-scale translation invariance: the SAME scripted run with the whole room placed in a far world cell must
+        // produce an identical CELL-INVARIANT (local) trajectory — proving the cell+offset coordinate adds astronomical
+        // range without perturbing the simulation. The far cell is ~1e9 cells (≈1e15 world units) from the origin.
+        const long farCell = 1_000_000_000L;
+        var nearLocal = Simulate(seed: seed, input: Script(), roster: new ScriptedRosterEventSource(schedule: schedule), ticks: ticks, moveId: moveId, jumpId: jumpId, capturedRoster: null, localHash: true);
+        var farLocal = Simulate(seed: seed, input: Script(), roster: new ScriptedRosterEventSource(schedule: schedule), ticks: ticks, moveId: moveId, jumpId: jumpId, capturedRoster: null, spawnCell: farCell, localHash: true);
+        var cellDivergence = HashTrace.FirstDivergence(left: nearLocal, right: farLocal);
+
+        if (cellDivergence >= 0) {
+            return new Result(Message: $"PLANET-SCALE INVARIANCE BROKEN: the cell 0 and cell {farCell:N0} local trajectories diverged at tick {cellDivergence}.", Passed: false);
+        }
+
+        return new Result(Message: $"determinism + replay + planet-scale cell-invariance (cell 0 ≡ cell {farCell:N0}) verified over {ticks} ticks with scheduled join/leave/recycle (peak {MiniActionWorld.MaxPlayers} players; final hash 0x{first[^1]:X16})", Passed: true);
     }
 
     // Exercises empty→full, two joins on one tick (ordering), a mid-slot leave, and a recycling rejoin (the case a naive
@@ -113,8 +125,8 @@ public static class MiniActionDeterminism {
         return new CommandSnapshot(Lanes: lanes.DrainToImmutable(), Tick: tick);
     }
 
-    private static ulong[] Simulate(uint seed, ISnapshotSource input, IRosterEventSource roster, int ticks, ushort moveId, ushort jumpId, List<ImmutableArray<RosterEvent>>? capturedRoster) {
-        var world = new MiniActionWorld(room: MiniActionRoom.Default, tuning: PlatformerTuning.Default, tickSeconds: TickSeconds, seed: seed);
+    private static ulong[] Simulate(uint seed, ISnapshotSource input, IRosterEventSource roster, int ticks, ushort moveId, ushort jumpId, List<ImmutableArray<RosterEvent>>? capturedRoster, long spawnCell = 0L, bool localHash = false) {
+        var world = new MiniActionWorld(room: MiniActionRoom.Default, tuning: PlatformerTuning.Default, tickSeconds: TickSeconds, seed: seed, spawnCellX: spawnCell, spawnCellZ: spawnCell);
         var hashes = new ulong[ticks];
 
         for (var index = 0; (index < ticks); index++) {
@@ -138,7 +150,7 @@ public static class MiniActionDeterminism {
 
             world.Advance(intentsBySlot: intents);
 
-            hashes[index] = world.StateHash();
+            hashes[index] = (localHash ? world.LocalStateHash() : world.StateHash());
         }
 
         return hashes;

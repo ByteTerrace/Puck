@@ -18,7 +18,7 @@ public sealed record HostDocument {
     /// resolution (and the camera aspect ratio) follow this size; the <c>showcase</c> graph and a <c>validation</c>
     /// gate render at a fixed resolution and ignore it.</summary>
     public IReadOnlyList<int>? Size { get; init; }
-    /// <summary>The swapchain present mode: <c>"vsync"</c> (default), <c>"mailbox"</c>, or <c>"immediate"</c>.</summary>
+    /// <summary>The swapchain present mode: <c>"vsync"</c> (default), <c>"mailbox"</c>, <c>"immediate"</c>, or <c>"adaptive"</c> (VRR).</summary>
     public string? PresentMode { get; init; }
     /// <summary>The back-buffer surface format: <c>"r8g8b8a8"</c> (default) or <c>"b8g8r8a8"</c>.</summary>
     public string? SurfaceFormat { get; init; }
@@ -35,7 +35,7 @@ public sealed record HostDocument {
 
     internal void Validate(string path, ValidationErrors errors) {
         RequireOneOf(errors: errors, name: "backend", path: $"{path}.backend", value: Backend, allowed: ["vulkan", "directx"]);
-        RequireOneOf(errors: errors, name: "presentMode", path: $"{path}.presentMode", value: PresentMode, allowed: ["vsync", "mailbox", "immediate"]);
+        RequireOneOf(errors: errors, name: "presentMode", path: $"{path}.presentMode", value: PresentMode, allowed: ["vsync", "mailbox", "immediate", "adaptive"]);
         RequireOneOf(errors: errors, name: "surfaceFormat", path: $"{path}.surfaceFormat", value: SurfaceFormat, allowed: ["r8g8b8a8", "b8g8r8a8"]);
 
         if (Size is not null) {

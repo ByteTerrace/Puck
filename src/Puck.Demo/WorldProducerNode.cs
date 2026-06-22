@@ -171,7 +171,7 @@ internal sealed class WorldProducerNode : IRenderNode {
             return default;
         }
 
-        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds);
+        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds, interpolationAlpha: (float)context.InterpolationAlpha);
 
         // Produce each child viewport's surface first (so its image-view is known before the source array is bound),
         // then build/refresh resources, then (re)bind the source array — SDF view textures and child surfaces alike.

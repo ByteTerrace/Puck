@@ -12,7 +12,7 @@ namespace Puck.DirectX.Presentation;
 /// render target that this presenter then blits.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXSurfacePresenter : ISurfacePresenter {
+public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback {
     private readonly DirectXSurfaceCompositor m_compositor;
     private readonly DirectXDeviceContext m_deviceContext;
 
@@ -63,6 +63,11 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter {
             surface: surface
         );
     }
+    /// <inheritdoc/>
+    public PresentTimingSample LastPresentTiming =>
+        (m_compositor.TryGetPresentTiming(out var presentCount, out var presentQpcTicks)
+            ? new PresentTimingSample(PresentCount: presentCount, PresentTimestampTicks: presentQpcTicks)
+            : PresentTimingSample.Unavailable);
     /// <inheritdoc/>
     public void Dispose() {
         Deactivate();

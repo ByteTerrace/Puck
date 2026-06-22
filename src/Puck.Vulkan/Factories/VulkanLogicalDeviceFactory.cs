@@ -37,12 +37,22 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         "VK_KHR_external_memory_win32",
     ];
 
+    /// <summary>Closed-loop present-timing extensions: <c>present_id</c> tags each present, <c>present_wait</c> blocks
+    /// until it is displayed. Enabled only when both extensions AND both features are supported; otherwise the host pacer
+    /// stays open-loop. present_wait depends on present_id, so both are required together.</summary>
+    private static readonly string[] PresentTimingExtensions = [
+        "VK_KHR_present_id",
+        "VK_KHR_present_wait",
+    ];
+
     // Extension feature struct sTypes, verified against the Vulkan SDK 1.4.350 header
     // (vulkan_core.h). Each enables the struct's first VkBool32 when chained.
     private const uint StructureTypePhysicalDeviceBufferDeviceAddressFeatures = 1000257000;
     private const uint StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr = 1000150013;
     private const uint StructureTypePhysicalDevicePipelineExecutablePropertiesFeaturesKhr = 1000269000;
     private const uint StructureTypePhysicalDeviceRayQueryFeaturesKhr = 1000348013;
+    private const uint StructureTypePhysicalDevicePresentIdFeaturesKhr = 1000294000;
+    private const uint StructureTypePhysicalDevicePresentWaitFeaturesKhr = 1000248000;
 
     // 0-based VkPhysicalDeviceFeatures flag indices for storage-image read/write without a
     // shader format qualifier (shaderStorageImage*WithoutFormat) — needed to write image
@@ -135,6 +145,32 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             )
         );
     }
+    /// <summary>Whether the device supports the full present-timing bundle (both extensions AND both features), so the
+    /// host pacer can phase-lock to actual present times. Falls back to open-loop pacing when any piece is missing.</summary>
+    private bool SupportsPresentTiming(nint instanceHandle, nint physicalDeviceHandle) {
+        foreach (var extension in PresentTimingExtensions) {
+            if (!m_physicalDeviceApi.HasDeviceExtension(
+                extensionName: extension,
+                instanceHandle: instanceHandle,
+                physicalDeviceHandle: physicalDeviceHandle
+            )) {
+                return false;
+            }
+        }
+
+        return (
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+                instanceHandle: instanceHandle,
+                physicalDeviceHandle: physicalDeviceHandle,
+                structureType: StructureTypePhysicalDevicePresentIdFeaturesKhr
+            ) &&
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+                instanceHandle: instanceHandle,
+                physicalDeviceHandle: physicalDeviceHandle,
+                structureType: StructureTypePhysicalDevicePresentWaitFeaturesKhr
+            )
+        );
+    }
     private (IReadOnlyList<string> ExtensionNames, IReadOnlyList<uint> FeatureStructureTypes) ComposeExtensionsAndFeatures(
         nint instanceHandle,
         nint physicalDeviceHandle
@@ -167,6 +203,19 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         )) {
             extensions.AddRange(collection: ExternalMemoryExtensions);
         }
+
+        var presentTiming = SupportsPresentTiming(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        if (presentTiming) {
+            extensions.AddRange(collection: PresentTimingExtensions);
+            featureStructureTypes.Add(item: StructureTypePhysicalDevicePresentIdFeaturesKhr);
+            featureStructureTypes.Add(item: StructureTypePhysicalDevicePresentWaitFeaturesKhr);
+        }
+
+        Console.Error.WriteLine(value: $"[present-timing] VK_KHR_present_wait/present_id {(presentTiming ? "ENABLED (closed-loop pacing)" : "unavailable (open-loop pacing)")}");
 
         return (extensions, featureStructureTypes);
     }

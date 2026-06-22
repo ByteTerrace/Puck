@@ -192,6 +192,12 @@ public sealed class VulkanRenderer(
 
         m_device.WaitIdle();
     }
+    /// <summary>Forwards the closed-loop present-timing sample (from VK_KHR_present_wait) for the host pacer to phase-lock to.</summary>
+    /// <param name="presentCount">When this returns <see langword="true"/>, the monotonic confirmed-present count.</param>
+    /// <param name="presentTimestampTicks">When this returns <see langword="true"/>, the present's timestamp in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
+    /// <returns><see langword="true"/> when a usable sample exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) =>
+        framePresenter.TryGetPresentTiming(out presentCount, out presentTimestampTicks);
 
     nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Handle;
 
@@ -216,6 +222,7 @@ public sealed class VulkanRenderer(
             PresentMode.Vsync => (uint?)VulkanPresentMode.Fifo,
             PresentMode.Mailbox => VulkanPresentMode.Mailbox,
             PresentMode.Immediate => VulkanPresentMode.Immediate,
+            PresentMode.Adaptive => VulkanPresentMode.FifoRelaxed,
             _ => null,
         };
         var desiredVkFormat = presentationOptions.SurfaceFormat switch {

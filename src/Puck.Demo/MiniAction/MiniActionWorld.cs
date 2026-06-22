@@ -21,20 +21,31 @@ public sealed class MiniActionWorld {
     /// world compositor's <c>MaxViewports</c>; growing past it is a later phase (it needs more than four viewports).</summary>
     public const int MaxPlayers = 4;
 
-    // Free slots park their box far below the floor, outside every camera frustum, so a fixed count of boxes can be
-    // built into the program once and the inactive ones simply march against nothing visible.
-    private static readonly FixedVector3 HiddenPosition = new(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: -1000L), Z: FixedQ4816.Zero);
     private readonly FixedRoom m_collision;
     private readonly PlatformerTuning m_tuning;
     private readonly FixedQ4816 m_dt;
     private readonly PlayerSlot?[] m_slots = new PlayerSlot?[MaxPlayers];
+    // Reused per-frame dynamic-transform buffer — refilled (never reallocated) each DynamicTransforms() call so a
+    // high-rate VRR present loop allocates nothing here. PRESENTATION ONLY.
+    private readonly DynamicTransform[] m_dynamicTransforms = new DynamicTransform[MaxPlayers];
     private readonly Dictionary<Guid, int> m_slotByPlayer = [];
+    // The cell every body and the room live in — the origin cell by default; a far cell places the whole room
+    // astronomically far from the world origin to exercise the planet-scale coordinate path.
+    private readonly long m_spawnCellX;
+    private readonly long m_spawnCellY;
+    private readonly long m_spawnCellZ;
+    // Free slots park their box far below the floor (in the spawn cell), outside every camera frustum, so a fixed count
+    // of boxes can be built into the program once and the inactive ones simply march against nothing visible.
+    private readonly WorldCoord3 m_hiddenPosition;
     private ulong m_tick;
     private uint m_rng;
 
     /// <summary>Initializes the world. <paramref name="seed"/> seeds the PRNG so generated content is reproducible;
-    /// <paramref name="tickSeconds"/> is the fixed simulation step (the host's <c>StepTicks</c> as seconds).</summary>
-    public MiniActionWorld(MiniActionRoom room, PlatformerTuning tuning, float tickSeconds, uint seed) {
+    /// <paramref name="tickSeconds"/> is the fixed simulation step (the host's <c>StepTicks</c> as seconds). The optional
+    /// spawn cell (<paramref name="spawnCellX"/>/<paramref name="spawnCellY"/>/<paramref name="spawnCellZ"/>) places the
+    /// whole room at an arbitrary world cell (default the origin cell); the simulation is cell-agnostic, so a far cell
+    /// reproduces the SAME per-tick local motion while proving the planet-scale coordinate seam.</summary>
+    public MiniActionWorld(MiniActionRoom room, PlatformerTuning tuning, float tickSeconds, uint seed, long spawnCellX = 0L, long spawnCellY = 0L, long spawnCellZ = 0L) {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(tuning);
 
@@ -44,6 +55,15 @@ public sealed class MiniActionWorld {
         m_tuning = tuning;
         m_dt = FixedQ4816.FromDouble(value: tickSeconds);
         m_rng = ((seed == 0u) ? 0x9E3779B9u : seed); // a zero seed would freeze xorshift; nudge to a fixed non-zero
+        m_spawnCellX = spawnCellX;
+        m_spawnCellY = spawnCellY;
+        m_spawnCellZ = spawnCellZ;
+        m_hiddenPosition = new WorldCoord3(
+            CellX: spawnCellX,
+            CellY: spawnCellY,
+            CellZ: spawnCellZ,
+            Local: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: -1000L), Z: FixedQ4816.Zero)
+        ).Normalize();
     }
 
     /// <summary>The number of fixed ticks simulated so far.</summary>
@@ -52,6 +72,9 @@ public sealed class MiniActionWorld {
     public int ActivePlayerCount { get; private set; }
     /// <summary>The slot array (null == free), for the renderer to read positions in slot order. Presentation only.</summary>
     public IReadOnlyList<PlayerSlot?> Slots => m_slots;
+    /// <summary>The origin (zero local offset) of the cell the room and every body live in — the frame the static room
+    /// geometry is authored in, so the renderer can express the render anchor in it. Coordinate plumbing only.</summary>
+    public WorldCoord3 SpawnAnchor => new(CellX: m_spawnCellX, CellY: m_spawnCellY, CellZ: m_spawnCellZ, Local: FixedVector3.Zero);
 
     /// <summary>Adds a player with the given external identity into the lowest free slot, returning that slot (or -1 when
     /// full). Idempotent: an already-present id returns its existing slot. The spawn position is a deterministic function
@@ -67,12 +90,17 @@ public sealed class MiniActionWorld {
             return -1;
         }
 
-        // The spawn is a deterministic function of the slot: a fixed grid offset on the floor.
-        var spawn = new FixedVector3(
-            X: FixedQ4816.FromInteger(value: (((slot % 2) * 8) - 4)),
-            Y: m_collision.FloorTop,
-            Z: FixedQ4816.FromInteger(value: (((slot / 2) * 8) - 4))
-        );
+        // The spawn is a deterministic function of the slot: a fixed grid offset on the floor, in the world's spawn cell.
+        var spawn = new WorldCoord3(
+            CellX: m_spawnCellX,
+            CellY: m_spawnCellY,
+            CellZ: m_spawnCellZ,
+            Local: new FixedVector3(
+                X: FixedQ4816.FromInteger(value: (((slot % 2) * 8) - 4)),
+                Y: m_collision.FloorTop,
+                Z: FixedQ4816.FromInteger(value: (((slot / 2) * 8) - 4))
+            )
+        ).Normalize();
 
         m_slots[slot] = new PlayerSlot(Id: playerId, Body: new PlatformerBody(position: spawn));
         m_slotByPlayer[playerId] = slot;
@@ -129,26 +157,38 @@ public sealed class MiniActionWorld {
     }
 
     /// <summary>The per-frame transforms for the renderer's dynamic-transform buffer — always exactly
-    /// <see cref="MaxPlayers"/> entries. An active slot reports its body; a free slot reports a hidden transform.</summary>
-    public IReadOnlyList<DynamicTransform> DynamicTransforms() {
-        var transforms = new DynamicTransform[MaxPlayers];
-
+    /// <see cref="MaxPlayers"/> entries, REBASED by <paramref name="renderOrigin"/> and INTERPOLATED by
+    /// <paramref name="alpha"/>. An active slot reports its body (lerped between the previous and current fixed tick); a
+    /// free slot reports a hidden transform. The returned list is a REUSED buffer valid only until the next call — the
+    /// renderer's packers consume it synchronously within the same frame. PRESENTATION ONLY.</summary>
+    /// <param name="renderOrigin">The per-frame world anchor every position is expressed relative to (subtracted in fixed point before the float cast).</param>
+    /// <param name="alpha">The interpolation fraction in <c>[0, 1)</c> between the previous and current fixed tick (the frame's <c>InterpolationAlpha</c>).</param>
+    /// <returns>The reused, per-slot transform buffer.</returns>
+    public IReadOnlyList<DynamicTransform> DynamicTransforms(WorldCoord3 renderOrigin, float alpha) {
         for (var slot = 0; (slot < MaxPlayers); slot++) {
             var player = m_slots[slot];
 
-            transforms[slot] = ((player is null)
-                ? new DynamicTransform(Position: HiddenPosition.ToVector3(), Orientation: Quaternion.Identity)
-                : new DynamicTransform(Position: player.Body.PresentationPosition, Orientation: player.Body.Orientation));
+            m_dynamicTransforms[slot] = ((player is null)
+                ? new DynamicTransform(Position: m_hiddenPosition.ToRenderRelative(origin: renderOrigin), Orientation: Quaternion.Identity)
+                : new DynamicTransform(Position: player.Body.RenderRelativePositionAt(renderOrigin: renderOrigin, alpha: alpha), Orientation: player.Body.OrientationAt(alpha: alpha)));
         }
 
-        return transforms;
+        return m_dynamicTransforms;
     }
 
     /// <summary>A 64-bit FNV-1a hash over the deterministic state — the per-tick probe the determinism/replay gate
     /// compares. Each slot contributes an active-mask bit (so a join/leave changes the hash even when survivors are
-    /// unchanged) and, when active, its body. The identity Guid is NOT hashed — the sim is identity-agnostic; replay
-    /// validates the roster separately.</summary>
-    public ulong StateHash() {
+    /// unchanged) and, when active, its body (cell index AND local offset). The identity Guid is NOT hashed — the sim is
+    /// identity-agnostic; replay validates the roster separately.</summary>
+    public ulong StateHash() =>
+        HashState(includeCell: true);
+    /// <summary>A 64-bit FNV-1a hash over the deterministic state EXCLUDING the absolute cell index — the cell-INVARIANT
+    /// signature. Two worlds whose rooms sit in different cells but whose bodies move identically in their local frames
+    /// produce the same sequence, proving the simulation is translation-invariant across the planet-scale cell grid.</summary>
+    public ulong LocalStateHash() =>
+        HashState(includeCell: false);
+
+    private ulong HashState(bool includeCell) {
         var hash = Fnv1aHash.Create();
 
         hash.Add(value: m_tick);
@@ -166,10 +206,18 @@ public sealed class MiniActionWorld {
             var body = player.Body;
 
             // The body is fixed-point, so its raw storage is folded directly — exact integers, no float bit
-            // reinterpretation, deterministic on every machine.
-            hash.Add(value: body.Position.X.Value);
-            hash.Add(value: body.Position.Y.Value);
-            hash.Add(value: body.Position.Z.Value);
+            // reinterpretation, deterministic on every machine. The position is hierarchical: the local offset always
+            // contributes; the absolute cell index contributes only to the full StateHash (the cell-invariant hash omits
+            // it, so a body in a far cell hashes identically to the same local offset at the origin cell).
+            if (includeCell) {
+                hash.Add(value: body.Position.CellX);
+                hash.Add(value: body.Position.CellY);
+                hash.Add(value: body.Position.CellZ);
+            }
+
+            hash.Add(value: body.Position.Local.X.Value);
+            hash.Add(value: body.Position.Local.Y.Value);
+            hash.Add(value: body.Position.Local.Z.Value);
             hash.Add(value: body.Velocity.X.Value);
             hash.Add(value: body.Velocity.Y.Value);
             hash.Add(value: body.Velocity.Z.Value);

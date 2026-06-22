@@ -101,7 +101,7 @@ var checkRunOption = new Option<string?>(name: "--check-run") {
 };
 var presentModeOption = new Option<string>(name: "--present-mode") {
     DefaultValueFactory = static _ => "vsync",
-    Description = "The swapchain present mode (both backends honor it): vsync (default), mailbox, or immediate.",
+    Description = "The swapchain present mode (both backends honor it): vsync (default), mailbox, immediate, or adaptive (VRR).",
 };
 var surfaceFormatOption = new Option<string>(name: "--surface-format") {
     DefaultValueFactory = static _ => "r8g8b8a8",
