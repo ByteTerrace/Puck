@@ -196,8 +196,9 @@ internal sealed class WaveChannel {
     public void Trigger(bool nextStepClocksLength) {
         // DMG wave-RAM corruption: retriggering the channel while it is active and exactly one sample step away from
         // fetching (SameBoy's sample_countdown == 0, which maps to a frequency timer of 2 T-cycles under this
-        // per-T-cycle model) scrambles the low bytes of wave RAM with the byte the fetcher was about to read.
-        if (m_enabled && (m_frequencyTimer == WaveCorruptionTimer)) {
+        // per-T-cycle model) scrambles the low bytes of wave RAM with the byte the fetcher was about to read. The CGB
+        // does not have this bug — its wave RAM survives a retrigger intact.
+        if (m_enabled && (m_frequencyTimer == WaveCorruptionTimer) && !(m_isCgb?.Invoke() ?? false)) {
             var nextByte = (((m_samplePosition + 1) >> 1) & 0x0F);
 
             if (nextByte < 4) {
@@ -238,9 +239,10 @@ internal sealed class WaveChannel {
     public void WriteLengthLoad(byte value) =>
         m_lengthCounter = (256 - value);
 
-    /// <summary>Clears every register and all channel state, as a power-down does — except the length counter (DMG
-    /// preserves it) and wave RAM.</summary>
-    public void PowerOff() {
+    /// <summary>Clears every register and all channel state, as a power-down does — except wave RAM, and the length
+    /// counter when <paramref name="clearLength"/> is <see langword="false"/> (the DMG preserves it; the CGB clears it).</summary>
+    /// <param name="clearLength">Whether to also clear the length counter, as the CGB does on power-down.</param>
+    public void PowerOff(bool clearLength) {
         m_nr0 = 0;
         m_nr1 = 0;
         m_nr2 = 0;
@@ -251,6 +253,10 @@ internal sealed class WaveChannel {
         m_samplePosition = 0;
         m_frequencyTimer = 0;
         m_sampleBuffer = 0;
+
+        if (clearLength) {
+            m_lengthCounter = 0;
+        }
     }
 
     private int CurrentSample() {

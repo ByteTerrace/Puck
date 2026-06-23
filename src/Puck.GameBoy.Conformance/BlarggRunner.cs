@@ -42,9 +42,17 @@ internal static class BlarggRunner {
     }
 
     private static bool RunOne(string romPath, TextWriter output) {
+        var rom = File.ReadAllBytes(path: romPath);
+
+        // The cartridge header's CGB flag (byte 0x143, bit 7) selects the console: Blargg's cgb_sound sets it and
+        // expects CGB-specific APU behavior (power-off clears the length timers, CGB wave-RAM access), while dmg_sound
+        // leaves it clear and runs on the DMG. Auto-detecting keeps each suite on the hardware it was written for.
+        var model = (((rom.Length > 0x143) && ((rom[0x143] & 0x80) != 0))
+            ? ConsoleModel.Cgb
+            : ConsoleModel.Dmg);
         var machine = new GameBoyMachine(
-            cartridge: Cartridge.Load(rom: File.ReadAllBytes(path: romPath)),
-            model: ConsoleModel.Dmg
+            cartridge: Cartridge.Load(rom: rom),
+            model: model
         );
 
         // Blargg ROMs report results one of two ways: older suites print over the serial port, while the newer

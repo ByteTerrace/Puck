@@ -73,7 +73,123 @@ internal static class CartridgeSmokeTests {
                     ? null
                     : $"loaded {mbc1.GetType().Name} and {mbc5.GetType().Name}";
             }),
+            ("MBC2 banks ROM (bit-8 decode) and stores its 4-bit RAM", static () => {
+                var cartridge = new Mbc2(rom: BuildBankedRom(bankCount: 8));
+
+                // Address bit 8 set selects the ROM bank; clear toggles RAM enable.
+                cartridge.WriteRom(address: 0x2100, value: 3);
+
+                if (cartridge.ReadRom(address: SwitchableRomBase) != 3) {
+                    return $"bank {cartridge.ReadRom(address: SwitchableRomBase)} (expected 3)";
+                }
+
+                cartridge.WriteRom(address: 0x0000, value: 0x0A);
+                cartridge.WriteRam(address: CartridgeRamBase, value: 0xF5);
+
+                // Only the low nibble is stored; the high nibble reads back as ones.
+                return (cartridge.ReadRam(address: CartridgeRamBase) == 0xF5)
+                    ? null
+                    : $"RAM = 0x{cartridge.ReadRam(address: CartridgeRamBase):X2} (expected 0xF5)";
+            }),
+            ("MBC3 banks ROM and ticks a latchable RTC", static () => {
+                var cartridge = new Mbc3(rom: BuildBankedRom(bankCount: 16), ramByteCount: 0x2000, hasRtc: true);
+
+                cartridge.WriteRom(address: 0x2000, value: 5);
+
+                if (cartridge.ReadRom(address: SwitchableRomBase) != 5) {
+                    return $"bank {cartridge.ReadRom(address: SwitchableRomBase)} (expected 5)";
+                }
+
+                cartridge.WriteRom(address: 0x0000, value: 0x0A); // enable RAM/RTC
+                cartridge.WriteRom(address: 0x4000, value: 0x08); // map the seconds register
+                cartridge.WriteRam(address: CartridgeRamBase, value: 0); // zero the live seconds
+
+                cartridge.Step(tCycles: (4194304 * 5)); // five seconds of master cycles
+
+                cartridge.WriteRom(address: 0x6000, value: 0x00); // latch sequence
+                cartridge.WriteRom(address: 0x6000, value: 0x01);
+
+                return (cartridge.ReadRam(address: CartridgeRamBase) == 5)
+                    ? null
+                    : $"RTC seconds = {cartridge.ReadRam(address: CartridgeRamBase)} (expected 5)";
+            }),
+            ("MBC7 stores an EEPROM word through the serial protocol", static () => {
+                var cartridge = new Mbc7(rom: BuildBankedRom(bankCount: 8));
+
+                cartridge.WriteRom(address: 0x0000, value: 0x0A); // primary RAM enable
+                cartridge.WriteRom(address: 0x4000, value: 0x40); // secondary enable
+
+                SendEepromCommand(cartridge: cartridge, command: 0x4C0); // EWEN
+                SendEepromCommand(cartridge: cartridge, command: 0x500, data: 0xABCD, dataBits: 16); // WRITE word 0
+
+                var word = ReadEepromWord(cartridge: cartridge, command: 0x600); // READ word 0
+
+                return (word == 0xABCD)
+                    ? null
+                    : $"EEPROM word = 0x{word:X4} (expected 0xABCD)";
+            }),
+            ("the cartridge loader selects every newly added mapper by header type", static () => {
+                (byte Type, Type Expected)[] cases = [
+                    (0x05, typeof(Mbc2)),
+                    (0x10, typeof(Mbc3)),
+                    (0x13, typeof(Mbc3)),
+                    (0x22, typeof(Mbc7)),
+                    (0x0B, typeof(Mmm01)),
+                    (0xFC, typeof(PocketCamera)),
+                    (0xFE, typeof(HuC3)),
+                    (0xFF, typeof(HuC1)),
+                ];
+
+                foreach (var (type, expected) in cases) {
+                    var cartridge = Cartridge.Load(rom: BuildHeaderedRom(cartridgeType: type, bankCount: 8));
+
+                    if (cartridge.GetType() != expected) {
+                        return $"type 0x{type:X2} -> {cartridge.GetType().Name} (expected {expected.Name})";
+                    }
+                }
+
+                return null;
+            }),
         ];
+
+    // Drives one bit through the MBC7 EEPROM's serial port at 0xA080: data on bit 1, a low-then-high clock on bit 6,
+    // chip-select held on bit 7.
+    private static void ClockEepromBit(Mbc7 cartridge, int bit) {
+        var data = ((bit != 0) ? 0x02 : 0x00);
+
+        cartridge.WriteRam(address: 0xA080, value: (byte)(0x80 | data));
+        cartridge.WriteRam(address: 0xA080, value: (byte)(0x80 | 0x40 | data));
+    }
+
+    private static void SendEepromCommand(Mbc7 cartridge, int command, int data = 0, int dataBits = 0) {
+        for (var i = 10; i >= 0; i -= 1) {
+            ClockEepromBit(cartridge: cartridge, bit: ((command >> i) & 0x01));
+        }
+
+        for (var i = (dataBits - 1); i >= 0; i -= 1) {
+            ClockEepromBit(cartridge: cartridge, bit: ((data >> i) & 0x01));
+        }
+
+        cartridge.WriteRam(address: 0xA080, value: 0x00); // deselect
+    }
+
+    private static int ReadEepromWord(Mbc7 cartridge, int command) {
+        for (var i = 10; i >= 0; i -= 1) {
+            ClockEepromBit(cartridge: cartridge, bit: ((command >> i) & 0x01));
+        }
+
+        var value = 0;
+
+        for (var i = 0; i < 16; i += 1) {
+            ClockEepromBit(cartridge: cartridge, bit: 0);
+
+            value = ((value << 1) | (cartridge.ReadRam(address: 0xA080) & 0x01));
+        }
+
+        cartridge.WriteRam(address: 0xA080, value: 0x00); // deselect
+
+        return value;
+    }
 
     private static byte[] BuildBankedRom(int bankCount) {
         var rom = new byte[bankCount * 0x4000];

@@ -105,6 +105,8 @@ internal sealed class NoiseChannel {
 
                 break;
             case 3:
+                var oldNr3 = m_nr3;
+
                 // On CGB a NR43 write that lands exactly as the counter reloaded re-derives the countdown from the
                 // new divisor and the current alignment (SameBoy's nr43_write reload path).
                 if (IsCgb && m_countdownReloaded) {
@@ -120,6 +122,10 @@ internal sealed class NoiseChannel {
                 }
 
                 m_nr3 = value;
+
+                if (IsCgb && m_enabled) {
+                    Nr43Glitch(old: oldNr3);
+                }
 
                 break;
             default:
@@ -300,9 +306,10 @@ internal sealed class NoiseChannel {
     public void WriteLengthLoad(byte value) =>
         m_lengthCounter = (64 - (value & 0x3F));
 
-    /// <summary>Clears every register and all channel state, as a power-down does — except the length counter, which
-    /// the DMG preserves through a power cycle.</summary>
-    public void PowerOff() {
+    /// <summary>Clears every register and all channel state, as a power-down does — except the length counter when
+    /// <paramref name="clearLength"/> is <see langword="false"/> (the DMG preserves it; the CGB clears it).</summary>
+    /// <param name="clearLength">Whether to also clear the length counter, as the CGB does on power-down.</param>
+    public void PowerOff(bool clearLength) {
         m_nr1 = 0;
         m_nr2 = 0;
         m_nr3 = 0;
@@ -323,6 +330,10 @@ internal sealed class NoiseChannel {
         m_startedWithDacDisabled = false;
         m_didStepCounter = false;
         m_countdownReloaded = false;
+
+        if (clearLength) {
+            m_lengthCounter = 0;
+        }
     }
 
     private bool IsCgb =>
@@ -398,9 +409,10 @@ internal sealed class NoiseChannel {
         var instantStep = false;
         var isActive = m_enabled;
 
-        // In double-speed the APU clock advances one 2 MHz unit per machine cycle, so a register access lands a unit
-        // earlier in the alignment phase than the machine-cycle-quantized counter sees it; correct for that here.
-        var align = (m_alignment - (((m_isDoubleSpeed?.Invoke() ?? false)) ? 1u : 0u));
+        // The alignment phase as the SameBoy counter sees it at the access point: my counter runs a constant offset
+        // ahead of SameBoy's (one 2 MHz unit in double-speed, two in single-speed), so correct for it here. Co-sim
+        // verified: SameBoy align&3=0 / cd=10 vs my raw align&3=2 / cd=8 on channel_4_frequency_alignment.
+        var align = (m_alignment - (((m_isDoubleSpeed?.Invoke() ?? false)) ? 1u : 2u));
 
         if ((divisor > 1) && (m_counterCountdown == 1)) {
             m_counter = ((m_counter + 1) & 0x3FFF);
@@ -481,6 +493,25 @@ internal sealed class NoiseChannel {
         return -4;
     }
 
+    // SameBoy's nr43_write LFSR glitch (CGB-E category 1): a NR43 shift-bit change can clock the LFSR an extra time.
+    // The conditions read the free-running counter (so the inverted-LFSR convention doesn't matter); the step uses the
+    // already-updated width via ClockShiftRegister.
+    private void Nr43Glitch(byte old) {
+        var value = m_nr3;
+
+        if ((old & 0xF0) == (value & 0xF0)) {
+            return;
+        }
+
+        var oldBit = (((m_counter >> (old >> 4)) & 1) != 0);
+        var glitchValue = ((old & 0x7F) | (value & 0x80));
+        var glitchBit = (((m_counter >> (glitchValue >> 4)) & 1) != 0);
+        var newBit = (((m_counter >> (value >> 4)) & 1) != 0);
+
+        if ((oldBit == newBit) && (newBit != glitchBit) && newBit && ((value & 0x80) == 0)) {
+            ClockShiftRegister();
+        }
+    }
     private void ClockShiftRegister() {
         var feedback = ((m_lfsr & 0x01) ^ ((m_lfsr >> 1) & 0x01));
 

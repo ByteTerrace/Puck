@@ -9,8 +9,12 @@ namespace Puck.GameBoy.Conformance;
 internal static class ApuSmokeTests {
     private const ushort Nr10 = 0xFF10;
     private const ushort Nr11 = 0xFF11;
+    private const ushort Nr12 = 0xFF12;
+    private const ushort Nr13 = 0xFF13;
+    private const ushort Nr14 = 0xFF14;
     private const ushort Nr30 = 0xFF1A;
     private const ushort Nr50 = 0xFF24;
+    private const ushort Nr51 = 0xFF25;
     private const ushort Nr52 = 0xFF26;
     private const ushort WaveRam0 = 0xFF30;
 
@@ -125,6 +129,41 @@ internal static class ApuSmokeTests {
                 return ((nr52 == 0xF1) && (nr10 == 0x80) && (nr50 == 0x77))
                     ? null
                     : $"NR52=0x{nr52:X2} NR10=0x{nr10:X2} NR50=0x{nr50:X2} (expected 0xF1 0x80 0x77)";
+            }),
+            ("the audio mixer produces a non-silent waveform for an active channel", static () => {
+                var apu = new Apu(systemCounter: static () => 0);
+
+                apu.ConfigureAudioOutput(sampleRate: 48000);
+                apu.Write(address: Nr52, value: 0x80); // power on
+                apu.Write(address: Nr50, value: 0x77); // master volume max both sides
+                apu.Write(address: Nr51, value: 0xFF); // route every channel to both sides
+                apu.Write(address: Nr12, value: 0xF0); // channel 1: volume 15, DAC on
+                apu.Write(address: Nr13, value: 0xF8); // frequency low
+                apu.Write(address: Nr14, value: 0x87); // trigger, frequency high (short period -> fast duty)
+
+                for (var cycle = 0; cycle < 40000; cycle += 4) {
+                    apu.Step(tCycles: 4);
+                }
+
+                if (apu.AvailableAudioSamples == 0) {
+                    return "no audio samples were buffered";
+                }
+
+                var buffer = new short[apu.AvailableAudioSamples];
+                var count = apu.ReadAudioSamples(destination: buffer);
+
+                var minimum = (short)0;
+                var maximum = (short)0;
+
+                for (var i = 0; i < count; i += 1) {
+                    minimum = Math.Min(val1: minimum, val2: buffer[i]);
+                    maximum = Math.Max(val1: maximum, val2: buffer[i]);
+                }
+
+                // A square wave passed through the DC-blocking filter must swing both above and below zero.
+                return ((minimum < 0) && (maximum > 0))
+                    ? null
+                    : $"waveform did not swing (min={minimum} max={maximum} samples={count})";
             }),
         ];
 }

@@ -142,6 +142,11 @@ internal sealed class PulseChannel {
 
                 m_nr4 = value;
 
+                // A frequency-high write that lands as the counter reloads re-derives the countdown (SameBoy NR14).
+                if (IsCgb && m_justReloaded) {
+                    m_sampleCountdown = (((Frequency ^ 0x7FF) * 2) + 1);
+                }
+
                 var lengthEnabled = ((value & 0x40) != 0);
 
                 // Obscure behavior: enabling the length counter during a frame-sequencer period that will NOT clock
@@ -342,12 +347,13 @@ internal sealed class PulseChannel {
             // SameBoy's square trigger delay (CGB-E): a freshly started channel waits 6 - lf_div 2 MHz ticks before its
             // first sample; an already-active retrigger starts two ticks earlier (4 - lf_div). lf_div is the 1 MHz
             // phase — the low bit of the 2 MHz counter, with the double-speed access-phase correction applied.
-            var align = (m_phase - (((m_isDoubleSpeed?.Invoke() ?? false)) ? 1u : 0u));
-            var lfDiv = (int)(align & 1);
+            // SameBoy's start delay is (active ? 4 : 6) - lf_div. In double-speed the 1 MHz phase is the 2 MHz
+            // counter's low bit; in single-speed the 2 MHz counter advances two per machine cycle (so its low bit is
+            // always 0) and the live phase comes entirely from the odd sub-machine-cycle split of the register write,
+            // which lands lf_div at 1. Verified against the SameBoy co-sim oracle (delay/duty lf=1, align lf=0).
+            var lfDiv = ((m_isDoubleSpeed?.Invoke() ?? false) ? (int)(m_phase & 1) : 1);
 
-            // The start delay is SameBoy's (active ? 4 : 6) - lf_div, less one tick to account for this port's
-            // check-zero-then-reload duty-step ordering (verified exact against channel_2_delay/duty).
-            m_delay = ((wasActive ? 3 : 5) - lfDiv + ApuTuning.PulseDelay);
+            m_delay = ((wasActive ? 4 : 6) - lfDiv + ApuTuning.PulseDelay);
             m_sampleCountdown = (((Frequency ^ 0x7FF) * 2) + m_delay);
 
             if (ApuTuning.PulseIndex != 0) {
@@ -398,9 +404,10 @@ internal sealed class PulseChannel {
     public void WriteLengthLoad(byte value) =>
         m_lengthCounter = (64 - (value & 0x3F));
 
-    /// <summary>Clears every register and all channel state, as a power-down does — except the length counter, which
-    /// the DMG preserves through a power cycle.</summary>
-    public void PowerOff() {
+    /// <summary>Clears every register and all channel state, as a power-down does — except the length counter when
+    /// <paramref name="clearLength"/> is <see langword="false"/> (the DMG preserves it; the CGB clears it).</summary>
+    /// <param name="clearLength">Whether to also clear the length counter, as the CGB does on power-down.</param>
+    public void PowerOff(bool clearLength) {
         m_nr0 = 0;
         m_nr1 = 0;
         m_nr2 = 0;
@@ -424,6 +431,10 @@ internal sealed class PulseChannel {
         m_sampleHigh = false;
         m_sampleSuppressed = false;
         m_phase = 0;
+
+        if (clearLength) {
+            m_lengthCounter = 0;
+        }
     }
 
     // The CGB 2 MHz square step: runs one 2 MHz tick at a time so the lf_div phase keeps its parity. The duty index

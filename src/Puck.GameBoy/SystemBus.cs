@@ -92,6 +92,13 @@ public sealed class SystemBus : ICpuBus {
         m_bootRom = bootRom;
         m_bootRomMapped = (bootRom is not null);
         m_cartridge = cartridge;
+
+        // A cartridge with an on-board clock (MBC3/HuC3 RTC) advances itself in step with the machine; clocking it in
+        // the Lcd domain feeds it the master-cycle count, which tracks real time in both speed modes.
+        if (cartridge is IClockedComponent clockedCartridge) {
+            Attach(component: clockedCartridge);
+        }
+
         m_model = model;
         m_videoRam = new byte[VideoRamBankSize * (isColor ? 2 : 1)];
         m_workRam = new byte[WorkRamBankSize * (isColor ? 8 : 2)];
