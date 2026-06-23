@@ -108,7 +108,7 @@ else {
     }
 
     if (!string.IsNullOrEmpty(gamesRoot) && Directory.Exists(gamesRoot)) {
-        failures += RomRunner.RunRenderHash(romPath: Path.Combine(gamesRoot, "A.gba"), name: "A (Golden Sun)", steps: 120_000_000, expected: 0xFD784298FF982124ul);
+        failures += RomRunner.RunRenderHash(romPath: Path.Combine(gamesRoot, "A.gba"), name: "A (Golden Sun)", steps: 120_000_000, expected: 0x83AF051D6A622EA2ul);
         failures += RomRunner.RunRenderHash(romPath: Path.Combine(gamesRoot, "AGS Aging Cartridge (World) (v7.1).gba"), name: "AGS menu", steps: 6_000_000, expected: 0x37893C186522CBD2ul);
     }
 }

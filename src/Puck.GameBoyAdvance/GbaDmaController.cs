@@ -101,6 +101,21 @@ public sealed class GbaDmaController : IGbaDmaController {
         }
     }
 
+    /// <inheritdoc/>
+    public void OnVideoCapture(IGbaBus bus) {
+        // Only DMA3 has special (video-capture) timing; for DMA1/2 the special mode is the Direct Sound FIFO.
+        if (((m_control[3] & 0x8000) != 0) && (((m_control[3] >> 12) & 0x3) == 3)) {
+            RunTransfer(channel: 3, bus: bus);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void OnVideoCaptureEnd() {
+        if (((m_control[3] & 0x8000) != 0) && (((m_control[3] >> 12) & 0x3) == 3)) {
+            m_control[3] &= unchecked((ushort)~0x8000);
+        }
+    }
+
     private void WriteControl(int channel, ushort value, IGbaBus bus) {
         var wasEnabled = (m_control[channel] & 0x8000) != 0;
 

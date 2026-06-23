@@ -40,4 +40,14 @@ public interface IGbaPpu : IGbaClockedComponent {
     /// <summary>Returns and clears the flag marking that the most recent step entered a visible H-blank.</summary>
     /// <returns><see langword="true"/> if an H-blank just started on a visible scanline.</returns>
     bool ConsumeHBlankStarted();
+
+    /// <summary>Returns and clears the flag marking an H-blank on a video-capture scanline (2–161), which fires
+    /// DMA3's special (video-capture) timing.</summary>
+    /// <returns><see langword="true"/> if a video-capture H-blank just started.</returns>
+    bool ConsumeVideoCaptureStarted();
+
+    /// <summary>Returns and clears the flag marking the end of the video-capture window (entering line 162), which
+    /// disables a running video-capture DMA.</summary>
+    /// <returns><see langword="true"/> if the video-capture window just ended.</returns>
+    bool ConsumeVideoCaptureEnded();
 }

@@ -175,6 +175,14 @@ public sealed class GbaBus : IGbaBus {
             m_dma.OnHBlank(bus: this);
         }
 
+        if (m_ppu.ConsumeVideoCaptureStarted()) {
+            m_dma.OnVideoCapture(bus: this);
+        }
+
+        if (m_ppu.ConsumeVideoCaptureEnded()) {
+            m_dma.OnVideoCaptureEnd();
+        }
+
         // Drained Direct Sound FIFOs are topped up by their special-timing DMA channels.
         if (m_apu.ConsumeFifoARefill()) {
             m_dma.OnFifo(fifo: 0, bus: this);
@@ -422,9 +430,11 @@ public sealed class GbaBus : IGbaBus {
 
     // Serves one opcode halfword from the prefetch buffer, returning its cycle cost and advancing the buffer head.
     private int ConsumeHalf(uint address, BusAccessType access) {
-        if ((access == BusAccessType.NonSequential) || !m_prefetchActive || (address != m_prefetchHead)) {
+        if (!m_prefetchActive || (address != m_prefetchHead)) {
             // A branch (or the first fetch into ROM) restarts the stream: pay the full non-sequential access, then
-            // begin prefetching the following halfwords.
+            // begin prefetching the following halfwords. Restart is driven by address discontinuity, not the N/S
+            // type — a data access to non-ROM sets the next fetch non-sequential but the prefetch unit keeps
+            // running, so a contiguous opcode fetch after it is still served from the buffer.
             m_prefetchActive = true;
             m_prefetchSeq = RomSeqCycles(region: address >> 24);
             m_prefetchCount = 0;
@@ -517,9 +527,12 @@ public sealed class GbaBus : IGbaBus {
     }
 
     private static int RomCycles(int nonSeq, int seq, int width, BusAccessType access) {
-        // A 32-bit game-pak access is a non-sequential half followed by a sequential half on the 16-bit bus.
+        // On the 16-bit game-pak bus a 32-bit access is two halfword transfers plus a one-cycle merge penalty
+        // (confirmed by the AGS wait-state table): a non-sequential word pays N+1+S, a sequential word pays 2S+1.
         if (width == 4) {
-            return nonSeq + seq;
+            return (access == BusAccessType.Sequential)
+                ? (seq + seq + 1)
+                : (nonSeq + seq + 1);
         }
 
         return (access == BusAccessType.Sequential)

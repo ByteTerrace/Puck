@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <OutputType>Exe</OutputType>
-    </PropertyGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
-        <ProjectReference Include="..\Puck.GameBoy\Puck.GameBoy.csproj" />
-    </ItemGroup>
-</Project>

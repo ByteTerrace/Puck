@@ -39,6 +39,8 @@ public sealed class GbaPpu : IGbaPpu {
     private bool m_hblankFlag;
     private bool m_vblankStarted;
     private bool m_hblankStarted;
+    private bool m_videoCaptureStarted;
+    private bool m_videoCaptureEnded;
 
     /// <summary>Creates the PPU bound to the interrupt controller it raises display interrupts through.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
@@ -156,17 +158,43 @@ public sealed class GbaPpu : IGbaPpu {
         return started;
     }
 
+    /// <inheritdoc/>
+    public bool ConsumeVideoCaptureStarted() {
+        var started = m_videoCaptureStarted;
+
+        m_videoCaptureStarted = false;
+
+        return started;
+    }
+
+    /// <inheritdoc/>
+    public bool ConsumeVideoCaptureEnded() {
+        var ended = m_videoCaptureEnded;
+
+        m_videoCaptureEnded = false;
+
+        return ended;
+    }
+
     private void EnterHBlank() {
         m_hblankFlag = true;
+
+        // The H-Blank interrupt fires on every scanline, including the V-Blank lines. The H-Blank DMA trigger and
+        // scanline rendering, by contrast, happen only on the visible lines (no H-Blank DMA during V-Blank).
+        if ((m_dispStatControl & 0x10) != 0) {
+            m_interrupts.Request(source: InterruptSource.HBlank);
+        }
 
         if (m_line < ScreenHeight) {
             RenderScanline(line: m_line);
 
             m_hblankStarted = true;
+        }
 
-            if ((m_dispStatControl & 0x10) != 0) {
-                m_interrupts.Request(source: InterruptSource.HBlank);
-            }
+        // DMA3 video-capture timing fires on the H-blank of scanlines 2 through 161 (the visible lines plus the
+        // first two V-blank lines), then the window ends at line 162.
+        if ((m_line >= 2) && (m_line <= 161)) {
+            m_videoCaptureStarted = true;
         }
     }
 
@@ -189,6 +217,11 @@ public sealed class GbaPpu : IGbaPpu {
             if ((m_dispStatControl & 0x8) != 0) {
                 m_interrupts.Request(source: InterruptSource.VBlank);
             }
+        }
+
+        // Reaching line 162 closes the video-capture window: a running video-capture DMA is stopped.
+        if (m_line == 162) {
+            m_videoCaptureEnded = true;
         }
 
         if ((m_line == (m_dispStatControl >> 8)) && ((m_dispStatControl & 0x20) != 0)) {

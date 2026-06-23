@@ -300,6 +300,15 @@ internal static class RomRunner {
             }
         }
 
+        // prefetch test (#6) reads the timer twice (prefetch on → expect 0x18, off → 0x33).
+        var prefetchReads = timerReads.Where(predicate: r => r.afterResults == 6).Select(selector: r => r.value).ToArray();
+        Console.WriteLine($"  -- prefetch timer reads (afterResults==6): {string.Join(", ", prefetchReads.Select(v => $"0x{v:X}"))} (expect 0x18 on, 0x33 off) --");
+
+        // cart-RAM (SRAM) wait test (#8) reads the timer 4 times (expect 0x1C,0x18,0x14,0x2C).
+        uint[] expectedCart = [0x1C, 0x18, 0x14, 0x2C];
+        var cartReads = timerReads.Where(predicate: r => r.afterResults == 8).Select(selector: r => r.value).ToArray();
+        Console.WriteLine($"  -- cart-RAM timer reads (afterResults==8): {string.Join(", ", cartReads.Select(v => $"0x{v:X}"))} (expect 0x1C,0x18,0x14,0x2C) --");
+
         return failed;
     }
 

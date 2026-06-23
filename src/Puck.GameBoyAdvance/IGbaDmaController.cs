@@ -32,4 +32,12 @@ public interface IGbaDmaController {
     /// <param name="fifo">The FIFO index: 0 for A (0x040000A0), 1 for B (0x040000A4).</param>
     /// <param name="bus">The bus to transfer through.</param>
     void OnFifo(int fifo, IGbaBus bus);
+
+    /// <summary>Runs DMA3 if it is enabled for special (video-capture) timing: one transfer for the current
+    /// video-capture scanline.</summary>
+    /// <param name="bus">The bus to transfer through.</param>
+    void OnVideoCapture(IGbaBus bus);
+
+    /// <summary>Disables a running DMA3 video-capture transfer at the end of the capture window (line 162).</summary>
+    void OnVideoCaptureEnd();
 }

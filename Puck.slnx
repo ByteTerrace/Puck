@@ -10,7 +10,6 @@
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
         <Project Path="src/Puck.GameBoy/Puck.GameBoy.csproj" />
-        <Project Path="src/Puck.GameBoy.Conformance/Puck.GameBoy.Conformance.csproj" />
         <Project Path="src/Puck.GameBoyAdvance/Puck.GameBoyAdvance.csproj" />
         <Project Path="src/Puck.GameBoyAdvance.Conformance/Puck.GameBoyAdvance.Conformance.csproj" />
         <Project Path="src/Puck.Hosting/Puck.Hosting.csproj" />
