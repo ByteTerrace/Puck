@@ -34,8 +34,9 @@ public sealed class GbaTimerController : IGbaTimerController {
     /// <inheritdoc/>
     public void Step(int cycles) {
         // Only prescaler-driven timers advance with the clock; count-up timers move when the one below overflows.
+        // Timer 0 has no timer beneath it, so its count-up bit has no effect — it always counts the clock.
         for (var timer = 0; timer < 4; ++timer) {
-            if (!m_enabled[timer] || m_cascade[timer]) {
+            if (!m_enabled[timer] || (m_cascade[timer] && (timer != 0))) {
                 continue;
             }
 

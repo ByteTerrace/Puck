@@ -3,8 +3,8 @@ namespace Puck.GameBoy;
 /// <summary>
 /// Temporary APU sub-cycle calibration knobs, read once from the environment. Each defaults to zero (no behavioral
 /// change), so production builds are unaffected; a calibration sweep sets them per process to search for the phase
-/// constants the SameSuite alignment tests pin. Once a constant is found it is baked into the channel and its knob
-/// removed.
+/// constants that align channel timing with hardware. Once a constant is found it is baked into the channel and its
+/// knob removed.
 /// </summary>
 internal static class ApuTuning {
     /// <summary>Additive adjustment to the pulse channel's per-trigger start delay (2 MHz ticks).</summary>

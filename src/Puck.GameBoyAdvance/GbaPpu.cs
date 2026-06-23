@@ -10,7 +10,9 @@ public sealed class GbaPpu : IGbaPpu {
     private const int ScreenWidth = 240;
     private const int ScreenHeight = 160;
     private const int DotsPerLine = 1232;
-    private const int VisibleDots = 960;
+    // The H-Blank flag is raised after the H-draw period — 1008 cycles, not the 960-cycle visible-pixel span —
+    // so the flag stays set for 224 cycles per line, matching hardware (and the AGS hblank_status test).
+    private const int HDrawLength = 1008;
     private const int TotalLines = 228;
 
     private readonly IGbaInterruptController m_interrupts;
@@ -62,7 +64,7 @@ public sealed class GbaPpu : IGbaPpu {
     public void Step(int cycles) {
         m_lineCycles += cycles;
 
-        if (!m_hblankFlag && (m_lineCycles >= VisibleDots)) {
+        if (!m_hblankFlag && (m_lineCycles >= HDrawLength)) {
             EnterHBlank();
         }
 
@@ -76,7 +78,9 @@ public sealed class GbaPpu : IGbaPpu {
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) {
         if (offset == 0x04u) {
-            return (ushort)((m_line >= ScreenHeight ? 0x1u : 0u)
+            // The V-Blank flag is set on lines 160–226 and cleared again on the final line (227), a hardware
+            // quirk the AGS vblank_status test checks explicitly.
+            return (ushort)((((m_line >= ScreenHeight) && (m_line < (TotalLines - 1))) ? 0x1u : 0u)
                 | (m_hblankFlag ? 0x2u : 0u)
                 | ((m_line == (m_dispStatControl >> 8)) ? 0x4u : 0u)
                 | m_dispStatControl);

@@ -7,7 +7,7 @@ namespace Puck.GameBoy;
 /// through a small command protocol. A write to <c>0x0000</c>–<c>0x1FFF</c> selects the mode the
 /// <c>0xA000</c>–<c>0xBFFF</c> window operates in — RAM (<c>0xA</c>), the RTC command/read registers (<c>0xB</c>/
 /// <c>0xC</c>), status (<c>0xD</c>), or IR (<c>0xE</c>). The clock advances off the emulated master cycle, so it is
-/// deterministic; the infrared link reports no incoming light. Ported from SameBoy's HuC3 implementation.
+/// deterministic; the infrared link reports no incoming light.
 /// </summary>
 public sealed class HuC3 : ICartridge, IClockedComponent {
     private const ushort RamBase = 0xA000;

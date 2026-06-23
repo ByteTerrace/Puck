@@ -1,7 +1,7 @@
 namespace Puck.GameBoy;
 
 /// <summary>
-/// The decoded Game Boy cartridge header (<c>0x0100</c>–<c>0x014F</c>): the fields the loader needs to pick a
+/// The decoded cartridge header (<c>0x0100</c>–<c>0x014F</c>): the fields the loader needs to pick a
 /// mapper and size its memory. Only the fields used during construction are surfaced; the rest of the header
 /// (logo, checksums) is not interpreted here.
 /// </summary>
@@ -9,7 +9,7 @@ namespace Puck.GameBoy;
 /// <param name="CartridgeType">The raw cartridge-type byte at <c>0x0147</c> that selects the mapper.</param>
 /// <param name="RomByteCount">The ROM size in bytes decoded from <c>0x0148</c>.</param>
 /// <param name="RamByteCount">The cartridge-RAM size in bytes decoded from <c>0x0149</c>.</param>
-/// <param name="SupportsColor">Whether the CGB flag at <c>0x0143</c> advertises Game Boy Color support.</param>
+/// <param name="SupportsColor">Whether the CGB flag at <c>0x0143</c> advertises CGB support.</param>
 public readonly record struct CartridgeHeader(
     string Title,
     byte CartridgeType,

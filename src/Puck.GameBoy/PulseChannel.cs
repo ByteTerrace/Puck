@@ -37,9 +37,9 @@ internal sealed class PulseChannel {
     private int m_sweepShadow;
     private int m_sweepTimer;
 
-    // CGB-only sub-cycle timing model (SameBoy's 2 MHz square generator). sample_countdown is a 2 MHz down-counter; the
-    // duty index advances when it reloads. A per-trigger start delay derived from the lf_div (1 MHz) phase is what the
-    // SameSuite channel_1/2 timing tests pin. m_phase tracks the 2 MHz parity that lf_div is read from.
+    // CGB-only sub-cycle timing model (the 2 MHz square generator). m_sampleCountdown is a 2 MHz down-counter; the
+    // duty index advances when it reloads. A per-trigger start delay derived from the lf_div (1 MHz) phase is what
+    // makes pulse trigger timing on the CGB observable. m_phase tracks the 2 MHz parity that lf_div is read from.
     private int m_sampleCountdown;
     private int m_delay;
     private bool m_justReloaded;
@@ -68,7 +68,7 @@ internal sealed class PulseChannel {
             }
 
             // CGB: the duty sample is latched at each step and held suppressed (silent) from a trigger until the first
-            // step, matching SameBoy. DMG reads the live duty position.
+            // step. DMG reads the live duty position.
             if (IsCgb) {
                 return ((!m_sampleSuppressed && m_sampleHigh) ? m_envelopeVolume : 0);
             }
@@ -115,7 +115,7 @@ internal sealed class PulseChannel {
 
                 break;
             case 2:
-                // Writing NR12/NR22 while the channel is active "zombie"-adjusts the live volume (SameBoy nrx2_glitch).
+                // Writing NR12/NR22 while the channel is active "zombie"-adjusts the live volume (the NRx2 zombie glitch).
                 if (IsCgb && m_enabled) {
                     Nrx2Glitch(value: value);
                 }
@@ -142,7 +142,7 @@ internal sealed class PulseChannel {
 
                 m_nr4 = value;
 
-                // A frequency-high write that lands as the counter reloads re-derives the countdown (SameBoy NR14).
+                // A frequency-high (NR14) write that lands as the counter reloads re-derives the countdown.
                 if (IsCgb && m_justReloaded) {
                     m_sampleCountdown = (((Frequency ^ 0x7FF) * 2) + 1);
                 }
@@ -199,7 +199,7 @@ internal sealed class PulseChannel {
             }
         }
     }
-    /// <summary>The volume-countdown decrement on the primary frame-sequencer edge (SameBoy's div&amp;7==7 step): a held
+    /// <summary>The volume-countdown decrement on the primary frame-sequencer edge (the (step&amp;7)==7 event): a held
     /// envelope clock pauses it.</summary>
     public void DecrementEnvelopeCountdown() {
         if (!m_envelopeClock) {

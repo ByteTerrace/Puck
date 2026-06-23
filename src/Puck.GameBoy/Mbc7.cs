@@ -5,7 +5,7 @@ namespace Puck.GameBoy;
 /// 93LC56) for saves. The accelerometer and EEPROM are reached through the <c>0xA000</c>–<c>0xBFFF</c> window once
 /// both the primary RAM enable (<c>0x0A</c> at <c>0x0000</c>–<c>0x1FFF</c>) and the secondary enable (<c>0x40</c> at
 /// <c>0x4000</c>–<c>0x5FFF</c>) are set. Tilt input has no source here, so the accelerometer reads centered; the
-/// EEPROM command protocol is fully emulated so battery saves work. Ported from SameBoy's MBC7 implementation.
+/// EEPROM command protocol is fully emulated so battery saves work.
 /// </summary>
 public sealed class Mbc7 : ICartridge {
     private const int RomBankSize = 0x4000;

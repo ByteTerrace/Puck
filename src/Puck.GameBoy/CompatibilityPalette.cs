@@ -1,10 +1,10 @@
 namespace Puck.GameBoy;
 
 /// <summary>
-/// Reproduces the Game Boy Color boot ROM's automatic colorization of original (DMG) games. A real CGB, when it boots
+/// Reproduces the CGB boot ROM's automatic colorization of original (DMG) games. A CGB, when it boots
 /// a cartridge with no CGB flag, hashes the title and looks the result up in a table the boot ROM carries, assigning a
-/// background palette and two object palettes from a fixed set — this is why black-and-white classics show up in color
-/// on a CGB. The data tables below are extracted verbatim from SameBoy's open-source <c>cgb_boot.asm</c>.
+/// background palette and two object palettes from a fixed set — this is why monochrome titles show up in color
+/// on a CGB. The data tables below are the CGB boot ROM's built-in title-checksum-to-palette assignments.
 /// </summary>
 public static class CompatibilityPalette {
     // The first 65 title checksums are unique; the remaining 29 share checksums and are disambiguated by the title's

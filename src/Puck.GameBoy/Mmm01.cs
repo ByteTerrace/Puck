@@ -6,8 +6,7 @@ namespace Puck.GameBoy;
 /// The MMM01 multi-game memory-bank controller used by compilation cartridges. At reset it is <em>unlocked</em>, and
 /// the menu program in the last banks of ROM is mapped (the low region reads the second-to-last bank, the high region
 /// the last). The menu programs the base-bank registers and then sets the lock bit, after which the controller
-/// behaves like an MBC1 windowed onto the selected game. Both ROM regions are independently banked. Ported from
-/// SameBoy's MMM01 implementation.
+/// behaves like an MBC1 windowed onto the selected game. Both ROM regions are independently banked.
 /// </summary>
 public sealed class Mmm01 : ICartridge {
     private const ushort RamBase = 0xA000;

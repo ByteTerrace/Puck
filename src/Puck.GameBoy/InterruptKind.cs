@@ -1,6 +1,6 @@
 namespace Puck.GameBoy;
 
-/// <summary>Specifies the five Game Boy interrupt sources. The flag value is the bit each source occupies in
+/// <summary>Specifies the five SM83 interrupt sources. The flag value is the bit each source occupies in
 /// the interrupt-flag (<c>IF</c>, <c>0xFF0F</c>) and interrupt-enable (<c>IE</c>, <c>0xFFFF</c>) registers;
 /// the bit order is also the service priority, lowest bit first (<see cref="VBlank"/> highest).</summary>
 [Flags]

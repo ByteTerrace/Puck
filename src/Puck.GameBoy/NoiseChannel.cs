@@ -26,10 +26,10 @@ internal sealed class NoiseChannel {
     private bool m_envelopeLocked;
     private int m_lfsr;
 
-    // CGB-only sub-cycle timing model (SameBoy's 2 MHz noise counter). The frequency generator is a free-running
+    // CGB-only sub-cycle timing model (the 2 MHz noise counter). The frequency generator is a free-running
     // 14-bit up-counter clocked at the fixed 2 MHz audio rate; the LFSR steps on the rising edge of counter bit
-    // NR43>>4. The counter keeps running in the background after the channel is disabled, so a retrigger sees a
-    // particular phase — this is what the SameSuite channel_4 timing tests measure.
+    // NR43>>4. The counter keeps running in the background after the channel is disabled, so a retrigger observes a
+    // particular phase — this phase is what makes retrigger timing on the CGB observable.
     private int m_counter;
     private int m_counterCountdown;
     private uint m_alignment;
@@ -80,7 +80,7 @@ internal sealed class NoiseChannel {
                 break;
             case 2:
                 // Disabling the DAC kills the channel; on CGB it also stops the background counter (with a one-step
-                // nudge if a step was imminent), matching SameBoy's NR42 handler.
+                // nudge if a step was imminent).
                 if ((value & 0xF8) == 0) {
                     if (IsCgb && m_enabled && ((m_nr3 & 0x07) != 0)) {
                         if (m_counterCountdown <= 2) {
@@ -95,7 +95,7 @@ internal sealed class NoiseChannel {
                     m_counterActive = false;
                 }
                 else {
-                    // Writing NR42 while the channel is active zombie-adjusts the live volume (SameBoy nrx2_glitch).
+                    // Writing NR42 while the channel is active zombie-adjusts the live volume (the NRx2 zombie glitch).
                     if (IsCgb && m_enabled) {
                         Nrx2Glitch(value: value);
                     }
@@ -108,7 +108,7 @@ internal sealed class NoiseChannel {
                 var oldNr3 = m_nr3;
 
                 // On CGB a NR43 write that lands exactly as the counter reloaded re-derives the countdown from the
-                // new divisor and the current alignment (SameBoy's nr43_write reload path).
+                // new divisor and the current alignment.
                 if (IsCgb && m_countdownReloaded) {
                     var newDivisor = ((value & 0x07) << 2);
 
@@ -217,7 +217,7 @@ internal sealed class NoiseChannel {
             SetEnvelopeClock(value: true, direction: ((m_nr2 & 0x08) != 0), volume: m_envelopeVolume);
         }
     }
-    // SameBoy's _nrx2_glitch (CGB-E variant): a write to NR42 on a running channel glitches the live volume.
+    // The NRx2 zombie glitch (CGB-E variant): a write to NR42 on a running channel glitches the live volume.
     private void Nrx2Glitch(byte value) {
         var old = m_nr2;
 
@@ -392,8 +392,8 @@ internal sealed class NoiseChannel {
         }
     }
 
-    // SameBoy's prepare_noise_start, specialized to the CGB-E (model > CGB-C) revision SameSuite targets. Computes the
-    // post-trigger counter start delay from the divisor and the current 2 MHz alignment phase.
+    // Computes the post-trigger counter start delay from the divisor and the current 2 MHz alignment phase,
+    // specialized to the CGB-E (model > CGB-C) revision.
     private void PrepareNoiseStart() {
         m_counterActive = ((m_nr2 & 0xF8) != 0);
 
@@ -409,9 +409,8 @@ internal sealed class NoiseChannel {
         var instantStep = false;
         var isActive = m_enabled;
 
-        // The alignment phase as the SameBoy counter sees it at the access point: my counter runs a constant offset
-        // ahead of SameBoy's (one 2 MHz unit in double-speed, two in single-speed), so correct for it here. Co-sim
-        // verified: SameBoy align&3=0 / cd=10 vs my raw align&3=2 / cd=8 on channel_4_frequency_alignment.
+        // Correct the raw counter alignment to the phase the hardware samples at the access point: this counter runs a
+        // constant offset ahead of the hardware's (one 2 MHz unit in double-speed, two in single-speed), removed here.
         var align = (m_alignment - (((m_isDoubleSpeed?.Invoke() ?? false)) ? 1u : 2u));
 
         if ((divisor > 1) && (m_counterCountdown == 1)) {
@@ -447,7 +446,7 @@ internal sealed class NoiseChannel {
         }
     }
 
-    // The alignment-phase adjustment to the post-trigger counter start delay (SameBoy prepare_noise_start, CGB-E).
+    // The alignment-phase adjustment to the post-trigger counter start delay (CGB-E).
     private int AlignmentDelay(uint align, int divisor, bool isActive, bool wasBackgroundCounting) {
         if ((align & 1) != 0) {
             if (divisor == 0) {
@@ -493,7 +492,7 @@ internal sealed class NoiseChannel {
         return -4;
     }
 
-    // SameBoy's nr43_write LFSR glitch (CGB-E category 1): a NR43 shift-bit change can clock the LFSR an extra time.
+    // The NR43-write LFSR glitch (CGB-E): a NR43 shift-bit change can clock the LFSR an extra time.
     // The conditions read the free-running counter (so the inverted-LFSR convention doesn't matter); the step uses the
     // already-updated width via ClockShiftRegister.
     private void Nr43Glitch(byte old) {

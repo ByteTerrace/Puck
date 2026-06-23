@@ -38,9 +38,9 @@ public sealed class Apu : IClockedComponent {
     private readonly WaveChannel m_channel3;
     private readonly NoiseChannel m_channel4;
 
-    // The power-on DIV-event skip glitch is a three-state machine, mirroring SameBoy's skip_div_event: Skip arms it,
-    // the first DIV event consumes it (Skipped) without advancing the divider, and the second restores Inactive — still
-    // without advancing — so the divider lingers one event, shifting the whole length/sweep/envelope schedule by one.
+    // The power-on DIV-event skip glitch is a three-state machine: Skip arms it, the first DIV event consumes it
+    // (Skipped) without advancing the divider, and the second restores Inactive — still without advancing — so the
+    // divider lingers one event, shifting the whole length/sweep/envelope schedule by one.
     private const int SkipDivEventInactive = 0;
     private const int SkipDivEventSkip = 1;
     private const int SkipDivEventSkipped = 2;
@@ -51,7 +51,7 @@ public sealed class Apu : IClockedComponent {
     private int m_skipDivEvent;
     private bool m_lastFrameSequencerBit;
 
-    // The DIV-APU divider (SameBoy's div_divider): increments each non-skipped DIV event, then length clocks on its odd
+    // The DIV-APU divider: increments each non-skipped DIV event, then length clocks on its odd
     // values, sweep on (&3)==3, and the envelope countdown decrements on (&7)==7.
     private int m_frameSequencerStep;
     private byte m_volume;
@@ -151,7 +151,7 @@ public sealed class Apu : IClockedComponent {
         else if (!(m_isCgb?.Invoke() ?? false)) {
             // While powered down the registers are inert — except that on the DMG the length-load registers
             // (NRx1) remain writable (length portion only), and the length counters survive the power cycle. On the
-            // CGB the registers are fully read-only while off (Pan Docs: the NRx1 exception is monochrome-only).
+            // CGB the registers are fully read-only while off (the NRx1 length-write exception is monochrome-only).
             switch (address) {
                 case 0xFF11:
                     m_channel1.WriteLengthLoad(value: value);
@@ -210,8 +210,8 @@ public sealed class Apu : IClockedComponent {
             return;
         }
 
-        // A double-speed envelope tick deferred from the previous machine cycle fires now (SameBoy's
-        // pending_envelope_tick: in double-speed CGB-D/E the volume tick lands one machine cycle after the div edge).
+        // A double-speed envelope tick deferred from the previous machine cycle fires now: in double-speed on the
+        // CGB-D/E the volume tick lands one machine cycle after the DIV edge.
         if (m_pendingEnvelopeTick) {
             m_pendingEnvelopeTick = false;
 
@@ -230,7 +230,7 @@ public sealed class Apu : IClockedComponent {
         }
         else if (!m_lastFrameSequencerBit && bit) {
             // Secondary edge: arm the envelope clock so the next primary edge ticks the volume — this half-period
-            // delay is what the SameSuite envelope-timing tests pin (SameBoy's GB_apu_div_secondary_event).
+            // delay between the secondary and primary DIV edges is the hardware's envelope timing.
             m_channel1.ArmEnvelopeClock();
             m_channel2.ArmEnvelopeClock();
             m_channel4.ArmEnvelopeClock();
@@ -252,7 +252,7 @@ public sealed class Apu : IClockedComponent {
     /// <summary>Advances the channel frequency generators to the end of the current machine cycle, ahead of a bus
     /// access that reads or writes channel state. The deferred-cycle bus lands an access at the start of its machine
     /// cycle, but the real hardware latches it at the end — after that cycle's channel ticks — so the access must see
-    /// the post-tick state (the sub-cycle phase the SameSuite alignment tests pin). The matching <see cref="Step"/>
+    /// the post-tick state (the sub-cycle phase the hardware exposes to the access). The matching <see cref="Step"/>
     /// then skips its channel advance for this cycle so the work is not counted twice. Only the channel generators
     /// move; the frame sequencer keeps its machine-cycle-boundary timing.</summary>
     /// <param name="tCycles">The machine cycle's CPU-domain T-cycle count (the same value <see cref="Step"/> receives).</param>
@@ -288,7 +288,7 @@ public sealed class Apu : IClockedComponent {
         m_highPassCapacitorLeft = 0;
         m_highPassCapacitorRight = 0;
 
-        // The DC-blocking high-pass charge factor per output sample (Blargg's filter scaled to the sample rate).
+        // The DC-blocking high-pass charge factor per output sample, scaled from the master clock to the sample rate.
         m_audioHighPassAlpha = Math.Pow(x: 0.999958, y: ((double)MasterClock / sampleRate));
     }
 
@@ -409,7 +409,7 @@ public sealed class Apu : IClockedComponent {
 
         if (!powerOn && m_powered) {
             // Powering down zeroes every register and silences the channels; wave RAM is preserved. On the CGB the
-            // length counters are also cleared (Pan Docs: monochrome models preserve them, the CGB does not).
+            // length counters are also cleared (monochrome models preserve them; the CGB does not).
             var clearLength = (m_isCgb?.Invoke() ?? false);
 
             m_channel1.PowerOff(clearLength: clearLength);
@@ -420,7 +420,7 @@ public sealed class Apu : IClockedComponent {
             m_panning = 0;
         }
         else if (powerOn && !m_powered) {
-            // Powering up restarts the DIV-APU divider (SameBoy's GB_apu_init). The power-on glitch: if the DIV bit
+            // Powering up restarts the DIV-APU divider. The power-on glitch: if the DIV bit
             // that drives the sequencer is already set, the first DIV event is skipped and the divider starts at 1, so
             // the held value clocks length on the second event.
             m_frameSequencerStep = 0;
@@ -486,7 +486,7 @@ public sealed class Apu : IClockedComponent {
     }
 
     private void StepFrameSequencer() {
-        // SameBoy's GB_apu_div_event. The power-on skip glitch lingers the divider for two events: the first event is
+        // The DIV-APU event. The power-on skip glitch lingers the divider for two events: the first event is
         // consumed without advancing or acting, the second restores Inactive (still no advance) so it acts on the held
         // divider value — shifting the whole 256/128/64 Hz schedule by one event.
         if (m_skipDivEvent == SkipDivEventSkip) {
@@ -502,7 +502,7 @@ public sealed class Apu : IClockedComponent {
             m_frameSequencerStep = ((m_frameSequencerStep + 1) & 0x07);
         }
 
-        // The envelope countdown decrements once per eight events (SameBoy's post-increment div&7==7).
+        // The envelope countdown decrements once per eight events (on the post-increment (step&7)==7).
         if ((m_frameSequencerStep & 0x07) == 0x07) {
             m_channel1.DecrementEnvelopeCountdown();
             m_channel2.DecrementEnvelopeCountdown();
@@ -510,8 +510,8 @@ public sealed class Apu : IClockedComponent {
         }
 
         // The volume tick fires every primary edge, but only takes effect when the prior secondary edge armed the
-        // clock (i.e. the countdown had expired) — SameBoy's deferred envelope. In double-speed it is deferred a
-        // further machine cycle (pending_envelope_tick).
+        // clock (i.e. the countdown had expired) — the deferred envelope. In double-speed it is deferred a
+        // further machine cycle.
         if (m_isDoubleSpeed?.Invoke() ?? false) {
             m_pendingEnvelopeTick = true;
         }

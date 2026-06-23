@@ -16,7 +16,7 @@ public sealed class Mbc3 : ICartridge, IClockedComponent {
     private const int RomBankSize = 0x4000;
     private const int RamBankSize = 0x2000;
 
-    // The Game Boy master clock; the RTC crystal advances one second per this many emulated master cycles.
+    // The SM83 master clock; the RTC crystal advances one second per this many emulated master cycles.
     private const int CyclesPerSecond = 4194304;
 
     private readonly bool m_hasRtc;

@@ -1,7 +1,7 @@
 namespace Puck.GameBoy;
 
 /// <summary>
-/// A fully assembled Game Boy: the CPU bound to the bus, which owns the timer, OAM DMA, and PPU and routes the
+/// A fully assembled SM83 system: the CPU bound to the bus, which owns the timer, OAM DMA, and PPU and routes the
 /// cartridge. The CPU is the bus master, so advancing the machine is simply stepping the CPU — every other
 /// component is clocked through the bus's cycle accessors. When constructed without a boot ROM the machine is
 /// initialized to the model's documented post-boot state, so cartridges can run directly from <c>0x0100</c>.
@@ -23,7 +23,7 @@ public sealed class GameBoyMachine {
         m_bus.Ppu;
 
     /// <summary>Assembles a machine for a model with a cartridge and an optional boot ROM.</summary>
-    /// <param name="model">The Game Boy model to emulate.</param>
+    /// <param name="model">The model to emulate.</param>
     /// <param name="cartridge">The cartridge plugged into the bus.</param>
     /// <param name="bootRom">The boot ROM to run from reset, or <see langword="null"/> to start at the post-boot state.</param>
     /// <param name="bootPalette">A button combination held at boot, which picks an alternative CGB compatibility palette for a DMG game.</param>
@@ -109,11 +109,11 @@ public sealed class GameBoyMachine {
         // phase is what the boot_div timing test pins down. (A write to DIV would instead clear the counter, which
         // is why this goes through the dedicated seam.)
         //
-        // The literature DMG/MGB value is 0xABCC. Under this bus's deferred-cycle model an I/O read latches at the
-        // START of its access machine cycle (the access's own four T-cycles are charged afterward), so DIV reads
-        // land a few T-cycles earlier in phase; seeding 0xABCF cancels that offset exactly and reproduces
-        // hardware-observed reads for boot_div's before/after-increment probes. (Verified against the mooneye
-        // trace — do NOT "correct" this back to 0xABCC.)
+        // The documented post-boot DIV value on DMG/MGB is 0xABCC. Under this bus's deferred-cycle model an I/O read
+        // latches at the START of its access machine cycle (the access's own four T-cycles are charged afterward), so a
+        // DIV read lands a few T-cycles earlier in phase than a literal 0xABCC seed would predict; seeding 0xABCF
+        // cancels that offset exactly, so DIV reads taken just before and just after the post-boot increment match
+        // hardware. The 0xABCF is load-bearing for that phase alignment — it is not a typo for 0xABCC.
         var postBootDivider = model switch {
             ConsoleModel.Dmg => (ushort)0xABCF,
             _ => (ushort)0x0000,

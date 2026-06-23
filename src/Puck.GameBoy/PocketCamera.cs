@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.GameBoy;
 
 /// <summary>
-/// The Game Boy Camera mapper (MAC-GBD): MBC3-like ROM/RAM banking plus the camera sensor's register block, mapped
+/// The pocket-camera mapper (MAC-GBD): MBC3-like ROM/RAM banking plus the camera sensor's register block, mapped
 /// into <c>0xA000</c>–<c>0xBFFF</c> when bit&#160;4 of the RAM-bank register is set. There is no image sensor in this
 /// emulator, so a capture completes instantly and the sensor registers report "ready"; the captured image area in
 /// RAM is left as the game last wrote it. Banking and saves are fully functional.
@@ -28,7 +28,7 @@ public sealed class PocketCamera : ICartridge {
     public ReadOnlySpan<byte> SaveRam =>
         m_ram;
 
-    /// <summary>Initializes a Game Boy Camera cartridge from a ROM image and a RAM size.</summary>
+    /// <summary>Initializes a pocket-camera cartridge from a ROM image and a RAM size.</summary>
     /// <param name="rom">The cartridge ROM image.</param>
     /// <param name="ramByteCount">The size of cartridge RAM in bytes, or zero for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rom"/> is <see langword="null"/>.</exception>

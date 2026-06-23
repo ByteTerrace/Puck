@@ -1,6 +1,6 @@
 namespace Puck.GameBoy;
 
-/// <summary>The Game Boy CPU address map: the region boundaries the <see cref="SystemBus"/> decoder switches on
+/// <summary>The SM83 CPU address map: the region boundaries the <see cref="SystemBus"/> decoder switches on
 /// and the I/O register addresses components claim. Values are inclusive bounds unless named otherwise.</summary>
 public static class MemoryMap {
     /// <summary>The last address of the cartridge ROM region (<c>0x0000</c>–<c>0x7FFF</c>).</summary>

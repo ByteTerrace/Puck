@@ -1,6 +1,6 @@
 namespace Puck.GameBoy;
 
-/// <summary>Specifies a Game Boy button. The flag value is the bit it occupies in the joypad's internal pressed
+/// <summary>Specifies a controller button. The flag value is the bit it occupies in the joypad's internal pressed
 /// state: the low nibble holds the direction pad (read when <c>P14</c> is selected) and the high nibble the action
 /// buttons (read when <c>P15</c> is selected).</summary>
 [Flags]

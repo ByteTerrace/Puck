@@ -179,13 +179,14 @@ internal static class SmokeTests {
 
         Check(name: "PPU starts at scanline 0", ok: ppu.ReadRegister(offset: 0x06u) == 0);
 
-        // Advance to the first visible scanline's end and confirm an H-blank was flagged.
-        ppu.Step(cycles: 960);
+        // Advance past the H-draw period (1008 cycles) and confirm an H-blank was flagged. The H-blank flag is
+        // raised after H-draw, not at the end of the 960-cycle visible-pixel span.
+        ppu.Step(cycles: 1008);
 
         Check(name: "PPU H-blank flagged on visible line", ok: ppu.ConsumeHBlankStarted());
 
-        // Advance to scanline 160 (V-blank). 160 lines * 1232 cycles, less the 960 already stepped.
-        ppu.Step(cycles: (160 * 1232) - 960);
+        // Advance to scanline 160 (V-blank). 160 lines * 1232 cycles, less the 1008 already stepped.
+        ppu.Step(cycles: (160 * 1232) - 1008);
 
         Check(name: "PPU reaches V-blank at line 160", ok: ppu.ReadRegister(offset: 0x06u) == 160);
         Check(name: "PPU V-blank flag set", ok: (ppu.ReadRegister(offset: 0x04u) & 0x1) != 0);
