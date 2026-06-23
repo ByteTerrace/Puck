@@ -16,9 +16,15 @@ internal static class GameRunner {
             return 2;
         }
 
+        var rom = File.ReadAllBytes(path: romPath);
+        // The cartridge header's CGB flag (byte 0x143, bit 7) selects the console, so a Color cartridge boots in CGB
+        // mode and renders in color.
+        var model = (((rom.Length > 0x143) && ((rom[0x143] & 0x80) != 0))
+            ? ConsoleModel.Cgb
+            : ConsoleModel.Dmg);
         var machine = new GameBoyMachine(
-            cartridge: Cartridge.Load(rom: File.ReadAllBytes(path: romPath)),
-            model: ConsoleModel.Dmg
+            cartridge: Cartridge.Load(rom: rom),
+            model: model
         );
 
         // Step the CPU until the PPU has completed the requested number of frames, with a generous cycle ceiling

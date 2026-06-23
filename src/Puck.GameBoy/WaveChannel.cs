@@ -13,6 +13,7 @@ internal sealed class WaveChannel {
     private const int WaveCorruptionTimer = 2;
 
     private readonly byte[] m_waveRam = new byte[WaveRamSize];
+    private readonly System.Func<bool>? m_isCgb;
 
     private byte m_nr0;
     private byte m_nr1;
@@ -24,6 +25,16 @@ internal sealed class WaveChannel {
     private int m_lengthCounter;
     private int m_samplePosition;
     private int m_frequencyTimer;
+    // The byte the channel last *fetched* from wave RAM. The output is driven from this latch, not a live read of
+    // the current index — so a (re)trigger's delay window keeps emitting the previously fetched sample until the
+    // first post-trigger fetch lands (SameBoy's current_sample_byte).
+    private byte m_sampleBuffer;
+
+    /// <summary>Initializes the wave channel.</summary>
+    /// <param name="isCgb">Reads whether the console is a CGB, which lets the CPU read/write wave RAM freely while the channel plays (the DMG only allows it during the brief post-fetch window); <see langword="null"/> (the default) is treated as DMG.</param>
+    public WaveChannel(System.Func<bool>? isCgb = null) {
+        m_isCgb = isCgb;
+    }
 
     /// <summary>Gets whether the channel is currently producing sound (the <c>NR52</c> status bit).</summary>
     public bool Enabled =>
@@ -119,6 +130,12 @@ internal sealed class WaveChannel {
             return m_waveRam[offset];
         }
 
+        // On the CGB the CPU sees wave RAM freely while the channel plays, reading the byte at the current sample
+        // position (synced with PCM34); the DMG only opens this window for the cycle just after a fetch.
+        if (m_isCgb?.Invoke() ?? false) {
+            return m_waveRam[m_samplePosition / 2];
+        }
+
         return (m_waveFormJustRead
             ? m_waveRam[m_samplePosition / 2]
             : (byte)0xFF);
@@ -132,7 +149,7 @@ internal sealed class WaveChannel {
         if (!m_enabled) {
             m_waveRam[offset] = value;
         }
-        else if (m_waveFormJustRead) {
+        else if ((m_isCgb?.Invoke() ?? false) || m_waveFormJustRead) {
             m_waveRam[m_samplePosition / 2] = value;
         }
     }
@@ -144,11 +161,20 @@ internal sealed class WaveChannel {
     public void Step(int cycles) {
         for (var cycle = 0; cycle < cycles; cycle += 1) {
             m_waveFormJustRead = false;
+
+            // The sample fetcher only runs while the channel is active; a disabled channel does not advance its
+            // position or latch a sample (so a trigger sees a clean phase, not whatever a free-running timer left).
+            if (!m_enabled) {
+                continue;
+            }
+
             m_frequencyTimer -= 1;
 
             if (m_frequencyTimer <= 0) {
                 m_frequencyTimer += ((2048 - Frequency) * 2);
                 m_samplePosition = ((m_samplePosition + 1) % SampleCount);
+                // Latch the freshly fetched byte; this is what the output presents until the next fetch.
+                m_sampleBuffer = m_waveRam[m_samplePosition / 2];
                 m_waveFormJustRead = true;
             }
         }
@@ -224,10 +250,13 @@ internal sealed class WaveChannel {
         m_waveFormJustRead = false;
         m_samplePosition = 0;
         m_frequencyTimer = 0;
+        m_sampleBuffer = 0;
     }
 
     private int CurrentSample() {
-        var sampleByte = m_waveRam[m_samplePosition / 2];
+        // The output reflects the last fetched byte (the latch), not a live read; only the nibble selection follows
+        // the current index parity.
+        var sampleByte = m_sampleBuffer;
 
         // Even positions take the high nibble, odd the low nibble.
         return (((m_samplePosition & 1) == 0)

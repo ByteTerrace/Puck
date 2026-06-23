@@ -14,8 +14,10 @@ public sealed class Apu : IClockedComponent {
     private const int MasterControlIndex = (MemoryMap.AudioMasterControl - MemoryMap.AudioBase);
     private const int Volume = 0xFF24;     // NR50
     private const int Panning = 0xFF25;    // NR51
-    // The system-counter bit whose falling edge advances the frame sequencer (512 Hz at single speed).
+    // The system-counter bit whose falling edge advances the frame sequencer (512 Hz). In CGB double-speed the
+    // counter runs twice as fast, so the next bit up is used to keep the sequencer at 512 Hz.
     private const int FrameSequencerBit = 0x1000;
+    private const int FrameSequencerBitDoubleSpeed = 0x2000;
 
     // Per-register read OR-masks: the bits that always read as one (write-only or unused bits), indexed from 0xFF10.
     private static readonly byte[] s_readMasks = [
@@ -29,12 +31,14 @@ public sealed class Apu : IClockedComponent {
     ];
 
     private readonly Func<int> m_systemCounter;
-    private readonly PulseChannel m_channel1 = new(hasSweep: true);
-    private readonly PulseChannel m_channel2 = new(hasSweep: false);
-    private readonly WaveChannel m_channel3 = new();
-    private readonly NoiseChannel m_channel4 = new();
+    private readonly Func<bool>? m_isDoubleSpeed;
+    private readonly PulseChannel m_channel1;
+    private readonly PulseChannel m_channel2;
+    private readonly WaveChannel m_channel3;
+    private readonly NoiseChannel m_channel4;
 
     private bool m_powered;
+    private bool m_channelsPreStepped;
     private bool m_lastFrameSequencerBit;
     private int m_frameSequencerStep;
     private byte m_volume;
@@ -42,16 +46,31 @@ public sealed class Apu : IClockedComponent {
 
     /// <summary>Initializes the APU wired to the system counter its frame sequencer is divided from.</summary>
     /// <param name="systemCounter">Reads the shared 16-bit system counter (the timer's internal divider).</param>
+    /// <param name="isDoubleSpeed">Reads whether the CGB is in double-speed mode, which moves the frame-sequencer bit up one; <see langword="null"/> (the default) is treated as single-speed.</param>
+    /// <param name="isCgb">Reads whether the console is a CGB, selecting the noise channel's sub-cycle timing model; <see langword="null"/> (the default) is treated as DMG.</param>
     /// <exception cref="ArgumentNullException"><paramref name="systemCounter"/> is <see langword="null"/>.</exception>
-    public Apu(Func<int> systemCounter) {
+    public Apu(Func<int> systemCounter, Func<bool>? isDoubleSpeed = null, Func<bool>? isCgb = null) {
         ArgumentNullException.ThrowIfNull(systemCounter);
 
         m_systemCounter = systemCounter;
+        m_isDoubleSpeed = isDoubleSpeed;
+        m_channel1 = new PulseChannel(hasSweep: true, isCgb: isCgb, isDoubleSpeed: isDoubleSpeed);
+        m_channel2 = new PulseChannel(hasSweep: false, isCgb: isCgb, isDoubleSpeed: isDoubleSpeed);
+        m_channel3 = new WaveChannel(isCgb: isCgb);
+        m_channel4 = new NoiseChannel(isCgb: isCgb, isDoubleSpeed: isDoubleSpeed);
     }
 
     /// <inheritdoc />
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+    /// <summary>Gets the CGB <c>PCM12</c> value: channel 1's current digital output (0-15) in the low nibble,
+    /// channel 2's in the high nibble.</summary>
+    public byte PcmAmplitude12 =>
+        (byte)((m_channel1.Output & 0x0F) | ((m_channel2.Output & 0x0F) << 4));
+    /// <summary>Gets the CGB <c>PCM34</c> value: channel 3's current digital output (0-15) in the low nibble,
+    /// channel 4's in the high nibble.</summary>
+    public byte PcmAmplitude34 =>
+        (byte)((m_channel3.Output & 0x0F) | ((m_channel4.Output & 0x0F) << 4));
 
     /// <summary>Reads an audio register or wave-RAM byte (<c>0xFF10</c>-<c>0xFF3F</c>).</summary>
     /// <param name="address">The address to read.</param>
@@ -151,23 +170,68 @@ public sealed class Apu : IClockedComponent {
     /// <inheritdoc />
     public void Step(int tCycles) {
         if (!m_powered) {
+            m_channelsPreStepped = false;
+
             return;
         }
 
         // The frame sequencer is clocked by the falling edge of a system-counter bit (sampled per machine cycle,
         // after the timer has advanced the counter this cycle).
-        var bit = ((m_systemCounter() & FrameSequencerBit) != 0);
+        var frameSequencerBit = (((m_isDoubleSpeed?.Invoke() ?? false)) ? FrameSequencerBitDoubleSpeed : FrameSequencerBit);
+        var bit = ((m_systemCounter() & frameSequencerBit) != 0);
 
         if (m_lastFrameSequencerBit && !bit) {
+            // Primary edge: length, sweep, and the envelope volume tick/decrement.
             StepFrameSequencer();
+        }
+        else if (!m_lastFrameSequencerBit && bit) {
+            // Secondary edge: arm the envelope clock so the next primary edge ticks the volume — this half-period
+            // delay is what the SameSuite envelope-timing tests pin (SameBoy's GB_apu_div_secondary_event).
+            m_channel1.ArmEnvelopeClock();
+            m_channel2.ArmEnvelopeClock();
+            m_channel4.ArmEnvelopeClock();
         }
 
         m_lastFrameSequencerBit = bit;
 
-        m_channel1.Step(cycles: tCycles);
-        m_channel2.Step(cycles: tCycles);
-        m_channel3.Step(cycles: tCycles);
-        m_channel4.Step(cycles: tCycles);
+        // The channel frequency generators were already advanced to the end of this machine cycle by a bus access
+        // that observed them (see AdvanceChannelsForAccess) — don't advance them twice.
+        if (m_channelsPreStepped) {
+            m_channelsPreStepped = false;
+
+            return;
+        }
+
+        StepChannels(tCycles: tCycles);
+    }
+
+    /// <summary>Advances the channel frequency generators to the end of the current machine cycle, ahead of a bus
+    /// access that reads or writes channel state. The deferred-cycle bus lands an access at the start of its machine
+    /// cycle, but the real hardware latches it at the end — after that cycle's channel ticks — so the access must see
+    /// the post-tick state (the sub-cycle phase the SameSuite alignment tests pin). The matching <see cref="Step"/>
+    /// then skips its channel advance for this cycle so the work is not counted twice. Only the channel generators
+    /// move; the frame sequencer keeps its machine-cycle-boundary timing.</summary>
+    /// <param name="tCycles">The machine cycle's CPU-domain T-cycle count (the same value <see cref="Step"/> receives).</param>
+    public void AdvanceChannelsForAccess(int tCycles) {
+        if (!m_powered || m_channelsPreStepped) {
+            return;
+        }
+
+        StepChannels(tCycles: tCycles);
+
+        m_channelsPreStepped = true;
+    }
+
+    // The frame sequencer above is DIV-driven (so it runs at the CPU rate, twice as fast in double-speed), but the
+    // channel frequency generators are clocked by the fixed audio master clock — so per CPU machine cycle they advance
+    // only half as far in double-speed.
+    private void StepChannels(int tCycles) {
+        var channelCycles = ((m_isDoubleSpeed?.Invoke() ?? false) ? (tCycles / 2) : tCycles);
+
+        m_channel1.Step(cycles: channelCycles);
+        m_channel2.Step(cycles: channelCycles);
+        m_channel3.Step(cycles: channelCycles);
+        m_channel4.Step(cycles: channelCycles);
     }
 
     private byte ReadMasterControl() {
@@ -258,15 +322,23 @@ public sealed class Apu : IClockedComponent {
                 m_channel1.StepSweep();
 
                 break;
-            case 7:
-                m_channel1.StepEnvelope();
-                m_channel2.StepEnvelope();
-                m_channel4.StepEnvelope();
-
-                break;
             default:
                 break;
         }
+
+        // SameBoy decrements the envelope countdown at post-increment div&7==7; this sequencer checks the step before
+        // incrementing, so that lands on step 6 here.
+        if (m_frameSequencerStep == 6) {
+            m_channel1.DecrementEnvelopeCountdown();
+            m_channel2.DecrementEnvelopeCountdown();
+            m_channel4.DecrementEnvelopeCountdown();
+        }
+
+        // The volume tick fires every primary edge, but only takes effect when the prior secondary edge armed the
+        // clock (i.e. the countdown had expired) — SameBoy's deferred envelope.
+        m_channel1.TickEnvelope();
+        m_channel2.TickEnvelope();
+        m_channel4.TickEnvelope();
 
         m_frameSequencerStep = ((m_frameSequencerStep + 1) & 0x07);
     }

@@ -68,16 +68,30 @@ public sealed class GameBoyMachine {
     }
 
     private void ApplyPostBootState(ConsoleModel model) {
-        // The DMG boot ROM's handoff state. (The half-carry/carry flags depend on the header checksum, which is
-        // non-zero for all real cartridges and test ROMs, giving F = 0xB0.)
-        m_cpu.A = 0x01;
-        m_cpu.F = 0xB0;
-        m_cpu.B = 0x00;
-        m_cpu.C = 0x13;
-        m_cpu.D = 0x00;
-        m_cpu.E = 0xD8;
-        m_cpu.H = 0x01;
-        m_cpu.L = 0x4D;
+        // The boot ROM's handoff register state, which differs per model. The CGB leaves A = 0x11 — the value ROMs
+        // test to detect a Color console and enable its features. (The DMG's H/C flags depend on the header
+        // checksum, which is non-zero for every real cartridge and test ROM, giving F = 0xB0.)
+        if (model == ConsoleModel.Cgb) {
+            m_cpu.A = 0x11;
+            m_cpu.F = 0x80;
+            m_cpu.B = 0x00;
+            m_cpu.C = 0x00;
+            m_cpu.D = 0xFF;
+            m_cpu.E = 0x56;
+            m_cpu.H = 0x00;
+            m_cpu.L = 0x0D;
+        }
+        else {
+            m_cpu.A = 0x01;
+            m_cpu.F = 0xB0;
+            m_cpu.B = 0x00;
+            m_cpu.C = 0x13;
+            m_cpu.D = 0x00;
+            m_cpu.E = 0xD8;
+            m_cpu.H = 0x01;
+            m_cpu.L = 0x4D;
+        }
+
         m_cpu.StackPointer = 0xFFFE;
         m_cpu.ProgramCounter = 0x0100;
 

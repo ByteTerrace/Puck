@@ -92,8 +92,32 @@ public static class MemoryMap {
     public const ushort VideoRamBank = 0xFF4F;
     /// <summary>The boot-ROM disable register (<c>BOOT</c>); a nonzero write unmaps the boot ROM permanently.</summary>
     public const ushort BootRomDisable = 0xFF50;
+    /// <summary>The CGB VRAM-DMA source high byte (<c>HDMA1</c>).</summary>
+    public const ushort VramDmaSourceHigh = 0xFF51;
+    /// <summary>The CGB VRAM-DMA source low byte (<c>HDMA2</c>); the low nibble is ignored.</summary>
+    public const ushort VramDmaSourceLow = 0xFF52;
+    /// <summary>The CGB VRAM-DMA destination high byte (<c>HDMA3</c>); only the low 5 bits matter (VRAM offset).</summary>
+    public const ushort VramDmaDestinationHigh = 0xFF53;
+    /// <summary>The CGB VRAM-DMA destination low byte (<c>HDMA4</c>); the low nibble is ignored.</summary>
+    public const ushort VramDmaDestinationLow = 0xFF54;
+    /// <summary>The CGB VRAM-DMA control register (<c>HDMA5</c>): bit 7 picks general vs HBlank mode, bits 6-0 the length; a write starts the transfer.</summary>
+    public const ushort VramDmaControl = 0xFF55;
+    /// <summary>The CGB background palette index register (<c>BGPI</c>): the palette-RAM index and auto-increment flag.</summary>
+    public const ushort BackgroundPaletteIndex = 0xFF68;
+    /// <summary>The CGB background palette data register (<c>BGPD</c>): reads/writes background palette RAM at the index.</summary>
+    public const ushort BackgroundPaletteData = 0xFF69;
+    /// <summary>The CGB object palette index register (<c>OBPI</c>).</summary>
+    public const ushort ObjectPaletteIndex = 0xFF6A;
+    /// <summary>The CGB object palette data register (<c>OBPD</c>).</summary>
+    public const ushort ObjectPaletteData = 0xFF6B;
+    /// <summary>The CGB object priority mode register (<c>OPRI</c>): selects OAM-order vs X-coordinate object priority.</summary>
+    public const ushort ObjectPriorityMode = 0xFF6C;
     /// <summary>The CGB work-RAM bank-select register (<c>SVBK</c>): selects work-RAM bank 1-7 at <c>0xD000</c>-<c>0xDFFF</c>.</summary>
     public const ushort WorkRamBank = 0xFF70;
+    /// <summary>The CGB digital-output register (<c>PCM12</c>): the low nibble is channel 1's current output, the high nibble channel 2's.</summary>
+    public const ushort PcmAmplitude12 = 0xFF76;
+    /// <summary>The CGB digital-output register (<c>PCM34</c>): the low nibble is channel 3's current output, the high nibble channel 4's.</summary>
+    public const ushort PcmAmplitude34 = 0xFF77;
     /// <summary>The interrupt-enable register (<c>IE</c>).</summary>
     public const ushort InterruptEnable = 0xFFFF;
 }

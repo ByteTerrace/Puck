@@ -37,6 +37,15 @@ public sealed class SystemBus : ICpuBus {
     private ulong m_elapsedDots;
     private int m_videoRamBank;
     private int m_workRamBank = 1;
+    // CGB VRAM DMA (HDMA/GDMA) state. The transfer copies 0x10-byte blocks from the source into the current VRAM
+    // bank; general mode runs every block at once (stalling the CPU), HBlank mode runs one block per horizontal
+    // blank. m_hdmaBlocks is the blocks remaining; m_hdmaHBlank distinguishes the modes.
+    private ushort m_hdmaSource;
+    private ushort m_hdmaDestination;
+    private int m_hdmaBlocks;
+    private bool m_hdmaActive;
+    private bool m_hdmaHBlank;
+    private PpuMode m_previousLcdMode = PpuMode.HorizontalBlank;
 
     /// <summary>Gets the model this bus emulates.</summary>
     public ConsoleModel Model =>
@@ -95,7 +104,7 @@ public sealed class SystemBus : ICpuBus {
         m_oamDma = new OamDma(oam: m_oam, readSource: ReadDmaSource);
         Attach(component: m_oamDma);
 
-        m_ppu = new Ppu(interrupts: m_interrupts, videoRam: m_videoRam, objectAttributeMemory: m_oam);
+        m_ppu = new Ppu(interrupts: m_interrupts, videoRam: m_videoRam, objectAttributeMemory: m_oam, model: model);
         Attach(component: m_ppu);
 
         m_joypad = new Joypad(interrupts: m_interrupts);
@@ -104,7 +113,7 @@ public sealed class SystemBus : ICpuBus {
         Attach(component: m_serial);
 
         // The APU's frame sequencer is divided from the same system counter as the serial clock.
-        m_apu = new Apu(systemCounter: () => m_timer.InternalCounter);
+        m_apu = new Apu(systemCounter: () => m_timer.InternalCounter, isDoubleSpeed: () => m_doubleSpeed, isCgb: () => (m_model == ConsoleModel.Cgb));
         Attach(component: m_apu);
     }
 
@@ -149,6 +158,10 @@ public sealed class SystemBus : ICpuBus {
             );
         }
 
+        if (IsAudioChannelAccess(address: address)) {
+            m_apu.AdvanceChannelsForAccess(tCycles: CpuDotsPerMachineCycle);
+        }
+
         var value = ReadByte(address: address);
 
         m_pendingMachineCycles = 1;
@@ -168,6 +181,10 @@ public sealed class SystemBus : ICpuBus {
             );
         }
 
+        if (IsAudioChannelAccess(address: address)) {
+            m_apu.AdvanceChannelsForAccess(tCycles: CpuDotsPerMachineCycle);
+        }
+
         WriteByte(
             address: address,
             value: value
@@ -175,6 +192,13 @@ public sealed class SystemBus : ICpuBus {
 
         m_pendingMachineCycles = 1;
     }
+
+    // Whether an access at this address observes the APU channel generators (the register/wave block 0xFF10-0xFF3F or
+    // the CGB PCM12/PCM34 amplitude registers), so the channels must be brought current to the access point first.
+    private static bool IsAudioChannelAccess(ushort address) =>
+        (((address >= MemoryMap.AudioBase) && (address <= (MemoryMap.WaveRamBase + 0x0F)))
+            || (address == MemoryMap.PcmAmplitude12)
+            || (address == MemoryMap.PcmAmplitude34));
 
     /// <inheritdoc />
     public void TriggerOamBug(ushort address, bool isWrite) {
@@ -355,6 +379,24 @@ public sealed class SystemBus : ICpuBus {
                 (byte)(0xFE | m_videoRamBank),
             MemoryMap.WorkRamBank when (m_model == ConsoleModel.Cgb) =>
                 (byte)(0xF8 | m_workRamBank),
+            MemoryMap.VramDmaControl when (m_model == ConsoleModel.Cgb) =>
+                // Bit 7 clear while a transfer is in progress; bits 6-0 are the blocks remaining minus one.
+                (byte)((m_hdmaActive ? 0x00 : 0x80) | ((m_hdmaBlocks - 1) & 0x7F)),
+            MemoryMap.BackgroundPaletteIndex when (m_model == ConsoleModel.Cgb) =>
+                m_ppu.ReadBackgroundPaletteIndex(),
+            MemoryMap.BackgroundPaletteData when (m_model == ConsoleModel.Cgb) =>
+                m_ppu.ReadBackgroundPaletteData(),
+            MemoryMap.ObjectPaletteIndex when (m_model == ConsoleModel.Cgb) =>
+                m_ppu.ReadObjectPaletteIndex(),
+            MemoryMap.ObjectPaletteData when (m_model == ConsoleModel.Cgb) =>
+                m_ppu.ReadObjectPaletteData(),
+            MemoryMap.ObjectPriorityMode when (m_model == ConsoleModel.Cgb) =>
+                m_ppu.ReadObjectPriorityMode(),
+            // The CGB exposes each channel's live digital output through PCM12/PCM34; the DMG has no such registers.
+            MemoryMap.PcmAmplitude12 when (m_model == ConsoleModel.Cgb) =>
+                m_apu.PcmAmplitude12,
+            MemoryMap.PcmAmplitude34 when (m_model == ConsoleModel.Cgb) =>
+                m_apu.PcmAmplitude34,
             _ => 0xFF,
         };
     private void WriteIo(ushort address, byte value) {
@@ -420,6 +462,47 @@ public sealed class SystemBus : ICpuBus {
                 m_workRamBank = (value & 0x07);
 
                 break;
+            case MemoryMap.VramDmaSourceHigh when (m_model == ConsoleModel.Cgb):
+                m_hdmaSource = (ushort)((value << 8) | (m_hdmaSource & 0x00F0));
+
+                break;
+            case MemoryMap.VramDmaSourceLow when (m_model == ConsoleModel.Cgb):
+                m_hdmaSource = (ushort)((m_hdmaSource & 0xFF00) | (value & 0xF0));
+
+                break;
+            case MemoryMap.VramDmaDestinationHigh when (m_model == ConsoleModel.Cgb):
+                // The destination is a VRAM offset: only the low 5 bits of the high byte are used (0x0000-0x1FF0).
+                m_hdmaDestination = (ushort)(((value & 0x1F) << 8) | (m_hdmaDestination & 0x00F0));
+
+                break;
+            case MemoryMap.VramDmaDestinationLow when (m_model == ConsoleModel.Cgb):
+                m_hdmaDestination = (ushort)((m_hdmaDestination & 0x1F00) | (value & 0xF0));
+
+                break;
+            case MemoryMap.VramDmaControl when (m_model == ConsoleModel.Cgb):
+                StartVramDma(control: value);
+
+                break;
+            case MemoryMap.BackgroundPaletteIndex when (m_model == ConsoleModel.Cgb):
+                m_ppu.WriteBackgroundPaletteIndex(value: value);
+
+                break;
+            case MemoryMap.BackgroundPaletteData when (m_model == ConsoleModel.Cgb):
+                m_ppu.WriteBackgroundPaletteData(value: value);
+
+                break;
+            case MemoryMap.ObjectPaletteIndex when (m_model == ConsoleModel.Cgb):
+                m_ppu.WriteObjectPaletteIndex(value: value);
+
+                break;
+            case MemoryMap.ObjectPaletteData when (m_model == ConsoleModel.Cgb):
+                m_ppu.WriteObjectPaletteData(value: value);
+
+                break;
+            case MemoryMap.ObjectPriorityMode when (m_model == ConsoleModel.Cgb):
+                m_ppu.WriteObjectPriorityMode(value: value);
+
+                break;
             default:
                 break;
         }
@@ -452,5 +535,71 @@ public sealed class SystemBus : ICpuBus {
         }
 
         m_elapsedDots += (ulong)lcdDots;
+
+        // HBlank VRAM DMA copies one block as each visible line enters horizontal blank.
+        if (m_hdmaActive && m_hdmaHBlank) {
+            var mode = m_ppu.Mode;
+
+            if ((mode == PpuMode.HorizontalBlank) && (m_previousLcdMode != PpuMode.HorizontalBlank) && (m_ppu.Line < Ppu.ScreenHeight)) {
+                TransferVramDmaBlock();
+            }
+
+            m_previousLcdMode = mode;
+        }
+    }
+
+    // Starts a CGB VRAM DMA from an HDMA5 write: bit 7 selects HBlank mode, the low 7 bits give the block count
+    // minus one. A general-purpose transfer (bit 7 clear) runs every block immediately and stalls the CPU; clearing
+    // bit 7 while an HBlank transfer is in flight cancels it instead of starting a new one.
+    private void StartVramDma(byte control) {
+        var hblankMode = ((control & 0x80) != 0);
+
+        // The block count is latched first, before the cancel check — so writing bit 7 clear while an HBlank
+        // transfer is in flight both stops it and updates the count the HDMA5 readback reports (matching SameBoy).
+        m_hdmaBlocks = ((control & 0x7F) + 1);
+
+        if (!hblankMode && m_hdmaActive && m_hdmaHBlank) {
+            m_hdmaActive = false;
+            m_hdmaHBlank = false;
+
+            return;
+        }
+
+        m_hdmaActive = true;
+        m_hdmaHBlank = hblankMode;
+
+        if (!hblankMode) {
+            // General-purpose DMA: copy the whole transfer at once, the CPU paused throughout.
+            while (m_hdmaActive) {
+                TransferVramDmaBlock();
+
+                for (var cycle = 0; cycle < 8; cycle += 1) {
+                    TickMachineCycle();
+                }
+            }
+        }
+        else if (m_ppu.Mode == PpuMode.HorizontalBlank) {
+            // Started during a horizontal blank: the first block transfers right away.
+            TransferVramDmaBlock();
+        }
+    }
+
+    private void TransferVramDmaBlock() {
+        var bankBase = (m_videoRamBank * VideoRamBankSize);
+
+        for (var index = 0; index < 0x10; index += 1) {
+            var value = ReadByte(address: m_hdmaSource);
+
+            m_videoRam[bankBase + (m_hdmaDestination & 0x1FFF)] = value;
+            m_hdmaSource = (ushort)(m_hdmaSource + 1);
+            m_hdmaDestination = (ushort)((m_hdmaDestination + 1) & 0x1FFF);
+        }
+
+        m_hdmaBlocks -= 1;
+
+        if (m_hdmaBlocks <= 0) {
+            m_hdmaActive = false;
+            m_hdmaHBlank = false;
+        }
     }
 }

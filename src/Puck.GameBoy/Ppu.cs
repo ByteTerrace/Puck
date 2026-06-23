@@ -139,10 +139,11 @@ public sealed partial class Ppu : IClockedComponent {
     /// from. The PPU reads video RAM directly (it is the component that locks it from the CPU), so the access is
     /// not subject to the mode lock.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
-    /// <param name="videoRam">The video RAM backing store the bus owns.</param>
+    /// <param name="videoRam">The video RAM backing store the bus owns (one 8&#160;KiB bank on the DMG, two on the CGB).</param>
     /// <param name="objectAttributeMemory">The 160-byte OAM backing store the bus owns, scanned for sprites.</param>
+    /// <param name="model">The console model; the CGB renders in color with tile attributes and palette RAM.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Ppu(InterruptController interrupts, byte[] videoRam, byte[] objectAttributeMemory) {
+    public Ppu(InterruptController interrupts, byte[] videoRam, byte[] objectAttributeMemory, ConsoleModel model = ConsoleModel.Dmg) {
         ArgumentNullException.ThrowIfNull(interrupts);
         ArgumentNullException.ThrowIfNull(videoRam);
         ArgumentNullException.ThrowIfNull(objectAttributeMemory);
@@ -150,6 +151,7 @@ public sealed partial class Ppu : IClockedComponent {
         m_interrupts = interrupts;
         m_objectAttributeMemory = objectAttributeMemory;
         m_videoRam = videoRam;
+        m_isColor = (model == ConsoleModel.Cgb);
     }
 
     /// <summary>Returns whether a fully rendered frame is ready to present, clearing the flag.</summary>
@@ -512,8 +514,14 @@ public sealed partial class Ppu : IClockedComponent {
     private void RenderScanline() {
         // Scanline-based rendering using the registers as they stand at pixel-transfer end. The dot-accurate
         // fetcher/FIFO (which lets mid-scanline register changes take effect) is a later stage.
-        RenderBackgroundAndWindow(line: m_line);
-        RenderSprites(line: m_line);
+        if (m_isColor) {
+            RenderBackgroundAndWindowColor(line: m_line);
+            RenderSpritesColor(line: m_line);
+        }
+        else {
+            RenderBackgroundAndWindow(line: m_line);
+            RenderSprites(line: m_line);
+        }
     }
 
     private void RenderBackgroundAndWindow(int line) {

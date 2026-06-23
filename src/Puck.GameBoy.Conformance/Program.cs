@@ -21,6 +21,18 @@ try {
             );
         }
 
+        // --samesuite <dir>: run LIJI32's SameSuite ROMs (Fibonacci breakpoint protocol, like mooneye).
+        if (args[index] == "--samesuite") {
+            var (samePassed, sameFailed) = SameSuiteRunner.Run(
+                output: Console.Out,
+                root: args[index + 1]
+            );
+
+            Console.WriteLine($"SameSuite: {samePassed} passed, {sameFailed} failed");
+
+            return ((sameFailed == 0) ? 0 : 1);
+        }
+
         // --run <romPath> <frames> <outputPng>: boot a game and dump a framebuffer PNG.
         if ((args[index] == "--run") && (index + 3 < args.Length)) {
             return GameRunner.Run(
