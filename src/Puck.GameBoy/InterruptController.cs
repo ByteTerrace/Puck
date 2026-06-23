@@ -7,7 +7,7 @@ namespace Puck.GameBoy;
 /// services the highest-priority source, and clears its bit. The upper three bits of <c>IF</c> have no source
 /// and read as set.
 /// </summary>
-public sealed class InterruptController {
+public sealed class InterruptController : IInterruptController {
     private const byte SourceMask = 0x1F;
     private const byte UnusedFlagBits = 0xE0;
 

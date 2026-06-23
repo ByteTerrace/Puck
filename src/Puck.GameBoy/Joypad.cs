@@ -6,11 +6,11 @@ namespace Puck.GameBoy;
 /// the selected group's state in bits 3-0, where a pressed button reads as 0. Pressing a button drives its input
 /// line low, which requests the joypad interrupt (the mechanism that also wakes the CPU from <c>STOP</c>).
 /// </summary>
-public sealed class Joypad {
+public sealed class Joypad : IJoypad {
     private const byte SelectDirections = 0x10;
     private const byte SelectActions = 0x20;
 
-    private readonly InterruptController m_interrupts;
+    private readonly IInterruptController m_interrupts;
 
     private byte m_pressed;
     private byte m_select;
@@ -18,7 +18,7 @@ public sealed class Joypad {
     /// <summary>Initializes the joypad wired to the interrupt controller it raises the joypad interrupt through.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
     /// <exception cref="ArgumentNullException"><paramref name="interrupts"/> is <see langword="null"/>.</exception>
-    public Joypad(InterruptController interrupts) {
+    public Joypad(IInterruptController interrupts) {
         ArgumentNullException.ThrowIfNull(interrupts);
 
         m_interrupts = interrupts;

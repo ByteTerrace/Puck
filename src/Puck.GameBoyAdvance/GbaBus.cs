@@ -519,7 +519,8 @@ public sealed class GbaBus : IGbaBus {
                 return RomCycles(nonSeq: m_ws2N, seq: m_ws2S, width: width, access: access);
             case 0xE:
             case 0xF:
-                return m_sram;
+                // The 8-bit save bus pays the same first-access overhead as a ROM word access.
+                return m_sram + 1;
             default:
                 // BIOS, on-chip WRAM, I/O, OAM: single-cycle 32-bit bus.
                 return 1;
@@ -527,12 +528,14 @@ public sealed class GbaBus : IGbaBus {
     }
 
     private static int RomCycles(int nonSeq, int seq, int width, BusAccessType access) {
-        // On the 16-bit game-pak bus a 32-bit access is two halfword transfers plus a one-cycle merge penalty
-        // (confirmed by the AGS wait-state table): a non-sequential word pays N+1+S, a sequential word pays 2S+1.
+        // On the 16-bit game-pak bus a 32-bit access is two halfword transfers plus a one-cycle merge penalty,
+        // and the game-pak adds one further first-access cycle to every word access — code (when the prefetch
+        // buffer is off) and data alike. So a non-sequential word costs N+S+2 and a sequential word 2S+2, matching
+        // mGBA and the AGS wait-state/prefetch timer values (verified per-instruction via the cycle co-sim).
         if (width == 4) {
             return (access == BusAccessType.Sequential)
-                ? (seq + seq + 1)
-                : (nonSeq + seq + 1);
+                ? (seq + seq + 2)
+                : (nonSeq + seq + 2);
         }
 
         return (access == BusAccessType.Sequential)

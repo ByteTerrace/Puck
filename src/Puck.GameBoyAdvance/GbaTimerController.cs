@@ -6,10 +6,15 @@ public sealed class GbaTimerController : IGbaTimerController {
 
     private readonly IGbaInterruptController m_interrupts;
     private readonly IGbaApu m_apu;
+    // A timer does not begin ticking until two cycles after its enable bit is written — a documented hardware
+    // start-up delay (verified per-instruction against mGBA on the AGS wait-state and prescaler tests).
+    private const int StartDelay = 2;
+
     private readonly int[] m_counter = new int[4];
     private readonly int[] m_reload = new int[4];
     private readonly int[] m_prescaler = new int[4];
     private readonly int[] m_accumulator = new int[4];
+    private readonly int[] m_startDelay = new int[4];
     private readonly bool[] m_enabled = new bool[4];
     private readonly bool[] m_cascade = new bool[4];
     private readonly bool[] m_irqEnabled = new bool[4];
@@ -40,7 +45,21 @@ public sealed class GbaTimerController : IGbaTimerController {
                 continue;
             }
 
-            m_accumulator[timer] += cycles;
+            var advance = cycles;
+
+            // Absorb the two-cycle start-up delay before the timer counts any clock.
+            if (m_startDelay[timer] > 0) {
+                var absorbed = Math.Min(m_startDelay[timer], advance);
+
+                m_startDelay[timer] -= absorbed;
+                advance -= absorbed;
+
+                if (advance == 0) {
+                    continue;
+                }
+            }
+
+            m_accumulator[timer] += advance;
 
             var ticks = m_accumulator[timer] / m_prescaler[timer];
 
@@ -83,10 +102,11 @@ public sealed class GbaTimerController : IGbaTimerController {
         m_irqEnabled[timer] = (value & 0x40u) != 0u;
         m_enabled[timer] = (value & 0x80u) != 0u;
 
-        // Enabling a timer reloads its counter and restarts the prescaler phase.
+        // Enabling a timer reloads its counter and restarts the prescaler phase, after the start-up delay.
         if (!wasEnabled && m_enabled[timer]) {
             m_counter[timer] = m_reload[timer];
             m_accumulator[timer] = 0;
+            m_startDelay[timer] = StartDelay;
         }
     }
 

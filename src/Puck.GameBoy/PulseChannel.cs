@@ -235,7 +235,7 @@ internal sealed class PulseChannel {
             SetEnvelopeClock(value: true, direction: ((m_nr2 & 0x08) != 0), volume: m_envelopeVolume);
         }
     }
-    // SameBoy's _nrx2_glitch (CGB-E variant): a write to NR12/NR22 on a running channel glitches the live volume via
+    // The NRx2 zombie glitch (CGB-E variant): a write to NR12/NR22 on a running channel glitches the live volume via
     // the envelope clock's odd connections. old = the register value before this write.
     private void Nrx2Glitch(byte value) {
         var old = m_nr2;
@@ -344,23 +344,18 @@ internal sealed class PulseChannel {
         m_envelopeLocked = false;
 
         if (IsCgb) {
-            // SameBoy's square trigger delay (CGB-E): a freshly started channel waits 6 - lf_div 2 MHz ticks before its
-            // first sample; an already-active retrigger starts two ticks earlier (4 - lf_div). lf_div is the 1 MHz
-            // phase — the low bit of the 2 MHz counter, with the double-speed access-phase correction applied.
-            // SameBoy's start delay is (active ? 4 : 6) - lf_div. In double-speed the 1 MHz phase is the 2 MHz
-            // counter's low bit; in single-speed the 2 MHz counter advances two per machine cycle (so its low bit is
-            // always 0) and the live phase comes entirely from the odd sub-machine-cycle split of the register write,
-            // which lands lf_div at 1. Verified against the SameBoy co-sim oracle (delay/duty lf=1, align lf=0).
+            // The CGB-E square trigger delay: a freshly started channel waits (6 - lf_div) 2 MHz ticks before its
+            // first sample; an already-active retrigger starts two ticks earlier, (4 - lf_div). lf_div is the 1 MHz
+            // phase — the low bit of the 2 MHz counter, with the double-speed access-phase correction applied. In
+            // double-speed the 1 MHz phase is the 2 MHz counter's low bit; in single-speed the 2 MHz counter advances
+            // two per machine cycle (so its low bit is always 0) and the live phase comes entirely from the odd
+            // sub-machine-cycle split of the register write, which lands lf_div at 1.
             var lfDiv = ((m_isDoubleSpeed?.Invoke() ?? false) ? (int)(m_phase & 1) : 1);
 
-            m_delay = ((wasActive ? 4 : 6) - lfDiv + ApuTuning.PulseDelay);
+            m_delay = ((wasActive ? 4 : 6) - lfDiv);
             m_sampleCountdown = (((Frequency ^ 0x7FF) * 2) + m_delay);
 
-            if (ApuTuning.PulseIndex != 0) {
-                m_dutyPosition = ((m_dutyPosition + ApuTuning.PulseIndex) & 0x07);
-            }
-
-            // A fresh trigger suppresses output until the first duty step — except the SameBoy CGB-E edge case where
+            // A fresh trigger suppresses output until the first duty step — except the CGB-E edge case where
             // the duty index advances immediately (forcing the sample unsuppressed).
             if (!wasActive) {
                 var forceUnsuppressed = (((m_nr4 & 0x04) == 0) && ((((m_sampleCountdown - m_delay) / 2) & 0x400) == 0));
@@ -449,7 +444,7 @@ internal sealed class PulseChannel {
                 continue;
             }
 
-            // SameBoy semantics: a duty step consumes (countdown + 1) ticks — the counter is checked for zero first,
+            // A duty step consumes (countdown + 1) ticks — the counter is checked for zero first,
             // then reloaded, so the effective period is (2048 - frequency) * 2 ticks.
             if (m_sampleCountdown == 0) {
                 m_sampleCountdown = (((Frequency ^ 0x7FF) * 2) + 1);

@@ -29,7 +29,7 @@ public sealed partial class Ppu {
     private byte m_objectPriorityMode; // OPRI (bit 0: 1 = X-coordinate priority, 0 = OAM-order priority)
     private CgbColorCorrection m_colorCorrection = CgbColorCorrection.ModernBalanced;
 
-    // SameBoy's measured CGB per-channel response curve (5-bit input -> 8-bit output).
+    // Measured CGB LCD per-channel response curve (5-bit input -> 8-bit output).
     private static readonly byte[] s_responseCurve = [
         0, 6, 12, 20, 28, 36, 45, 56, 66, 76, 88, 100, 113, 125, 137, 149,
         161, 172, 182, 192, 202, 210, 218, 225, 232, 238, 243, 247, 250, 252, 254, 255,
@@ -185,7 +185,7 @@ public sealed partial class Ppu {
         return (0xFF000000u | (b << 16) | (g << 8) | r);
     }
 
-    // Precomputes SameBoy's ModernBalanced green: the curved green and blue mixed in gamma-1.6 space, 3 parts green to
+    // Precomputes the ModernBalanced green: the curved green and blue mixed in gamma-1.6 space, 3 parts green to
     // one part blue, indexed by the raw 5-bit green and blue.
     private static byte[] BuildBalancedGreen() {
         const double Gamma = 1.6;

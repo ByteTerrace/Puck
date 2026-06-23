@@ -12,11 +12,11 @@ namespace Puck.GameBoy;
 /// completion — align to the counter's phase (and to <c>DIV</c> resets), not to the moment <c>SC</c> was written.
 /// </para>
 /// </summary>
-public sealed class Serial : IClockedComponent {
+public sealed class Serial : ISerial {
     // The system-counter bit whose falling edge clocks one serial bit: bit 8 recurs every 512 T-cycles = 8192 Hz.
     private const int ClockBitMask = 0x100;
 
-    private readonly InterruptController m_interrupts;
+    private readonly IInterruptController m_interrupts;
     private readonly Func<int> m_systemCounter;
 
     private bool m_lastClockBit;
@@ -31,16 +31,16 @@ public sealed class Serial : IClockedComponent {
     public Action<byte>? ByteTransmitted { get; set; }
 
     /// <summary>Initializes the serial port wired to the interrupt controller it raises the serial interrupt through,
-    /// and to the system counter its shift clock is divided from.</summary>
+    /// and to the divider/timer its shift clock is divided from.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
-    /// <param name="systemCounter">Reads the shared 16-bit system counter (the timer's internal divider).</param>
+    /// <param name="timer">The divider/timer whose internal counter drives the serial shift clock.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Serial(InterruptController interrupts, Func<int> systemCounter) {
+    public Serial(IInterruptController interrupts, ITimer timer) {
         ArgumentNullException.ThrowIfNull(interrupts);
-        ArgumentNullException.ThrowIfNull(systemCounter);
+        ArgumentNullException.ThrowIfNull(timer);
 
         m_interrupts = interrupts;
-        m_systemCounter = systemCounter;
+        m_systemCounter = () => timer.InternalCounter;
     }
 
     /// <summary>Reads the transfer data register (<c>SB</c>).</summary>

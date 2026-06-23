@@ -8,7 +8,7 @@ namespace Puck.GameBoy;
 /// pipeline (background, window, sprites) fills the framebuffer in a later stage, so <see cref="Framebuffer"/>
 /// is allocated and latched on each vertical blank but not yet painted.
 /// </summary>
-public sealed partial class Ppu : IClockedComponent {
+public sealed partial class Ppu : IPpu {
     /// <summary>The visible screen width in pixels.</summary>
     public const int ScreenWidth = 160;
     /// <summary>The visible screen height in pixels.</summary>
@@ -19,17 +19,17 @@ public sealed partial class Ppu : IClockedComponent {
     private const int DrawingDots = 172;
     private const int LastLine = 153;
     // T-cycles the LY=LYC comparison stays invalid after LY increments (the polled coincidence bit reads 0 in this
-    // window, then tracks the new line) — tuned against lcdon_timing-GS.
+    // window, then tracks the new line) — the documented LCD-enable coincidence timing.
     private const int LyComparisonDelayDots = 4;
     // T-cycles the polled STAT mode bits lag the actual mode transition. Small under this bus's deferred-cycle read
     // model: a CPU I/O read latches at the START of its access machine cycle (the access's four T-cycles are charged
     // afterward), so the read already observes the PPU a machine cycle "ahead" — the mode bits need only a single
-    // dot of lag on top to land on the right machine cycle. (Pinned by the lcdon timing tests and the sub-cycle
-    // sprite measurement intr_2_mode0_timing_sprites.)
+    // dot of lag on top to land on the right machine cycle. (This is the hardware's sub-cycle STAT-mode and
+    // sprite-timing behavior.)
     private const int StatBitReportDelay = 1;
     // T-cycles the mode-driven STAT *interrupt* lags the actual transition, on its own clock independent of the
-    // polled STAT bits (SameBoy's mode_for_interrupt vs the STAT register). One machine cycle keeps the
-    // interrupt-to-interrupt deltas the intr_2_* tests sync on exact.
+    // polled STAT bits — the mode the interrupt logic sees lags the STAT-register mode by one machine cycle, which is
+    // the hardware's interrupt-to-interrupt timing.
     private const int InterruptReportDelay = 4;
 
     private const byte StatHBlankInterrupt = 0x08;
@@ -45,7 +45,7 @@ public sealed partial class Ppu : IClockedComponent {
     // DMG shades 0-3 (lightest to darkest) as packed R8G8B8A8 (0xAABBGGRR in little-endian byte order).
     private static readonly uint[] Shades = [0xFFFFFFFFu, 0xFFAAAAAAu, 0xFF555555u, 0xFF000000u];
 
-    private readonly InterruptController m_interrupts;
+    private readonly IInterruptController m_interrupts;
     private readonly byte[] m_objectAttributeMemory;
     private readonly byte[] m_videoRam;
     private readonly uint[] m_framebuffer = new uint[ScreenWidth * ScreenHeight];
@@ -70,8 +70,8 @@ public sealed partial class Ppu : IClockedComponent {
     // mode-2 onset, VRAM at the mode-3 onset), one machine cycle before the STAT bits report the new mode. The
     // WRITE locks engage a machine cycle later, as the reported mode settles. All release together when the
     // reported mode settles back to horizontal blank. The OAM write lock additionally opens for a single cycle at
-    // the mode-2/3 boundary. (SameBoy's separate oam/vram read/write flags — pinned by lcdon_timing-GS and
-    // lcdon_write_timing-GS.)
+    // the mode-2/3 boundary. (OAM and VRAM each have separate read and write locks, with distinct engage/release
+    // timing.)
     private bool m_oamReadBlocked;
     private bool m_oamWriteBlocked;
     private bool m_vramReadBlocked;
@@ -82,7 +82,7 @@ public sealed partial class Ppu : IClockedComponent {
     private bool m_statInterruptLine;
     private int m_dot;
     private int m_line;
-    // The LY value the LY=LYC comparison actually uses (SameBoy's ly_for_comparison). It goes briefly invalid (-1)
+    // The LY value the LY=LYC comparison actually uses. It goes briefly invalid (-1)
     // right after LY increments, so the coincidence reads "not equal" for a machine cycle before tracking the new
     // line — both for the polled STAT bit and for the STAT interrupt.
     private int m_lyForComparison = -1;
@@ -170,19 +170,19 @@ public sealed partial class Ppu : IClockedComponent {
     /// from. The PPU reads video RAM directly (it is the component that locks it from the CPU), so the access is
     /// not subject to the mode lock.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
-    /// <param name="videoRam">The video RAM backing store the bus owns (one 8&#160;KiB bank on the DMG, two on the CGB).</param>
-    /// <param name="objectAttributeMemory">The 160-byte OAM backing store the bus owns, scanned for sprites.</param>
-    /// <param name="model">The console model; the CGB renders in color with tile attributes and palette RAM.</param>
+    /// <param name="memory">The shared system memory whose video RAM and object attribute memory the PPU scans
+    /// (one 8&#160;KiB VRAM bank on the monochrome models, two on color).</param>
+    /// <param name="configuration">The machine configuration; the color model renders with tile attributes and palette RAM.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Ppu(InterruptController interrupts, byte[] videoRam, byte[] objectAttributeMemory, ConsoleModel model = ConsoleModel.Dmg) {
+    public Ppu(IInterruptController interrupts, SystemMemory memory, MachineConfiguration configuration) {
         ArgumentNullException.ThrowIfNull(interrupts);
-        ArgumentNullException.ThrowIfNull(videoRam);
-        ArgumentNullException.ThrowIfNull(objectAttributeMemory);
+        ArgumentNullException.ThrowIfNull(memory);
+        ArgumentNullException.ThrowIfNull(configuration);
 
         m_interrupts = interrupts;
-        m_objectAttributeMemory = objectAttributeMemory;
-        m_videoRam = videoRam;
-        m_isColor = (model == ConsoleModel.Cgb);
+        m_objectAttributeMemory = memory.ObjectAttributeMemory;
+        m_videoRam = memory.VideoRam;
+        m_isColor = (configuration.Model == ConsoleModel.Cgb);
     }
 
     /// <summary>Returns whether a fully rendered frame is ready to present, clearing the flag.</summary>
@@ -394,7 +394,7 @@ public sealed partial class Ppu : IClockedComponent {
             ? 0
             : ((scrollX <= 4) ? 4 : 8));
 
-    // The per-object mode-3 penalty (Pan Docs "OBJ penalty algorithm"). Each object the fetcher stalls for costs a
+    // The per-object mode-3 penalty (the OBJ penalty algorithm). Each object the fetcher stalls for costs a
     // flat 6 dots; the first object whose leftmost pixel falls in a not-yet-considered background tile adds up to 5
     // more depending on where in the tile it lands (so overlapping objects in one tile pay the tile cost once). An
     // object parked at OAM X=0 always costs 11. Only matters while objects are enabled.
@@ -442,8 +442,7 @@ public sealed partial class Ppu : IClockedComponent {
 
             // Objects off the right edge (X >= 168, i.e. screen X >= 160) are never reached by the fetcher and cost
             // nothing. Off the left edge (X in 0..7, including the X=0 stall) they still are, so only the right side
-            // is excluded. (intr_2_mode0_timing_sprites pins X=167 as the last X that lengthens mode 3, X=168 as the
-            // first that does not.)
+            // is excluded. (On hardware, X=167 is the last X that lengthens mode 3; X=168 is the first that does not.)
             if (objectX >= 168) {
                 continue;
             }
@@ -500,7 +499,7 @@ public sealed partial class Ppu : IClockedComponent {
         }
 
         // LY just changed: the comparison value goes invalid for a machine cycle, so the coincidence reads "not
-        // equal" until it tracks the new line (the lcdon coincidence quirk).
+        // equal" until it tracks the new line (the LCD-enable coincidence quirk).
         m_lyForComparison = -1;
         m_lyForComparisonDelay = LyComparisonDelayDots;
 
@@ -812,8 +811,9 @@ public sealed partial class Ppu : IClockedComponent {
 
         m_enabled = enabling;
         // The first scanline after the LCD is enabled runs ~4 dots short (the documented first-frame lateness), so
-        // LY advances slightly earlier than a normal 456-dot line. (Verified against lcdon_timing-GS's LY and
-        // STAT-mode sample points; the remaining lcdon coincidence-bit and OAM/VRAM-access edges are still open.)
+        // LY advances slightly earlier than a normal 456-dot line. (This matches the hardware's first-frame LY and
+        // STAT-mode timing after enable; the exact coincidence-bit and OAM/VRAM-access edges of that first line
+        // remain an approximation.)
         m_dot = (enabling ? 4 : 0);
         m_line = 0;
 

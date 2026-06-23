@@ -3,12 +3,12 @@ namespace Puck.GameBoy;
 /// <summary>
 /// The CPU's view of the bus: the three cycle accessors through which the SM83 advances the machine, plus the
 /// interrupt controller it samples and the speed-switch hook <c>STOP</c> drives. Depending on this seam rather
-/// than the concrete <see cref="SystemBus"/> lets the CPU run against a flat-memory test bus (for per-opcode
-/// conformance vectors) as readily as against the real decoded machine.
+/// than the concrete <see cref="SystemBus"/> lets the CPU run against a simple flat-memory bus as readily as
+/// against the real decoded machine.
 /// </summary>
 public interface ICpuBus {
     /// <summary>The interrupt controller the CPU samples at instruction boundaries and services.</summary>
-    InterruptController Interrupts { get; }
+    IInterruptController Interrupts { get; }
 
     /// <summary>Reads a byte over one machine cycle, advancing the rest of the machine first.</summary>
     /// <param name="address">The CPU address to read.</param>

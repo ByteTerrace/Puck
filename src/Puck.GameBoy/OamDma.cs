@@ -7,13 +7,12 @@ namespace Puck.GameBoy;
 /// return <c>0xFF</c>, writes are dropped), which is why games kick off the copy during vertical blank from a
 /// routine running in high RAM.
 /// </summary>
-public sealed class OamDma : IClockedComponent {
+public sealed class OamDma : IOamDma {
     private const int ByteCount = 0xA0;
     private const int StartupDelayMachineCycles = 1;
     private const int TCyclesPerMachineCycle = 4;
 
     private readonly byte[] m_oam;
-    private readonly Func<ushort, byte> m_readSource;
 
     private bool m_active;
     private bool m_locked;
@@ -37,17 +36,16 @@ public sealed class OamDma : IClockedComponent {
     /// <summary>Gets the most recently written source page, as read back from <c>0xFF46</c>.</summary>
     public byte Page =>
         m_page;
+    /// <inheritdoc />
+    public Func<ushort, byte> ReadSource { get; set; } = static _ => (byte)0xFF;
 
-    /// <summary>Initializes the engine over the object-attribute memory it fills and the source reader it pulls from.</summary>
-    /// <param name="oam">The 160-byte object-attribute memory the transfer writes into directly.</param>
-    /// <param name="readSource">Reads a byte from the main bus for the transfer source.</param>
-    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public OamDma(byte[] oam, Func<ushort, byte> readSource) {
-        ArgumentNullException.ThrowIfNull(oam);
-        ArgumentNullException.ThrowIfNull(readSource);
+    /// <summary>Initializes the engine over the shared object attribute memory it fills.</summary>
+    /// <param name="memory">The shared system memory whose object attribute memory the transfer writes into.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="memory"/> is <see langword="null"/>.</exception>
+    public OamDma(SystemMemory memory) {
+        ArgumentNullException.ThrowIfNull(memory);
 
-        m_oam = oam;
-        m_readSource = readSource;
+        m_oam = memory.ObjectAttributeMemory;
     }
 
     /// <summary>Starts (or restarts) a transfer from the given source page.</summary>
@@ -97,7 +95,7 @@ public sealed class OamDma : IClockedComponent {
 
         // The transfer is now driving the bus; OAM becomes inaccessible from here until it completes.
         m_locked = true;
-        m_oam[m_index] = m_readSource(arg: (ushort)((m_page << 8) + m_index));
+        m_oam[m_index] = ReadSource(arg: (ushort)((m_page << 8) + m_index));
         m_index += 1;
 
         if (m_index >= ByteCount) {

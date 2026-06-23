@@ -9,39 +9,30 @@ namespace Puck.GameBoy;
 /// I/O registers here, and the two clock domains (<see cref="ClockDomain"/>) are advanced here, which is what
 /// keeps the wiring — not any single component — the place the system's timing lives.
 /// </summary>
-public sealed class SystemBus : ICpuBus {
+public sealed class SystemBus : ISystemBus {
     private const int CpuDotsPerMachineCycle = 4;
     private const int WorkRamBankSize = 0x1000;
     private const int VideoRamBankSize = 0x2000;
 
-    // T-cycle-accurate OAM access: a CPU access to the OAM region puts its address on the bus partway through its
-    // machine cycle, so the OAM-corruption bug samples the PPU's scan position this many dots into the access cycle
-    // (rather than at the cycle's start). Tunable for calibration; the PPU runs at dot resolution already.
-    private static readonly int OamAccessDotOffset = (int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_OAM_DOTS"), out var offset) ? offset : 0);
-
-    // How far the PPU has been advanced into the current machine cycle ahead of the other components (by a T-cycle-
-    // accurate OAM access); the next machine-cycle flush advances it by the remainder so it stays in lockstep.
-    private int m_ppuExtraDots;
-
-    private readonly Apu m_apu;
+    private readonly IApu m_apu;
     private readonly List<IClockedComponent> m_clockedComponents = [];
     private readonly ICartridge m_cartridge;
     private readonly byte[] m_highRam = new byte[0x7F];
-    private readonly InterruptController m_interrupts = new();
-    private readonly Joypad m_joypad;
-    private readonly Serial m_serial;
+    private readonly IInterruptController m_interrupts;
+    private readonly IJoypad m_joypad;
+    private readonly ISerial m_serial;
     private readonly byte[]? m_bootRom;
     private readonly ConsoleModel m_model;
-    private readonly byte[] m_oam = new byte[0xA0];
-    private readonly OamDma m_oamDma;
-    private readonly Ppu m_ppu;
-    private readonly Timer m_timer;
+    private readonly byte[] m_oam;
+    private readonly IOamDma m_oamDma;
+    private readonly IPpu m_ppu;
+    private readonly ITimer m_timer;
     private readonly byte[] m_videoRam;
     private readonly byte[] m_workRam;
 
     private bool m_armedSpeedSwitch;
     private bool m_bootRomMapped;
-    private bool m_doubleSpeed;
+    private readonly ClockState m_clockState;
     private int m_pendingMachineCycles;
     private ulong m_elapsedDots;
     private int m_videoRamBank;
@@ -67,12 +58,12 @@ public sealed class SystemBus : ICpuBus {
     public ConsoleModel Model =>
         m_model;
     /// <summary>Gets the interrupt controller, through which components raise interrupts and the CPU services them.</summary>
-    public InterruptController Interrupts =>
+    public IInterruptController Interrupts =>
         m_interrupts;
     /// <summary>Gets whether the CPU clock is in CGB double-speed mode, which halves the number of LCD-domain
     /// T-cycles per machine cycle. Always <see langword="false"/> on the DMG.</summary>
     public bool DoubleSpeed =>
-        m_doubleSpeed;
+        m_clockState.DoubleSpeed;
     /// <summary>Gets the total LCD-domain T-cycles (dots) elapsed since construction — the machine's wall clock.</summary>
     public ulong ElapsedDots =>
         m_elapsedDots;
@@ -83,16 +74,48 @@ public sealed class SystemBus : ICpuBus {
     public Span<byte> VideoRam =>
         m_videoRam;
 
-    /// <summary>Initializes the bus for a model with a cartridge and an optional boot ROM.</summary>
-    /// <param name="model">The Game Boy model to emulate, which sizes the banked memories.</param>
+    /// <summary>Initializes the bus from the per-machine configuration and the injected subsystems and shared
+    /// services that make up the machine.</summary>
+    /// <param name="configuration">The model, boot ROM, and boot-palette selection.</param>
     /// <param name="cartridge">The cartridge plugged into the bus.</param>
-    /// <param name="bootRom">The boot ROM mapped over low memory until disabled, or <see langword="null"/> to start post-boot.</param>
-    /// <param name="bootPalette">A button combination held at boot, picking an alternative CGB compatibility palette for a DMG game.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="cartridge"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="bootRom"/> is shorter than the region the model maps it over.</exception>
-    public SystemBus(ConsoleModel model, ICartridge cartridge, byte[]? bootRom = null, BootPaletteSelection bootPalette = default) {
+    /// <param name="memory">The shared object/video/work RAM, sized for the model.</param>
+    /// <param name="clockState">The shared double-speed clock state.</param>
+    /// <param name="interrupts">The interrupt controller.</param>
+    /// <param name="timer">The divider/timer.</param>
+    /// <param name="oamDma">The OAM DMA engine.</param>
+    /// <param name="ppu">The picture processing unit.</param>
+    /// <param name="joypad">The joypad.</param>
+    /// <param name="serial">The serial link port.</param>
+    /// <param name="apu">The audio processing unit.</param>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The configured boot ROM is shorter than the region the model maps it over.</exception>
+    public SystemBus(
+        MachineConfiguration configuration,
+        ICartridge cartridge,
+        SystemMemory memory,
+        ClockState clockState,
+        IInterruptController interrupts,
+        ITimer timer,
+        IOamDma oamDma,
+        IPpu ppu,
+        IJoypad joypad,
+        ISerial serial,
+        IApu apu
+    ) {
+        ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(cartridge);
+        ArgumentNullException.ThrowIfNull(memory);
+        ArgumentNullException.ThrowIfNull(clockState);
+        ArgumentNullException.ThrowIfNull(interrupts);
+        ArgumentNullException.ThrowIfNull(timer);
+        ArgumentNullException.ThrowIfNull(oamDma);
+        ArgumentNullException.ThrowIfNull(ppu);
+        ArgumentNullException.ThrowIfNull(joypad);
+        ArgumentNullException.ThrowIfNull(serial);
+        ArgumentNullException.ThrowIfNull(apu);
 
+        var model = configuration.Model;
+        var bootRom = configuration.BootRom;
         var isColor = (model == ConsoleModel.Cgb);
 
         // The overlay indexes the boot ROM directly (DMG over 0x000-0x0FF, CGB over 0x000-0x0FF and
@@ -102,45 +125,47 @@ public sealed class SystemBus : ICpuBus {
         if ((bootRom is not null) && (bootRom.Length < requiredBootRomLength)) {
             throw new ArgumentException(
                 message: $"A {model} boot ROM must be at least 0x{requiredBootRomLength:X} bytes; got 0x{bootRom.Length:X}.",
-                paramName: nameof(bootRom)
+                paramName: nameof(configuration)
             );
         }
 
         m_bootRom = bootRom;
         m_bootRomMapped = (bootRom is not null);
         m_cartridge = cartridge;
+        m_model = model;
+        m_clockState = clockState;
 
-        // A cartridge with an on-board clock (MBC3/HuC3 RTC) advances itself in step with the machine; clocking it in
-        // the Lcd domain feeds it the master-cycle count, which tracks real time in both speed modes.
+        // The PPU and OAM DMA share these backing stores with the bus.
+        m_oam = memory.ObjectAttributeMemory;
+        m_videoRam = memory.VideoRam;
+        m_workRam = memory.WorkRam;
+
+        m_interrupts = interrupts;
+        m_timer = timer;
+        m_oamDma = oamDma;
+        m_ppu = ppu;
+        m_joypad = joypad;
+        m_serial = serial;
+        m_apu = apu;
+
+        // OAM DMA reads its source through the untimed path; wiring the reader here (rather than at the engine's
+        // construction) keeps it free of a dependency on the bus type, breaking the construction cycle.
+        m_oamDma.ReadSource = ReadDmaSource;
+
+        // Clock order matters: the peripherals step in this sequence each machine cycle. A cartridge with an on-board
+        // clock (RTC) is clocked in the Lcd domain so it tracks real time in both speed modes; the timer, OAM DMA,
+        // PPU, serial, and APU follow. (The joypad is event-driven, not clocked.)
         if (cartridge is IClockedComponent clockedCartridge) {
             Attach(component: clockedCartridge);
         }
 
-        m_model = model;
-        m_videoRam = new byte[VideoRamBankSize * (isColor ? 2 : 1)];
-        m_workRam = new byte[WorkRamBankSize * (isColor ? 8 : 2)];
-
-        // The timer and OAM DMA are internal SoC components the bus owns and clocks (the cartridge, by contrast,
-        // is plugged in). OAM DMA reads its source through the untimed ReadByte path.
-        m_timer = new Timer(interrupts: m_interrupts);
         Attach(component: m_timer);
-
-        m_oamDma = new OamDma(oam: m_oam, readSource: ReadDmaSource);
         Attach(component: m_oamDma);
-
-        m_ppu = new Ppu(interrupts: m_interrupts, videoRam: m_videoRam, objectAttributeMemory: m_oam, model: model);
         Attach(component: m_ppu);
-
-        m_joypad = new Joypad(interrupts: m_interrupts);
-        // The serial shift clock is divided from the timer's system counter, so transfers align to its phase.
-        m_serial = new Serial(interrupts: m_interrupts, systemCounter: () => m_timer.InternalCounter);
         Attach(component: m_serial);
-
-        // The APU's frame sequencer is divided from the same system counter as the serial clock.
-        m_apu = new Apu(systemCounter: () => m_timer.InternalCounter, isDoubleSpeed: () => m_doubleSpeed, isCgb: () => (m_model == ConsoleModel.Cgb));
         Attach(component: m_apu);
 
-        ConfigureDmgCompatibilityColorization(model: model, bootPalette: bootPalette);
+        ConfigureDmgCompatibilityColorization(model: model, bootPalette: configuration.BootPalette);
     }
 
     // A CGB console booting a cartridge with no CGB flag colorizes the original game with the boot ROM's assigned
@@ -163,19 +188,19 @@ public sealed class SystemBus : ICpuBus {
     }
 
     /// <summary>Gets the picture processing unit, for the host to present its framebuffer.</summary>
-    public Ppu Ppu =>
+    public IPpu Ppu =>
         m_ppu;
     /// <summary>Gets the timer and divider, for seeding the post-boot divider phase.</summary>
-    public Timer Timer =>
+    public ITimer Timer =>
         m_timer;
     /// <summary>Gets the joypad, for the host to feed button input.</summary>
-    public Joypad Joypad =>
+    public IJoypad Joypad =>
         m_joypad;
     /// <summary>Gets the serial port, for capturing serial output.</summary>
-    public Serial Serial =>
+    public ISerial Serial =>
         m_serial;
     /// <summary>Gets the audio processing unit, for the host to drain sample output.</summary>
-    public Apu Apu =>
+    public IApu Apu =>
         m_apu;
 
     /// <summary>Registers a component to be advanced each machine cycle in its clock domain.</summary>
@@ -238,17 +263,6 @@ public sealed class SystemBus : ICpuBus {
         m_pendingMachineCycles = 1;
     }
 
-    // Advances the PPU alone to the sub-machine-cycle dot at which an OAM access reaches the bus, so the OAM-bug scan
-    // position is T-cycle accurate. The remainder of this machine cycle is made up for the PPU at the next flush.
-    private void AdvancePpuToAccessDot() {
-        var dots = Math.Min(val1: OamAccessDotOffset, val2: (m_doubleSpeed ? 2 : 4));
-
-        if (dots > 0) {
-            m_ppu.Step(tCycles: dots);
-            m_ppuExtraDots = dots;
-        }
-    }
-
     // Whether an access at this address observes the APU channel generators (the register/wave block 0xFF10-0xFF3F or
     // the CGB PCM12/PCM34 amplitude registers), so the channels must be brought current to the access point first.
     private static bool IsAudioChannelAccess(ushort address) =>
@@ -263,9 +277,6 @@ public sealed class SystemBus : ICpuBus {
         if ((m_model == ConsoleModel.Cgb) || (address < MemoryMap.OamBase) || (address > MemoryMap.UnusableEnd)) {
             return;
         }
-
-        // Sample the PPU's scan position at the sub-machine-cycle dot the OAM access reaches the bus (T-cycle accuracy).
-        AdvancePpuToAccessDot();
 
         if (isWrite) {
             m_ppu.OamBugWrite();
@@ -289,8 +300,8 @@ public sealed class SystemBus : ICpuBus {
         }
     }
 
-    // The CPU freezes for this many T-cycles while the clock changes during a speed switch (SameBoy's
-    // speed_switch_halt_countdown); the peripherals keep running, which is the "display collapse" the docs describe.
+    // The CPU freezes for this many T-cycles while the clock changes during a speed switch; the peripherals keep
+    // running, which is the "display collapse" the hardware exhibits during the switch.
     private const int SpeedSwitchStallTCycles = 0x20008;
 
     /// <summary>Performs a CGB speed switch when one has been armed via <c>KEY1</c>, as the <c>STOP</c> instruction
@@ -303,7 +314,7 @@ public sealed class SystemBus : ICpuBus {
         }
 
         m_armedSpeedSwitch = false;
-        m_doubleSpeed = !m_doubleSpeed;
+        m_clockState.DoubleSpeed = !m_clockState.DoubleSpeed;
 
         // STOP resets DIV, then the clock-change stall runs at the new speed with the CPU frozen.
         FlushPendingCycles();
@@ -446,7 +457,7 @@ public sealed class SystemBus : ICpuBus {
             >= MemoryMap.LcdControl and <= MemoryMap.WindowX => m_ppu.ReadRegister(address: address),
             MemoryMap.BootRomDisable => (byte)(0xFE | (m_bootRomMapped ? 0x00 : 0x01)),
             MemoryMap.SpeedSwitch when (m_model == ConsoleModel.Cgb) =>
-                (byte)(0x7E | (m_doubleSpeed ? 0x80 : 0x00) | (m_armedSpeedSwitch ? 0x01 : 0x00)),
+                (byte)(0x7E | (m_clockState.DoubleSpeed ? 0x80 : 0x00) | (m_armedSpeedSwitch ? 0x01 : 0x00)),
             MemoryMap.VideoRamBank when (m_model == ConsoleModel.Cgb) =>
                 (byte)(0xFE | m_videoRamBank),
             MemoryMap.WorkRamBank when (m_model == ConsoleModel.Cgb) =>
@@ -639,28 +650,23 @@ public sealed class SystemBus : ICpuBus {
     }
 
     private void TickMachineCycle() {
-        var lcdDots = (m_doubleSpeed ? 2 : 4);
+        var lcdDots = (m_clockState.DoubleSpeed ? 2 : 4);
 
         foreach (var component in m_clockedComponents) {
-            // The PPU may already have been advanced part-way into this machine cycle by a T-cycle-accurate OAM access;
-            // step it only by the remainder so every component lands on the same machine-cycle boundary.
-            var dots = ((component.Domain == ClockDomain.Cpu)
-                ? CpuDotsPerMachineCycle
-                : (ReferenceEquals(objA: component, objB: m_ppu) ? (lcdDots - m_ppuExtraDots) : lcdDots));
+            var dots = ((component.Domain == ClockDomain.Cpu) ? CpuDotsPerMachineCycle : lcdDots);
 
             if (dots > 0) {
                 component.Step(tCycles: dots);
             }
         }
 
-        m_ppuExtraDots = 0;
         m_elapsedDots += (ulong)lcdDots;
 
         // HBlank VRAM DMA copies one block as each visible line enters horizontal blank.
         if (m_hdmaActive && m_hdmaHBlank) {
             var mode = m_ppu.Mode;
 
-            if ((mode == PpuMode.HorizontalBlank) && (m_previousLcdMode != PpuMode.HorizontalBlank) && (m_ppu.Line < Ppu.ScreenHeight)) {
+            if ((mode == PpuMode.HorizontalBlank) && (m_previousLcdMode != PpuMode.HorizontalBlank) && (m_ppu.Line < Puck.GameBoy.Ppu.ScreenHeight)) {
                 TransferVramDmaBlock();
             }
 
@@ -675,7 +681,7 @@ public sealed class SystemBus : ICpuBus {
         var hblankMode = ((control & 0x80) != 0);
 
         // The block count is latched first, before the cancel check — so writing bit 7 clear while an HBlank
-        // transfer is in flight both stops it and updates the count the HDMA5 readback reports (matching SameBoy).
+        // transfer is in flight both stops it and updates the count the HDMA5 readback reports.
         m_hdmaBlocks = ((control & 0x7F) + 1);
 
         if (!hblankMode && m_hdmaActive && m_hdmaHBlank) {

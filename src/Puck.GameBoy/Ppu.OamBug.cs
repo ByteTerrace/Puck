@@ -1,20 +1,17 @@
 namespace Puck.GameBoy;
 
 /// <summary>
-/// The DMG OAM corruption bug. Touching the OAM region (<c>0xFE00</c>-<c>0xFEFF</c>) — or running the CPU's 16-bit
-/// increment/decrement unit over an address in that range — while the PPU is scanning OAM (mode&#160;2) scrambles
-/// the row the PPU is currently reading. The Game Boy Color is immune. The scrambles are model- and even
-/// instance-specific on real hardware; these reproduce the common DMG-B behavior Blargg's <c>oam_bug</c> suite
-/// expects (ported from SameBoy's <c>memory.c</c>).
+/// The OAM corruption erratum of the original monochrome hardware (DMG/MGB). Touching the OAM region
+/// (<c>0xFE00</c>-<c>0xFEFF</c>) — or running the CPU's 16-bit increment/decrement unit over an address in that range —
+/// while the PPU is scanning OAM (mode&#160;2) scrambles the row the PPU is currently reading. The color hardware (CGB)
+/// is immune. The scrambles are model- and even instance-specific in silicon; these reproduce the common DMG-B
+/// revision's behavior.
 /// </summary>
 public sealed partial class Ppu {
-    private static readonly bool s_oamTrace = (Environment.GetEnvironmentVariable(variable: "PUCK_OAM_TRACE") is not null);
-
     private const int OamRowInvalid = 0xFF;
     // The highest OAM row (byte offset) the corruption can touch; rows past this would index beyond OAM.
     private const int OamRowLast = 0x98;
-    // Dot offset applied when mapping the current dot to the OAM-scan row the bug corrupts (calibrated against the
-    // oam_bug timing tests).
+    // Dot offset mapping the current mode-2 dot to the OAM-scan row the corruption hits.
     private const int OamBugRowDotOffset = -4;
 
     // The OAM row (byte offset, a multiple of 8) the PPU is scanning this dot during mode 2 — the row the bug
@@ -50,11 +47,6 @@ public sealed partial class Ppu {
         // is copied from the preceding row.
         SetOamWord(offset: row, value: GlitchWrite(a: OamWord(offset: row), b: OamWord(offset: (row - 8)), c: OamWord(offset: (row - 4))));
         CopyOamBytes(destination: (row + 2), source: (row - 6), count: 6);
-
-        if (s_oamTrace) {
-            var o = m_objectAttributeMemory;
-            Console.Error.WriteLine(value: $"OAMBUG W row={row:x2} ly={m_line} bytes={o[row]:x2}{o[row+1]:x2}{o[row+2]:x2}{o[row+3]:x2}{o[row+4]:x2}{o[row+5]:x2}{o[row+6]:x2}{o[row+7]:x2} pre={o[row-8]:x2}{o[row-7]:x2}{o[row-4]:x2}{o[row-2]:x2}");
-        }
     }
 
     /// <summary>Corrupts the scanned OAM row as a read would, if the PPU is mid OAM scan. Several rows have their own
@@ -64,10 +56,6 @@ public sealed partial class Ppu {
 
         if ((row < 8) || (row > OamRowLast)) {
             return;
-        }
-
-        if (s_oamTrace) {
-            Console.Error.WriteLine(value: $"OAMBUG R row={row:x2} ly={m_line}");
         }
 
         switch (row & 0x18) {
@@ -145,8 +133,8 @@ public sealed partial class Ppu {
         }
     }
 
-    // The bitwise scrambles. Each operates on 16-bit OAM words. (a/b/c… name the operand rows as in Pan Docs and
-    // SameBoy; the quaternary form ignores its leading operand on the DMG.)
+    // The bitwise scrambles. Each operates on 16-bit OAM words. (a/b/c… name the operand rows; the quaternary form
+    // ignores its leading operand on the DMG.)
     private static ushort GlitchWrite(ushort a, ushort b, ushort c) =>
         (ushort)(((a ^ c) & (b ^ c)) ^ c);
     private static ushort GlitchRead(ushort a, ushort b, ushort c) =>

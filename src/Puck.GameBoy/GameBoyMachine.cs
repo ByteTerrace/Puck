@@ -7,40 +7,38 @@ namespace Puck.GameBoy;
 /// initialized to the model's documented post-boot state, so cartridges can run directly from <c>0x0100</c>.
 /// </summary>
 public sealed class GameBoyMachine {
-    private readonly SystemBus m_bus;
-    private readonly Sm83 m_cpu;
+    private readonly ISystemBus m_bus;
+    private readonly ICpu m_cpu;
 
     private ulong m_runTargetDots;
 
     /// <summary>Gets the CPU.</summary>
-    public Sm83 Cpu =>
+    public ICpu Cpu =>
         m_cpu;
     /// <summary>Gets the bus.</summary>
-    public SystemBus Bus =>
+    public ISystemBus Bus =>
         m_bus;
     /// <summary>Gets the PPU, whose framebuffer is the machine's video output.</summary>
-    public Ppu Ppu =>
+    public IPpu Ppu =>
         m_bus.Ppu;
 
-    /// <summary>Assembles a machine for a model with a cartridge and an optional boot ROM.</summary>
-    /// <param name="model">The model to emulate.</param>
-    /// <param name="cartridge">The cartridge plugged into the bus.</param>
-    /// <param name="bootRom">The boot ROM to run from reset, or <see langword="null"/> to start at the post-boot state.</param>
-    /// <param name="bootPalette">A button combination held at boot, which picks an alternative CGB compatibility palette for a DMG game.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="cartridge"/> is <see langword="null"/>.</exception>
-    public GameBoyMachine(ConsoleModel model, ICartridge cartridge, byte[]? bootRom = null, BootPaletteSelection bootPalette = default) {
-        ArgumentNullException.ThrowIfNull(cartridge);
+    /// <summary>Assembles a machine from its CPU, bus, and configuration — all resolved together from one
+    /// per-machine DI scope. When the configuration supplies no boot ROM, the CPU and I/O are seeded to the model's
+    /// documented post-boot state so a cartridge can run directly from <c>0x0100</c>.</summary>
+    /// <param name="cpu">The CPU core, already bound to <paramref name="bus"/>.</param>
+    /// <param name="bus">The system bus.</param>
+    /// <param name="configuration">The model and reset configuration.</param>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    public GameBoyMachine(ICpu cpu, ISystemBus bus, MachineConfiguration configuration) {
+        ArgumentNullException.ThrowIfNull(cpu);
+        ArgumentNullException.ThrowIfNull(bus);
+        ArgumentNullException.ThrowIfNull(configuration);
 
-        m_bus = new SystemBus(
-            bootRom: bootRom,
-            cartridge: cartridge,
-            model: model,
-            bootPalette: bootPalette
-        );
-        m_cpu = new Sm83(bus: m_bus);
+        m_cpu = cpu;
+        m_bus = bus;
 
-        if (bootRom is null) {
-            ApplyPostBootState(model: model);
+        if (configuration.BootRom is null) {
+            ApplyPostBootState(model: configuration.Model);
         }
     }
 
@@ -106,8 +104,8 @@ public sealed class GameBoyMachine {
 
         // The divider is not zero at handoff: the boot ROM has been running for a model-specific number of cycles,
         // so the 16-bit internal counter has a precise post-boot phase (DIV reads its high byte). Seeding the exact
-        // phase is what the boot_div timing test pins down. (A write to DIV would instead clear the counter, which
-        // is why this goes through the dedicated seam.)
+        // phase keeps a DIV read taken immediately after boot matching hardware. (A write to DIV would instead clear
+        // the counter, which is why this goes through the dedicated seam.)
         //
         // The documented post-boot DIV value on DMG/MGB is 0xABCC. Under this bus's deferred-cycle model an I/O read
         // latches at the START of its access machine cycle (the access's own four T-cycles are charged afterward), so a

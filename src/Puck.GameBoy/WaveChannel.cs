@@ -9,7 +9,7 @@ internal sealed class WaveChannel {
     private const int WaveRamSize = 16;
     private const int SampleCount = 32;
     // The frequency-timer value at which a retrigger corrupts wave RAM (the DMG bug), i.e. one sample step away from
-    // a fetch. Maps SameBoy's sample_countdown == 0 onto this per-T-cycle timer.
+    // a fetch — the point where the channel is about to fetch the next sample byte.
     private const int WaveCorruptionTimer = 2;
 
     private readonly byte[] m_waveRam = new byte[WaveRamSize];
@@ -27,7 +27,7 @@ internal sealed class WaveChannel {
     private int m_frequencyTimer;
     // The byte the channel last *fetched* from wave RAM. The output is driven from this latch, not a live read of
     // the current index — so a (re)trigger's delay window keeps emitting the previously fetched sample until the
-    // first post-trigger fetch lands (SameBoy's current_sample_byte).
+    // first post-trigger fetch lands.
     private byte m_sampleBuffer;
 
     /// <summary>Initializes the wave channel.</summary>
@@ -195,9 +195,9 @@ internal sealed class WaveChannel {
     /// <param name="nextStepClocksLength">Whether the frame sequencer's next step will clock length, for the extra-clock-on-trigger behavior.</param>
     public void Trigger(bool nextStepClocksLength) {
         // DMG wave-RAM corruption: retriggering the channel while it is active and exactly one sample step away from
-        // fetching (SameBoy's sample_countdown == 0, which maps to a frequency timer of 2 T-cycles under this
-        // per-T-cycle model) scrambles the low bytes of wave RAM with the byte the fetcher was about to read. The CGB
-        // does not have this bug — its wave RAM survives a retrigger intact.
+        // fetching (a frequency timer of 2 T-cycles under this per-T-cycle model) scrambles the low bytes of wave RAM
+        // with the byte the fetcher was about to read. The CGB does not have this bug — its wave RAM survives a
+        // retrigger intact.
         if (m_enabled && (m_frequencyTimer == WaveCorruptionTimer) && !(m_isCgb?.Invoke() ?? false)) {
             var nextByte = (((m_samplePosition + 1) >> 1) & 0x0F);
 
@@ -224,8 +224,8 @@ internal sealed class WaveChannel {
         }
 
         // The first sample fetch after a trigger is delayed an extra three frequency-timer periods (six T-cycles)
-        // beyond a normal sample step — the DMG wave-trigger delay SameBoy models as sample_countdown + 3. This
-        // phase is what the wave-RAM-access-while-on tests (dmg_sound 09/10/12) pin.
+        // beyond a normal sample step — the DMG wave-trigger delay. This phase governs the narrow post-fetch window
+        // in which the DMG lets the CPU read or write wave RAM while the channel plays.
         m_frequencyTimer = (((2048 - Frequency) * 2) + 6);
         m_samplePosition = 0;
 

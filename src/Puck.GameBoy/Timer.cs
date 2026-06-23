@@ -9,10 +9,10 @@ namespace Puck.GameBoy;
 /// moment ticks <c>TIMA</c>. On overflow, <c>TIMA</c> reads zero for one machine cycle before it is reloaded
 /// from the modulo (<c>TMA</c>, <c>0xFF06</c>) and the timer interrupt is raised.
 /// </summary>
-public sealed class Timer : IClockedComponent {
+public sealed class Timer : ITimer {
     private const int ReloadDelayTCycles = 4;
 
-    private readonly InterruptController m_interrupts;
+    private readonly IInterruptController m_interrupts;
 
     private bool m_lastTimerSignal;
     private bool m_reloadedThisCycle;
@@ -34,7 +34,7 @@ public sealed class Timer : IClockedComponent {
     /// <summary>Initializes the timer wired to the interrupt controller it raises the timer interrupt through.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
     /// <exception cref="ArgumentNullException"><paramref name="interrupts"/> is <see langword="null"/>.</exception>
-    public Timer(InterruptController interrupts) {
+    public Timer(IInterruptController interrupts) {
         ArgumentNullException.ThrowIfNull(interrupts);
 
         m_interrupts = interrupts;

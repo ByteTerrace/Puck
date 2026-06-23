@@ -8,7 +8,7 @@ namespace Puck.GameBoy;
 /// exposes only some bits (the rest read as one), and the <c>NR52</c> power switch silences and zeroes everything
 /// while it is off.
 /// </summary>
-public sealed class Apu : IClockedComponent {
+public sealed class Apu : IApu {
     // The audio register block 0xFF10-0xFF26 (NR10..NR52), indexed from 0xFF10.
     private const int RegisterCount = 23;
     private const int MasterControlIndex = (MemoryMap.AudioMasterControl - MemoryMap.AudioBase);
@@ -72,15 +72,22 @@ public sealed class Apu : IClockedComponent {
     private int m_audioReadFrame;
     private int m_audioFrameCount;
 
-    /// <summary>Initializes the APU wired to the system counter its frame sequencer is divided from.</summary>
-    /// <param name="systemCounter">Reads the shared 16-bit system counter (the timer's internal divider).</param>
-    /// <param name="isDoubleSpeed">Reads whether the CGB is in double-speed mode, which moves the frame-sequencer bit up one; <see langword="null"/> (the default) is treated as single-speed.</param>
-    /// <param name="isCgb">Reads whether the console is a CGB, selecting the noise channel's sub-cycle timing model; <see langword="null"/> (the default) is treated as DMG.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="systemCounter"/> is <see langword="null"/>.</exception>
-    public Apu(Func<int> systemCounter, Func<bool>? isDoubleSpeed = null, Func<bool>? isCgb = null) {
-        ArgumentNullException.ThrowIfNull(systemCounter);
+    /// <summary>Initializes the APU wired to the divider/timer its frame sequencer is divided from, the shared clock
+    /// state (double-speed moves the frame-sequencer bit up one), and the machine configuration (the color model
+    /// selects the noise channel's sub-cycle timing).</summary>
+    /// <param name="timer">The divider/timer whose internal counter the frame sequencer divides.</param>
+    /// <param name="clockState">The shared double-speed clock state.</param>
+    /// <param name="configuration">The machine configuration.</param>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    public Apu(ITimer timer, ClockState clockState, MachineConfiguration configuration) {
+        ArgumentNullException.ThrowIfNull(timer);
+        ArgumentNullException.ThrowIfNull(clockState);
+        ArgumentNullException.ThrowIfNull(configuration);
 
-        m_systemCounter = systemCounter;
+        Func<bool> isDoubleSpeed = () => clockState.DoubleSpeed;
+        Func<bool> isCgb = () => (configuration.Model == ConsoleModel.Cgb);
+
+        m_systemCounter = () => timer.InternalCounter;
         m_isDoubleSpeed = isDoubleSpeed;
         m_isCgb = isCgb;
         m_channel1 = new PulseChannel(hasSweep: true, isCgb: isCgb, isDoubleSpeed: isDoubleSpeed);

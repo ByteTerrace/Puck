@@ -131,7 +131,8 @@ internal static class SmokeTests {
 
         Check(name: "IRQ IF write-one-to-clear", ok: !controller.LineAsserted);
 
-        // Timer overflow raises its interrupt: reload 0xFFFE, prescaler 1, two ticks to overflow.
+        // Timer overflow raises its interrupt: reload 0xFFFE, prescaler 1. The hardware start-up delay means the
+        // timer ignores its first two cycles, then takes two ticks to overflow — so the IRQ comes at cycle 4, not 2.
         var timerInterrupts = new GbaInterruptController();
 
         timerInterrupts.WriteRegister(offset: 0x208u, value: 1);
@@ -141,7 +142,11 @@ internal static class SmokeTests {
 
         timers.WriteRegister(offset: 0x100u, value: 0xFFFE);          // reload
         timers.WriteRegister(offset: 0x102u, value: 0x00C0);          // enable + IRQ, prescaler 1
-        timers.Step(cycles: 2);
+        timers.Step(cycles: 2);                                       // absorbed by the start-up delay
+
+        Check(name: "timer start-up delay holds off overflow", ok: !timerInterrupts.LineAsserted);
+
+        timers.Step(cycles: 2);                                       // two ticks → overflow
 
         Check(name: "timer overflow raises IRQ", ok: timerInterrupts.LineAsserted);
 

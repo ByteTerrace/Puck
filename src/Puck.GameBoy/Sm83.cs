@@ -7,7 +7,7 @@ namespace Puck.GameBoy;
 /// timing emerges from its access pattern rather than from a cycle table. <see cref="Step"/> runs one whole
 /// instruction (or one machine cycle of <c>HALT</c>, or one interrupt dispatch).
 /// </summary>
-public sealed partial class Sm83 {
+public sealed partial class Sm83 : ICpu {
     private readonly ICpuBus m_bus;
 
     private byte m_a;

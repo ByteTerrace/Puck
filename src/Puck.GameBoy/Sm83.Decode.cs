@@ -674,7 +674,7 @@ public sealed partial class Sm83 {
 
         // An interrupt is already pending when HALT runs. If interrupts are enabled — or an EI in its delay slot is
         // about to enable them, as in `ei; halt` — the CPU does not halt: it rewinds PC to the HALT so that when the
-        // pending interrupt is serviced its return re-enters HALT (SameBoy's `halted = false; pc--`). With interrupts
+        // pending interrupt is serviced its return re-enters HALT (PC is rewound to the HALT opcode). With interrupts
         // disabled and none pending-to-enable, it triggers the HALT bug instead.
         if (m_interruptMasterEnable || (m_interruptEnableDelay > 0)) {
             m_programCounter -= 1;

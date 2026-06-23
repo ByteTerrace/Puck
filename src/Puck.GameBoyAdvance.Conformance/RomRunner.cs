@@ -142,6 +142,49 @@ internal static class RomRunner {
     }
 
     /// <summary>
+    /// Traces per-instruction cycle accounting for a ROM, to diff against the mGBA cycle-exact oracle. Prints
+    /// (step, PC, cumulative cycles, delta) for each instruction, plus the final value the micro-ROM stored to
+    /// EWRAM (0x02000000) — the same number the AGS wait-state/prescaler tests compare against hardware.
+    /// </summary>
+    public static void TraceCycles(string romPath, long steps) {
+        if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
+            return;
+        }
+
+        using (provider) {
+            var bus = (GbaBus)machine.Bus;
+            var prev = bus.Cycles;
+            var lastPc = 0xFFFFFFFFu;
+            var stable = 0;
+
+            for (long i = 0; i < steps; ++i) {
+                var pc = machine.Cpu.GetRegister(index: 15);
+
+                machine.Step();
+
+                var now = bus.Cycles;
+
+                Console.WriteLine($"{i,5}  pc={pc:X8}  cyc={now}  d={now - prev}");
+
+                prev = now;
+
+                if (pc == lastPc) {
+                    if (++stable > 4) {
+                        break;
+                    }
+                }
+                else {
+                    stable = 0;
+                }
+
+                lastPc = pc;
+            }
+
+            Console.WriteLine($"RESULT[0x02000000] = 0x{machine.Bus.Read32(address: 0x02000000u, access: BusAccessType.NonSequential):X8} (timer value the test reads)");
+        }
+    }
+
+    /// <summary>
     /// Boots a ROM, runs it for a fixed number of steps, and hashes the resulting framebuffer. Used as a
     /// deterministic visual-regression floor: the core is fully deterministic, so a known-good render must
     /// reproduce its hash exactly. A mismatch flags an unintended change to the CPU/PPU/timing pipeline.
