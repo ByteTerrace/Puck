@@ -14,6 +14,15 @@ public sealed class SystemBus : ICpuBus {
     private const int WorkRamBankSize = 0x1000;
     private const int VideoRamBankSize = 0x2000;
 
+    // T-cycle-accurate OAM access: a CPU access to the OAM region puts its address on the bus partway through its
+    // machine cycle, so the OAM-corruption bug samples the PPU's scan position this many dots into the access cycle
+    // (rather than at the cycle's start). Tunable for calibration; the PPU runs at dot resolution already.
+    private static readonly int OamAccessDotOffset = (int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_OAM_DOTS"), out var offset) ? offset : 0);
+
+    // How far the PPU has been advanced into the current machine cycle ahead of the other components (by a T-cycle-
+    // accurate OAM access); the next machine-cycle flush advances it by the remainder so it stays in lockstep.
+    private int m_ppuExtraDots;
+
     private readonly Apu m_apu;
     private readonly List<IClockedComponent> m_clockedComponents = [];
     private readonly ICartridge m_cartridge;
@@ -78,9 +87,10 @@ public sealed class SystemBus : ICpuBus {
     /// <param name="model">The Game Boy model to emulate, which sizes the banked memories.</param>
     /// <param name="cartridge">The cartridge plugged into the bus.</param>
     /// <param name="bootRom">The boot ROM mapped over low memory until disabled, or <see langword="null"/> to start post-boot.</param>
+    /// <param name="bootPalette">A button combination held at boot, picking an alternative CGB compatibility palette for a DMG game.</param>
     /// <exception cref="ArgumentNullException"><paramref name="cartridge"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="bootRom"/> is shorter than the region the model maps it over.</exception>
-    public SystemBus(ConsoleModel model, ICartridge cartridge, byte[]? bootRom = null) {
+    public SystemBus(ConsoleModel model, ICartridge cartridge, byte[]? bootRom = null, BootPaletteSelection bootPalette = default) {
         ArgumentNullException.ThrowIfNull(cartridge);
 
         var isColor = (model == ConsoleModel.Cgb);
@@ -130,12 +140,13 @@ public sealed class SystemBus : ICpuBus {
         m_apu = new Apu(systemCounter: () => m_timer.InternalCounter, isDoubleSpeed: () => m_doubleSpeed, isCgb: () => (m_model == ConsoleModel.Cgb));
         Attach(component: m_apu);
 
-        ConfigureDmgCompatibilityColorization(model: model);
+        ConfigureDmgCompatibilityColorization(model: model, bootPalette: bootPalette);
     }
 
     // A CGB console booting a cartridge with no CGB flag colorizes the original game with the boot ROM's assigned
-    // palettes; the PPU then renders DMG-style through them. A CGB-aware cartridge (or a DMG console) is left untouched.
-    private void ConfigureDmgCompatibilityColorization(ConsoleModel model) {
+    // palettes (or an alternative chosen by a held button combination); the PPU then renders DMG-style through them.
+    // A CGB-aware cartridge (or a DMG console) is left untouched.
+    private void ConfigureDmgCompatibilityColorization(ConsoleModel model, BootPaletteSelection bootPalette) {
         if ((model != ConsoleModel.Cgb) || ((m_cartridge.ReadRom(address: 0x0143) & 0x80) != 0)) {
             return;
         }
@@ -146,7 +157,7 @@ public sealed class SystemBus : ICpuBus {
             header[i] = m_cartridge.ReadRom(address: (ushort)i);
         }
 
-        var (background, object0, object1) = CompatibilityPalette.Resolve(rom: header);
+        var (background, object0, object1) = CompatibilityPalette.Resolve(rom: header, input: bootPalette);
 
         m_ppu.EnableDmgCompatibilityColorization(background: background, object0: object0, object1: object1);
     }
@@ -227,6 +238,17 @@ public sealed class SystemBus : ICpuBus {
         m_pendingMachineCycles = 1;
     }
 
+    // Advances the PPU alone to the sub-machine-cycle dot at which an OAM access reaches the bus, so the OAM-bug scan
+    // position is T-cycle accurate. The remainder of this machine cycle is made up for the PPU at the next flush.
+    private void AdvancePpuToAccessDot() {
+        var dots = Math.Min(val1: OamAccessDotOffset, val2: (m_doubleSpeed ? 2 : 4));
+
+        if (dots > 0) {
+            m_ppu.Step(tCycles: dots);
+            m_ppuExtraDots = dots;
+        }
+    }
+
     // Whether an access at this address observes the APU channel generators (the register/wave block 0xFF10-0xFF3F or
     // the CGB PCM12/PCM34 amplitude registers), so the channels must be brought current to the access point first.
     private static bool IsAudioChannelAccess(ushort address) =>
@@ -241,6 +263,9 @@ public sealed class SystemBus : ICpuBus {
         if ((m_model == ConsoleModel.Cgb) || (address < MemoryMap.OamBase) || (address > MemoryMap.UnusableEnd)) {
             return;
         }
+
+        // Sample the PPU's scan position at the sub-machine-cycle dot the OAM access reaches the bus (T-cycle accuracy).
+        AdvancePpuToAccessDot();
 
         if (isWrite) {
             m_ppu.OamBugWrite();
@@ -264,8 +289,13 @@ public sealed class SystemBus : ICpuBus {
         }
     }
 
+    // The CPU freezes for this many T-cycles while the clock changes during a speed switch (SameBoy's
+    // speed_switch_halt_countdown); the peripherals keep running, which is the "display collapse" the docs describe.
+    private const int SpeedSwitchStallTCycles = 0x20008;
+
     /// <summary>Performs a CGB speed switch when one has been armed via <c>KEY1</c>, as the <c>STOP</c> instruction
-    /// does. Toggles between normal and double speed and disarms the request.</summary>
+    /// does. Toggles between normal and double speed, resets the divider, and stalls the CPU for the ~0x20008-T-cycle
+    /// clock-change window during which the peripherals keep advancing. Disarms the request.</summary>
     /// <returns><see langword="true"/> when a switch was armed and performed; otherwise <see langword="false"/>.</returns>
     public bool ApplyPreparedSpeedSwitch() {
         if (!m_armedSpeedSwitch) {
@@ -274,6 +304,14 @@ public sealed class SystemBus : ICpuBus {
 
         m_armedSpeedSwitch = false;
         m_doubleSpeed = !m_doubleSpeed;
+
+        // STOP resets DIV, then the clock-change stall runs at the new speed with the CPU frozen.
+        FlushPendingCycles();
+        m_timer.SetInternalCounter(value: 0);
+
+        for (var cycle = 0; cycle < (SpeedSwitchStallTCycles / CpuDotsPerMachineCycle); cycle += 1) {
+            TickMachineCycle();
+        }
 
         return true;
     }
@@ -604,9 +642,18 @@ public sealed class SystemBus : ICpuBus {
         var lcdDots = (m_doubleSpeed ? 2 : 4);
 
         foreach (var component in m_clockedComponents) {
-            component.Step(tCycles: ((component.Domain == ClockDomain.Cpu) ? CpuDotsPerMachineCycle : lcdDots));
+            // The PPU may already have been advanced part-way into this machine cycle by a T-cycle-accurate OAM access;
+            // step it only by the remainder so every component lands on the same machine-cycle boundary.
+            var dots = ((component.Domain == ClockDomain.Cpu)
+                ? CpuDotsPerMachineCycle
+                : (ReferenceEquals(objA: component, objB: m_ppu) ? (lcdDots - m_ppuExtraDots) : lcdDots));
+
+            if (dots > 0) {
+                component.Step(tCycles: dots);
+            }
         }
 
+        m_ppuExtraDots = 0;
         m_elapsedDots += (ulong)lcdDots;
 
         // HBlank VRAM DMA copies one block as each visible line enters horizontal blank.

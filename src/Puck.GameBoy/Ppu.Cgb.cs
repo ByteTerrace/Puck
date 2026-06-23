@@ -27,18 +27,34 @@ public sealed partial class Ppu {
     private byte m_backgroundPaletteIndex; // BGPI: bit 7 auto-increment, bits 0-5 index
     private byte m_objectPaletteIndex; // OBPI
     private byte m_objectPriorityMode; // OPRI (bit 0: 1 = X-coordinate priority, 0 = OAM-order priority)
-    private bool m_colorCorrection = true;
+    private CgbColorCorrection m_colorCorrection = CgbColorCorrection.ModernBalanced;
+
+    // SameBoy's measured CGB per-channel response curve (5-bit input -> 8-bit output).
+    private static readonly byte[] s_responseCurve = [
+        0, 6, 12, 20, 28, 36, 45, 56, 66, 76, 88, 100, 113, 125, 137, 149,
+        161, 172, 182, 192, 202, 210, 218, 225, 232, 238, 243, 247, 250, 252, 254, 255,
+    ];
+
+    // The ModernBalanced green output, blended from the curved green and blue (gamma 1.6), precomputed per (g, b).
+    private static readonly byte[] s_balancedGreen = BuildBalancedGreen();
 
     /// <summary>Gets whether this is a Game Boy Color PPU (color render path, palette RAM, tile attributes).</summary>
     public bool IsColor =>
         m_isColor;
 
-    /// <summary>Gets or sets whether the CGB color-correction curve is applied when converting palette entries to RGBA.
-    /// When enabled (the default) the framebuffer matches the muted, slightly green-tinted look of the real CGB LCD;
-    /// when disabled the 15-bit BGR555 channels are bit-expanded directly for the brighter "raw" palette.</summary>
-    public bool ColorCorrectionEnabled {
+    /// <summary>Gets or sets how CGB palette colors are corrected for display. Defaults to
+    /// <see cref="CgbColorCorrection.ModernBalanced"/>, the closest match to the physical CGB screen.</summary>
+    public CgbColorCorrection ColorCorrection {
         get => m_colorCorrection;
         set => m_colorCorrection = value;
+    }
+
+    /// <summary>Gets or sets whether color correction is applied, as a convenience over <see cref="ColorCorrection"/>:
+    /// enabling selects <see cref="CgbColorCorrection.ModernBalanced"/>, disabling selects
+    /// <see cref="CgbColorCorrection.Disabled"/>.</summary>
+    public bool ColorCorrectionEnabled {
+        get => (m_colorCorrection != CgbColorCorrection.Disabled);
+        set => m_colorCorrection = (value ? CgbColorCorrection.ModernBalanced : CgbColorCorrection.Disabled);
     }
 
     /// <summary>Reads the background palette index register (<c>BGPI</c>, <c>0xFF68</c>).</summary>
@@ -139,28 +155,54 @@ public sealed partial class Ppu {
         var g5 = ((value >> 5) & 0x1F);
         var b5 = ((value >> 10) & 0x1F);
 
-        return (m_colorCorrection
-            ? CorrectColor(r5: r5, g5: g5, b5: b5)
-            : RawColor(r5: r5, g5: g5, b5: b5));
-    }
+        uint r;
+        uint g;
+        uint b;
 
-    // The brighter "raw" conversion: each 5-bit channel widened to 8 bits via (c << 3) | (c >> 2).
-    private static uint RawColor(int r5, int g5, int b5) {
-        var r = (uint)((r5 << 3) | (r5 >> 2));
-        var g = (uint)((g5 << 3) | (g5 >> 2));
-        var b = (uint)((b5 << 3) | (b5 >> 2));
+        switch (m_colorCorrection) {
+            case CgbColorCorrection.Disabled:
+                // Each 5-bit channel widened to 8 bits via (c << 3) | (c >> 2).
+                r = (uint)((r5 << 3) | (r5 >> 2));
+                g = (uint)((g5 << 3) | (g5 >> 2));
+                b = (uint)((b5 << 3) | (b5 >> 2));
+
+                break;
+            case CgbColorCorrection.CorrectCurves:
+                r = s_responseCurve[r5];
+                g = s_responseCurve[g5];
+                b = s_responseCurve[b5];
+
+                break;
+            default:
+                // ModernBalanced: the response curve, with green blended toward blue (precomputed in s_balancedGreen).
+                r = s_responseCurve[r5];
+                g = s_balancedGreen[(g5 * 32) + b5];
+                b = s_responseCurve[b5];
+
+                break;
+        }
 
         return (0xFF000000u | (b << 16) | (g << 8) | r);
     }
 
-    // The CGB LCD color-correction curve (the widely used higan/near matrix): each output channel mixes all three
-    // inputs and is clamped, reproducing the console's muted, slightly green-tinted palette. Output range is 0-240.
-    private static uint CorrectColor(int r5, int g5, int b5) {
-        var r = (uint)(Math.Min(val1: 960, val2: ((r5 * 26) + (g5 * 4) + (b5 * 2))) >> 2);
-        var g = (uint)(Math.Min(val1: 960, val2: ((g5 * 24) + (b5 * 8))) >> 2);
-        var b = (uint)(Math.Min(val1: 960, val2: ((r5 * 6) + (g5 * 4) + (b5 * 22))) >> 2);
+    // Precomputes SameBoy's ModernBalanced green: the curved green and blue mixed in gamma-1.6 space, 3 parts green to
+    // one part blue, indexed by the raw 5-bit green and blue.
+    private static byte[] BuildBalancedGreen() {
+        const double Gamma = 1.6;
 
-        return (0xFF000000u | (b << 16) | (g << 8) | r);
+        var table = new byte[32 * 32];
+
+        for (var g5 = 0; g5 < 32; g5 += 1) {
+            for (var b5 = 0; b5 < 32; b5 += 1) {
+                var curvedGreen = (s_responseCurve[g5] / 255.0);
+                var curvedBlue = (s_responseCurve[b5] / 255.0);
+                var mixed = Math.Pow(x: (((Math.Pow(x: curvedGreen, y: Gamma) * 3) + Math.Pow(x: curvedBlue, y: Gamma)) / 4), y: (1 / Gamma));
+
+                table[(g5 * 32) + b5] = (byte)Math.Round(a: (mixed * 255));
+            }
+        }
+
+        return table;
     }
 
     private void RenderBackgroundAndWindowColor(int line) {

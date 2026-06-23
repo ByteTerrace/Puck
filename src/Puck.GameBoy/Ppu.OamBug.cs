@@ -8,6 +8,8 @@ namespace Puck.GameBoy;
 /// expects (ported from SameBoy's <c>memory.c</c>).
 /// </summary>
 public sealed partial class Ppu {
+    private static readonly bool s_oamTrace = (Environment.GetEnvironmentVariable(variable: "PUCK_OAM_TRACE") is not null);
+
     private const int OamRowInvalid = 0xFF;
     // The highest OAM row (byte offset) the corruption can touch; rows past this would index beyond OAM.
     private const int OamRowLast = 0x98;
@@ -48,6 +50,11 @@ public sealed partial class Ppu {
         // is copied from the preceding row.
         SetOamWord(offset: row, value: GlitchWrite(a: OamWord(offset: row), b: OamWord(offset: (row - 8)), c: OamWord(offset: (row - 4))));
         CopyOamBytes(destination: (row + 2), source: (row - 6), count: 6);
+
+        if (s_oamTrace) {
+            var o = m_objectAttributeMemory;
+            Console.Error.WriteLine(value: $"OAMBUG W row={row:x2} ly={m_line} bytes={o[row]:x2}{o[row+1]:x2}{o[row+2]:x2}{o[row+3]:x2}{o[row+4]:x2}{o[row+5]:x2}{o[row+6]:x2}{o[row+7]:x2} pre={o[row-8]:x2}{o[row-7]:x2}{o[row-4]:x2}{o[row-2]:x2}");
+        }
     }
 
     /// <summary>Corrupts the scanned OAM row as a read would, if the PPU is mid OAM scan. Several rows have their own
@@ -57,6 +64,10 @@ public sealed partial class Ppu {
 
         if ((row < 8) || (row > OamRowLast)) {
             return;
+        }
+
+        if (s_oamTrace) {
+            Console.Error.WriteLine(value: $"OAMBUG R row={row:x2} ly={m_line}");
         }
 
         switch (row & 0x18) {

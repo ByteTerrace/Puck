@@ -26,14 +26,16 @@ public sealed class GameBoyMachine {
     /// <param name="model">The Game Boy model to emulate.</param>
     /// <param name="cartridge">The cartridge plugged into the bus.</param>
     /// <param name="bootRom">The boot ROM to run from reset, or <see langword="null"/> to start at the post-boot state.</param>
+    /// <param name="bootPalette">A button combination held at boot, which picks an alternative CGB compatibility palette for a DMG game.</param>
     /// <exception cref="ArgumentNullException"><paramref name="cartridge"/> is <see langword="null"/>.</exception>
-    public GameBoyMachine(ConsoleModel model, ICartridge cartridge, byte[]? bootRom = null) {
+    public GameBoyMachine(ConsoleModel model, ICartridge cartridge, byte[]? bootRom = null, BootPaletteSelection bootPalette = default) {
         ArgumentNullException.ThrowIfNull(cartridge);
 
         m_bus = new SystemBus(
             bootRom: bootRom,
             cartridge: cartridge,
-            model: model
+            model: model,
+            bootPalette: bootPalette
         );
         m_cpu = new Sm83(bus: m_bus);
 

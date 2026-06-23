@@ -53,6 +53,9 @@ public sealed partial class Ppu : IClockedComponent {
     // vertical blank. Presenting from this (rather than the live back buffer the PPU paints into scanline by
     // scanline) means a host that stops the machine mid-frame never sees a torn, half-drawn picture.
     private readonly uint[] m_presentBuffer = new uint[ScreenWidth * ScreenHeight];
+    // The raw previous frame, kept for frame blending (the LCD's slow pixel response visually merges consecutive
+    // frames, so games that flicker rapidly to fake transparency or extra shades appear stable on hardware).
+    private readonly uint[] m_previousFramebuffer = new uint[ScreenWidth * ScreenHeight];
     // The background/window color index (0-3) chosen per pixel on the current line, used for sprite-to-background
     // priority (a sprite with the priority bit set is hidden behind background colors 1-3).
     private readonly byte[] m_lineColorIndex = new byte[ScreenWidth];
@@ -60,6 +63,8 @@ public sealed partial class Ppu : IClockedComponent {
     private bool m_coincidence;
     private bool m_enabled;
     private bool m_frameReady;
+    private bool m_frameBlending = true;
+    private bool m_hasPreviousFrame;
     // The OAM/VRAM CPU-access locks, split by direction because reads block a machine cycle before writes do.
     // The READ locks lead the polled STAT mode bits: they engage at the *actual* mode transition (OAM at the
     // mode-2 onset, VRAM at the mode-3 onset), one machine cycle before the STAT bits report the new mode. The
@@ -86,6 +91,23 @@ public sealed partial class Ppu : IClockedComponent {
     private int m_reportedModeDelay;
     private int m_interruptModeDelay;
     private int m_windowLineCounter;
+
+    // Per-dot mode-3 background/window pixel pipeline (Phase 1: the DMG background fetcher + FIFO; sprites are still
+    // overlaid at line end, and the closed-form mode-3 length still drives timing). The fetcher runs one logical step
+    // per two dots — fetch tile number, low byte, high byte, then push eight colour indices — and the FIFO shifts one
+    // pixel out per dot, so mid-scanline writes to SCX/SCY/LCDC/BGP take effect partway across the line.
+    private readonly byte[] m_bgFifo = new byte[16];
+    private int m_bgFifoHead;
+    private int m_bgFifoCount;
+    private int m_fetchStep;        // 0-7: two dots each for tile number / low / high / push
+    private int m_fetchTileX;       // tile column fetched so far (background or window space)
+    private int m_fetchTileNumber;
+    private int m_fetchLow;
+    private int m_fetchHigh;
+    private int m_pixelX;           // next screen X to output (0-160)
+    private int m_scxDiscard;       // fine-scroll pixels still to drop from the FIFO front
+    private bool m_fetchingWindow;
+    private bool m_windowDrawnThisLine;
     private PpuMode m_mode = PpuMode.HorizontalBlank;
     private PpuMode m_reportedMode = PpuMode.HorizontalBlank;
     // The mode that drives the STAT interrupt, settled independently of the polled STAT bits (m_reportedMode) so
@@ -116,6 +138,15 @@ public sealed partial class Ppu : IClockedComponent {
     /// mid-draw. (Empty — all zero — until the first frame completes.)</summary>
     public ReadOnlySpan<uint> Framebuffer =>
         m_presentBuffer;
+
+    /// <summary>Gets or sets whether consecutive frames are blended when latched, simulating the LCD's slow pixel
+    /// response. Enabled by default: static images are unaffected (identical frames blend to themselves), but content
+    /// that flickers every frame to fake transparency or extra shades resolves to the stable image hardware shows.</summary>
+    public bool FrameBlendingEnabled {
+        get => m_frameBlending;
+        set => m_frameBlending = value;
+    }
+
     /// <summary>Gets whether VRAM is readable by the CPU — true unless the PPU is drawing. The read lock engages at
     /// the actual mode-3 onset (a machine cycle ahead of the STAT mode-3 bits) and releases when the reported mode
     /// settles back to horizontal blank.</summary>
@@ -340,10 +371,18 @@ public sealed partial class Ppu : IClockedComponent {
                 // keep the line 456 dots.
                 m_mode0StartDot = (OamScanDots + DrawingDots + ScxPenalty(scrollX: (m_scrollX & 7)) + ObjectPenalty(line: m_line));
                 SetMode(mode: PpuMode.Drawing);
+
+                if (!m_isColor) {
+                    StartBackgroundFetch();
+                }
             }
             else if (m_dot == m_mode0StartDot) {
                 RenderScanline();
                 SetMode(mode: PpuMode.HorizontalBlank);
+            }
+            else if (!m_isColor && (m_mode == PpuMode.Drawing)) {
+                // DMG background/window is produced one pixel per dot by the fetcher (sprites are overlaid at line end).
+                StepBackgroundFetcher();
             }
         }
     }
@@ -452,7 +491,7 @@ public sealed partial class Ppu : IClockedComponent {
             // The window's internal line counter resets here, ready for the next frame.
             SetMode(mode: PpuMode.VerticalBlank);
             m_interrupts.Request(kind: InterruptKind.VBlank);
-            Array.Copy(sourceArray: m_framebuffer, destinationArray: m_presentBuffer, length: m_framebuffer.Length);
+            PresentFrame();
             m_frameReady = true;
             m_windowLineCounter = 0;
         }
@@ -511,15 +550,43 @@ public sealed partial class Ppu : IClockedComponent {
         UpdateStatInterrupt();
     }
 
+    // Latches the finished back buffer into the front buffer, blending it with the previous frame when enabled.
+    private void PresentFrame() {
+        if (m_frameBlending && m_hasPreviousFrame) {
+            for (var i = 0; i < m_framebuffer.Length; i += 1) {
+                m_presentBuffer[i] = BlendPixels(a: m_framebuffer[i], b: m_previousFramebuffer[i]);
+            }
+        }
+        else {
+            Array.Copy(sourceArray: m_framebuffer, destinationArray: m_presentBuffer, length: m_framebuffer.Length);
+        }
+
+        if (m_frameBlending) {
+            // Keep the raw (unblended) frame so the next blend mixes the two real frames, not a feedback of blends.
+            Array.Copy(sourceArray: m_framebuffer, destinationArray: m_previousFramebuffer, length: m_framebuffer.Length);
+            m_hasPreviousFrame = true;
+        }
+    }
+
+    // A per-channel 50/50 average of two opaque RGBA pixels. Done per channel (not a masked bit-halve) so that two
+    // identical frames average to themselves exactly — a static picture is left untouched, only flicker is smoothed.
+    private static uint BlendPixels(uint a, uint b) {
+        var r = (((a & 0xFFu) + (b & 0xFFu)) >> 1);
+        var g = ((((a >> 8) & 0xFFu) + ((b >> 8) & 0xFFu)) >> 1);
+        var blue = ((((a >> 16) & 0xFFu) + ((b >> 16) & 0xFFu)) >> 1);
+
+        return (0xFF000000u | (blue << 16) | (g << 8) | r);
+    }
+
     private void RenderScanline() {
-        // Scanline-based rendering using the registers as they stand at pixel-transfer end. The dot-accurate
-        // fetcher/FIFO (which lets mid-scanline register changes take effect) is a later stage.
         if (m_isColor) {
+            // The CGB background/window is still drawn all at once (its per-dot fetcher is a later phase).
             RenderBackgroundAndWindowColor(line: m_line);
             RenderSpritesColor(line: m_line);
         }
         else {
-            RenderBackgroundAndWindow(line: m_line);
+            // The DMG background/window was already drawn per-dot by the fetcher; finalize it and overlay sprites.
+            FinishBackgroundLine();
             RenderSprites(line: m_line);
         }
     }

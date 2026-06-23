@@ -154,6 +154,25 @@ internal static class CartridgeSmokeTests {
                     ? null
                     : $"bg = [{background[0]:X4} {background[1]:X4} {background[2]:X4} {background[3]:X4}]";
             }),
+            ("a held boot button combination overrides the compatibility palette", static () => {
+                var rom = new byte[0x8000];
+
+                "TETRIS"u8.CopyTo(destination: rom.AsSpan(start: 0x0134));
+                rom[0x014B] = 0x01;
+
+                // Up + B is key-combination 11, which selects palette combination 28 (background palette 1).
+                var selection = new BootPaletteSelection(Direction: BootPaletteDirection.Up, B: true);
+
+                if (selection.KeyCombinationIndex != 11) {
+                    return $"key index = {selection.KeyCombinationIndex} (expected 11)";
+                }
+
+                var (background, _, _) = CompatibilityPalette.Resolve(rom: rom, input: selection);
+
+                return ((background[0] == 0x639F) && (background[1] == 0x4279) && (background[2] == 0x15B0) && (background[3] == 0x04CB))
+                    ? null
+                    : $"bg = [{background[0]:X4} {background[1]:X4} {background[2]:X4} {background[3]:X4}]";
+            }),
             ("a DMG cartridge on a CGB console enables compatibility colorization", static () => {
                 var rom = new byte[0x8000];
 

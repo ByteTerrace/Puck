@@ -684,9 +684,9 @@ public sealed partial class Sm83 {
         }
     }
     private void ExecuteStop() {
-        // STOP is nominally a two-byte opcode; skip the padding byte. On the CGB a STOP with an armed KEY1
-        // request performs the speed switch instead of stopping. The multi-thousand-cycle STOP stall is
-        // approximated (not modeled) for now.
+        // STOP is nominally a two-byte opcode; skip the padding byte. On the CGB a STOP with an armed KEY1 request
+        // performs the speed switch (which resets DIV and stalls the CPU for the clock-change window) instead of
+        // entering stop mode.
         m_programCounter += 1;
 
         if (!m_bus.ApplyPreparedSpeedSwitch()) {

@@ -9,7 +9,7 @@ namespace Puck.GameBoy.Conformance;
 /// </summary>
 internal static class BlarggRunner {
     // Blargg ROMs finish in well under this many cycles; the ceiling only guards against a hung ROM.
-    private const long CycleCeiling = 80_000_000L;
+    private static readonly long CycleCeiling = (long.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_BLARGG_CEILING"), out var ceiling) ? ceiling : 80_000_000L);
 
     public static int Run(string path, TextWriter output) {
         if (Directory.Exists(path: path)) {
@@ -44,10 +44,11 @@ internal static class BlarggRunner {
     private static bool RunOne(string romPath, TextWriter output) {
         var rom = File.ReadAllBytes(path: romPath);
 
-        // The cartridge header's CGB flag (byte 0x143, bit 7) selects the console: Blargg's cgb_sound sets it and
-        // expects CGB-specific APU behavior (power-off clears the length timers, CGB wave-RAM access), while dmg_sound
-        // leaves it clear and runs on the DMG. Auto-detecting keeps each suite on the hardware it was written for.
-        var model = (((rom.Length > 0x143) && ((rom[0x143] & 0x80) != 0))
+        // Pick the console the suite was written for. Only CGB-ONLY ROMs (header 0x143 = 0xC0, e.g. cgb_sound and
+        // interrupt_time) run on the CGB; CGB-enhanced ROMs (0x80, e.g. oam_bug, halt_bug, cpu_instrs) are testing
+        // DMG-compatible behavior and must run on the DMG — the OAM corruption bug, in particular, exists only there.
+        // (Games keep the usual 0x80 -> CGB mapping in GameRunner; this DMG bias is specific to the test ROMs.)
+        var model = (((rom.Length > 0x143) && ((rom[0x143] & 0xC0) == 0xC0) && (Environment.GetEnvironmentVariable(variable: "PUCK_BLARGG_FORCE_DMG") is null))
             ? ConsoleModel.Cgb
             : ConsoleModel.Dmg);
         var machine = new GameBoyMachine(
@@ -70,24 +71,49 @@ internal static class BlarggRunner {
         };
 
         var resultCode = -1;
+        string? screenResult = null;
+
+        var histogram = ((Environment.GetEnvironmentVariable(variable: "PUCK_BLARGG_PCHIST") is not null) ? new Dictionary<ushort, long>() : null);
 
         for (var step = 0L; (step < CycleCeiling) && !finished; step += 1) {
+            if ((histogram is not null) && ((step & 0x3F) == 0)) {
+                var pc = machine.Cpu.ProgramCounter;
+
+                histogram[pc] = (histogram.GetValueOrDefault(key: pc) + 1);
+            }
+
             machine.Step();
 
-            // Poll the memory-mapped result periodically (cheap relative to the run).
+            // Poll the result periodically (cheap relative to the run): some ROMs write it to cartridge RAM, while the
+            // oldest (halt_bug, interrupt_time) only print it on screen, so also scan the background tile map.
             if ((step & 0x1FFF) == 0) {
                 if (HasMemoryResult(machine: machine, out var code)) {
                     resultCode = code;
                     finished = true;
                 }
+                else if ((screenResult = ReadScreenResult(machine: machine)) is not null) {
+                    finished = true;
+                }
             }
+        }
+
+        if (histogram is not null) {
+            output.WriteLine(value: "  -- PC histogram (top 12 by sampled occupancy) --");
+
+            foreach (var entry in histogram.OrderByDescending(keySelector: e => e.Value).Take(count: 12)) {
+                output.WriteLine(value: $"    PC=0x{entry.Key:X4}  {entry.Value}");
+            }
+        }
+
+        if (Environment.GetEnvironmentVariable(variable: "PUCK_BLARGG_SCREENDUMP") is not null) {
+            DumpScreenTiles(machine: machine, output: output);
         }
 
         var serialText = serial.ToString().Replace(oldChar: '\n', newChar: ' ').Trim();
         var memoryText = ReadMemoryText(machine: machine);
-        var passed = (finished && ((resultCode == 0) || ((resultCode < 0) && Contains(builder: serial, fragment: "Passed"))));
+        var passed = (finished && ((resultCode == 0) || ((resultCode < 0) && (Contains(builder: serial, fragment: "Passed") || (screenResult == "Passed")))));
         var status = (finished ? (passed ? "PASS" : "FAIL") : "TIMEOUT");
-        var fullText = ((memoryText.Length > 0) ? memoryText : serialText);
+        var fullText = ((memoryText.Length > 0) ? memoryText : ((serialText.Length > 0) ? serialText : (screenResult is null ? "" : $"(on screen) {screenResult}")));
         var text = ((fullText.Length > 90) ? (fullText[..90] + "…") : fullText);
         var diagnostic = (finished
             ? (((resultCode > 0) ? $"#{resultCode} " : "") + text)
@@ -96,6 +122,59 @@ internal static class BlarggRunner {
         output.WriteLine(value: $"  {status}  {Path.GetFileName(path: romPath)}: {diagnostic}");
 
         return passed;
+    }
+
+    // Reconstructs the on-screen text from the background tile maps (Blargg's font stores each glyph at the tile index
+    // equal to its ASCII code, so a tile byte IS its character) and reports the test's "Passed"/"Failed" verdict.
+    private static string? ReadScreenResult(GameBoyMachine machine) {
+        var vram = machine.Bus.VideoRam;
+
+        // Either background map may be in use; scan both (each is 32x32 tile indices at VRAM offset 0x1800 / 0x1C00).
+        for (var map = 0x1800; map <= 0x1C00; map += 0x400) {
+            if ((map + (32 * 32)) > vram.Length) {
+                continue;
+            }
+
+            for (var row = 0; row < 32; row += 1) {
+                var line = new StringBuilder(capacity: 32);
+
+                for (var col = 0; col < 32; col += 1) {
+                    var tile = vram[map + (row * 32) + col];
+
+                    _ = line.Append(value: (((tile >= 0x20) && (tile < 0x7F)) ? (char)tile : ' '));
+                }
+
+                var text = line.ToString();
+
+                if (text.Contains(value: "Passed", comparisonType: StringComparison.Ordinal)) {
+                    return "Passed";
+                }
+
+                if (text.Contains(value: "Failed", comparisonType: StringComparison.Ordinal)) {
+                    return "Failed";
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static void DumpScreenTiles(GameBoyMachine machine, TextWriter output) {
+        var vram = machine.Bus.VideoRam;
+
+        for (var map = 0x1800; map <= 0x1C00; map += 0x400) {
+            output.WriteLine(value: $"  -- tile map 0x{(0x8000 + map):X4} (raw tile indices, first 6 rows x 20 cols) --");
+
+            for (var row = 0; row < 6; row += 1) {
+                var line = new StringBuilder();
+
+                for (var col = 0; col < 20; col += 1) {
+                    _ = line.Append(value: $"{vram[map + (row * 32) + col]:X2} ");
+                }
+
+                output.WriteLine(value: $"  {line}");
+            }
+        }
     }
 
     // The cartridge-RAM result is present once the signature is written and the code has left its 0x80 "running" state.

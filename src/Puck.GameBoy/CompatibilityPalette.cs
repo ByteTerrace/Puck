@@ -48,6 +48,12 @@ public static class CompatibilityPalette {
         32, 8, 0, 0, 16,
     ];
 
+    // The palette combination chosen for each boot-time key combination (1-based: Right, Left, Up, Down, then the same
+    // four with +A, then +B, then +A+B). Holding a direction at boot overrides the title-hash default.
+    private static readonly byte[] s_keyCombinationCombos = [
+        1, 48, 5, 8, 0, 40, 43, 3, 6, 7, 28, 49, 51, 52, 53, 54,
+    ];
+
     // 32 palettes of four BGR555 colors each (128 colors), addressed by byte offset above (color index = offset / 2).
     private static readonly ushort[] s_palettes = [
         0x7FFF, 0x32BF, 0x00D0, 0x0000, 0x639F, 0x4279, 0x15B0, 0x04CB, 0x7FFF, 0x6E31, 0x454A, 0x0000, 0x7FFF, 0x1BEF, 0x0200, 0x0000,
@@ -62,9 +68,14 @@ public static class CompatibilityPalette {
 
     /// <summary>Resolves the boot ROM's assigned palettes for a cartridge, each as four BGR555 colors.</summary>
     /// <param name="rom">The cartridge ROM image (at least <c>0x150</c> bytes; the header is read for the title).</param>
+    /// <param name="input">A button combination held at boot, which overrides the title-hash palette; the default holds nothing.</param>
     /// <returns>The background, object-0, and object-1 palettes the CGB would assign to this DMG game.</returns>
-    public static (ushort[] Background, ushort[] Object0, ushort[] Object1) Resolve(ReadOnlySpan<byte> rom) {
-        var combination = (CombinationIndex(rom: rom) * 3);
+    public static (ushort[] Background, ushort[] Object0, ushort[] Object1) Resolve(ReadOnlySpan<byte> rom, BootPaletteSelection input = default) {
+        // A held direction picks one of the boot ROM's key-combination palettes; otherwise the title is hashed.
+        var keyIndex = input.KeyCombinationIndex;
+        var combination = (((keyIndex > 0)
+            ? s_keyCombinationCombos[keyIndex - 1]
+            : CombinationIndex(rom: rom)) * 3);
 
         return (
             Background: ReadPalette(byteOffset: s_paletteCombinations[combination + 2]),

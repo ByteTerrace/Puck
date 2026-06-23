@@ -9,7 +9,7 @@ namespace Puck.GameBoy.Conformance;
 /// pipeline to produce a recognizable image is a far stronger correctness signal than any single synthetic test.
 /// </summary>
 internal static class GameRunner {
-    public static int Run(string romPath, int frames, string outputPath, TextWriter output, bool colorizeDmg = false) {
+    public static int Run(string romPath, int frames, string outputPath, TextWriter output, bool colorizeDmg = false, BootPaletteSelection bootPalette = default) {
         if (!File.Exists(path: romPath)) {
             output.WriteLine(value: $"run: ROM not found: {romPath}");
 
@@ -19,14 +19,15 @@ internal static class GameRunner {
         var rom = File.ReadAllBytes(path: romPath);
         // The cartridge header's CGB flag (byte 0x143, bit 7) selects the console, so a Color cartridge boots in CGB
         // mode and renders in color. A DMG cartridge boots on the DMG unless colorizeDmg requests the CGB console, which
-        // then applies the boot ROM's compatibility colorization.
+        // then applies the boot ROM's compatibility colorization (optionally overridden by a held button combination).
         var isColorCartridge = ((rom.Length > 0x143) && ((rom[0x143] & 0x80) != 0));
         var model = ((isColorCartridge || colorizeDmg)
             ? ConsoleModel.Cgb
             : ConsoleModel.Dmg);
         var machine = new GameBoyMachine(
             cartridge: Cartridge.Load(rom: rom),
-            model: model
+            model: model,
+            bootPalette: bootPalette
         );
 
         // Step the CPU until the PPU has completed the requested number of frames, with a generous cycle ceiling

@@ -1,3 +1,4 @@
+using Puck.GameBoy;
 using Puck.GameBoy.Conformance;
 
 // Headless Game Boy conformance runner. Exit codes: 0 = all gates passed, 1 = a gate failed, 2 = infra error.
@@ -35,13 +36,17 @@ try {
 
         // --run <romPath> <frames> <outputPng>: boot a game and dump a framebuffer PNG.
         if ((args[index] == "--run") && (index + 3 < args.Length)) {
+            // An optional trailing "cgb" boots a DMG cartridge on a CGB console for compatibility colorization, and a
+            // further direction/A/B (e.g. "cgb up b") holds that button combination at boot to pick an alternate palette.
+            var colorizeDmg = ((index + 4 < args.Length) && (args[index + 4] == "cgb"));
+
             return GameRunner.Run(
                 frames: int.Parse(s: args[index + 2]),
                 output: Console.Out,
                 outputPath: args[index + 3],
                 romPath: args[index + 1],
-                // An optional trailing "cgb" boots a DMG cartridge on a CGB console for compatibility colorization.
-                colorizeDmg: ((index + 4 < args.Length) && (args[index + 4] == "cgb"))
+                colorizeDmg: colorizeDmg,
+                bootPalette: (colorizeDmg ? ParseBootPalette(args: args, start: (index + 5)) : default)
             );
         }
     }
@@ -126,4 +131,44 @@ static string? ResolveAssetRoot(string[] arguments) {
     return (string.IsNullOrWhiteSpace(fromEnvironment)
         ? null
         : fromEnvironment);
+}
+
+// Parses a held boot-button combination from the remaining --run arguments, e.g. "up b" or "right a".
+static BootPaletteSelection ParseBootPalette(string[] args, int start) {
+    var direction = BootPaletteDirection.None;
+    var holdA = false;
+    var holdB = false;
+
+    for (var index = start; index < args.Length; index += 1) {
+        switch (args[index].ToLowerInvariant()) {
+            case "right":
+                direction = BootPaletteDirection.Right;
+
+                break;
+            case "left":
+                direction = BootPaletteDirection.Left;
+
+                break;
+            case "up":
+                direction = BootPaletteDirection.Up;
+
+                break;
+            case "down":
+                direction = BootPaletteDirection.Down;
+
+                break;
+            case "a":
+                holdA = true;
+
+                break;
+            case "b":
+                holdB = true;
+
+                break;
+            default:
+                break;
+        }
+    }
+
+    return new BootPaletteSelection(Direction: direction, A: holdA, B: holdB);
 }
