@@ -146,6 +146,84 @@ internal static class RomRunner {
     /// (step, PC, cumulative cycles, delta) for each instruction, plus the final value the micro-ROM stored to
     /// EWRAM (0x02000000) — the same number the AGS wait-state/prescaler tests compare against hardware.
     /// </summary>
+    /// <summary>Prints the executing instruction address for each game-ROM (0x08…) instruction, matching the
+    /// mGBA cosim's --pctrace format, so the two streams can be diffed to find the first execution divergence.</summary>
+    public static void PcTrace(string romPath, long steps) {
+        if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
+            return;
+        }
+
+        using (provider) {
+            var cpu = machine.Cpu;
+            var bus = (GbaBus)machine.Bus;
+            var output = Console.Out;
+
+            // Boot through the BIOS reset routine (undo TryLoad's direct boot) so the trace aligns with mGBA's
+            // full-BIOS boot, letting the first true execution divergence be found.
+            cpu.Reset();
+
+            for (long i = 0; i < steps; ++i) {
+                var thumb = (cpu.Cpsr & 0x20u) != 0u;
+
+                output.WriteLine($"{cpu.GetRegister(index: 15):X8} {(thumb ? 'T' : 'A')} {bus.Cycles}");
+
+                machine.Step();
+            }
+        }
+    }
+
+    /// <summary>Runs a ROM and dumps key machine state, to diagnose a game that boots to a blank screen.</summary>
+    public static void Probe(string romPath, long steps) {
+        if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
+            return;
+        }
+
+        using (provider) {
+            var cart = provider.CreateScope().ServiceProvider.GetRequiredService<GbaCartridge>();
+
+            Console.WriteLine($"  backup={cart.Backup}  hasRtc={cart.HasRtc}");
+
+            for (long i = 0; i < steps; ++i) {
+                machine.Step();
+            }
+
+            var bus = machine.Bus;
+            uint Reg(uint a) => bus.Read16(address: a, access: BusAccessType.NonSequential);
+
+            for (var r = 0; r < 16; r += 4) {
+                Console.WriteLine($"  r{r,-2}=0x{machine.Cpu.GetRegister(r):X8}  r{r + 1,-2}=0x{machine.Cpu.GetRegister(r + 1):X8}  r{r + 2,-2}=0x{machine.Cpu.GetRegister(r + 2):X8}  r{r + 3,-2}=0x{machine.Cpu.GetRegister(r + 3):X8}");
+            }
+
+            Console.WriteLine($"  PC=0x{machine.Cpu.GetRegister(15):X8}  CPSR=0x{machine.Cpu.Cpsr:X8}");
+            Console.WriteLine($"  DISPCNT=0x{Reg(0x04000000u):X4}  DISPSTAT=0x{Reg(0x04000004u):X4}  VCOUNT=0x{Reg(0x04000006u):X4}");
+            Console.WriteLine($"  IE=0x{Reg(0x04000200u):X4}  IF=0x{Reg(0x04000202u):X4}  IME=0x{Reg(0x04000208u):X4}  WAITCNT=0x{Reg(0x04000204u):X4}");
+
+            var vramNonZero = 0;
+            var palNonZero = 0;
+
+            for (var a = 0x06000000u; a < 0x06018000u; a += 2u) {
+                if (Reg(a) != 0u) {
+                    ++vramNonZero;
+                }
+            }
+
+            for (var a = 0x05000000u; a < 0x05000400u; a += 2u) {
+                if (Reg(a) != 0u) {
+                    ++palNonZero;
+                }
+            }
+
+            var fb = machine.Framebuffer;
+            var distinct = new HashSet<uint>();
+
+            for (var i = 0; (i < fb.Length) && (distinct.Count < 16); ++i) {
+                distinct.Add(fb[i]);
+            }
+
+            Console.WriteLine($"  VRAM non-zero halfwords={vramNonZero}  palette non-zero={palNonZero}  framebuffer distinct colors≈{distinct.Count}");
+        }
+    }
+
     public static void TraceCycles(string romPath, long steps) {
         if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
             return;

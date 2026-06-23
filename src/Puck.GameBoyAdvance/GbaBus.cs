@@ -236,8 +236,23 @@ public sealed class GbaBus : IGbaBus {
                 m_cartridge.WriteSave(address: address & 0xFFFFu, value: (byte)(value >> (int)((address & (uint)(width - 1)) * 8u)));
 
                 break;
+            case 0x8:
+            case 0x9:
+            case 0xA:
+            case 0xB:
+            case 0xC:
+            case 0xD: {
+                // ROM is read-only, except the GPIO/RTC registers overlaid at 0x0C4–0x0C8.
+                var offset = address & 0x01FFFFFFu;
+
+                if (m_cartridge.HasRtc && (offset >= 0xC4u) && (offset <= 0xC8u)) {
+                    m_cartridge.WriteGpio(register: offset & ~1u, value: (ushort)value);
+                }
+
+                break;
+            }
             default:
-                // BIOS and ROM are read-only; writes elsewhere are dropped.
+                // BIOS writes are dropped.
                 break;
         }
     }
@@ -412,8 +427,13 @@ public sealed class GbaBus : IGbaBus {
         Tick(cycles: cycles);
     }
 
-    // Cycle cost of an instruction fetch. Outside ROM (or with prefetch disabled) this is the plain wait-state;
-    // inside ROM with prefetch on, sequential fetches are served from the buffer.
+    // Cycle cost of an instruction fetch. Outside ROM (or with prefetch disabled) this is the plain wait-state.
+    // Inside ROM with prefetch on, the game-pak buffer only helps when it has genuinely run ahead of the CPU —
+    // which it can only do during cycles the CPU isn't itself fetching from ROM (internal cycles, non-ROM data
+    // accesses). A fetch whose opcode is already buffered costs one cycle per halfword; a fetch the buffer hasn't
+    // reached — a branch target, or any fetch in a tight ROM loop that never lets the buffer get ahead — stalls
+    // for the full wait-state access. This matches mGBA and is why a tight ROM-resident loop sees no prefetch
+    // speed-up at all.
     private int CodeFetchCycles(uint address, int width, BusAccessType access) {
         var region = address >> 24;
 
@@ -423,47 +443,55 @@ public sealed class GbaBus : IGbaBus {
             return AccessCycles(address: address, width: width, access: access);
         }
 
-        return (width == 4)
-            ? ConsumeHalf(address: address, access: access) + ConsumeHalf(address: address + 2u, access: BusAccessType.Sequential)
-            : ConsumeHalf(address: address, access: access);
-    }
+        var halfwords = width >> 1;
 
-    // Serves one opcode halfword from the prefetch buffer, returning its cycle cost and advancing the buffer head.
-    private int ConsumeHalf(uint address, BusAccessType access) {
+        // A branch — an opcode that doesn't continue where the buffer was heading — restarts the buffer at the new
+        // address and pays the full non-sequential wait-state. (A data access to non-ROM marks the next fetch
+        // non-sequential, but the buffer keeps running, so a *contiguous* fetch after it is still served from it —
+        // the restart is driven by address discontinuity, not the N/S type.)
         if (!m_prefetchActive || (address != m_prefetchHead)) {
-            // A branch (or the first fetch into ROM) restarts the stream: pay the full non-sequential access, then
-            // begin prefetching the following halfwords. Restart is driven by address discontinuity, not the N/S
-            // type — a data access to non-ROM sets the next fetch non-sequential but the prefetch unit keeps
-            // running, so a contiguous opcode fetch after it is still served from the buffer.
-            m_prefetchActive = true;
-            m_prefetchSeq = RomSeqCycles(region: address >> 24);
-            m_prefetchCount = 0;
-            m_prefetchCountdown = 0;
-            m_prefetchHead = address + 2u;
+            RestartPrefetch(address: address, width: width, region: region);
 
-            return RomNonSeqCycles(region: address >> 24);
+            return AccessCycles(address: address, width: width, access: BusAccessType.NonSequential);
         }
 
-        int cost;
+        // A cold buffer that has not begun loading the next opcode (a tight ROM loop, which never frees the bus for
+        // the buffer to run ahead) stalls for the full sequential access — no prefetch speed-up at all.
+        if ((m_prefetchCount == 0) && (m_prefetchCountdown == 0)) {
+            m_prefetchHead = address + (uint)width;
 
-        if (m_prefetchCount > 0) {
-            // Already buffered ahead of the CPU: a single cycle to hand it over.
-            --m_prefetchCount;
-            cost = 1;
-        }
-        else if (m_prefetchCountdown > 0) {
-            // The buffer is mid-load of exactly this halfword; the CPU waits out the remainder.
-            cost = m_prefetchCountdown;
-            m_prefetchCountdown = 0;
-        }
-        else {
-            // The buffer had no head start, so this fetch pays a full sequential access.
-            cost = m_prefetchSeq;
+            return AccessCycles(address: address, width: width, access: BusAccessType.Sequential);
         }
 
-        m_prefetchHead = address + 2u;
+        // The buffer has run ahead (sequential code interleaved with non-ROM accesses): serve each halfword it
+        // already holds for one cycle, and stall for the remainder of any in-flight load.
+        var cost = 0;
+
+        for (var i = 0; i < halfwords; ++i) {
+            if (m_prefetchCount > 0) {
+                --m_prefetchCount;
+                ++cost;
+            }
+            else if (m_prefetchCountdown > 0) {
+                cost += m_prefetchCountdown;
+                m_prefetchCountdown = 0;
+            }
+            else {
+                cost += m_prefetchSeq;
+            }
+        }
+
+        m_prefetchHead = address + (uint)width;
 
         return cost;
+    }
+
+    private void RestartPrefetch(uint address, int width, uint region) {
+        m_prefetchActive = true;
+        m_prefetchSeq = RomSeqCycles(region: region);
+        m_prefetchCount = 0;
+        m_prefetchCountdown = 0;
+        m_prefetchHead = address + (uint)width;
     }
 
     // Advances the prefetch buffer by the given free cycles, loading sequential halfwords up to its capacity.

@@ -47,6 +47,24 @@ for (var index = 0; index < args.Length - 2; ++index) {
     }
 }
 
+// --pctrace <rom> <steps>: print executing 0x08… instruction addresses, to diff against the mGBA cosim.
+for (var index = 0; index < args.Length - 2; ++index) {
+    if (args[index] == "--pctrace") {
+        RomRunner.PcTrace(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
+
+        return 0;
+    }
+}
+
+// --probe <rom> <steps>: dump machine state after running, to diagnose a blank-screen boot.
+for (var index = 0; index < args.Length - 2; ++index) {
+    if (args[index] == "--probe") {
+        RomRunner.Probe(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
+
+        return 0;
+    }
+}
+
 // --trace-cycles <rom> <steps>: per-instruction cycle trace, to diff against the mGBA cosim oracle.
 for (var index = 0; index < args.Length - 2; ++index) {
     if (args[index] == "--trace-cycles") {
@@ -117,7 +135,7 @@ else {
     }
 
     if (!string.IsNullOrEmpty(gamesRoot) && Directory.Exists(gamesRoot)) {
-        failures += RomRunner.RunRenderHash(romPath: Path.Combine(gamesRoot, "A.gba"), name: "A (Golden Sun)", steps: 120_000_000, expected: 0xC609396427AEF109ul);
+        failures += RomRunner.RunRenderHash(romPath: Path.Combine(gamesRoot, "A.gba"), name: "A (Golden Sun)", steps: 120_000_000, expected: 0x83AF051D6A622EA2ul);
         failures += RomRunner.RunRenderHash(romPath: Path.Combine(gamesRoot, "AGS Aging Cartridge (World) (v7.1).gba"), name: "AGS menu", steps: 6_000_000, expected: 0x37893C186522CBD2ul);
     }
 }
