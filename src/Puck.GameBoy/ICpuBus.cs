@@ -23,6 +23,13 @@ public interface ICpuBus {
     /// <summary>Advances the machine by one machine cycle of internal CPU work with no bus access.</summary>
     void InternalCycle();
 
+    /// <summary>Signals that the CPU drove an address onto the bus that, if it lands in the OAM region while the PPU
+    /// is scanning OAM, triggers the DMG OAM corruption bug. Called both for actual OAM accesses and for the 16-bit
+    /// increment/decrement unit (which drives its result onto the address bus even without a memory access).</summary>
+    /// <param name="address">The address driven onto the bus (the register value, before the increment/decrement).</param>
+    /// <param name="isWrite">Whether the access is a write (or an IDU operation, which behaves as a write); a read otherwise.</param>
+    void TriggerOamBug(ushort address, bool isWrite);
+
     /// <summary>Discharges any machine cycle deferred by the last access, advancing the rest of the machine to the
     /// current point. The CPU calls this before sampling interrupts so the decision sees up-to-date peripheral
     /// state (the deferred-cycle model: an access reads/writes at the start of its machine cycle and the cycle is

@@ -142,6 +142,13 @@ public sealed class SystemBus : ICpuBus {
     public byte ReadCycle(ushort address) {
         FlushPendingCycles();
 
+        if ((address >= MemoryMap.OamBase) && (address <= MemoryMap.UnusableEnd)) {
+            TriggerOamBug(
+                address: address,
+                isWrite: false
+            );
+        }
+
         var value = ReadByte(address: address);
 
         m_pendingMachineCycles = 1;
@@ -153,12 +160,36 @@ public sealed class SystemBus : ICpuBus {
     /// <param name="value">The value to store.</param>
     public void WriteCycle(ushort address, byte value) {
         FlushPendingCycles();
+
+        if ((address >= MemoryMap.OamBase) && (address <= MemoryMap.UnusableEnd)) {
+            TriggerOamBug(
+                address: address,
+                isWrite: true
+            );
+        }
+
         WriteByte(
             address: address,
             value: value
         );
 
         m_pendingMachineCycles = 1;
+    }
+
+    /// <inheritdoc />
+    public void TriggerOamBug(ushort address, bool isWrite) {
+        // The bug is DMG-only and confined to the OAM region; it only bites while the PPU is scanning OAM (mode 2),
+        // which the PPU itself checks.
+        if ((m_model == ConsoleModel.Cgb) || (address < MemoryMap.OamBase) || (address > MemoryMap.UnusableEnd)) {
+            return;
+        }
+
+        if (isWrite) {
+            m_ppu.OamBugWrite();
+        }
+        else {
+            m_ppu.OamBugRead();
+        }
     }
     /// <summary>Advances the machine by one machine cycle of internal CPU work that performs no bus access, deferred
     /// the same way as an access.</summary>

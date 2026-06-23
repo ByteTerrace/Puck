@@ -255,12 +255,16 @@ public sealed partial class Sm83 {
     }
 
     private void Push16(ushort value) {
+        // Each stack-pointer decrement drives the pre-decrement value onto the address bus through the IDU, which
+        // triggers the OAM corruption bug when the stack points into OAM.
+        m_bus.TriggerOamBug(address: m_stackPointer, isWrite: true);
         m_stackPointer -= 1;
         m_bus.WriteCycle(
             address: m_stackPointer,
             value: (byte)(value >> 8)
         );
 
+        m_bus.TriggerOamBug(address: m_stackPointer, isWrite: true);
         m_stackPointer -= 1;
         m_bus.WriteCycle(
             address: m_stackPointer,
@@ -270,10 +274,13 @@ public sealed partial class Sm83 {
     private ushort Pop16() {
         var low = m_bus.ReadCycle(address: m_stackPointer);
 
+        // The post-increment likewise drives the pre-increment value onto the address bus.
+        m_bus.TriggerOamBug(address: m_stackPointer, isWrite: true);
         m_stackPointer += 1;
 
         var high = m_bus.ReadCycle(address: m_stackPointer);
 
+        m_bus.TriggerOamBug(address: m_stackPointer, isWrite: true);
         m_stackPointer += 1;
 
         return (ushort)((high << 8) | low);

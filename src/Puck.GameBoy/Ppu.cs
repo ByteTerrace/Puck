@@ -8,7 +8,7 @@ namespace Puck.GameBoy;
 /// pipeline (background, window, sprites) fills the framebuffer in a later stage, so <see cref="Framebuffer"/>
 /// is allocated and latched on each vertical blank but not yet painted.
 /// </summary>
-public sealed class Ppu : IClockedComponent {
+public sealed partial class Ppu : IClockedComponent {
     /// <summary>The visible screen width in pixels.</summary>
     public const int ScreenWidth = 160;
     /// <summary>The visible screen height in pixels.</summary>

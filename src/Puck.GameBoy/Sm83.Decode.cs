@@ -78,11 +78,18 @@ public sealed partial class Sm83 {
             case 3: {
                 // INC rr (q=0) or DEC rr (q=1).
                 var pair = (y >> 1);
+                var value = ReadRegisterPair(pair: pair);
 
                 m_bus.InternalCycle();
+                // The 16-bit increment/decrement unit drives the pre-operation value onto the address bus, so an
+                // operation on a register pointing into OAM triggers the OAM corruption bug.
+                m_bus.TriggerOamBug(
+                    address: value,
+                    isWrite: true
+                );
                 WriteRegisterPair(
                     pair: pair,
-                    value: (ushort)(ReadRegisterPair(pair: pair) + (((y & 1) == 0) ? 1 : -1))
+                    value: (ushort)(value + (((y & 1) == 0) ? 1 : -1))
                 );
 
                 break;
@@ -167,11 +174,21 @@ public sealed partial class Sm83 {
             m_a = m_bus.ReadCycle(address: address);
         }
 
-        // p=2/3 are the post-increment/decrement HL forms; the pointer modify happens after the access.
+        // p=2/3 are the post-increment/decrement HL forms; the pointer modify happens after the access. The IDU
+        // drives HL onto the address bus as it modifies it, so OAM corruption triggers a second time (after the one
+        // the memory access above already triggered) when HL points into OAM.
         if (p == 2) {
+            m_bus.TriggerOamBug(
+                address: HL,
+                isWrite: true
+            );
             HL += 1;
         }
         else if (p == 3) {
+            m_bus.TriggerOamBug(
+                address: HL,
+                isWrite: true
+            );
             HL -= 1;
         }
     }
