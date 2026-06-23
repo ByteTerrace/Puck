@@ -8,6 +8,9 @@ namespace Puck.GameBoy;
 internal sealed class WaveChannel {
     private const int WaveRamSize = 16;
     private const int SampleCount = 32;
+    // The frequency-timer value at which a retrigger corrupts wave RAM (the DMG bug), i.e. one sample step away from
+    // a fetch. Maps SameBoy's sample_countdown == 0 onto this per-T-cycle timer.
+    private const int WaveCorruptionTimer = 2;
 
     private readonly byte[] m_waveRam = new byte[WaveRamSize];
 
@@ -165,6 +168,24 @@ internal sealed class WaveChannel {
     /// <summary>Restarts the channel: re-enables it (if its DAC is on), reloads the length, and resets playback.</summary>
     /// <param name="nextStepClocksLength">Whether the frame sequencer's next step will clock length, for the extra-clock-on-trigger behavior.</param>
     public void Trigger(bool nextStepClocksLength) {
+        // DMG wave-RAM corruption: retriggering the channel while it is active and exactly one sample step away from
+        // fetching (SameBoy's sample_countdown == 0, which maps to a frequency timer of 2 T-cycles under this
+        // per-T-cycle model) scrambles the low bytes of wave RAM with the byte the fetcher was about to read.
+        if (m_enabled && (m_frequencyTimer == WaveCorruptionTimer)) {
+            var nextByte = (((m_samplePosition + 1) >> 1) & 0x0F);
+
+            if (nextByte < 4) {
+                m_waveRam[0] = m_waveRam[nextByte];
+            }
+            else {
+                var source = (nextByte & ~0x03);
+
+                for (var i = 0; i < 4; i += 1) {
+                    m_waveRam[i] = m_waveRam[source + i];
+                }
+            }
+        }
+
         m_enabled = true;
 
         if (m_lengthCounter == 0) {
@@ -175,7 +196,10 @@ internal sealed class WaveChannel {
             }
         }
 
-        m_frequencyTimer = ((2048 - Frequency) * 2);
+        // The first sample fetch after a trigger is delayed an extra three frequency-timer periods (six T-cycles)
+        // beyond a normal sample step — the DMG wave-trigger delay SameBoy models as sample_countdown + 3. This
+        // phase is what the wave-RAM-access-while-on tests (dmg_sound 09/10/12) pin.
+        m_frequencyTimer = (((2048 - Frequency) * 2) + 6);
         m_samplePosition = 0;
 
         if (!DacEnabled) {
