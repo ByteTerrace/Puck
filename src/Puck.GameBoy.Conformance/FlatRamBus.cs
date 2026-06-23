@@ -35,6 +35,9 @@ internal sealed class FlatRamBus : ICpuBus {
     }
     public void InternalCycle() =>
         MachineCycles += 1;
+    public void FlushPendingCycles() {
+        // The flat test bus counts each access immediately and ticks no peripherals, so there is nothing to defer.
+    }
     public bool ApplyPreparedSpeedSwitch() =>
         false;
 }

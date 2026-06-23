@@ -18,6 +18,19 @@ public sealed class Ppu : IClockedComponent {
     private const int OamScanDots = 80;
     private const int DrawingDots = 172;
     private const int LastLine = 153;
+    // T-cycles the LY=LYC comparison stays invalid after LY increments (the polled coincidence bit reads 0 in this
+    // window, then tracks the new line) — tuned against lcdon_timing-GS.
+    private const int LyComparisonDelayDots = 4;
+    // T-cycles the polled STAT mode bits lag the actual mode transition. Small under this bus's deferred-cycle read
+    // model: a CPU I/O read latches at the START of its access machine cycle (the access's four T-cycles are charged
+    // afterward), so the read already observes the PPU a machine cycle "ahead" — the mode bits need only a single
+    // dot of lag on top to land on the right machine cycle. (Pinned by the lcdon timing tests and the sub-cycle
+    // sprite measurement intr_2_mode0_timing_sprites.)
+    private const int StatBitReportDelay = 1;
+    // T-cycles the mode-driven STAT *interrupt* lags the actual transition, on its own clock independent of the
+    // polled STAT bits (SameBoy's mode_for_interrupt vs the STAT register). One machine cycle keeps the
+    // interrupt-to-interrupt deltas the intr_2_* tests sync on exact.
+    private const int InterruptReportDelay = 4;
 
     private const byte StatHBlankInterrupt = 0x08;
     private const byte StatVBlankInterrupt = 0x10;
@@ -47,14 +60,37 @@ public sealed class Ppu : IClockedComponent {
     private bool m_coincidence;
     private bool m_enabled;
     private bool m_frameReady;
+    // The OAM/VRAM CPU-access locks, split by direction because reads block a machine cycle before writes do.
+    // The READ locks lead the polled STAT mode bits: they engage at the *actual* mode transition (OAM at the
+    // mode-2 onset, VRAM at the mode-3 onset), one machine cycle before the STAT bits report the new mode. The
+    // WRITE locks engage a machine cycle later, as the reported mode settles. All release together when the
+    // reported mode settles back to horizontal blank. The OAM write lock additionally opens for a single cycle at
+    // the mode-2/3 boundary. (SameBoy's separate oam/vram read/write flags — pinned by lcdon_timing-GS and
+    // lcdon_write_timing-GS.)
+    private bool m_oamReadBlocked;
+    private bool m_oamWriteBlocked;
+    private bool m_vramReadBlocked;
+    private bool m_vramWriteBlocked;
+    // The first line after the LCD is enabled skips OAM scan (mode 0 straight to mode 3), so it has no mode-2
+    // onset to lead from: its access locks engage *with* the reported mode-3 bits rather than a machine cycle ahead.
+    private bool m_firstLineAfterEnable;
     private bool m_statInterruptLine;
     private int m_dot;
     private int m_line;
+    // The LY value the LY=LYC comparison actually uses (SameBoy's ly_for_comparison). It goes briefly invalid (-1)
+    // right after LY increments, so the coincidence reads "not equal" for a machine cycle before tracking the new
+    // line — both for the polled STAT bit and for the STAT interrupt.
+    private int m_lyForComparison = -1;
+    private int m_lyForComparisonDelay;
     private int m_mode0StartDot = (OamScanDots + DrawingDots);
     private int m_reportedModeDelay;
+    private int m_interruptModeDelay;
     private int m_windowLineCounter;
     private PpuMode m_mode = PpuMode.HorizontalBlank;
     private PpuMode m_reportedMode = PpuMode.HorizontalBlank;
+    // The mode that drives the STAT interrupt, settled independently of the polled STAT bits (m_reportedMode) so
+    // the mode-2 interrupt and the mode-0 transition have the right sub-cycle vernier.
+    private PpuMode m_interruptMode = PpuMode.HorizontalBlank;
     private byte m_backgroundPalette;
     private byte m_lcdControl;
     private byte m_lineCompare;
@@ -80,14 +116,24 @@ public sealed class Ppu : IClockedComponent {
     /// mid-draw. (Empty — all zero — until the first frame completes.)</summary>
     public ReadOnlySpan<uint> Framebuffer =>
         m_presentBuffer;
-    /// <summary>Gets whether VRAM is currently accessible to the CPU — true unless the PPU is drawing. Follows the
-    /// reported (machine-cycle-lagged) mode, so the lock tracks what a CPU read observes.</summary>
+    /// <summary>Gets whether VRAM is readable by the CPU — true unless the PPU is drawing. The read lock engages at
+    /// the actual mode-3 onset (a machine cycle ahead of the STAT mode-3 bits) and releases when the reported mode
+    /// settles back to horizontal blank.</summary>
     public bool IsVideoRamAccessible =>
-        (!m_enabled || (m_reportedMode != PpuMode.Drawing));
-    /// <summary>Gets whether OAM is currently accessible to the CPU — true outside the OAM-scan and drawing modes,
-    /// tracking the reported (lagged) mode.</summary>
+        (!m_enabled || !m_vramReadBlocked);
+    /// <summary>Gets whether VRAM is writable by the CPU. The write lock engages a machine cycle after the read
+    /// lock (as the reported mode settles to drawing) and releases with it.</summary>
+    public bool IsVideoRamWritable =>
+        (!m_enabled || !m_vramWriteBlocked);
+    /// <summary>Gets whether OAM is readable by the CPU — true outside OAM scan and drawing. The read lock engages
+    /// at the actual mode-2 (or, on the first line after LCD-on, mode-3) onset, a machine cycle ahead of the STAT
+    /// bits, and releases when the reported mode settles back to horizontal blank.</summary>
     public bool IsObjectMemoryAccessible =>
-        (!m_enabled || (m_reportedMode is PpuMode.HorizontalBlank or PpuMode.VerticalBlank));
+        (!m_enabled || !m_oamReadBlocked);
+    /// <summary>Gets whether OAM is writable by the CPU. The write lock engages a machine cycle after the read lock
+    /// (as the reported mode settles), and briefly opens for one cycle at the mode-2/3 boundary.</summary>
+    public bool IsObjectMemoryWritable =>
+        (!m_enabled || !m_oamWriteBlocked);
 
     /// <summary>Initializes the PPU wired to the interrupt controller and the video RAM it fetches tiles and maps
     /// from. The PPU reads video RAM directly (it is the component that locks it from the CPU), so the access is
@@ -219,6 +265,63 @@ public sealed class Ppu : IClockedComponent {
 
             if (m_reportedModeDelay == 0) {
                 m_reportedMode = m_mode;
+
+                switch (m_reportedMode) {
+                    case PpuMode.HorizontalBlank:
+                        // Every lock releases as the reported mode settles to horizontal blank — a machine cycle
+                        // after the actual mode-0 transition, matching when the STAT bits report it.
+                        m_oamReadBlocked = false;
+                        m_oamWriteBlocked = false;
+                        m_vramReadBlocked = false;
+                        m_vramWriteBlocked = false;
+
+                        break;
+                    case PpuMode.OamScan:
+                        // The OAM write lock trails the read lock by a machine cycle, engaging as mode 2 reports.
+                        m_oamWriteBlocked = true;
+
+                        break;
+                    case PpuMode.Drawing:
+                        // The write locks engage as mode 3 reports (a machine cycle behind the read locks).
+                        m_oamWriteBlocked = true;
+                        m_vramWriteBlocked = true;
+
+                        // The first line after LCD-on has no mode-2 onset to lead from, so its read locks engage
+                        // here, with the reported mode-3 bits, rather than at the actual transition.
+                        if (m_firstLineAfterEnable) {
+                            m_oamReadBlocked = true;
+                            m_vramReadBlocked = true;
+                        }
+
+                        break;
+                    default:
+                        break;
+                }
+
+                // Re-evaluate the STAT line as the polled bits settle (the coincidence bit and the access edges may
+                // shift it).
+                UpdateStatInterrupt();
+            }
+        }
+
+        // The mode-driven STAT interrupt settles on its own clock, independent of the polled STAT bits.
+        if (m_interruptModeDelay > 0) {
+            m_interruptModeDelay -= 1;
+
+            if (m_interruptModeDelay == 0) {
+                m_interruptMode = m_mode;
+                UpdateStatInterrupt();
+            }
+        }
+
+        // The LY=LYC comparison value tracks the new line a machine cycle after LY changed; recompute the latched
+        // coincidence (and STAT line) when it settles.
+        if (m_lyForComparisonDelay > 0) {
+            m_lyForComparisonDelay -= 1;
+
+            if (m_lyForComparisonDelay == 0) {
+                m_lyForComparison = m_line;
+                UpdateStatInterrupt();
             }
         }
 
@@ -230,9 +333,10 @@ public sealed class Ppu : IClockedComponent {
         }
         else if (m_line < ScreenHeight) {
             if (m_dot == OamScanDots) {
-                // SCX is latched at the mode 2->3 transition; its low three bits lengthen mode 3 (and so push the
-                // mode-0 start later), which HBlank absorbs to keep the line 456 dots.
-                m_mode0StartDot = (OamScanDots + DrawingDots + ScxPenalty(scrollX: (m_scrollX & 7)));
+                // Mode 3 length is latched at the mode 2->3 transition: the base 172 dots, plus the SCX fine-scroll
+                // discard, plus the per-object fetch penalty for the sprites on this line. HBlank absorbs it all to
+                // keep the line 456 dots.
+                m_mode0StartDot = (OamScanDots + DrawingDots + ScxPenalty(scrollX: (m_scrollX & 7)) + ObjectPenalty(line: m_line));
                 SetMode(mode: PpuMode.Drawing);
             }
             else if (m_dot == m_mode0StartDot) {
@@ -249,12 +353,96 @@ public sealed class Ppu : IClockedComponent {
             ? 0
             : ((scrollX <= 4) ? 4 : 8));
 
+    // The per-object mode-3 penalty (Pan Docs "OBJ penalty algorithm"). Each object the fetcher stalls for costs a
+    // flat 6 dots; the first object whose leftmost pixel falls in a not-yet-considered background tile adds up to 5
+    // more depending on where in the tile it lands (so overlapping objects in one tile pay the tile cost once). An
+    // object parked at OAM X=0 always costs 11. Only matters while objects are enabled.
+    private int ObjectPenalty(int line) {
+        if ((m_lcdControl & 0x02) == 0) {
+            return 0;
+        }
+
+        var spriteHeight = (((m_lcdControl & 0x04) != 0) ? 16 : 8);
+
+        // Up to 10 objects covering this line, in OAM order.
+        Span<int> selected = stackalloc int[10];
+        var count = 0;
+
+        for (var index = 0; (index < 40) && (count < 10); index += 1) {
+            var objectY = (m_objectAttributeMemory[index * 4] - 16);
+
+            if ((line >= objectY) && (line < (objectY + spriteHeight))) {
+                selected[count] = index;
+                count += 1;
+            }
+        }
+
+        // The fetcher meets objects left to right, so cost them by ascending X (ties keep OAM order).
+        for (var i = 1; i < count; i += 1) {
+            var current = selected[i];
+            var currentX = m_objectAttributeMemory[(current * 4) + 1];
+            var j = (i - 1);
+
+            while ((j >= 0) && (m_objectAttributeMemory[(selected[j] * 4) + 1] > currentX)) {
+                selected[j + 1] = selected[j];
+                j -= 1;
+            }
+
+            selected[j + 1] = current;
+        }
+
+        var scroll = (m_scrollX & 7);
+        var penalty = 0;
+        Span<int> consideredTiles = stackalloc int[10];
+        var consideredCount = 0;
+
+        for (var s = 0; s < count; s += 1) {
+            var objectX = m_objectAttributeMemory[(selected[s] * 4) + 1];
+
+            // Objects off the right edge (X >= 168, i.e. screen X >= 160) are never reached by the fetcher and cost
+            // nothing. Off the left edge (X in 0..7, including the X=0 stall) they still are, so only the right side
+            // is excluded. (intr_2_mode0_timing_sprites pins X=167 as the last X that lengthens mode 3, X=168 as the
+            // first that does not.)
+            if (objectX >= 168) {
+                continue;
+            }
+
+            var pixel = ((objectX - 8) + scroll);
+            var tile = (pixel >> 3);
+            var alreadyConsidered = false;
+
+            for (var t = 0; t < consideredCount; t += 1) {
+                if (consideredTiles[t] == tile) {
+                    alreadyConsidered = true;
+
+                    break;
+                }
+            }
+
+            // The first object whose leftmost pixel lands in a not-yet-considered tile pays the tile-fetch cost:
+            // the pixels of that tile strictly to its right, minus 2. An object at OAM X=0 always pays the full 5
+            // here regardless of SCX. Overlapping objects in the same tile skip this and only pay the flat fetch.
+            if (!alreadyConsidered) {
+                consideredTiles[consideredCount] = tile;
+                consideredCount += 1;
+                penalty += ((objectX == 0) ? 5 : Math.Max(0, (5 - (pixel & 7))));
+            }
+
+            penalty += 6;
+        }
+
+        return penalty;
+    }
+
     private void AdvanceLine() {
         m_line += 1;
 
         if (m_line > LastLine) {
             m_line = 0;
         }
+
+        // Line 0's special post-LCD-on timing applies only to that first line; subsequent lines lead normally.
+        m_firstLineAfterEnable = false;
 
         if (m_line == ScreenHeight) {
             // Entering vertical blank: the frame is complete and the vertical-blank interrupt fires. The finished
@@ -270,14 +458,54 @@ public sealed class Ppu : IClockedComponent {
             SetMode(mode: PpuMode.OamScan);
         }
 
+        // LY just changed: the comparison value goes invalid for a machine cycle, so the coincidence reads "not
+        // equal" until it tracks the new line (the lcdon coincidence quirk).
+        m_lyForComparison = -1;
+        m_lyForComparisonDelay = LyComparisonDelayDots;
+
         // The line number changed even when the mode did not (lines 145-153), so refresh LY=LYC.
         UpdateStatInterrupt();
     }
 
     private void SetMode(PpuMode mode) {
         m_mode = mode;
-        // The interrupt is evaluated now (at the transition); the STAT mode bits update 4 dots later.
-        m_reportedModeDelay = 4;
+
+        // The READ locks engage at the *actual* transition, one machine cycle ahead of the polled STAT bits: OAM at
+        // the mode-2 onset, OAM+VRAM at the mode-3 onset. The first post-LCD-on line skips OAM scan, so it defers
+        // its read locks to the reported settle (handled in TickDot). The WRITE locks trail by a machine cycle and
+        // engage on the reported settle. Vertical blank frees everything.
+        switch (mode) {
+            case PpuMode.OamScan:
+                m_oamReadBlocked = true;
+
+                break;
+            case PpuMode.Drawing:
+                if (!m_firstLineAfterEnable) {
+                    m_oamReadBlocked = true;
+                    m_vramReadBlocked = true;
+                }
+
+                // The mode-2 OAM write lock releases at the actual mode-3 transition and the mode-3 OAM write lock
+                // re-engages a machine cycle later (the reported settle), leaving a one-cycle OAM write window at
+                // the boundary. VRAM is freely writable through mode 2, so only its mode-3 write lock matters.
+                m_oamWriteBlocked = false;
+
+                break;
+            case PpuMode.VerticalBlank:
+                m_oamReadBlocked = false;
+                m_oamWriteBlocked = false;
+                m_vramReadBlocked = false;
+                m_vramWriteBlocked = false;
+
+                break;
+            default:
+                break;
+        }
+
+        // The polled STAT mode bits and the mode-driven STAT interrupt each lag the raw transition, on independent
+        // clocks (see the delay constants).
+        m_reportedModeDelay = StatBitReportDelay;
+        m_interruptModeDelay = InterruptReportDelay;
         UpdateStatInterrupt();
     }
 
@@ -467,14 +695,16 @@ public sealed class Ppu : IClockedComponent {
 
     private void UpdateStatInterrupt() {
         // The coincidence bit is latched here (it is frozen while the LCD is off, since this is not called then),
-        // so STAT reads return the held value rather than a fresh LY=LYC compare.
-        m_coincidence = (m_line == m_lineCompare);
-        // The OAM (mode 2) STAT source asserts during mode 2 and also at the start of vertical blank (line 144,
-        // a DMG quirk).
-        var oamSource = (((m_mode == PpuMode.OamScan) || (m_line == ScreenHeight)) && ((m_statEnables & StatOamInterrupt) != 0));
+        // so STAT reads return the held value rather than a fresh LY=LYC compare. The comparison uses the lagged
+        // ly_for_comparison, so it reads "not equal" for a machine cycle right after LY increments.
+        m_coincidence = (m_lyForComparison == m_lineCompare);
+        // The STAT mode-select sources track the interrupt mode, settled on its own clock (independent of the
+        // polled STAT bits). The OAM (mode 2) source also asserts at the start of vertical blank (line 144, a DMG
+        // quirk).
+        var oamSource = (((m_interruptMode == PpuMode.OamScan) || (m_line == ScreenHeight)) && ((m_statEnables & StatOamInterrupt) != 0));
         var line = (
-            ((m_mode == PpuMode.HorizontalBlank) && ((m_statEnables & StatHBlankInterrupt) != 0)) ||
-            ((m_mode == PpuMode.VerticalBlank) && ((m_statEnables & StatVBlankInterrupt) != 0)) ||
+            ((m_interruptMode == PpuMode.HorizontalBlank) && ((m_statEnables & StatHBlankInterrupt) != 0)) ||
+            ((m_interruptMode == PpuMode.VerticalBlank) && ((m_statEnables & StatVBlankInterrupt) != 0)) ||
             oamSource ||
             (m_coincidence && ((m_statEnables & StatLineCompareInterrupt) != 0))
         );
@@ -517,12 +747,25 @@ public sealed class Ppu : IClockedComponent {
         m_mode = PpuMode.HorizontalBlank;
         m_reportedMode = PpuMode.HorizontalBlank;
         m_reportedModeDelay = 0;
+        m_interruptMode = PpuMode.HorizontalBlank;
+        m_interruptModeDelay = 0;
         m_windowLineCounter = 0;
+
+        // The first post-LCD-on line begins in horizontal blank, so OAM and VRAM start accessible; the locks engage
+        // when that line reaches mode 3. Turning the LCD off likewise leaves everything accessible.
+        m_oamReadBlocked = false;
+        m_oamWriteBlocked = false;
+        m_vramReadBlocked = false;
+        m_vramWriteBlocked = false;
+        m_firstLineAfterEnable = enabling;
 
         // On re-enable, recompute the STAT line for LY=0 and fire only on a genuine rising edge carried from the
         // value held while the LCD was off — resetting it to false would fabricate a spurious edge. On disable,
         // the STAT line is frozen at its last value (writes skip recomputation while off).
         if (enabling) {
+            // Enabling sets LY directly rather than incrementing it, so the comparison is valid immediately.
+            m_lyForComparison = m_line;
+            m_lyForComparisonDelay = 0;
             UpdateStatInterrupt();
         }
     }

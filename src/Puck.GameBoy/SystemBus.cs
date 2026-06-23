@@ -33,6 +33,7 @@ public sealed class SystemBus : ICpuBus {
     private bool m_armedSpeedSwitch;
     private bool m_bootRomMapped;
     private bool m_doubleSpeed;
+    private int m_pendingMachineCycles;
     private ulong m_elapsedDots;
     private int m_videoRamBank;
     private int m_workRamBank = 1;
@@ -132,27 +133,47 @@ public sealed class SystemBus : ICpuBus {
         m_clockedComponents.Add(item: component);
     }
 
-    /// <summary>Reads a byte over one machine cycle: advances the rest of the machine, then performs the access.</summary>
+    /// <summary>Reads a byte over one machine cycle. The deferred-cycle model: the cycle owed by the PREVIOUS
+    /// access is discharged first, the read then happens at the start of this machine cycle, and this cycle is
+    /// deferred until just before the next access — so peripherals observe the access at the hardware-faithful
+    /// point.</summary>
     /// <param name="address">The CPU address to read.</param>
-    /// <returns>The byte the CPU latches at the end of the machine cycle.</returns>
+    /// <returns>The byte the CPU latches.</returns>
     public byte ReadCycle(ushort address) {
-        TickMachineCycle();
+        FlushPendingCycles();
 
-        return ReadByte(address: address);
+        var value = ReadByte(address: address);
+
+        m_pendingMachineCycles = 1;
+
+        return value;
     }
-    /// <summary>Writes a byte over one machine cycle: advances the rest of the machine, then performs the access.</summary>
+    /// <summary>Writes a byte over one machine cycle, with the same deferred-cycle timing as <see cref="ReadCycle"/>.</summary>
     /// <param name="address">The CPU address to write.</param>
     /// <param name="value">The value to store.</param>
     public void WriteCycle(ushort address, byte value) {
-        TickMachineCycle();
+        FlushPendingCycles();
         WriteByte(
             address: address,
             value: value
         );
+
+        m_pendingMachineCycles = 1;
     }
-    /// <summary>Advances the machine by one machine cycle of internal CPU work that performs no bus access.</summary>
-    public void InternalCycle() =>
-        TickMachineCycle();
+    /// <summary>Advances the machine by one machine cycle of internal CPU work that performs no bus access, deferred
+    /// the same way as an access.</summary>
+    public void InternalCycle() {
+        FlushPendingCycles();
+
+        m_pendingMachineCycles = 1;
+    }
+    /// <inheritdoc />
+    public void FlushPendingCycles() {
+        while (m_pendingMachineCycles > 0) {
+            m_pendingMachineCycles -= 1;
+            TickMachineCycle();
+        }
+    }
 
     /// <summary>Performs a CGB speed switch when one has been armed via <c>KEY1</c>, as the <c>STOP</c> instruction
     /// does. Toggles between normal and double speed and disarms the request.</summary>
@@ -220,8 +241,8 @@ public sealed class SystemBus : ICpuBus {
 
                 break;
             case >= MemoryMap.VideoRamBase and <= MemoryMap.VideoRamEnd:
-                // VRAM is locked while the PPU is drawing the scanline.
-                if (m_ppu.IsVideoRamAccessible) {
+                // VRAM is write-locked while the PPU is drawing; the write lock trails the read lock by a cycle.
+                if (m_ppu.IsVideoRamWritable) {
                     m_videoRam[(m_videoRamBank * VideoRamBankSize) + (address - MemoryMap.VideoRamBase)] = value;
                 }
 
@@ -242,8 +263,9 @@ public sealed class SystemBus : ICpuBus {
 
                 break;
             case >= MemoryMap.OamBase and <= MemoryMap.OamEnd:
-                // Object-attribute memory is locked during an OAM DMA transfer and while the PPU scans/draws.
-                if (!m_oamDma.IsOamLocked && m_ppu.IsObjectMemoryAccessible) {
+                // Object-attribute memory is locked during an OAM DMA transfer and while the PPU scans/draws; the
+                // write lock trails the read lock by a cycle and briefly opens at the mode-2/3 boundary.
+                if (!m_oamDma.IsOamLocked && m_ppu.IsObjectMemoryWritable) {
                     m_oam[address - MemoryMap.OamBase] = value;
                 }
 

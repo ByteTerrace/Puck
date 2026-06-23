@@ -17,6 +17,7 @@ internal sealed class WaveChannel {
     private byte m_nr3;
     private byte m_nr4;
     private bool m_enabled;
+    private bool m_waveFormJustRead;
     private int m_lengthCounter;
     private int m_samplePosition;
     private int m_frequencyTimer;
@@ -106,24 +107,47 @@ internal sealed class WaveChannel {
         }
     }
 
-    /// <summary>Reads a wave-RAM byte (<c>0xFF30</c>-<c>0xFF3F</c>), which the CPU may access regardless of power.</summary>
+    /// <summary>Reads a wave-RAM byte (<c>0xFF30</c>-<c>0xFF3F</c>). While the channel is playing, the DMG only lets
+    /// the CPU see wave RAM during the single cycle right after the channel fetched a sample, and then it reads the
+    /// byte the channel just read; otherwise the read returns open bus.</summary>
     /// <param name="offset">The byte offset 0-15 into wave RAM.</param>
-    public byte ReadWaveRam(int offset) =>
-        m_waveRam[offset];
-    /// <summary>Writes a wave-RAM byte (<c>0xFF30</c>-<c>0xFF3F</c>).</summary>
+    public byte ReadWaveRam(int offset) {
+        if (!m_enabled) {
+            return m_waveRam[offset];
+        }
+
+        return (m_waveFormJustRead
+            ? m_waveRam[m_samplePosition / 2]
+            : (byte)0xFF);
+    }
+    /// <summary>Writes a wave-RAM byte (<c>0xFF30</c>-<c>0xFF3F</c>). While the channel is playing, the DMG only lets
+    /// the write land during the cycle right after a sample fetch, into the byte the channel just read; otherwise
+    /// the write is dropped.</summary>
     /// <param name="offset">The byte offset 0-15 into wave RAM.</param>
     /// <param name="value">The value written.</param>
-    public void WriteWaveRam(int offset, byte value) =>
-        m_waveRam[offset] = value;
+    public void WriteWaveRam(int offset, byte value) {
+        if (!m_enabled) {
+            m_waveRam[offset] = value;
+        }
+        else if (m_waveFormJustRead) {
+            m_waveRam[m_samplePosition / 2] = value;
+        }
+    }
 
-    /// <summary>Advances the frequency timer, stepping to the next sample when it expires.</summary>
+    /// <summary>Advances the frequency timer one T-cycle at a time, stepping to the next sample when it expires.
+    /// Tracks the single cycle just after a fetch (<c>wave_form_just_read</c>) that opens the DMG wave-RAM access
+    /// window — so it is stepped per cycle rather than in a whole machine cycle.</summary>
     /// <param name="cycles">The number of T-cycles elapsed.</param>
     public void Step(int cycles) {
-        m_frequencyTimer -= cycles;
+        for (var cycle = 0; cycle < cycles; cycle += 1) {
+            m_waveFormJustRead = false;
+            m_frequencyTimer -= 1;
 
-        while (m_frequencyTimer <= 0) {
-            m_frequencyTimer += ((2048 - Frequency) * 2);
-            m_samplePosition = ((m_samplePosition + 1) % SampleCount);
+            if (m_frequencyTimer <= 0) {
+                m_frequencyTimer += ((2048 - Frequency) * 2);
+                m_samplePosition = ((m_samplePosition + 1) % SampleCount);
+                m_waveFormJustRead = true;
+            }
         }
     }
 
@@ -173,6 +197,7 @@ internal sealed class WaveChannel {
         m_nr3 = 0;
         m_nr4 = 0;
         m_enabled = false;
+        m_waveFormJustRead = false;
         m_samplePosition = 0;
         m_frequencyTimer = 0;
     }

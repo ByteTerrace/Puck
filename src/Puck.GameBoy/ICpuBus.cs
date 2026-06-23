@@ -23,6 +23,12 @@ public interface ICpuBus {
     /// <summary>Advances the machine by one machine cycle of internal CPU work with no bus access.</summary>
     void InternalCycle();
 
+    /// <summary>Discharges any machine cycle deferred by the last access, advancing the rest of the machine to the
+    /// current point. The CPU calls this before sampling interrupts so the decision sees up-to-date peripheral
+    /// state (the deferred-cycle model: an access reads/writes at the start of its machine cycle and the cycle is
+    /// charged just before the next access).</summary>
+    void FlushPendingCycles();
+
     /// <summary>Performs a CGB speed switch armed via <c>KEY1</c>, as <c>STOP</c> does.</summary>
     /// <returns><see langword="true"/> when a switch was armed and performed; otherwise <see langword="false"/>.</returns>
     bool ApplyPreparedSpeedSwitch();

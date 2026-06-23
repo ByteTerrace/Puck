@@ -93,13 +93,13 @@ public sealed class GameBoyMachine {
         // phase is what the boot_div timing test pins down. (A write to DIV would instead clear the counter, which
         // is why this goes through the dedicated seam.)
         //
-        // The literature DMG/MGB value is 0xABCC, but that assumes an I/O read latches on the third T-cycle of the
-        // access machine cycle. This bus latches at the end of the machine cycle (ReadCycle ticks the full four
-        // T-cycles, then reads), so DIV reads land one T-cycle later in phase; seeding one less (0xABCB) cancels
-        // that constant offset exactly and reproduces hardware-observed reads for boot_div's before/after-increment
-        // probes. (Verified against the mooneye trace — do NOT "correct" this back to 0xABCC.)
+        // The literature DMG/MGB value is 0xABCC. Under this bus's deferred-cycle model an I/O read latches at the
+        // START of its access machine cycle (the access's own four T-cycles are charged afterward), so DIV reads
+        // land a few T-cycles earlier in phase; seeding 0xABCF cancels that offset exactly and reproduces
+        // hardware-observed reads for boot_div's before/after-increment probes. (Verified against the mooneye
+        // trace — do NOT "correct" this back to 0xABCC.)
         var postBootDivider = model switch {
-            ConsoleModel.Dmg => (ushort)0xABCB,
+            ConsoleModel.Dmg => (ushort)0xABCF,
             _ => (ushort)0x0000,
         };
 

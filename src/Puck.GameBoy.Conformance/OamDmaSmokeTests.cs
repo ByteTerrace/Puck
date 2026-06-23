@@ -42,6 +42,10 @@ internal static class OamDmaSmokeTests {
                 bus.InternalCycle();
                 bus.InternalCycle();
 
+                // A real CPU read flushes the deferred machine cycle first; do the same so the untimed peek sees
+                // the state a read would observe.
+                bus.FlushPendingCycles();
+
                 var duringTransfer = bus.ReadByte(address: OamBase);
 
                 return (duringTransfer == 0xFF)
@@ -65,13 +69,17 @@ internal static class OamDmaSmokeTests {
                 bus.WriteByte(address: OamBase, value: 0x42);
                 bus.WriteByte(address: DmaRegister, value: SourcePage);
 
+                bus.FlushPendingCycles();
+
                 var afterStart = bus.ReadByte(address: OamBase);
 
                 bus.InternalCycle();
+                bus.FlushPendingCycles();
 
                 var duringSetup = bus.ReadByte(address: OamBase);
 
                 bus.InternalCycle();
+                bus.FlushPendingCycles();
 
                 var whileCopying = bus.ReadByte(address: OamBase);
 
@@ -89,10 +97,13 @@ internal static class OamDmaSmokeTests {
                     bus.InternalCycle();
                 }
 
+                bus.FlushPendingCycles();
+
                 var atLastCopy = bus.ReadByte(address: OamBase);
 
                 // ...and becomes readable on the very next cycle.
                 bus.InternalCycle();
+                bus.FlushPendingCycles();
 
                 var afterEnd = bus.ReadByte(address: OamBase);
 

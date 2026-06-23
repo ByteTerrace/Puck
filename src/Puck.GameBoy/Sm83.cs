@@ -145,6 +145,10 @@ public sealed partial class Sm83 {
     /// <summary>Runs one instruction, or — when the CPU is halted — advances a single machine cycle, or services
     /// a pending interrupt. The bus is advanced for every cycle consumed.</summary>
     public void Step() {
+        // Discharge the machine cycle deferred by the previous instruction's last access, so the interrupt
+        // decision below and the upcoming fetch observe current peripheral state (the deferred-cycle model).
+        m_bus.FlushPendingCycles();
+
         if (m_stopped) {
             // An illegal opcode hard-locks the CPU, and STOP halts it; in both cases the core does nothing
             // further while time keeps passing. (STOP's joypad/interrupt wake is modeled once the joypad exists.)
