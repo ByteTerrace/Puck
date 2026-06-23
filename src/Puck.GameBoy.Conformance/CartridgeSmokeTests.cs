@@ -128,6 +128,45 @@ internal static class CartridgeSmokeTests {
                     ? null
                     : $"EEPROM word = 0x{word:X4} (expected 0xABCD)";
             }),
+            ("CGB compatibility colorization assigns Tetris its boot-ROM palette", static () => {
+                var rom = new byte[0x8000];
+
+                "TETRIS"u8.CopyTo(destination: rom.AsSpan(start: 0x0134));
+                rom[0x014B] = 0x01; // Nintendo licensee, so the boot ROM would colorize it
+
+                // The title checksum (0xDB) selects palette combination 3, whose background is palette 24.
+                var (background, _, _) = CompatibilityPalette.Resolve(rom: rom);
+
+                return ((background[0] == 0x7FFF) && (background[1] == 0x03FF) && (background[2] == 0x001F) && (background[3] == 0x0000))
+                    ? null
+                    : $"bg = [{background[0]:X4} {background[1]:X4} {background[2]:X4} {background[3]:X4}]";
+            }),
+            ("CGB compatibility colorization falls back to the default for non-Nintendo games", static () => {
+                var rom = new byte[0x8000];
+
+                "TETRIS"u8.CopyTo(destination: rom.AsSpan(start: 0x0134));
+                rom[0x014B] = 0x99; // not a Nintendo licensee -> default palette combination 0
+
+                var (background, _, _) = CompatibilityPalette.Resolve(rom: rom);
+
+                // Combination 0's background is palette 29.
+                return ((background[0] == 0x7FFF) && (background[1] == 0x1BEF) && (background[2] == 0x6180) && (background[3] == 0x0000))
+                    ? null
+                    : $"bg = [{background[0]:X4} {background[1]:X4} {background[2]:X4} {background[3]:X4}]";
+            }),
+            ("a DMG cartridge on a CGB console enables compatibility colorization", static () => {
+                var rom = new byte[0x8000];
+
+                rom[0x0147] = 0x00; // ROM only, no CGB flag at 0x143 -> a DMG game
+                rom[0x0148] = 0x00;
+
+                var ppu = new GameBoyMachine(model: ConsoleModel.Cgb, cartridge: Cartridge.Load(rom: rom)).Ppu;
+
+                // The PPU drops to the DMG render path (IsColor false) but is colorizing rather than grayscale.
+                return (!ppu.IsColor)
+                    ? null
+                    : "PPU stayed in the color render path for a DMG game on CGB";
+            }),
             ("the cartridge loader selects every newly added mapper by header type", static () => {
                 (byte Type, Type Expected)[] cases = [
                     (0x05, typeof(Mbc2)),

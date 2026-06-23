@@ -11,9 +11,15 @@ public sealed partial class Ppu {
     private const int PaletteRamSize = 64; // 8 palettes * 4 colors * 2 bytes
     private const int VideoRamBankStride = 0x2000;
 
-    private readonly bool m_isColor;
+    private bool m_isColor;
     private readonly byte[] m_backgroundPaletteRam = new byte[PaletteRamSize];
     private readonly byte[] m_objectPaletteRam = new byte[PaletteRamSize];
+    // DMG-on-CGB compatibility colorization: when a CGB console runs a game with no CGB flag it renders DMG-style but
+    // maps the shades through the boot ROM's assigned palettes, in RGBA, instead of the grayscale ramp.
+    private bool m_dmgCompatColorization;
+    private readonly uint[] m_compatBackground = new uint[4];
+    private readonly uint[] m_compatObject0 = new uint[4];
+    private readonly uint[] m_compatObject1 = new uint[4];
     // Per-pixel BG-over-OBJ priority for the current line (the tile attribute's bit 7), used to resolve object
     // priority against the background.
     private readonly bool[] m_lineBackgroundPriority = new bool[ScreenWidth];
@@ -21,10 +27,19 @@ public sealed partial class Ppu {
     private byte m_backgroundPaletteIndex; // BGPI: bit 7 auto-increment, bits 0-5 index
     private byte m_objectPaletteIndex; // OBPI
     private byte m_objectPriorityMode; // OPRI (bit 0: 1 = X-coordinate priority, 0 = OAM-order priority)
+    private bool m_colorCorrection = true;
 
     /// <summary>Gets whether this is a Game Boy Color PPU (color render path, palette RAM, tile attributes).</summary>
     public bool IsColor =>
         m_isColor;
+
+    /// <summary>Gets or sets whether the CGB color-correction curve is applied when converting palette entries to RGBA.
+    /// When enabled (the default) the framebuffer matches the muted, slightly green-tinted look of the real CGB LCD;
+    /// when disabled the 15-bit BGR555 channels are bit-expanded directly for the brighter "raw" palette.</summary>
+    public bool ColorCorrectionEnabled {
+        get => m_colorCorrection;
+        set => m_colorCorrection = value;
+    }
 
     /// <summary>Reads the background palette index register (<c>BGPI</c>, <c>0xFF68</c>).</summary>
     public byte ReadBackgroundPaletteIndex() =>
@@ -86,19 +101,67 @@ public sealed partial class Ppu {
     private byte ReadVideoRamBank(int address, int bank) =>
         m_videoRam[(bank * VideoRamBankStride) + (address - VideoRamBase)];
 
-    // A 15-bit BGR555 palette entry expanded to opaque R8G8B8A8 (0xAABBGGRR). The channel expansion mirrors the
-    // common (c << 3) | (c >> 2) widening; no further color correction is applied.
-    private static uint ColorFromPaletteRam(byte[] paletteRam, int palette, int colorIndex) {
+    /// <summary>Enables DMG-on-CGB compatibility colorization with the boot ROM's assigned palettes (four BGR555 colors
+    /// each), forcing the DMG render path so the game's shades resolve through these instead of grayscale.</summary>
+    /// <param name="background">The four background-palette colors.</param>
+    /// <param name="object0">The four object-palette-0 colors.</param>
+    /// <param name="object1">The four object-palette-1 colors.</param>
+    public void EnableDmgCompatibilityColorization(ReadOnlySpan<ushort> background, ReadOnlySpan<ushort> object0, ReadOnlySpan<ushort> object1) {
+        for (var i = 0; i < 4; i += 1) {
+            m_compatBackground[i] = Bgr555ToRgba(value: background[i]);
+            m_compatObject0[i] = Bgr555ToRgba(value: object0[i]);
+            m_compatObject1[i] = Bgr555ToRgba(value: object1[i]);
+        }
+
+        m_isColor = false; // DMG-style rendering, colorized through the assigned palettes
+        m_dmgCompatColorization = true;
+    }
+
+    // The background color for a resolved DMG shade: the assigned compatibility color, or the grayscale ramp otherwise.
+    private uint BackgroundColor(int shade) =>
+        (m_dmgCompatColorization ? m_compatBackground[shade] : Shades[shade]);
+
+    // The object color for a resolved DMG shade, selecting object palette 0 or 1.
+    private uint ObjectColor(bool palette1, int shade) =>
+        (m_dmgCompatColorization
+            ? (palette1 ? m_compatObject1[shade] : m_compatObject0[shade])
+            : Shades[shade]);
+
+    // A 15-bit BGR555 palette entry converted to opaque R8G8B8A8 (0xAABBGGRR), either through the CGB color-correction
+    // curve or a direct bit-expansion, per ColorCorrectionEnabled.
+    private uint ColorFromPaletteRam(byte[] paletteRam, int palette, int colorIndex) {
         var offset = ((palette * 4) + colorIndex) * 2;
-        var value = (paletteRam[offset] | (paletteRam[offset + 1] << 8));
-        var r = (uint)Expand5To8(channel: (value & 0x1F));
-        var g = (uint)Expand5To8(channel: ((value >> 5) & 0x1F));
-        var b = (uint)Expand5To8(channel: ((value >> 10) & 0x1F));
+
+        return Bgr555ToRgba(value: (paletteRam[offset] | (paletteRam[offset + 1] << 8)));
+    }
+    private uint Bgr555ToRgba(int value) {
+        var r5 = (value & 0x1F);
+        var g5 = ((value >> 5) & 0x1F);
+        var b5 = ((value >> 10) & 0x1F);
+
+        return (m_colorCorrection
+            ? CorrectColor(r5: r5, g5: g5, b5: b5)
+            : RawColor(r5: r5, g5: g5, b5: b5));
+    }
+
+    // The brighter "raw" conversion: each 5-bit channel widened to 8 bits via (c << 3) | (c >> 2).
+    private static uint RawColor(int r5, int g5, int b5) {
+        var r = (uint)((r5 << 3) | (r5 >> 2));
+        var g = (uint)((g5 << 3) | (g5 >> 2));
+        var b = (uint)((b5 << 3) | (b5 >> 2));
 
         return (0xFF000000u | (b << 16) | (g << 8) | r);
     }
-    private static int Expand5To8(int channel) =>
-        ((channel << 3) | (channel >> 2));
+
+    // The CGB LCD color-correction curve (the widely used higan/near matrix): each output channel mixes all three
+    // inputs and is clamped, reproducing the console's muted, slightly green-tinted palette. Output range is 0-240.
+    private static uint CorrectColor(int r5, int g5, int b5) {
+        var r = (uint)(Math.Min(val1: 960, val2: ((r5 * 26) + (g5 * 4) + (b5 * 2))) >> 2);
+        var g = (uint)(Math.Min(val1: 960, val2: ((g5 * 24) + (b5 * 8))) >> 2);
+        var b = (uint)(Math.Min(val1: 960, val2: ((r5 * 6) + (g5 * 4) + (b5 * 22))) >> 2);
+
+        return (0xFF000000u | (b << 16) | (g << 8) | r);
+    }
 
     private void RenderBackgroundAndWindowColor(int line) {
         var rowBase = (line * ScreenWidth);

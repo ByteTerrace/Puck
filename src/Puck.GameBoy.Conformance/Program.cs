@@ -39,7 +39,9 @@ try {
                 frames: int.Parse(s: args[index + 2]),
                 output: Console.Out,
                 outputPath: args[index + 3],
-                romPath: args[index + 1]
+                romPath: args[index + 1],
+                // An optional trailing "cgb" boots a DMG cartridge on a CGB console for compatibility colorization.
+                colorizeDmg: ((index + 4 < args.Length) && (args[index + 4] == "cgb"))
             );
         }
     }

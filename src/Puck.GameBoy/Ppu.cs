@@ -530,7 +530,7 @@ public sealed partial class Ppu : IClockedComponent {
         // On the DMG, LCDC bit 0 disables both background and window, clearing the line to the lightest shade.
         if ((m_lcdControl & 0x01) == 0) {
             for (var x = 0; x < ScreenWidth; x += 1) {
-                m_framebuffer[rowBase + x] = Shades[0];
+                m_framebuffer[rowBase + x] = BackgroundColor(shade: 0);
                 m_lineColorIndex[x] = 0;
             }
 
@@ -570,7 +570,7 @@ public sealed partial class Ppu : IClockedComponent {
 
             var shade = ((m_backgroundPalette >> (colorIndex * 2)) & 3);
 
-            m_framebuffer[rowBase + x] = Shades[shade];
+            m_framebuffer[rowBase + x] = BackgroundColor(shade: shade);
         }
 
         // The window's internal line counter advances once per line the window was actually drawn.
@@ -658,7 +658,8 @@ public sealed partial class Ppu : IClockedComponent {
         var objectX = (m_objectAttributeMemory[oamAddress + 1] - 8);
         var tile = (int)m_objectAttributeMemory[oamAddress + 2];
         var attributes = m_objectAttributeMemory[oamAddress + 3];
-        var palette = (((attributes & 0x10) != 0) ? m_objectPalette1 : m_objectPalette0);
+        var usingObjectPalette1 = ((attributes & 0x10) != 0);
+        var palette = (usingObjectPalette1 ? m_objectPalette1 : m_objectPalette0);
         var behindBackground = ((attributes & 0x80) != 0);
 
         var rowInSprite = (line - objectY);
@@ -694,7 +695,7 @@ public sealed partial class Ppu : IClockedComponent {
 
             var shade = ((palette >> (colorIndex * 2)) & 3);
 
-            m_framebuffer[rowBase + screenX] = Shades[shade];
+            m_framebuffer[rowBase + screenX] = ObjectColor(palette1: usingObjectPalette1, shade: shade);
         }
     }
 

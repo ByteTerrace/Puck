@@ -37,6 +37,13 @@ public sealed class SystemBus : ICpuBus {
     private ulong m_elapsedDots;
     private int m_videoRamBank;
     private int m_workRamBank = 1;
+    // CGB miscellany: the boot-ROM CPU-mode latch (KEY0), the infrared port (RP), and the four undocumented registers.
+    private byte m_cpuMode;
+    private byte m_infraredPort;
+    private byte m_undocumented72;
+    private byte m_undocumented73;
+    private byte m_undocumented74;
+    private byte m_undocumented75;
     // CGB VRAM DMA (HDMA/GDMA) state. The transfer copies 0x10-byte blocks from the source into the current VRAM
     // bank; general mode runs every block at once (stalling the CPU), HBlank mode runs one block per horizontal
     // blank. m_hdmaBlocks is the blocks remaining; m_hdmaHBlank distinguishes the modes.
@@ -122,6 +129,26 @@ public sealed class SystemBus : ICpuBus {
         // The APU's frame sequencer is divided from the same system counter as the serial clock.
         m_apu = new Apu(systemCounter: () => m_timer.InternalCounter, isDoubleSpeed: () => m_doubleSpeed, isCgb: () => (m_model == ConsoleModel.Cgb));
         Attach(component: m_apu);
+
+        ConfigureDmgCompatibilityColorization(model: model);
+    }
+
+    // A CGB console booting a cartridge with no CGB flag colorizes the original game with the boot ROM's assigned
+    // palettes; the PPU then renders DMG-style through them. A CGB-aware cartridge (or a DMG console) is left untouched.
+    private void ConfigureDmgCompatibilityColorization(ConsoleModel model) {
+        if ((model != ConsoleModel.Cgb) || ((m_cartridge.ReadRom(address: 0x0143) & 0x80) != 0)) {
+            return;
+        }
+
+        var header = new byte[0x0150];
+
+        for (var i = 0; i < header.Length; i += 1) {
+            header[i] = m_cartridge.ReadRom(address: (ushort)i);
+        }
+
+        var (background, object0, object1) = CompatibilityPalette.Resolve(rom: header);
+
+        m_ppu.EnableDmgCompatibilityColorization(background: background, object0: object0, object1: object1);
     }
 
     /// <summary>Gets the picture processing unit, for the host to present its framebuffer.</summary>
@@ -404,6 +431,21 @@ public sealed class SystemBus : ICpuBus {
                 m_apu.PcmAmplitude12,
             MemoryMap.PcmAmplitude34 when (m_model == ConsoleModel.Cgb) =>
                 m_apu.PcmAmplitude34,
+            MemoryMap.CpuMode when (m_model == ConsoleModel.Cgb) =>
+                m_cpuMode,
+            MemoryMap.InfraredPort when (m_model == ConsoleModel.Cgb) =>
+                // Bits 7-6/0 read back as written; bit 1 is the received signal — always 1 (no light) with no IR peer;
+                // the unused bits 5-2 read as one.
+                (byte)((m_infraredPort & 0xC1) | 0x3E),
+            MemoryMap.Undocumented72 when (m_model == ConsoleModel.Cgb) =>
+                m_undocumented72,
+            MemoryMap.Undocumented73 when (m_model == ConsoleModel.Cgb) =>
+                m_undocumented73,
+            MemoryMap.Undocumented74 when (m_model == ConsoleModel.Cgb) =>
+                m_undocumented74,
+            MemoryMap.Undocumented75 when (m_model == ConsoleModel.Cgb) =>
+                // Only bits 4-6 are read/write; the rest read as one.
+                (byte)(0x8F | (m_undocumented75 & 0x70)),
             _ => 0xFF,
         };
     private void WriteIo(ushort address, byte value) {
@@ -508,6 +550,30 @@ public sealed class SystemBus : ICpuBus {
                 break;
             case MemoryMap.ObjectPriorityMode when (m_model == ConsoleModel.Cgb):
                 m_ppu.WriteObjectPriorityMode(value: value);
+
+                break;
+            case MemoryMap.CpuMode when (m_model == ConsoleModel.Cgb):
+                m_cpuMode = value;
+
+                break;
+            case MemoryMap.InfraredPort when (m_model == ConsoleModel.Cgb):
+                m_infraredPort = value;
+
+                break;
+            case MemoryMap.Undocumented72 when (m_model == ConsoleModel.Cgb):
+                m_undocumented72 = value;
+
+                break;
+            case MemoryMap.Undocumented73 when (m_model == ConsoleModel.Cgb):
+                m_undocumented73 = value;
+
+                break;
+            case MemoryMap.Undocumented74 when (m_model == ConsoleModel.Cgb):
+                m_undocumented74 = value;
+
+                break;
+            case MemoryMap.Undocumented75 when (m_model == ConsoleModel.Cgb):
+                m_undocumented75 = (byte)(value & 0x70);
 
                 break;
             default:

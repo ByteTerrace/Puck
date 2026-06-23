@@ -85,5 +85,60 @@ internal static class IoSmokeTests {
                     ? null
                     : $"captured 0x{captured:X2} (expected 0x5A)";
             }),
+            ("CGB undocumented registers FF72/FF73/FF74 round-trip fully", static () => {
+                var bus = CgbBus();
+
+                bus.WriteByte(address: 0xFF72, value: 0x5A);
+                bus.WriteByte(address: 0xFF73, value: 0xA5);
+                bus.WriteByte(address: 0xFF74, value: 0x3C);
+
+                if ((bus.ReadByte(address: 0xFF72) != 0x5A) || (bus.ReadByte(address: 0xFF73) != 0xA5) || (bus.ReadByte(address: 0xFF74) != 0x3C)) {
+                    return $"FF72=0x{bus.ReadByte(address: 0xFF72):X2} FF73=0x{bus.ReadByte(address: 0xFF73):X2} FF74=0x{bus.ReadByte(address: 0xFF74):X2}";
+                }
+
+                return null;
+            }),
+            ("CGB FF75 stores only bits 4-6, rest read as one", static () => {
+                var bus = CgbBus();
+
+                bus.WriteByte(address: 0xFF75, value: 0x40); // bit 6 only
+
+                // Read = 0x8F (unused bits set) | the stored bits 4-6.
+                return (bus.ReadByte(address: 0xFF75) == 0xCF)
+                    ? null
+                    : $"FF75 = 0x{bus.ReadByte(address: 0xFF75):X2} (expected 0xCF)";
+            }),
+            ("CGB RP infrared port reports no incoming signal", static () => {
+                var bus = CgbBus();
+
+                // Bit 1 (receiving) reads 1 when no IR light is present, which it never is with no peer.
+                return ((bus.ReadByte(address: 0xFF56) & 0x02) != 0)
+                    ? null
+                    : $"RP = 0x{bus.ReadByte(address: 0xFF56):X2} (bit 1 should be set)";
+            }),
+            ("the CGB-only registers are inert on a DMG machine", static () => {
+                var bus = DmgBus();
+
+                bus.WriteByte(address: 0xFF72, value: 0x5A); // dropped on DMG
+
+                return (bus.ReadByte(address: 0xFF72) == 0xFF)
+                    ? null
+                    : $"FF72 = 0x{bus.ReadByte(address: 0xFF72):X2} (expected open-bus 0xFF on DMG)";
+            }),
         ];
+
+    private static SystemBus CgbBus() =>
+        new GameBoyMachine(model: ConsoleModel.Cgb, cartridge: Cartridge.Load(rom: HeaderedRom())).Bus;
+
+    private static SystemBus DmgBus() =>
+        new GameBoyMachine(model: ConsoleModel.Dmg, cartridge: Cartridge.Load(rom: HeaderedRom())).Bus;
+
+    private static byte[] HeaderedRom() {
+        var rom = new byte[0x8000];
+
+        rom[0x0147] = 0x00; // ROM only
+        rom[0x0148] = 0x00; // 32 KiB
+
+        return rom;
+    }
 }

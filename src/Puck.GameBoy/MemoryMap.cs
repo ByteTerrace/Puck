@@ -86,10 +86,14 @@ public static class MemoryMap {
     public const ushort WindowY = 0xFF4A;
     /// <summary>The window-X-plus-7 register (<c>WX</c>).</summary>
     public const ushort WindowX = 0xFF4B;
+    /// <summary>The CGB CPU-mode register (<c>KEY0</c>): bit&#160;2 selects DMG-compatibility mode; written only by the boot ROM.</summary>
+    public const ushort CpuMode = 0xFF4C;
     /// <summary>The CGB speed-switch register (<c>KEY1</c>): bit&#160;7 reports current speed, bit&#160;0 arms a switch performed by <c>STOP</c>.</summary>
     public const ushort SpeedSwitch = 0xFF4D;
     /// <summary>The CGB video-RAM bank-select register (<c>VBK</c>).</summary>
     public const ushort VideoRamBank = 0xFF4F;
+    /// <summary>The CGB infrared-port register (<c>RP</c>): bits 7-6 read enable, bit&#160;1 the received signal, bit&#160;0 the LED.</summary>
+    public const ushort InfraredPort = 0xFF56;
     /// <summary>The boot-ROM disable register (<c>BOOT</c>); a nonzero write unmaps the boot ROM permanently.</summary>
     public const ushort BootRomDisable = 0xFF50;
     /// <summary>The CGB VRAM-DMA source high byte (<c>HDMA1</c>).</summary>
@@ -114,6 +118,14 @@ public static class MemoryMap {
     public const ushort ObjectPriorityMode = 0xFF6C;
     /// <summary>The CGB work-RAM bank-select register (<c>SVBK</c>): selects work-RAM bank 1-7 at <c>0xD000</c>-<c>0xDFFF</c>.</summary>
     public const ushort WorkRamBank = 0xFF70;
+    /// <summary>The first undocumented CGB register (<c>0xFF72</c>): fully read/write.</summary>
+    public const ushort Undocumented72 = 0xFF72;
+    /// <summary>The second undocumented CGB register (<c>0xFF73</c>): fully read/write.</summary>
+    public const ushort Undocumented73 = 0xFF73;
+    /// <summary>The third undocumented CGB register (<c>0xFF74</c>): fully read/write in CGB mode.</summary>
+    public const ushort Undocumented74 = 0xFF74;
+    /// <summary>The fourth undocumented CGB register (<c>0xFF75</c>): only bits 4-6 are read/write.</summary>
+    public const ushort Undocumented75 = 0xFF75;
     /// <summary>The CGB digital-output register (<c>PCM12</c>): the low nibble is channel 1's current output, the high nibble channel 2's.</summary>
     public const ushort PcmAmplitude12 = 0xFF76;
     /// <summary>The CGB digital-output register (<c>PCM34</c>): the low nibble is channel 3's current output, the high nibble channel 4's.</summary>
