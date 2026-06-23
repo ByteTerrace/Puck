@@ -5,6 +5,7 @@ public sealed class GbaTimerController : IGbaTimerController {
     private static readonly int[] s_prescaler = { 1, 64, 256, 1024 };
 
     private readonly IGbaInterruptController m_interrupts;
+    private readonly IGbaApu m_apu;
     private readonly int[] m_counter = new int[4];
     private readonly int[] m_reload = new int[4];
     private readonly int[] m_prescaler = new int[4];
@@ -13,13 +14,17 @@ public sealed class GbaTimerController : IGbaTimerController {
     private readonly bool[] m_cascade = new bool[4];
     private readonly bool[] m_irqEnabled = new bool[4];
 
-    /// <summary>Creates the timer block bound to the interrupt controller it signals on overflow.</summary>
+    /// <summary>Creates the timer block bound to the interrupt controller it signals on overflow and the APU it
+    /// clocks for Direct Sound.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="interrupts"/> is <see langword="null"/>.</exception>
-    public GbaTimerController(IGbaInterruptController interrupts) {
+    /// <param name="apu">The audio unit, advanced on timer 0/1 overflow.</param>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    public GbaTimerController(IGbaInterruptController interrupts, IGbaApu apu) {
         ArgumentNullException.ThrowIfNull(interrupts);
+        ArgumentNullException.ThrowIfNull(apu);
 
         m_interrupts = interrupts;
+        m_apu = apu;
 
         for (var i = 0; i < 4; ++i) {
             m_prescaler[i] = 1;
@@ -93,6 +98,11 @@ public sealed class GbaTimerController : IGbaTimerController {
 
         if (m_irqEnabled[timer]) {
             m_interrupts.Request(source: (InterruptSource)((int)InterruptSource.Timer0 + timer));
+        }
+
+        // Timers 0 and 1 can clock the Direct Sound FIFOs.
+        if (timer < 2) {
+            m_apu.OnTimerOverflow(timer: timer);
         }
 
         // Overflow drives the next timer up if it is in count-up mode.

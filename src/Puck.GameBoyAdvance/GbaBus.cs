@@ -33,7 +33,7 @@ public sealed class GbaBus : IGbaBus {
     private readonly IGbaTimerController m_timers;
     private readonly IGbaDmaController m_dma;
     private readonly IGbaPpu m_ppu;
-    private readonly List<IGbaClockedComponent> m_components = new();
+    private readonly IGbaApu m_apu;
 
     private uint m_openBus;
     private int m_ws0N;
@@ -44,6 +44,18 @@ public sealed class GbaBus : IGbaBus {
     private int m_ws2S;
     private int m_sram;
 
+    // Game-pak prefetch buffer (WAITCNT bit 14). When enabled, the cartridge speculatively reads sequential
+    // halfwords ahead of the CPU into an 8-entry buffer during cycles the CPU is not using the game-pak bus
+    // (internal cycles, non-ROM accesses). A sequential code fetch already buffered costs 1 cycle; otherwise the
+    // CPU stalls for the in-flight load. Any non-sequential fetch or ROM data access flushes the buffer.
+    private const int PrefetchCapacity = 8;
+    private bool m_prefetchEnabled;
+    private bool m_prefetchActive;
+    private int m_prefetchCount;
+    private int m_prefetchCountdown;
+    private int m_prefetchSeq;
+    private uint m_prefetchHead;
+
     /// <summary>Creates the bus over a BIOS image, a cartridge, and the I/O peripherals it routes to.</summary>
     /// <param name="bios">The system BIOS provider.</param>
     /// <param name="cartridge">The inserted cartridge.</param>
@@ -51,14 +63,16 @@ public sealed class GbaBus : IGbaBus {
     /// <param name="timers">The timer block.</param>
     /// <param name="dma">The DMA block.</param>
     /// <param name="ppu">The picture-processing unit (owns palette/VRAM/OAM and the display registers).</param>
+    /// <param name="apu">The audio-processing unit.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public GbaBus(IBios bios, GbaCartridge cartridge, IGbaInterruptController interrupts, IGbaTimerController timers, IGbaDmaController dma, IGbaPpu ppu) {
+    public GbaBus(IBios bios, GbaCartridge cartridge, IGbaInterruptController interrupts, IGbaTimerController timers, IGbaDmaController dma, IGbaPpu ppu, IGbaApu apu) {
         ArgumentNullException.ThrowIfNull(bios);
         ArgumentNullException.ThrowIfNull(cartridge);
         ArgumentNullException.ThrowIfNull(interrupts);
         ArgumentNullException.ThrowIfNull(timers);
         ArgumentNullException.ThrowIfNull(dma);
         ArgumentNullException.ThrowIfNull(ppu);
+        ArgumentNullException.ThrowIfNull(apu);
 
         m_bios = bios.Image.ToArray();
         m_cartridge = cartridge;
@@ -66,6 +80,7 @@ public sealed class GbaBus : IGbaBus {
         m_timers = timers;
         m_dma = dma;
         m_ppu = ppu;
+        m_apu = apu;
 
         UpdateWaitControl(value: 0);
 
@@ -80,60 +95,66 @@ public sealed class GbaBus : IGbaBus {
     /// <inheritdoc/>
     public bool IrqPending => m_interrupts.LineAsserted;
 
-    /// <summary>Registers a peripheral to be advanced by every charged access. Called during machine wiring,
-    /// before execution, as each subsystem (PPU, timers, DMA, APU) is built.</summary>
-    /// <param name="component">The clocked peripheral to advance.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="component"/> is <see langword="null"/>.</exception>
-    public void Attach(IGbaClockedComponent component) {
-        ArgumentNullException.ThrowIfNull(component);
-
-        m_components.Add(item: component);
-    }
-
     /// <inheritdoc/>
     public byte Read8(uint address, BusAccessType access) {
-        Tick(cycles: AccessCycles(address: address, width: 1, access: access));
+        DataAccess(address: address, cycles: AccessCycles(address: address, width: 1, access: access));
 
         return (byte)ReadRegion(address: address, width: 1);
     }
 
     /// <inheritdoc/>
     public ushort Read16(uint address, BusAccessType access) {
-        Tick(cycles: AccessCycles(address: address, width: 2, access: access));
+        DataAccess(address: address, cycles: AccessCycles(address: address, width: 2, access: access));
 
         return (ushort)ReadRegion(address: address & ~1u, width: 2);
     }
 
     /// <inheritdoc/>
     public uint Read32(uint address, BusAccessType access) {
-        Tick(cycles: AccessCycles(address: address, width: 4, access: access));
+        DataAccess(address: address, cycles: AccessCycles(address: address, width: 4, access: access));
+
+        return ReadRegion(address: address & ~3u, width: 4);
+    }
+
+    /// <inheritdoc/>
+    public ushort ReadCode16(uint address, BusAccessType access) {
+        Tick(cycles: CodeFetchCycles(address: address, width: 2, access: access));
+
+        return (ushort)ReadRegion(address: address & ~1u, width: 2);
+    }
+
+    /// <inheritdoc/>
+    public uint ReadCode32(uint address, BusAccessType access) {
+        Tick(cycles: CodeFetchCycles(address: address, width: 4, access: access));
 
         return ReadRegion(address: address & ~3u, width: 4);
     }
 
     /// <inheritdoc/>
     public void Write8(uint address, byte value, BusAccessType access) {
-        Tick(cycles: AccessCycles(address: address, width: 1, access: access));
+        DataAccess(address: address, cycles: AccessCycles(address: address, width: 1, access: access));
 
         WriteRegion(address: address, width: 1, value: value);
     }
 
     /// <inheritdoc/>
     public void Write16(uint address, ushort value, BusAccessType access) {
-        Tick(cycles: AccessCycles(address: address, width: 2, access: access));
+        DataAccess(address: address, cycles: AccessCycles(address: address, width: 2, access: access));
 
         WriteRegion(address: address & ~1u, width: 2, value: value);
     }
 
     /// <inheritdoc/>
     public void Write32(uint address, uint value, BusAccessType access) {
-        Tick(cycles: AccessCycles(address: address, width: 4, access: access));
+        DataAccess(address: address, cycles: AccessCycles(address: address, width: 4, access: access));
 
         WriteRegion(address: address & ~3u, width: 4, value: value);
     }
 
     /// <inheritdoc/>
     public void Idle(int cycles) {
+        // Internal cycles leave the game-pak bus free, so the prefetch buffer fills.
+        StepPrefetch(cycles: cycles);
         Tick(cycles: cycles);
     }
 
@@ -143,10 +164,7 @@ public sealed class GbaBus : IGbaBus {
         // The peripherals observe the access at the point it happens (deferred-cycle model).
         m_timers.Step(cycles: cycles);
         m_ppu.Step(cycles: cycles);
-
-        for (var i = 0; i < m_components.Count; ++i) {
-            m_components[i].Step(cycles: cycles);
-        }
+        m_apu.Step(cycles: cycles);
 
         // The PPU only flags the blank transitions; the bus fires the timed DMAs so the PPU stays bus-free.
         if (m_ppu.ConsumeVBlankStarted()) {
@@ -155,6 +173,15 @@ public sealed class GbaBus : IGbaBus {
 
         if (m_ppu.ConsumeHBlankStarted()) {
             m_dma.OnHBlank(bus: this);
+        }
+
+        // Drained Direct Sound FIFOs are topped up by their special-timing DMA channels.
+        if (m_apu.ConsumeFifoARefill()) {
+            m_dma.OnFifo(fifo: 0, bus: this);
+        }
+
+        if (m_apu.ConsumeFifoBRefill()) {
+            m_dma.OnFifo(fifo: 1, bus: this);
         }
     }
 
@@ -288,6 +315,10 @@ public sealed class GbaBus : IGbaBus {
             return m_ppu.ReadRegister(offset: offset);
         }
 
+        if ((offset >= 0x60u) && (offset < 0xA8u)) {
+            return m_apu.ReadRegister(offset: offset);
+        }
+
         if ((offset >= 0x100u) && (offset < 0x110u)) {
             return m_timers.ReadRegister(offset: offset);
         }
@@ -310,6 +341,12 @@ public sealed class GbaBus : IGbaBus {
 
         if (offset < 0x58u) {
             m_ppu.WriteRegister(offset: offset, value: value);
+
+            return;
+        }
+
+        if ((offset >= 0x60u) && (offset < 0xA8u)) {
+            m_apu.WriteRegister(offset: offset, value: value);
 
             return;
         }
@@ -342,6 +379,7 @@ public sealed class GbaBus : IGbaBus {
     }
 
     private void UpdateWaitControl(ushort value) {
+        m_prefetchEnabled = (value & 0x4000) != 0;
         m_sram = s_sramWait[value & 0x3];
         m_ws0N = s_romNonSeq[(value >> 2) & 0x3];
         m_ws0S = s_ws0Seq[(value >> 4) & 0x1];
@@ -350,6 +388,107 @@ public sealed class GbaBus : IGbaBus {
         m_ws2N = s_romNonSeq[(value >> 8) & 0x3];
         m_ws2S = s_ws2Seq[(value >> 10) & 0x1];
     }
+
+    // A CPU data access uses the game-pak bus when it targets ROM or SRAM, which flushes the prefetch buffer;
+    // anywhere else the game-pak bus is free, so the buffer fills during this access.
+    private void DataAccess(uint address, int cycles) {
+        var region = address >> 24;
+
+        if ((region >= 0x08u) && (region <= 0x0Fu)) {
+            m_prefetchActive = false;
+        }
+        else {
+            StepPrefetch(cycles: cycles);
+        }
+
+        Tick(cycles: cycles);
+    }
+
+    // Cycle cost of an instruction fetch. Outside ROM (or with prefetch disabled) this is the plain wait-state;
+    // inside ROM with prefetch on, sequential fetches are served from the buffer.
+    private int CodeFetchCycles(uint address, int width, BusAccessType access) {
+        var region = address >> 24;
+
+        if ((region < 0x08u) || (region > 0x0Du) || !m_prefetchEnabled) {
+            m_prefetchActive = false;
+
+            return AccessCycles(address: address, width: width, access: access);
+        }
+
+        return (width == 4)
+            ? ConsumeHalf(address: address, access: access) + ConsumeHalf(address: address + 2u, access: BusAccessType.Sequential)
+            : ConsumeHalf(address: address, access: access);
+    }
+
+    // Serves one opcode halfword from the prefetch buffer, returning its cycle cost and advancing the buffer head.
+    private int ConsumeHalf(uint address, BusAccessType access) {
+        if ((access == BusAccessType.NonSequential) || !m_prefetchActive || (address != m_prefetchHead)) {
+            // A branch (or the first fetch into ROM) restarts the stream: pay the full non-sequential access, then
+            // begin prefetching the following halfwords.
+            m_prefetchActive = true;
+            m_prefetchSeq = RomSeqCycles(region: address >> 24);
+            m_prefetchCount = 0;
+            m_prefetchCountdown = 0;
+            m_prefetchHead = address + 2u;
+
+            return RomNonSeqCycles(region: address >> 24);
+        }
+
+        int cost;
+
+        if (m_prefetchCount > 0) {
+            // Already buffered ahead of the CPU: a single cycle to hand it over.
+            --m_prefetchCount;
+            cost = 1;
+        }
+        else if (m_prefetchCountdown > 0) {
+            // The buffer is mid-load of exactly this halfword; the CPU waits out the remainder.
+            cost = m_prefetchCountdown;
+            m_prefetchCountdown = 0;
+        }
+        else {
+            // The buffer had no head start, so this fetch pays a full sequential access.
+            cost = m_prefetchSeq;
+        }
+
+        m_prefetchHead = address + 2u;
+
+        return cost;
+    }
+
+    // Advances the prefetch buffer by the given free cycles, loading sequential halfwords up to its capacity.
+    private void StepPrefetch(int cycles) {
+        if (!m_prefetchActive || !m_prefetchEnabled) {
+            return;
+        }
+
+        while ((cycles > 0) && (m_prefetchCount < PrefetchCapacity)) {
+            if (m_prefetchCountdown <= 0) {
+                m_prefetchCountdown = m_prefetchSeq;
+            }
+
+            var step = Math.Min(cycles, m_prefetchCountdown);
+
+            m_prefetchCountdown -= step;
+            cycles -= step;
+
+            if (m_prefetchCountdown == 0) {
+                ++m_prefetchCount;
+            }
+        }
+    }
+
+    private int RomSeqCycles(uint region) => region switch {
+        0x8u or 0x9u => m_ws0S,
+        0xAu or 0xBu => m_ws1S,
+        _ => m_ws2S,
+    };
+
+    private int RomNonSeqCycles(uint region) => region switch {
+        0x8u or 0x9u => m_ws0N,
+        0xAu or 0xBu => m_ws1N,
+        _ => m_ws2N,
+    };
 
     private int AccessCycles(uint address, int width, BusAccessType access) {
         switch (address >> 24) {

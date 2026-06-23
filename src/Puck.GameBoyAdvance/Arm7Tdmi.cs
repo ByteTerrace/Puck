@@ -146,7 +146,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
             var opcode = (ushort)m_pipe[0];
 
             m_pipe[0] = m_pipe[1];
-            m_pipe[1] = m_bus.Read16(address: address, access: fetchType);
+            m_pipe[1] = m_bus.ReadCode16(address: address, access: fetchType);
 
             ExecuteThumb(opcode: opcode);
 
@@ -159,7 +159,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
             var opcode = m_pipe[0];
 
             m_pipe[0] = m_pipe[1];
-            m_pipe[1] = m_bus.Read32(address: address, access: fetchType);
+            m_pipe[1] = m_bus.ReadCode32(address: address, access: fetchType);
 
             ExecuteArm(opcode: opcode);
 
@@ -225,15 +225,15 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         if (ThumbState) {
             var pc = m_gpr[15] & ~1u;
 
-            m_pipe[0] = m_bus.Read16(address: pc, access: BusAccessType.NonSequential);
-            m_pipe[1] = m_bus.Read16(address: pc + 2u, access: BusAccessType.Sequential);
+            m_pipe[0] = m_bus.ReadCode16(address: pc, access: BusAccessType.NonSequential);
+            m_pipe[1] = m_bus.ReadCode16(address: pc + 2u, access: BusAccessType.Sequential);
             m_gpr[15] = pc + 4u;
         }
         else {
             var pc = m_gpr[15] & ~3u;
 
-            m_pipe[0] = m_bus.Read32(address: pc, access: BusAccessType.NonSequential);
-            m_pipe[1] = m_bus.Read32(address: pc + 4u, access: BusAccessType.Sequential);
+            m_pipe[0] = m_bus.ReadCode32(address: pc, access: BusAccessType.NonSequential);
+            m_pipe[1] = m_bus.ReadCode32(address: pc + 4u, access: BusAccessType.Sequential);
             m_gpr[15] = pc + 8u;
         }
 

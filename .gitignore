@@ -44,7 +44,7 @@ Desktop.ini
 __azurite_db_blob*.json
 __blobstorage__
 
-# Game Boy ROMs / boot ROMs / conformance vectors (external, copyrighted — never commit; see PUCK_GB_TESTROMS)
-testroms/
+# ROMS
 *.gb
+*.gba
 *.gbc

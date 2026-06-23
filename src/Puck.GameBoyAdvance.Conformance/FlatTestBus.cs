@@ -45,6 +45,10 @@ internal sealed class FlatTestBus : IGbaBus {
             | (m_memory[(a + 3u) & m_mask] << 24));
     }
 
+    public ushort ReadCode16(uint address, BusAccessType access) => Read16(address: address, access: access);
+
+    public uint ReadCode32(uint address, BusAccessType access) => Read32(address: address, access: access);
+
     public void Write8(uint address, byte value, BusAccessType access) {
         m_memory[address & m_mask] = value;
     }

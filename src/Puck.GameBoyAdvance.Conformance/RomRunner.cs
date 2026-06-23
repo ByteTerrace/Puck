@@ -119,7 +119,7 @@ internal static class RomRunner {
         }
     }
 
-    public static void Render(string romPath, string outputPath) {
+    public static void Render(string romPath, string outputPath, long steps = 6_000_000) {
         if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
             return;
         }
@@ -127,7 +127,7 @@ internal static class RomRunner {
         using (provider) {
             // Run long enough for the ROM to finish its vsync wait and draw its result, rather than stopping at
             // the first stable-PC loop (which would catch it mid-vsync, before anything is drawn).
-            for (long i = 0; i < 6_000_000; ++i) {
+            for (long i = 0; i < steps; ++i) {
                 machine.Step();
             }
 
@@ -139,6 +139,168 @@ internal static class RomRunner {
 
             Console.WriteLine($"  rendered {Path.GetFileName(romPath)} -> {outputPath}");
         }
+    }
+
+    /// <summary>
+    /// Boots a ROM, runs it for a fixed number of steps, and hashes the resulting framebuffer. Used as a
+    /// deterministic visual-regression floor: the core is fully deterministic, so a known-good render must
+    /// reproduce its hash exactly. A mismatch flags an unintended change to the CPU/PPU/timing pipeline.
+    /// When <paramref name="expected"/> is 0 the actual hash is reported (for capturing a new floor).
+    /// </summary>
+    public static int RunRenderHash(string romPath, string name, long steps, ulong expected) {
+        if (!TryLoad(romPath: romPath, name: name, out var provider, out var machine)) {
+            return 0;
+        }
+
+        using (provider) {
+            for (long i = 0; i < steps; ++i) {
+                machine.Step();
+            }
+
+            var bytes = MemoryMarshal.AsBytes(span: machine.Framebuffer);
+            var hash = 0xCBF29CE484222325ul; // FNV-1a 64-bit
+
+            foreach (var b in bytes) {
+                hash = (hash ^ b) * 0x100000001B3ul;
+            }
+
+            if (expected == 0ul) {
+                Console.WriteLine($"  [HASH] {name}: 0x{hash:X16} (capture)");
+
+                return 0;
+            }
+
+            if (hash == expected) {
+                Console.WriteLine($"  [PASS] {name}: frame hash matches floor");
+
+                return 0;
+            }
+
+            Console.WriteLine($"  [FAIL] {name}: frame hash 0x{hash:X16} != floor 0x{expected:X16}");
+
+            return 1;
+        }
+    }
+
+    // The AGS tests run in this order under the default (KEYINPUT-advanced / COM / SIO-extended tests disabled),
+    // per the DenSinH/AGSTests decompilation. Names are best-effort annotations for the value stream written to
+    // 0x04; the raw index + value is authoritative. The SIO interrupt test spins waiting for a link cable, so a
+    // headless run stalls there (after ~32 results).
+    private static readonly string[] s_agsTestNames = [
+        "mem: cpu_external_work_ram", "mem: cpu_internal_work_ram", "mem: palette_ram", "mem: vram", "mem: oam",
+        "mem: cartridge_type_flag", "mem: prefetch_buffer", "mem: waitstate_wait_control", "mem: cartridge_ram_wait_control",
+        "lcd: vcounter", "lcd: vcount_intr_flag", "lcd: hblank_intr_flag", "lcd: vblank_intr_flag", "lcd: vcount_status",
+        "lcd: hblank_status", "lcd: vblank_status",
+        "timer: prescaler", "timer: timer_connect", "timer: timer_intr_flag",
+        "dma: DMA0_address_control", "dma: DMA1_address_control", "dma: DMA2_address_control", "dma: DMA3_address_control",
+        "dma: DMA_vblank_start", "dma: DMA_hblank_start", "dma: DMA_display_start", "dma: DMA_intr_flag", "dma: DMA_priority",
+        "intr: vblank", "intr: hblank", "intr: vcount", "intr: timer", "intr: sio (link-cable; expected stall)",
+    ];
+
+    /// <summary>
+    /// Runs the AGS aging cartridge (the TCHK10 dump, md5 9f74b2ad…) headlessly. The ROM is patched in memory with
+    /// the DenSinH output-results patch so each test writes its result flags to 0x04; a <see cref="TracingGbaBus"/>
+    /// captures that stream. A flag value of 0 means the test passed. Runs until the result stream goes quiet
+    /// (the SIO interrupt test stalls waiting for a link cable, which is expected).
+    /// </summary>
+    public static int RunAgs(string romPath, string name) {
+        if (!File.Exists(romPath)) {
+            Console.WriteLine($"  [SKIP] {name}: not found at {romPath}");
+
+            return 0;
+        }
+
+        var rom = File.ReadAllBytes(path: romPath);
+
+        // Output-results patch: replace the per-test flag accumulator at file offset 0xB20 with
+        //   mov r1,#4 ; str r0,[r1] ; str r7,[r7,#8]
+        // so the test's return flags (r0) are stored to address 0x04 after every test.
+        ReadOnlySpan<byte> patch = [0x04, 0x21, 0x08, 0x60, 0xBF, 0x60];
+
+        patch.CopyTo(destination: rom.AsSpan(start: 0xB20));
+
+        var results = new List<uint>();
+
+        // Diagnostic: capture every TM0CNT_L (0x04000100) read tagged with how many test results had been written
+        // at the time. The wait-state test (result index 7) reads the timer 24 times — one per setting — so the
+        // reads tagged 7 are exactly the 24 values it compares against wait_control_timer_values[3][8].
+        var timerReads = new List<(int afterResults, uint value)>();
+        var cartridge = new GbaCartridge(rom: rom);
+        var services = new ServiceCollection();
+
+        // Wire the tracing decorator in front of the real bus: register the concrete bus, then map IGbaBus to a
+        // TracingGbaBus that wraps it. Registering IGbaBus first makes AddGameBoyAdvance's TryAdd defer to ours.
+        services.AddScoped<GbaBus>();
+        services.AddScoped<IGbaBus>(implementationFactory: sp => new TracingGbaBus(
+            inner: sp.GetRequiredService<GbaBus>(),
+            watchAddress: 0x04u,
+            onStore: results.Add,
+            readWatchAddress: 0x04000100u,
+            onRead: value => timerReads.Add((results.Count, value))));
+        _ = services.AddGameBoyAdvance();
+        _ = services.AddReplacementBios(image: BiosImage);
+        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+
+        using var provider = services.BuildServiceProvider();
+        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+
+        machine.DirectBoot();
+
+        // Step until the result stream goes quiet: once results have started arriving, a long gap with no new
+        // result means the suite has stalled (the SIO link-cable test) or finished.
+        const long budget = 400_000_000;
+        const long quietWindow = 12_000_000;
+        var lastCount = 0;
+        var lastChangeStep = 0L;
+
+        for (long i = 1; i <= budget; ++i) {
+            machine.Step();
+
+            if (results.Count != lastCount) {
+                lastCount = results.Count;
+                lastChangeStep = i;
+            }
+            else if ((results.Count > 0) && ((i - lastChangeStep) > quietWindow)) {
+                break;
+            }
+        }
+
+        var passed = 0;
+        var failed = 0;
+
+        Console.WriteLine($"  {name}: {results.Count} test results captured");
+
+        for (var i = 0; i < results.Count; ++i) {
+            var value = results[i];
+            var label = (i < s_agsTestNames.Length) ? s_agsTestNames[i] : $"test #{i}";
+            var ok = value == 0u;
+
+            if (ok) {
+                ++passed;
+            }
+            else {
+                ++failed;
+            }
+
+            Console.WriteLine($"    [{(ok ? "PASS" : "FAIL")}] #{i,2} {label,-42} flags=0x{value:X}");
+        }
+
+        Console.WriteLine($"  == AGS: {passed} passed, {failed} failed ({results.Count} run) ==");
+
+        // Wait-state diagnostic: the 24 timer reads taken during test index 7, against the expected table.
+        uint[] expectedWait = [0x28, 0x24, 0x20, 0x38, 0x24, 0x20, 0x1C, 0x34, 0x30, 0x2C, 0x28, 0x40, 0x24, 0x20, 0x1C, 0x34, 0x40, 0x3C, 0x38, 0x50, 0x24, 0x20, 0x1C, 0x34];
+        var waitReads = timerReads.Where(predicate: r => r.afterResults == 7).Select(selector: r => r.value).ToArray();
+
+        if (waitReads.Length > 0) {
+            Console.WriteLine($"  -- wait-state timer reads (ours vs expected), {waitReads.Length} captured --");
+
+            for (var i = 0; (i < waitReads.Length) && (i < expectedWait.Length); ++i) {
+                var ours = waitReads[i];
+                Console.WriteLine($"     [{i,2}] ours=0x{ours:X} expected=0x{expectedWait[i]:X} {(ours == expectedWait[i] ? "ok" : $"Δ={(long)ours - expectedWait[i]}")}");
+            }
+        }
+
+        return failed;
     }
 
     private static string Ascii(uint word) {

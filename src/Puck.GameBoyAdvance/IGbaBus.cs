@@ -30,6 +30,20 @@ public interface IGbaBus {
     /// <returns>The 32-bit value at <paramref name="address"/>.</returns>
     uint Read32(uint address, BusAccessType access);
 
+    /// <summary>Fetches a Thumb opcode halfword. Distinct from <see cref="Read16"/> so the bus can route it
+    /// through the game-pak prefetch buffer: sequential code fetches from ROM drain the buffer that fills during
+    /// the CPU's other cycles, while data reads flush it.</summary>
+    /// <param name="address">The 32-bit instruction address; the hardware forces halfword alignment.</param>
+    /// <param name="access">Whether the fetch is sequential or non-sequential.</param>
+    /// <returns>The 16-bit opcode at <paramref name="address"/>.</returns>
+    ushort ReadCode16(uint address, BusAccessType access);
+
+    /// <summary>Fetches an ARM opcode word. The game-pak prefetch counterpart of <see cref="Read32"/>.</summary>
+    /// <param name="address">The 32-bit instruction address; the hardware forces word alignment.</param>
+    /// <param name="access">Whether the fetch is sequential or non-sequential.</param>
+    /// <returns>The 32-bit opcode at <paramref name="address"/>.</returns>
+    uint ReadCode32(uint address, BusAccessType access);
+
     /// <summary>Writes a byte, advancing the rest of the machine by the access's wait-state first.</summary>
     /// <param name="address">The 32-bit CPU address to write.</param>
     /// <param name="value">The value to store.</param>

@@ -75,6 +75,32 @@ public sealed class GbaDmaController : IGbaDmaController {
     /// <inheritdoc/>
     public void OnHBlank(IGbaBus bus) => RunTimed(timing: TimingHBlank, bus: bus);
 
+    /// <inheritdoc/>
+    public void OnFifo(int fifo, IGbaBus bus) {
+        var fifoDestination = (fifo == 0) ? 0x040000A0u : 0x040000A4u;
+
+        for (var channel = 1; channel <= 2; ++channel) {
+            var control = m_control[channel];
+
+            // Enabled, special-timing, and pointed at this FIFO.
+            if (((control & 0x8000) == 0) || (((control >> 12) & 0x3) != 3) || (m_destinationLatch[channel] != (fifoDestination & DestinationMask(channel: channel)))) {
+                continue;
+            }
+
+            var sourceControl = (control >> 7) & 0x3;
+
+            // A FIFO transfer is always four 32-bit words into the fixed FIFO address.
+            for (var i = 0; i < 4; ++i) {
+                bus.Write32(address: fifoDestination, value: bus.Read32(address: m_sourceLatch[channel], access: BusAccessType.Sequential), access: BusAccessType.Sequential);
+                m_sourceLatch[channel] = Step(address: m_sourceLatch[channel], control: sourceControl, unit: 4u);
+            }
+
+            if ((control & 0x4000) != 0) {
+                m_interrupts.Request(source: (InterruptSource)((int)InterruptSource.Dma0 + channel));
+            }
+        }
+    }
+
     private void WriteControl(int channel, ushort value, IGbaBus bus) {
         var wasEnabled = (m_control[channel] & 0x8000) != 0;
 

@@ -26,4 +26,10 @@ public interface IGbaDmaController {
     /// <summary>Runs any channels configured for horizontal-blank timing.</summary>
     /// <param name="bus">The bus to transfer through.</param>
     void OnHBlank(IGbaBus bus);
+
+    /// <summary>Refills a drained Direct Sound FIFO: runs any special-timing channel (DMA1/DMA2) targeting that
+    /// FIFO, transferring four words from its running source.</summary>
+    /// <param name="fifo">The FIFO index: 0 for A (0x040000A0), 1 for B (0x040000A4).</param>
+    /// <param name="bus">The bus to transfer through.</param>
+    void OnFifo(int fifo, IGbaBus bus);
 }

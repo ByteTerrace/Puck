@@ -12,20 +12,24 @@ public sealed class GameBoyAdvanceMachine {
     private readonly IArmCpu m_cpu;
     private readonly IGbaBus m_bus;
     private readonly IGbaPpu m_ppu;
+    private readonly IGbaApu m_apu;
 
-    /// <summary>Creates the machine from its CPU, bus, and PPU (all injected from the per-machine scope).</summary>
+    /// <summary>Creates the machine from its CPU, bus, PPU, and APU (all injected from the per-machine scope).</summary>
     /// <param name="cpu">The ARM7TDMI core, already bound to <paramref name="bus"/>.</param>
     /// <param name="bus">The system bus.</param>
     /// <param name="ppu">The picture-processing unit.</param>
+    /// <param name="apu">The audio-processing unit.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public GameBoyAdvanceMachine(IArmCpu cpu, IGbaBus bus, IGbaPpu ppu) {
+    public GameBoyAdvanceMachine(IArmCpu cpu, IGbaBus bus, IGbaPpu ppu, IGbaApu apu) {
         ArgumentNullException.ThrowIfNull(cpu);
         ArgumentNullException.ThrowIfNull(bus);
         ArgumentNullException.ThrowIfNull(ppu);
+        ArgumentNullException.ThrowIfNull(apu);
 
         m_cpu = cpu;
         m_bus = bus;
         m_ppu = ppu;
+        m_apu = apu;
     }
 
     /// <summary>Gets the CPU core.</summary>
@@ -36,6 +40,9 @@ public sealed class GameBoyAdvanceMachine {
 
     /// <summary>Gets the picture-processing unit.</summary>
     public IGbaPpu Ppu => m_ppu;
+
+    /// <summary>Gets the audio-processing unit.</summary>
+    public IGbaApu Apu => m_apu;
 
     /// <summary>Gets the most recent 240×160 frame as packed 0xAARRGGBB pixels.</summary>
     public ReadOnlySpan<uint> Framebuffer => m_ppu.Framebuffer;

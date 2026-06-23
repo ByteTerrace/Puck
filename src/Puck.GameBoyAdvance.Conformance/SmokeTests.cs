@@ -36,6 +36,7 @@ internal static class SmokeTests {
         SpriteRendering();
         AffineBackgroundRendering();
         BrightnessBlend();
+        ApuPulseOutput();
         BiosIrqDispatch();
         DependencyInjectionScope();
 
@@ -136,7 +137,7 @@ internal static class SmokeTests {
         timerInterrupts.WriteRegister(offset: 0x208u, value: 1);
         timerInterrupts.WriteRegister(offset: 0x200u, value: timer0Bit);
 
-        var timers = new GbaTimerController(interrupts: timerInterrupts);
+        var timers = new GbaTimerController(interrupts: timerInterrupts, apu: new GbaApu());
 
         timers.WriteRegister(offset: 0x100u, value: 0xFFFE);          // reload
         timers.WriteRegister(offset: 0x102u, value: 0x00C0);          // enable + IRQ, prescaler 1
@@ -150,9 +151,10 @@ internal static class SmokeTests {
             bios: new ReplacementBios(image: new byte[ReplacementBios.ImageSize]),
             cartridge: new GbaCartridge(rom: new byte[256]),
             interrupts: dmaInterrupts,
-            timers: new GbaTimerController(interrupts: dmaInterrupts),
+            timers: new GbaTimerController(interrupts: dmaInterrupts, apu: new GbaApu()),
             dma: new GbaDmaController(interrupts: dmaInterrupts),
-            ppu: new GbaPpu(interrupts: dmaInterrupts));
+            ppu: new GbaPpu(interrupts: dmaInterrupts),
+            apu: new GbaApu());
 
         bus.Write32(address: 0x03000000u, value: 0xCAFEBABEu, access: BusAccessType.NonSequential);
         bus.Write16(address: 0x040000B0u, value: 0x0000, access: BusAccessType.NonSequential); // SAD lo
@@ -280,6 +282,83 @@ internal static class SmokeTests {
         var pixel = ppu.Framebuffer[0];
 
         Check(name: "brightness blend → white at EVY=16", ok: pixel == 0xFFFFFFFFu, detail: $"got 0x{pixel:X8}");
+    }
+
+    private static void ApuPulseOutput() {
+        var apu = new GbaApu();
+
+        apu.ConfigureOutput(sampleRate: 32768);
+        apu.WriteRegister(offset: 0x84u, value: 0x0080);   // SOUNDCNT_X: master enable (must precede channel writes)
+        apu.WriteRegister(offset: 0x82u, value: 0x0002);   // SOUNDCNT_H: PSG ratio 100%
+        apu.WriteRegister(offset: 0x62u, value: 0xF080);   // NR11 duty 50%, NR12 volume 15
+        apu.WriteRegister(offset: 0x64u, value: 0x8700);   // NR13/NR14: frequency + trigger
+
+        var buffer = new short[2048];
+        var first = 0;
+        var gotFirst = false;
+        var varied = false;
+
+        for (var chunk = 0; chunk < 256; ++chunk) {
+            apu.Step(cycles: 8192);
+
+            var count = apu.DrainSamples(destination: buffer);
+
+            for (var i = 0; i < count; ++i) {
+                if (!gotFirst) {
+                    first = buffer[i];
+                    gotFirst = true;
+                }
+                else if (buffer[i] != first) {
+                    varied = true;
+                }
+            }
+        }
+
+        Check(name: "APU pulse channel is active", ok: (apu.ReadRegister(offset: 0x84u) & 0x1) != 0);
+        Check(name: "APU pulse produces a varying waveform", ok: varied);
+
+        // Noise channel: trigger it and confirm the LFSR drives a varying output.
+        var noiseApu = new GbaApu();
+
+        noiseApu.ConfigureOutput(sampleRate: 32768);
+        noiseApu.WriteRegister(offset: 0x84u, value: 0x0080);   // master enable
+        noiseApu.WriteRegister(offset: 0x82u, value: 0x0002);   // PSG ratio 100%
+        noiseApu.WriteRegister(offset: 0x78u, value: 0xF000);   // NR42 volume 15
+        noiseApu.WriteRegister(offset: 0x7Cu, value: 0x8000);   // NR44 trigger
+
+        var noiseVaried = false;
+        var noiseFirst = 0;
+        var gotNoiseFirst = false;
+
+        for (var chunk = 0; chunk < 256; ++chunk) {
+            noiseApu.Step(cycles: 8192);
+
+            var count = noiseApu.DrainSamples(destination: buffer);
+
+            for (var i = 0; i < count; ++i) {
+                if (!gotNoiseFirst) {
+                    noiseFirst = buffer[i];
+                    gotNoiseFirst = true;
+                }
+                else if (buffer[i] != noiseFirst) {
+                    noiseVaried = true;
+                }
+            }
+        }
+
+        Check(name: "APU noise channel is active", ok: (noiseApu.ReadRegister(offset: 0x84u) & 0x8) != 0);
+        Check(name: "APU noise produces a varying waveform", ok: noiseVaried);
+
+        // Direct Sound FIFO: enqueue samples, pop one on a timer overflow, and confirm the low FIFO asks for a refill.
+        var fifoApu = new GbaApu();
+
+        fifoApu.WriteRegister(offset: 0x84u, value: 0x0080); // master enable
+        fifoApu.WriteRegister(offset: 0x82u, value: 0x0000); // SOUNDCNT_H: FIFO A clocked by timer 0
+        fifoApu.WriteRegister(offset: 0xA0u, value: 0x2010); // enqueue two samples (0x10, 0x20)
+        fifoApu.OnTimerOverflow(timer: 0);                   // pop one
+
+        Check(name: "Direct Sound FIFO requests refill when low", ok: fifoApu.ConsumeFifoARefill());
+        Check(name: "Direct Sound FIFO refill flag clears", ok: !fifoApu.ConsumeFifoARefill());
     }
 
     private static void BiosIrqDispatch() {

@@ -556,13 +556,16 @@ public sealed class GbaPpu : IGbaPpu {
         var verticalOffset = m_registers[9 + (background * 2)] & 0x1FF;
         var widthMask = ((size == 0) || (size == 2)) ? 0xFF : 0x1FF;
         var heightMask = ((size == 0) || (size == 1)) ? 0xFF : 0x1FF;
+        var mosaic = (control & 0x40) != 0;
+        var mosaicX = mosaic ? ((m_registers[0x26] & 0xF) + 1) : 1;
+        var mosaicY = mosaic ? (((m_registers[0x26] >> 4) & 0xF) + 1) : 1;
 
-        var y = (line + verticalOffset) & heightMask;
+        var y = ((line - (line % mosaicY)) + verticalOffset) & heightMask;
         var tileY = y >> 3;
         var inTileY = y & 7;
 
         for (var x = 0; x < ScreenWidth; ++x) {
-            var px = (x + horizontalOffset) & widthMask;
+            var px = ((x - (x % mosaicX)) + horizontalOffset) & widthMask;
             var entry = Vram16(offset: screenBase + MapEntryOffset(tileX: px >> 3, tileY: tileY, size: size));
             var tileNumber = (uint)(entry & 0x3FF);
             var flipX = (entry & 0x400) != 0;
@@ -622,12 +625,17 @@ public sealed class GbaPpu : IGbaPpu {
         var pb = (short)m_registers[registerBase + 1];
         var pc = (short)m_registers[registerBase + 2];
         var pd = (short)m_registers[registerBase + 3];
-        var startX = m_affineRefX[index] + (pb * line);
-        var startY = m_affineRefY[index] + (pd * line);
+        var mosaic = (control & 0x40) != 0;
+        var mosaicX = mosaic ? ((m_registers[0x26] & 0xF) + 1) : 1;
+        var mosaicY = mosaic ? (((m_registers[0x26] >> 4) & 0xF) + 1) : 1;
+        var mosaicLine = line - (line % mosaicY);
+        var startX = m_affineRefX[index] + (pb * mosaicLine);
+        var startY = m_affineRefY[index] + (pd * mosaicLine);
 
         for (var x = 0; x < ScreenWidth; ++x) {
-            var texX = (startX + (pa * x)) >> 8;
-            var texY = (startY + (pc * x)) >> 8;
+            var sampleX = x - (x % mosaicX);
+            var texX = (startX + (pa * sampleX)) >> 8;
+            var texY = (startY + (pc * sampleX)) >> 8;
 
             if (wrap) {
                 texX &= mapPixels - 1;
