@@ -1,0 +1,133 @@
+namespace Puck.GameBoy;
+
+/// <summary>
+/// A fully assembled SM83 system: the CPU bound to the bus, which owns the timer, OAM DMA, and PPU and routes the
+/// cartridge. The CPU is the bus master, so advancing the machine is simply stepping the CPU — every other
+/// component is clocked through the bus's cycle accessors. When constructed without a boot ROM the machine is
+/// initialized to the model's documented post-boot state, so cartridges can run directly from <c>0x0100</c>.
+/// </summary>
+public sealed class GameBoyMachine {
+    private readonly ISystemBus m_bus;
+    private readonly ICpu m_cpu;
+
+    private ulong m_runTargetDots;
+
+    /// <summary>Gets the CPU.</summary>
+    public ICpu Cpu =>
+        m_cpu;
+    /// <summary>Gets the bus.</summary>
+    public ISystemBus Bus =>
+        m_bus;
+    /// <summary>Gets the PPU, whose framebuffer is the machine's video output.</summary>
+    public IPpu Ppu =>
+        m_bus.Ppu;
+
+    /// <summary>Assembles a machine from its CPU, bus, and configuration — all resolved together from one
+    /// per-machine DI scope. When the configuration supplies no boot ROM, the CPU and I/O are seeded to the model's
+    /// documented post-boot state so a cartridge can run directly from <c>0x0100</c>.</summary>
+    /// <param name="cpu">The CPU core, already bound to <paramref name="bus"/>.</param>
+    /// <param name="bus">The system bus.</param>
+    /// <param name="configuration">The model and reset configuration.</param>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    public GameBoyMachine(ICpu cpu, ISystemBus bus, MachineConfiguration configuration) {
+        ArgumentNullException.ThrowIfNull(cpu);
+        ArgumentNullException.ThrowIfNull(bus);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        m_cpu = cpu;
+        m_bus = bus;
+
+        if (configuration.BootRom is null) {
+            ApplyPostBootState(model: configuration.Model);
+        }
+    }
+
+    /// <summary>Advances the machine by one CPU instruction (or one machine cycle while halted/stopped),
+    /// clocking every other component through the bus.</summary>
+    public void Step() =>
+        m_cpu.Step();
+
+    /// <summary>Advances the machine by a budget of master clock cycles (T-cycles / PPU dots — the units of
+    /// <see cref="SystemBus.ElapsedDots"/>), stepping whole instructions until the budget is met. This is the
+    /// deterministic pacing seam a host node drives: the host converts its frame's elapsed engine ticks to an
+    /// exact integer cycle budget (the rational accumulator <c>ticks·4194304/50400</c>) and hands it here.</summary>
+    /// <param name="cycles">The number of master clock cycles to advance this call.</param>
+    /// <remarks>An instruction is the smallest step, so a single call overshoots the budget by at most one
+    /// instruction's worth of cycles. The overshoot is carried against a cumulative target, so a sequence of
+    /// calls stays cycle-exact in aggregate (no drift) — the long-term cycle count tracks the summed budget to
+    /// within one in-flight instruction, which is what keeps host pacing free of accumulating error.</remarks>
+    public void Run(ulong cycles) {
+        m_runTargetDots += cycles;
+
+        // Step() always advances the bus by at least one machine cycle in every path (including halted and
+        // stopped, which fall through to an internal cycle), so ElapsedDots strictly increases and this loop
+        // always terminates.
+        while (m_bus.ElapsedDots < m_runTargetDots) {
+            m_cpu.Step();
+        }
+    }
+
+    private void ApplyPostBootState(ConsoleModel model) {
+        // The boot ROM's handoff register state, which differs per model. The CGB leaves A = 0x11 — the value ROMs
+        // test to detect a Color console and enable its features. (The DMG's H/C flags depend on the header
+        // checksum, which is non-zero for every real cartridge and test ROM, giving F = 0xB0.)
+        if (model == ConsoleModel.Cgb) {
+            m_cpu.A = 0x11;
+            m_cpu.F = 0x80;
+            m_cpu.B = 0x00;
+            m_cpu.C = 0x00;
+            m_cpu.D = 0xFF;
+            m_cpu.E = 0x56;
+            m_cpu.H = 0x00;
+            m_cpu.L = 0x0D;
+        }
+        else {
+            m_cpu.A = 0x01;
+            m_cpu.F = 0xB0;
+            m_cpu.B = 0x00;
+            m_cpu.C = 0x13;
+            m_cpu.D = 0x00;
+            m_cpu.E = 0xD8;
+            m_cpu.H = 0x01;
+            m_cpu.L = 0x4D;
+        }
+
+        m_cpu.StackPointer = 0xFFFE;
+        m_cpu.ProgramCounter = 0x0100;
+
+        // The post-boot I/O state cartridges rely on: the LCD is on with the background enabled, and the palettes
+        // are seeded. (The sound registers are left at reset for now.)
+        m_bus.WriteByte(address: MemoryMap.LcdControl, value: 0x91);
+        m_bus.WriteByte(address: MemoryMap.BackgroundPalette, value: 0xFC);
+        m_bus.WriteByte(address: MemoryMap.ObjectPalette0, value: 0xFF);
+        m_bus.WriteByte(address: MemoryMap.ObjectPalette1, value: 0xFF);
+
+        // The divider is not zero at handoff: the boot ROM has been running for a model-specific number of cycles,
+        // so the 16-bit internal counter has a precise post-boot phase (DIV reads its high byte). Seeding the exact
+        // phase keeps a DIV read taken immediately after boot matching hardware. (A write to DIV would instead clear
+        // the counter, which is why this goes through the dedicated seam.)
+        //
+        // The documented post-boot DIV value on DMG/MGB is 0xABCC. Under this bus's deferred-cycle model an I/O read
+        // latches at the START of its access machine cycle (the access's own four T-cycles are charged afterward), so a
+        // DIV read lands a few T-cycles earlier in phase than a literal 0xABCC seed would predict; seeding 0xABCF
+        // cancels that offset exactly, so DIV reads taken just before and just after the post-boot increment match
+        // hardware. The 0xABCF is load-bearing for that phase alignment — it is not a typo for 0xABCC.
+        var postBootDivider = model switch {
+            ConsoleModel.Dmg => (ushort)0xABCF,
+            _ => (ushort)0x0000,
+        };
+
+        m_bus.Timer.SetInternalCounter(value: postBootDivider);
+
+        // During boot the LCD is already running, so a VBlank fires and leaves its flag pending in IF; the boot ROM
+        // never clears it. Post-boot IF therefore reads 0xE1 (the VBlank request bit set, the unused upper bits read
+        // as one). IME is off and IE is zero at handoff, so nothing dispatches — the flag simply sits pending, as on
+        // hardware. (Seeding it is more faithful than leaving IF clear: a cartridge that enables VBlank immediately
+        // would take the interrupt on real hardware too.)
+        m_bus.WriteByte(address: MemoryMap.InterruptFlag, value: 0x01);
+
+        // The boot ROM's startup chime leaves the APU powered with a known register state (and channel 1 sounding);
+        // seed it directly so the audio block reads match hardware without replaying the chime.
+        m_bus.Apu.InitializePostBoot();
+    }
+}
