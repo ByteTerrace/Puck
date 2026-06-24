@@ -9,10 +9,10 @@
         <Project Path="src/Puck.Demo/Puck.Demo.csproj" />
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
-        <Project Path="src/Puck.GameBoy/Puck.GameBoy.csproj" />
         <Project Path="src/Puck.GameBoyAdvance/Puck.GameBoyAdvance.csproj" />
         <Project Path="src/Puck.GameBoyAdvance.Conformance/Puck.GameBoyAdvance.Conformance.csproj" />
         <Project Path="src/Puck.Hosting/Puck.Hosting.csproj" />
+        <Project Path="src/Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
         <Project Path="src/Puck.Input/Puck.Input.csproj" />
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />
