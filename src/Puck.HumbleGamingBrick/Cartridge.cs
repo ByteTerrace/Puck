@@ -1,3 +1,5 @@
+using Puck.HumbleGamingBrick.Interfaces;
+
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>Builds the right <see cref="ICartridge"/> for a ROM image by reading its header and selecting the

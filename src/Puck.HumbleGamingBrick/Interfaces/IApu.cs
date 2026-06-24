@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The audio processing unit: four sound channels (two pulse, one wave, one noise) driven by a frame sequencer

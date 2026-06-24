@@ -333,7 +333,7 @@ public sealed partial class Arm7Tdmi {
             m_bus.Write8(address: address, value: (byte)m_gpr[rd], access: BusAccessType.NonSequential);
         }
         else {
-            m_bus.Write32(address: address & ~3u, value: m_gpr[rd], access: BusAccessType.NonSequential);
+            m_bus.Write32(address: address, value: m_gpr[rd], access: BusAccessType.NonSequential);
         }
 
         m_nextFetchNonSequential = true;
@@ -349,7 +349,7 @@ public sealed partial class Arm7Tdmi {
 
         switch (operation) {
             case 0u: // STRH
-                m_bus.Write16(address: address & ~1u, value: (ushort)m_gpr[rd], access: BusAccessType.NonSequential);
+                m_bus.Write16(address: address, value: (ushort)m_gpr[rd], access: BusAccessType.NonSequential);
 
                 break;
             case 1u: // LDRH
@@ -407,7 +407,7 @@ public sealed partial class Arm7Tdmi {
             m_bus.Write8(address: address, value: (byte)m_gpr[rd], access: BusAccessType.NonSequential);
         }
         else {
-            m_bus.Write32(address: address & ~3u, value: m_gpr[rd], access: BusAccessType.NonSequential);
+            m_bus.Write32(address: address, value: m_gpr[rd], access: BusAccessType.NonSequential);
         }
 
         m_nextFetchNonSequential = true;
@@ -431,7 +431,7 @@ public sealed partial class Arm7Tdmi {
             m_bus.Idle(cycles: 1);
         }
         else {
-            m_bus.Write16(address: address & ~1u, value: (ushort)m_gpr[rd], access: BusAccessType.NonSequential);
+            m_bus.Write16(address: address, value: (ushort)m_gpr[rd], access: BusAccessType.NonSequential);
         }
 
         m_nextFetchNonSequential = true;
@@ -448,7 +448,7 @@ public sealed partial class Arm7Tdmi {
             m_bus.Idle(cycles: 1);
         }
         else {
-            m_bus.Write32(address: address & ~3u, value: m_gpr[rd], access: BusAccessType.NonSequential);
+            m_bus.Write32(address: address, value: m_gpr[rd], access: BusAccessType.NonSequential);
         }
 
         m_nextFetchNonSequential = true;

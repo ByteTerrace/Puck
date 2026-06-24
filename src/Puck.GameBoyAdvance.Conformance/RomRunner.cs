@@ -28,11 +28,19 @@ internal static class RomRunner {
         using (provider) {
             RunUntilSettled(machine: machine);
 
-            // Guard against a crash masquerading as a pass: a settled PC outside BIOS/ROM means the core ran off
-            // into unmapped memory rather than reaching the ROM's result loop.
+            // Guard against a crash masquerading as a pass: a settled PC in genuinely unmapped memory means the
+            // core ran off rather than reaching the ROM's result loop. The GBA can fetch code from any RAM/ROM
+            // region — BIOS, EWRAM, IWRAM, VRAM, and game-pak ROM — so all of those are legitimate (the nes test,
+            // for one, copies its body into VRAM and executes from there). Only flag the truly-unmapped gaps.
             var pc = machine.Cpu.GetRegister(index: 15);
+            var region = pc >> 24;
+            var executable = (pc < 0x4000u)             // BIOS
+                || (region == 0x02u)                    // on-board WRAM
+                || (region == 0x03u)                    // on-chip WRAM
+                || (region == 0x06u)                    // VRAM
+                || ((region >= 0x08u) && (region <= 0x0Du)); // game-pak ROM + mirrors
 
-            if ((pc >= 0x4000u) && ((pc < 0x08000000u) || (pc >= 0x0A000000u))) {
+            if (!executable) {
                 Console.WriteLine($"  [FAIL] {name}: ran off to unmapped PC 0x{pc:X8}");
 
                 return 1;
@@ -50,6 +58,119 @@ internal static class RomRunner {
 
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Runs the menu-driven mGBA test suite (mgba-emu/suite) head-lessly: a <see cref="MgbaDebugBus"/> emulates the
+    /// mGBA debug-log register (so the suite prints each category's "BEGIN:"/"END: passes/total") and injects the
+    /// controller input that drives the menu — press A to run each suite, read its result, press B then Down to
+    /// advance. Returns the number of suites with at least one failing subtest.
+    /// </summary>
+    public static int RunMgbaSuite(string romPath, string name) {
+        if (!File.Exists(romPath)) {
+            Console.WriteLine($"  [SKIP] {name}: not found at {romPath}");
+
+            return 0;
+        }
+
+        const long frameCycles = 280_896; // one GBA frame
+        var logs = new List<string>();
+        var cartridge = new GbaCartridge(rom: File.ReadAllBytes(path: romPath));
+        var services = new ServiceCollection();
+
+        services.AddScoped<GbaBus>();
+        services.AddScoped<IGbaBus>(implementationFactory: sp => new MgbaDebugBus(
+            inner: sp.GetRequiredService<GbaBus>(),
+            onLog: (level, text) => logs.Add(item: text)));
+        _ = services.AddGameBoyAdvance();
+        _ = services.AddReplacementBios(image: BiosImage);
+        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+
+        using var provider = services.BuildServiceProvider();
+        var scope = provider.CreateScope().ServiceProvider;
+        var machine = scope.GetRequiredService<GameBoyAdvanceMachine>();
+        var bus = scope.GetRequiredService<GbaBus>();
+        var debug = (MgbaDebugBus)scope.GetRequiredService<IGbaBus>();
+
+        machine.DirectBoot();
+
+        void StepCycles(long cycles) {
+            var target = bus.Cycles + cycles;
+
+            while (bus.Cycles < target) {
+                machine.Step();
+            }
+        }
+
+        void Press(ushort keyMask) {
+            debug.Keys = (ushort)(0x3FFu & ~keyMask);
+            StepCycles(frameCycles * 3);
+            debug.Keys = 0x3FF;
+            StepCycles(frameCycles * 5);
+        }
+
+        const ushort keyA = 0x1, keyB = 0x2, keyDown = 0x80;
+
+        // Let the suite clear SRAM, set up, and reach its menu.
+        StepCycles(frameCycles * 40);
+
+        const int suiteCount = 14;
+        var passedSuites = 0;
+        var failedSuites = 0;
+
+        Console.WriteLine($"  == {name} ==");
+
+        for (var i = 0; i < suiteCount; ++i) {
+            var before = logs.Count;
+
+            Press(keyMask: keyA); // run the selected suite
+
+            // Wait for the "END: passes/total" line (slow suites take many frames).
+            var endLine = (string?)null;
+
+            for (var frame = 0; (frame < 1200) && (endLine is null); ++frame) {
+                StepCycles(frameCycles);
+
+                for (var l = before; l < logs.Count; ++l) {
+                    if (logs[l].StartsWith(value: "END:", comparisonType: StringComparison.Ordinal)) {
+                        endLine = logs[l];
+
+                        break;
+                    }
+                }
+            }
+
+            var beginLine = logs.Skip(count: before).FirstOrDefault(predicate: s => s.StartsWith(value: "BEGIN:", comparisonType: StringComparison.Ordinal));
+            var suiteName = beginLine?.Substring(startIndex: 6).Trim() ?? $"suite #{i}";
+
+            if (endLine is null) {
+                Console.WriteLine($"    [????] {suiteName,-20} no result (timed out)");
+                ++failedSuites;
+            }
+            else {
+                // "END: passes/total"
+                var slash = endLine.IndexOf(value: '/');
+                var passes = int.Parse(endLine.AsSpan(start: 4, length: slash - 4).Trim());
+                var total = int.Parse(endLine.AsSpan(start: slash + 1).Trim());
+                var ok = (passes == total) && (total > 0);
+
+                Console.WriteLine($"    [{(ok ? "PASS" : "FAIL")}] {suiteName,-20} {passes}/{total}");
+
+                if (ok) {
+                    ++passedSuites;
+                }
+                else {
+                    ++failedSuites;
+                }
+            }
+
+            Press(keyMask: keyB);    // back to the menu
+            Press(keyMask: keyDown); // next suite
+        }
+
+        Console.WriteLine($"  == {name}: {passedSuites}/{suiteCount} suites fully passed ==");
+
+        return failedSuites;
     }
 
     public static int RunFuzzArm(string romPath, string name) {
@@ -166,6 +287,41 @@ internal static class RomRunner {
                 var thumb = (cpu.Cpsr & 0x20u) != 0u;
 
                 output.WriteLine($"{cpu.GetRegister(index: 15):X8} {(thumb ? 'T' : 'A')} {bus.Cycles}");
+
+                machine.Step();
+            }
+        }
+    }
+
+    /// <summary>Full-state co-simulation trace: per instruction prints PC, CPSR, r0..r14, and cumulative cycles
+    /// (state BEFORE the instruction executes), matching the mGBA cosim's <c>--statetrace</c> format. Diffing the
+    /// architectural registers (not just PC) finds the first true divergence unambiguously — immune to the
+    /// pipeline PC offset and to single-instruction count slips that defeat a naive line-by-line PC diff.</summary>
+    public static void StateTrace(string romPath, long steps) {
+        if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
+            return;
+        }
+
+        using (provider) {
+            var cpu = machine.Cpu;
+            var bus = (GbaBus)machine.Bus;
+            using var output = new StreamWriter(stream: Console.OpenStandardOutput(), bufferSize: 1 << 20);
+            var sb = new System.Text.StringBuilder(capacity: 160);
+
+            // Boot through the BIOS reset routine (undo TryLoad's direct boot) so the trace aligns with mGBA.
+            cpu.Reset();
+
+            for (long i = 0; i < steps; ++i) {
+                sb.Clear();
+                sb.Append(value: cpu.GetRegister(index: 15).ToString(format: "X8"));
+                sb.Append(value: ' ').Append(value: cpu.Cpsr.ToString(format: "X8"));
+
+                for (var r = 0; r < 15; ++r) {
+                    sb.Append(value: ' ').Append(value: cpu.GetRegister(index: r).ToString(format: "X8"));
+                }
+
+                sb.Append(value: ' ').Append(value: bus.Cycles);
+                output.WriteLine(value: sb);
 
                 machine.Step();
             }
@@ -349,13 +505,22 @@ internal static class RomRunner {
         var cartridge = new GbaCartridge(rom: rom);
         var services = new ServiceCollection();
 
+        var trace = Environment.GetEnvironmentVariable(variable: "PUCK_AGS_TRACE") == "1";
+        GameBoyAdvanceMachine? machineRef = null;
+
         // Wire the tracing decorator in front of the real bus: register the concrete bus, then map IGbaBus to a
         // TracingGbaBus that wraps it. Registering IGbaBus first makes AddGameBoyAdvance's TryAdd defer to ours.
         services.AddScoped<GbaBus>();
         services.AddScoped<IGbaBus>(implementationFactory: sp => new TracingGbaBus(
             inner: sp.GetRequiredService<GbaBus>(),
             watchAddress: 0x04u,
-            onStore: results.Add,
+            onStore: value => {
+                if (trace && (results.Count < 8)) {
+                    Console.WriteLine($"    [store] result#{results.Count} value=0x{value:X8} pc=0x{(machineRef?.Cpu.GetRegister(index: 15) ?? 0):X8}");
+                }
+
+                results.Add(item: value);
+            },
             readWatchAddress: 0x04000100u,
             onRead: value => timerReads.Add((results.Count, value))));
         _ = services.AddGameBoyAdvance();
@@ -364,6 +529,8 @@ internal static class RomRunner {
 
         using var provider = services.BuildServiceProvider();
         var machine = provider.CreateScope().ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+
+        machineRef = machine;
 
         machine.DirectBoot();
 
@@ -376,6 +543,10 @@ internal static class RomRunner {
 
         for (long i = 1; i <= budget; ++i) {
             machine.Step();
+
+            if (trace && ((i % 2_000_000L) == 0L)) {
+                Console.WriteLine($"    [trace] step={i,12} pc=0x{machine.Cpu.GetRegister(index: 15):X8} dispcnt=0x{machine.Ppu.ReadRegister(offset: 0x00u):X4} vcount={machine.Ppu.ReadRegister(offset: 0x06u),3} results={results.Count}");
+            }
 
             if (results.Count != lastCount) {
                 lastCount = results.Count;

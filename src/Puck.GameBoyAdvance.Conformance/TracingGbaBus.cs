@@ -56,6 +56,14 @@ internal sealed class TracingGbaBus : IGbaBus {
 
     public void Idle(int cycles) => m_inner.Idle(cycles: cycles);
 
+    public void ProcessEvents() => m_inner.ProcessEvents();
+
+    public bool Halted => m_inner.Halted;
+
+    public void Halt(bool stop) => m_inner.Halt(stop: stop);
+
+    public void RunUntilInterrupt() => m_inner.RunUntilInterrupt();
+
     private void Watch(uint address, uint value) {
         // The watched word lives in the BIOS region (0x04), which a real bus drops on write — but the store still
         // happens on the CPU side, which is all the patch needs. Match any access that covers the watched word.

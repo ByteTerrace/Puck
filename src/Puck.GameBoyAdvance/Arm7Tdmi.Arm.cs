@@ -428,7 +428,9 @@ public sealed partial class Arm7Tdmi {
                 m_bus.Write8(address: address, value: (byte)data, access: BusAccessType.NonSequential);
             }
             else {
-                m_bus.Write32(address: address & ~3u, value: data, access: BusAccessType.NonSequential);
+                // Raw address: the bus aligns it for wide-bus regions, while the 8-bit save bus uses the low bits
+                // to select which byte of the word it stores (and where) — STR to SRAM writes a single byte.
+                m_bus.Write32(address: address, value: data, access: BusAccessType.NonSequential);
             }
 
             WriteBackBase(rn: rn, preIndex: preIndex, writeBack: writeBack, baseAddress: baseAddress, indexedAddress: address, offset: offset, add: add);
@@ -499,8 +501,9 @@ public sealed partial class Arm7Tdmi {
             }
         }
         else {
-            // STRH is the only valid store form in this space.
-            m_bus.Write16(address: address & ~1u, value: (ushort)m_gpr[rd], access: BusAccessType.NonSequential);
+            // STRH is the only valid store form in this space. Pass the raw address: the bus aligns it for the
+            // wide-bus regions, but the 8-bit save bus needs the low bit to select which byte of the value lands.
+            m_bus.Write16(address: address, value: (ushort)m_gpr[rd], access: BusAccessType.NonSequential);
 
             WriteBackBase(rn: rn, preIndex: preIndex, writeBack: writeBack, baseAddress: baseAddress, indexedAddress: address, offset: offset, add: add);
         }

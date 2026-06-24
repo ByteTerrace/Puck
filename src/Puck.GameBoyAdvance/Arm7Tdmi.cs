@@ -125,6 +125,10 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
     /// <inheritdoc/>
     public void Step() {
+        // Commit the previous instruction's cycles to the scheduler and fire any peripheral events now due (which
+        // may raise interrupts) before this instruction's boundary interrupt sample — the event-driven timing model.
+        m_bus.ProcessEvents();
+
         // Interrupts are sampled at the instruction boundary; taking one consumes this step. The line comes from
         // the bus's interrupt controller (or the directly-set IrqLine, for isolated CPU tests).
         if ((m_irqLine || m_bus.IrqPending) && ((m_cpsr & FlagI) == 0u)) {

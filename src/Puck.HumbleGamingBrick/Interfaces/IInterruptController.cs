@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The interrupt controller: holds the enable mask (IE) and the request flags (IF) and arbitrates which pending

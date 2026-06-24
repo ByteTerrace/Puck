@@ -65,4 +65,22 @@ public interface IGbaBus {
     /// <summary>Advances the machine by <paramref name="cycles"/> internal CPU cycles with no bus access.</summary>
     /// <param name="cycles">The number of internal (I) cycles to charge; always positive.</param>
     void Idle(int cycles);
+
+    /// <summary>Commits the cycles charged since the last call to the master clock and fires every scheduled
+    /// peripheral event now due. The CPU calls this at each instruction boundary, before sampling interrupts, so
+    /// timer/PPU/DMA events take effect at the right time. Test buses with no scheduler do nothing.</summary>
+    void ProcessEvents() { }
+
+    /// <summary>Gets a value indicating whether the CPU is in a HALT/STOP low-power state (entered via a write to
+    /// HALTCNT, 0x04000301). While halted the CPU executes nothing; the bus keeps the peripherals running.</summary>
+    bool Halted => false;
+
+    /// <summary>Puts the CPU into a HALT (<paramref name="stop"/> false) or STOP (true) low-power state until an
+    /// enabled interrupt is requested.</summary>
+    /// <param name="stop">Whether to enter STOP (deeper sleep) rather than HALT.</param>
+    void Halt(bool stop) { }
+
+    /// <summary>Advances the machine while the CPU is halted until an enabled interrupt is requested (IE &amp; IF),
+    /// then clears the halt state. Called by the CPU in place of executing an instruction while halted.</summary>
+    void RunUntilInterrupt() { }
 }

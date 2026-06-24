@@ -1,3 +1,5 @@
+using Puck.HumbleGamingBrick.Interfaces;
+
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace Puck.HumbleGamingBrick;
 /// component is clocked through the bus's cycle accessors. When constructed without a boot ROM the machine is
 /// initialized to the model's documented post-boot state, so cartridges can run directly from <c>0x0100</c>.
 /// </summary>
-public sealed class GameBoyMachine {
+public sealed class Sm83Machine {
     private readonly ISystemBus m_bus;
     private readonly ICpu m_cpu;
 
@@ -29,7 +31,7 @@ public sealed class GameBoyMachine {
     /// <param name="bus">The system bus.</param>
     /// <param name="configuration">The model and reset configuration.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public GameBoyMachine(ICpu cpu, ISystemBus bus, MachineConfiguration configuration) {
+    public Sm83Machine(ICpu cpu, ISystemBus bus, MachineConfiguration configuration) {
         ArgumentNullException.ThrowIfNull(cpu);
         ArgumentNullException.ThrowIfNull(bus);
         ArgumentNullException.ThrowIfNull(configuration);

@@ -56,6 +56,16 @@ for (var index = 0; index < args.Length - 2; ++index) {
     }
 }
 
+// --statetrace <rom> <steps>: full per-instruction CPU state (PC/CPSR/r0..r14/cycles), to diff against the
+// mGBA cosim's --statetrace and find the first true register divergence (not just the first PC mismatch).
+for (var index = 0; index < args.Length - 2; ++index) {
+    if (args[index] == "--statetrace") {
+        RomRunner.StateTrace(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
+
+        return 0;
+    }
+}
+
 // --probe <rom> <steps>: dump machine state after running, to diagnose a blank-screen boot.
 for (var index = 0; index < args.Length - 2; ++index) {
     if (args[index] == "--probe") {
@@ -71,6 +81,13 @@ for (var index = 0; index < args.Length - 2; ++index) {
         RomRunner.TraceCycles(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
 
         return 0;
+    }
+}
+
+// --mgba-suite <rom>: run the menu-driven mGBA test suite (mgba-emu/suite) headlessly via the debug-log register.
+for (var index = 0; index < args.Length - 1; ++index) {
+    if (args[index] == "--mgba-suite") {
+        return RomRunner.RunMgbaSuite(romPath: args[index + 1], name: "mGBA suite");
     }
 }
 
@@ -103,6 +120,15 @@ else {
     failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "thumb", "thumb.gba"), name: "thumb");
     failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "memory", "memory.gba"), name: "memory");
 
+    // Save-backup conformance (same r12 verdict convention): exercises the SRAM/Flash command protocols and,
+    // critically, the Flash 64K/128K state machine + bank switching that commercial saves (e.g. Emerald) need.
+    Console.WriteLine("== jsmolka save tests ==");
+
+    failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "save", "none.gba"), name: "save/none");
+    failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "save", "sram.gba"), name: "save/sram");
+    failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "save", "flash64.gba"), name: "save/flash64");
+    failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "save", "flash128.gba"), name: "save/flash128");
+
     // Note: jsmolka's bios.gba is intentionally excluded — it asserts the *official* Nintendo BIOS's exact
     // open-bus read values, which no clean-room replacement reproduces. BIOS IRQ/SWI behaviour is validated by
     // the BiosIrqDispatch smoke test instead.
@@ -115,7 +141,15 @@ else {
 
         failures += RomRunner.RunFuzzArm(romPath: Path.Combine(fuzzArmRoot, "ARM_Any.gba"), name: "ARM_Any");
         failures += RomRunner.RunFuzzArm(romPath: Path.Combine(fuzzArmRoot, "THUMB_Any.gba"), name: "THUMB_Any");
+        failures += RomRunner.RunFuzzArm(romPath: Path.Combine(fuzzArmRoot, "ARM_DataProcessing.gba"), name: "ARM_DataProcessing");
+        failures += RomRunner.RunFuzzArm(romPath: Path.Combine(fuzzArmRoot, "THUMB_DataProcessing.gba"), name: "THUMB_DataProcessing");
+        failures += RomRunner.RunFuzzArm(romPath: Path.Combine(fuzzArmRoot, "FuzzARM.gba"), name: "FuzzARM");
     }
+
+    // nes (jsmolka): a tiny NES-style CPU/PPU exerciser using the r12 verdict convention.
+    Console.WriteLine("== jsmolka misc ==");
+    failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "nes", "nes.gba"), name: "nes");
+    failures += RomRunner.RunRenderHash(romPath: Path.Combine(assetRoot, "ppu", "shades.gba"), name: "ppu/shades", steps: 6_000_000, expected: 0x19E7C5AF1FB0BF25ul);
 
     // Deterministic render-hash floors: the core is fully deterministic, so a known-good frame must reproduce
     // its FNV-1a hash exactly. These guard the whole CPU→bus→PPU pipeline against silent regressions while we

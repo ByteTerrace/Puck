@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The CPU's view of the bus: the three cycle accessors through which the SM83 advances the machine, plus the

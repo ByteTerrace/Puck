@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The serial link port (SB data, SC control). Shifts eight bits in and out under the selected clock and requests

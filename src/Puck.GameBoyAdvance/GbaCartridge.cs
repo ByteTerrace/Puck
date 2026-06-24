@@ -23,6 +23,16 @@ public sealed class GbaCartridge {
     private readonly byte[] m_rom;
     private readonly byte[] m_save;
     private readonly bool m_isFlash;
+    private readonly bool m_isEeprom;
+
+    // Serial EEPROM (accessed at 0x0D… over a 1-bit bus, driven by DMA). The bus width — 6 address bits
+    // (512 B / 64 blocks) or 14 (8 KiB / 1024 blocks) — is auto-detected from the first command's length, the
+    // same way real carts behave. Each block is 64 bits (8 bytes), shifted MSB-first.
+    private int m_eepromAddressBits;            // 0 = not yet detected
+    private readonly byte[] m_eepromCommand = new byte[128];
+    private int m_eepromCommandLength;
+    private ulong m_eepromReadData;
+    private int m_eepromReadBitsRemaining;       // >0 while shifting a read reply out (68 bits: 4 dummy + 64 data)
 
     // Flash command state machine: the unlock phase (0 raw / 1 started / 2 continue), the pending command byte
     // (0x80 erase, 0x90 id, 0xA0 program, 0xB0 bank-switch; 0 when idle), and the selected 64&#160;KiB bank.
@@ -59,6 +69,7 @@ public sealed class GbaCartridge {
         m_rom = rom;
         Backup = Detect(rom: rom);
         m_isFlash = Backup is CartridgeBackup.Flash64 or CartridgeBackup.Flash128;
+        m_isEeprom = Backup is CartridgeBackup.Eeprom;
         m_save = new byte[BackupSize(backup: Backup)];
 
         // Flash and (uninitialised) SRAM read as 0xFF on real hardware.
@@ -143,6 +154,105 @@ public sealed class GbaCartridge {
         }
 
         m_save[address & (uint)(m_save.Length - 1)] = value;
+    }
+
+    /// <summary>Gets a value indicating whether the cartridge's backup is a serial EEPROM (accessed at 0x0D…).</summary>
+    public bool IsEeprom => m_isEeprom;
+
+    /// <summary>Shifts one bit out of the serial EEPROM (the value a DMA read from the EEPROM region returns in
+    /// bit 0). Returns 1 when idle/ready. The first read after a command finalises that command.</summary>
+    public ushort ReadEeprom() {
+        if ((m_eepromReadBitsRemaining == 0) && (m_eepromCommandLength > 0)) {
+            FinalizeEepromCommand();
+        }
+
+        if (m_eepromReadBitsRemaining > 0) {
+            // A read reply is 68 bits: 4 leading zeros then the 64 data bits, MSB first.
+            var position = 68 - m_eepromReadBitsRemaining;
+            --m_eepromReadBitsRemaining;
+
+            if (position < 4) {
+                return 0;
+            }
+
+            var dataBit = 63 - (position - 4);
+
+            return (ushort)((m_eepromReadData >> dataBit) & 1u);
+        }
+
+        return 1; // ready
+    }
+
+    /// <summary>Shifts one command bit into the serial EEPROM (bit 0 of a DMA write to the EEPROM region).</summary>
+    public void WriteEeprom(ushort value) {
+        // While a read reply is being shifted out, further writes are ignored. Otherwise accumulate the command
+        // bit; the command is interpreted on the next read (read setup) or its trailing status read (write).
+        if (m_eepromReadBitsRemaining > 0) {
+            return;
+        }
+
+        if (m_eepromCommandLength < m_eepromCommand.Length) {
+            m_eepromCommand[m_eepromCommandLength++] = (byte)(value & 1u);
+        }
+    }
+
+    private void FinalizeEepromCommand() {
+        var length = m_eepromCommandLength;
+
+        m_eepromCommandLength = 0;
+
+        if (length < 3) {
+            return;
+        }
+
+        var command = (m_eepromCommand[0] << 1) | m_eepromCommand[1];
+
+        // Auto-detect the address bus width from the command length the first time: a read setup is
+        // 2 (command) + addr + 1 (stop) bits; a write is 2 + addr + 64 + 1.
+        if (m_eepromAddressBits == 0) {
+            var detected = (command == 0b11) ? (length - 3) : (length - 67);
+
+            m_eepromAddressBits = detected switch {
+                <= 6 => 6,
+                _ => 14,
+            };
+        }
+
+        var addressBits = m_eepromAddressBits;
+        var address = 0;
+
+        for (var i = 0; i < addressBits; ++i) {
+            address = (address << 1) | m_eepromCommand[2 + i];
+        }
+
+        var blockOffset = (address * 8) & (m_save.Length - 1);
+
+        if (command == 0b11) {
+            // Read: latch the 64-bit block, then shift it out (with 4 leading dummy bits) on subsequent reads.
+            ulong data = 0;
+
+            for (var i = 0; i < 8; ++i) {
+                data = (data << 8) | m_save[blockOffset + i];
+            }
+
+            m_eepromReadData = data;
+            m_eepromReadBitsRemaining = 68;
+        }
+        else if (command == 0b10) {
+            // Write: bits after the address are the 64 data bits (MSB first); store them, then signal ready.
+            ulong data = 0;
+            var dataStart = 2 + addressBits;
+
+            for (var i = 0; i < 64; ++i) {
+                var bit = ((dataStart + i) < length) ? m_eepromCommand[dataStart + i] : 0;
+
+                data = (data << 1) | (uint)bit;
+            }
+
+            for (var i = 0; i < 8; ++i) {
+                m_save[blockOffset + i] = (byte)(data >> (56 - (i * 8)));
+            }
+        }
     }
 
     // Drives the flash command/unlock state machine for a byte write. Commands are issued as a three-write

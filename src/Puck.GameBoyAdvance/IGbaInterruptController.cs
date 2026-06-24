@@ -11,6 +11,11 @@ public interface IGbaInterruptController {
     /// enable set — the level the CPU samples each instruction boundary.</summary>
     bool LineAsserted { get; }
 
+    /// <summary>Gets a value indicating whether an enabled interrupt is requested (IE &amp; IF), ignoring the
+    /// master enable (IME). This is the condition that wakes the CPU from a HALT/STOP low-power state — halt
+    /// resumes on any enabled+requested interrupt regardless of IME.</summary>
+    bool HasPendingInterrupt { get; }
+
     /// <summary>Latches an interrupt request from a peripheral by setting its IF bit.</summary>
     /// <param name="source">The interrupting source.</param>
     void Request(InterruptSource source);

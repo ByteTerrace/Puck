@@ -1,10 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// The composition root for a monochrome/color handheld machine. Every subsystem (CPU, PPU, APU, timer, OAM DMA,
+/// The composition root for a Humble Gaming Brick. Every subsystem (CPU, PPU, APU, timer, OAM DMA,
 /// interrupt controller, joypad, serial, bus) is registered here behind its interface with <c>TryAdd</c>, so a test
 /// or an alternate composition can replace any one of them — a headless stub PPU, a tracing CPU decorator, a second
 /// implementation to A/B against the same ROM — by registering its own first, with no edit to this root.
@@ -14,14 +15,14 @@ namespace Puck.HumbleGamingBrick;
 /// per-machine <see cref="MachineConfiguration"/> and <see cref="ICartridge"/> into that scope before resolving.
 /// </para>
 /// </summary>
-public static class GameBoyServiceRegistration {
-    /// <summary>Registers the shared handheld services. The consumer adds a per-machine
+public static class Sm83ServiceRegistration {
+    /// <summary>Registers the shared Humble Gaming Brick services. The consumer adds a per-machine
     /// <see cref="MachineConfiguration"/> and <see cref="ICartridge"/> to the scope before resolving
-    /// <see cref="GameBoyMachine"/>.</summary>
+    /// <see cref="Sm83Machine"/>.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
-    public static IServiceCollection AddGameBoy(this IServiceCollection services) {
+    public static IServiceCollection AddHumbleGamingBrick(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddScoped<SystemMemory>();
@@ -37,7 +38,7 @@ public static class GameBoyServiceRegistration {
         // The CPU's narrow bus seam (ICpuBus) and the full bus (ISystemBus) resolve to the same instance.
         services.TryAddScoped<ICpuBus>(implementationFactory: provider => provider.GetRequiredService<ISystemBus>());
         services.TryAddScoped<ICpu, Sm83>();
-        services.TryAddScoped<GameBoyMachine>();
+        services.TryAddScoped<Sm83Machine>();
 
         return services;
     }

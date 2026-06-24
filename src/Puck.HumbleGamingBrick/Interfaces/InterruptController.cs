@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The interrupt controller: the interrupt-flag register (<c>IF</c>, <c>0xFF0F</c>) and the interrupt-enable

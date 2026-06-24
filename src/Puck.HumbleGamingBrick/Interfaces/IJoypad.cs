@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The joypad register (0xFF00): two selectable 4-button nibbles (direction pad and action buttons), with pressed

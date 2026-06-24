@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The system bus: the memory map and the master clock. It decodes every CPU access, routes it to the cartridge,

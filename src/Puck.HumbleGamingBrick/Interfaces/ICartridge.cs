@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// A cartridge plugged into the bus: the program ROM mapped at <c>0x0000</c>–<c>0x7FFF</c> and the optional

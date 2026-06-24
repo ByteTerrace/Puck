@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The OAM DMA engine: a write to 0xFF46 copies a 0xNN00 page into object attribute memory one byte per machine

@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The picture processing unit: scans object attribute memory and video RAM through its mode 2/3/0/1 timeline,

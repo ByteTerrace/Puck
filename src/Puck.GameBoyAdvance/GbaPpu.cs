@@ -15,6 +15,10 @@ public sealed class GbaPpu : IGbaPpu {
     private const int HDrawLength = 1008;
     private const int TotalLines = 228;
 
+    private const int HBlankLength = DotsPerLine - HDrawLength; // 224
+
+    private readonly GbaScheduler m_scheduler;
+    private readonly GbaScheduler.Event m_event;
     private readonly IGbaInterruptController m_interrupts;
     private readonly byte[] m_palette = new byte[0x400];
     private readonly byte[] m_vram = new byte[0x18000];
@@ -35,8 +39,8 @@ public sealed class GbaPpu : IGbaPpu {
     private readonly int[] m_affineRefX = new int[2];
     private readonly int[] m_affineRefY = new int[2];
 
-    private int m_lineCycles;
     private int m_line;
+    private bool m_inHBlank;
     private ushort m_dispStatControl;
     private bool m_hblankFlag;
     private bool m_vblankStarted;
@@ -47,10 +51,17 @@ public sealed class GbaPpu : IGbaPpu {
     /// <summary>Creates the PPU bound to the interrupt controller it raises display interrupts through.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
     /// <exception cref="ArgumentNullException"><paramref name="interrupts"/> is <see langword="null"/>.</exception>
-    public GbaPpu(IGbaInterruptController interrupts) {
+    public GbaPpu(GbaScheduler scheduler, IGbaInterruptController interrupts) {
+        ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(interrupts);
 
+        m_scheduler = scheduler;
         m_interrupts = interrupts;
+
+        // The raster runs as scheduled events: from the start of each scanline the next event is H-Blank (after
+        // the H-draw period), and from H-Blank the next is the following scanline. The first fires at H-draw end.
+        m_event = new GbaScheduler.Event { Callback = RunEvent };
+        m_scheduler.Schedule(e: m_event, cyclesFromNow: HDrawLength);
     }
 
     /// <inheritdoc/>
@@ -61,17 +72,18 @@ public sealed class GbaPpu : IGbaPpu {
     private bool ForcedBlank => (m_registers[0] & 0x80) != 0;
 
     /// <inheritdoc/>
-    public void Step(int cycles) {
-        m_lineCycles += cycles;
-
-        if (!m_hblankFlag && (m_lineCycles >= HDrawLength)) {
+    // The scheduled raster event: alternately enters H-Blank (at H-draw end) and advances to the next scanline
+    // (at line end), rescheduling itself for the next transition. cyclesLate keeps the cadence drift-free.
+    private void RunEvent(int cyclesLate) {
+        if (!m_inHBlank) {
             EnterHBlank();
+            m_inHBlank = true;
+            m_scheduler.Schedule(e: m_event, cyclesFromNow: HBlankLength - cyclesLate);
         }
-
-        while (m_lineCycles >= DotsPerLine) {
-            m_lineCycles -= DotsPerLine;
-
+        else {
             NextScanline();
+            m_inHBlank = false;
+            m_scheduler.Schedule(e: m_event, cyclesFromNow: HDrawLength - cyclesLate);
         }
     }
 
@@ -465,6 +477,13 @@ public sealed class GbaPpu : IGbaPpu {
                 continue;
             }
 
+            // OBJ mosaic (attr0 bit 12): the MOSAIC register's bits 8-11 (H) and 12-15 (V) quantise the sprite's
+            // sampled coordinates into blocks, snapped to the sprite's origin.
+            var objMosaic = (attr0 & 0x1000) != 0;
+            var objMosaicX = objMosaic ? (((m_registers[0x26] >> 8) & 0xF) + 1) : 1;
+            var objMosaicY = objMosaic ? (((m_registers[0x26] >> 12) & 0xF) + 1) : 1;
+            var sampleRow = objMosaic ? (rowInBox - (rowInBox % objMosaicY)) : rowInBox;
+
             var x = attr1 & 0x1FF;
             var priority = (attr2 >> 10) & 0x3;
             var tileBase = (uint)(attr2 & 0x3FF);
@@ -501,16 +520,19 @@ public sealed class GbaPpu : IGbaPpu {
                 int texelX;
                 int texelY;
 
+                // Snap the sampled column to the OBJ mosaic grid (the row was snapped above).
+                var sampleColumn = objMosaic ? (column - (column % objMosaicX)) : column;
+
                 if (affine) {
-                    var dx = column - halfBoxWidth;
-                    var dy = rowInBox - halfBoxHeight;
+                    var dx = sampleColumn - halfBoxWidth;
+                    var dy = sampleRow - halfBoxHeight;
 
                     texelX = (((pa * dx) + (pb * dy)) >> 8) + (width / 2);
                     texelY = (((pc * dx) + (pd * dy)) >> 8) + (height / 2);
                 }
                 else {
-                    texelX = flipX ? (width - 1 - column) : column;
-                    texelY = flipY ? (height - 1 - rowInBox) : rowInBox;
+                    texelX = flipX ? (width - 1 - sampleColumn) : sampleColumn;
+                    texelY = flipY ? (height - 1 - sampleRow) : sampleRow;
                 }
 
                 if ((texelX < 0) || (texelX >= width) || (texelY < 0) || (texelY >= height)) {

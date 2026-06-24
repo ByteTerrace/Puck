@@ -7,7 +7,7 @@ namespace Puck.GameBoyAdvance;
 /// <em>flags</em> the H/V-blank moments — the bus polls those flags after stepping it and fires the timed DMAs,
 /// so the PPU needs no reference back to the bus or DMA.
 /// </summary>
-public interface IGbaPpu : IGbaClockedComponent {
+public interface IGbaPpu {
     /// <summary>Gets the completed 240×160 frame as packed 0xAARRGGBB pixels, row-major.</summary>
     ReadOnlySpan<uint> Framebuffer { get; }
 

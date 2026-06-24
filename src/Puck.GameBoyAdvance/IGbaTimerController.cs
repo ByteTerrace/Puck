@@ -5,7 +5,7 @@ namespace Puck.GameBoyAdvance;
 /// count-up mode — advances only when the timer below it overflows, raising its interrupt and reloading on
 /// overflow. Advanced as a clocked component so its timing rides the same deferred-cycle accounting as the bus.
 /// </summary>
-public interface IGbaTimerController : IGbaClockedComponent {
+public interface IGbaTimerController {
     /// <summary>Reads a 16-bit timer register (the live counter for the CNT_L offsets).</summary>
     /// <param name="offset">The I/O offset within the 0x04000000 page.</param>
     /// <returns>The register value.</returns>

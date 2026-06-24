@@ -11,8 +11,7 @@ public sealed class GbaApu : IGbaApu {
 
     private readonly ApuPulseChannel m_pulse1 = new(hasSweep: true);
     private readonly ApuPulseChannel m_pulse2 = new(hasSweep: false);
-    private readonly byte[] m_waveRam = new byte[0x10];
-    private readonly ApuWaveChannel m_wave;
+    private readonly ApuWaveChannel m_wave = new();
     private readonly ApuNoiseChannel m_noise = new();
     private readonly Queue<sbyte> m_fifoA = new();
     private readonly Queue<sbyte> m_fifoB = new();
@@ -20,6 +19,11 @@ public sealed class GbaApu : IGbaApu {
     private ushort m_soundControlLow;
     private ushort m_soundControlHigh;
     private bool m_masterEnable;
+
+    // SOUNDBIAS (0x04000088): the DAC bias level + amplitude-resolution/sampling-rate field. It powers on at
+    // 0x0200 (bias 0x100) and is independent of the master sound enable. The GBA BIOS reads this during sound
+    // init; returning 0 here (as an unimplemented register would) derails real games' boot — e.g. Pokémon Emerald.
+    private ushort m_soundBias = 0x0200;
     private int m_frameSequencerTimer = FrameSequencerPeriod;
     private int m_frameSequencerStep;
     private int m_directSoundA;
@@ -32,11 +36,6 @@ public sealed class GbaApu : IGbaApu {
     private int m_outputRead;
     private int m_cyclesPerSample;
     private int m_sampleTimer;
-
-    /// <summary>Creates the APU, binding the wave channel to the shared wave RAM.</summary>
-    public GbaApu() {
-        m_wave = new ApuWaveChannel(waveRam: m_waveRam);
-    }
 
     /// <inheritdoc/>
     public void ConfigureOutput(int sampleRate) {
@@ -134,6 +133,13 @@ public sealed class GbaApu : IGbaApu {
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) {
         return offset switch {
+            0x60u => m_pulse1.ReadSweep(),
+            0x62u => (ushort)(m_pulse1.ReadDutyLength() | (m_pulse1.ReadEnvelope() << 8)),
+            0x64u => (ushort)(m_pulse1.ReadControl() << 8),
+            0x68u => (ushort)(m_pulse2.ReadDutyLength() | (m_pulse2.ReadEnvelope() << 8)),
+            0x6Cu => (ushort)(m_pulse2.ReadControl() << 8),
+            0x78u => (ushort)(m_noise.ReadEnvelope() << 8),
+            0x7Cu => (ushort)(m_noise.ReadPolynomial() | (m_noise.ReadControl() << 8)),
             0x80u => m_soundControlLow,
             0x82u => m_soundControlHigh,
             0x84u => (ushort)((m_masterEnable ? 0x80u : 0u)
@@ -141,15 +147,20 @@ public sealed class GbaApu : IGbaApu {
                 | (m_pulse2.Active ? 0x2u : 0u)
                 | (m_wave.Active ? 0x4u : 0u)
                 | (m_noise.Active ? 0x8u : 0u)),
-            >= 0x90u and <= 0x9Fu => (ushort)(m_waveRam[offset - 0x90u] | (m_waveRam[(offset - 0x90u) + 1u] << 8)),
+            0x88u => m_soundBias,
+            0x70u => m_wave.ReadEnable(),
+            0x72u => (ushort)(m_wave.ReadVolume() << 8),
+            0x74u => (ushort)(m_wave.ReadControl() << 8),
+            >= 0x90u and <= 0x9Fu => (ushort)(m_wave.ReadRam((int)(offset - 0x90u)) | (m_wave.ReadRam((int)(offset - 0x90u) + 1) << 8)),
             _ => 0,
         };
     }
 
     /// <inheritdoc/>
     public void WriteRegister(uint offset, ushort value) {
-        // Sound is fully writable only while the master enable is set, except for the enable itself.
-        if (!m_masterEnable && (offset != 0x84u) && (offset < 0x90u)) {
+        // Sound is fully writable only while the master enable is set, except for the master enable (0x84) and
+        // SOUNDBIAS (0x88), which are always accessible (they sit outside the gated PSG/FIFO control block).
+        if (!m_masterEnable && (offset != 0x84u) && (offset != 0x88u) && (offset < 0x90u)) {
             return;
         }
 
@@ -219,13 +230,17 @@ public sealed class GbaApu : IGbaApu {
                 }
 
                 break;
+            case 0x88u:
+                m_soundBias = value;
+
+                break;
             case 0x84u:
                 m_masterEnable = (value & 0x80) != 0;
 
                 break;
             case >= 0x90u and <= 0x9Fu:
-                m_waveRam[offset - 0x90u] = (byte)value;
-                m_waveRam[(offset - 0x90u) + 1u] = (byte)(value >> 8);
+                m_wave.WriteRam((int)(offset - 0x90u), (byte)value);
+                m_wave.WriteRam((int)(offset - 0x90u) + 1, (byte)(value >> 8));
 
                 break;
             case >= 0xA0u and <= 0xA3u:
@@ -280,21 +295,49 @@ public sealed class GbaApu : IGbaApu {
         short right = 0;
 
         if (m_masterEnable) {
-            // PSG: sum the four channels (0–15 each), scaled by the SOUNDCNT_H PSG ratio (25/50/100%).
+            // SOUNDCNT_L (0x80): bits 0-2 right master volume, 4-6 left; bits 8-11 per-channel right enable,
+            // 12-15 per-channel left enable (pulse1, pulse2, wave, noise). Each PSG channel outputs 0-15.
+            var p1 = m_pulse1.Output;
+            var p2 = m_pulse2.Output;
+            var wv = m_wave.Output;
+            var ns = m_noise.Output;
+
+            var rightEnable = (m_soundControlLow >> 8) & 0xF;
+            var leftEnable = (m_soundControlLow >> 12) & 0xF;
+
+            var psgRight = (((rightEnable & 0x1) != 0) ? p1 : 0) + (((rightEnable & 0x2) != 0) ? p2 : 0)
+                + (((rightEnable & 0x4) != 0) ? wv : 0) + (((rightEnable & 0x8) != 0) ? ns : 0);
+            var psgLeft = (((leftEnable & 0x1) != 0) ? p1 : 0) + (((leftEnable & 0x2) != 0) ? p2 : 0)
+                + (((leftEnable & 0x4) != 0) ? wv : 0) + (((leftEnable & 0x8) != 0) ? ns : 0);
+
+            // SOUNDCNT_H bits 0-1: PSG mix ratio 25/50/100%. Master volume (0-7) scales as (vol+1)/8.
             var psgRatio = m_soundControlHigh & 0x3;
-            var psgScale = (psgRatio == 0) ? 1 : (psgRatio == 1) ? 2 : 4;
-            var psgRaw = m_pulse1.Output + m_pulse2.Output + m_wave.Output + m_noise.Output;
+            var psgScale = (psgRatio == 0) ? 1 : (psgRatio == 1) ? 2 : 4; // 25% / 50% / 100% (×4 = full)
+            var volRight = (m_soundControlLow & 0x7) + 1;
+            var volLeft = ((m_soundControlLow >> 4) & 0x7) + 1;
 
-            // Centre the PSG amplitude (0–60 around 30) and add the Direct Sound channels (8-bit signed,
-            // optional half volume).
-            var mix = ((psgRaw - 30) * psgScale * 16)
-                + (m_directSoundA << (((m_soundControlHigh & 0x4) != 0) ? 2 : 1))
-                + (m_directSoundB << (((m_soundControlHigh & 0x8) != 0) ? 2 : 1));
+            // PSG amplitude centred (each channel idles near 8, so subtract the enabled-channel midpoint),
+            // scaled to 16-bit. Direct Sound A/B are 8-bit signed, panned by SOUNDCNT_H L/R enable bits, with
+            // an optional half-volume (bits 2/3). Direct Sound is not affected by the PSG master volume.
+            var psgMixRight = ((psgRight * 2) - CountBits(rightEnable) * 15) * psgScale * volRight;
+            var psgMixLeft = ((psgLeft * 2) - CountBits(leftEnable) * 15) * psgScale * volLeft;
 
-            var clamped = (short)Math.Clamp(value: mix, min: -32768, max: 32767);
+            var dsaShift = ((m_soundControlHigh & 0x4) != 0) ? 3 : 2; // 100% / 50%
+            var dsbShift = ((m_soundControlHigh & 0x8) != 0) ? 3 : 2;
+            var dsa = m_directSoundA << dsaShift;
+            var dsb = m_directSoundB << dsbShift;
 
-            left = clamped;
-            right = clamped;
+            var mixRight = psgMixRight
+                + (((m_soundControlHigh & 0x0100) != 0) ? dsa : 0)
+                + (((m_soundControlHigh & 0x1000) != 0) ? dsb : 0);
+            var mixLeft = psgMixLeft
+                + (((m_soundControlHigh & 0x0200) != 0) ? dsa : 0)
+                + (((m_soundControlHigh & 0x2000) != 0) ? dsb : 0);
+
+            // SOUNDBIAS adds a DC offset to the final mix on hardware; it nets out for line-level output, so we
+            // clamp around zero. (The bias level field is honoured by games probing it; the audible effect is nil.)
+            right = (short)Math.Clamp(value: mixRight, min: -32768, max: 32767);
+            left = (short)Math.Clamp(value: mixLeft, min: -32768, max: 32767);
         }
 
         m_outputRing[m_outputWrite] = left;
@@ -302,4 +345,7 @@ public sealed class GbaApu : IGbaApu {
         m_outputRing[m_outputWrite] = right;
         m_outputWrite = (m_outputWrite + 1) % m_outputRing.Length;
     }
+
+    private static int CountBits(int nibble) =>
+        (nibble & 1) + ((nibble >> 1) & 1) + ((nibble >> 2) & 1) + ((nibble >> 3) & 1);
 }

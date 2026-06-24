@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The divider/timer block (DIV, TIMA, TMA, TAC). A free-running 16-bit counter drives DIV from its high byte and

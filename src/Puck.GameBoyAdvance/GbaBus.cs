@@ -28,6 +28,7 @@ public sealed class GbaBus : IGbaBus {
     private readonly byte[] m_ewram = new byte[0x40000];
     private readonly byte[] m_iwram = new byte[0x8000];
     private readonly byte[] m_io = new byte[0x400];
+    private readonly GbaScheduler m_scheduler;
     private readonly GbaCartridge m_cartridge;
     private readonly IGbaInterruptController m_interrupts;
     private readonly IGbaTimerController m_timers;
@@ -36,6 +37,19 @@ public sealed class GbaBus : IGbaBus {
     private readonly IGbaApu m_apu;
 
     private uint m_openBus;
+    private uint m_lastBiosOpcode;
+    private bool m_inCodeFetch;
+    private bool m_executingInBios;
+    private bool m_dmaActive;
+    private byte m_postFlag;
+    private ushort m_sioCnt;
+    private ushort m_sioMulti0 = 0xFFFF;
+    private ushort m_sioMulti1 = 0xFFFF;
+    private ushort m_sioMulti2 = 0xFFFF;
+    private ushort m_sioMulti3 = 0xFFFF;
+    private ushort m_sioSend = 0xFFFF;
+    private ushort m_rcnt;
+    private ushort m_keyControl;
     private int m_ws0N;
     private int m_ws0S;
     private int m_ws1N;
@@ -44,17 +58,18 @@ public sealed class GbaBus : IGbaBus {
     private int m_ws2S;
     private int m_sram;
 
-    // Game-pak prefetch buffer (WAITCNT bit 14). When enabled, the cartridge speculatively reads sequential
-    // halfwords ahead of the CPU into an 8-entry buffer during cycles the CPU is not using the game-pak bus
-    // (internal cycles, non-ROM accesses). A sequential code fetch already buffered costs 1 cycle; otherwise the
-    // CPU stalls for the in-flight load. Any non-sequential fetch or ROM data access flushes the buffer.
-    private const int PrefetchCapacity = 8;
+    // Game-pak prefetch (WAITCNT bit 14), modelled exactly as mGBA's GBAMemoryStall: code fetches pay the raw
+    // wait-state, but a non-game-pak data access made while executing from ROM lets the prefetcher stream
+    // sequential ROM halfwords during it, so the wait-states of the code fetches it covers are credited back from
+    // the access (and the pending fetch's N becomes an S) — a credit that can drive the access cost negative,
+    // which the scheduler's relative-cycle counter absorbs. m_codeFetchPc is a stable PC basis (the constant
+    // pipeline offset cancels in the distance subtraction); m_lastPrefetchedPc tracks how far the prefetcher ran.
     private bool m_prefetchEnabled;
-    private bool m_prefetchActive;
-    private int m_prefetchCount;
-    private int m_prefetchCountdown;
-    private int m_prefetchSeq;
-    private uint m_prefetchHead;
+    private bool m_executingInRom;
+    private uint m_codeFetchPc;
+    private uint m_lastPrefetchedPc;
+    private int m_romSeqWait;
+    private int m_romNonSeqWait;
 
     /// <summary>Creates the bus over a BIOS image, a cartridge, and the I/O peripherals it routes to.</summary>
     /// <param name="bios">The system BIOS provider.</param>
@@ -65,7 +80,8 @@ public sealed class GbaBus : IGbaBus {
     /// <param name="ppu">The picture-processing unit (owns palette/VRAM/OAM and the display registers).</param>
     /// <param name="apu">The audio-processing unit.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public GbaBus(IBios bios, GbaCartridge cartridge, IGbaInterruptController interrupts, IGbaTimerController timers, IGbaDmaController dma, IGbaPpu ppu, IGbaApu apu) {
+    public GbaBus(GbaScheduler scheduler, IBios bios, GbaCartridge cartridge, IGbaInterruptController interrupts, IGbaTimerController timers, IGbaDmaController dma, IGbaPpu ppu, IGbaApu apu) {
+        ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(bios);
         ArgumentNullException.ThrowIfNull(cartridge);
         ArgumentNullException.ThrowIfNull(interrupts);
@@ -74,6 +90,7 @@ public sealed class GbaBus : IGbaBus {
         ArgumentNullException.ThrowIfNull(ppu);
         ArgumentNullException.ThrowIfNull(apu);
 
+        m_scheduler = scheduler;
         m_bios = bios.Image.ToArray();
         m_cartridge = cartridge;
         m_interrupts = interrupts;
@@ -89,84 +106,123 @@ public sealed class GbaBus : IGbaBus {
         m_io[0x131] = 0x03;
     }
 
-    /// <summary>Gets the total master clock cycles charged to the bus since construction.</summary>
-    public long Cycles { get; private set; }
+    /// <summary>Gets the current master-clock time (committed clock plus the CPU's running offset).</summary>
+    public long Cycles => m_scheduler.Now;
 
     /// <inheritdoc/>
     public bool IrqPending => m_interrupts.LineAsserted;
 
     /// <inheritdoc/>
-    public byte Read8(uint address, BusAccessType access) {
-        DataAccess(address: address, cycles: AccessCycles(address: address, width: 1, access: access));
+    public void ProcessEvents() {
+        // The CPU calls this at instruction boundaries. Commit the cycles accumulated since the last commit to the
+        // master clock and fire every scheduled peripheral event now due, until the next event is still in the
+        // future. The committed delta also drives the (non-event-scheduled) APU. DMA fires from the flags events set.
+        while (m_scheduler.RelativeCycles >= m_scheduler.NextEvent) {
+            var cycles = m_scheduler.RelativeCycles;
 
-        return (byte)ReadRegion(address: address, width: 1);
+            m_scheduler.RelativeCycles = 0;
+            m_apu.Step(cycles: cycles);
+            m_scheduler.Tick(cycles: cycles);
+            FireTimedDma();
+        }
+    }
+
+    /// <inheritdoc/>
+    public byte Read8(uint address, BusAccessType access) {
+        var value = (byte)ReadRegion(address: address, width: 1);
+
+        ChargeData(address: address, cost: AccessCycles(address: address, width: 1, access: access));
+
+        return value;
     }
 
     /// <inheritdoc/>
     public ushort Read16(uint address, BusAccessType access) {
-        DataAccess(address: address, cycles: AccessCycles(address: address, width: 2, access: access));
+        var value = (ushort)ReadRegion(address: address & ~1u, width: 2);
 
-        return (ushort)ReadRegion(address: address & ~1u, width: 2);
+        ChargeData(address: address, cost: AccessCycles(address: address, width: 2, access: access));
+
+        return value;
     }
 
     /// <inheritdoc/>
     public uint Read32(uint address, BusAccessType access) {
-        DataAccess(address: address, cycles: AccessCycles(address: address, width: 4, access: access));
+        var value = ReadRegion(address: address & ~3u, width: 4);
 
-        return ReadRegion(address: address & ~3u, width: 4);
+        ChargeData(address: address, cost: AccessCycles(address: address, width: 4, access: access));
+
+        return value;
     }
 
     /// <inheritdoc/>
     public ushort ReadCode16(uint address, BusAccessType access) {
-        Tick(cycles: CodeFetchCycles(address: address, width: 2, access: access));
+        var cost = CodeFetchCycles(address: address, width: 2, access: access);
 
-        return (ushort)ReadRegion(address: address & ~1u, width: 2);
+        m_executingInBios = address < 0x4000u;
+        m_inCodeFetch = true;
+        var value = (ushort)ReadRegion(address: address & ~1u, width: 2);
+        m_inCodeFetch = false;
+
+        m_scheduler.RelativeCycles += cost;
+
+        return value;
     }
 
     /// <inheritdoc/>
     public uint ReadCode32(uint address, BusAccessType access) {
-        Tick(cycles: CodeFetchCycles(address: address, width: 4, access: access));
+        var cost = CodeFetchCycles(address: address, width: 4, access: access);
 
-        return ReadRegion(address: address & ~3u, width: 4);
+        m_executingInBios = address < 0x4000u;
+        m_inCodeFetch = true;
+        var value = ReadRegion(address: address & ~3u, width: 4);
+        m_inCodeFetch = false;
+
+        m_scheduler.RelativeCycles += cost;
+
+        return value;
     }
 
     /// <inheritdoc/>
     public void Write8(uint address, byte value, BusAccessType access) {
-        DataAccess(address: address, cycles: AccessCycles(address: address, width: 1, access: access));
-
         WriteRegion(address: address, width: 1, value: value);
+        ChargeData(address: address, cost: AccessCycles(address: address, width: 1, access: access));
     }
 
     /// <inheritdoc/>
     public void Write16(uint address, ushort value, BusAccessType access) {
-        DataAccess(address: address, cycles: AccessCycles(address: address, width: 2, access: access));
-
-        WriteRegion(address: address & ~1u, width: 2, value: value);
+        // Pass the raw (unaligned) address: most regions force alignment internally, but the 8-bit save bus must
+        // see the low bit to pick which byte of the value it stores and where.
+        WriteRegion(address: address, width: 2, value: value);
+        ChargeData(address: address, cost: AccessCycles(address: address, width: 2, access: access));
     }
 
     /// <inheritdoc/>
     public void Write32(uint address, uint value, BusAccessType access) {
-        DataAccess(address: address, cycles: AccessCycles(address: address, width: 4, access: access));
-
-        WriteRegion(address: address & ~3u, width: 4, value: value);
+        WriteRegion(address: address, width: 4, value: value);
+        ChargeData(address: address, cost: AccessCycles(address: address, width: 4, access: access));
     }
 
     /// <inheritdoc/>
     public void Idle(int cycles) {
-        // Internal cycles leave the game-pak bus free, so the prefetch buffer fills.
-        StepPrefetch(cycles: cycles);
-        Tick(cycles: cycles);
+        // Internal cycles just advance the CPU's running offset; the prefetcher is modelled on memory accesses.
+        m_scheduler.RelativeCycles += cycles;
     }
 
-    private void Tick(int cycles) {
-        Cycles += cycles;
+    /// <inheritdoc/>
+    public void Halt(bool stop) {
+        // HALTCNT requests a low-power stop until the next interrupt. The BIOS's IntrWait/VBlankIntrWait — how
+        // games actually wait — already busy-polls its interrupt-flag word around the SWI, so the CPU naturally
+        // resumes the instant the IRQ is serviced; modelling a true CPU halt here only de-synchronises the
+        // instruction cadence from the reference. So Halt is a no-op: the surrounding poll does the waiting.
+    }
 
-        // The peripherals observe the access at the point it happens (deferred-cycle model).
-        m_timers.Step(cycles: cycles);
-        m_ppu.Step(cycles: cycles);
-        m_apu.Step(cycles: cycles);
+    // The PPU/timer events set the blank/FIFO flags; the bus polls them after each commit and fires the timed
+    // DMAs. DMA transfers are marked active so EEPROM (which is DMA-driven on hardware) routes only for them.
+    private void FireTimedDma() {
+        var prevDma = m_dmaActive;
 
-        // The PPU only flags the blank transitions; the bus fires the timed DMAs so the PPU stays bus-free.
+        m_dmaActive = true;
+
         if (m_ppu.ConsumeVBlankStarted()) {
             m_dma.OnVBlank(bus: this);
         }
@@ -183,7 +239,6 @@ public sealed class GbaBus : IGbaBus {
             m_dma.OnVideoCaptureEnd();
         }
 
-        // Drained Direct Sound FIFOs are topped up by their special-timing DMA channels.
         if (m_apu.ConsumeFifoARefill()) {
             m_dma.OnFifo(fifo: 0, bus: this);
         }
@@ -191,11 +246,13 @@ public sealed class GbaBus : IGbaBus {
         if (m_apu.ConsumeFifoBRefill()) {
             m_dma.OnFifo(fifo: 1, bus: this);
         }
+
+        m_dmaActive = prevDma;
     }
 
     private uint ReadRegion(uint address, int width) {
         var value = (address >> 24) switch {
-            RegionBios => (address < 0x4000u) ? ReadArray(array: m_bios, index: address & 0x3FFFu, width: width) : m_openBus,
+            RegionBios => ReadBios(address: address, width: width),
             RegionEwram => ReadArray(array: m_ewram, index: address & 0x3FFFFu, width: width),
             RegionIwram => ReadArray(array: m_iwram, index: address & 0x7FFFu, width: width),
             RegionIo => ReadIo(address: address, width: width),
@@ -211,23 +268,27 @@ public sealed class GbaBus : IGbaBus {
     }
 
     private void WriteRegion(uint address, int width, uint value) {
+        // Aligned address for the wide-bus regions (the CPU forces 16/32-bit accesses to their natural alignment);
+        // the save region below deliberately uses the raw address for its 8-bit byte select.
+        var aligned = address & ~(uint)(width - 1);
+
         switch (address >> 24) {
             case RegionEwram:
-                WriteArray(array: m_ewram, index: address & 0x3FFFFu, width: width, value: value);
+                WriteArray(array: m_ewram, index: aligned & 0x3FFFFu, width: width, value: value);
 
                 break;
             case RegionIwram:
-                WriteArray(array: m_iwram, index: address & 0x7FFFu, width: width, value: value);
+                WriteArray(array: m_iwram, index: aligned & 0x7FFFu, width: width, value: value);
 
                 break;
             case RegionIo:
-                WriteIo(address: address, width: width, value: value);
+                WriteIo(address: aligned, width: width, value: value);
 
                 break;
             case RegionPalette:
             case RegionVram:
             case RegionOam:
-                m_ppu.WriteVideo(address: address, width: width, value: value);
+                m_ppu.WriteVideo(address: aligned, width: width, value: value);
 
                 break;
             case 0xE:
@@ -242,7 +303,14 @@ public sealed class GbaBus : IGbaBus {
             case 0xB:
             case 0xC:
             case 0xD: {
-                // ROM is read-only, except the GPIO/RTC registers overlaid at 0x0C4–0x0C8.
+                // A serial EEPROM is written one bit at a time (bit 0) over the upper ROM region (0x0D…), by DMA.
+                if (m_dmaActive && m_cartridge.IsEeprom && ((address >> 24) == 0x0Du)) {
+                    m_cartridge.WriteEeprom(value: (ushort)value);
+
+                    break;
+                }
+
+                // ROM is otherwise read-only, except the GPIO/RTC registers overlaid at 0x0C4–0x0C8.
                 var offset = address & 0x01FFFFFFu;
 
                 if (m_cartridge.HasRtc && (offset >= 0xC4u) && (offset <= 0xC8u)) {
@@ -257,7 +325,32 @@ public sealed class GbaBus : IGbaBus {
         }
     }
 
+    // The BIOS ROM is readable only by code executing within it: a code fetch returns the real bytes and latches
+    // the fetched opcode word; a data read returns real bytes only while executing in the BIOS, else that opcode.
+    private uint ReadBios(uint address, int width) {
+        if (address >= 0x4000u) {
+            return m_openBus;
+        }
+
+        if (m_inCodeFetch) {
+            m_lastBiosOpcode = ReadArray(array: m_bios, index: address & 0x3FFCu, width: 4);
+
+            return ReadArray(array: m_bios, index: address & 0x3FFFu, width: width);
+        }
+
+        return m_executingInBios
+            ? ReadArray(array: m_bios, index: address & 0x3FFFu, width: width)
+            : m_lastBiosOpcode;
+    }
+
     private uint ReadRom(uint address, int width) {
+        // A serial EEPROM responds in the upper ROM region (0x0D…) to DMA accesses only (it is DMA-driven on
+        // hardware). A CPU read there hits the ROM mirror/open-bus — so a cart that merely embeds the EEPROM_V
+        // string (e.g. the AGS aging cartridge) never has its 0x0D region hijacked.
+        if (m_dmaActive && m_cartridge.IsEeprom && ((address >> 24) == 0x0Du)) {
+            return m_cartridge.ReadEeprom();
+        }
+
         var offset = address & 0x01FFFFFFu;
 
         return width switch {
@@ -299,6 +392,20 @@ public sealed class GbaBus : IGbaBus {
         var offset = address & 0xFFFFFFu;
 
         if (offset >= 0x400u) {
+            return;
+        }
+
+        // POSTFLG (0x300) / HALTCNT (0x301): a HALT is requested by writing HALTCNT=0x00, which a halfword
+        // read-modify-write cannot distinguish from "no change" (HALTCNT reads back 0), so apply bytes directly.
+        if ((offset <= 0x301u) && ((offset + (uint)width) > 0x300u)) {
+            if ((offset <= 0x300u) && ((offset + (uint)width) > 0x300u)) {
+                m_postFlag = (byte)(value >> (int)((0x300u - offset) * 8u));
+            }
+
+            if ((offset <= 0x301u) && ((offset + (uint)width) > 0x301u)) {
+                Halt(stop: ((value >> (int)((0x301u - offset) * 8u)) & 0x80u) != 0u);
+            }
+
             return;
         }
 
@@ -354,6 +461,18 @@ public sealed class GbaBus : IGbaBus {
             return m_interrupts.ReadRegister(offset: offset);
         }
 
+        switch (offset) {
+            case 0x120u: return m_sioMulti0;
+            case 0x122u: return m_sioMulti1;
+            case 0x124u: return m_sioMulti2;
+            case 0x126u: return m_sioMulti3;
+            case 0x128u: return m_sioCnt;
+            case 0x12Au: return m_sioSend;
+            case 0x132u: return m_keyControl;
+            case 0x134u: return m_rcnt;
+            case 0x300u: return m_postFlag; // POSTFLG (bit 0); HALTCNT (high byte) is write-only, reads 0
+        }
+
         return (ushort)(m_io[offset] | (m_io[offset + 1u] << 8));
     }
 
@@ -381,7 +500,11 @@ public sealed class GbaBus : IGbaBus {
         }
 
         if ((offset >= 0xB0u) && (offset < 0xE0u)) {
+            // A control-register write can start an immediate DMA, whose transfers must count as DMA accesses.
+            var prevDma = m_dmaActive;
+            m_dmaActive = true;
             m_dma.WriteRegister(offset: offset, value: value, bus: this);
+            m_dmaActive = prevDma;
 
             return;
         }
@@ -392,12 +515,38 @@ public sealed class GbaBus : IGbaBus {
             return;
         }
 
+        switch (offset) {
+            case 0x120u: m_sioMulti0 = value; return;
+            case 0x122u: m_sioMulti1 = value; return;
+            case 0x124u: m_sioMulti2 = value; return;
+            case 0x126u: m_sioMulti3 = value; return;
+            case 0x128u: WriteSioControl(value: value); return;
+            case 0x12Au: m_sioSend = value; return;
+            case 0x132u: m_keyControl = value; return;
+            case 0x134u: m_rcnt = value; return;
+        }
+
         m_io[offset] = (byte)value;
         m_io[offset + 1u] = (byte)(value >> 8);
 
         // WAITCNT (0x04000204) reconfigures the game-pak wait-states.
         if (offset == 0x204u) {
             UpdateWaitControl(value: value);
+        }
+    }
+
+    // SIOCNT (0x128): with no link cable a started transfer (bit 7) completes immediately; the start bit clears
+    // and a serial IRQ fires if enabled (bit 14). The receive registers stay 0xFFFF, so games see no partner.
+    private void WriteSioControl(ushort value) {
+        if ((value & 0x0080u) != 0u) {
+            m_sioCnt = (ushort)(value & ~0x0080u);
+
+            if ((value & 0x4000u) != 0u) {
+                m_interrupts.Request(source: InterruptSource.Serial);
+            }
+        }
+        else {
+            m_sioCnt = value;
         }
     }
 
@@ -412,108 +561,69 @@ public sealed class GbaBus : IGbaBus {
         m_ws2S = s_ws2Seq[(value >> 10) & 0x1];
     }
 
-    // A CPU data access uses the game-pak bus when it targets ROM or SRAM, which flushes the prefetch buffer;
-    // anywhere else the game-pak bus is free, so the buffer fills during this access.
-    private void DataAccess(uint address, int cycles) {
-        var region = address >> 24;
-
-        if ((region >= 0x08u) && (region <= 0x0Fu)) {
-            m_prefetchActive = false;
-        }
-        else {
-            StepPrefetch(cycles: cycles);
+    // Charges a data access. While code runs from ROM with prefetch on, a non-game-pak access lets the prefetcher
+    // run ahead and discounts the upcoming code fetches it covers (mGBA's GBAMemoryStall, which may net negative).
+    private void ChargeData(uint address, int cost) {
+        if (!s_disablePrefetch && m_prefetchEnabled && m_executingInRom && ((address >> 24) < 0x08u)) {
+            cost = ApplyPrefetchStall(wait: cost);
         }
 
-        Tick(cycles: cycles);
+        m_scheduler.RelativeCycles += cost;
     }
 
-    // Cycle cost of an instruction fetch. Outside ROM (or with prefetch disabled) this is the plain wait-state.
-    // Inside ROM with prefetch on, the game-pak buffer only helps when it has genuinely run ahead of the CPU —
-    // which it can only do during cycles the CPU isn't itself fetching from ROM (internal cycles, non-ROM data
-    // accesses). A fetch whose opcode is already buffered costs one cycle per halfword; a fetch the buffer hasn't
-    // reached — a branch target, or any fetch in a tight ROM loop that never lets the buffer get ahead — stalls
-    // for the full wait-state access. This matches mGBA and is why a tight ROM-resident loop sees no prefetch
-    // speed-up at all.
+    // Temporary diagnostic switch to isolate the prefetch credit from the event model.
+    private static readonly bool s_disablePrefetch = Environment.GetEnvironmentVariable("PUCK_NO_PREFETCH") == "1";
+
+    // Cycle cost of an instruction fetch: always the raw wait-state. The prefetch benefit is credited from the
+    // following data access (ApplyPrefetchStall), not the fetch. Records the execution context that needs.
     private int CodeFetchCycles(uint address, int width, BusAccessType access) {
         var region = address >> 24;
 
-        if ((region < 0x08u) || (region > 0x0Du) || !m_prefetchEnabled) {
-            m_prefetchActive = false;
+        m_codeFetchPc = address;
+        m_executingInRom = (region >= 0x08u) && (region <= 0x0Du);
 
-            return AccessCycles(address: address, width: width, access: access);
+        if (m_executingInRom) {
+            m_romSeqWait = RomSeqCycles(region: region);
+            m_romNonSeqWait = RomNonSeqCycles(region: region);
         }
 
-        var halfwords = width >> 1;
-
-        // A branch — an opcode that doesn't continue where the buffer was heading — restarts the buffer at the new
-        // address and pays the full non-sequential wait-state. (A data access to non-ROM marks the next fetch
-        // non-sequential, but the buffer keeps running, so a *contiguous* fetch after it is still served from it —
-        // the restart is driven by address discontinuity, not the N/S type.)
-        if (!m_prefetchActive || (address != m_prefetchHead)) {
-            RestartPrefetch(address: address, width: width, region: region);
-
-            return AccessCycles(address: address, width: width, access: BusAccessType.NonSequential);
-        }
-
-        // A cold buffer that has not begun loading the next opcode (a tight ROM loop, which never frees the bus for
-        // the buffer to run ahead) stalls for the full sequential access — no prefetch speed-up at all.
-        if ((m_prefetchCount == 0) && (m_prefetchCountdown == 0)) {
-            m_prefetchHead = address + (uint)width;
-
-            return AccessCycles(address: address, width: width, access: BusAccessType.Sequential);
-        }
-
-        // The buffer has run ahead (sequential code interleaved with non-ROM accesses): serve each halfword it
-        // already holds for one cycle, and stall for the remainder of any in-flight load.
-        var cost = 0;
-
-        for (var i = 0; i < halfwords; ++i) {
-            if (m_prefetchCount > 0) {
-                --m_prefetchCount;
-                ++cost;
-            }
-            else if (m_prefetchCountdown > 0) {
-                cost += m_prefetchCountdown;
-                m_prefetchCountdown = 0;
-            }
-            else {
-                cost += m_prefetchSeq;
-            }
-        }
-
-        m_prefetchHead = address + (uint)width;
-
-        return cost;
+        return AccessCycles(address: address, width: width, access: access);
     }
 
-    private void RestartPrefetch(uint address, int width, uint region) {
-        m_prefetchActive = true;
-        m_prefetchSeq = RomSeqCycles(region: region);
-        m_prefetchCount = 0;
-        m_prefetchCountdown = 0;
-        m_prefetchHead = address + (uint)width;
-    }
+    // Game-pak prefetch, ported from mGBA's GBAMemoryStall: while code runs from ROM with prefetch on, a data
+    // access to a non-game-pak region lets the prefetcher stream sequential ROM halfwords during the access, so
+    // the wait-states of the code fetches it covers vanish (and the pending fetch's N becomes an S).
+    private int ApplyPrefetchStall(int wait) {
+        var s = m_romSeqWait;
+        var pc = m_codeFetchPc;
 
-    // Advances the prefetch buffer by the given free cycles, loading sequential halfwords up to its capacity.
-    private void StepPrefetch(int cycles) {
-        if (!m_prefetchActive || !m_prefetchEnabled) {
-            return;
+        var previousLoads = 0;
+        var dist = m_lastPrefetchedPc - pc;
+        var maxLoads = 8;
+
+        if (dist < 16u) {
+            previousLoads = (int)(dist >> 1);
+            maxLoads -= previousLoads;
         }
 
-        while ((cycles > 0) && (m_prefetchCount < PrefetchCapacity)) {
-            if (m_prefetchCountdown <= 0) {
-                m_prefetchCountdown = m_prefetchSeq;
-            }
+        var stall = s + 1;
+        var loads = 1;
 
-            var step = Math.Min(cycles, m_prefetchCountdown);
-
-            m_prefetchCountdown -= step;
-            cycles -= step;
-
-            if (m_prefetchCountdown == 0) {
-                ++m_prefetchCount;
-            }
+        while ((stall < wait) && (loads < maxLoads)) {
+            stall += s;
+            ++loads;
         }
+
+        m_lastPrefetchedPc = pc + (uint)(2 * (loads + previousLoads - 1));
+
+        if (stall > wait) {
+            wait = stall;
+        }
+
+        wait -= m_romNonSeqWait - s; // the pending fetch used to be an N; prefetch makes it an S
+        wait -= stall;               // the prefetched code fetches disappear entirely
+
+        return wait;
     }
 
     private int RomSeqCycles(uint region) => region switch {
@@ -567,8 +677,8 @@ public sealed class GbaBus : IGbaBus {
         }
 
         return (access == BusAccessType.Sequential)
-            ? seq
-            : nonSeq;
+            ? (seq + 1)
+            : (nonSeq + 1);
     }
 
     private static uint ReadArray(byte[] array, uint index, int width) {

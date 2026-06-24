@@ -49,6 +49,15 @@ public sealed class ApuNoiseChannel {
         }
     }
 
+    /// <summary>Reads back the envelope register (NR42): initial volume, direction, and period.</summary>
+    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease ? 0x8 : 0) | m_envelopePeriod);
+
+    /// <summary>Reads back the polynomial register (NR43): divisor, width mode, and shift clock.</summary>
+    public byte ReadPolynomial() => (byte)(m_divisorCode | (m_widthMode ? 0x8 : 0) | (m_shiftClock << 4));
+
+    /// <summary>Reads back NR44's length-enable bit (the only readable bit).</summary>
+    public byte ReadControl() => (byte)(m_lengthEnabled ? 0x40 : 0);
+
     /// <summary>Reloads the length counter (NR41).</summary>
     public void WriteLength(byte value) {
         m_lengthCounter = 64 - (value & 0x3F);

@@ -138,27 +138,29 @@ internal static class SmokeTests {
         timerInterrupts.WriteRegister(offset: 0x208u, value: 1);
         timerInterrupts.WriteRegister(offset: 0x200u, value: timer0Bit);
 
-        var timers = new GbaTimerController(interrupts: timerInterrupts, apu: new GbaApu());
+        var timerScheduler = new GbaScheduler();
+        var timers = new GbaTimerController(scheduler: timerScheduler, interrupts: timerInterrupts, apu: new GbaApu());
 
-        timers.WriteRegister(offset: 0x100u, value: 0xFFFE);          // reload
+        timers.WriteRegister(offset: 0x100u, value: 0xFFFE);          // reload (overflows after two ticks)
         timers.WriteRegister(offset: 0x102u, value: 0x00C0);          // enable + IRQ, prescaler 1
-        timers.Step(cycles: 2);                                       // absorbed by the start-up delay
+        timerScheduler.Tick(cycles: 1);                              // 0xFFFE -> 0xFFFF, no overflow yet
 
-        Check(name: "timer start-up delay holds off overflow", ok: !timerInterrupts.LineAsserted);
+        Check(name: "timer holds off overflow before its count expires", ok: !timerInterrupts.LineAsserted);
 
-        timers.Step(cycles: 2);                                       // two ticks → overflow
+        timerScheduler.Tick(cycles: 1);                             // 0xFFFF -> overflow
 
         Check(name: "timer overflow raises IRQ", ok: timerInterrupts.LineAsserted);
 
         // Immediate DMA copies a word through the full bus I/O path.
         var dmaInterrupts = new GbaInterruptController();
         var bus = new GbaBus(
+            scheduler: new GbaScheduler(),
             bios: new ReplacementBios(image: new byte[ReplacementBios.ImageSize]),
             cartridge: new GbaCartridge(rom: new byte[256]),
             interrupts: dmaInterrupts,
-            timers: new GbaTimerController(interrupts: dmaInterrupts, apu: new GbaApu()),
+            timers: new GbaTimerController(scheduler: new GbaScheduler(), interrupts: dmaInterrupts, apu: new GbaApu()),
             dma: new GbaDmaController(interrupts: dmaInterrupts),
-            ppu: new GbaPpu(interrupts: dmaInterrupts),
+            ppu: new GbaPpu(scheduler: new GbaScheduler(), interrupts: dmaInterrupts),
             apu: new GbaApu());
 
         bus.Write32(address: 0x03000000u, value: 0xCAFEBABEu, access: BusAccessType.NonSequential);
@@ -176,7 +178,8 @@ internal static class SmokeTests {
 
     private static void PpuTiming() {
         var interrupts = new GbaInterruptController();
-        var ppu = new GbaPpu(interrupts: interrupts);
+        var scheduler = new GbaScheduler();
+        var ppu = new GbaPpu(scheduler: scheduler, interrupts: interrupts);
 
         interrupts.WriteRegister(offset: 0x208u, value: 1);
         interrupts.WriteRegister(offset: 0x200u, value: (ushort)(1u << (int)InterruptSource.VBlank));
@@ -186,12 +189,12 @@ internal static class SmokeTests {
 
         // Advance past the H-draw period (1008 cycles) and confirm an H-blank was flagged. The H-blank flag is
         // raised after H-draw, not at the end of the 960-cycle visible-pixel span.
-        ppu.Step(cycles: 1008);
+        scheduler.Tick(cycles: 1008);
 
         Check(name: "PPU H-blank flagged on visible line", ok: ppu.ConsumeHBlankStarted());
 
         // Advance to scanline 160 (V-blank). 160 lines * 1232 cycles, less the 1008 already stepped.
-        ppu.Step(cycles: (160 * 1232) - 1008);
+        scheduler.Tick(cycles: (160 * 1232) - 1008);
 
         Check(name: "PPU reaches V-blank at line 160", ok: ppu.ReadRegister(offset: 0x06u) == 160);
         Check(name: "PPU V-blank flag set", ok: (ppu.ReadRegister(offset: 0x04u) & 0x1) != 0);
@@ -199,7 +202,7 @@ internal static class SmokeTests {
         Check(name: "PPU V-blank raised IRQ", ok: interrupts.LineAsserted);
 
         // Run out the rest of the frame back to the top.
-        ppu.Step(cycles: (TotalLinesForTest - 160) * 1232);
+        scheduler.Tick(cycles: (TotalLinesForTest - 160) * 1232);
 
         Check(name: "PPU wraps to scanline 0", ok: ppu.ReadRegister(offset: 0x06u) == 0);
     }
@@ -207,7 +210,8 @@ internal static class SmokeTests {
     private const int TotalLinesForTest = 228;
 
     private static void SpriteRendering() {
-        var ppu = new GbaPpu(interrupts: new GbaInterruptController());
+        var scheduler = new GbaScheduler();
+        var ppu = new GbaPpu(scheduler: scheduler, interrupts: new GbaInterruptController());
 
         // Mode 0, OBJ enabled (bit 12), 1-D tile mapping (bit 6).
         ppu.WriteRegister(offset: 0x00u, value: 0x1040);
@@ -226,7 +230,7 @@ internal static class SmokeTests {
         ppu.WriteVideo(address: 0x07000002u, width: 2, value: 0x0000); // attr1: x=0, 8×8
         ppu.WriteVideo(address: 0x07000004u, width: 2, value: 0x0000); // attr2: tile 0
 
-        ppu.Step(cycles: 1232); // render scanline 0
+        scheduler.Tick(cycles: 1232); // render scanline 0
 
         var pixel = ppu.Framebuffer[0];
         var backdrop = ppu.Framebuffer[100]; // x=100 is beyond the 8-pixel sprite → backdrop
@@ -236,7 +240,8 @@ internal static class SmokeTests {
     }
 
     private static void AffineBackgroundRendering() {
-        var ppu = new GbaPpu(interrupts: new GbaInterruptController());
+        var scheduler = new GbaScheduler();
+        var ppu = new GbaPpu(scheduler: scheduler, interrupts: new GbaInterruptController());
 
         // Mode 2 with BG2 (affine) enabled.
         ppu.WriteRegister(offset: 0x00u, value: 0x0402);
@@ -256,7 +261,7 @@ internal static class SmokeTests {
         // BG palette colour index 1 = red.
         ppu.WriteVideo(address: 0x05000002u, width: 2, value: 0x001F);
 
-        ppu.Step(cycles: 1232); // render scanline 0
+        scheduler.Tick(cycles: 1232); // render scanline 0
 
         var pixel = ppu.Framebuffer[0];
 
@@ -264,7 +269,8 @@ internal static class SmokeTests {
     }
 
     private static void BrightnessBlend() {
-        var ppu = new GbaPpu(interrupts: new GbaInterruptController());
+        var scheduler = new GbaScheduler();
+        var ppu = new GbaPpu(scheduler: scheduler, interrupts: new GbaInterruptController());
 
         // Mode 0, BG0 enabled.
         ppu.WriteRegister(offset: 0x00u, value: 0x0100);
@@ -283,7 +289,7 @@ internal static class SmokeTests {
         // BG palette index 1 = red.
         ppu.WriteVideo(address: 0x05000002u, width: 2, value: 0x001F);
 
-        ppu.Step(cycles: 1232);
+        scheduler.Tick(cycles: 1232);
 
         var pixel = ppu.Framebuffer[0];
 
@@ -295,6 +301,7 @@ internal static class SmokeTests {
 
         apu.ConfigureOutput(sampleRate: 32768);
         apu.WriteRegister(offset: 0x84u, value: 0x0080);   // SOUNDCNT_X: master enable (must precede channel writes)
+        apu.WriteRegister(offset: 0x80u, value: 0xFF77);   // SOUNDCNT_L: route all PSG channels L+R, master volume max
         apu.WriteRegister(offset: 0x82u, value: 0x0002);   // SOUNDCNT_H: PSG ratio 100%
         apu.WriteRegister(offset: 0x62u, value: 0xF080);   // NR11 duty 50%, NR12 volume 15
         apu.WriteRegister(offset: 0x64u, value: 0x8700);   // NR13/NR14: frequency + trigger
@@ -328,6 +335,7 @@ internal static class SmokeTests {
 
         noiseApu.ConfigureOutput(sampleRate: 32768);
         noiseApu.WriteRegister(offset: 0x84u, value: 0x0080);   // master enable
+        noiseApu.WriteRegister(offset: 0x80u, value: 0xFF77);   // SOUNDCNT_L: route all PSG channels L+R, master volume max
         noiseApu.WriteRegister(offset: 0x82u, value: 0x0002);   // PSG ratio 100%
         noiseApu.WriteRegister(offset: 0x78u, value: 0xF000);   // NR42 volume 15
         noiseApu.WriteRegister(offset: 0x7Cu, value: 0x8000);   // NR44 trigger

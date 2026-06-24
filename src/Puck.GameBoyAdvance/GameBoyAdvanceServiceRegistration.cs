@@ -28,6 +28,7 @@ public static class GameBoyAdvanceServiceRegistration {
         // a prior Replace/registration wins — the swappability seam. Scoped lifetime + one scope per machine keeps
         // two machines from sharing a stateful component instance. The consumer supplies the per-machine
         // GbaCartridge and a BIOS (AddReplacementBios) before resolving the machine.
+        services.TryAddScoped<GbaScheduler>();
         services.TryAddScoped<IArmCpu, Arm7Tdmi>();
         services.TryAddScoped<IGbaInterruptController, GbaInterruptController>();
         services.TryAddScoped<IGbaTimerController, GbaTimerController>();

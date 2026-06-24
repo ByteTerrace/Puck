@@ -12,14 +12,24 @@ bus/memory-map, IRQ/timers/DMA, replacement BIOS, full PPU, full APU). This proj
 ## 1. Current status
 
 - **CPU/bus/PPU/APU/DMA/timers**: complete. Golden Sun renders correctly in colour.
-- **AGS aging cartridge: 34 / 35** subtests pass (the one open cell is documented in §6).
+- **AGS aging cartridge: 37 / 38** subtests pass. The prefetch cell is fixed (§6.B; prefetch timer
+  reads `0x18` on / `0x33` off, all 24 wait-state + cart-RAM reads hardware-exact). Implementing SIO
+  unblocked the SIO interrupt cell (now passes) plus three further cells (#33–36) that previously
+  never ran behind the stall; the lone failure is **#37** (a multiplayer-SIO cell that genuinely
+  needs a link partner — expected to fail on a single console).
 - **jsmolka** `arm`/`thumb`/`memory` + **FuzzARM** `ARM_Any`/`THUMB_Any`: pass.
 - **40 smoke tests** + **4 render-hash floors** (Golden Sun, AGS menu, jsmolka hello/stripes): green.
-- **Saves**: SRAM, **Flash 64K/128K** (full command/bank/erase state machine + chip-ID), and
-  the **Seiko S-3511A RTC over GPIO** are implemented. EEPROM is still a linear stub.
-- **Open functionality gap**: **Pokémon Emerald boots to a white screen** — it hangs in a
-  VCOUNT-poll wait-loop because our cycle timing drifts ~4200 cycles behind real hardware over
-  boot. This is the highest-value next task; see §5–6.
+- **Saves**: SRAM, **Flash 64K/128K** (full command/bank/erase state machine + chip-ID),
+  **EEPROM** (full serial read/write protocol, 6- and 14-bit auto-detected bus widths, DMA-gated so
+  it never shadows the 0x0D ROM mirror), and the **Seiko S-3511A RTC over GPIO**.
+- **Hardware-parity pass** (this round): APU per-channel L/R panning + master volume + Direct Sound
+  L/R + **SOUNDBIAS** + **2-bank 64-sample wave** + PSG register read-back; **SIO/serial** (no-cable
+  defaults, start-bit auto-clear + IRQ); **HALT/STOP + POSTFLG/HALTCNT**; **BIOS open-bus read
+  protection** + general open bus; **OBJ (sprite) mosaic**. See §8.
+- **Open functionality gap**: **Pokémon Emerald boots to a white screen**, but the cause is now
+  pinned down (and is *not* the old cycle-drift theory — after the §5 prefetch fix Emerald tracks
+  mGBA to within ~13 cycles for 250k instructions). The state-diff co-sim (§4) finds a **functional**
+  register divergence on the boot path; see §6.A. This is the highest-value next task.
 
 Everything below is green and regression-free as of this writing.
 
@@ -68,6 +78,7 @@ CLI modes (each takes a ROM path):
 | `--render-hash <rom> <steps>` | print the deterministic FNV-1a frame hash (for capturing a floor) |
 | `--trace-cycles <rom> <steps>` | per-instruction `(PC, cumulative-cycles, delta)` — diff vs the co-sim |
 | `--pctrace <rom> <steps>` | per-instruction `PC + Thumb-flag + cycles`; **boots through the BIOS** (matches the co-sim's full-BIOS boot for divergence diffing) |
+| `--statetrace <rom> <steps>` | full per-instruction state `PC CPSR r0..r14 cycles`; diff the registers vs `cosim … --statetrace` to find the first **functional** divergence (immune to PC offset / line slips) |
 | `--probe <rom> <steps>` | dump GPRs, DISPCNT/DISPSTAT/VCOUNT, IE/IF/IME/WAITCNT, VRAM/palette occupancy — diagnose a blank-screen boot |
 | `--trace-crash <rom>` | report the first branch into unmapped memory |
 
@@ -101,18 +112,38 @@ epoxy/OpenGL module.
 ### The harness (`cosim.c`)
 
 A small C program links `mgba.lib` and single-steps the GBA core, mirroring our `--pctrace`
-output so the two streams diff line-for-line. Usage: `cosim <rom> <steps> [bios] [--probe|--pctrace]`.
+output so the two streams diff line-for-line. A working copy is checked out at
+`D:\Source\ByteTerrace\gba-cosim\cosim.c`. Usage: `cosim <rom> <steps> [bios] [--probe|--pctrace]`.
 
-- Boots through the BIOS when one is supplied (`skipBios=0`), matching our `--pctrace`.
-- `--pctrace` prints `gprs[15] + Thumb-flag + cumulative-cycles`. **Use the raw architectural
-  PC, not a normalized "exec" address** — normalization is unreliable across mode switches and
-  branches and produces phantom ±4 divergences.
-- `--probe` prints `PC / DISPCNT / VCOUNT / VRAM-occupancy` after N steps.
-- Install a silent `mLogger` (`mLogSetDefaultLogger`) or mGBA floods stdout.
-- API surface used: `GBACoreCreate` → `init` → `mCoreConfigSetIntValue(skipBios,…)` →
-  `loadBIOS`/`loadROM` → `reset` → `core->step`; read `((struct ARMCore*)core->cpu)->gprs[15]`,
-  cumulative cycles via `mTimingGlobalTime(&((struct GBA*)core->board)->timing)`,
-  memory via `core->busRead16/32`.
+Build it from an MSVC dev shell (note the `/MD` and the extra Win32 link libs, both required):
+
+```sh
+cl /O2 /MD <defs> /I <mgba-src>/include cosim.c <mgba-build>/mgba.lib \
+   ws2_32.lib advapi32.lib shell32.lib user32.lib ole32.lib shlwapi.lib /Fe:cosim.exe
+```
+
+- **`<defs>` must match the lib's build flags exactly** or `struct mCore`/`struct GBA` layouts
+  differ and you get an instant access-violation. Pull them from `mgba-build/build.ninja`; for the
+  §4 config they are `-DBUILD_STATIC -DENABLE_DIRECTORIES -DENABLE_VFS -DENABLE_VFS_FD
+  -DHAVE_SETLOCALE -DHAVE_STRDUP -DM_CORE_GBA -DNOMINMAX -DWIN32_LEAN_AND_MEAN`. (`ENABLE_VFS`+
+  `ENABLE_DIRECTORIES` add a `dirs` field to `struct mCore` — omit them and every offset shifts.)
+- **Sequence that actually works** (each step below was a separate crash until added):
+  `GBACoreCreate` → `core->init` → **`mCoreConfigInit(&core->config, "gba")`** (reset reads config
+  tables — they must exist) → **`core->setVideoBuffer`** with a `baseVideoSize`-sized buffer (the
+  software renderer derefs NULL otherwise) → set `core->opts.skipBios` → **`mCoreConfigSetValue(
+  &core->config,"idleOptimization","ignore")` + `core->loadConfig`** → `loadROM`/`loadBIOS` →
+  `reset` → `core->step`. Install a silent `mLogger` (`mLogSetDefaultLogger`) or mGBA floods stdout.
+- Boots through the BIOS when one is supplied (`skipBios=0`), matching `--pctrace`. Pass **no bios**
+  to direct-boot to `0x08000000` (matches our `--trace-cycles`), best for ROM-resident micro-ROMs.
+- `--pctrace` prints `gprs[15] + Thumb-flag + cycles`. Our PC is a constant **+4** vs mGBA's (a
+  pipeline-representation offset); subtract it and the streams align. Use the raw architectural PC.
+- **CAUTION — cumulative cycles are NOT monotonic.** `mTimingGlobalTime` rebases to 0 on every
+  frame reroot, so the absolute column resets repeatedly. **Compare per-instruction *deltas*, not
+  the absolute count.** mGBA also attributes the *next* instruction's fetch to the *current* one,
+  so single-instruction deltas are shifted by one vs ours — **compare closed-loop totals** (a tight
+  loop's cycles/iteration) for an apples-to-apples number.
+- `idleOptimization=ignore` is mandatory: without it mGBA fast-forwards busy-wait loops and the
+  cycle clock freezes.
 
 ### Diffing workflow
 
@@ -137,9 +168,13 @@ the wait-state, timer, and prefetch models below were each validated to per-cycl
 All in `src/Puck.GameBoyAdvance/GbaBus.cs` and `GbaTimerController.cs`. Timing "emerges from the
 bus accessors": every fetch/transfer/idle advances the machine through `Tick`.
 
-- **Game-pak word access** (`RomCycles`, 32-bit): `N+S+2` non-sequential / `2S+2` sequential —
-  the two 16-bit halves plus the inter-halfword merge and a game-pak first-access cycle. SRAM
-  data adds `+1` likewise.
+- **Game-pak access** (`RomCycles`): every 16-bit halfword transfer costs its wait-state **plus a
+  one-cycle bus base** — a sequential halfword is `S+1`, a non-sequential one `N+1`. A 32-bit
+  access is just two such transfers, so a word is `2S+2` sequential / `N+S+2` non-sequential. This
+  base cycle applies to **code fetches (prefetch off) and data alike** — both 16- and 32-bit. SRAM
+  data adds `+1` likewise. (The 16-bit base was historically dropped, which under-counted every
+  Thumb ROM fetch by 1; caught by the §4 co-sim — a Thumb ROM self-branch loop is `2S+1N = 2·3+5 =
+  11` cycles, not 8 — and fixed.)
 - **Timer start-up delay**: a timer ignores its first **2 cycles** after the enable bit is
   written (`GbaTimerController.StartDelay`). Real hardware behaviour; required for the AGS
   wait-state and prescaler tests and for any timer-measured loop.
@@ -163,34 +198,54 @@ re-validate any change with the micro-ROM method and re-run the full suite + AGS
 
 ### A. Pokémon Emerald boot — the main functionality task
 
-Emerald white-screens. It is **not** a save/BIOS problem (Flash 128K + RTC are detected and
-wired; mGBA boots Emerald with the *same* replacement BIOS via the co-sim). The cause is a
-**cycle-timing drift**:
+Emerald white-screens (stuck at PC `0x082E6DD0`, DISPCNT=0). The **old cycle-drift theory is
+stale**: after the §5 prefetch fix, Emerald's cumulative cycles track mGBA to within **~13 cycles
+over 250k instructions** (re-measured with the fixed co-sim — see §4). The real cause is a
+**functional register divergence** on the boot path, found by the §4 **state-diff co-sim**:
 
-- Emerald spins a Thumb wait-loop polling **VCOUNT** for value `0xE0` (224) — regs in the loop:
-  `r1=0x04000006` (VCOUNT addr), `r5=0xE0`.
-- Our core runs **~4200 cycles behind** mGBA by the time the loop should exit, so our VCOUNT is
-  several scanlines out of phase and the `==224` sample never lands; the loop never exits.
-- The drift accumulates across boot. The §5 prefetch-model fix removed a large tight-loop error
-  (and fixed the AGS prefetch-ON cell + general ARM ROM-loop accuracy) but did **not** close the
-  Emerald drift — so there is at least one more under-counted construct on Emerald's boot path.
+- SOUNDBIAS (0x04000088) read as 0 instead of its `0x0200` power-on default — the BIOS sound init
+  derailed on it. **Fixed** (APU now models SOUNDBIAS); divergence moved ~67k instructions later.
+- The *next* divergence is at ROM PC `~0x6A6` (Thumb): register **r0** differs after a load
+  (`0x84000200` → ours vs mGBA), right after a ~2570-cycle SWI/HALT wait. Not yet root-caused.
 
-**Next step:** use `--pctrace`/cosim with the cumulative-cycle column to find *where* in boot
-the drift accumulates (diff per-instruction cycle deltas, not just the final loop), isolate the
-mischarged construct with a micro-ROM, fix the model in `GbaBus`/CPU, re-validate. Prime suspects
-to check first: IRQ exception-entry cycle cost, and Thumb branch/load cycle edges in ROM with
-prefetch on.
+**Method (this is the breakthrough):** dump full per-instruction state from both cores
+(`--statetrace` here, `cosim … --statetrace`) and diff the *architectural registers* (immune to the
+PC pipeline offset and to single-instruction count slips that defeat a PC-only diff). The first
+register that differs is the bug — `/tmp/statediff2.awk`-style two-pointer resync diff finds it.
+Continue from the `~0x6A6` r0 divergence: disassemble the instruction, find which input (an I/O
+read, a memory value) we compute wrong, fix, re-diff.
 
-### B. AGS `prefetch_buffer` subtest (the 35th cell)
+### B. AGS `prefetch_buffer` subtest (the 35th cell) — FIXED & CONFIRMED ✅
 
-The prefetch-**disabled** half reads `0x2A` (42); hardware wants `0x33` (51) — our prefetch-off
-ROM code-fetch is ~1 cycle/fetch light. Lower priority than A; the same per-instruction
-cycle-diff method applies.
+The prefetch-**disabled** half read `0x2A` (42); hardware wants `0x33` (51) — our prefetch-off
+ROM code-fetch was ~1 cycle/fetch light. **Cause found & fixed:** 16-bit game-pak accesses omitted
+the per-transfer +1 bus base cycle that the 32-bit path already carried, so every Thumb ROM fetch
+(and 16-bit ROM data read) under-counted by 1 (see §5). Verified per-instruction against the §4
+co-sim (sequential fetch 2→3, self-branch loop 8→11, load+branch loop 22-total — all match mGBA,
+prefetch on and off) **and confirmed on the real `TCHK10` aging cartridge: AGS is now 35/35**, with
+prefetch reads `0x18` on / `0x33` off. Zero regression on the full suite.
 
-### C. EEPROM saves
+### C. EEPROM saves — IMPLEMENTED ✅
 
-Still a linear stub in `GbaCartridge`. Implement the serial protocol (read/write address +
-64/512-byte modes) when a game that needs it is tested. Flash + RTC are the model to follow.
+Full serial protocol in `GbaCartridge` (`ReadEeprom`/`WriteEeprom`): read (`11`) and write (`10`)
+commands, 6-bit (512 B) and 14-bit (8 KiB) bus widths auto-detected from the first command's length,
+64-bit blocks shifted MSB-first, 68-bit read replies (4 dummy + 64 data). The bus routes 0x0D…
+to it **only for DMA accesses** (`m_dmaActive`), matching hardware — EEPROM is DMA-driven, and this
+keeps test carts that merely embed the `EEPROM_V` string (the AGS aging cartridge has `EEPROM_V122`!)
+from having their 0x0D ROM mirror hijacked. Untested against a real EEPROM game (none on hand).
+
+### D. Other hardware-parity items now implemented (this round)
+
+- **APU mix**: SOUNDCNT_L per-channel L/R panning + master volume, Direct Sound L/R enables,
+  SOUNDBIAS, 2-bank 64-sample wave mode, PSG register read-back. `GbaApu` / `Apu*Channel`.
+- **SIO/serial**: SIODATA/SIOMULTI/SIOCNT/RCNT with no-cable defaults (0xFFFF), start-bit
+  auto-clear + serial IRQ. `GbaBus.WriteSioControl`.
+- **HALT/STOP + POSTFLG/HALTCNT**: `GbaBus.Halt`/`RunUntilInterrupt`, CPU suspends until IE&IF.
+- **BIOS open-bus read protection**: `GbaBus.ReadBios` — BIOS readable only by code in it.
+- **OBJ (sprite) mosaic**: `GbaPpu.RenderSprites`.
+
+Deferred (genuine accuracy frontier, not stubs): dot-accurate mid-scanline PPU register effects;
+exact APU mix levels (structure is correct, absolute levels unverified without an audio reference).
 
 ---
 

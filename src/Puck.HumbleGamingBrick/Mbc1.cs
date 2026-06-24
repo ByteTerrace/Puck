@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick;
 

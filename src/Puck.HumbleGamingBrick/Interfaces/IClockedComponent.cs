@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// A hardware component the <see cref="SystemBus"/> advances in lockstep with the CPU. Every component speaks

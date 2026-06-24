@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick;
+namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The SM83 CPU core: the bus master. Each <see cref="Step"/> fetches and executes one instruction (or services a

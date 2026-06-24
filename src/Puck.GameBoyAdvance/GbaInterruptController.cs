@@ -12,6 +12,9 @@ public sealed class GbaInterruptController : IGbaInterruptController {
     public bool LineAsserted => m_masterEnable && ((m_enable & m_requested & SourceMask) != 0);
 
     /// <inheritdoc/>
+    public bool HasPendingInterrupt => (m_enable & m_requested & SourceMask) != 0;
+
+    /// <inheritdoc/>
     public void Request(InterruptSource source) {
         m_requested |= (ushort)(1u << (int)source);
     }

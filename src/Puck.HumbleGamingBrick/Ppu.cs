@@ -1,3 +1,5 @@
+using Puck.HumbleGamingBrick.Interfaces;
+
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>

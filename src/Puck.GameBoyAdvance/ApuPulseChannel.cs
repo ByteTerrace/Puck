@@ -71,6 +71,18 @@ public sealed class ApuPulseChannel {
         m_sweepShift = value & 0x7;
     }
 
+    /// <summary>Reads back the sweep register (NR10): shift, direction, and period (all bits readable).</summary>
+    public byte ReadSweep() => (byte)((m_sweepPeriod << 4) | (m_sweepDecrease ? 0x8 : 0) | m_sweepShift);
+
+    /// <summary>Reads back the duty field of NRx1 (the length sub-field is write-only and reads as zero).</summary>
+    public byte ReadDutyLength() => (byte)(m_dutyPattern << 6);
+
+    /// <summary>Reads back the envelope register (NRx2): initial volume, direction, and period.</summary>
+    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease ? 0x8 : 0) | m_envelopePeriod);
+
+    /// <summary>Reads back NRx4's length-enable bit (the only readable bit).</summary>
+    public byte ReadControl() => (byte)(m_lengthEnabled ? 0x40 : 0);
+
     /// <summary>Sets duty and reloads the length counter (NRx1).</summary>
     public void WriteDutyLength(byte value) {
         m_dutyPattern = (value >> 6) & 0x3;
