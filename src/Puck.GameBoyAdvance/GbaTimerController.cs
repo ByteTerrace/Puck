@@ -135,8 +135,24 @@ public sealed class GbaTimerController : IGbaTimerController {
         m_scheduler.Deschedule(e: m_event[timer]);
 
         if (m_enabled[timer] && !m_countUp[timer]) {
-            m_lastEvent[timer] = m_scheduler.Now & ~((1L << prescaleBits) - 1L);
-            UpdateRegister(timer: timer, cyclesLate: 0);
+            var tickMask = (1L << prescaleBits) - 1L;
+
+            if (!wasEnabled) {
+                // Fresh 0→1 enable: offset m_lastEvent by 2 cycles to account for (1) the I/O write
+                // bus access charged AFTER WriteRegion returns and (2) the GBA timer control latch that
+                // processes the enable flag one cycle after the write commits (Ares: stepLatch delays).
+                // Skip the immediate UpdateRegister — calling it with currentTime < m_lastEvent would
+                // compute negative ticks and corrupt m_counter. Schedule the overflow directly instead.
+                m_lastEvent[timer] = (m_scheduler.Now + 2L) & ~tickMask;
+                var untilOverflow = (0x10000L - m_counter[timer]) << prescaleBits;
+                m_scheduler.ScheduleAbsolute(e: m_event[timer], when: (m_lastEvent[timer] + untilOverflow) & ~tickMask);
+            }
+            else {
+                // Prescaler or cascade-mode change while already running: bring the counter current
+                // from the old prescaler, then reschedule using the new one.
+                m_lastEvent[timer] = m_scheduler.Now & ~tickMask;
+                UpdateRegister(timer: timer, cyclesLate: 0);
+            }
         }
     }
 

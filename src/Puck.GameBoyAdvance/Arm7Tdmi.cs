@@ -147,12 +147,12 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
         if (ThumbState) {
             var address = m_gpr[15];
-            var opcode = (ushort)m_pipe[0];
+            var opcode  = (ushort)m_pipe[0];
 
             m_pipe[0] = m_pipe[1];
             m_pipe[1] = m_bus.ReadCode16(address: address, access: fetchType);
 
-            ExecuteThumb(opcode: opcode);
+            unsafe { s_thumbTable[opcode >> 8](this, opcode); }
 
             if (!m_branched) {
                 m_gpr[15] = address + 2u;
@@ -160,12 +160,20 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         }
         else {
             var address = m_gpr[15];
-            var opcode = m_pipe[0];
+            var opcode  = m_pipe[0];
 
             m_pipe[0] = m_pipe[1];
             m_pipe[1] = m_bus.ReadCode32(address: address, access: fetchType);
 
-            ExecuteArm(opcode: opcode);
+            var condition = opcode >> 28;
+
+            if ((condition == 0xEu) || CheckCondition(cpu: this, condition: condition)) {
+                unsafe {
+                    var index = ((opcode >> 16) & 0xFF0u) | ((opcode >> 4) & 0xFu);
+
+                    s_armTable[index](this, opcode);
+                }
+            }
 
             if (!m_branched) {
                 m_gpr[15] = address + 4u;

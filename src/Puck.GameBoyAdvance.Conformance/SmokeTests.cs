@@ -143,11 +143,11 @@ internal static class SmokeTests {
 
         timers.WriteRegister(offset: 0x100u, value: 0xFFFE);          // reload (overflows after two ticks)
         timers.WriteRegister(offset: 0x102u, value: 0x00C0);          // enable + IRQ, prescaler 1
-        timerScheduler.Tick(cycles: 1);                              // 0xFFFE -> 0xFFFF, no overflow yet
+        timerScheduler.Tick(cycles: 3);                              // 2-cycle start delay + first tick (0xFFFE -> 0xFFFF)
 
         Check(name: "timer holds off overflow before its count expires", ok: !timerInterrupts.LineAsserted);
 
-        timerScheduler.Tick(cycles: 1);                             // 0xFFFF -> overflow
+        timerScheduler.Tick(cycles: 1);                              // second tick: 0xFFFF -> overflow at cycle 4
 
         Check(name: "timer overflow raises IRQ", ok: timerInterrupts.LineAsserted);
 

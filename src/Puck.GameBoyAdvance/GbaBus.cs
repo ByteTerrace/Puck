@@ -535,14 +535,26 @@ public sealed class GbaBus : IGbaBus {
         }
     }
 
-    // SIOCNT (0x128): with no link cable a started transfer (bit 7) completes immediately; the start bit clears
-    // and a serial IRQ fires if enabled (bit 14). The receive registers stay 0xFFFF, so games see no partner.
+    // SIOCNT (0x128): Normal/Multiplayer/UART mode SIO control.
+    // Bit-field meaning depends on the mode selected by bits [13:12]:
+    //   00/01 = Normal 8-/32-bit: bit 0 = clock select (0=external, 1=internal).
+    //           External clock: transfer waits for a partner to supply SC — never completes without one.
+    //           Internal clock: GBA provides SC itself; completes immediately, received data = 0xFFFF.
+    //   10 = Multiplayer: bit 0 is baud rate, not clock select. The Parent GBA starts the transfer and it
+    //        always completes (all child slots return 0xFFFF when no GBA is connected). Fire immediately.
+    //   11 = UART: not commonly used; fire immediately so the game sees a clean completion.
     private void WriteSioControl(ushort value) {
         if ((value & 0x0080u) != 0u) {
             m_sioCnt = (ushort)(value & ~0x0080u);
 
             if ((value & 0x4000u) != 0u) {
-                m_interrupts.Request(source: InterruptSource.Serial);
+                var mode = (value >> 12) & 3u;
+                var normalWithInternalClock = (mode != 2u) && (mode != 3u) && ((value & 0x0001u) != 0u);
+                var multiplayerOrUart = (mode == 2u) || (mode == 3u);
+
+                if (normalWithInternalClock || multiplayerOrUart) {
+                    m_interrupts.Request(source: InterruptSource.Serial);
+                }
             }
         }
         else {

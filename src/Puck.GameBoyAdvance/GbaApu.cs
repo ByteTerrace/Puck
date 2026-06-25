@@ -1,9 +1,9 @@
 namespace Puck.GameBoyAdvance;
 
 /// <summary>
-/// The default APU: the two square PSG channels plus the two Direct Sound FIFO channels, mixed per SOUNDCNT and
-/// resampled into a drainable stereo ring. A 512&#160;Hz frame sequencer clocks the PSG length/envelope/sweep
-/// units. The wave and noise PSG channels are registered but not yet sounded — a follow-up increment.
+/// The default APU: all four PSG channels (pulse×2, wave, noise) plus two Direct Sound FIFO channels, mixed per
+/// SOUNDCNT and resampled into a drainable stereo ring. A 512&#160;Hz frame sequencer clocks the PSG
+/// length/envelope/sweep units.
 /// </summary>
 public sealed class GbaApu : IGbaApu {
     private const int MasterClock = 16_777_216;
