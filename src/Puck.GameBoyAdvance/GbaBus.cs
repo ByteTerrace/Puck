@@ -522,7 +522,7 @@ public sealed class GbaBus : IGbaBus {
             case 0x126u: m_sioMulti3 = value; return;
             case 0x128u: WriteSioControl(value: value); return;
             case 0x12Au: m_sioSend = value; return;
-            case 0x132u: m_keyControl = value; return;
+            case 0x132u: m_keyControl = value; EvaluateKeypadIrq(); return;
             case 0x134u: m_rcnt = value; return;
         }
 
@@ -559,6 +559,32 @@ public sealed class GbaBus : IGbaBus {
         }
         else {
             m_sioCnt = value;
+        }
+    }
+
+    // KEYCNT (0x132): check the keypad IRQ condition against the current KEYINPUT state and request an IRQ if met.
+    // OR mode (bit 15 = 0): any selected key is pressed (KEYINPUT bit = 0).
+    // AND mode (bit 15 = 1): all selected keys are pressed — vacuously true when 0 keys are selected.
+    private void EvaluateKeypadIrq() {
+        if ((m_keyControl & 0x4000u) == 0u) {
+            return;
+        }
+
+        var selected = (uint)(m_keyControl & 0x03FFu);
+        var keyInput = (uint)((m_io[0x131] << 8) | m_io[0x130]) & 0x03FFu; // 0 = pressed, 1 = released
+        var pressed = selected & ~keyInput;
+
+        bool condition;
+
+        if ((m_keyControl & 0x8000u) == 0u) {
+            condition = pressed != 0u;                 // OR: any selected key pressed
+        }
+        else {
+            condition = (selected & keyInput) == 0u;   // AND: all selected keys pressed (vacuously true if selected=0)
+        }
+
+        if (condition) {
+            m_interrupts.Request(source: InterruptSource.Keypad);
         }
     }
 

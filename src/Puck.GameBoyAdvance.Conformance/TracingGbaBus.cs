@@ -10,13 +10,23 @@ internal sealed class TracingGbaBus : IGbaBus {
     private readonly Action<uint> m_onStore;
     private readonly uint m_readWatchAddress;
     private readonly Action<uint>? m_onRead;
+    private readonly uint m_readWatchAddress2;
+    private readonly Action<uint, uint>? m_onRead2; // (address, value)
+    private readonly uint m_readRangeBase;
+    private readonly uint m_readRangeEnd;
+    private readonly Action<uint, uint>? m_onReadRange; // (address, value) for any hit in [base, end)
 
-    public TracingGbaBus(IGbaBus inner, uint watchAddress, Action<uint> onStore, uint readWatchAddress = 0xFFFFFFFFu, Action<uint>? onRead = null) {
+    public TracingGbaBus(IGbaBus inner, uint watchAddress, Action<uint> onStore, uint readWatchAddress = 0xFFFFFFFFu, Action<uint>? onRead = null, uint readWatchAddress2 = 0xFFFFFFFFu, Action<uint, uint>? onRead2 = null, uint readRangeBase = 0xFFFFFFFFu, uint readRangeEnd = 0u, Action<uint, uint>? onReadRange = null) {
         m_inner = inner;
         m_watchAddress = watchAddress;
         m_onStore = onStore;
         m_readWatchAddress = readWatchAddress;
         m_onRead = onRead;
+        m_readWatchAddress2 = readWatchAddress2;
+        m_onRead2 = onRead2;
+        m_readRangeBase = readRangeBase;
+        m_readRangeEnd = readRangeEnd;
+        m_onReadRange = onReadRange;
     }
 
     public bool IrqPending => m_inner.IrqPending;
@@ -25,9 +35,18 @@ internal sealed class TracingGbaBus : IGbaBus {
 
     public ushort Read16(uint address, BusAccessType access) {
         var value = m_inner.Read16(address: address, access: access);
+        var aligned = address & ~1u;
 
-        if ((m_onRead is not null) && ((address & ~1u) == (m_readWatchAddress & ~1u))) {
+        if ((m_onRead is not null) && (aligned == (m_readWatchAddress & ~1u))) {
             m_onRead(obj: value);
+        }
+
+        if ((m_onRead2 is not null) && (aligned == (m_readWatchAddress2 & ~1u))) {
+            m_onRead2(arg1: aligned, arg2: value);
+        }
+
+        if ((m_onReadRange is not null) && (aligned >= m_readRangeBase) && (aligned < m_readRangeEnd)) {
+            m_onReadRange(arg1: aligned, arg2: value);
         }
 
         return value;

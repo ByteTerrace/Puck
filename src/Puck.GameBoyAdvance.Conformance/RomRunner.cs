@@ -616,6 +616,10 @@ internal static class RomRunner {
         // at the time. The wait-state test (result index 7) reads the timer 24 times — one per setting — so the
         // reads tagged 7 are exactly the 24 values it compares against wait_control_timer_values[3][8].
         var timerReads = new List<(int afterResults, uint value)>();
+        // Also capture all I/O timer register reads (0x04000100–0x04000110) and IF (0x04000202) for the
+        // timer_connect diagnostic (#17). Key: address, value, result-count at time of read.
+        var timer1Reads = new List<(int afterResults, uint value)>();
+        var connectIoReads = new List<(int afterResults, uint address, uint value)>();
         var cartridge = new GbaCartridge(rom: rom);
         var services = new ServiceCollection();
 
@@ -636,7 +640,12 @@ internal static class RomRunner {
                 results.Add(item: value);
             },
             readWatchAddress: 0x04000100u,
-            onRead: value => timerReads.Add((results.Count, value))));
+            onRead: value => timerReads.Add((results.Count, value)),
+            readWatchAddress2: 0x04000104u,
+            onRead2: (_, value) => timer1Reads.Add((results.Count, value)),
+            readRangeBase: 0x04000100u,
+            readRangeEnd: 0x04000210u,  // covers all 4 timer regs + IME/IE/IF
+            onReadRange: (addr, value) => connectIoReads.Add((results.Count, addr, value))));
         _ = services.AddGameBoyAdvance();
         _ = services.AddReplacementBios(image: BiosImage);
         services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
@@ -718,6 +727,26 @@ internal static class RomRunner {
         // prescaler test (#16) reads the timer once per prescaler mode (4 reads: /1, /64, /256, /1024).
         var prescalerReads = timerReads.Where(predicate: r => r.afterResults == 16).Select(selector: r => r.value).ToArray();
         Console.WriteLine($"  -- prescaler timer reads (afterResults==16): {string.Join(", ", prescalerReads.Select(v => $"0x{v:X}"))} ({prescalerReads.Length} reads, expect 4 values) --");
+
+        // For any failed test: dump I/O reads observed during it. Helps identify unknown tests and root causes.
+        for (var testIdx = 0; testIdx < results.Count; ++testIdx) {
+            if (results[testIdx] == 0u) {
+                continue;
+            }
+
+            var ioForTest = connectIoReads.Where(predicate: r => r.afterResults == testIdx).ToArray();
+
+            if (ioForTest.Length == 0) {
+                continue;
+            }
+
+            var testLabel = (testIdx < s_agsTestNames.Length) ? s_agsTestNames[testIdx] : $"test #{testIdx}";
+            Console.WriteLine($"  -- [{testIdx}] {testLabel} I/O reads: {ioForTest.Length} total --");
+
+            foreach (var (_, addr, val) in ioForTest) {
+                Console.WriteLine($"     [0x{addr:X8}] = 0x{val:X4}");
+            }
+        }
 
         return failed;
     }
