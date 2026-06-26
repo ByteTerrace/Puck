@@ -1,12 +1,10 @@
 namespace Puck.GameBoyAdvance;
 
 /// <summary>
-/// The system event scheduler, modelled on mGBA's <c>mTiming</c>. Time is split into a committed
-/// <see cref="MasterCycles"/> clock and the CPU's running <see cref="RelativeCycles"/> offset (which may briefly
-/// go negative — e.g. when the game-pak prefetcher credits back the cost of code fetches it absorbed). The true
-/// time at any instant is <see cref="Now"/> = MasterCycles + RelativeCycles. Peripherals schedule events at
-/// absolute times and compute their state lazily from <see cref="Now"/> on read, so the machine is cycle-exact
-/// without stepping every peripheral on every access.
+/// The system event scheduler for the cycle-stepped engine. Time is a single monotonic master clock,
+/// <see cref="Now"/>, advanced one cycle at a time by the bus's per-cycle stepping. Peripherals schedule events at
+/// absolute times on that clock, and the bus fires each one at its <b>exact</b> cycle (ARES's model — no deferred
+/// batching, so a peripheral register read mid-instruction sees state that has advanced to the precise cycle).
 /// </summary>
 public sealed class GbaScheduler {
     /// <summary>A scheduled callback. <see cref="When"/> is an absolute time on the <see cref="Now"/> clock.</summary>
@@ -22,22 +20,14 @@ public sealed class GbaScheduler {
 
     private Event? m_root;
 
-    /// <summary>The committed master clock — advanced only forward, as events are processed.</summary>
-    public long MasterCycles { get; private set; }
+    /// <summary>The master clock: the current absolute time, advanced one cycle at a time by the bus.</summary>
+    public long Now { get; set; }
 
-    /// <summary>The CPU's running cycle offset since the last commit; may be negative momentarily.</summary>
-    public int RelativeCycles { get; set; }
-
-    /// <summary>The cycle threshold (in <see cref="RelativeCycles"/> terms) at which the next event is due.</summary>
-    public int NextEvent { get; private set; } = int.MaxValue;
-
-    /// <summary>The true current time: the committed clock plus the CPU's running offset.</summary>
-    public long Now => MasterCycles + RelativeCycles;
+    /// <summary>The absolute time of the next scheduled event, or <see cref="long.MaxValue"/> if none is queued.</summary>
+    public long NextWhen => m_root?.When ?? long.MaxValue;
 
     /// <summary>Schedules <paramref name="e"/> to fire <paramref name="cyclesFromNow"/> cycles from now.</summary>
-    public void Schedule(Event e, int cyclesFromNow) {
-        ScheduleAbsolute(e: e, when: Now + cyclesFromNow);
-    }
+    public void Schedule(Event e, int cyclesFromNow) => ScheduleAbsolute(e: e, when: Now + cyclesFromNow);
 
     /// <summary>Schedules <paramref name="e"/> to fire at the absolute time <paramref name="when"/>.</summary>
     public void ScheduleAbsolute(Event e, long when) {
@@ -61,8 +51,6 @@ public sealed class GbaScheduler {
             e.Next = node.Next;
             node.Next = e;
         }
-
-        UpdateNextEvent();
     }
 
     /// <summary>Removes <paramref name="e"/> from the queue if present.</summary>
@@ -88,38 +76,34 @@ public sealed class GbaScheduler {
 
         e.Scheduled = false;
         e.Next = null;
-        UpdateNextEvent();
     }
 
-    /// <summary>Commits <paramref name="cycles"/> of CPU progress to the master clock and fires every event now
-    /// due, each with its lateness. Returns the cycle count (relative to the new clock) of the next event.</summary>
-    public int Tick(int cycles) {
-        MasterCycles += cycles;
+    /// <summary>Advances the clock by <paramref name="cycles"/>, firing each scheduled event at its exact time along
+    /// the way (so callbacks see the clock at their <see cref="Event.When"/>). The cycle-accurate way to drive the
+    /// scheduler standalone — the bus normally interleaves this with per-cycle CPU/timer work via its own loop.</summary>
+    public void Advance(long cycles) {
+        var target = Now + cycles;
 
-        while (m_root is not null) {
-            var late = MasterCycles - m_root.When;
+        while (NextWhen <= target) {
+            Now = NextWhen;
+            FireDue();
+        }
 
-            if (late < 0) {
-                break;
-            }
+        Now = target;
+    }
 
+    /// <summary>Fires every event whose time has arrived (<see cref="Event.When"/> &lt;= <see cref="Now"/>), each
+    /// with how many cycles late it fired. Called from the bus's per-cycle loop the instant the clock reaches the
+    /// event, so events take effect at their exact cycle.</summary>
+    public void FireDue() {
+        while ((m_root is not null) && (m_root.When <= Now)) {
             var e = m_root;
 
             m_root = e.Next;
             e.Scheduled = false;
             e.Next = null;
 
-            e.Callback((int)late);
+            e.Callback((int)(Now - e.When));
         }
-
-        UpdateNextEvent();
-
-        return NextEvent;
-    }
-
-    private void UpdateNextEvent() {
-        NextEvent = (m_root is null)
-            ? int.MaxValue
-            : (int)Math.Min(int.MaxValue, m_root.When - MasterCycles);
     }
 }

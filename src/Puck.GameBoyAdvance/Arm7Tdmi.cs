@@ -31,14 +31,29 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private readonly uint[] m_fiqR8to12 = new uint[5];
     private readonly uint[] m_usrR8to12 = new uint[5];
 
-    // The two prefetched instruction words (decode and fetch slots of the 3-stage pipeline).
-    private readonly uint[] m_pipe = new uint[2];
+    // ARES's 3-stage instruction pipeline (component/processor/arm7tdmi). Each slot carries the fetched word; the
+    // decode/execute slots also carry the instruction's address (for the exception link register) and the Thumb/IRQ
+    // flags sampled when it was fetched. Fills are LAZY — a branch sets m_reload and the NEXT Step pays the refill —
+    // so the per-instruction cycle accounting (and the boot pipeline-fill) is byte-identical to ARES.
+    private uint m_fetchWord;
+    private uint m_decodeWord;
+    private uint m_executeWord;
+    private uint m_fetchAddress;
+    private uint m_decodeAddress;
+    private uint m_executeAddress;
+    private bool m_decodeThumb;
+    private bool m_executeThumb;
+    private bool m_reload;
 
     private uint m_cpsr;
     private bool m_irqLine;
 
-    // Set when the executing instruction redirected the PC, so Step() skips the normal sequential advance.
-    private bool m_branched;
+    // ARES's two-stage interrupt-recognition pipeline (component/processor/arm7tdmi/instruction.cpp). m_decodeIrq
+    // is sampled from CPSR.I when an instruction is fetched; it slides into m_executeIrq one boundary later, gated
+    // by the live synchronizer, to decide whether that instruction is pre-empted by an IRQ. This delay is the
+    // hardware's interrupt-recognition latency — not a tuned constant.
+    private bool m_decodeIrq;
+    private bool m_executeIrq;
 
     // Set after a data transfer so the next opcode fetch is charged as non-sequential.
     private bool m_nextFetchNonSequential;
@@ -98,11 +113,14 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         // Power-on: Supervisor mode, ARM state, both interrupt lines masked, executing from the reset vector.
         m_cpsr = (uint)CpuMode.Supervisor | FlagI | FlagF;
         m_irqLine = false;
-        m_branched = false;
+        m_decodeIrq = false;
+        m_executeIrq = false;
         m_nextFetchNonSequential = false;
         m_gpr[15] = 0x00000000u;
 
-        ReloadPipeline();
+        // Lazy reload: the first Step refills the pipeline from the reset vector, charging the fill to that
+        // instruction exactly as ARES does (no eager pre-fill before the clock starts).
+        m_reload = true;
     }
 
     /// <inheritdoc/>
@@ -120,51 +138,42 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_cpsr = (uint)CpuMode.System; // System mode, ARM state, interrupts unmasked at the CPSR level
         m_gpr[15] = entryPoint;
 
-        ReloadPipeline();
+        m_reload = true; // lazily refill from the cartridge entry on the first Step (ARES boot accounting)
     }
 
     /// <inheritdoc/>
     public void Step() {
         // Commit the previous instruction's cycles to the scheduler and fire any peripheral events now due (which
-        // may raise interrupts) before this instruction's boundary interrupt sample — the event-driven timing model.
+        // may raise interrupts) before this instruction executes — the event-driven timing model.
         m_bus.ProcessEvents();
 
-        // Interrupts are sampled at the instruction boundary; taking one consumes this step. The line comes from
-        // the bus's interrupt controller (or the directly-set IrqLine, for isolated CPU tests).
-        if ((m_irqLine || m_bus.IrqPending) && ((m_cpsr & FlagI) == 0u)) {
-            TakeIrq();
+        if (m_bus.Halted) {
+            m_bus.RunUntilInterrupt();
+        }
+
+        // ARES ARM7TDMI::instruction (instruction.cpp:23-41): refill the pipeline if a branch/exception left it
+        // stale (lazy — the refill is charged here, to the consuming instruction), slide one stage, then either
+        // take a pre-empting IRQ or execute the instruction now in the execute slot.
+        if (m_reload) {
+            Reload();
+        }
+
+        Fetch();
+
+        if (m_executeIrq) {
+            TakeIrqException();
 
             return;
         }
 
-        m_branched = false;
+        var opcode = m_executeWord;
 
-        var fetchType = m_nextFetchNonSequential
-            ? BusAccessType.NonSequential
-            : BusAccessType.Sequential;
+        if (m_executeThumb) {
+            var thumbOpcode = (ushort)opcode;
 
-        m_nextFetchNonSequential = false;
-
-        if (ThumbState) {
-            var address = m_gpr[15];
-            var opcode  = (ushort)m_pipe[0];
-
-            m_pipe[0] = m_pipe[1];
-            m_pipe[1] = m_bus.ReadCode16(address: address, access: fetchType);
-
-            unsafe { s_thumbTable[opcode >> 8](this, opcode); }
-
-            if (!m_branched) {
-                m_gpr[15] = address + 2u;
-            }
+            unsafe { s_thumbTable[thumbOpcode >> 8](this, thumbOpcode); }
         }
         else {
-            var address = m_gpr[15];
-            var opcode  = m_pipe[0];
-
-            m_pipe[0] = m_pipe[1];
-            m_pipe[1] = m_bus.ReadCode32(address: address, access: fetchType);
-
             var condition = opcode >> 28;
 
             if ((condition == 0xEu) || CheckCondition(cpu: this, condition: condition)) {
@@ -173,10 +182,6 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
                     s_armTable[index](this, opcode);
                 }
-            }
-
-            if (!m_branched) {
-                m_gpr[15] = address + 4u;
             }
         }
     }
@@ -232,37 +237,65 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_cpsr = value;
     }
 
-    // Refills both pipeline slots from the (newly set) PC; the first fetch is non-sequential.
-    private void ReloadPipeline() {
-        if (ThumbState) {
-            var pc = m_gpr[15] & ~1u;
+    // ARES ARM7TDMI::fetch (instruction.cpp:10-21): slide the pipeline one stage, gate the freshly-promoted
+    // execute-stage IRQ flag against the live synchronizer (so it fires only if the line is still asserted), sample
+    // the decode-stage Thumb/IRQ flags from the current CPSR, then advance R15 and refill the fetch slot.
+    private void Fetch() {
+        m_executeWord = m_decodeWord;
+        m_executeAddress = m_decodeAddress;
+        m_executeThumb = m_decodeThumb;
+        m_executeIrq = m_decodeIrq && (m_bus.Synchronizer || m_irqLine);
 
-            m_pipe[0] = m_bus.ReadCode16(address: pc, access: BusAccessType.NonSequential);
-            m_pipe[1] = m_bus.ReadCode16(address: pc + 2u, access: BusAccessType.Sequential);
-            m_gpr[15] = pc + 4u;
-        }
-        else {
-            var pc = m_gpr[15] & ~3u;
+        m_decodeWord = m_fetchWord;
+        m_decodeAddress = m_fetchAddress;
+        m_decodeThumb = ThumbState;
+        m_decodeIrq = (m_cpsr & FlagI) == 0u;
 
-            m_pipe[0] = m_bus.ReadCode32(address: pc, access: BusAccessType.NonSequential);
-            m_pipe[1] = m_bus.ReadCode32(address: pc + 4u, access: BusAccessType.Sequential);
-            m_gpr[15] = pc + 8u;
-        }
+        var thumb = ThumbState;
 
-        m_branched = true;
-        m_nextFetchNonSequential = false;
+        m_gpr[15] += thumb ? 2u : 4u;
+        m_fetchAddress = m_gpr[15];
+        m_fetchWord = FetchWord(address: m_fetchAddress, thumb: thumb);
     }
 
-    // Redirects execution to an address and refills the pipeline.
+    // A pipeline opcode read, charged as sequential unless a branch or data access made the next fetch non-seq.
+    private uint FetchWord(uint address, bool thumb) {
+        var access = m_nextFetchNonSequential
+            ? BusAccessType.NonSequential
+            : BusAccessType.Sequential;
+
+        m_nextFetchNonSequential = false;
+
+        return thumb
+            ? m_bus.ReadCode16(address: address & ~1u, access: access)
+            : m_bus.ReadCode32(address: address & ~3u, access: access);
+    }
+
+    // ARES ARM7TDMI::reload (instruction.cpp:1-8): after a branch/exception writes R15, the pipeline is refilled
+    // lazily on the next Step — the first refill fetch is non-sequential, then fetch() slides+refills again, so the
+    // three refill reads are charged to the instruction that consumes them (matching ARES, including at boot).
+    private void Reload() {
+        m_reload = false;
+        m_nextFetchNonSequential = true;
+
+        var thumb = ThumbState;
+
+        m_fetchAddress = m_gpr[15];
+        m_fetchWord = FetchWord(address: m_fetchAddress, thumb: thumb);
+
+        Fetch();
+    }
+
+    // Redirects execution to an address; the pipeline reloads lazily on the next Step (ARES sets pipeline.reload
+    // when R15 is written, rather than refetching immediately).
     private void BranchTo(uint address) {
         m_gpr[15] = address;
-
-        ReloadPipeline();
+        m_reload = true;
     }
 
-    // Common exception entry: bank the mode, save the old CPSR to its SPSR, set the return link, mask IRQ,
-    // enter ARM state, and vector.
-    private void TakeException(CpuMode mode, uint vector, uint linkRegister) {
+    // ARES ARM7TDMI::exception (instruction.cpp:43-52): bank the mode, save the old CPSR to its SPSR, set the
+    // return link from the decode-stage address, mask IRQ, enter ARM state, and vector (which arms the reload).
+    private void Exception(CpuMode mode, uint vector, uint linkRegister) {
         var savedCpsr = m_cpsr;
 
         SwitchMode(newMode: (uint)mode);
@@ -275,23 +308,20 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         BranchTo(address: vector);
     }
 
-    private void TakeIrq() {
-        // SUBS PC,LR,#4 returns to the interrupted instruction, so LR = interrupted-instruction address + 4.
-        var linkRegister = m_gpr[15] - (ThumbState ? 0u : 4u);
+    // A pre-empting IRQ recognised in Step. The link register is the decode-stage address (the instruction that was
+    // about to execute); ARES adds 2 in Thumb so SUBS PC,LR,#4 returns to re-run it (instruction.cpp:27-30).
+    private void TakeIrqException() {
+        var linkRegister = m_decodeAddress + (m_executeThumb ? 2u : 0u);
 
-        TakeException(mode: CpuMode.Irq, vector: 0x18u, linkRegister: linkRegister);
+        Exception(mode: CpuMode.Irq, vector: 0x18u, linkRegister: linkRegister);
     }
 
     private void SoftwareInterrupt() {
-        // SWI returns with MOVS PC,LR straight to the following instruction.
-        var linkRegister = m_gpr[15] - (ThumbState ? 2u : 4u);
-
-        TakeException(mode: CpuMode.Supervisor, vector: 0x08u, linkRegister: linkRegister);
+        // SWI returns with MOVS PC,LR straight to the following instruction (the decode-stage address).
+        Exception(mode: CpuMode.Supervisor, vector: 0x08u, linkRegister: m_decodeAddress);
     }
 
     private void UndefinedInstruction() {
-        var linkRegister = m_gpr[15] - (ThumbState ? 2u : 4u);
-
-        TakeException(mode: CpuMode.Undefined, vector: 0x04u, linkRegister: linkRegister);
+        Exception(mode: CpuMode.Undefined, vector: 0x04u, linkRegister: m_decodeAddress);
     }
 }

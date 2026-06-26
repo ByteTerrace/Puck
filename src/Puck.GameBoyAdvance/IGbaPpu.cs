@@ -21,6 +21,11 @@ public interface IGbaPpu {
     /// <param name="value">The value to write.</param>
     void WriteRegister(uint offset, ushort value);
 
+    /// <summary>Gets whether the PPU is contending for the palette bus this cycle, so a CPU/DMA palette access must
+    /// stall (ARES <c>PPU::pramContention</c>). True only during a rendered visible scanline, on the specific dot
+    /// phase the renderer reads palette RAM.</summary>
+    bool PramContention => false;
+
     /// <summary>Reads palette/VRAM/OAM, selected by the region nibble of <paramref name="address"/>.</summary>
     /// <param name="address">The CPU address (0x05/0x06/0x07 region).</param>
     /// <param name="width">The access width in bytes (1, 2, or 4).</param>

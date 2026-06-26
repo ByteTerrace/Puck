@@ -13,6 +13,10 @@ namespace Puck.HumbleGamingBrick;
 /// </summary>
 public sealed class SystemBus : ISystemBus {
     private const int CpuDotsPerMachineCycle = 4;
+    // A memory access lands partway through its machine cycle (ares' cycle==2): the peripherals advance two T-cycles
+    // before the access, then the remaining two are deferred to the next access. This sub-machine-cycle access point
+    // is what makes mid-mode-3 PPU register writes land on the hardware-faithful pixel.
+    private const int AccessHeadDots = 2;
     private const int WorkRamBankSize = 0x1000;
     private const int VideoRamBankSize = 0x2000;
 
@@ -35,7 +39,7 @@ public sealed class SystemBus : ISystemBus {
     private bool m_armedSpeedSwitch;
     private bool m_bootRomMapped;
     private readonly ClockState m_clockState;
-    private int m_pendingMachineCycles;
+    private int m_pendingDots;
     private ulong m_elapsedDots;
     private int m_videoRamBank;
     private int m_workRamBank = 1;
@@ -221,7 +225,10 @@ public sealed class SystemBus : ISystemBus {
     /// <param name="address">The CPU address to read.</param>
     /// <returns>The byte the CPU latches.</returns>
     public byte ReadCycle(ushort address) {
-        FlushPendingCycles();
+        // Advance the deferred tail of the previous access plus this access's two-T-cycle head, landing the read at
+        // its sub-machine-cycle access point; the remaining two T-cycles are deferred until the next access.
+        AdvanceDots(cpuDots: m_pendingDots + AccessHeadDots);
+        m_pendingDots = 0;
 
         if ((address >= MemoryMap.OamBase) && (address <= MemoryMap.UnusableEnd)) {
             TriggerOamBug(
@@ -231,12 +238,12 @@ public sealed class SystemBus : ISystemBus {
         }
 
         if (IsAudioChannelAccess(address: address)) {
-            m_apu.AdvanceChannelsForAccess(tCycles: CpuDotsPerMachineCycle);
+            m_apu.AdvanceChannelsForAccess(tCycles: AccessHeadDots);
         }
 
         var value = ReadByte(address: address);
 
-        m_pendingMachineCycles = 1;
+        m_pendingDots = (CpuDotsPerMachineCycle - AccessHeadDots);
 
         return value;
     }
@@ -244,7 +251,9 @@ public sealed class SystemBus : ISystemBus {
     /// <param name="address">The CPU address to write.</param>
     /// <param name="value">The value to store.</param>
     public void WriteCycle(ushort address, byte value) {
-        FlushPendingCycles();
+        // Same sub-machine-cycle timing as ReadCycle: two T-cycles elapse before the write lands, two are deferred.
+        AdvanceDots(cpuDots: m_pendingDots + AccessHeadDots);
+        m_pendingDots = 0;
 
         if ((address >= MemoryMap.OamBase) && (address <= MemoryMap.UnusableEnd)) {
             TriggerOamBug(
@@ -254,7 +263,7 @@ public sealed class SystemBus : ISystemBus {
         }
 
         if (IsAudioChannelAccess(address: address)) {
-            m_apu.AdvanceChannelsForAccess(tCycles: CpuDotsPerMachineCycle);
+            m_apu.AdvanceChannelsForAccess(tCycles: AccessHeadDots);
         }
 
         WriteByte(
@@ -262,7 +271,7 @@ public sealed class SystemBus : ISystemBus {
             value: value
         );
 
-        m_pendingMachineCycles = 1;
+        m_pendingDots = (CpuDotsPerMachineCycle - AccessHeadDots);
     }
 
     // Whether an access at this address observes the APU channel generators (the register/wave block 0xFF10-0xFF3F or
@@ -290,15 +299,48 @@ public sealed class SystemBus : ISystemBus {
     /// <summary>Advances the machine by one machine cycle of internal CPU work that performs no bus access, deferred
     /// the same way as an access.</summary>
     public void InternalCycle() {
-        FlushPendingCycles();
+        // No bus access this machine cycle: discharge the deferred tail, then owe a full machine cycle.
+        AdvanceDots(cpuDots: m_pendingDots);
 
-        m_pendingMachineCycles = 1;
+        m_pendingDots = CpuDotsPerMachineCycle;
     }
     /// <inheritdoc />
     public void FlushPendingCycles() {
-        while (m_pendingMachineCycles > 0) {
-            m_pendingMachineCycles -= 1;
-            TickMachineCycle();
+        AdvanceDots(cpuDots: m_pendingDots);
+
+        m_pendingDots = 0;
+    }
+
+    // Advances every clocked component by the given number of CPU-domain T-cycles (the LCD domain runs at half the
+    // rate under double speed), accumulates the master-clock total, and services HBlank VRAM DMA. Accesses split a
+    // machine cycle into a head and a deferred tail through this, so the access observes the peripherals at the
+    // hardware-faithful sub-machine-cycle point.
+    private void AdvanceDots(int cpuDots) {
+        if (cpuDots <= 0) {
+            return;
+        }
+
+        var lcdDots = (m_clockState.DoubleSpeed ? (cpuDots / 2) : cpuDots);
+
+        foreach (var component in m_clockedComponents) {
+            var dots = ((component.Domain == ClockDomain.Cpu) ? cpuDots : lcdDots);
+
+            if (dots > 0) {
+                component.Step(tCycles: dots);
+            }
+        }
+
+        m_elapsedDots += (ulong)lcdDots;
+
+        // HBlank VRAM DMA copies one block as each visible line enters horizontal blank.
+        if (m_hdmaActive && m_hdmaHBlank) {
+            var mode = m_ppu.Mode;
+
+            if ((mode == PpuMode.HorizontalBlank) && (m_previousLcdMode != PpuMode.HorizontalBlank) && (m_ppu.Line < Puck.HumbleGamingBrick.Ppu.ScreenHeight)) {
+                TransferVramDmaBlock();
+            }
+
+            m_previousLcdMode = mode;
         }
     }
 
@@ -651,30 +693,9 @@ public sealed class SystemBus : ISystemBus {
         return ((address <= 0x00FF) || ((m_model == ConsoleModel.Cgb) && (address >= 0x0200) && (address < m_bootRom.Length)));
     }
 
-    private void TickMachineCycle() {
-        var lcdDots = (m_clockState.DoubleSpeed ? 2 : 4);
-
-        foreach (var component in m_clockedComponents) {
-            var dots = ((component.Domain == ClockDomain.Cpu) ? CpuDotsPerMachineCycle : lcdDots);
-
-            if (dots > 0) {
-                component.Step(tCycles: dots);
-            }
-        }
-
-        m_elapsedDots += (ulong)lcdDots;
-
-        // HBlank VRAM DMA copies one block as each visible line enters horizontal blank.
-        if (m_hdmaActive && m_hdmaHBlank) {
-            var mode = m_ppu.Mode;
-
-            if ((mode == PpuMode.HorizontalBlank) && (m_previousLcdMode != PpuMode.HorizontalBlank) && (m_ppu.Line < Puck.HumbleGamingBrick.Ppu.ScreenHeight)) {
-                TransferVramDmaBlock();
-            }
-
-            m_previousLcdMode = mode;
-        }
-    }
+    // A full machine cycle of advancement, used by the speed-switch stall and general-purpose VRAM DMA loops.
+    private void TickMachineCycle() =>
+        AdvanceDots(cpuDots: CpuDotsPerMachineCycle);
 
     // Starts a CGB VRAM DMA from an HDMA5 write: bit 7 selects HBlank mode, the low 7 bits give the block count
     // minus one. A general-purpose transfer (bit 7 clear) runs every block immediately and stalls the CPU; clearing

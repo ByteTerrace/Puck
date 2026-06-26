@@ -19,6 +19,9 @@ public sealed partial class Ppu : IPpu {
     private const int DotsPerLine = 456;
     private const int OamScanDots = 80;
     private const int DrawingDots = 172;
+    // Dots after mode-3 start before the per-pixel renderer produces pixel 0, phasing the pixel pipeline so a
+    // mid-mode-3 register write lands on the hardware-faithful pixel given Puck's CPU/PPU access timing.
+    private const int RenderWarmupDots = 24;
     private const int LastLine = 153;
     // T-cycles the LY=LYC comparison stays invalid after LY increments (the polled coincidence bit reads 0 in this
     // window, then tracks the new line) — the documented LCD-enable coincidence timing.
@@ -94,22 +97,24 @@ public sealed partial class Ppu : IPpu {
     private int m_interruptModeDelay;
     private int m_windowLineCounter;
 
-    // Per-dot mode-3 background/window pixel pipeline (Phase 1: the DMG background fetcher + FIFO; sprites are still
-    // overlaid at line end, and the closed-form mode-3 length still drives timing). The fetcher runs one logical step
-    // per two dots — fetch tile number, low byte, high byte, then push eight colour indices — and the FIFO shifts one
-    // pixel out per dot, so mid-scanline writes to SCX/SCY/LCDC/BGP take effect partway across the line.
-    private readonly byte[] m_bgFifo = new byte[16];
-    private int m_bgFifoHead;
-    private int m_bgFifoCount;
-    private int m_fetchStep;        // 0-7: two dots each for tile number / low / high / push
-    private int m_fetchTileX;       // tile column fetched so far (background or window space)
-    private int m_fetchTileNumber;
-    private int m_fetchLow;
-    private int m_fetchHigh;
-    private int m_pixelX;           // next screen X to output (0-160)
-    private int m_scxDiscard;       // fine-scroll pixels still to drop from the FIFO front
-    private bool m_fetchingWindow;
-    private bool m_windowDrawnThisLine;
+    // Per-pixel mode-3 renderer state (ported from ares' DMG PPU): one pixel produced per dot, registers and tile/
+    // sprite data read fresh each pixel, so a mid-mode-3 write takes effect on the exact pixel hardware shows.
+    private int m_px;                    // current screen X being rendered (0-160)
+    private bool m_renderActive;         // the DMG renderer is producing this line's pixels
+    private ushort m_backgroundTiledata; // cached background tile row (low plane low byte, high plane high byte)
+    private ushort m_windowTiledata;     // cached window tile row
+    private int m_latchWy;               // window internal line counter (ares latch.wy)
+    private bool m_latchWindowEnable;    // window-enable latched at the mode 2->3 transition
+    private int m_latchWx;               // WX latched at the mode 2->3 transition
+    private readonly int[] m_spriteX = new int[10];
+    private readonly int[] m_spriteY = new int[10];
+    private readonly int[] m_spriteTile = new int[10];
+    private readonly int[] m_spriteAttributes = new int[10];
+    private int m_spriteCount;
+    private int m_renderWarmup;          // dots after mode-3 start before pixel 0 is produced (aligns writes to pixels)
+    private byte m_bgpRender;            // BGP the renderer applies (a write on a FIFO push-phase dot reaches it one pixel late)
+    private byte m_bgpRenderPending;     // a deferred push-phase BGP write awaiting its one-pixel delay
+    private int m_bgpRenderPendingPops;  // pixels remaining before the pending BGP write takes effect (0 = none)
     private PpuMode m_mode = PpuMode.HorizontalBlank;
     private PpuMode m_reportedMode = PpuMode.HorizontalBlank;
     // The mode that drives the STAT interrupt, settled independently of the polled STAT bits (m_reportedMode) so
@@ -268,6 +273,17 @@ public sealed partial class Ppu : IPpu {
             case MemoryMap.BackgroundPalette:
                 m_backgroundPalette = value;
 
+                // A BGP write landing on a tile-fetch-phase dot reaches the pixel pipeline one pixel later than a
+                // mid-fetch write — the sub-dot latch mealybug m3_bgp_change pins (widening the band by one pixel).
+                if (m_renderActive && ((m_dot & 7) == 4)) {
+                    m_bgpRenderPending = value;
+                    m_bgpRenderPendingPops = 1;
+                }
+                else {
+                    m_bgpRender = value;
+                    m_bgpRenderPendingPops = 0;
+                }
+
                 break;
             case MemoryMap.ObjectPalette0:
                 m_objectPalette0 = value;
@@ -370,21 +386,33 @@ public sealed partial class Ppu : IPpu {
             if (m_dot == OamScanDots) {
                 // Mode 3 length is latched at the mode 2->3 transition: the base 172 dots, plus the SCX fine-scroll
                 // discard, plus the per-object fetch penalty for the sprites on this line. HBlank absorbs it all to
-                // keep the line 456 dots.
+                // keep the line 456 dots. This drives the CPU-visible STAT mode-0 timing; the DMG pixel pipeline runs
+                // on its own clock below.
                 m_mode0StartDot = (OamScanDots + DrawingDots + ScxPenalty(scrollX: (m_scrollX & 7)) + ObjectPenalty(line: m_line));
                 SetMode(mode: PpuMode.Drawing);
 
                 if (!m_isColor) {
-                    StartBackgroundFetch();
+                    // The DMG per-pixel renderer starts here and produces pixel 0 at the mode-3 start dot, one pixel
+                    // per dot through pixel 159 — independent of the closed-form STAT mode-0 transition above (which
+                    // keeps the CPU-visible timing). With sub-machine-cycle access timing, mid-mode-3 register writes
+                    // land on the hardware-faithful pixel.
+                    StartLineDmg();
+                    StepRenderDmg();
                 }
             }
-            else if (m_dot == m_mode0StartDot) {
-                RenderScanline();
-                SetMode(mode: PpuMode.HorizontalBlank);
-            }
-            else if (!m_isColor && (m_mode == PpuMode.Drawing)) {
-                // DMG background/window is produced one pixel per dot by the fetcher (sprites are overlaid at line end).
-                StepBackgroundFetcher();
+            else {
+                if (m_dot == m_mode0StartDot) {
+                    if (m_isColor) {
+                        // CGB still renders the whole line at the mode-0 transition (its per-dot renderer is a later phase).
+                        RenderScanline();
+                    }
+
+                    SetMode(mode: PpuMode.HorizontalBlank);
+                }
+
+                if (!m_isColor && m_renderActive) {
+                    StepRenderDmg();
+                }
             }
         }
     }
@@ -579,192 +607,10 @@ public sealed partial class Ppu : IPpu {
         return (0xFF000000u | (blue << 16) | (g << 8) | r);
     }
 
+    // Called only for the CGB at the mode-0 transition; the DMG renders per pixel during mode 3 (Ppu.Fetcher.cs).
     private void RenderScanline() {
-        if (m_isColor) {
-            // The CGB background/window is still drawn all at once (its per-dot fetcher is a later phase).
-            RenderBackgroundAndWindowColor(line: m_line);
-            RenderSpritesColor(line: m_line);
-        }
-        else {
-            // The DMG background/window was already drawn per-dot by the fetcher; finalize it and overlay sprites.
-            FinishBackgroundLine();
-            RenderSprites(line: m_line);
-        }
-    }
-
-    private void RenderBackgroundAndWindow(int line) {
-        var rowBase = (line * ScreenWidth);
-
-        // On the DMG, LCDC bit 0 disables both background and window, clearing the line to the lightest shade.
-        if ((m_lcdControl & 0x01) == 0) {
-            for (var x = 0; x < ScreenWidth; x += 1) {
-                m_framebuffer[rowBase + x] = BackgroundColor(shade: 0);
-                m_lineColorIndex[x] = 0;
-            }
-
-            return;
-        }
-
-        var backgroundMap = (((m_lcdControl & 0x08) != 0) ? TileMap1 : TileMap0);
-        var windowMap = (((m_lcdControl & 0x40) != 0) ? TileMap1 : TileMap0);
-        var unsignedTiles = ((m_lcdControl & 0x10) != 0);
-        var windowActive = (((m_lcdControl & 0x20) != 0) && (line >= m_windowY));
-        var windowStartX = (m_windowX - 7);
-        var windowShown = false;
-
-        for (var x = 0; x < ScreenWidth; x += 1) {
-            int colorIndex;
-
-            if (windowActive && (x >= windowStartX)) {
-                // The window has its own map and an internal line counter (it advances only on lines it appears).
-                colorIndex = FetchTileColor(
-                    mapBase: windowMap,
-                    pixelX: (x - windowStartX),
-                    pixelY: m_windowLineCounter,
-                    unsignedTiles: unsignedTiles
-                );
-                windowShown = true;
-            }
-            else {
-                colorIndex = FetchTileColor(
-                    mapBase: backgroundMap,
-                    pixelX: ((m_scrollX + x) & 0xFF),
-                    pixelY: ((m_scrollY + line) & 0xFF),
-                    unsignedTiles: unsignedTiles
-                );
-            }
-
-            m_lineColorIndex[x] = (byte)colorIndex;
-
-            var shade = ((m_backgroundPalette >> (colorIndex * 2)) & 3);
-
-            m_framebuffer[rowBase + x] = BackgroundColor(shade: shade);
-        }
-
-        // The window's internal line counter advances once per line the window was actually drawn.
-        if (windowShown) {
-            m_windowLineCounter += 1;
-        }
-    }
-
-    private int FetchTileColor(ushort mapBase, int pixelX, int pixelY, bool unsignedTiles) {
-        var tileNumber = ReadVideoRam(address: (ushort)(mapBase + ((pixelY >> 3) * 32) + (pixelX >> 3)));
-
-        // The 0x8000 method indexes tiles unsigned from 0x8000; the 0x8800 method indexes signed from 0x9000.
-        var tileDataAddress = (unsignedTiles
-            ? (0x8000 + (tileNumber * 16))
-            : (0x9000 + ((sbyte)tileNumber * 16)));
-        var rowAddress = (ushort)(tileDataAddress + ((pixelY & 7) * 2));
-        var low = ReadVideoRam(address: rowAddress);
-        var high = ReadVideoRam(address: (ushort)(rowAddress + 1));
-        var bit = (7 - (pixelX & 7));
-
-        return ((((high >> bit) & 1) << 1) | ((low >> bit) & 1));
-    }
-
-    private void RenderSprites(int line) {
-        // Objects (sprites) are disabled by LCDC bit 1.
-        if ((m_lcdControl & 0x02) == 0) {
-            return;
-        }
-
-        var rowBase = (line * ScreenWidth);
-        var spriteHeight = (((m_lcdControl & 0x04) != 0) ? 16 : 8);
-
-        // OAM scan: the first 10 objects (in OAM order) whose vertical span covers this line.
-        Span<int> selected = stackalloc int[10];
-        var count = 0;
-
-        for (var index = 0; (index < 40) && (count < 10); index += 1) {
-            var objectY = (m_objectAttributeMemory[index * 4] - 16);
-
-            if ((line >= objectY) && (line < (objectY + spriteHeight))) {
-                selected[count] = index;
-                count += 1;
-            }
-        }
-
-        // DMG object priority: a smaller X draws on top, ties broken by the smaller OAM index. Draw lowest priority
-        // first (largest X, then largest index) so the highest-priority object overwrites.
-        SortByDrawOrder(
-            selected: selected[..count]
-        );
-
-        foreach (var index in selected[..count]) {
-            DrawSprite(
-                line: line,
-                oamIndex: index,
-                rowBase: rowBase,
-                spriteHeight: spriteHeight
-            );
-        }
-    }
-
-    private void SortByDrawOrder(Span<int> selected) {
-        // Insertion sort by object X descending, then OAM index descending (small span, at most 10 entries).
-        for (var i = 1; i < selected.Length; i += 1) {
-            var current = selected[i];
-            var currentX = m_objectAttributeMemory[(current * 4) + 1];
-            var j = (i - 1);
-
-            while ((j >= 0) && IsHigherDrawPriority(candidate: selected[j], candidateX: m_objectAttributeMemory[(selected[j] * 4) + 1], referenceX: currentX, referenceIndex: current)) {
-                selected[j + 1] = selected[j];
-                j -= 1;
-            }
-
-            selected[j + 1] = current;
-        }
-    }
-
-    private static bool IsHigherDrawPriority(int candidate, int candidateX, int referenceX, int referenceIndex) =>
-        // "Earlier in draw order" means lower priority: larger X, or equal X with larger OAM index.
-        ((candidateX < referenceX) || ((candidateX == referenceX) && (candidate < referenceIndex)));
-
-    private void DrawSprite(int line, int oamIndex, int rowBase, int spriteHeight) {
-        var oamAddress = (oamIndex * 4);
-        var objectY = (m_objectAttributeMemory[oamAddress] - 16);
-        var objectX = (m_objectAttributeMemory[oamAddress + 1] - 8);
-        var tile = (int)m_objectAttributeMemory[oamAddress + 2];
-        var attributes = m_objectAttributeMemory[oamAddress + 3];
-        var usingObjectPalette1 = ((attributes & 0x10) != 0);
-        var palette = (usingObjectPalette1 ? m_objectPalette1 : m_objectPalette0);
-        var behindBackground = ((attributes & 0x80) != 0);
-
-        var rowInSprite = (line - objectY);
-
-        if ((attributes & 0x40) != 0) {
-            rowInSprite = (spriteHeight - 1 - rowInSprite);
-        }
-
-        if (spriteHeight == 16) {
-            // In 8x16 mode the low bit of the tile number is ignored; the two stacked tiles are addressed by the row.
-            tile &= 0xFE;
-        }
-
-        var rowAddress = (ushort)(0x8000 + (tile * 16) + (rowInSprite * 2));
-        var low = ReadVideoRam(address: rowAddress);
-        var high = ReadVideoRam(address: (ushort)(rowAddress + 1));
-        var flipX = ((attributes & 0x20) != 0);
-
-        for (var pixel = 0; pixel < 8; pixel += 1) {
-            var screenX = (objectX + pixel);
-
-            if ((screenX < 0) || (screenX >= ScreenWidth)) {
-                continue;
-            }
-
-            var bit = (flipX ? pixel : (7 - pixel));
-            var colorIndex = ((((high >> bit) & 1) << 1) | ((low >> bit) & 1));
-
-            // Color 0 is transparent; a priority object is also hidden behind non-zero background pixels.
-            if ((colorIndex == 0) || (behindBackground && (m_lineColorIndex[screenX] != 0))) {
-                continue;
-            }
-
-            var shade = ((palette >> (colorIndex * 2)) & 3);
-
-            m_framebuffer[rowBase + screenX] = ObjectColor(palette1: usingObjectPalette1, shade: shade);
-        }
+        RenderBackgroundAndWindowColor(line: m_line);
+        RenderSpritesColor(line: m_line);
     }
 
     private byte ReadVideoRam(ushort address) =>

@@ -16,6 +16,11 @@ if (!string.IsNullOrEmpty(biosPath) && File.Exists(biosPath)) {
     }
 }
 
+// --save-test: verify the cartridge save-persistence (.sav export/import) round-trip, standalone.
+if (Array.IndexOf(array: args, value: "--save-test") >= 0) {
+    return RomRunner.RunSaveRoundtrip();
+}
+
 // --trace-crash <rom>: run a ROM and report the instruction that first branches into unmapped memory.
 for (var index = 0; index < args.Length - 1; ++index) {
     if (args[index] == "--trace-crash") {
@@ -66,13 +71,36 @@ for (var index = 0; index < args.Length - 2; ++index) {
     }
 }
 
-// --probe <rom> <steps>: dump machine state after running, to diagnose a blank-screen boot.
+// --gen-rom <kind> <out.gba>: hand-assemble a timer/IRQ micro-ROM (timer-irq | cascade-irq | ime-delay) to disk,
+// for differential lockstep against the ARES oracle with near-zero cumulative drift.
 for (var index = 0; index < args.Length - 2; ++index) {
-    if (args[index] == "--probe") {
-        RomRunner.Probe(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
+    if (args[index] == "--gen-rom") {
+        MicroRoms.Generate(kind: args[index + 1], outPath: args[index + 2]);
 
         return 0;
     }
+}
+
+// --lockstep <rom> <steps>: step Puck against the ARES oracle (ares-cosim) in lockstep; halt at the first
+// functional divergence and characterise the per-instruction cycle-delta drift (the M-CYCLE target).
+for (var index = 0; index < args.Length - 2; ++index) {
+    if (args[index] == "--lockstep") {
+        return RomRunner.Lockstep(romPath: args[index + 1], steps: long.Parse(args[index + 2]), direct: Array.IndexOf(array: args, value: "direct") >= 0);
+    }
+}
+
+// --iodump <rom> <steps>: dump every I/O register halfword, to diff against ares-cosim's iodump.
+for (var index = 0; index < args.Length - 2; ++index) {
+    if (args[index] == "--iodump") {
+        RomRunner.IoDump(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
+
+        return 0;
+    }
+}
+
+// --probe <rom> <steps> | --emerald-trace <rom> <loHex> <hiHex> <count> [skip]: blank-screen boot diagnostics.
+if (RomRunner.TryDiagnostic(args: args)) {
+    return 0;
 }
 
 // --trace-cycles <rom> <steps>: per-instruction cycle trace, to diff against the mGBA cosim oracle.
@@ -128,6 +156,9 @@ else {
     failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "save", "sram.gba"), name: "save/sram");
     failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "save", "flash64.gba"), name: "save/flash64");
     failures += RomRunner.RunJsmolka(romPath: Path.Combine(assetRoot, "save", "flash128.gba"), name: "save/flash128");
+
+    // Save persistence: prove the export/import (.sav) round-trip preserves the backup across a fresh cartridge.
+    failures += RomRunner.RunSaveRoundtrip();
 
     // Note: jsmolka's bios.gba is intentionally excluded — it asserts the *official* Nintendo BIOS's exact
     // open-bus read values, which no clean-room replacement reproduces. BIOS IRQ/SWI behaviour is validated by

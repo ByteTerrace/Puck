@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Capture;
@@ -161,6 +162,29 @@ internal static class RomRunner {
                 }
                 else {
                     ++failedSuites;
+
+                    // Per-subtest detail: the suite logs each FAILING subtest between BEGIN: and END:. Dump them
+                    // (gated/focusable via PUCK_MGBA_FOCUS=<substring>) so we can fix real mechanism failures rather
+                    // than guess from the aggregate score. Capped to keep the output readable.
+                    var focus = Environment.GetEnvironmentVariable(variable: "PUCK_MGBA_FOCUS");
+                    var wantDetail = (focus is null) || suiteName.Contains(value: focus, comparisonType: StringComparison.OrdinalIgnoreCase);
+
+                    if (wantDetail) {
+                        var shown = 0;
+
+                        for (var l = before; (l < logs.Count) && (shown < 80); ++l) {
+                            var text = logs[l];
+
+                            if (text.StartsWith(value: "BEGIN:", comparisonType: StringComparison.Ordinal)
+                                || text.StartsWith(value: "END:", comparisonType: StringComparison.Ordinal)
+                                || (text.Length == 0)) {
+                                continue;
+                            }
+
+                            Console.WriteLine($"        · {text}");
+                            ++shown;
+                        }
+                    }
                 }
             }
 
@@ -252,6 +276,12 @@ internal static class RomRunner {
         }
 
         using (provider) {
+            // PUCK_GBA_FULLBOOT=1: run the real BIOS intro then jump to the cartridge (cpu.Reset), instead of the
+            // direct-boot post-BIOS state. Some games (e.g. Pokémon Emerald) depend on full-BIOS-boot side effects.
+            if (Environment.GetEnvironmentVariable(variable: "PUCK_GBA_FULLBOOT") == "1") {
+                machine.Cpu.Reset();
+            }
+
             // Run long enough for the ROM to finish its vsync wait and draw its result, rather than stopping at
             // the first stable-PC loop (which would catch it mid-vsync, before anything is drawn).
             for (long i = 0; i < steps; ++i) {
@@ -334,7 +364,363 @@ internal static class RomRunner {
         }
     }
 
+    /// <summary>
+    /// Lockstep differential against the ARES oracle (the cycle-stepped reference Puck is being realigned to).
+    /// Spawns <c>ares-cosim.exe</c> on the same ROM/steps/BIOS, reads its per-instruction trace, and steps Puck
+    /// in lockstep — comparing architectural state (cpsr + r0..r14) and per-instruction cycle deltas. Both boot
+    /// the real BIOS, so the streams align 1:1 by instruction index. Halts at the first FUNCTIONAL divergence (a
+    /// real bug, or the symptom of accumulated timing drift resolving a timing-paced branch differently) and
+    /// reports the first TIMING-delta divergence + cumulative drift — the M-CYCLE target. ares-cosim path from
+    /// <c>PUCK_ARES_COSIM</c> (default the gba-cosim dir); BIOS from <c>PUCK_GBA_BIOS</c>.
+    /// </summary>
+    public static int Lockstep(string romPath, long steps, bool direct = false) {
+        if (!File.Exists(romPath)) {
+            Console.WriteLine($"  [SKIP] lockstep: rom not found at {romPath}");
+
+            return 0;
+        }
+
+        var aresExe = Environment.GetEnvironmentVariable(variable: "PUCK_ARES_COSIM")
+            ?? @"D:\Source\ByteTerrace\gba-cosim\ares-cosim.exe";
+        var biosPath = Environment.GetEnvironmentVariable(variable: "PUCK_GBA_BIOS")
+            ?? @"D:\Source\ByteTerrace\BIOS\bios.bin";
+
+        if (!File.Exists(aresExe)) {
+            Console.WriteLine($"  [SKIP] lockstep: ares-cosim not found at {aresExe} (set PUCK_ARES_COSIM)");
+
+            return 0;
+        }
+
+        var psi = new ProcessStartInfo {
+            FileName = aresExe,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        psi.ArgumentList.Add(item: romPath);
+        psi.ArgumentList.Add(item: steps.ToString());
+        psi.ArgumentList.Add(item: biosPath);
+
+        if (direct) {
+            psi.ArgumentList.Add(item: "direct");
+        }
+
+        using var ares = Process.Start(startInfo: psi)!;
+        var aresOut = ares.StandardOutput;
+
+        if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
+            return 0;
+        }
+
+        using (provider) {
+            var cpu = machine.Cpu;
+            var bus = (GbaBus)machine.Bus;
+
+            // BIOS-boot mode: undo TryLoad's direct boot and run the BIOS reset to align with ares's full-BIOS boot.
+            // Direct-boot mode: keep TryLoad's DirectBoot state so both cores start at the cartridge entry (0x08000000),
+            // skipping the ~1M-instruction BIOS intro — for diffing ROM/game execution.
+            if (!direct) {
+                cpu.Reset();
+            }
+
+            var history = new Queue<string>(capacity: 16);
+            long prevAres = -1, prevPuck = -1, aresClk0 = -1, puckCyc0 = -1;
+            long firstTimingIdx = -1, firstTimingAres = 0, firstTimingPuck = 0, timingMismatches = 0;
+            long maxDrift = 0, maxDriftIdx = 0;
+            uint firstTimingPc = 0;
+
+            void TimingSummary() {
+                if (firstTimingIdx < 0) {
+                    Console.WriteLine("  timing: per-instruction cycle deltas matched ARES exactly.");
+                }
+                else {
+                    Console.WriteLine($"  timing: FIRST cycle-delta divergence at instr {firstTimingIdx} (aresPC=0x{firstTimingPc:X8}): ares d={firstTimingAres} puck d={firstTimingPuck}");
+                    Console.WriteLine($"  timing: {timingMismatches} delta mismatches; max cumulative drift (puck-ares) = {maxDrift} at instr {maxDriftIdx}");
+                }
+            }
+
+            try {
+                for (long i = 0; i < steps; ++i) {
+                    var line = aresOut.ReadLine();
+
+                    if (line is null) {
+                        Console.WriteLine($"  ares stream ended at instr {i}");
+
+                        break;
+                    }
+
+                    var f = line.Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries);
+
+                    if (f.Length < 19) {
+                        continue;
+                    }
+
+                    // ares columns: f0=execAddr f1=cpsr f2..f17=r0..r15 f18=clock
+                    var aExec = Convert.ToUInt32(value: f[0], fromBase: 16);
+                    var aCpsr = Convert.ToUInt32(value: f[1], fromBase: 16);
+                    var aClk = long.Parse(s: f[18]);
+
+                    var pCpsr = cpu.Cpsr;
+                    var pCyc = bus.Cycles;
+
+                    if (aresClk0 < 0) {
+                        aresClk0 = aClk;
+                        puckCyc0 = pCyc;
+                    }
+
+                    // functional compare: cpsr + r0..r14 (architectural state, immune to PC-representation offset)
+                    var funcCpsr = aCpsr != pCpsr;
+                    var funcReg = -1;
+
+                    for (var r = 0; (r < 15) && (funcReg < 0); ++r) {
+                        if (Convert.ToUInt32(value: f[2 + r], fromBase: 16) != cpu.GetRegister(index: r)) {
+                            funcReg = r;
+                        }
+                    }
+
+                    if (prevAres >= 0) {
+                        var da = aClk - prevAres;
+                        var dp = pCyc - prevPuck;
+
+                        if (da != dp) {
+                            ++timingMismatches;
+
+                            if (firstTimingIdx < 0) {
+                                firstTimingIdx = i;
+                                firstTimingAres = da;
+                                firstTimingPuck = dp;
+                                firstTimingPc = aExec;
+                            }
+                        }
+
+                        var drift = (pCyc - puckCyc0) - (aClk - aresClk0);
+
+                        if (Math.Abs(value: drift) > Math.Abs(value: maxDrift)) {
+                            maxDrift = drift;
+                            maxDriftIdx = i;
+                        }
+                    }
+
+                    if (history.Count >= 16) {
+                        _ = history.Dequeue();
+                    }
+
+                    history.Enqueue(item: $"#{i,8} aresPC={aExec:X8} cpsr a={aCpsr:X8}/p={pCpsr:X8} cyc a={aClk}/p={pCyc} da={(prevAres < 0 ? 0 : aClk - prevAres)}/dp={(prevPuck < 0 ? 0 : pCyc - prevPuck)}");
+
+                    if (funcCpsr || (funcReg >= 0)) {
+                        Console.WriteLine($"  == FUNCTIONAL DIVERGENCE at instr {i} ==");
+                        Console.WriteLine($"     aresPC=0x{aExec:X8}  puckR15=0x{cpu.GetRegister(index: 15):X8}  thumb={(pCpsr & 0x20u) != 0u}");
+
+                        if (funcCpsr) {
+                            Console.WriteLine($"     cpsr  ares=0x{aCpsr:X8}  puck=0x{pCpsr:X8}");
+                        }
+
+                        for (var r = 0; r < 15; ++r) {
+                            var av = Convert.ToUInt32(value: f[2 + r], fromBase: 16);
+                            var pv = cpu.GetRegister(index: r);
+
+                            if (av != pv) {
+                                Console.WriteLine($"     r{r,-2}  ares=0x{av:X8}  puck=0x{pv:X8}");
+                            }
+                        }
+
+                        Console.WriteLine("     -- last instructions (oldest first) --");
+
+                        foreach (var h in history) {
+                            Console.WriteLine($"       {h}");
+                        }
+
+                        TimingSummary();
+
+                        return 1;
+                    }
+
+                    prevAres = aClk;
+                    prevPuck = pCyc;
+                    machine.Step();
+                }
+
+                Console.WriteLine($"  == lockstep: NO functional divergence in {steps} instructions ==");
+                TimingSummary();
+
+                return 0;
+            }
+            finally {
+                try {
+                    if (!ares.HasExited) {
+                        ares.Kill(entireProcessTree: true);
+                    }
+                }
+                catch {
+                    // best-effort cleanup
+                }
+            }
+        }
+    }
+
+    /// <summary>Dumps every I/O register halfword after running a ROM, in the ares-cosim <c>iodump</c> format
+    /// (<c>IO &lt;offset&gt; &lt;value&gt;</c>), so the two streams diff to find I/O read-mask divergences.</summary>
+    public static void IoDump(string romPath, long steps) {
+        if (!TryLoad(romPath: romPath, name: Path.GetFileName(romPath), out var provider, out var machine)) {
+            return;
+        }
+
+        using (provider) {
+            var bus = (GbaBus)machine.Bus;
+
+            machine.Cpu.Reset();
+
+            for (long i = 0; i < steps; ++i) {
+                machine.Step();
+            }
+
+            for (uint off = 0; off < 0x400u; off += 2u) {
+                Console.WriteLine($"IO {off:X3} {bus.DebugReadIo(offset: off):X4}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies the cartridge save-persistence API end to end: write known bytes to an SRAM backup, export it (as a
+    /// host would to a <c>.sav</c> file), load it into a FRESH cartridge, and confirm the bytes survive the round
+    /// trip — plus the dirty-flag transitions and the wrong-size rejection. Self-contained (synthesises a tagged ROM).
+    /// </summary>
+    public static int RunSaveRoundtrip() {
+        Console.WriteLine("== save persistence round-trip ==");
+
+        // A minimal ROM carrying the "SRAM_V113" library tag so detection allocates a 32 KiB SRAM backup.
+        var rom = new byte[0x1000];
+        ReadOnlySpan<byte> tag = [0x53, 0x52, 0x41, 0x4D, 0x5F, 0x56, 0x31, 0x31, 0x33]; // "SRAM_V113"
+
+        tag.CopyTo(destination: rom.AsSpan(start: 0xC0));
+
+        var ok = true;
+
+        void Check(bool condition, string what) {
+            if (!condition) {
+                Console.WriteLine($"  [FAIL] {what}");
+                ok = false;
+            }
+        }
+
+        var source = new GbaCartridge(rom: rom);
+
+        Check(condition: source.Backup == CartridgeBackup.Sram, what: "detects SRAM backup");
+        Check(condition: source.HasSave, what: "HasSave");
+        Check(condition: !source.SaveDirty, what: "fresh cartridge starts clean");
+
+        source.WriteSave(address: 0x0000u, value: 0x12);
+        source.WriteSave(address: 0x0001u, value: 0x34);
+        source.WriteSave(address: 0x0100u, value: 0xAB);
+
+        Check(condition: source.SaveDirty, what: "SaveDirty set after a write");
+
+        var exported = source.SaveData.ToArray();
+
+        Check(condition: exported.Length == 32 * 1024, what: "exported save is 32 KiB");
+        Check(condition: (exported[0x0000] == 0x12) && (exported[0x0001] == 0x34) && (exported[0x0100] == 0xAB), what: "exported bytes match writes");
+
+        // Reload into a fresh cartridge, exactly as a host would on the next launch.
+        var reloaded = new GbaCartridge(rom: rom);
+
+        Check(condition: reloaded.LoadSave(data: exported), what: "LoadSave accepts a matching-size save");
+        Check(condition: !reloaded.SaveDirty, what: "freshly loaded cartridge is clean");
+        Check(condition: (reloaded.ReadSave(address: 0x0000u) == 0x12) && (reloaded.ReadSave(address: 0x0001u) == 0x34) && (reloaded.ReadSave(address: 0x0100u) == 0xAB), what: "persisted bytes read back");
+        Check(condition: !reloaded.LoadSave(data: new byte[10]), what: "rejects a wrong-size save");
+
+        Console.WriteLine(value: ok ? "  [PASS] save round-trip" : "  [FAIL] save round-trip");
+
+        return ok ? 0 : 1;
+    }
+
     /// <summary>Runs a ROM and dumps key machine state, to diagnose a game that boots to a blank screen.</summary>
+    /// <summary>Dispatches the blank-screen boot diagnostics — <c>--probe &lt;rom&gt; &lt;steps&gt;</c> and
+    /// <c>--emerald-trace &lt;rom&gt; &lt;loHex&gt; &lt;hiHex&gt; &lt;count&gt; [skipAfter]</c>; returns whether it
+    /// handled the args (kept out of Program.cs to bound Main's cyclomatic complexity).</summary>
+    public static bool TryDiagnostic(string[] args) {
+        for (var index = 0; index < (args.Length - 2); ++index) {
+            if (args[index] == "--probe") {
+                Probe(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
+
+                return true;
+            }
+        }
+
+        for (var index = 0; index < (args.Length - 4); ++index) {
+            if (args[index] == "--emerald-trace") {
+                EmeraldTrace(
+                    romPath: args[index + 1],
+                    triggerLo: Convert.ToUInt32(value: args[index + 2], fromBase: 16),
+                    triggerHi: Convert.ToUInt32(value: args[index + 3], fromBase: 16),
+                    count: long.Parse(args[index + 4]),
+                    skipAfter: (args.Length > (index + 5)) ? long.Parse(args[index + 5]) : 0);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Full-boots a ROM, runs until the PC first enters [triggerLo, triggerHi), then dumps the next
+    /// <paramref name="count"/> instructions with PC + r0..r6 + the SIO/timer/IRQ registers the link probe reads —
+    /// to see exactly why Pokémon Emerald's link-init loops, with no external oracle.</summary>
+    public static void EmeraldTrace(string romPath, uint triggerLo, uint triggerHi, long count, long skipAfter = 0) {
+        var cartridge = new GbaCartridge(rom: File.ReadAllBytes(path: romPath));
+        var services = new ServiceCollection();
+
+        services.AddScoped<GbaBus>();
+        services.AddScoped<IGbaBus>(implementationFactory: sp => sp.GetRequiredService<GbaBus>());
+        _ = services.AddGameBoyAdvance();
+        _ = services.AddReplacementBios(image: BiosImage);
+        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+
+        using var provider = services.BuildServiceProvider();
+        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+
+        machine.DirectBoot();
+        machine.Cpu.Reset(); // full BIOS boot
+
+        var bus = (GbaBus)machine.Bus;
+        var cpu = machine.Cpu;
+
+        long i = 0;
+        const long cap = 250_000_000;
+        var armed = false;
+
+        while (i < cap) {
+            var pc = cpu.GetRegister(index: 15);
+
+            if ((pc >= triggerLo) && (pc < triggerHi) && (i >= skipAfter)) {
+                armed = true;
+                break;
+            }
+
+            machine.Step();
+            ++i;
+        }
+
+        if (!armed) {
+            Console.WriteLine($"  EmeraldTrace: trigger 0x{triggerLo:X}-0x{triggerHi:X} not hit within {cap} instrs");
+            return;
+        }
+
+        Console.WriteLine($"  EmeraldTrace: armed at instr {i}; dumping {count} instructions:");
+
+        for (long k = 0; k < count; ++k) {
+            var pc = cpu.GetRegister(index: 15);
+            var cpsr = cpu.Cpsr;
+            Console.WriteLine(
+                $"{k,5} pc={pc:X8} cpsr={cpsr:X8} r0={cpu.GetRegister(0):X8} r1={cpu.GetRegister(1):X8} "
+                + $"r2={cpu.GetRegister(2):X8} r3={cpu.GetRegister(3):X8} r4={cpu.GetRegister(4):X8} "
+                + $"r6={cpu.GetRegister(6):X8} | SIOCNT={bus.DebugReadIo(0x128):X4} SIOML0={bus.DebugReadIo(0x120):X4} "
+                + $"IE={bus.DebugReadIo(0x200):X4} IF={bus.DebugReadIo(0x202):X4} IME={bus.DebugReadIo(0x208):X4} "
+                + $"TM3={bus.DebugReadIo(0x10C):X4} KEY={bus.DebugReadIo(0x130):X4} DISPCNT={bus.DebugReadIo(0x000):X4}");
+            machine.Step();
+        }
+    }
+
     public static void Probe(string romPath, long steps) {
         if (!File.Exists(romPath)) {
             Console.WriteLine($"  [SKIP] {Path.GetFileName(romPath)}: not found");
@@ -379,6 +765,12 @@ internal static class RomRunner {
 
         machineProbeRef = machine;
         machine.DirectBoot();
+
+        // PUCK_GBA_FULLBOOT=1: undo the HLE direct-boot state and run the real BIOS intro from the reset vector,
+        // exactly as ARES boots (cpu.Reset()). The default stays direct boot for quick game-state probes.
+        if (Environment.GetEnvironmentVariable(variable: "PUCK_GBA_FULLBOOT") == "1") {
+            machine.Cpu.Reset();
+        }
 
         // Count BX-to-reset-vector events (soft resets). In ARM7TDMI after DirectBoot, the PC register
         // (which shows executing_addr + 8 in ARM mode) = 8 only when a branch to 0x00000000 fires the pipeline.
@@ -446,7 +838,7 @@ internal static class RomRunner {
         Console.WriteLine($"  SIOCNT writes ({sioWrites.Count} captured):");
 
         foreach (var (step, value) in sioWrites) {
-            Console.WriteLine($"    step={step,12}  SIOCNT=0x{value:X4}  start={(value & 0x80) != 0}  irq={(value & 0x4000) != 0}  clk_int={(value & 0x01) != 0}");
+            Console.WriteLine($"    step={step,12}  SIOCNT=0x{value:X4}  start={(value & 0x80) != 0}  irq={(value & 0x4000) != 0}  clk_int={(value & 0x02) != 0}");
         }
 
         // Dump ROM around the key SIO-caller addresses to decode the "SIO failed" path.
@@ -619,33 +1011,42 @@ internal static class RomRunner {
         // Also capture all I/O timer register reads (0x04000100–0x04000110) and IF (0x04000202) for the
         // timer_connect diagnostic (#17). Key: address, value, result-count at time of read.
         var timer1Reads = new List<(int afterResults, uint value)>();
-        var connectIoReads = new List<(int afterResults, uint address, uint value)>();
+        var connectIoReads = new List<(int afterResults, uint address, uint value, long cycles)>();
+        var connectIoWrites = new List<(int afterResults, uint address, uint value, long cycles)>();
         var cartridge = new GbaCartridge(rom: rom);
         var services = new ServiceCollection();
 
         var trace = Environment.GetEnvironmentVariable(variable: "PUCK_AGS_TRACE") == "1";
         GameBoyAdvanceMachine? machineRef = null;
+        GbaBus? busRef = null;
 
         // Wire the tracing decorator in front of the real bus: register the concrete bus, then map IGbaBus to a
         // TracingGbaBus that wraps it. Registering IGbaBus first makes AddGameBoyAdvance's TryAdd defer to ours.
         services.AddScoped<GbaBus>();
-        services.AddScoped<IGbaBus>(implementationFactory: sp => new TracingGbaBus(
-            inner: sp.GetRequiredService<GbaBus>(),
-            watchAddress: 0x04u,
-            onStore: value => {
-                if (trace && (results.Count < 8)) {
-                    Console.WriteLine($"    [store] result#{results.Count} value=0x{value:X8} pc=0x{(machineRef?.Cpu.GetRegister(index: 15) ?? 0):X8}");
-                }
+        services.AddScoped<IGbaBus>(implementationFactory: sp => {
+            busRef = sp.GetRequiredService<GbaBus>();
 
-                results.Add(item: value);
-            },
-            readWatchAddress: 0x04000100u,
-            onRead: value => timerReads.Add((results.Count, value)),
-            readWatchAddress2: 0x04000104u,
-            onRead2: (_, value) => timer1Reads.Add((results.Count, value)),
-            readRangeBase: 0x04000100u,
-            readRangeEnd: 0x04000210u,  // covers all 4 timer regs + IME/IE/IF
-            onReadRange: (addr, value) => connectIoReads.Add((results.Count, addr, value))));
+            return new TracingGbaBus(
+                inner: busRef,
+                watchAddress: 0x04u,
+                onStore: value => {
+                    if (trace && (results.Count < 8)) {
+                        Console.WriteLine($"    [store] result#{results.Count} value=0x{value:X8} pc=0x{(machineRef?.Cpu.GetRegister(index: 15) ?? 0):X8}");
+                    }
+
+                    results.Add(item: value);
+                },
+                readWatchAddress: 0x04000100u,
+                onRead: value => timerReads.Add((results.Count, value)),
+                readWatchAddress2: 0x04000104u,
+                onRead2: (_, value) => timer1Reads.Add((results.Count, value)),
+                readRangeBase: 0x040000B0u,
+                readRangeEnd: 0x04000210u,
+                onReadRange: (addr, value) => connectIoReads.Add((results.Count, addr, value, busRef?.Cycles ?? 0)),
+                writeRangeBase: 0x04000100u,
+                writeRangeEnd: 0x04000110u,
+                onWriteRange: (addr, value) => connectIoWrites.Add((results.Count, addr, value, busRef?.Cycles ?? 0)));
+        });
         _ = services.AddGameBoyAdvance();
         _ = services.AddReplacementBios(image: BiosImage);
         services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
@@ -711,7 +1112,7 @@ internal static class RomRunner {
 
             for (var i = 0; (i < waitReads.Length) && (i < expectedWait.Length); ++i) {
                 var ours = waitReads[i];
-                Console.WriteLine($"     [{i,2}] ours=0x{ours:X} expected=0x{expectedWait[i]:X} {(ours == expectedWait[i] ? "ok" : $"Δ={(long)ours - expectedWait[i]}")}");
+                Console.WriteLine($"     [{i,2}] ours=0x{ours:X} expected=0x{expectedWait[i]:X} {(ours == expectedWait[i] ? "ok" : $"d={(long)ours - expectedWait[i]}")}");
             }
         }
 
@@ -728,23 +1129,32 @@ internal static class RomRunner {
         var prescalerReads = timerReads.Where(predicate: r => r.afterResults == 16).Select(selector: r => r.value).ToArray();
         Console.WriteLine($"  -- prescaler timer reads (afterResults==16): {string.Join(", ", prescalerReads.Select(v => $"0x{v:X}"))} ({prescalerReads.Length} reads, expect 4 values) --");
 
-        // For any failed test: dump I/O reads observed during it. Helps identify unknown tests and root causes.
+        // For any failed test: dump I/O reads and writes observed during it.
         for (var testIdx = 0; testIdx < results.Count; ++testIdx) {
             if (results[testIdx] == 0u) {
                 continue;
             }
 
-            var ioForTest = connectIoReads.Where(predicate: r => r.afterResults == testIdx).ToArray();
+            var testLabel = (testIdx < s_agsTestNames.Length) ? s_agsTestNames[testIdx] : $"test #{testIdx}";
 
-            if (ioForTest.Length == 0) {
-                continue;
+            var ioWritesForTest = connectIoWrites.Where(predicate: r => r.afterResults == testIdx).ToArray();
+
+            if (ioWritesForTest.Length > 0) {
+                Console.WriteLine($"  -- [{testIdx}] {testLabel} I/O writes: {ioWritesForTest.Length} total --");
+
+                foreach (var (_, addr, val, cyc) in ioWritesForTest) {
+                    Console.WriteLine($"     W [0x{addr:X8}] <- 0x{val:X6}  @cyc={cyc}");
+                }
             }
 
-            var testLabel = (testIdx < s_agsTestNames.Length) ? s_agsTestNames[testIdx] : $"test #{testIdx}";
-            Console.WriteLine($"  -- [{testIdx}] {testLabel} I/O reads: {ioForTest.Length} total --");
+            var ioForTest = connectIoReads.Where(predicate: r => r.afterResults == testIdx).ToArray();
 
-            foreach (var (_, addr, val) in ioForTest) {
-                Console.WriteLine($"     [0x{addr:X8}] = 0x{val:X4}");
+            if (ioForTest.Length > 0) {
+                Console.WriteLine($"  -- [{testIdx}] {testLabel} I/O reads: {ioForTest.Length} total --");
+
+                foreach (var (_, addr, val, cyc) in ioForTest) {
+                    Console.WriteLine($"     R [0x{addr:X8}] = 0x{val:X4}  @cyc={cyc}");
+                }
             }
         }
 

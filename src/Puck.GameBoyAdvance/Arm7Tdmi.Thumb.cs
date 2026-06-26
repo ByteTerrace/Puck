@@ -466,6 +466,8 @@ public sealed partial class Arm7Tdmi {
             if (includePcLr) {
                 cpu.m_bus.Write32(address: address, value: cpu.m_gpr[14], access: access);
             }
+
+            // PUSH is STM: no trailing internal cycle (its trailing N is the next opcode fetch, marked below).
         }
 
         cpu.m_nextFetchNonSequential = true;
@@ -522,6 +524,7 @@ public sealed partial class Arm7Tdmi {
             access = BusAccessType.Sequential;
         }
 
+        // LDM has a trailing internal cycle; STM does not (its trailing N is the next opcode fetch).
         if (load) {
             cpu.m_bus.Idle(cycles: 1);
         }

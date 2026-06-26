@@ -12,6 +12,11 @@ public interface IGbaBus {
     /// signal the CPU samples each instruction boundary. Test buses with no interrupt source return false.</summary>
     bool IrqPending { get; }
 
+    /// <summary>Gets the level of the synchronized IRQ line into the CPU (ARES's <c>irq.synchronizer</c>): the
+    /// per-cycle-recognized interrupt signal the CPU gates its pipeline against. Test buses with no interrupt
+    /// pipeline fall back to <see cref="IrqPending"/>.</summary>
+    bool Synchronizer => IrqPending;
+
     /// <summary>Reads a byte, advancing the rest of the machine by the access's wait-state first.</summary>
     /// <param name="address">The 32-bit CPU address to read.</param>
     /// <param name="access">Whether the access is sequential or non-sequential.</param>
@@ -83,4 +88,14 @@ public interface IGbaBus {
     /// <summary>Advances the machine while the CPU is halted until an enabled interrupt is requested (IE &amp; IF),
     /// then clears the halt state. Called by the CPU in place of executing an instruction while halted.</summary>
     void RunUntilInterrupt() { }
+
+    /// <summary>Begins a DMA-stall region: while a DMA burst holds the CPU off the bus, the timers keep counting
+    /// but the IRQ-recognition pipeline freezes (ARES <c>dmac.stallingCPU</c>). Re-entrant — pairs with
+    /// <see cref="EndDmaStall"/>. Test buses do nothing.</summary>
+    /// <returns>The previous stall state, to restore via <see cref="EndDmaStall"/>.</returns>
+    bool BeginDmaStall() => false;
+
+    /// <summary>Ends a DMA-stall region, restoring the state returned by <see cref="BeginDmaStall"/>.</summary>
+    /// <param name="previous">The state returned by the matching <see cref="BeginDmaStall"/>.</param>
+    void EndDmaStall(bool previous) { }
 }

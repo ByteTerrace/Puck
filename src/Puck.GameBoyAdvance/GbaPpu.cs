@@ -1,10 +1,10 @@
 namespace Puck.GameBoyAdvance;
 
 /// <summary>
-/// The default PPU: raster timing plus the bitmap background modes (3/4/5). Each scanline spans 1232 master
-/// cycles (240 visible dots + 68 H-blank dots) and a frame spans 228 scanlines (160 visible + 68 V-blank). The
-/// tiled modes (0–2) and the sprite/window/blend layers are not yet rendered — those scanlines show the
-/// backdrop — but the timing, interrupts, and DMA triggers are fully in place.
+/// The default PPU: full scanline-based renderer with all six video modes (tiled 0–2, bitmap 3–5), sprites
+/// (simple and affine), the WIN0/WIN1/WINOBJ window system, and BLDCNT alpha blending / brightness effects.
+/// Each scanline spans 1232 master cycles (240 visible dots + 68 H-blank dots) and a frame spans 228 scanlines
+/// (160 visible + 68 V-blank). Timing, interrupts, and DMA triggers are cycle-accurate.
 /// </summary>
 public sealed class GbaPpu : IGbaPpu {
     private const int ScreenWidth = 240;
@@ -116,10 +116,53 @@ public sealed class GbaPpu : IGbaPpu {
             case 0x06u:
                 // VCOUNT is read-only.
                 break;
+            case 0x28u or 0x2Au:
+                m_registers[offset >> 1] = value;
+                m_affineRefX[0] = ReadReferencePoint(lowIndex: 0x14);
+
+                break;
+            case 0x2Cu or 0x2Eu:
+                m_registers[offset >> 1] = value;
+                m_affineRefY[0] = ReadReferencePoint(lowIndex: 0x16);
+
+                break;
+            case 0x30u or 0x32u:
+                m_registers[offset >> 1] = value;
+                m_affineRefX[1] = ReadReferencePoint(lowIndex: 0x1C);
+
+                break;
+            case 0x34u or 0x36u:
+                m_registers[offset >> 1] = value;
+                m_affineRefY[1] = ReadReferencePoint(lowIndex: 0x1E);
+
+                break;
             default:
                 m_registers[offset >> 1] = value;
 
                 break;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool PramContention {
+        get {
+            // ARES PPU::pramContention (scanline renderer): during a rendered visible scanline — not forced blank,
+            // and not a bitmap mode (3/5) whose backdrop isn't palette-fetched per dot — palette RAM is busy on the
+            // dot phase (hcounter & 3) == 2 across the visible window [46, 1005]. hcounter is the cycle within the
+            // 1232-cycle scanline, which equals the master clock modulo 1232 (scanlines are 1232-aligned from boot).
+            var mode = m_registers[0] & 0x7;
+
+            if ((m_line >= ScreenHeight) || ForcedBlank || (mode == 3) || (mode == 5)) {
+                return false;
+            }
+
+            var hcounter = m_scheduler.Now % 1232L;
+
+            if ((hcounter < 46L) || (hcounter > 1005L)) {
+                return false;
+            }
+
+            return (hcounter & 3L) == 2L;
         }
     }
 
@@ -566,8 +609,9 @@ public sealed class GbaPpu : IGbaPpu {
 
         tileNumber &= 0x3FF;
 
-        // Object tiles live in the upper half of VRAM (0x10000+).
-        var address = 0x10000u + (tileNumber * 32u);
+        // Object tiles live in the upper half of VRAM: 0x10000+ in text modes, 0x14000+ in bitmap modes 3/4/5.
+        var spriteBase = (BackgroundMode >= 3) ? 0x14000u : 0x10000u;
+        var address = spriteBase + (tileNumber * 32u);
 
         if (is8Bpp) {
             address += (uint)(((texelY & 7) * 8) + (texelX & 7));

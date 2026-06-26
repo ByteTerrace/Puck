@@ -564,6 +564,8 @@ public sealed partial class Arm7Tdmi {
             access = BusAccessType.Sequential;
         }
 
+        // LDM has a trailing internal cycle (n S + 1N + 1I); STM does NOT — its trailing N is the next opcode
+        // fetch, already accounted for by m_nextFetchNonSequential below. Verified against the ARES bus trace.
         if (load) {
             cpu.m_bus.Idle(cycles: 1);
         }

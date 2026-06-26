@@ -33,6 +33,7 @@ public static class GameBoyAdvanceServiceRegistration {
         services.TryAddScoped<IGbaInterruptController, GbaInterruptController>();
         services.TryAddScoped<IGbaTimerController, GbaTimerController>();
         services.TryAddScoped<IGbaDmaController, GbaDmaController>();
+        services.TryAddScoped<IGbaSerialController, GbaSerialController>();
         services.TryAddScoped<IGbaPpu, GbaPpu>();
         services.TryAddScoped<IGbaApu, GbaApu>();
         services.TryAddScoped<IGbaBus, GbaBus>();

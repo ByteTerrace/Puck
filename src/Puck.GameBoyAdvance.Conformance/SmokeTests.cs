@@ -115,41 +115,59 @@ internal static class SmokeTests {
     }
 
     private static void InterruptsTimersAndDma() {
-        // Interrupt controller: line asserts only with IME + IE + IF; IF is write-one-to-clear.
+        // Interrupt controller: the IE/IF/IME pipeline is double-buffered (ARES stepIRQ). Writes land in the
+        // "next" stage and only reach the synchronizer (the CPU's line) after StepSync shifts them through — the
+        // 2-cycle recognition latency. IF is write-one-to-clear.
         var controller = new GbaInterruptController();
         var timer0Bit = (ushort)(1u << (int)InterruptSource.Timer0);
 
-        Check(name: "IRQ line low at rest", ok: !controller.LineAsserted);
+        Check(name: "IRQ line low at rest", ok: !controller.Synchronizer);
 
-        controller.WriteRegister(offset: 0x208u, value: 1);          // IME = 1
-        controller.WriteRegister(offset: 0x200u, value: timer0Bit);  // IE: timer 0
-        controller.Request(source: InterruptSource.Timer0);
+        controller.WriteRegister(offset: 0x208u, value: 1);          // IME = 1 (next stage)
+        controller.WriteRegister(offset: 0x200u, value: timer0Bit);  // IE: timer 0 (next stage)
+        controller.Request(source: InterruptSource.Timer0);          // IF (next stage)
 
-        Check(name: "IRQ asserts with IME+IE+IF", ok: controller.LineAsserted);
+        Check(name: "IRQ line still low before pipeline settles", ok: !controller.Synchronizer);
 
-        controller.WriteRegister(offset: 0x202u, value: timer0Bit);  // acknowledge
+        controller.StepSync(stallingCpu: false);                     // shift [1]->[0]; synchronizer from old [0]=0
+        controller.StepSync(stallingCpu: false);                     // synchronizer now sees committed IME+IE+IF
 
-        Check(name: "IRQ IF write-one-to-clear", ok: !controller.LineAsserted);
+        Check(name: "IRQ asserts with IME+IE+IF after 2-cycle latency", ok: controller.Synchronizer);
 
-        // Timer overflow raises its interrupt: reload 0xFFFE, prescaler 1. The hardware start-up delay means the
-        // timer ignores its first two cycles, then takes two ticks to overflow — so the IRQ comes at cycle 4, not 2.
+        controller.WriteRegister(offset: 0x202u, value: timer0Bit);  // acknowledge (next stage)
+        controller.StepSync(stallingCpu: false);
+        controller.StepSync(stallingCpu: false);
+
+        Check(name: "IRQ IF write-one-to-clear", ok: !controller.Synchronizer);
+
+        // Timer overflow raises its interrupt, ported from ARES's per-cycle latch model: reload 0xFFFE, prescaler 1
+        // (steps every cycle). Cycle 0 commits the enable (arms the reload); cycle 1 reload-latches 0xFFFE; cycles
+        // 2 and 3 count 0xFFFF then overflow. The IRQ lands in flag[1] and reaches HasPendingInterrupt one StepSync
+        // later — no (now+2) heuristic.
         var timerInterrupts = new GbaInterruptController();
 
         timerInterrupts.WriteRegister(offset: 0x208u, value: 1);
         timerInterrupts.WriteRegister(offset: 0x200u, value: timer0Bit);
+        timerInterrupts.StepSync(stallingCpu: false);
+        timerInterrupts.StepSync(stallingCpu: false);
 
-        var timerScheduler = new GbaScheduler();
-        var timers = new GbaTimerController(scheduler: timerScheduler, interrupts: timerInterrupts, apu: new GbaApu());
+        var timers = new GbaTimerController(interrupts: timerInterrupts, apu: new GbaApu());
 
-        timers.WriteRegister(offset: 0x100u, value: 0xFFFE);          // reload (overflows after two ticks)
-        timers.WriteRegister(offset: 0x102u, value: 0x00C0);          // enable + IRQ, prescaler 1
-        timerScheduler.Tick(cycles: 3);                              // 2-cycle start delay + first tick (0xFFFE -> 0xFFFF)
+        timers.WriteRegister(offset: 0x100u, value: 0xFFFE);         // reload (overflows after two ticks)
+        timers.WriteRegister(offset: 0x102u, value: 0x00C0);         // enable + IRQ, prescaler 1
 
-        Check(name: "timer holds off overflow before its count expires", ok: !timerInterrupts.LineAsserted);
+        long clock = 0;
 
-        timerScheduler.Tick(cycles: 1);                              // second tick: 0xFFFF -> overflow at cycle 4
+        for (; clock < 3; ++clock) {
+            timers.RunCycle(clock: clock);
+        }
 
-        Check(name: "timer overflow raises IRQ", ok: timerInterrupts.LineAsserted);
+        Check(name: "timer holds off overflow before its count expires", ok: !timerInterrupts.HasPendingInterrupt);
+
+        timers.RunCycle(clock: clock);                               // cycle 3: 0xFFFF -> overflow, sets flag[1]
+        timerInterrupts.StepSync(stallingCpu: false);               // propagate flag[1] -> flag[0]
+
+        Check(name: "timer overflow raises IRQ", ok: timerInterrupts.HasPendingInterrupt);
 
         // Immediate DMA copies a word through the full bus I/O path.
         var dmaInterrupts = new GbaInterruptController();
@@ -158,8 +176,9 @@ internal static class SmokeTests {
             bios: new ReplacementBios(image: new byte[ReplacementBios.ImageSize]),
             cartridge: new GbaCartridge(rom: new byte[256]),
             interrupts: dmaInterrupts,
-            timers: new GbaTimerController(scheduler: new GbaScheduler(), interrupts: dmaInterrupts, apu: new GbaApu()),
+            timers: new GbaTimerController(interrupts: dmaInterrupts, apu: new GbaApu()),
             dma: new GbaDmaController(interrupts: dmaInterrupts),
+            serial: new GbaSerialController(scheduler: new GbaScheduler(), interrupts: dmaInterrupts),
             ppu: new GbaPpu(scheduler: new GbaScheduler(), interrupts: dmaInterrupts),
             apu: new GbaApu());
 
@@ -189,20 +208,25 @@ internal static class SmokeTests {
 
         // Advance past the H-draw period (1008 cycles) and confirm an H-blank was flagged. The H-blank flag is
         // raised after H-draw, not at the end of the 960-cycle visible-pixel span.
-        scheduler.Tick(cycles: 1008);
+        scheduler.Advance(cycles: 1008);
 
         Check(name: "PPU H-blank flagged on visible line", ok: ppu.ConsumeHBlankStarted());
 
         // Advance to scanline 160 (V-blank). 160 lines * 1232 cycles, less the 1008 already stepped.
-        scheduler.Tick(cycles: (160 * 1232) - 1008);
+        scheduler.Advance(cycles: (160 * 1232) - 1008);
 
         Check(name: "PPU reaches V-blank at line 160", ok: ppu.ReadRegister(offset: 0x06u) == 160);
         Check(name: "PPU V-blank flag set", ok: (ppu.ReadRegister(offset: 0x04u) & 0x1) != 0);
         Check(name: "PPU V-blank started flag", ok: ppu.ConsumeVBlankStarted());
-        Check(name: "PPU V-blank raised IRQ", ok: interrupts.LineAsserted);
+
+        // The V-blank request lands in the interrupt pipeline's next stage; shift it through to the synchronizer.
+        interrupts.StepSync(stallingCpu: false);
+        interrupts.StepSync(stallingCpu: false);
+
+        Check(name: "PPU V-blank raised IRQ", ok: interrupts.Synchronizer);
 
         // Run out the rest of the frame back to the top.
-        scheduler.Tick(cycles: (TotalLinesForTest - 160) * 1232);
+        scheduler.Advance(cycles: (TotalLinesForTest - 160) * 1232);
 
         Check(name: "PPU wraps to scanline 0", ok: ppu.ReadRegister(offset: 0x06u) == 0);
     }
@@ -230,7 +254,7 @@ internal static class SmokeTests {
         ppu.WriteVideo(address: 0x07000002u, width: 2, value: 0x0000); // attr1: x=0, 8×8
         ppu.WriteVideo(address: 0x07000004u, width: 2, value: 0x0000); // attr2: tile 0
 
-        scheduler.Tick(cycles: 1232); // render scanline 0
+        scheduler.Advance(cycles: 1232); // render scanline 0
 
         var pixel = ppu.Framebuffer[0];
         var backdrop = ppu.Framebuffer[100]; // x=100 is beyond the 8-pixel sprite → backdrop
@@ -261,7 +285,7 @@ internal static class SmokeTests {
         // BG palette colour index 1 = red.
         ppu.WriteVideo(address: 0x05000002u, width: 2, value: 0x001F);
 
-        scheduler.Tick(cycles: 1232); // render scanline 0
+        scheduler.Advance(cycles: 1232); // render scanline 0
 
         var pixel = ppu.Framebuffer[0];
 
@@ -289,7 +313,7 @@ internal static class SmokeTests {
         // BG palette index 1 = red.
         ppu.WriteVideo(address: 0x05000002u, width: 2, value: 0x001F);
 
-        scheduler.Tick(cycles: 1232);
+        scheduler.Advance(cycles: 1232);
 
         var pixel = ppu.Framebuffer[0];
 

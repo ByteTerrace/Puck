@@ -13,6 +13,8 @@
         <Project Path="src/Puck.GameBoyAdvance.Conformance/Puck.GameBoyAdvance.Conformance.csproj" />
         <Project Path="src/Puck.Hosting/Puck.Hosting.csproj" />
         <Project Path="src/Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
+        <Project Path="src/Puck.HumbleGamingBrick.Conformance/Puck.HumbleGamingBrick.Conformance.csproj" />
+        <Project Path="src/Puck.HumbleGamingBrick.Conformance.Tests/Puck.HumbleGamingBrick.Conformance.Tests.csproj" />
         <Project Path="src/Puck.Input/Puck.Input.csproj" />
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />

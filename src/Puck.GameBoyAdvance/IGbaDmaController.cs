@@ -4,9 +4,16 @@ namespace Puck.GameBoyAdvance;
 /// The four DMA channels (I/O 0xB0–0xDF). A channel copies a run of half- or full-words between memory regions
 /// with configurable address stepping, optionally repeating and raising an interrupt. The transfer engine
 /// moves data through the bus passed at call time rather than a stored reference, so the DMA controller and the
-/// bus stay free of a construction cycle. Immediate transfers run on enable; the timed modes fire from the PPU.
+/// bus stay free of a construction cycle. Following ARES, a trigger (immediate enable, or a timed PPU/FIFO event)
+/// only marks a channel pending; the queued burst then runs at the CPU's next bus access via <see cref="RunPending"/>,
+/// so the transfer's cycles and its completion IRQ land on the consuming instruction — not the trigger.
 /// </summary>
 public interface IGbaDmaController {
+    /// <summary>Runs any channel that has become ready, stalling the CPU for the burst (ARES <c>dmac.runPending</c>).
+    /// The bus calls this at the start of each CPU access, so a queued DMA runs just before the CPU touches the bus.</summary>
+    /// <param name="bus">The bus to transfer through.</param>
+    void RunPending(IGbaBus bus);
+
     /// <summary>Reads a 16-bit DMA register (only the control halfwords read back).</summary>
     /// <param name="offset">The I/O offset within the 0x04000000 page.</param>
     /// <returns>The register value.</returns>

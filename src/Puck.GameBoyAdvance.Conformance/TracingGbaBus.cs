@@ -15,8 +15,11 @@ internal sealed class TracingGbaBus : IGbaBus {
     private readonly uint m_readRangeBase;
     private readonly uint m_readRangeEnd;
     private readonly Action<uint, uint>? m_onReadRange; // (address, value) for any hit in [base, end)
+    private readonly uint m_writeRangeBase;
+    private readonly uint m_writeRangeEnd;
+    private readonly Action<uint, uint>? m_onWriteRange;
 
-    public TracingGbaBus(IGbaBus inner, uint watchAddress, Action<uint> onStore, uint readWatchAddress = 0xFFFFFFFFu, Action<uint>? onRead = null, uint readWatchAddress2 = 0xFFFFFFFFu, Action<uint, uint>? onRead2 = null, uint readRangeBase = 0xFFFFFFFFu, uint readRangeEnd = 0u, Action<uint, uint>? onReadRange = null) {
+    public TracingGbaBus(IGbaBus inner, uint watchAddress, Action<uint> onStore, uint readWatchAddress = 0xFFFFFFFFu, Action<uint>? onRead = null, uint readWatchAddress2 = 0xFFFFFFFFu, Action<uint, uint>? onRead2 = null, uint readRangeBase = 0xFFFFFFFFu, uint readRangeEnd = 0u, Action<uint, uint>? onReadRange = null, uint writeRangeBase = 0xFFFFFFFFu, uint writeRangeEnd = 0u, Action<uint, uint>? onWriteRange = null) {
         m_inner = inner;
         m_watchAddress = watchAddress;
         m_onStore = onStore;
@@ -27,6 +30,9 @@ internal sealed class TracingGbaBus : IGbaBus {
         m_readRangeBase = readRangeBase;
         m_readRangeEnd = readRangeEnd;
         m_onReadRange = onReadRange;
+        m_writeRangeBase = writeRangeBase;
+        m_writeRangeEnd = writeRangeEnd;
+        m_onWriteRange = onWriteRange;
     }
 
     public bool IrqPending => m_inner.IrqPending;
@@ -65,11 +71,13 @@ internal sealed class TracingGbaBus : IGbaBus {
 
     public void Write16(uint address, ushort value, BusAccessType access) {
         Watch(address: address, value: value);
+        WatchWriteRange(address: address, value: value);
         m_inner.Write16(address: address, value: value, access: access);
     }
 
     public void Write32(uint address, uint value, BusAccessType access) {
         Watch(address: address, value: value);
+        WatchWriteRange(address: address & ~3u, value: value);
         m_inner.Write32(address: address, value: value, access: access);
     }
 
@@ -84,10 +92,16 @@ internal sealed class TracingGbaBus : IGbaBus {
     public void RunUntilInterrupt() => m_inner.RunUntilInterrupt();
 
     private void Watch(uint address, uint value) {
-        // The watched word lives in the BIOS region (0x04), which a real bus drops on write — but the store still
-        // happens on the CPU side, which is all the patch needs. Match any access that covers the watched word.
         if ((address & ~0x3u) == (m_watchAddress & ~0x3u)) {
             m_onStore(obj: value);
+        }
+    }
+
+    private void WatchWriteRange(uint address, uint value) {
+        var aligned = address & ~1u;
+
+        if ((m_onWriteRange is not null) && (aligned >= m_writeRangeBase) && (aligned < m_writeRangeEnd)) {
+            m_onWriteRange(arg1: aligned, arg2: value);
         }
     }
 }

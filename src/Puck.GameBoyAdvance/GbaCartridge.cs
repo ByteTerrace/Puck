@@ -51,6 +51,8 @@ public sealed class GbaCartridge {
     private int m_gpioDirection;
     private bool m_gpioReadable;
 
+    private Func<long>? m_cycleProvider;
+
     private bool m_rtcSckEdge;
     private bool m_rtcCommandActive;
     private bool m_rtcSioOutput;
@@ -75,9 +77,17 @@ public sealed class GbaCartridge {
         // Flash and (uninitialised) SRAM read as 0xFF on real hardware.
         Array.Fill(array: m_save, value: (byte)0xFF);
 
-        m_hasRtc = Contains(haystack: rom, needle: s_rtc);
+        // Diagnostic override (PUCK_GBA_NO_RTC=1): force the GPIO/RTC off to isolate whether an RTC-protocol issue
+        // is what stalls a game's boot, vs an engine-timing issue.
+        m_hasRtc = Contains(haystack: rom, needle: s_rtc)
+            && (Environment.GetEnvironmentVariable(variable: "PUCK_GBA_NO_RTC") != "1");
         m_rtcControl = 0x40; // 24-hour mode
         InitRtcTime();
+    }
+
+    /// <summary>Sets the cycle-count provider used by the RTC to advance wall time from emulated cycles.</summary>
+    public void SetCycleProvider(Func<long> provider) {
+        m_cycleProvider = provider;
     }
 
     /// <summary>Gets a value indicating whether the cartridge exposes a GPIO real-time clock (e.g. Pokémon
@@ -92,6 +102,34 @@ public sealed class GbaCartridge {
 
     /// <summary>Gets the ROM image length in bytes.</summary>
     public int RomLength => m_rom.Length;
+
+    /// <summary>Gets a value indicating whether the cartridge has a writable save backup (SRAM/Flash/EEPROM).</summary>
+    public bool HasSave => m_save.Length > 0;
+
+    /// <summary>Gets a value indicating whether the save backup has been written since it was last loaded or
+    /// persisted. A host watches this to decide when to flush the save to disk, then calls <see cref="MarkSaveClean"/>.</summary>
+    public bool SaveDirty { get; private set; }
+
+    /// <summary>Exports the raw save backup (SRAM/Flash/EEPROM contents) for persistence to a <c>.sav</c> file.</summary>
+    public ReadOnlySpan<byte> SaveData => m_save;
+
+    /// <summary>Loads a previously persisted save backup (typically a <c>.sav</c> file's contents). The length must
+    /// match the detected backup size; a mismatch is rejected so a stale/wrong save can't corrupt the backup.</summary>
+    /// <param name="data">The save bytes to load.</param>
+    /// <returns><see langword="true"/> if loaded; <see langword="false"/> if the length did not match the backup.</returns>
+    public bool LoadSave(ReadOnlySpan<byte> data) {
+        if ((m_save.Length == 0) || (data.Length != m_save.Length)) {
+            return false;
+        }
+
+        data.CopyTo(destination: m_save);
+        SaveDirty = false;
+
+        return true;
+    }
+
+    /// <summary>Clears <see cref="SaveDirty"/> after a host has persisted the save to disk.</summary>
+    public void MarkSaveClean() => SaveDirty = false;
 
     /// <summary>Reads a ROM byte at <paramref name="offset"/>, or the open-bus pattern beyond the image.</summary>
     /// <param name="offset">The byte offset into the cartridge ROM address space (0–0x01FFFFFF).</param>
@@ -154,6 +192,7 @@ public sealed class GbaCartridge {
         }
 
         m_save[address & (uint)(m_save.Length - 1)] = value;
+        SaveDirty = true;
     }
 
     /// <summary>Gets a value indicating whether the cartridge's backup is a serial EEPROM (accessed at 0x0D…).</summary>
@@ -252,6 +291,8 @@ public sealed class GbaCartridge {
             for (var i = 0; i < 8; ++i) {
                 m_save[blockOffset + i] = (byte)(data >> (56 - (i * 8)));
             }
+
+            SaveDirty = true;
         }
     }
 
@@ -264,6 +305,7 @@ public sealed class GbaCartridge {
                 if (m_flashCommand == 0xA0) {
                     m_save[FlashOffset(offset: address)] = value;
                     m_flashCommand = 0;
+                    SaveDirty = true;
 
                     return;
                 }
@@ -300,6 +342,7 @@ public sealed class GbaCartridge {
                         if (value == 0x10) {
                             Array.Fill(array: m_save, value: (byte)0xFF); // chip erase
                             m_flashCommand = 0;
+                            SaveDirty = true;
                         }
                     }
                     else if (m_flashCommand == 0x90) {
@@ -314,6 +357,7 @@ public sealed class GbaCartridge {
 
                     Array.Fill(array: m_save, value: (byte)0xFF, startIndex: (int)sector, count: 0x1000);
                     m_flashCommand = 0;
+                    SaveDirty = true;
                 }
 
                 return;
@@ -492,16 +536,27 @@ public sealed class GbaCartridge {
         return ((output >> m_rtcBitsRead) & 1) != 0;
     }
 
-    // Loads a fixed, deterministic timestamp (2026-06-23 12:00:00, a Tuesday) in BCD. A constant clock keeps the
-    // conformance harness reproducible; a host-time source can replace this later without touching the protocol.
+    private static byte ToBcd(int value) => (byte)(((value / 10) << 4) | (value % 10));
+
+    // Computes the current RTC time from a fixed epoch plus elapsed emulated cycles. The GBA master clock is
+    // 16,780,000 Hz, so seconds = cycles / 16_780_000. A fixed epoch keeps the conformance harness reproducible
+    // while still advancing the clock at the correct emulated rate.
     private void InitRtcTime() {
-        m_rtcTime[0] = 0x26; // year (since 2000)
-        m_rtcTime[1] = 0x06; // month
-        m_rtcTime[2] = 0x23; // day
-        m_rtcTime[3] = 0x02; // weekday (Tuesday)
-        m_rtcTime[4] = 0x12; // hour (24-hour)
-        m_rtcTime[5] = 0x00; // minute
-        m_rtcTime[6] = 0x00; // second
+        var epoch = new DateTime(year: 2026, month: 6, day: 23, hour: 12, minute: 0, second: 0);
+
+        if (m_cycleProvider is not null) {
+            var elapsedSeconds = m_cycleProvider() / 16_780_000L;
+
+            epoch = epoch.AddSeconds(value: elapsedSeconds);
+        }
+
+        m_rtcTime[0] = ToBcd(epoch.Year - 2000);
+        m_rtcTime[1] = ToBcd(epoch.Month);
+        m_rtcTime[2] = ToBcd(epoch.Day);
+        m_rtcTime[3] = ToBcd((int)epoch.DayOfWeek);
+        m_rtcTime[4] = ToBcd(epoch.Hour);
+        m_rtcTime[5] = ToBcd(epoch.Minute);
+        m_rtcTime[6] = ToBcd(epoch.Second);
     }
 
     private static CartridgeBackup Detect(byte[] rom) {
