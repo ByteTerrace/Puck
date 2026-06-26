@@ -8,11 +8,13 @@ namespace Puck.HumbleGamingBrick.Ares;
 /// are deferred.
 /// </summary>
 public sealed class AresMachine {
-    /// <summary>Builds a DMG machine for the given ROM image and seeds its post-boot state.</summary>
+    /// <summary>Builds a DMG machine for the given ROM image. With a boot ROM, runs it (loading the logo into VRAM,
+    /// which the mealybug tests rely on); otherwise seeds the post-boot state directly.</summary>
     /// <param name="rom">The full cartridge ROM image.</param>
     /// <param name="color">Whether to build a Game Boy Color machine (CGB rendering is deferred).</param>
+    /// <param name="bootRom">An optional 256-byte DMG boot ROM; when supplied it is executed to completion.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rom"/> is <see langword="null"/>.</exception>
-    public AresMachine(byte[] rom, bool color) {
+    public AresMachine(byte[] rom, bool color, byte[]? bootRom = null) {
         ArgumentNullException.ThrowIfNull(argument: rom);
 
         var cartridge = Cartridge.Load(rom: rom);
@@ -30,11 +32,26 @@ public sealed class AresMachine {
         Cpu.PpuLine = () => Ppu.Line;
         Cpu.DrivePpu = Ppu.AdvanceTo;
 
-        Cpu.SeedPostBootDmg();
-        Ppu.WriteIo(cycle: 2, address: 0xFF47, data: 0xFC); // BGP
-        Ppu.WriteIo(cycle: 2, address: 0xFF48, data: 0xFF); // OBP0
-        Ppu.WriteIo(cycle: 2, address: 0xFF49, data: 0xFF); // OBP1
-        Ppu.WriteIo(cycle: 4, address: 0xFF40, data: 0x91); // LCDC: display + BG enabled
+        if (bootRom is not null) {
+            // Run the boot ROM from a true power-on state; it decodes the cartridge logo into VRAM, plays its
+            // animation, then writes 0xFF50 to unmap itself and reach 0x0100 — the exact state mealybug expects.
+            cartridgeAdapter.LoadBootRom(bootRom: bootRom);
+            Cpu.BeginBoot();
+
+            var guard = 0;
+
+            while (cartridgeAdapter.BootromEnable && (guard < 40_000_000)) {
+                Cpu.Main();
+                guard += 1;
+            }
+        }
+        else {
+            Cpu.SeedPostBootDmg();
+            Ppu.WriteIo(cycle: 2, address: 0xFF47, data: 0xFC); // BGP
+            Ppu.WriteIo(cycle: 2, address: 0xFF48, data: 0xFF); // OBP0
+            Ppu.WriteIo(cycle: 2, address: 0xFF49, data: 0xFF); // OBP1
+            Ppu.WriteIo(cycle: 4, address: 0xFF40, data: 0x91); // LCDC: display + BG enabled
+        }
     }
 
     /// <summary>The CPU.</summary>

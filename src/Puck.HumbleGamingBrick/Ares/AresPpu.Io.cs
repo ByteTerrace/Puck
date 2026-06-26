@@ -70,6 +70,7 @@ public sealed partial class AresPpu {
     /// <inheritdoc/>
     public void WriteIo(int cycle, ushort address, byte data) {
         if ((address >= 0x8000) && (address <= 0x9FFF) && (cycle == 2)) {
+            VramWrites += 1;
             m_vram[VramAddress(address: address)] = data;
 
             return;
@@ -174,6 +175,8 @@ public sealed partial class AresPpu {
 
     private void WriteLcdc(byte data) {
         var enable = ((data & 0x80) != 0);
+
+        LcdcWriteTrace(data: data);
 
         if (m_displayEnable != enable) {
             m_mode = 0;

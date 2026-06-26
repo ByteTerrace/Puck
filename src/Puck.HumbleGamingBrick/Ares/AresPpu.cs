@@ -19,9 +19,15 @@ namespace Puck.HumbleGamingBrick.Ares;
 public sealed partial class AresPpu : IAresIo {
     private const int ScreenWidth = 160;
     private const int ScreenHeight = 144;
-    private const int RenderWarmupDots = 21;
 
     private static readonly uint[] Shades = [0xFFFFFFFFu, 0xFFAAAAAAu, 0xFF555555u, 0xFF000000u];
+
+    private enum FetchState {
+        GetTile,
+        GetLow,
+        GetHigh,
+        Push,
+    }
 
     private readonly bool m_color;
     private readonly byte[] m_vram;
@@ -77,21 +83,74 @@ public sealed partial class AresPpu : IAresIo {
     private readonly int[] m_spriteY = new int[10];
     private readonly byte[] m_spriteTile = new byte[10];
     private readonly byte[] m_spriteAttributes = new byte[10];
-    private readonly ushort[] m_spriteTiledata = new ushort[10];
     private int m_sprites;
 
     private int m_px;
 
-    // Background/window fetched tile rows (ares PPU::Background background, window).
-    private ushort m_backgroundTiledata;
-    private ushort m_windowTiledata;
+    // === Pixel-FIFO fetcher state machine ===
+    private FetchState m_fetcherState;
+    private int m_fetcherStepDots;     // 2-dot countdown within GetTile/GetLow/GetHigh.
+    private int m_fetcherX;            // tile column counter (BG/window).
+    private bool m_fetcherIsWindow;    // fetcher currently serving the window vs the background.
+    private byte m_fetchTileNumber;    // latched in GetTile.
+    private int m_fetchRowY;           // the BG/window fetch row (m_ly+m_scy or m_latchWy-1), frozen at GetTile time.
+    private byte m_fetchTileLow;       // latched in GetLow.
+    private byte m_fetchTileHigh;      // latched in GetHigh.
+    private bool m_firstFetchDiscarded; // the one throwaway 6-dot priming fetch per (re)start.
 
-    // Composited pixel state for the current dot (ares PPU::Pixel bg, ob).
-    private int m_bgColor;
-    private int m_bgPalette;
-    private int m_obColor;
-    private int m_obPalette;
-    private bool m_obPriority;
+    // === BG/window FIFO (8-deep, raw 2-bit colour indices, pre-palette) ===
+    private readonly byte[] m_bgFifo = new byte[8];
+    private int m_bgFifoCount;
+
+    // === OBJ FIFO (8-deep, parallel slots) ===
+    private readonly byte[] m_objFifoIndex = new byte[8];     // 0..3; 0 = transparent.
+    private readonly bool[] m_objFifoPalette1 = new bool[8];  // true = OBP1.
+    private readonly bool[] m_objFifoPriority = new bool[8];  // attribute bit 7 (1 = behind BG 1-3).
+
+    // === SCX fine discard ===
+    private int m_scxFineDiscard; // latched (m_scx & 7) at line start.
+
+    // === Mode-3 warmup calibration ===
+    // Extra pre-pop dots so the first BG pixel pops at mode-3 dot ~21, matching this core's CPU<->PPU write phase.
+    // The textbook FIFO warmup (6 dots) + our throwaway prime fetch reaches the FIFO at dot ~13; this constant
+    // closes the gap. Calibrated against m3_bgp_change band positions (x1/x73/x145) and the SCX=0 172-dot length.
+    private const int Mode3WarmupExtra = 8;
+    private int m_mode3Warmup; // countdown of remaining warmup dots this line.
+
+    // === BGP render snapshot (band-width FIFO phase) ===
+    // The renderer applies BGP at pop, but a mid-mode-3 BGP write that lands while the fetcher is mid-data-fetch
+    // (GetLow/GetHigh of the group currently feeding the shifter) reaches the popped pixel one pop later than a write
+    // landing at the tile-index phase. This 1-pop deferral is what widens a palette band from 12px to the
+    // hardware-correct 13px (mealybug m3_bgp_change): the band's SET write lands at the tile phase (immediate) and its
+    // RESET write at the data phase (deferred). Tracked entirely in the renderer (no IO-cycle change).
+    private readonly byte[] m_bgpRender = new byte[4]; // the BGP the renderer reads (a deferred snapshot of m_bgp).
+    private int m_bgpPrevPacked = -1;                  // last-seen packed m_bgp, to detect a write.
+    private int m_bgpDeferPops;                        // pops remaining before a deferred BGP write takes effect.
+
+    // === OBP render snapshot (same FIFO-phase deferral as BGP, applied to the two object palettes) ===
+    // OBP0/OBP1 are cycle-2 writes like BGP, so a mid-mode-3 OBP write that lands in the fetcher's data-fetch phase
+    // reaches the popped sprite pixel one pop later than one landing at the tile-index phase (mealybug m3_obp0_change).
+    private readonly byte[] m_obpRender = new byte[8]; // the OBP the renderer reads (deferred snapshot of m_obp).
+    private int m_obpPrevPacked = -1;                  // last-seen packed m_obp (both palettes), to detect a write.
+    private int m_obpDeferPops;                        // pops remaining before a deferred OBP write takes effect.
+
+    // === Window per-line state ===
+    private bool m_windowTriggeredThisLine; // gates the single WLY bump per line.
+    private bool m_windowDrawing;           // window layer currently emitting.
+
+    // Window-enable arming. The per-line arm is latched at mode-2 start (m_latchWindowDisplayEnable), so a CPU LCDC.5
+    // write during this line's mode 2 doesn't affect THIS line (mealybug m2_win_en_toggle). Mid-mode-3 LCDC.5 writes
+    // DO take effect: m_winArmed follows live changes measured against the mode-3-entry reference
+    // (m_winEnableRef), so the mode-2 write baked into the reference is ignored while in-mode-3 deltas apply
+    // (mealybug m3_lcdc_win_en_change_multiple).
+    private bool m_winArmed;     // current window-enable arm for the trigger/disable comparator.
+    private bool m_winEnableRef; // live LCDC.5 as of mode-3 entry (baseline for delta detection).
+
+    // === Sprite per-line state ===
+    private readonly bool[] m_spriteFetched = new bool[10];
+    private int m_consideredTiles;          // bitmask of BG tile columns already surcharged this line.
+    private bool m_spriteFetchActive;       // shifter stalled by an in-progress sprite fetch.
+    private int m_spriteFetchDotsRemaining; // stall countdown.
 
     /// <summary>Creates the PPU for the given model and seeds its post-boot state (ares PPU::power).</summary>
     /// <param name="color">Whether the machine is a Game Boy Color (CGB rendering is deferred).</param>
@@ -143,6 +202,9 @@ public sealed partial class AresPpu : IAresIo {
     /// <summary>The current scanline (LY); used by the CPU to gate HDMA.</summary>
     public int Line => m_ly;
 
+    /// <summary>Diagnostic: count of VRAM writes since power-on.</summary>
+    public long VramWrites { get; private set; }
+
     // ares PPU::main(), as a C# iterator yielding once per dot (the cothread expressed as a single-threaded coroutine).
     private IEnumerator Run() {
         while (true) {
@@ -169,26 +231,7 @@ public sealed partial class AresPpu : IAresIo {
                     yield return c;
                 }
 
-                Mode(mode: 3);
-
-                foreach (var c in StepDots(clocks: 172)) {
-                    yield return c;
-                }
-
-                Mode(mode: 0);
-
-                foreach (var c in StepDots(clocks: 456 - 8 - m_lx)) {
-                    yield return c;
-                }
-            }
-            else if (m_ly <= 143) {
-                Mode(mode: 2);
                 ScanlineDmg();
-
-                foreach (var c in StepDots(clocks: 80)) {
-                    yield return c;
-                }
-
                 m_latchWindowDisplayEnable = m_windowDisplayEnable;
                 m_latchWx = m_wx;
 
@@ -196,25 +239,52 @@ public sealed partial class AresPpu : IAresIo {
                     m_latchWy += 1;
                 }
 
+                StartLineMode3();
                 Mode(mode: 3);
 
-                // Mode-3 render warmup: pixels begin emerging only after the BG fetch/FIFO fill, so a mid-mode-3
-                // register write lands ~21 dots later than the dot it was issued on. ares' fixed model omits this;
-                // it is required here to place mealybug's mid-line writes on the hardware-correct pixel.
-                foreach (var c in StepDots(clocks: RenderWarmupDots)) {
-                    yield return c;
-                }
-
-                for (var n = 0; n < 160; n += 1) {
-                    RunDmg();
+                while (m_px < 160) {
+                    StepMode3Dot();
 
                     foreach (var c in StepDots(clocks: 1)) {
                         yield return c;
                     }
                 }
 
-                foreach (var c in StepDots(clocks: 12)) {
+                Mode(mode: 0);
+
+                foreach (var c in StepDots(clocks: 456 - m_lx)) {
                     yield return c;
+                }
+            }
+            else if (m_ly <= 143) {
+                Mode(mode: 2);
+                ScanlineDmg();
+
+                // Sample window-enable for this line at the START of mode 2. A CPU write that toggles LCDC.5 during
+                // this line's mode 2 lands too late to arm/disarm the window for THIS line on hardware — it affects the
+                // next line (mealybug m2_win_en_toggle: the window draws on the line whose mode-2-start value was set,
+                // i.e. one toggle behind the live value at mode-3 time).
+                m_latchWindowDisplayEnable = m_windowDisplayEnable;
+
+                foreach (var c in StepDots(clocks: 80)) {
+                    yield return c;
+                }
+
+                m_latchWx = m_wx;
+
+                if ((m_ly >= m_wy) && (m_wx < 7)) {
+                    m_latchWy += 1;
+                }
+
+                StartLineMode3();
+                Mode(mode: 3);
+
+                while (m_px < 160) {
+                    StepMode3Dot();
+
+                    foreach (var c in StepDots(clocks: 1)) {
+                        yield return c;
+                    }
                 }
 
                 Mode(mode: 0);

@@ -104,6 +104,27 @@ public sealed partial class AresCpu : AresSm83, IAresIo {
     /// <summary>The current program counter (for terminal-condition detection in the conformance harness).</summary>
     public ushort ProgramCounter => PC;
 
+    /// <summary>Register A (for conformance pass-signature checks).</summary>
+    public byte RegisterA => A;
+
+    /// <summary>Register B (for conformance pass-signature checks — mooneye PASS sets B=3).</summary>
+    public byte RegisterB => B;
+
+    /// <summary>Register C (mooneye PASS sets C=5).</summary>
+    public byte RegisterC => C;
+
+    /// <summary>Register D (mooneye PASS sets D=8).</summary>
+    public byte RegisterD => D;
+
+    /// <summary>Register E (mooneye PASS sets E=13).</summary>
+    public byte RegisterE => E;
+
+    /// <summary>Register H (mooneye PASS sets H=21).</summary>
+    public byte RegisterH => H;
+
+    /// <summary>Register L (mooneye PASS sets L=34).</summary>
+    public byte RegisterL => L;
+
     /// <summary>Seeds the DMG post-boot CPU register and timer/interrupt state (boot ROM not run).</summary>
     public void SeedPostBootDmg() {
         AF = 0x01B0;
@@ -115,6 +136,19 @@ public sealed partial class AresCpu : AresSm83, IAresIo {
         RegisterIme = false;
         m_interruptFlag = 0x01;
         m_div = 8;
+    }
+
+    /// <summary>Prepares for running a boot ROM from a true power-on state (PC=0, registers=0, DIV=0).</summary>
+    public void BeginBoot() {
+        AF = 0;
+        BC = 0;
+        DE = 0;
+        HL = 0;
+        SP = 0;
+        PC = 0;
+        RegisterIme = false;
+        m_interruptFlag = 0;
+        m_div = 0;
     }
 
     /// <summary>Executes one CPU step: HDMA if pending, interrupt dispatch, then one instruction (ares CPU::main).</summary>

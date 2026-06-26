@@ -9,6 +9,8 @@ namespace Puck.HumbleGamingBrick.Ares;
 /// </summary>
 public sealed class AresCartridgeAdapter : IAresIo {
     private readonly ICartridge m_cartridge;
+    private byte[]? m_bootRom;
+    private bool m_bootromEnable;
 
     /// <summary>Wraps the given cartridge.</summary>
     /// <param name="cartridge">The mapper-backed cartridge to expose on the bus.</param>
@@ -19,10 +21,26 @@ public sealed class AresCartridgeAdapter : IAresIo {
         m_cartridge = cartridge;
     }
 
+    /// <summary>Whether the boot ROM is currently mapped over 0x0000-0x00FF.</summary>
+    public bool BootromEnable => m_bootromEnable;
+
+    /// <summary>Maps a DMG boot ROM over 0x0000-0x00FF until it disables itself via 0xFF50.</summary>
+    /// <param name="bootRom">The 256-byte DMG boot ROM image.</param>
+    public void LoadBootRom(byte[] bootRom) {
+        ArgumentNullException.ThrowIfNull(argument: bootRom);
+
+        m_bootRom = bootRom;
+        m_bootromEnable = true;
+    }
+
     /// <inheritdoc/>
     public byte ReadIo(int cycle, ushort address, byte data) {
         if (cycle != 2) {
             return data;
+        }
+
+        if (m_bootromEnable && (address <= 0x00FF) && (m_bootRom is not null)) {
+            return m_bootRom[address];
         }
 
         if (address <= 0x7FFF) {
@@ -39,6 +57,12 @@ public sealed class AresCartridgeAdapter : IAresIo {
     /// <inheritdoc/>
     public void WriteIo(int cycle, ushort address, byte data) {
         if (cycle != 2) {
+            return;
+        }
+
+        if ((address == 0xFF50) && ((data & 1) != 0)) {
+            m_bootromEnable = false; // the boot ROM unmaps itself just before jumping to 0x0100.
+
             return;
         }
 
