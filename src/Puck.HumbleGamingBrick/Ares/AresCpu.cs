@@ -88,6 +88,10 @@ public sealed partial class AresCpu : AresSm83, IAresIo {
     /// <summary>Advances the PPU to the CPU's current clock; set during machine assembly.</summary>
     public Action<ulong>? DrivePpu { get; set; }
 
+    /// <summary>Advances the APU to the CPU's current clock; set during machine assembly. Analogous to
+    /// <see cref="DrivePpu"/> — the APU self-paces to its fixed 2 MHz rate from the CPU clock it is handed.</summary>
+    public Action<ulong>? DriveApu { get; set; }
+
     /// <summary>Connects the CPU to the bus once every component is constructed.</summary>
     public void Connect(AresBus bus) {
         ArgumentNullException.ThrowIfNull(argument: bus);
@@ -252,6 +256,7 @@ public sealed partial class AresCpu : AresSm83, IAresIo {
 
             Clock += 1;
             DrivePpu!(obj: Clock);
+            DriveApu?.Invoke(obj: Clock);
         }
     }
 

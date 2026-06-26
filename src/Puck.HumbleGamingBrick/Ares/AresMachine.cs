@@ -22,15 +22,18 @@ public sealed class AresMachine {
         Cpu = new AresCpu(color: color);
         Ppu = new AresPpu(color: color);
 
-        var apu = new AresApu();
+        Apu = new AresApu(color: color);
+
         var cartridgeAdapter = new AresCartridgeAdapter(cartridge: cartridge);
 
-        Bus = new AresBus(cpu: Cpu, apu: apu, ppu: Ppu, cartridge: cartridgeAdapter);
+        Bus = new AresBus(cpu: Cpu, apu: Apu, ppu: Ppu, cartridge: cartridgeAdapter);
 
         Cpu.Connect(bus: Bus);
         Ppu.Connect(cpu: Cpu, bus: Bus);
         Cpu.PpuLine = () => Ppu.Line;
         Cpu.DrivePpu = Ppu.AdvanceTo;
+        Cpu.DriveApu = Apu.AdvanceTo;
+        Apu.SpeedDouble = () => Cpu.SpeedDouble;
 
         if (bootRom is not null) {
             // Run the boot ROM from a true power-on state; it decodes the cartridge logo into VRAM, plays its
@@ -59,6 +62,9 @@ public sealed class AresMachine {
 
     /// <summary>The PPU (framebuffer and frame-ready signal).</summary>
     public AresPpu Ppu { get; }
+
+    /// <summary>The APU (sound registers, wave RAM, and the mixed stereo output sample).</summary>
+    public AresApu Apu { get; }
 
     /// <summary>The bus (for untimed peeks).</summary>
     public AresBus Bus { get; }
