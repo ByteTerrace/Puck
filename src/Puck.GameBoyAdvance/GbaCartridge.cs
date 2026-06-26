@@ -131,6 +131,33 @@ public sealed class GbaCartridge {
     /// <summary>Clears <see cref="SaveDirty"/> after a host has persisted the save to disk.</summary>
     public void MarkSaveClean() => SaveDirty = false;
 
+    // Game-pak burst page counter (ARES gba/cartridge mrom). The 16-bit cartridge bus latches the low address lines
+    // on a non-sequential access (startBurst) and auto-increments per sequential half-word — so during a burst the
+    // cartridge supplies consecutive half-words regardless of the requested low address. A burst ends at the last
+    // half-word of a 128 KiB page (0x1FFFE). Sequential code/data still resolves to the requested address (the
+    // counter tracks it); the visible effect is that a fixed/decrement-source DMA reads the auto-incrementing data.
+    private uint m_romBurstPage;
+    private bool m_romBurst;
+
+    /// <summary>Reads a half-word through the game-pak burst page counter. <paramref name="sequential"/> continues an
+    /// in-progress burst; otherwise a new burst is latched at <paramref name="address"/>.</summary>
+    public ushort ReadRomBurst(uint address, bool sequential) {
+        if (!sequential || !m_romBurst) {
+            m_romBurstPage = address >> 1; // startBurst: latch the half-word address
+            m_romBurst = true;
+        }
+
+        if ((address & 0x1FFFEu) == 0x1FFFEu) {
+            m_romBurst = false; // burst ends at the last half-word of the page
+        }
+
+        var romAddr = ((address >> 17) << 17) | (m_romBurstPage << 1);
+
+        ++m_romBurstPage;
+
+        return (ushort)(ReadRom(offset: romAddr) | (ReadRom(offset: romAddr + 1u) << 8));
+    }
+
     /// <summary>Reads a ROM byte at <paramref name="offset"/>, or the open-bus pattern beyond the image.</summary>
     /// <param name="offset">The byte offset into the cartridge ROM address space (0–0x01FFFFFF).</param>
     /// <returns>The ROM byte, or the open-bus value for out-of-range offsets.</returns>

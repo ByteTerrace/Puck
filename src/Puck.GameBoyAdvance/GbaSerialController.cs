@@ -65,12 +65,15 @@ public sealed class GbaSerialController : IGbaSerialController {
 
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) => offset switch {
-        0x120u => m_data[0],
-        0x122u => m_data[1],
-        0x124u => m_data[2],
-        0x126u => m_data[3],
+        // 0x120/0x122 are SIODATA32 in Normal-32 and SIOMULTI0/1 in Multiplayer; 0x124/0x126 are SIOMULTI2/3
+        // (Multiplayer only). In any other mode these read 0 (mGBA GBASIOReadRegister) — without this read-gating a
+        // UART/Normal-8 read would return stale Normal-32 data.
+        0x120u => (ushort)(((m_sioMode == 1) || (m_sioMode == 2)) ? m_data[0] : 0),
+        0x122u => (ushort)(((m_sioMode == 1) || (m_sioMode == 2)) ? m_data[1] : 0),
+        0x124u => (ushort)((m_sioMode == 2) ? m_data[2] : 0),
+        0x126u => (ushort)((m_sioMode == 2) ? m_data[3] : 0),
         0x128u => PackSioControl(),
-        0x12Au => m_dataSend,
+        0x12Au => (ushort)((m_sioMode == 3) ? 0 : m_dataSend), // SIODATA8/SIOMLT_SEND reads 0 in UART mode (mGBA)
         0x134u => PackRcnt(),
         0x140u => PackJoyControl(),
         0x150u => (ushort)m_joyRecv,
@@ -84,18 +87,20 @@ public sealed class GbaSerialController : IGbaSerialController {
     /// <inheritdoc/>
     public void WriteRegister(uint offset, ushort value) {
         switch (offset) {
-            case 0x120u: m_data[0] = value; break;
-            case 0x122u: m_data[1] = value; break;
-            case 0x124u: m_data[2] = value; break;
-            case 0x126u: m_data[3] = value; break;
+            case 0x120u: if (m_sioMode == 1) { m_data[0] = value; } break; // SIODATA32_L: writable only in Normal-32
+            case 0x122u: if (m_sioMode == 1) { m_data[1] = value; } break; // SIODATA32_H: writable only in Normal-32
+            case 0x124u: break; // SIOMULTI2: received-only (read-only)
+            case 0x126u: break; // SIOMULTI3: received-only (read-only)
             case 0x128u: WriteSioControl(value); break;
             case 0x12Au: m_dataSend = value; break;
             case 0x134u: WriteRcnt(value); break;
             case 0x140u: WriteJoyControl(value); break;
-            case 0x150u: m_joyRecv = (m_joyRecv & 0xFFFF0000u) | value; break;
-            case 0x152u: m_joyRecv = (m_joyRecv & 0x0000FFFFu) | ((uint)value << 16); break;
-            case 0x154u: m_joyTrans = (m_joyTrans & 0xFFFF0000u) | value; break;
-            case 0x156u: m_joyTrans = (m_joyTrans & 0x0000FFFFu) | ((uint)value << 16); break;
+            // JOY_RECV/JOY_TRANS are live only on the JOY bus (RCNT mode 3); outside it, CPU writes are dropped and
+            // the registers read 0 (mGBA).
+            case 0x150u: if (m_rcntMode == 3) { m_joyRecv = (m_joyRecv & 0xFFFF0000u) | value; } break;
+            case 0x152u: if (m_rcntMode == 3) { m_joyRecv = (m_joyRecv & 0x0000FFFFu) | ((uint)value << 16); } break;
+            case 0x154u: if (m_rcntMode == 3) { m_joyTrans = (m_joyTrans & 0xFFFF0000u) | value; } break;
+            case 0x156u: if (m_rcntMode == 3) { m_joyTrans = (m_joyTrans & 0x0000FFFFu) | ((uint)value << 16); } break;
             case 0x158u: WriteJoyStat(value); break;
             default: break;
         }
@@ -118,6 +123,11 @@ public sealed class GbaSerialController : IGbaSerialController {
             if (m_multiplayerError) {
                 value |= 0x0040u;
             }
+        }
+
+        // UART mode reads back bit 5 (receive-FIFO-empty status) set (mGBA: SIOCNT U-mask reads 0x7FAF).
+        if (m_sioMode == 3) {
+            value |= 0x0020u;
         }
 
         return (ushort)value;
@@ -254,17 +264,27 @@ public sealed class GbaSerialController : IGbaSerialController {
         }
     }
 
-    private ushort PackRcnt() => (ushort)(
-        (m_rcntSc ? 0x0001u : 0u)
-        | (m_rcntSd ? 0x0002u : 0u)
-        | (m_rcntSi ? 0x0004u : 0u)
-        | (m_rcntSo ? 0x0008u : 0u)
-        | (m_rcntScMode ? 0x0010u : 0u)
-        | (m_rcntSdMode ? 0x0020u : 0u)
-        | (m_rcntSiMode ? 0x0040u : 0u)
-        | (m_rcntSoMode ? 0x0080u : 0u)
-        | (m_siIrqEnable ? 0x0100u : 0u)
-        | ((uint)m_rcntMode << 14));
+    private ushort PackRcnt() {
+        var value = (m_rcntSc ? 0x0001u : 0u)
+            | (m_rcntSd ? 0x0002u : 0u)
+            | (m_rcntSi ? 0x0004u : 0u)
+            | (m_rcntSo ? 0x0008u : 0u)
+            | (m_rcntScMode ? 0x0010u : 0u)
+            | (m_rcntSdMode ? 0x0020u : 0u)
+            | (m_rcntSiMode ? 0x0040u : 0u)
+            | (m_rcntSoMode ? 0x0080u : 0u)
+            | (m_siIrqEnable ? 0x0100u : 0u)
+            | ((uint)m_rcntMode << 14);
+
+        // While RCNT is in SIO mode (not GPIO/JOY) and SIOCNT is in a Normal mode, the SD (bit 1) and SO (bit 3)
+        // lines are driven by the serial unit and read back 0 (mGBA: Normal RCNT reads 0x01F5 vs 0x01FF for M/UART).
+        // Gate on RCNT-SIO so the RFU's GPIO line reads (Pokémon Emerald) are untouched.
+        if ((m_rcntMode < 2) && (m_sioMode <= 1)) {
+            value &= ~0x000Au;
+        }
+
+        return (ushort)value;
+    }
 
     private void WriteRcnt(ushort value) {
         m_rcntSc = (value & 0x0001u) != 0u;

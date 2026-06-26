@@ -18,6 +18,11 @@ public sealed class GbaDmaController : IGbaDmaController {
     private readonly uint[] m_sourceLatch = new uint[4];
     private readonly uint[] m_destinationLatch = new uint[4];
     private readonly uint[] m_remaining = new uint[4];
+
+    // Last value latched onto the internal DMA bus. A read from an undrivable source (BIOS region < 0x02000000)
+    // returns this open-bus latch rather than fetching; a halfword read mirrors into both halves so the destination
+    // alignment selects the right half (mGBA open-bus DMA behavior).
+    private readonly uint[] m_dataLatch = new uint[4];
     private readonly bool[] m_active = new bool[4];
     private bool m_running;
     private int m_activeChannel = -1;
@@ -216,22 +221,28 @@ public sealed class GbaDmaController : IGbaDmaController {
 
             m_activeChannel = ch;
 
-            uint data;
-
-            if (word) {
-                data = bus.Read32(address: m_sourceLatch[ch], access: access);
-            }
-            else {
-                data = bus.Read16(address: m_sourceLatch[ch], access: access);
+            // Only an addressable source (>= 0x02000000) actually drives the bus; a BIOS-region source leaves the
+            // previous latch in place (open bus). A halfword read mirrors into both halves of the latch.
+            if (m_sourceLatch[ch] >= 0x02000000u) {
+                if (word) {
+                    m_dataLatch[ch] = bus.Read32(address: m_sourceLatch[ch], access: access);
+                }
+                else {
+                    var half = bus.Read16(address: m_sourceLatch[ch], access: access) & 0xFFFFu;
+                    m_dataLatch[ch] = half | (half << 16);
+                }
             }
 
             bus.ProcessEvents();
 
             if (word) {
-                bus.Write32(address: m_destinationLatch[ch], value: data, access: access);
+                // 32-bit transfer force-aligns; write the full latched word (the bus aligns the destination).
+                bus.Write32(address: m_destinationLatch[ch], value: m_dataLatch[ch], access: access);
             }
             else {
-                bus.Write16(address: m_destinationLatch[ch], value: (ushort)data, access: access);
+                // 16-bit transfer: the destination's bit 1 selects which mirrored half of the latch drives the bus.
+                var half = m_dataLatch[ch] >> (int)((m_destinationLatch[ch] & 2u) * 8u);
+                bus.Write16(address: m_destinationLatch[ch], value: (ushort)half, access: access);
             }
 
             m_sourceLatch[ch] = Step(address: m_sourceLatch[ch], control: sourceControl, unit: unit);

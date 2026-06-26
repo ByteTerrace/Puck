@@ -248,7 +248,7 @@ public sealed class GbaBus : IGbaBus {
     public byte Read8(uint address, BusAccessType access) {
         RunPendingDma();
         BusTrace(op: 'R', address: address, width: 1, access: access);
-        var value = (byte)ReadRegion(address: address, width: 1);
+        var value = (byte)ReadRegion(address: address, width: 1, access: access);
 
         ChargeData(address: address, cost: AccessCycles(address: address, width: 1, access: access));
 
@@ -259,7 +259,7 @@ public sealed class GbaBus : IGbaBus {
     public ushort Read16(uint address, BusAccessType access) {
         RunPendingDma();
         BusTrace(op: 'R', address: address, width: 2, access: access);
-        var value = (ushort)ReadRegion(address: address & ~1u, width: 2);
+        var value = (ushort)ReadRegion(address: address & ~1u, width: 2, access: access);
 
         ChargeData(address: address, cost: AccessCycles(address: address, width: 2, access: access));
 
@@ -270,7 +270,7 @@ public sealed class GbaBus : IGbaBus {
     public uint Read32(uint address, BusAccessType access) {
         RunPendingDma();
         BusTrace(op: 'R', address: address, width: 4, access: access);
-        var value = ReadRegion(address: address & ~3u, width: 4);
+        var value = ReadRegion(address: address & ~3u, width: 4, access: access);
 
         ChargeData(address: address, cost: AccessCycles(address: address, width: 4, access: access));
 
@@ -296,7 +296,7 @@ public sealed class GbaBus : IGbaBus {
 
             var syncExtra = PrefetchSync(address, 2);
             m_inCodeFetch = true;
-            var miss = (ushort)ReadRegion(address: address & ~1u, width: 2);
+            var miss = (ushort)ReadRegion(address: address & ~1u, width: 2, access: access);
             m_inCodeFetch = false;
             var missCost = AccessCycles(address: address, width: 2, access: access);
 
@@ -309,7 +309,7 @@ public sealed class GbaBus : IGbaBus {
         }
 
         m_inCodeFetch = true;
-        var value = (ushort)ReadRegion(address: address & ~1u, width: 2);
+        var value = (ushort)ReadRegion(address: address & ~1u, width: 2, access: access);
         m_inCodeFetch = false;
         var cost = AccessCycles(address: address, width: 2, access: access);
         if (!s_disablePrefetch) {
@@ -340,7 +340,7 @@ public sealed class GbaBus : IGbaBus {
 
             var syncExtra = PrefetchSync(address & ~3u, 4);
             m_inCodeFetch = true;
-            var miss = ReadRegion(address: address & ~3u, width: 4);
+            var miss = ReadRegion(address: address & ~3u, width: 4, access: access);
             m_inCodeFetch = false;
             var missCost = AccessCycles(address: address, width: 4, access: access);
 
@@ -350,7 +350,7 @@ public sealed class GbaBus : IGbaBus {
         }
 
         m_inCodeFetch = true;
-        var value = ReadRegion(address: address & ~3u, width: 4);
+        var value = ReadRegion(address: address & ~3u, width: 4, access: access);
         m_inCodeFetch = false;
         var cost = AccessCycles(address: address, width: 4, access: access);
         if (!s_disablePrefetch) {
@@ -473,14 +473,14 @@ public sealed class GbaBus : IGbaBus {
         }
     }
 
-    private uint ReadRegion(uint address, int width) {
+    private uint ReadRegion(uint address, int width, BusAccessType access) {
         var value = (address >> 24) switch {
             RegionBios => ReadBios(address: address, width: width),
             RegionEwram => ReadArray(array: m_ewram, index: address & 0x3FFFFu, width: width),
             RegionIwram => ReadArray(array: m_iwram, index: address & 0x7FFFu, width: width),
             RegionIo => ReadIo(address: address, width: width),
             RegionPalette or RegionVram or RegionOam => m_ppu.ReadVideo(address: address, width: width),
-            0x8 or 0x9 or 0xA or 0xB or 0xC or 0xD => ReadRom(address: address, width: width),
+            0x8 or 0x9 or 0xA or 0xB or 0xC or 0xD => ReadRom(address: address, width: width, access: access),
             0xE or 0xF => ReadSave(address: address, width: width),
             _ => m_openBus,
         };
@@ -566,7 +566,7 @@ public sealed class GbaBus : IGbaBus {
             : m_lastBiosOpcode;
     }
 
-    private uint ReadRom(uint address, int width) {
+    private uint ReadRom(uint address, int width, BusAccessType access) {
         // A serial EEPROM responds in the upper ROM region (0x0D…) to DMA accesses only (it is DMA-driven on
         // hardware). A CPU read there hits the ROM mirror/open-bus — so a cart that merely embeds the EEPROM_V
         // string (e.g. the AGS aging cartridge) never has its 0x0D region hijacked.
@@ -575,6 +575,31 @@ public sealed class GbaBus : IGbaBus {
         }
 
         var offset = address & 0x01FFFFFFu;
+
+        // DMA reads go through the cartridge's burst page counter, so a fixed/decrement source still reads the
+        // auto-incrementing data (mGBA "ROM load DMA" tests). CPU code/data reads stay raw (their values already
+        // resolve to the requested address, and routing them through the shared counter would corrupt a code fetch
+        // that interleaves with a data read). A 32-bit access is two half-word burst steps (first per access, second
+        // sequential within the word).
+        if (m_dmaActive) {
+            var sequential = access == BusAccessType.Sequential;
+
+            switch (width) {
+                case 1: {
+                    var half = m_cartridge.ReadRomBurst(address: offset & ~1u, sequential: sequential);
+
+                    return ((offset & 1u) == 0u) ? (uint)(half & 0xFFu) : (uint)(half >> 8);
+                }
+                case 2:
+                    return m_cartridge.ReadRomBurst(address: offset, sequential: sequential);
+                default: {
+                    var low = m_cartridge.ReadRomBurst(address: offset, sequential: sequential);
+                    var high = m_cartridge.ReadRomBurst(address: offset + 2u, sequential: true);
+
+                    return (uint)(low | ((uint)high << 16));
+                }
+            }
+        }
 
         return width switch {
             1 => m_cartridge.ReadRom(offset: offset),
@@ -952,8 +977,11 @@ public sealed class GbaBus : IGbaBus {
         }
 
         if (PrefetchEmpty) {
-            PrefetchStep(m_prefetchWait);
+            // Capture the wait BEFORE stepping: PrefetchStep loads a slot and resets m_prefetchWait to the NEXT
+            // slot's seq-wait, so reading it after would charge the post-reload count (e.g. 3 instead of 1). ARES's
+            // prefetchStep(prefetch.wait) advances exactly `wait` clocks and never re-reads the field.
             extra = m_prefetchWait;
+            PrefetchStep(extra);
         }
 
         var word = m_prefetchSlots[(m_prefetchAddr >> 1) & 7];
@@ -987,13 +1015,13 @@ public sealed class GbaBus : IGbaBus {
                 return (width == 4) ? 2 : 1;
             case 0x8:
             case 0x9:
-                return RomCycles(nonSeq: m_ws0N, seq: m_ws0S, width: width, access: access);
+                return RomCycles(nonSeq: m_ws0N, seq: m_ws0S, width: width, access: RomBurstAccess(address: address, access: access));
             case 0xA:
             case 0xB:
-                return RomCycles(nonSeq: m_ws1N, seq: m_ws1S, width: width, access: access);
+                return RomCycles(nonSeq: m_ws1N, seq: m_ws1S, width: width, access: RomBurstAccess(address: address, access: access));
             case 0xC:
             case 0xD:
-                return RomCycles(nonSeq: m_ws2N, seq: m_ws2S, width: width, access: access);
+                return RomCycles(nonSeq: m_ws2N, seq: m_ws2S, width: width, access: RomBurstAccess(address: address, access: access));
             case 0xE:
             case 0xF:
                 // The 8-bit save bus pays the same first-access overhead as a ROM word access.
@@ -1002,6 +1030,14 @@ public sealed class GbaBus : IGbaBus {
                 // BIOS, on-chip WRAM, I/O, OAM: single-cycle 32-bit bus.
                 return 1;
         }
+    }
+
+    // A sequential game-pak access that lands on a 128 KiB page boundary restarts the cartridge's burst (the previous
+    // burst ended after the page's last half-word, 0x1FFFE), so it pays a fresh non-sequential first-access cost.
+    private static BusAccessType RomBurstAccess(uint address, BusAccessType access) {
+        return ((access == BusAccessType.Sequential) && ((address & 0x1FFFEu) == 0u))
+            ? BusAccessType.NonSequential
+            : access;
     }
 
     private static int RomCycles(int nonSeq, int seq, int width, BusAccessType access) {
