@@ -222,15 +222,21 @@ thread — so the phase math is firmer on DX and needs a clock-domain reconcilia
   re-opens after a ~600-frame cooldown — a replugged camera comes back without a restart, a failed open retries on the
   same cadence, and the last shown frame persists while disconnected (never a black pane).
 - **M5 — Genlock (latency phase-align). ✅ DONE; control law verified deterministically, live convergence is
-  display-gated.** As built: `ExternalPresentClock` (Puck.Abstractions) is the arrival-ingestion seam; both capture
-  tiers stamp arrivals with `Stopwatch` **on the grabber thread at the publish site** — same QPC domain as the pacer, so
-  the MF-100ns / present-timing clock-domain reconciliation the plan feared never arises (and the DX-vs-Vulkan
-  scanout-timestamp asymmetry stays where it was: inside the existing present re-anchor, which genlock slews rather than
-  replaces). `GenlockPhaseAligner` (Puck.Launcher) estimates the producer period from version-normalized arrival deltas
-  and nudges the **deadline grid's phase** (error mod `renderPeriod` — a camera-period target would demand rate-matching,
-  which the plan forbids) through a PI filter bounded to `renderPeriod/16` per frame; stale feeds freeze it,
-  `PUCK_GENLOCK=0` disables it, `PUCK_PRESENT_TIMING=1` logs the mean |phase error|. `CameraChildNode` forwards each new
-  frame's arrival (+ version). **Verification:** `--validate-genlock`, a pure-CPU deterministic gate simulating the
+  display-gated.** As built (**generalized to named rhythm sources + host election** — producers never decide what
+  drives the pacer): `ExternalClockRegistry` (Puck.Abstractions) is the ingestion seam — every rhythm producer (a
+  camera pane as `camera:<slot>`, a capture card, a network feed stamping *local receipt time*) registers a named
+  source with its **own** conflating channel, so sources at different rates never pollute each other; the
+  **`host.genlock`** document field elects which single source forwards to the pacer-facing `PacerClock` (`"off"` =
+  never; a source id = exactly that one; absent = AUTO, elected only while exactly one source is registered — plurality
+  silently un-elects, no arbitrary winner). Both capture tiers stamp arrivals with `Stopwatch` **on the grabber thread
+  at the publish site** — same QPC domain as the pacer, so the MF-100ns / present-timing clock-domain reconciliation
+  the plan feared never arises (and the DX-vs-Vulkan scanout-timestamp asymmetry stays where it was: inside the
+  existing present re-anchor, which genlock slews rather than replaces). `GenlockPhaseAligner` (Puck.Launcher)
+  estimates the elected producer's period from version-normalized arrival deltas — a version REGRESSION means the
+  election switched producers (each counts its own frames, at its own rate), so the estimate resets and re-trains —
+  and nudges the **deadline grid's phase** (error mod `renderPeriod` — a camera-period target would demand
+  rate-matching, which the plan forbids) through a PI filter bounded to `renderPeriod/16` per frame; stale feeds freeze
+  it, `PUCK_GENLOCK=0` disables it, `PUCK_PRESENT_TIMING=1` logs the mean |phase error|. **Verification:** `--validate-genlock`, a pure-CPU deterministic gate simulating the
   design-target regime (a 240 Hz grid whose presents follow the deadline — i.e. VRR — vs ~29.9 Hz jittered arrivals):
   aligned mean 0.98 ms vs the 1.04 ms guard, spread collapsed 1.19 → 0.334 ms (the 0.289 ms jitter floor — the beat
   sweep is gone), max nudge 0.124 ms inside the VRR-safe bound. Live on the dev machine the controller runs and is
