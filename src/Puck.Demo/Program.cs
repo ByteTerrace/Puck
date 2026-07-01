@@ -89,6 +89,9 @@ var validateCameraOption = new Option<bool>(name: "--validate-camera") {
 var cameraOption = new Option<bool>(name: "--camera") {
     Description = "Live camera content source: a bespoke Direct3D 12 device (a stand-in for a hardware camera's decode device) produces an animated feed into a shared image each frame, which the Vulkan host imports zero-copy and presents. The running skeleton the real camera fills later. Forces a Vulkan host.",
 };
+var validateCameraLiveOption = new Option<bool>(name: "--validate-camera-live") {
+    Description = "Live-camera hardware bring-up gate: opens the real default webcam through Media Foundation, polls until a frame arrives, and writes artifacts/camera-live.png (so RGB32 orientation/content can be verified). Lenient about the environment (no device/privacy-blocked yields skip); exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
+};
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
     Description = "With --validate-world, renders a fuzz-generated SDF scene program (deterministic from this seed, identical on both backends) instead of the showcase — one cross-backend differential-fuzzing iteration. A negative value (default) disables fuzzing.",
@@ -138,6 +141,7 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validatePixelateOption,
     validateCaptureOption,
     validateCameraOption,
+    validateCameraLiveOption,
     cameraOption,
     validateWorldOption,
     validateWorldChildOption,
@@ -192,6 +196,7 @@ var runDocument = (runPath is not null)
         ValidatePixelate = parseResult.GetValue(validatePixelateOption),
         ValidateCapture = parseResult.GetValue(validateCaptureOption),
         ValidateCamera = parseResult.GetValue(validateCameraOption),
+        ValidateCameraLive = parseResult.GetValue(validateCameraLiveOption),
         ValidateWorld = parseResult.GetValue(validateWorldOption),
         ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
         World = parseResult.GetValue(worldOption),
