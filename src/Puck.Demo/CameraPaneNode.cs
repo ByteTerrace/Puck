@@ -51,7 +51,9 @@ internal sealed class CameraPaneNode : IRenderNode {
     private nint m_deviceHandle;
     private bool m_disposed;
     private IGpuComputeServices? m_gpu;
+    private bool m_hasCameraOutput;
     private uint m_height;
+    private long m_lastCameraVersion = -1;
     private nint m_lastInputView;
     private IGpuStorageImage? m_outputImage;
     private bool m_outputInitialized;
@@ -103,16 +105,28 @@ internal sealed class CameraPaneNode : IRenderNode {
 
         m_time += (float)context.DeltaSeconds;
 
+        // Newest-frame-wins drop policy: if a real camera is bound and hasn't delivered a new frame since the last
+        // upload (its FrameVersion is unchanged) and the output already holds that frame, reuse it — no upload, no
+        // dispatch, no synchronous submit. The engine keeps rendering at full rate between the camera's own arrivals
+        // (e.g. 30 fps) instead of stalling on a redundant upload every rendered frame.
+        var cameraFresh = ((m_cameraSession is not null) && (m_cameraSession.FrameVersion != m_lastCameraVersion));
+
+        if ((m_cameraSession is not null) && !cameraFresh && m_hasCameraOutput && m_outputInitialized) {
+            return CurrentSurface();
+        }
+
         // The frame's source pixels: the newest camera frame if one is ready, otherwise the animated fallback pattern —
         // both B8G8R8A8 CPU pixels fed through the identical upload+sample path.
         ReadOnlyMemory<byte> pixels;
         uint sourceHeight;
         uint sourceWidth;
 
-        if ((m_cameraSession is not null) && m_cameraSession.TryCapture(out var frame) && !frame.Pixels.IsEmpty) {
+        if (cameraFresh && m_cameraSession!.TryCapture(out var frame) && !frame.Pixels.IsEmpty) {
             pixels = frame.Pixels;
             sourceHeight = frame.Height;
             sourceWidth = frame.Width;
+            m_hasCameraOutput = true;
+            m_lastCameraVersion = m_cameraSession.FrameVersion;
         } else {
             FillFallback();
 
@@ -133,7 +147,11 @@ internal sealed class CameraPaneNode : IRenderNode {
 
         Render();
 
-        // A rect-sized, General-layout storage image: the integer-copy source contract WorldProducerNode composites.
+        return CurrentSurface();
+    }
+
+    // A rect-sized, General-layout storage image: the integer-copy source contract WorldProducerNode composites.
+    private Surface CurrentSurface() {
         return new Surface(
             Format: SurfaceFormat.R8G8B8A8Unorm,
             Height: m_height,
@@ -216,6 +234,10 @@ internal sealed class CameraPaneNode : IRenderNode {
         m_outputImage = m_gpu.StorageImageFactory.Create(deviceContext: gpuDevice, format: Format, height: height, width: width);
         m_descriptorAllocator!.WriteStorageImage(arrayElement: 0, binding: OutputBindingIndex, descriptorSetHandle: m_set, deviceHandle: m_deviceHandle, imageViewHandle: m_outputImage.ImageViewHandle);
         m_outputInitialized = false; // the freshly created output starts Undefined; Render brings it into General.
+        // The new output holds no frame yet; force the next ProduceFrame to re-upload the current camera frame into it
+        // (rather than reuse the discarded old image or fall back to the pattern for one frame on resize).
+        m_hasCameraOutput = false;
+        m_lastCameraVersion = -1;
 
         // ResampleParams: sample the whole source into the pane rect, with the authored pixelation + quantization.
         var words = MemoryMarshal.Cast<byte, uint>(span: m_push.AsSpan());
@@ -296,9 +318,12 @@ internal sealed class CameraPaneNode : IRenderNode {
 
     /// <inheritdoc/>
     public void OnDeviceLost() {
-        // Reset on the still-valid (lost) device, wait-free. The next ProduceFrame re-runs EnsureResources and rebuilds.
+        // Reset on the still-valid (lost) device, wait-free. The next ProduceFrame re-runs EnsureResources and rebuilds;
+        // clearing the camera-output latch forces the current frame to be re-uploaded into the new resources.
         ReleaseGpuResources();
         m_deviceHandle = 0;
+        m_hasCameraOutput = false;
+        m_lastCameraVersion = -1;
         m_lastInputView = 0;
         m_outputInitialized = false;
         m_resourcesReady = false;

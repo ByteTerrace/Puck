@@ -75,6 +75,8 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
     }
 
     /// <inheritdoc/>
+    public long FrameVersion => m_latest.Version;
+    /// <inheritdoc/>
     public int Height => m_height;
     /// <inheritdoc/>
     public string Name => m_name;

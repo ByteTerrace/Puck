@@ -11,7 +11,18 @@ internal sealed class LatestFrameBuffer {
     private byte[] m_frame = [];
     private bool m_hasFrame;
     private int m_height;
+    private long m_version;
     private int m_width;
+
+    /// <summary>A monotonically increasing counter bumped on every <see cref="Publish"/> — lets a puller detect whether a
+    /// new frame has arrived (and skip re-processing an unchanged one) without copying the pixels out.</summary>
+    public long Version {
+        get {
+            lock (m_gate) {
+                return m_version;
+            }
+        }
+    }
 
     /// <summary>Publishes a newly captured frame (called from the grabber thread).</summary>
     /// <param name="pixels">The frame's tightly packed pixels.</param>
@@ -27,6 +38,7 @@ internal sealed class LatestFrameBuffer {
             m_height = height;
             m_width = width;
             m_hasFrame = true;
+            m_version++;
         }
     }
 
