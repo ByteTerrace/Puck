@@ -1,11 +1,13 @@
 # Plan: live camera as a first-class viewport content source
 
-**Status:** the camera is a first-class, sampled, per-viewport content source — done and hardware-verified. A run
-document can declare `viewports[i].source = { "$type": "live-camera", "fit": "fill" }` and the live C920 feed renders
-into that viewport slot, sampled by the SDF world compositor, alongside SDF-camera viewports (see
-`docs/examples/world-camera.json`). The document seam, zero-copy keystone, live `--camera` node, Media Foundation
-CPU-upload capture, and the per-viewport sampled integration are all in. Remaining work is the perf and platform
-milestones **M3–M6** (GPU-resident zero-copy tier, formats/robustness, genlock, cross-platform).
+**Status:** the camera is a first-class, sampled, per-viewport content source running on the **GPU-resident zero-copy
+tier** — done and hardware-verified. A run document can declare `viewports[i].source = { "$type": "live-camera",
+"fit": "fill" }` and the live C920 feed renders into that viewport slot, sampled by the SDF world compositor, alongside
+SDF-camera viewports (see `docs/examples/world-camera.json`) — with frames converted to BGRA on the GPU and shared into
+the world device without ever visiting host memory (M3; the CPU-upload tier remains the instrumented fallback). The
+document seam, zero-copy keystone, live `--camera` node, Media Foundation capture (both tiers), and the per-viewport
+sampled integration are all in. Remaining work: **M4** robustness extras, **M5** genlock (latency phase-align, decided),
+**M6** cross-platform verticals.
 
 ## Vision
 
@@ -89,13 +91,19 @@ Fit: sample|fill }`.
 
 ### Transport tiers (selected by capability at open; both behind the one node)
 
-- **Zero-copy / GPU-resident (default; M3).** Windows: MF with `MF_SOURCE_READER_D3D_MANAGER` (an `IMFDXGIDeviceManager`
-  wrapping a D3D11 device LUID-matched to the host adapter); DXVA HW decode yields GPU-resident NV12 textures. MF frames
-  are **not born shareable**, so the node keeps a small ring (N≈3) of **persistent**
-  `D3D11_RESOURCE_MISC_SHARED_NTHANDLE | KEYED_MUTEX` textures, does one on-GPU `CopyResource` decode→shared per frame,
-  and hands the **stable** handle into the existing `VulkanSurfaceImport`/`DirectXGpuSurfaceImport` (import each stable
-  handle **once** at open; every frame is then a cache hit). Steady-state = one `CopyResource` + one keyed-mutex
-  handshake + one NV12→RGB pass, no queue drain. NV12→RGB is GPU-side (in-shader ycbcr or VideoProcessor MFT), never CPU.
+- **Zero-copy / GPU-resident (default; M3 — ✅ SHIPPED & hardware-verified, and SIMPLER than this sketch).** As built:
+  MF with `MF_SOURCE_READER_D3D_MANAGER` (an `IMFDXGIDeviceManager` wrapping a `Win32D3D11VideoDevice` on the LUID-named
+  adapter) **plus `MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING`**, so the DXVA VideoProcessor converts each frame
+  to **ARGB32 on the GPU** — which eliminated the NV12/`VkSamplerYcbcrConversion` plumbing entirely (the "VideoProcessor
+  MFT" option won). The ring is **not** keyed-mutex D3D11 textures: it is N=3 **D3D12-allocated** simultaneous-access
+  shared targets (`CreateSimultaneousAccessStorageImage`: `ALLOW_SIMULTANEOUS_ACCESS | ALLOW_RENDER_TARGET`, COMMON —
+  BGRA has no D3D11 UAV, so a UAV-flagged texture is refused on open) that the session's D3D11 device opens via
+  `OpenSharedResource1` and fills with `CopySubresourceRegion`, draining each copy with an event-query CPU wait **on the
+  grabber thread at camera cadence** before publishing the slot (`FrameVersion` + `LatestSlot`). The consumer imports
+  each stable handle **once** per slot through the existing proven `VulkanSurfaceImport`/`DirectXGpuSurfaceImport`
+  (zero Vulkan-layer changes); steady state is a descriptor rebind. No keyed mutex anywhere; no frame ever visits host
+  memory. Gate: `--validate-camera-gpu` (imports a published slot, asserts real camera content, dumps
+  `artifacts/camera-gpu.png`; verified 1280x720 GPU-scaled and 640x480 native on the C920).
 - **CPU-upload fallback (correctness floor, in use today).** No D3D manager / no shareable path → `IGpuSurfaceUpload`
   of RGB32 CPU pixels. Resources are reused, but the path serializes per frame (`vkQueueWaitIdle` /
   `WaitForGpu(INFINITE)`), which caps FPS. It must (a) emit a **tier-telemetry** signal so a silent fall-to-slow (e.g. a
@@ -196,13 +204,19 @@ thread — so the phase math is firmer on DX and needs a clock-domain reconcilia
     descriptor, no planar/YCbCr, and no `Surface` layout tag (the camera child produces a General-layout storage image
     directly). Those seams are only needed by M3's zero-copy NV12 tier, where they now belong.
 
+- **M3 — Windows MF GPU-resident zero-copy tier. ✅ DONE & hardware-verified (2026-07-01, RTX 4070 + C920).** See the
+  *Transport tiers* section for the as-built shape (advanced GPU video processing → ARGB32, D3D12-allocated
+  simultaneous-access targets, D3D11 `OpenSharedResource1` + `CopySubresourceRegion`, per-slot import-once — no keyed
+  mutex, no ycbcr, no host-memory round trip). `CameraChildNode` prefers this tier (adapter LUID from the D3D12 world
+  device, or from the Vulkan host for a bespoke LUID-matched allocator); the CPU tier remains the fallback and the
+  telemetry line names whichever engaged. Verified: `--validate-camera-gpu` pass; `world-camera.json` presents the live
+  pane via "(GPU zero-copy tier)" at native 640x480; world/child parity + all camera gates stay green.
+
 **Remaining:**
 
-- **M3 — Windows MF GPU-resident zero-copy tier.** `MF_SOURCE_READER_D3D_MANAGER` DXVA NV12 → one `CopyResource` into
-  the keyed-mutex ring → existing import path; NV12→RGB in-shader or VideoProcessor MFT. Success: per-frame transport =
-  one copy + mutex + convert, no queue drain; measured high-FPS at 1080p on RTX 4060-class HW via `PUCK_TIMING` counters.
-- **M4 — Format + robustness.** MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback), late-frame drop policy,
-  ring sizing, keyed-mutex timeout handling, device-unplug recovery through `OnDeviceLost`.
+- **M4 — Format + robustness.** MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback — largely subsumed by the
+  advanced-video-processing reader, needs a device to confirm), automatic re-open on device replug (both tiers currently
+  hold the last frame), ring-size tuning, and a `PUCK_TIMING` tier-throughput measurement at 1080p.
 - **M5 — Genlock (latency phase-align, decided).** Add the camera-arrival external-clock ingestion seam; feed arrival
   timestamps into the adaptive pacer's deadline re-anchor with a **PI loop filter on the camera-phase error** (full VRR
   preserved, sim untouched); reconcile the MF/QPC/present-timing clock domains; handle the DX-vs-Vulkan
