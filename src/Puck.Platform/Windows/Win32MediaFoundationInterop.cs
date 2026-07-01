@@ -19,6 +19,7 @@ internal static class MfInterop {
     public static Guid MF_MT_MAJOR_TYPE = new(g: "48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
     public static Guid MF_MT_SUBTYPE = new(g: "f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
     public static Guid MF_MT_FRAME_SIZE = new(g: "1652c33d-d6b2-4012-b834-72030849a37d");
+    public static Guid MF_MT_DEFAULT_STRIDE = new(g: "644b4e48-1e02-4516-b0eb-c01ca9d49ac6");
     public static Guid MFMediaType_Video = new(g: "73646976-0000-0010-8000-00aa00389b71");
     public static Guid MFVideoFormat_RGB32 = new(g: "00000016-0000-0010-8000-00aa00389b71");
     public static Guid MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING = new(g: "fb394f3d-ccf1-42ee-bbb3-f9b845d5681d");
@@ -121,7 +122,7 @@ internal interface IMFMediaType {
     [PreserveSig] int GetItemType();
     [PreserveSig] int CompareItem();
     [PreserveSig] int Compare();
-    [PreserveSig] int GetUINT32();
+    [PreserveSig] int GetUINT32(ref Guid guidKey, out uint punValue);
     [PreserveSig] int GetUINT64(ref Guid guidKey, out ulong punValue);
     [PreserveSig] int GetDouble();
     [PreserveSig] int GetGUID();
