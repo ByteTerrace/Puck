@@ -1,8 +1,13 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Puck.Abstractions;
+using Puck.DirectX;
+using Puck.DirectX.Apis;
+using Puck.DirectX.Interfaces;
 using Puck.Hosting;
 using Puck.Platform;
 using Puck.Scene;
+using Puck.Vulkan.Interfaces;
 
 namespace Puck.Demo;
 
@@ -37,6 +42,7 @@ internal sealed class CameraChildNode : IRenderNode {
     private readonly ReadOnlyMemory<byte> m_resampleBytecode;
     private readonly byte[] m_resamplePush = new byte[ResamplePushByteLength];
 
+    private DirectXComputeWorldDevice? m_allocatorDevice;
     private nint m_boundSourceView;
     private bool m_cameraChecked;
     private IGpuSurfaceUpload? m_cameraUpload;
@@ -44,6 +50,9 @@ internal sealed class CameraChildNode : IRenderNode {
     private uint m_cameraViewHeight;
     private uint m_cameraViewWidth;
     private ICameraCaptureSession? m_cameraSession;
+    private ICameraSharedCaptureSession? m_sharedSession;
+    private IGpuExportableStorageImage?[] m_sharedTargets = [];
+    private IGpuSurfaceImport?[] m_slotImports = [];
     private IGpuComputeCommandPool? m_commandPool;
     private IGpuComputeRecorder? m_computeRecorder;
     private IGpuDescriptorAllocator? m_descriptorAllocator;
@@ -115,7 +124,7 @@ internal sealed class CameraChildNode : IRenderNode {
         // frame since the last render and the output already holds it. The pump then renders at full rate between the
         // camera's own (~30 fps) arrivals instead of re-uploading every rendered frame. A resize clears m_outputInitialized
         // (via EnsureResources), forcing a re-render into the fresh output.
-        var cameraVersion = (m_cameraSession?.FrameVersion ?? 0L);
+        var cameraVersion = (m_sharedSession?.FrameVersion ?? m_cameraSession?.FrameVersion ?? 0L);
 
         if (m_outputInitialized && (cameraVersion == m_lastRenderedVersion)) {
             return CurrentSurface();
@@ -139,7 +148,9 @@ internal sealed class CameraChildNode : IRenderNode {
         );
     }
 
-    // Resolve the camera service once and open the default device; on failure the placeholder fills the slot.
+    // Resolve the camera service once and open the default device — the GPU-resident zero-copy tier first (frames
+    // never visit host memory), the CPU-upload tier as the correctness floor; on failure the placeholder fills the
+    // slot. The active tier is logged (the plan's tier telemetry).
     private void EnsureCamera() {
         if (m_cameraChecked) {
             return;
@@ -147,12 +158,20 @@ internal sealed class CameraChildNode : IRenderNode {
 
         m_cameraChecked = true;
 
+        if (m_cameraServices.GetService(serviceType: typeof(ICameraCaptureService)) is not ICameraCaptureService service || !service.IsSupported) {
+            Console.Out.WriteLine(value: "[camera] no capture backend for the viewport source; showing a placeholder.");
+
+            return;
+        }
+
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240) && TryOpenGpuTier(service: service)) {
+            return;
+        }
+
         var requestedWidth = ((m_requestedWidth > 0) ? m_requestedWidth : 640);
         var requestedHeight = ((m_requestedHeight > 0) ? m_requestedHeight : 480);
 
-        if ((m_cameraServices.GetService(serviceType: typeof(ICameraCaptureService)) is ICameraCaptureService service)
-            && service.IsSupported
-            && service.TryOpenDefault(requestedWidth: requestedWidth, requestedHeight: requestedHeight, session: out var session)) {
+        if (service.TryOpenDefault(requestedWidth: requestedWidth, requestedHeight: requestedHeight, session: out var session)) {
             m_cameraSession = session;
 
             Console.Out.WriteLine(value: $"[camera] viewport source '{session.Name}' {session.Width}x{session.Height} (CPU-upload tier).");
@@ -163,6 +182,98 @@ internal sealed class CameraChildNode : IRenderNode {
         Console.Out.WriteLine(value: "[camera] no capture device for the viewport source; showing a placeholder.");
     }
 
+    // The GPU-resident zero-copy tier: a Media Foundation GPU session converts frames to BGRA on the GPU and copies
+    // them into D3D12-allocated simultaneous-access shared targets; this node imports each target ONCE on the world
+    // device and, per camera frame, just rebinds the newest published slot's view as the resample source. The targets
+    // are allocated on the world device when it is Direct3D 12, or on a bespoke LUID-matched D3D12 device for a Vulkan
+    // world; either way they share the adapter, so the world-side import is the proven D3D12-handle path.
+    [SupportedOSPlatform("windows10.0.10240")]
+    private bool TryOpenGpuTier(ICameraCaptureService service) {
+        try {
+            long adapterLuid;
+            IGpuDeviceContext allocatorContext;
+
+            if (m_deviceContext is IDirectXDeviceContext directXWorld) {
+                adapterLuid = new DirectXNativeDeviceApi().GetAdapterLuid(deviceHandle: directXWorld.Device.Handle);
+                allocatorContext = m_deviceContext!;
+            } else if ((m_cameraServices.GetService(serviceType: typeof(IVulkanDeviceContext)) is IVulkanDeviceContext vulkanHost)
+                && (m_cameraServices.GetService(serviceType: typeof(IVulkanPhysicalDeviceApi)) is IVulkanPhysicalDeviceApi physicalDeviceApi)) {
+                adapterLuid = physicalDeviceApi.GetDeviceLuid(
+                    instanceHandle: vulkanHost.Instance.Handle,
+                    physicalDeviceHandle: vulkanHost.LogicalDevice.PhysicalDevice.Handle
+                );
+                m_allocatorDevice = new DirectXComputeWorldDevice(hostProvider: m_cameraServices);
+                allocatorContext = m_allocatorDevice.DeviceContext;
+            } else {
+                // No Direct3D 12 world device and no Vulkan host to LUID-match a bespoke allocator against (e.g. the
+                // reverse Vulkan-produce-on-DX-host path) — the CPU tier covers it.
+                return false;
+            }
+
+            if (!service.TryOpenSharedDefault(adapterLuid: adapterLuid, requestedWidth: m_requestedWidth, requestedHeight: m_requestedHeight, session: out var session)) {
+                ReleaseGpuTier();
+
+                return false;
+            }
+
+            const int RingSize = 3;
+
+            var factory = new DirectXGpuSurfaceExportFactory();
+
+            m_sharedSession = session;
+            m_sharedTargets = new IGpuExportableStorageImage?[RingSize];
+            m_slotImports = new IGpuSurfaceImport?[RingSize];
+
+            var handles = new nint[RingSize];
+
+            for (var index = 0; (index < RingSize); index++) {
+                m_sharedTargets[index] = factory.CreateSimultaneousAccessStorageImage(
+                    deviceContext: allocatorContext,
+                    format: GpuPixelFormat.B8G8R8A8Unorm,
+                    height: (uint)session.Height,
+                    width: (uint)session.Width
+                );
+                m_slotImports[index] = m_gpu!.SurfaceTransferFactory.CreateImport(deviceContext: m_deviceContext!);
+                handles[index] = m_sharedTargets[index]!.SharedHandle;
+            }
+
+            session.Start(sharedTargetHandles: handles);
+
+            Console.Out.WriteLine(value: $"[camera] viewport source '{session.Name}' {session.Width}x{session.Height} (GPU zero-copy tier).");
+
+            return true;
+        } catch (Exception exception) {
+            Console.Error.WriteLine(value: $"[camera] the GPU zero-copy tier failed to open ({exception.Message}); falling back to the CPU-upload tier.");
+            ReleaseGpuTier();
+
+            return false;
+        }
+    }
+
+    // GPU-tier teardown (open failure, device loss, dispose): stop the writer FIRST (the session's D3D11 device holds
+    // the targets open), then the world-device imports, then the targets and their allocator.
+    private void ReleaseGpuTier() {
+        m_sharedSession?.Dispose();
+        m_sharedSession = null;
+
+        foreach (var import in m_slotImports) {
+            import?.Dispose();
+        }
+
+        m_slotImports = [];
+
+        foreach (var target in m_sharedTargets) {
+            target?.Dispose();
+        }
+
+        m_sharedTargets = [];
+
+        if ((m_allocatorDevice is not null) && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
+            m_allocatorDevice.Dispose();
+            m_allocatorDevice = null;
+        }
+    }
+
     // Upload the newest camera frame (or the placeholder before the first frame), rebind the sampler if the source view
     // changed, and refresh the fit push constants for the current source dimensions.
     private void UpdateSource() {
@@ -170,7 +281,21 @@ internal sealed class CameraChildNode : IRenderNode {
         uint sourceWidth;
         uint sourceHeight;
 
-        if ((m_cameraSession is not null) && m_cameraSession.TryCapture(out var frame) && frame.IsCpuPixels) {
+        if ((m_sharedSession is not null) && (m_sharedSession.LatestSlot >= 0)) {
+            // The GPU zero-copy tier: sample the newest published shared target. The per-slot import is a cache hit
+            // after its first frame (the ring handles are stable), so steady state is at most a descriptor rebind.
+            var slot = m_sharedSession.LatestSlot;
+
+            source = m_slotImports[slot]!.Import(
+                deviceContext: m_deviceContext!,
+                format: GpuPixelFormat.B8G8R8A8Unorm,
+                height: (uint)m_sharedSession.Height,
+                sharedHandle: m_sharedTargets[slot]!.SharedHandle,
+                width: (uint)m_sharedSession.Width
+            );
+            sourceHeight = (uint)m_sharedSession.Height;
+            sourceWidth = (uint)m_sharedSession.Width;
+        } else if ((m_cameraSession is not null) && m_cameraSession.TryCapture(out var frame) && frame.IsCpuPixels) {
             m_cameraView = m_cameraUpload!.Upload(deviceContext: m_deviceContext!, pixels: frame.Pixels, width: frame.Width, height: frame.Height, format: GpuPixelFormat.B8G8R8A8Unorm);
             m_cameraViewHeight = frame.Height;
             m_cameraViewWidth = frame.Width;
@@ -319,8 +444,15 @@ internal sealed class CameraChildNode : IRenderNode {
 
     /// <inheritdoc/>
     public void OnDeviceLost() {
-        // The GPU resources belong to the (lost) world device; the next EnsureResources rebuilds them. The camera
-        // session is device-independent (CPU pixels), so it survives.
+        // The GPU resources belong to the (lost) world device; the next EnsureResources rebuilds them. A CPU-tier
+        // camera session is device-independent (CPU pixels), so it survives; the GPU tier's session/ring/imports all
+        // ride GPU devices, so tear the tier down and let the next frame re-open it (possibly landing on either tier).
+        if (m_sharedSession is not null) {
+            ReleaseGpuTier();
+
+            m_cameraChecked = false;
+        }
+
         m_resourcesReady = false;
         m_outputInitialized = false;
         m_boundSourceView = 0;
@@ -336,6 +468,9 @@ internal sealed class CameraChildNode : IRenderNode {
         }
 
         m_disposed = true;
+        // Stop the GPU tier's writer first (its D3D11 device holds the shared targets open), then drain the world
+        // device before releasing what it reads.
+        ReleaseGpuTier();
         m_deviceContext?.WaitIdle();
         m_cameraSession?.Dispose();
         m_cameraSession = null;
