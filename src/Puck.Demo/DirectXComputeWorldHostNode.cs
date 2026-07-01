@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions;
 using Puck.DirectX.Interfaces;
 using Puck.Hosting;
+using Puck.Scene;
 using Puck.SdfVm;
 
 namespace Puck.Demo;
@@ -34,8 +35,9 @@ internal sealed class DirectXComputeWorldHostNode : IRenderNode {
     /// <param name="capturePath">An optional PNG path; the first rendered frame is read back from the D3D12 device and written there.</param>
     /// <param name="width">The render width in pixels (defaults to 960).</param>
     /// <param name="height">The render height in pixels (defaults to 600).</param>
+    /// <param name="liveSources">The document's live-camera viewport slots (each becomes a <see cref="CameraChildNode"/>); null/empty for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="hostProvider"/> or <paramref name="frameSource"/> is <see langword="null"/>.</exception>
-    public DirectXComputeWorldHostNode(IServiceProvider hostProvider, bool withChild, ISdfFrameSource frameSource, string? capturePath = null, uint width = 960, uint height = 600) {
+    public DirectXComputeWorldHostNode(IServiceProvider hostProvider, bool withChild, ISdfFrameSource frameSource, string? capturePath = null, uint width = 960, uint height = 600, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null) {
         ArgumentNullException.ThrowIfNull(hostProvider);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -57,7 +59,7 @@ internal sealed class DirectXComputeWorldHostNode : IRenderNode {
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.dxil")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.dxil")),
             capturePath: capturePath,
-            children: WorldPaneChildren.Build(directX: true, frameSource: frameSource, serviceProvider: m_services, withChild: withChild),
+            children: WorldChildren.Build(cameraServices: hostProvider, directX: true, gpuServices: m_services, liveSources: liveSources, testChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.dxil")),
             frameSource: frameSource,
             height: height,

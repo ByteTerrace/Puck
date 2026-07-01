@@ -4,6 +4,7 @@ using Puck.Abstractions;
 using Puck.DirectX;
 using Puck.DirectX.Interfaces;
 using Puck.Hosting;
+using Puck.Scene;
 using Puck.SdfVm;
 using Puck.Vulkan;
 using Puck.Vulkan.Interfaces;
@@ -54,11 +55,12 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
     /// <param name="serviceProvider">The application service provider (resolves the Direct3D 12 host device and seeds the bespoke Vulkan producer).</param>
     /// <param name="frameSource">The data-driven scene/camera source to render.</param>
     /// <param name="withChild">Whether the bottom-right slot is a hosted <see cref="ChildSurfaceNode"/> instead of an SDF camera.</param>
+    /// <param name="liveSources">The document's live-camera viewport slots (each becomes a <see cref="CameraChildNode"/>); null/empty for none.</param>
     /// <param name="capturePath">An optional PNG path; the inner producer reads its first rendered frame back from the bespoke Vulkan device and writes it there.</param>
     /// <param name="width">The render width in pixels (defaults to 960).</param>
     /// <param name="height">The render height in pixels (defaults to 600).</param>
     /// <exception cref="ArgumentNullException"><paramref name="serviceProvider"/> or <paramref name="frameSource"/> is <see langword="null"/>.</exception>
-    public VulkanComputeWorldHostNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, bool withChild = false, string? capturePath = null, uint width = 960, uint height = 600) {
+    public VulkanComputeWorldHostNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, bool withChild = false, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null, string? capturePath = null, uint width = 960, uint height = 600) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -72,7 +74,7 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.spv")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.spv")),
             capturePath: capturePath,
-            children: WorldPaneChildren.Build(directX: false, frameSource: frameSource, serviceProvider: m_device.Services, withChild: withChild),
+            children: WorldChildren.Build(cameraServices: serviceProvider, directX: false, gpuServices: m_device.Services, liveSources: liveSources, testChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.spv")),
             createStorageImage: CreateReverseSharedImage,
             frameSource: frameSource,

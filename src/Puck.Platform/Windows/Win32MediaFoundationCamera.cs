@@ -48,7 +48,9 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
     private readonly LatestFrameBuffer m_latest = new();
     private readonly ManualResetEventSlim m_initDone = new(initialState: false);
     private readonly Thread m_thread;
+    private int m_defaultStride;
     private bool m_disposed;
+    private bool m_firstFrameLogged;
     private int m_height;
     private string? m_initError;
     private bool m_initOk;
@@ -217,6 +219,13 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
             throw new InvalidOperationException(message: $"the camera reported an invalid frame size ({m_width}x{m_height})");
         }
 
+        // The negotiated default stride's SIGN is the authoritative row orientation: a negative stride means the buffer
+        // is bottom-up (row 0 is the bottom of the image) — RGB32's GDI convention — which must be flipped to the
+        // top-down layout the CPU-upload compositor expects. Absent/zero: assume top-down (positive), report as such.
+        var strideKey = MfInterop.MF_MT_DEFAULT_STRIDE;
+
+        m_defaultStride = ((currentType.GetUINT32(guidKey: ref strideKey, punValue: out var rawStride) >= 0) ? (int)rawStride : 0);
+
         return reader;
     }
 
@@ -262,6 +271,7 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
                                 }
 
                                 Marshal.Copy(source: pointer, destination: scratch, startIndex: 0, length: (int)length);
+                                LogFirstFrame(length: (int)length);
                                 m_latest.Publish(pixels: scratch, width: m_width, height: m_height);
                             } finally {
                                 _ = buffer.Unlock();
@@ -275,6 +285,24 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
                 _ = Marshal.ReleaseComObject(o: sample);
             }
         }
+    }
+
+    // One-shot format telemetry (first frame only): reports the negotiated buffer length against the tightly-packed
+    // expectation (detects contiguous-buffer row padding) and the default stride's sign (row orientation). Both were the
+    // hardware bring-up unknowns; keeping the line makes a silent stride/padding surprise diagnosable on any future device
+    // (or platform). Hardware-confirmed on the C920: 640x480, no padding, stride +2560 (top-down) — the layout the
+    // CPU-upload compositor expects, so no per-frame flip or de-pad is needed.
+    private void LogFirstFrame(int length) {
+        if (m_firstFrameLogged) {
+            return;
+        }
+
+        m_firstFrameLogged = true;
+
+        var expected = (m_width * m_height * 4);
+        var orientation = (m_defaultStride < 0) ? "bottom-up" : ((m_defaultStride > 0) ? "top-down" : "unreported(assume top-down)");
+
+        Console.Out.WriteLine(value: $"[camera] first frame {m_width}x{m_height}: buffer {length} bytes (packed expects {expected}, {((length == expected) ? "no padding" : "PADDED/short")}); default stride {m_defaultStride} ({orientation}).");
     }
 
     private static void Check(int hr) {

@@ -72,8 +72,8 @@ public static class RunDocument {
         ArgumentNullException.ThrowIfNull(argument: viewports);
         ArgumentNullException.ThrowIfNull(argument: program);
 
-        var (cameras, regions, liveCameraSlots) = ViewportBuilder.Build(viewports: viewports);
+        var (cameras, regions) = ViewportBuilder.Build(viewports: viewports);
 
-        return new JsonSdfFrameSource(cameras: cameras, liveCameraSlots: liveCameraSlots, program: program, regions: regions);
+        return new JsonSdfFrameSource(cameras: cameras, program: program, regions: regions);
     }
 }

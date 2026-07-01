@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Cameras;
 using Puck.Compositing;
 
@@ -6,65 +7,72 @@ namespace Puck.Scene;
 /// <summary>
 /// Turns the validated <see cref="Viewport"/> list into the parallel <see cref="ICamera"/> + <see cref="NormalizedRect"/>
 /// arrays an <c>ISdfFrameSource</c> drives. Each camera DTO becomes its concrete engine camera (degrees converted to
-/// radians by the DTO), and each <c>[x, y, w, h]</c> region becomes a <see cref="NormalizedRect"/>.
+/// radians by the DTO), and each <c>[x, y, w, h]</c> region becomes a <see cref="NormalizedRect"/>. A live-capture
+/// (<see cref="LiveCameraSource"/>) slot builds a placeholder camera here — the host overrides that slot's rendered view
+/// with the imported camera surface — and is surfaced separately by <see cref="LiveSources"/>.
 /// </summary>
 public static class ViewportBuilder {
-    /// <summary>Builds the cameras, regions, and live-camera slots for a viewport list.</summary>
+    private static readonly IReadOnlyDictionary<int, LiveCameraSource> EmptyLiveSources = new Dictionary<int, LiveCameraSource>();
+
+    /// <summary>Builds the cameras and regions for a viewport list. A <see cref="LiveCameraSource"/> slot gets a
+    /// placeholder camera (its rendered view is overridden by the imported camera surface at composite).</summary>
     /// <param name="viewports">The validated viewport section.</param>
-    /// <returns>The parallel camera and region arrays (one entry per viewport), plus one <see cref="LiveCameraSlot"/>
-    /// per viewport whose source is a <see cref="LiveCameraViewportSource"/> — the slots the demo hosts a live-camera
-    /// producer node in (their <see cref="ICamera"/> entry is a placeholder whose SDF render is overwritten by that
-    /// node's surface, exactly as the child-surface slot is today).</returns>
+    /// <returns>The parallel camera and region arrays, one entry per viewport.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="viewports"/> is <see langword="null"/>.</exception>
-    public static (ICamera[] Cameras, NormalizedRect[] Regions, LiveCameraSlot[] LiveCameraSlots) Build(IReadOnlyList<Viewport> viewports) {
+    public static (ICamera[] Cameras, NormalizedRect[] Regions) Build(IReadOnlyList<Viewport> viewports) {
         ArgumentNullException.ThrowIfNull(argument: viewports);
 
         var cameras = new ICamera[viewports.Count];
-        var liveCameraSlots = new List<LiveCameraSlot>();
         var regions = new NormalizedRect[viewports.Count];
 
         for (var index = 0; (index < viewports.Count); index++) {
             var viewport = viewports[index];
             var region = viewport.Region;
 
+            cameras[index] = viewport.Source switch {
+                CameraDocument camera => camera.Build(),
+                // A live-capture slot still renders an SDF view (a placeholder camera keeps the frame well-formed); the
+                // host composites the imported camera surface over it — the camera's parameters are never seen.
+                LiveCameraSource => PlaceholderCamera(),
+                _ => throw new NotSupportedException(message: $"viewport[{index}] source '{viewport.Source?.GetType().Name ?? "null"}' is not a buildable viewport source"),
+            };
             regions[index] = new NormalizedRect(
                 Height: region[3],
                 Width: region[2],
                 X: region[0],
                 Y: region[1]
             );
+        }
 
-            // A virtual SDF camera builds its concrete engine camera. A live-camera source builds no camera — a
-            // producer node fills its pane instead; it still gets a PLACEHOLDER camera so the per-view arrays stay
-            // parallel (its SDF render is discarded, overwritten by the hosted node's surface, like the child slot).
-            switch (viewport.Source) {
-                case CameraDocument camera:
-                    cameras[index] = camera.Build();
+        return (cameras, regions);
+    }
 
-                    break;
-                case LiveCameraViewportSource liveCamera:
-                    cameras[index] = CreatePlaceholderCamera();
-                    liveCameraSlots.Add(item: new LiveCameraSlot(PixelSize: liveCamera.PixelSize, Quantize: liveCamera.Quantize, Slot: index));
+    /// <summary>Extracts the live-capture slots (viewport index → its <see cref="LiveCameraSource"/>) so the host can
+    /// build a per-slot camera child node. Empty when no viewport uses a live camera.</summary>
+    /// <param name="viewports">The validated viewport section.</param>
+    /// <returns>A slot → source map (empty if none).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="viewports"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyDictionary<int, LiveCameraSource> LiveSources(IReadOnlyList<Viewport> viewports) {
+        ArgumentNullException.ThrowIfNull(argument: viewports);
 
-                    break;
-                default:
-                    throw new NotSupportedException(message: $"viewport[{index}] source '{viewport.Source?.GetType().Name ?? "null"}' is not a supported ViewportSource kind");
+        Dictionary<int, LiveCameraSource>? live = null;
+
+        for (var index = 0; (index < viewports.Count); index++) {
+            if (viewports[index].Source is LiveCameraSource source) {
+                (live ??= []).Add(key: index, value: source);
             }
         }
 
-        return (cameras, regions, liveCameraSlots.ToArray());
+        return (live ?? EmptyLiveSources);
     }
 
-    // A benign default orbit for a live-camera slot: its rendered output is never shown (the hosted live-camera node's
-    // surface replaces it), so the parameters only need to be valid, not meaningful.
-    private static ICamera CreatePlaceholderCamera() {
+    // A benign stand-in camera for a live-capture slot; never visible (the imported camera surface overrides the slot).
+    private static ICamera PlaceholderCamera() {
         return new OrbitCamera {
-            AngularSpeedRadiansPerSecond = 0f,
-            AzimuthRadians = 0f,
-            FieldOfViewRadians = (60f * (MathF.PI / 180f)),
-            Height = 1.6f,
+            FieldOfViewRadians = (MathF.PI / 3f),
+            Height = 2f,
             Radius = 5f,
-            Target = System.Numerics.Vector3.Zero,
+            Target = Vector3.Zero,
         };
     }
 }

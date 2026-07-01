@@ -47,6 +47,7 @@ internal static class GraphBuilder {
                 capturePath: capture,
                 frameSource: RunDocument.CreateFrameSource(document: document),
                 height: height,
+                liveSources: ViewportBuilder.LiveSources(viewports: document.Viewports),
                 onDirectX: hostsOnDirectX,
                 produceBackend: produce,
                 serviceProvider: serviceProvider,

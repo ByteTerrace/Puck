@@ -320,7 +320,7 @@ internal static class DemoRootNode {
     // Picks the live compute-world root node: hosted on Direct3D 12 (same-device on the D3D12 window, or — with
     // produce:"vulkan" — a bespoke Vulkan producer whose content the D3D12 host imports zero-copy) when requested,
     // otherwise the Vulkan-hosted path (same-device on Vulkan, or D3D12-produced + Vulkan-imported by default).
-    internal static IRenderNode CreateWorldRootNode(IServiceProvider serviceProvider, bool withChild, bool onDirectX, string? produceBackend, string? capturePath, ISdfFrameSource frameSource, uint width = 960, uint height = 600) {
+    internal static IRenderNode CreateWorldRootNode(IServiceProvider serviceProvider, bool withChild, bool onDirectX, string? produceBackend, string? capturePath, ISdfFrameSource frameSource, uint width = 960, uint height = 600, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null) {
         if (
             onDirectX &&
             OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)
@@ -329,14 +329,15 @@ internal static class DemoRootNode {
             // producer renders into a host-owned shared image the D3D12 window blits. produce omitted/anything else
             // runs the world same-device on Direct3D 12 (#2).
             return string.Equals(produceBackend, "vulkan", StringComparison.OrdinalIgnoreCase)
-                ? new VulkanComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, serviceProvider: serviceProvider, width: width, withChild: withChild)
-                : new DirectXComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, hostProvider: serviceProvider, width: width, withChild: withChild);
+                ? new VulkanComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, liveSources: liveSources, serviceProvider: serviceProvider, width: width, withChild: withChild)
+                : new DirectXComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, hostProvider: serviceProvider, liveSources: liveSources, width: width, withChild: withChild);
         }
 
         return CreateWorldNode(
             capturePath: capturePath,
             frameSource: frameSource,
             height: height,
+            liveSources: liveSources,
             produceBackend: produceBackend,
             serviceProvider: serviceProvider,
             width: width,
@@ -348,19 +349,19 @@ internal static class DemoRootNode {
     // and the Vulkan host imports the shared result zero-copy. --produce vulkan (or a non-Windows OS, where there is
     // no Direct3D 12) runs it same-device on the Vulkan host instead. With a hosted child, the bottom-right viewport
     // shows that child node's surface instead of an SDF camera.
-    internal static IRenderNode CreateWorldNode(IServiceProvider serviceProvider, string? produceBackend, string? capturePath, bool withChild, ISdfFrameSource frameSource, uint width = 960, uint height = 600) {
+    internal static IRenderNode CreateWorldNode(IServiceProvider serviceProvider, string? produceBackend, string? capturePath, bool withChild, ISdfFrameSource frameSource, uint width = 960, uint height = 600, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null) {
         if (
             OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240) &&
             !string.Equals(produceBackend, "vulkan", StringComparison.OrdinalIgnoreCase)
         ) {
-            return new CrossBackendComputeWorldNode(capturePath: capturePath, frameSource: frameSource, height: height, serviceProvider: serviceProvider, width: width, withChild: withChild);
+            return new CrossBackendComputeWorldNode(capturePath: capturePath, frameSource: frameSource, height: height, liveSources: liveSources, serviceProvider: serviceProvider, width: width, withChild: withChild);
         }
 
         return new WorldProducerNode(
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.spv")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.spv")),
             capturePath: capturePath,
-            children: WorldPaneChildren.Build(directX: false, frameSource: frameSource, serviceProvider: serviceProvider, withChild: withChild),
+            children: WorldChildren.Build(cameraServices: serviceProvider, directX: false, gpuServices: serviceProvider, liveSources: liveSources, testChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.spv")),
             frameSource: frameSource,
             height: height,

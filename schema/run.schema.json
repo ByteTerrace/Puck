@@ -506,10 +506,25 @@
                   "$type": {
                     "const": "live-camera"
                   },
-                  "pixelSize": {
+                  "deviceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "fit": {
+                    "enum": [
+                      "Sample",
+                      "Fill"
+                    ]
+                  },
+                  "requestedFps": {
                     "type": "integer"
                   },
-                  "quantize": {
+                  "requestedHeight": {
+                    "type": "integer"
+                  },
+                  "requestedWidth": {
                     "type": "integer"
                   }
                 },

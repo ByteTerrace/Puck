@@ -22,11 +22,9 @@ public sealed class JsonSdfFrameSource : ISdfFrameSource {
     /// <param name="program">The prebuilt scene program.</param>
     /// <param name="cameras">The per-viewport cameras, parallel to <paramref name="regions"/>.</param>
     /// <param name="regions">The per-viewport normalized regions, parallel to <paramref name="cameras"/>.</param>
-    /// <param name="liveCameraSlots">The viewports whose source is a live hardware camera (empty if none); a producer
-    /// node fills those panes and their placeholder SDF render is discarded.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The camera and region counts differ, or there are no viewports.</exception>
-    public JsonSdfFrameSource(SdfProgram program, ICamera[] cameras, NormalizedRect[] regions, IReadOnlyList<LiveCameraSlot>? liveCameraSlots = null) {
+    public JsonSdfFrameSource(SdfProgram program, ICamera[] cameras, NormalizedRect[] regions) {
         ArgumentNullException.ThrowIfNull(argument: cameras);
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: regions);
@@ -40,14 +38,9 @@ public sealed class JsonSdfFrameSource : ISdfFrameSource {
         }
 
         m_cameras = cameras;
-        LiveCameraSlots = (liveCameraSlots ?? []);
         m_program = program;
         m_regions = regions;
     }
-
-    /// <summary>The viewports whose source is a live hardware camera — the slots a host builds a live-camera producer
-    /// node in (their per-view camera is a discarded placeholder). Empty for an all-SDF-camera document.</summary>
-    public IReadOnlyList<LiveCameraSlot> LiveCameraSlots { get; }
 
     /// <inheritdoc/>
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
