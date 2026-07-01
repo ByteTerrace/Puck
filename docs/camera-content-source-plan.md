@@ -100,7 +100,10 @@ Fit: sample|fill }`.
   of RGB32 CPU pixels. Resources are reused, but the path serializes per frame (`vkQueueWaitIdle` /
   `WaitForGpu(INFINITE)`), which caps FPS. It must (a) emit a **tier-telemetry** signal so a silent fall-to-slow (e.g. a
   DXVA→software / LUID-mismatch fallback) is diagnosable, and (b) eventually get a staging ring + fence pipelining. Its
-  advertised framerate is honestly stated as a floor.
+  advertised framerate is honestly stated as a floor. **Implemented mitigation:** `CameraChildNode` uploads + resamples
+  only when the device delivers a NEW frame (a monotonic `ICameraCaptureSession.FrameVersion`); on unchanged frames it
+  reuses the persistent output and does no submit, so the per-frame serialization happens at the camera's own rate
+  (~30 fps), not the render rate — the pump renders freely between arrivals.
 
 ### SDF/effects consumption (M1c)
 
@@ -165,7 +168,9 @@ thread — so the phase math is firmer on DX and needs a clock-domain reconcilia
   `+2560`) and **tightly packed** (buffer = W·H·4, no row padding), and MF `RGB32` memory order (B,G,R,X) matches
   `B8G8R8A8Unorm` (the blit forces alpha to 1.0, so the undefined X byte is irrelevant). A one-shot format-telemetry line
   (`LogFirstFrame`) reports negotiated size, buffer length vs the packed expectation, and stride sign, so a future
-  device/platform that pads or delivers bottom-up is diagnosable immediately.
+  device/platform that pads or delivers bottom-up is diagnosable immediately. A repeatable bring-up gate
+  `--validate-camera-live` (`CameraLiveProbeNode`) opens the default device, polls until a frame arrives, and dumps
+  `artifacts/camera-live.png` — 0 = pass/skip (no device is lenient), 2 = infra-fail.
 - **M1c — Sampled + per-viewport first-class (hardware-verified).** A live camera is now an authorable per-viewport
   document source, sampled into the SDF world compositor. Chain:
   - **Document layer.** `LiveCameraSource : ViewportSource` (`$type "live-camera"`, `src/Puck.Scene/LiveCameraSource.cs`)
