@@ -5,9 +5,11 @@ tier** — done and hardware-verified. A run document can declare `viewports[i].
 "fit": "fill" }` and the live C920 feed renders into that viewport slot, sampled by the SDF world compositor, alongside
 SDF-camera viewports (see `docs/examples/world-camera.json`) — with frames converted to BGRA on the GPU and shared into
 the world device without ever visiting host memory (M3; the CPU-upload tier remains the instrumented fallback). The
-document seam, zero-copy keystone, live `--camera` node, Media Foundation capture (both tiers), and the per-viewport
-sampled integration are all in. Remaining work: **M4** robustness extras, **M5** genlock (latency phase-align, decided),
-**M6** cross-platform verticals.
+document seam, zero-copy keystone, live `--camera` node, Media Foundation capture (both tiers), the per-viewport
+sampled integration, **M4** robustness (replug re-open; MJPEG confirmed subsumed — 1080p passes on the C920), and
+**M5** genlock (latency phase-align: the arrival seam + PI grid-phase aligner, verified deterministically by
+`--validate-genlock`; live convergence needs a true VRR panel) are all in. Remaining work: **M6** cross-platform
+verticals.
 
 ## Vision
 
@@ -212,17 +214,32 @@ thread — so the phase math is firmer on DX and needs a clock-domain reconcilia
   telemetry line names whichever engaged. Verified: `--validate-camera-gpu` pass; `world-camera.json` presents the live
   pane via "(GPU zero-copy tier)" at native 640x480; world/child parity + all camera gates stay green.
 
-**Remaining:**
+- **M4 — Format + robustness. ✅ DONE & hardware-verified (2026-07-01).** **MJPEG confirmed subsumed** by the
+  advanced-processing reader: `--validate-camera-gpu` honors `PUCK_CAMERA_GPU_SIZE=WxH`, and **1920x1080 passes on the
+  C920** — a resolution that sensor only serves via compressed modes, so the GPU pipeline decoded MJPEG/H.264 +
+  converted + delivered 1080p GPU-resident frames end to end. **Replug recovery**: both session seams expose `IsEnded`
+  (the grabber flags a permanently stopped feed); `CameraChildNode.MaintainCamera` tears the ended tier down and
+  re-opens after a ~600-frame cooldown — a replugged camera comes back without a restart, a failed open retries on the
+  same cadence, and the last shown frame persists while disconnected (never a black pane).
+- **M5 — Genlock (latency phase-align). ✅ DONE; control law verified deterministically, live convergence is
+  display-gated.** As built: `ExternalPresentClock` (Puck.Abstractions) is the arrival-ingestion seam; both capture
+  tiers stamp arrivals with `Stopwatch` **on the grabber thread at the publish site** — same QPC domain as the pacer, so
+  the MF-100ns / present-timing clock-domain reconciliation the plan feared never arises (and the DX-vs-Vulkan
+  scanout-timestamp asymmetry stays where it was: inside the existing present re-anchor, which genlock slews rather than
+  replaces). `GenlockPhaseAligner` (Puck.Launcher) estimates the producer period from version-normalized arrival deltas
+  and nudges the **deadline grid's phase** (error mod `renderPeriod` — a camera-period target would demand rate-matching,
+  which the plan forbids) through a PI filter bounded to `renderPeriod/16` per frame; stale feeds freeze it,
+  `PUCK_GENLOCK=0` disables it, `PUCK_PRESENT_TIMING=1` logs the mean |phase error|. `CameraChildNode` forwards each new
+  frame's arrival (+ version). **Verification:** `--validate-genlock`, a pure-CPU deterministic gate simulating the
+  design-target regime (a 240 Hz grid whose presents follow the deadline — i.e. VRR — vs ~29.9 Hz jittered arrivals):
+  aligned mean 0.98 ms vs the 1.04 ms guard, spread collapsed 1.19 → 0.334 ms (the 0.289 ms jitter floor — the beat
+  sweep is gone), max nudge 0.124 ms inside the VRR-safe bound. Live on the dev machine the controller runs and is
+  harmless (bounded nudges; kill switch, world/child parity, and mini-action sim determinism all verified) but full live
+  convergence needs a display whose scanout follows presents: this session's is a fixed 32 Hz remote scanout, which
+  quantizes presents to an immovable vblank grid regardless of law. Run `world-camera.json` with
+  `PUCK_PRESENT_TIMING=1` on a true VRR panel to watch the live phase error settle.
 
-- **M4 — Format + robustness.** MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback — largely subsumed by the
-  advanced-video-processing reader, needs a device to confirm), automatic re-open on device replug (both tiers currently
-  hold the last frame), ring-size tuning, and a `PUCK_TIMING` tier-throughput measurement at 1080p.
-- **M5 — Genlock (latency phase-align, decided).** Add the camera-arrival external-clock ingestion seam; feed arrival
-  timestamps into the adaptive pacer's deadline re-anchor with a **PI loop filter on the camera-phase error** (full VRR
-  preserved, sim untouched); reconcile the MF/QPC/present-timing clock domains; handle the DX-vs-Vulkan
-  scanout-timestamp asymmetry (bias off DX `SyncQPCTime`; coarser correction on Vulkan). Not in scope: the reserved
-  DX-only fixed-harmonic PLL (measurement-gated future step). Success: measured camera-to-photon latency drops and holds
-  stable via `PUCK_TIMING`, with no VRR-rate or sim-determinism regression.
+**Remaining:**
 - **M6 — Cross-platform verticals.** Linux V4L2: `VIDIOC_EXPBUF` dma-buf fd → `VkImportMemoryFdInfoKHR` (`DMA_BUF_BIT_EXT`)
   + DRM format modifier + ycbcr (Vulkan-only). macOS AVFoundation: IOSurface-backed `CVPixelBuffer` → `CVMetalTextureCache`
   (native Metal) or `VK_EXT_metal_objects` (MoltenVK). Both slot into the same `ICameraCaptureService` / `LiveCameraNode`
