@@ -11,6 +11,7 @@ namespace Puck.Scene;
 /// </summary>
 [JsonDerivedType(typeof(OrbitCameraDocument), typeDiscriminator: "orbit")]
 [JsonDerivedType(typeof(PerspectiveCameraDocument), typeDiscriminator: "perspective")]
+[JsonDerivedType(typeof(LiveCameraSource), typeDiscriminator: "live-camera")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ViewportSource {
     internal abstract void Validate(string path, ValidationErrors errors);

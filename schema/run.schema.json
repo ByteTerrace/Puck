@@ -500,6 +500,35 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "$type": {
+                    "const": "live-camera"
+                  },
+                  "deviceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "fit": {
+                    "enum": [
+                      "Sample",
+                      "Fill"
+                    ]
+                  },
+                  "requestedFps": {
+                    "type": "integer"
+                  },
+                  "requestedHeight": {
+                    "type": "integer"
+                  },
+                  "requestedWidth": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
               }
             ]
           },
