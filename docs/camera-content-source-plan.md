@@ -28,9 +28,11 @@ import, is sampled by an SDF/effects stage, and the present phase-locks to camer
 - **Full per-viewport `ViewportSource` — schema break accepted.** `Viewport.Camera` becomes `Viewport.Source`, an
   abstract polymorphic record. Breaking a strict (`[JsonUnmappedMemberHandling(Disallow)]`) leaf record and migrating
   every document is accepted: it is the only thing that makes a camera interchangeable with a viewport source.
-- **Genlock to the camera — phase-lock, not rate-lock.** The render loop phase-locks to camera arrival while keeping
-  full VRR rate (see *Genlock*). The specific flavor (latency-phase vs harmonic-PLL) is the one open design fork,
-  resolved when we reach the pacer work.
+- **Genlock to the camera — latency phase-align, full VRR (flavor DECIDED).** The render loop keeps rendering at free
+  VRR and biases the present deadline toward each camera arrival, smoothed by a light PI loop filter on the phase error —
+  NOT a fixed-harmonic rate-lock (see *Genlock*). Chosen because it preserves the VRR mandate and the deterministic sim,
+  extends the shipped adaptive pacer rather than adding a new control system, and tolerates the MF/Vulkan clock jitter a
+  tight lock could not. A fixed-harmonic PLL is reserved as a DX-only, measurement-gated future step, not the M5 baseline.
 - **Zero-copy is the high-FPS path; CPU upload is a correctness floor.** The shared-handle import layer is the target;
   the CPU-upload path is an instrumented fallback, never the silent default.
 - **Windows first (Media Foundation), cross-platform seam designed up front.** Linux (V4L2) and macOS (AVFoundation)
@@ -106,17 +108,31 @@ The camera surface is bound as a sampled texture exactly like `ResampleNode`: a 
 binding + `CreateSampler` + `DescriptorAllocator.WriteCombinedImageSampler`, with the surface left **ShaderReadOnly** for
 that consumer. The NV12 case threads a `VkSamplerYcbcrConversion` through the descriptor allocator (new plumbing).
 
-### Genlock (deferred flavor; principle locked; M5)
+### Genlock (flavor DECIDED: latency phase-align, PI-filtered, full VRR; M5)
 
 Genlock means phase-locking so a fresh camera frame reaches photons with minimum latency while the engine keeps
-rendering at full VRR rate — **not** rate-locking the engine to a 30/60 fps camera. Two candidate flavors:
+rendering at full VRR rate — **not** rate-locking the engine to a 30/60 fps camera.
 
-- **Latency phase-align** — keep full render rate; bias the present deadline so a present fires ASAP after each camera
-  arrival.
-- **Harmonic / PLL lock** — render at a fixed integer multiple of camera rate, with a PLL slewing render phase to track
-  the camera's free-running crystal. Most Puck-native (camera arrivals land on known render boundaries) but more work.
+**Decision (latency phase-align).** Keep rendering at free VRR and bias the present deadline toward each camera arrival,
+driven by a **light PI loop filter on the camera-phase error** (not a naive per-arrival jerk — the PI filter steals the
+PLL's phase *stability* without its rate-lock or lock-loss failure modes). Rationale over a harmonic PLL:
+- **Preserves the VRR mandate** — a fixed-harmonic lock pins the render rate to a multiple of the camera *below* panel
+  max, abandoning the shipped VRR closed loop; phase-align keeps the full free rate.
+- **Determinism-clean** — it perturbs only the present/pacing layer (already wall-clock), leaving the 50400-tick
+  fixed-point sim + snapshot replay untouched. (The PLL's "Puck-native" edge is clean *timing structure* vs the camera,
+  not sim reproducibility, which neither approach changes.)
+- **Incremental, not a new control system** — it extends the adaptive pacer's existing deadline re-anchor with one
+  camera term, rather than adding a phase detector + loop + lock acquisition/loss + tuning.
+- **Tolerates the clock jitter** — a coarse PI nudge survives MF's 100 ns worker-thread timestamps and Vulkan's imprecise
+  scanout clock; a tight lock would hunt on them.
 
-Either way it adds a **new external-clock ingestion seam** feeding camera arrival timestamps into
+**Reserved (not the baseline): a fixed-harmonic PLL**, DX-only and behind a **measurement gate** — pursue it only if
+`PUCK_TIMING` shows phase-wander is the dominant latency term a lock would remove AND a use case justifies trading free
+VRR for zero camera-beat (latency-critical AR-style, camera-as-primary-content). It would lock to DirectX's
+`GetFrameStatistics.SyncQPCTime` (Vulkan's present-timing clock isn't clean enough). The arrival-timestamp ingestion seam
++ phase detector built for latency-align is ~80% of the PLL substrate, so nothing is wasted if it is ever needed.
+
+The chosen path still adds a **new external-clock ingestion seam** feeding camera arrival timestamps into
 `LauncherWindowHostedService.ResolveRenderPeriod` / the deadline re-anchor logic (the loop is internally clocked today
 and consumes only present timing) — a **three-clock system** (sim / display VRR / camera). Clock-domain asymmetry:
 DirectX exposes a true scanout timestamp (`GetFrameStatistics.SyncQPCTime`), but the Vulkan present-timing value is not
@@ -182,8 +198,12 @@ thread — so the phase math is firmer on DX and needs a clock-domain reconcilia
   one copy + mutex + convert, no queue drain; measured high-FPS at 1080p on RTX 4060-class HW via `PUCK_TIMING` counters.
 - **M4 — Format + robustness.** MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback), late-frame drop policy,
   ring sizing, keyed-mutex timeout handling, device-unplug recovery through `OnDeviceLost`.
-- **M5 — Genlock.** Resolve the flavor fork; add the external-clock ingestion seam; reconcile the MF/QPC/present-timing
-  clock domains; handle the DX-vs-Vulkan scanout-timestamp asymmetry.
+- **M5 — Genlock (latency phase-align, decided).** Add the camera-arrival external-clock ingestion seam; feed arrival
+  timestamps into the adaptive pacer's deadline re-anchor with a **PI loop filter on the camera-phase error** (full VRR
+  preserved, sim untouched); reconcile the MF/QPC/present-timing clock domains; handle the DX-vs-Vulkan
+  scanout-timestamp asymmetry (bias off DX `SyncQPCTime`; coarser correction on Vulkan). Not in scope: the reserved
+  DX-only fixed-harmonic PLL (measurement-gated future step). Success: measured camera-to-photon latency drops and holds
+  stable via `PUCK_TIMING`, with no VRR-rate or sim-determinism regression.
 - **M6 — Cross-platform verticals.** Linux V4L2: `VIDIOC_EXPBUF` dma-buf fd → `VkImportMemoryFdInfoKHR` (`DMA_BUF_BIT_EXT`)
   + DRM format modifier + ycbcr (Vulkan-only). macOS AVFoundation: IOSurface-backed `CVPixelBuffer` → `CVMetalTextureCache`
   (native Metal) or `VK_EXT_metal_objects` (MoltenVK). Both slot into the same `ICameraCaptureService` / `LiveCameraNode`
@@ -192,7 +212,8 @@ thread — so the phase math is firmer on DX and needs a clock-domain reconcilia
 
 ## Open items & gotchas
 
-- **Genlock flavor** (M5): latency phase-align vs harmonic/PLL lock.
+- ~~**Genlock flavor** (M5): latency phase-align vs harmonic/PLL lock.~~ **DECIDED: latency phase-align (PI-filtered,
+  full VRR); fixed-harmonic PLL reserved DX-only behind a measurement gate.** See *Genlock* + M5.
 - **Cross-process / cross-adapter camera is out of scope.** The zero-copy ordering assumes an in-process, same-adapter
   producer; a foreign-process/adapter camera would need a shared-fence handshake that does not exist.
 - **One unifying content-source host abstraction** across `WorldProducerNode` (slot-dict) and `ViewportCompositorNode`
