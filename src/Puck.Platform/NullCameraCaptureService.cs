@@ -15,4 +15,11 @@ public sealed class NullCameraCaptureService : ICameraCaptureService {
 
         return false;
     }
+
+    /// <inheritdoc/>
+    public bool TryOpenSharedDefault(long adapterLuid, int requestedWidth, int requestedHeight, [NotNullWhen(true)] out ICameraSharedCaptureSession? session) {
+        session = null;
+
+        return false;
+    }
 }

@@ -38,6 +38,25 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
             return false;
         }
     }
+
+    /// <inheritdoc/>
+    public bool TryOpenSharedDefault(long adapterLuid, int requestedWidth, int requestedHeight, [NotNullWhen(true)] out ICameraSharedCaptureSession? session) {
+        session = null;
+
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
+            return false;
+        }
+
+        try {
+            session = new Win32MediaFoundationSharedCameraSession(adapterLuid: adapterLuid, requestedWidth: requestedWidth, requestedHeight: requestedHeight);
+
+            return true;
+        } catch (Exception exception) {
+            Console.Error.WriteLine(value: $"[camera] Media Foundation GPU-tier open failed: {exception.Message}");
+
+            return false;
+        }
+    }
 }
 
 /// <summary>The live Media Foundation session: a dedicated MTA grabber thread owns all Media Foundation state (startup,

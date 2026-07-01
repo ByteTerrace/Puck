@@ -29,4 +29,22 @@ public sealed class DirectXGpuSurfaceExportFactory : IGpuSurfaceExportFactory {
             height: height,
             width: width
         );
+
+    /// <summary>Creates an exportable storage image whose shared handle another API family can open — with
+    /// <c>ALLOW_SIMULTANEOUS_ACCESS</c>, so a Direct3D 11 device (e.g. Media Foundation's camera decode device) can
+    /// open and write it while this device merely owns the allocation. Not part of the neutral interface: the caller is
+    /// Windows-specific by construction.</summary>
+    /// <param name="deviceContext">The Direct3D 12 device context that allocates the texture.</param>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <param name="format">The neutral pixel format (a <see cref="GpuPixelFormat"/> constant).</param>
+    /// <returns>The exportable image (its <see cref="IGpuExportableStorageImage.SharedHandle"/> is the cross-API handle).</returns>
+    public IGpuExportableStorageImage CreateSimultaneousAccessStorageImage(IGpuDeviceContext deviceContext, uint width, uint height, uint format) =>
+        new DirectXGpuExportableStorageImage(
+            deviceContext: (IDirectXDeviceContext)deviceContext,
+            format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
+            height: height,
+            simultaneousAccess: true,
+            width: width
+        );
 }

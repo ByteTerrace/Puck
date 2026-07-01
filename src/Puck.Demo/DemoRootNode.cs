@@ -174,6 +174,7 @@ internal static class DemoRootNode {
             "capture" => new CaptureValidationNode(result: result, serviceProvider: serviceProvider),
             "camera" => new CameraValidationNode(result: result, serviceProvider: serviceProvider),
             "camera-live" => new CameraLiveProbeNode(result: result, serviceProvider: serviceProvider),
+            "camera-gpu" => new CameraGpuValidationNode(result: result, serviceProvider: serviceProvider),
             "mini-action" => new MiniAction.MiniActionDeterminismNode(result: result),
             "determinism" => new Replay.DeterminismGateNode(result: result),
             "cli-determinism" => new Replay.CliDeterminismGateNode(result: result),

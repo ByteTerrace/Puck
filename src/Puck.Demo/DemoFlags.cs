@@ -50,6 +50,8 @@ internal sealed record DemoFlags {
     public required bool ValidateCamera { get; init; }
     /// <summary>The <c>--validate-camera-live</c> real-webcam hardware bring-up gate (opens the default device and dumps a frame).</summary>
     public required bool ValidateCameraLive { get; init; }
+    /// <summary>The <c>--validate-camera-gpu</c> GPU-resident zero-copy camera tier gate (DXVA → shared targets → Vulkan import).</summary>
+    public required bool ValidateCameraGpu { get; init; }
     /// <summary>The <c>--validate-world</c> cross-backend compute-world parity gate.</summary>
     public required bool ValidateWorld { get; init; }
     /// <summary>The <c>--validate-world-child</c> compute-world parity gate with a hosted child viewport.</summary>

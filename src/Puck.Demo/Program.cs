@@ -92,6 +92,9 @@ var cameraOption = new Option<bool>(name: "--camera") {
 var validateCameraLiveOption = new Option<bool>(name: "--validate-camera-live") {
     Description = "Live-camera hardware bring-up gate: opens the real default webcam through Media Foundation, polls until a frame arrives, and writes artifacts/camera-live.png (so RGB32 orientation/content can be verified). Lenient about the environment (no device/privacy-blocked yields skip); exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
 };
+var validateCameraGpuOption = new Option<bool>(name: "--validate-camera-gpu") {
+    Description = "GPU-resident zero-copy camera gate (the M3 tier): opens the real webcam with a Media Foundation D3D manager so DXVA converts frames to ARGB32 on-GPU, copies them into D3D12-allocated simultaneous-access shared targets on a D3D11 decode device, then Vulkan-imports the latest target and reads it back — no frame ever visits host memory — writing artifacts/camera-gpu.png. Exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
+};
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
     Description = "With --validate-world, renders a fuzz-generated SDF scene program (deterministic from this seed, identical on both backends) instead of the showcase — one cross-backend differential-fuzzing iteration. A negative value (default) disables fuzzing.",
@@ -142,6 +145,7 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validateCaptureOption,
     validateCameraOption,
     validateCameraLiveOption,
+    validateCameraGpuOption,
     cameraOption,
     validateWorldOption,
     validateWorldChildOption,
@@ -197,6 +201,7 @@ var runDocument = (runPath is not null)
         ValidateCapture = parseResult.GetValue(validateCaptureOption),
         ValidateCamera = parseResult.GetValue(validateCameraOption),
         ValidateCameraLive = parseResult.GetValue(validateCameraLiveOption),
+        ValidateCameraGpu = parseResult.GetValue(validateCameraGpuOption),
         ValidateWorld = parseResult.GetValue(validateWorldOption),
         ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
         World = parseResult.GetValue(worldOption),

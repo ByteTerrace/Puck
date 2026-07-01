@@ -21,7 +21,10 @@ internal static class MfInterop {
     public static Guid MF_MT_FRAME_SIZE = new(g: "1652c33d-d6b2-4012-b834-72030849a37d");
     public static Guid MF_MT_DEFAULT_STRIDE = new(g: "644b4e48-1e02-4516-b0eb-c01ca9d49ac6");
     public static Guid MFMediaType_Video = new(g: "73646976-0000-0010-8000-00aa00389b71");
+    public static Guid MFVideoFormat_ARGB32 = new(g: "00000015-0000-0010-8000-00aa00389b71");
     public static Guid MFVideoFormat_RGB32 = new(g: "00000016-0000-0010-8000-00aa00389b71");
+    public static Guid MF_SOURCE_READER_D3D_MANAGER = new(g: "ec822da2-e1e9-4b29-a0d8-563c719f5269");
+    public static Guid MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING = new(g: "0f81da2c-b537-4672-a8b2-a681b17307a3");
     public static Guid MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING = new(g: "fb394f3d-ccf1-42ee-bbb3-f9b845d5681d");
 
     [DllImport("Mfplat.dll")]
@@ -41,6 +44,9 @@ internal static class MfInterop {
 
     [DllImport("Mfreadwrite.dll")]
     public static extern int MFCreateSourceReaderFromMediaSource([MarshalAs(UnmanagedType.IUnknown)] object pMediaSource, IMFAttributes pAttributes, out IMFSourceReader ppSourceReader);
+
+    [DllImport("Mfplat.dll")]
+    public static extern int MFCreateDXGIDeviceManager(out uint pResetToken, out IMFDXGIDeviceManager ppDeviceManager);
 }
 
 /// <summary>IMFAttributes — only SetUINT32 (slot 19) and SetGUID (slot 22) are called; earlier slots are placeholders.</summary>
@@ -71,6 +77,9 @@ internal interface IMFAttributes {
     [PreserveSig] int SetUINT64();
     [PreserveSig] int SetDouble();
     [PreserveSig] int SetGUID(ref Guid guidKey, ref Guid guidValue);
+    [PreserveSig] int SetString();
+    [PreserveSig] int SetBlob();
+    [PreserveSig] int SetUnknown(ref Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object punkValue);
 }
 
 /// <summary>IMFActivate — GetAllocatedString (slot 11) + ActivateObject (slot 31) are called.</summary>
@@ -112,7 +121,7 @@ internal interface IMFActivate {
     [PreserveSig] int ActivateObject(ref Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
 }
 
-/// <summary>IMFMediaType — GetUINT64 (slot 6) + SetGUID (slot 22) are called (both IMFAttributes-prefix slots).</summary>
+/// <summary>IMFMediaType — GetUINT32/GetUINT64, SetUINT64 (frame size), and SetGUID are called (all IMFAttributes-prefix slots).</summary>
 [ComImport]
 [Guid("44ae0fa8-ea31-4109-8d2e-4cae4997c555")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -137,7 +146,7 @@ internal interface IMFMediaType {
     [PreserveSig] int DeleteItem();
     [PreserveSig] int DeleteAllItems();
     [PreserveSig] int SetUINT32();
-    [PreserveSig] int SetUINT64();
+    [PreserveSig] int SetUINT64(ref Guid guidKey, ulong unValue);
     [PreserveSig] int SetDouble();
     [PreserveSig] int SetGUID(ref Guid guidKey, ref Guid guidValue);
 }
@@ -185,8 +194,39 @@ internal interface IMFSample {
     [PreserveSig] int GetSampleDuration();
     [PreserveSig] int SetSampleDuration();
     [PreserveSig] int GetBufferCount();
-    [PreserveSig] int GetBufferByIndex();
+    [PreserveSig] int GetBufferByIndex(uint dwIndex, out IMFMediaBuffer ppBuffer);
     [PreserveSig] int ConvertToContiguousBuffer(out IMFMediaBuffer ppBuffer);
+}
+
+/// <summary>IMFDXGIBuffer — the DXGI (GPU-texture) view of a media buffer produced under a D3D manager: GetResource
+/// yields the sample's <c>ID3D11Texture2D</c> and GetSubresourceIndex the array slice a DXVA component wrote (decoders
+/// output texture arrays). Obtained by casting an <see cref="IMFMediaBuffer"/> (a runtime QI).</summary>
+[ComImport]
+[Guid("e7174cfa-1c9e-48b1-8866-626226bfc258")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IMFDXGIBuffer {
+    [PreserveSig] int GetResource(ref Guid riid, out nint ppvObject);
+    [PreserveSig] int GetSubresourceIndex(out uint puSubresource);
+    [PreserveSig] int GetUnknown();
+    [PreserveSig] int SetUnknown();
+}
+
+/// <summary>IMFDXGIDeviceManager — the shared-D3D-device broker Media Foundation's DXVA components lock the device
+/// through. Only ResetDevice (associating the D3D11 device) is called; the source reader receives the manager via the
+/// <c>MF_SOURCE_READER_D3D_MANAGER</c> attribute.</summary>
+[ComImport]
+[Guid("eb533d5d-2db6-40f8-97a9-494692014f07")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IMFDXGIDeviceManager {
+    [PreserveSig] int CloseDeviceHandle();
+    [PreserveSig] int GetVideoService();
+    [PreserveSig] int LockDevice();
+    [PreserveSig] int OpenDeviceHandle();
+    [PreserveSig] int ResetDevice(nint pUnkDevice, uint resetToken);
+    [PreserveSig] int TestDevice();
+    [PreserveSig] int UnlockDevice();
 }
 
 /// <summary>IMFMediaBuffer — Lock, Unlock, GetCurrentLength.</summary>
