@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Puck.Abstractions;
+using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Launcher;
 

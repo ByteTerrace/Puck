@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Cameras;
 using Puck.Compositing;
 using Puck.Scene;

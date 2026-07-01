@@ -1,4 +1,5 @@
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Post;

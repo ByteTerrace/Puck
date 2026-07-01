@@ -1,5 +1,4 @@
-using Puck.Abstractions;
-
+using Puck.Abstractions.Gpu;
 namespace Puck.Demo;
 
 /// <summary>

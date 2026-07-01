@@ -3,7 +3,7 @@ namespace Puck.Post;
 /// <summary>
 /// Tier-D stage D2. Device-lost recovery, end to end and process-isolated: launches the POST's own executable as a
 /// child in <c>--probe device-loss</c> mode with <c>PUCK_TEST_DEVICE_LOSS=1</c> set, so the launcher's frame loop
-/// injects ONE synthetic <see cref="Puck.Abstractions.DeviceLostException"/> at ~1 s on a healthy GPU and must catch
+/// injects ONE synthetic <see cref="Puck.Abstractions.Gpu.DeviceLostException"/> at ~1 s on a healthy GPU and must catch
 /// it, recover the device + presentation resources in place, and resume driving the probe node. The probe asserts it
 /// survives well past the injection with its tick accumulator strictly monotonic (the recovery may not reset the
 /// loop's clock); a failed recovery rethrows in the child and the non-zero exit is reported here. Runs LAST (with D3)

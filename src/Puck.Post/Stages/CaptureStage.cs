@@ -1,5 +1,5 @@
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Capture;
 using Puck.Capture;
 using Puck.Platform;
 using Puck.Platform.Windows;

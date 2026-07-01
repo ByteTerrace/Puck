@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Puck.Abstractions;
-
+using Puck.Abstractions.Pacing;
 namespace Puck.Launcher;
 
 /// <summary>

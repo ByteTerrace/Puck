@@ -1,5 +1,4 @@
-using Puck.Abstractions;
-
+using Puck.Abstractions.Capture;
 namespace Puck.Capture;
 
 /// <summary>

@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.DirectX;
 using Puck.Hosting;
 using Puck.Scene;

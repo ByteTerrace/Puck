@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
-using Puck.Abstractions;
-
+using Puck.Abstractions.Gpu;
 namespace Puck.Post;
 
 /// <summary>

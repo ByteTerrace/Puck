@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Windowing;
 using Puck.Launcher;
 using Puck.Scene;
 

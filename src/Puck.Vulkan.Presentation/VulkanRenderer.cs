@@ -1,4 +1,6 @@
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Windowing;
 using Puck.Assets;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;

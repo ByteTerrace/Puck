@@ -4,6 +4,9 @@
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Puck.Abstractions" />
+        <Using Include="Puck.Abstractions.Gpu" />
+        <Using Include="Puck.Abstractions.Memory" />
+        <Using Include="Puck.Abstractions.Presentation" />
+        <Using Include="Puck.Abstractions.Windowing" />
     </ItemGroup>
 </Project>

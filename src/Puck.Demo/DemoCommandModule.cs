@@ -1,6 +1,6 @@
 using System.CommandLine;
 using System.Numerics;
-using Puck.Abstractions;
+using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Input;

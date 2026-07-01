@@ -1,5 +1,5 @@
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
 using Puck.Compositing;
 using Puck.Hosting;
 

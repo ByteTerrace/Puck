@@ -1,7 +1,6 @@
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
-
+using Puck.Abstractions.Gpu;
 namespace Puck.Post;
 
 /// <summary>The shared per-run context handed to every <see cref="IPostStage"/>: the application service provider

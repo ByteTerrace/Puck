@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Cameras;
 using Puck.Compositing;
 using Puck.SdfVm;

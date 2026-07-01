@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Presentation;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;

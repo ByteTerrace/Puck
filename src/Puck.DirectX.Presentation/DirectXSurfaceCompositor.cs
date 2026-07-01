@@ -1,7 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Windowing;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Puck.DirectX.Messages;

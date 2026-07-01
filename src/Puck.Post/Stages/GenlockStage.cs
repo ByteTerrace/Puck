@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Puck.Abstractions;
+using Puck.Abstractions.Pacing;
 using Puck.Launcher;
 
 namespace Puck.Post;

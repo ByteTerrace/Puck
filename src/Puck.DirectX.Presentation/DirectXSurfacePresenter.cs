@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Windowing;
 using Puck.DirectX.Interop;
 
 namespace Puck.DirectX.Presentation;

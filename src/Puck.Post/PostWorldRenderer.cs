@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 
 namespace Puck.Post;

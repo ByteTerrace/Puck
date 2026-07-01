@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.DirectX;
 using Puck.Vulkan;
 using Puck.Vulkan.Interfaces;

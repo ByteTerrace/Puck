@@ -8,6 +8,6 @@
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Puck.Abstractions" />
+        <Using Include="Puck.Abstractions.Gpu" />
     </ItemGroup>
 </Project>

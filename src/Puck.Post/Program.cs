@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.DirectX.Presentation;
 using Puck.Hosting;

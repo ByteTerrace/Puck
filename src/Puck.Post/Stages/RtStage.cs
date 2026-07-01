@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.DirectX;
 using Puck.SdfVm;
 

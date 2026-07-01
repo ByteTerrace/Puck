@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Memory;
 using Puck.Vulkan;
 using Puck.Vulkan.Interfaces;

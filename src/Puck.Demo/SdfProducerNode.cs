@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Compositing;
 using Puck.Hosting;

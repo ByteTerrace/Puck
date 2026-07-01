@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Windowing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;

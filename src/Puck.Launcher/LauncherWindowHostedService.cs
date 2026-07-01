@@ -1,7 +1,10 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Input;
