@@ -42,7 +42,7 @@ internal sealed class CrossBackendComputeWorldNode : IRenderNode {
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.dxil")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.dxil")),
             capturePath: capturePath,
-            children: withChild ? ChildSurfaceNode.CreateWorldChildren(serviceProvider: m_device.Services, directX: true) : null,
+            children: WorldPaneChildren.Build(directX: true, frameSource: frameSource, serviceProvider: m_device.Services, withChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.dxil")),
             createStorageImage: deviceContext => new DirectXGpuSurfaceExportFactory().CreateExportableStorageImage(
                 deviceContext: deviceContext,

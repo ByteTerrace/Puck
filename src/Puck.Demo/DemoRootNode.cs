@@ -360,7 +360,7 @@ internal static class DemoRootNode {
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.spv")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.spv")),
             capturePath: capturePath,
-            children: (withChild ? ChildSurfaceNode.CreateWorldChildren(serviceProvider: serviceProvider, directX: false) : null),
+            children: WorldPaneChildren.Build(directX: false, frameSource: frameSource, serviceProvider: serviceProvider, withChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.spv")),
             frameSource: frameSource,
             height: height,

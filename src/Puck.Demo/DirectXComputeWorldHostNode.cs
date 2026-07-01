@@ -57,7 +57,7 @@ internal sealed class DirectXComputeWorldHostNode : IRenderNode {
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.dxil")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.dxil")),
             capturePath: capturePath,
-            children: (withChild ? ChildSurfaceNode.CreateWorldChildren(serviceProvider: m_services, directX: true) : null),
+            children: WorldPaneChildren.Build(directX: true, frameSource: frameSource, serviceProvider: m_services, withChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.dxil")),
             frameSource: frameSource,
             height: height,
