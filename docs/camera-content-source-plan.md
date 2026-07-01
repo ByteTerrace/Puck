@@ -3,11 +3,10 @@
 This document travels with the branch. Status: **M0(a)/M1a/M1b/M1c/M2a/M2b DONE & GPU-verified (2026-07-01) on an
 RTX 4070 + HD Pro Webcam C920.** A live webcam is now a first-class per-viewport content source, authored in the run
 document, sampled into the SDF/effects pipeline, and rendered at full engine FPS between the camera's own arrivals.
-**Remaining/deferred:** M3 (the GPU-resident DXVA NV12 zero-copy tier — a large, high-risk COM/GPU interop milestone,
-intentionally not half-implemented; the practical no-stall goal is already met by the CPU tier), M4 robustness extras
-(MJPEG, auto re-open on replug), M5 genlock (an unresolved pacer-redesign fork), and M6 Linux/macOS verticals (wrong OS
-to verify here). The scope below was validated against the code by a fan-out reading pass and stress-tested by an
-adversarial design review; this file is the executable summary, updated with what actually shipped and verified.
+**Next up:** M3 (the GPU-resident DXVA NV12 zero-copy tier — the remaining transport optimization; the CPU tier already
+renders without stalling the pump), M4 robustness extras (MJPEG, auto re-open on replug), and M5 genlock (latency
+phase-align — the flavor is decided). This file is the executable summary, updated with what shipped and verified and the
+concrete steps left for each next milestone.
 
 ## Vision
 
@@ -28,9 +27,9 @@ into it, displace, pixelate, threshold, …). Two non-negotiables set by the aut
   abstract polymorphic record. This is a breaking change to a strict (`[JsonUnmappedMemberHandling(Disallow)]`) v1 leaf
   record and requires migrating every embedded/`--run` document. Accepted deliberately: it is the only thing that makes a
   camera *interchangeable with a viewport source*, which is the mandate.
-- **Genlock to the camera — accepted, flavor deferred.** The render loop will phase-lock to camera arrival, NOT
-  rate-lock to it (see *Genlock* below). The specific flavor (latency-phase vs harmonic-PLL) is the one open design item,
-  resolved when we reach the pacer work (post-M3).
+- **Genlock to the camera — accepted; flavor decided: latency phase-align.** The render loop phase-locks to camera
+  arrival, NOT rate-locks to it (see *Genlock* below). The chosen flavor is latency phase-align: keep the full render
+  rate and bias the present deadline so a present fires as soon as possible after each camera arrival.
 - **Zero-copy is the high-FPS path; CPU upload is a correctness floor.** The existing shared-handle import layer is the
   target; the CPU-upload path is a fallback that must be quarantined *and instrumented*, never the silent default.
 - **Windows first (Media Foundation), cross-platform seam designed up front.** Linux (V4L2) and macOS (AVFoundation)
@@ -135,17 +134,15 @@ binding + `CreateSampler` + `DescriptorAllocator.WriteCombinedImageSampler`, wit
 that consumer. (The NV12 case threads a `VkSamplerYcbcrConversion` through the descriptor allocator — new plumbing, see
 gap #2.)
 
-### Genlock (deferred flavor; principle locked)
+### Genlock (latency phase-align)
 Genlock does **not** mean rate-locking the engine to a 30/60 fps camera — that would violate the high-FPS mandate. It
 means phase-locking so a fresh camera frame reaches photons with minimum latency while the engine keeps rendering at full
-VRR rate. Two candidate flavors, decided later:
-- **Latency phase-align** — keep the full render rate; bias the present deadline so a present fires ASAP after each
-  camera arrival.
-- **Harmonic / PLL lock** — render at a fixed integer multiple of camera rate, with a PLL slewing render phase to track
-  the camera's free-running crystal. Most Puck-native (preserves deterministic fixed-rate culture; camera arrivals land
-  on known render boundaries) but more work.
+VRR rate. The chosen flavor is **latency phase-align**: keep the full render rate and bias the present deadline so a
+present fires as soon as possible after each camera arrival. (A harmonic/PLL lock — render at an integer multiple of
+camera rate with a phase-tracking PLL — was considered and set aside; latency phase-align is simpler and keeps the full
+render rate.)
 
-Either way it adds a **new external-clock ingestion seam** feeding camera arrival timestamps into
+It adds a **new external-clock ingestion seam** feeding camera arrival timestamps into
 `LauncherWindowHostedService.ResolveRenderPeriod` / the deadline re-anchor logic — the loop is internally clocked today
 and consumes only *present* timing. It becomes a **three-clock system** (sim 240 Hz / display VRR / camera). Note a real
 asymmetry: DirectX exposes a true scanout timestamp (`GetFrameStatistics.SyncQPCTime`) but the Vulkan present-timing
@@ -199,7 +196,7 @@ Vulkan.
   - **Design deviation from the plan:** `WorldNode.Child` was **kept**, not dropped — it is load-bearing for the
     `--validate-world-child` cross-backend parity gate. The live-camera path layers on top of the *same* children
     machinery (a document-authored per-viewport source is strictly more general than the bool), so first-classness is
-    achieved without destabilizing that gate. Because the CPU-upload path is already ShaderReadOnly→sampled and the
+    achieved while the child parity gate keeps passing. Because the CPU-upload path is already ShaderReadOnly→sampled and the
     composite reads a same-device General-layout image, the deferred M0(b) neutral external-memory descriptor + planar/
     YCbCr and M0(c) `Surface` layout tag are **not needed on the CPU tier**; they return as M3 prerequisites (the NV12
     zero-copy path is where a `Surface` layout tag and a planar/YCbCr import descriptor actually bite).
@@ -241,52 +238,45 @@ Vulkan.
   contiguous buffer is **tightly packed** (stride 2560 = 640·4, no row padding). So the M2a caveats (bottom-up / padding)
   do **not** apply to this device — the interop was correct as-written. Read-loop errors + end-of-stream are now logged
   (a disconnected device freezes the pane on its last frame rather than stopping silently).
-- **M3 — Windows MF GPU-resident zero-copy tier. DEFERRED (large, high-interop-risk; not started).** This is the one
-  headline optimization left. It is deliberately *not* half-implemented: it is a multi-step COM/GPU interop endeavor that
-  must be verified at each step on hardware, and a broken partial would be worse than the working, non-stalling CPU tier
-  now shipped. Precise remaining requirements (each new): (1) a **D3D11 device LUID-matched** to the host adapter;
-  (2) `IMFDXGIDeviceManager` + `MF_SOURCE_READER_D3D_MANAGER` on the reader config; (3) `IMFSample`→`IMFDXGIBuffer`→
-  `ID3D11Texture2D` (transient, non-shareable) extraction; (4) a **persistent ring** of
+- **M3 — Windows MF GPU-resident zero-copy tier. NEXT.** The remaining transport optimization: keep the camera GPU-resident
+  end to end so a frame reaches the compositor without the host round-trip the CPU tier does. Steps: (1) a **D3D11 device
+  LUID-matched** to the host adapter; (2) `IMFDXGIDeviceManager` + `MF_SOURCE_READER_D3D_MANAGER` on the reader config;
+  (3) `IMFSample`→`IMFDXGIBuffer`→`ID3D11Texture2D` extraction; (4) a **persistent ring** of
   `D3D11_RESOURCE_MISC_SHARED_NTHANDLE | KEYED_MUTEX` textures; (5) per-frame `CopyResource` decode→ring with keyed-mutex
   acquire/release; (6) hand the **stable** shared NT handle into the existing `VulkanSurfaceImport`/`DirectXGpuSurfaceImport`
-  (imported once per ring slot); (7) **NV12→RGB**, which is the real blocker — the external-memory format model is
-  RGBA8/BGRA8 only, so this needs a planar/YCbCr import descriptor + `VkSamplerYcbcrConversion` (gap #2) or a VideoProcessor
-  MFT pass. **Success:** per-frame transport = one copy + mutex + convert, no queue drain; measured high-FPS at 1080p via
-  `PUCK_TIMING`. **Note:** the practical "don't stall the pump" goal is *already met* by the M1c non-stalling CPU tier;
-  M3's remaining win is eliminating the per-camera-frame host round-trip + upload (matters most at high camera resolution).
-- **M4 — Format + robustness. PARTIALLY DONE.** Done: newest-frame-wins **late-frame drop** (the `FrameVersion` skip);
-  **device-loss rebuild** through `CameraPaneNode.OnDeviceLost` (mirrors the verified `ChildSurfaceNode` pattern; the
-  CPU-side camera session survives GPU device loss); **graceful unplug** (the read loop exits + logs, the pane freezes on
-  the last frame, no crash). Deferred: MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback), *automatic re-open*
-  on device replug (currently a frozen-on-last-frame degrade, not a recover), keyed-mutex timeout handling / ring sizing
-  (those belong to M3's ring).
-- **M5 — Genlock. DEFERRED (unresolved design fork — intentionally left open).** The plan itself defers the flavor
-  decision (latency-phase vs harmonic-PLL) to this milestone; it is a large, risky change to `LauncherWindowHostedService`
-  present pacing (a new external-clock ingestion seam, a three-clock system, and the DX-vs-Vulkan scanout-timestamp
-  asymmetry). Not attempted this session — it is a pacer redesign, not camera plumbing, and would risk the verified
-  present-timing behavior. See [[vrr-present-timing-status]].
-- **M6 — Cross-platform verticals (seams already shaped in M0).** Linux V4L2: `VIDIOC_EXPBUF` dma-buf fd →
-  `VkImportMemoryFdInfoKHR` (`DMA_BUF_BIT_EXT`) + DRM format modifier + ycbcr (Vulkan-only). macOS AVFoundation:
-  IOSurface-backed `CVPixelBuffer` → `CVMetalTextureCache` (native Metal) or `VK_EXT_metal_objects` (MoltenVK). Both slot
-  into the same `ICameraCaptureService` + `LiveCameraNode` + triple buffer + neutral import descriptor; only the platform
-  capture impl and the external-memory handle type differ. Budget as real work — the current external-memory API shares
-  nothing with the FD/Metal paths except the C# interface name.
+  (imported once per ring slot); (7) **NV12→RGB** — the external-memory format model is RGBA8/BGRA8 today, so this adds a
+  planar/YCbCr import descriptor + `VkSamplerYcbcrConversion` (gap #2) or a VideoProcessor MFT pass. **Success:** per-frame
+  transport = one copy + mutex + convert, no queue drain; high-FPS at 1080p measured via `PUCK_TIMING`. The M1c non-stalling
+  CPU tier already keeps the pump free between camera arrivals; M3's win is dropping the per-camera-frame host round-trip +
+  upload (largest at high camera resolution).
+- **M4 — Format + robustness. IN PROGRESS.** Done: newest-frame-wins **late-frame drop** (the `FrameVersion` skip);
+  **device-loss rebuild** through `CameraPaneNode.OnDeviceLost` (mirrors the `ChildSurfaceNode` pattern; the CPU-side
+  camera session survives GPU device loss); **unplug handling** (the read loop exits + logs, the pane holds its last frame,
+  no crash). Next: MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback), *automatic re-open* on device replug
+  (currently holds the last frame; add re-enumeration), keyed-mutex timeout handling / ring sizing (land with M3's ring).
+- **M5 — Genlock (latency phase-align). NEXT.** Flavor is decided: latency phase-align — keep the full render rate and bias
+  the present deadline so a present fires as soon as possible after each camera arrival. Add the external-clock ingestion
+  seam feeding camera arrival timestamps into `LauncherWindowHostedService.ResolveRenderPeriod` / the deadline re-anchor
+  logic (the loop is internally clocked today and consumes only present timing). It becomes a three-clock system (sim
+  240 Hz / display VRR / camera); reconcile the MF-100ns / QPC / present-timing domains, and use the DirectX scanout
+  timestamp (`GetFrameStatistics.SyncQPCTime`) where available (the Vulkan present-timing value tracks period, not absolute
+  vblank). See [[vrr-present-timing-status]].
 
 ## Open items
 
-- **Genlock flavor** (M5): latency phase-align vs harmonic/PLL lock. Decide when we reach the pacer work.
 - **Cross-process / cross-adapter camera** is out of scope: the zero-copy ordering assumes an in-process, same-adapter
   producer. A foreign-process/adapter camera would need a shared-fence handshake that does not exist.
 - **One unifying content-source host abstraction** across `WorldProducerNode` (slot-dict) and `ViewportCompositorNode`
-  (pane-list) — nice-to-have for true symmetry; can follow M1 if the `--viewports` (non-SDF) path also needs live camera.
+  (pane-list) — a symmetry cleanup; can follow if the `--viewports` (non-SDF) path also grows live camera.
 
-## Risks (from the adversarial review)
+## Implementation notes
 
-- The `Viewport.Camera → Source` break fails `Parse` the instant a stale literal is left un-migrated (strict `Disallow`).
-  M0's regression test is the guard.
-- "Zero-copy" is really *one copy + keyed-mutex + convert*; if DXVA silently falls to software/mismatched-LUID, the node
-  lands on the stall-y upload tier. Tier telemetry (M2) exists to make that loud.
-- The import layer's per-frame-free behavior assumes **stable** handles; the plan keeps that by importing N persistent
-  ring handles once. Rotating fresh handles per frame would re-import (frame-0 cost) every frame and break the claim.
-- Genlocking to a free-running 30/60 fps camera under 120 Hz+ VRR visibly duplicates/drops camera content by design (the
-  SDF/effects content still updates every frame). Acceptable; latency-critical use is why M5 exists.
+- The `Viewport.Camera → Source` migration fails `Parse` if a stale literal is left un-migrated (strict `Disallow`);
+  the `--check-run` regression covers it.
+- On M3: "zero-copy" is *one copy + keyed-mutex + convert*. If DXVA falls to software / a mismatched LUID, the node lands
+  on the CPU-upload tier — the tier telemetry line names which tier is active so that is visible.
+- M3's import layer is per-frame-free only with **stable** handles; import the N persistent ring handles once (rotating
+  fresh handles per frame would re-import every frame).
+- Latency phase-align under a free-running 30/60 fps camera and 120 Hz+ VRR shows each camera frame for a few render
+  frames by design (the SDF/effects content still updates every frame) — expected, and the minimum-latency present is the
+  point.
