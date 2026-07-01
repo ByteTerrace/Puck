@@ -44,6 +44,8 @@ internal sealed record DemoFlags {
     public required bool ValidatePixelate { get; init; }
     /// <summary>The <c>--validate-capture</c> native (GDI) image-capture pipeline gate.</summary>
     public required bool ValidateCapture { get; init; }
+    /// <summary>The <c>--validate-camera</c> camera-source zero-copy cross-device import gate.</summary>
+    public required bool ValidateCamera { get; init; }
     /// <summary>The <c>--validate-world</c> cross-backend compute-world parity gate.</summary>
     public required bool ValidateWorld { get; init; }
     /// <summary>The <c>--validate-world-child</c> compute-world parity gate with a hosted child viewport.</summary>

@@ -163,10 +163,20 @@ Vulkan.
   ShaderReadOnly). *Rationale for deferral:* both are GPU-plumbing with no consumer until M1's static zero-copy node;
   shaping them against that first real consumer avoids a speculative abstraction. They are prerequisites *within* M1, done
   before the node binds a shared surface.
-- **M1 — Static zero-copy node proof.** `LiveCameraNode` produces a fixed test image via the proven import template
-  (`CrossShareReverseNode` / keyed-mutex shared texture), bound into `WorldProducerNode.children[slot]` (General) **and**
-  sampled by an SDF stage (ShaderReadOnly). No live device. **Success:** a viewport slot shows the imported texture at
-  high FPS with non-blocking `Submit` and `OnDeviceLost` re-import.
+- **M1a — Zero-copy keystone gate. ✅ DONE & GPU-verified (2026-07-01).** `CameraValidationNode` (`--validate-camera`,
+  `src/Puck.Demo/CameraValidationNode.cs`) proves the camera *direction* of the zero-copy path: a bespoke Direct3D 12
+  device (standing in for a camera's decode device) dispatches `sdf-child.comp.dxil` into an exportable **storage** image
+  it owns, hands it off in the External/COMMON state, and the Vulkan **host** imports that shared handle zero-copy and
+  reads it back — asserting the foreign-device content survived (spatial variation). Verified on the RTX 4070: `CAMERA
+  pass`, exit 0, `px0 != px_center`. Reuses `DirectXComputeWorldDevice` + `DirectXGpuSurfaceExportFactory` +
+  `IVulkanExternalMemoryApi` (import direction flipped vs `CrossShareReverseNode`). Confirms the load-bearing bet —
+  compute-dispatch *into* a D3D12 exportable storage image — works.
+- **M1b — Live content-source binding. REMAINING.** Package the proof as a `LiveCameraNode : IRenderNode` that hands the
+  host `Surface { SharedHandle }` each frame (the existing `SurfaceCompositor` import path consumes it with **no new host
+  code** — verified template) and/or binds the imported view as a **sampled** SDF/effects input
+  (`WriteCombinedImageSampler`). Then the document-layer `LiveCameraSource` + `ViewportBuilder` slot→`IRenderNode` map +
+  `WorldNode` rewiring (the per-viewport first-class completion). This is where the deferred M0(b) external-memory
+  descriptor + planar/YCbCr and M0(c) `Surface` layout tag land against their first live consumer.
 - **M2 — Windows MF live capture, CPU fallback tier.** MF async callback → latest-frame triple buffer →
   `IGpuSurfaceUpload` (RGB32). New `ICameraCaptureService` (`IsSupported` + `TryOpen`) + a `Null` fallback, **DI-registered
   parallel to `AddPlatformWindowing`** (capture has no DI registration today — add it). Ship **tier telemetry** here.

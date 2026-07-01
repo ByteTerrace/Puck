@@ -93,7 +93,7 @@ internal static class DemoRunDocuments {
         // produce:"vulkan" is the REVERSE cross-backend live path (a bespoke Vulkan producer the host imports). It is
         // dropped only for a Direct3D 12 SHOWCASE host, which has no reverse cross-backend path (it would yield a blank
         // window — the validator rejects that combination).
-        var offscreen = (flags.Validate || flags.ValidateExport || flags.ValidateCompute || flags.ValidateMiniAction || flags.ValidateDeterminism || flags.ValidateCliDeterminism || flags.ValidateReverseShare || flags.ValidateIndirect || flags.ValidateResample || flags.ValidateViewports || flags.ValidatePixelate || flags.ValidateCapture || flags.ValidateWorld || flags.ValidateWorldChild);
+        var offscreen = (flags.Validate || flags.ValidateExport || flags.ValidateCompute || flags.ValidateMiniAction || flags.ValidateDeterminism || flags.ValidateCliDeterminism || flags.ValidateReverseShare || flags.ValidateIndirect || flags.ValidateResample || flags.ValidateViewports || flags.ValidatePixelate || flags.ValidateCapture || flags.ValidateCamera || flags.ValidateWorld || flags.ValidateWorldChild);
         var directXHost = (!offscreen && string.Equals(flags.Backend, "directx", StringComparison.OrdinalIgnoreCase));
         var directXShowcaseHost = (directXHost && !flags.World && !flags.WorldSplit && !flags.WorldChild && !flags.WorldRt);
         var host = new HostDocument {
@@ -203,6 +203,7 @@ internal static class DemoRunDocuments {
         if (flags.ValidateViewports) { return "viewports"; }
         if (flags.ValidatePixelate) { return "pixelate"; }
         if (flags.ValidateCapture) { return "capture"; }
+        if (flags.ValidateCamera) { return "camera"; }
 
         return null;
     }

@@ -83,6 +83,9 @@ var validatePixelateOption = new Option<bool>(name: "--validate-pixelate") {
 var validateCaptureOption = new Option<bool>(name: "--validate-capture") {
     Description = "Native image-capture gate: drives the backend-neutral capture pipeline end to end (a GDI screen grab through IFrameCaptureSource into a CaptureSink + frame hash), writing artifacts/capture-desktop.png. Lenient about signal (a headless/secure desktop yields nothing); exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
 };
+var validateCameraOption = new Option<bool>(name: "--validate-camera") {
+    Description = "Camera-source zero-copy gate: a bespoke Direct3D 12 device (standing in for a camera's decode device) produces a frame (sdf-child) into a shared image, which the Vulkan host imports zero-copy and reads back — asserting the foreign-device content survived. Exits (0 pass/skip, 2 infra-fail). Forces a Vulkan host.",
+};
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
     Description = "With --validate-world, renders a fuzz-generated SDF scene program (deterministic from this seed, identical on both backends) instead of the showcase — one cross-backend differential-fuzzing iteration. A negative value (default) disables fuzzing.",
@@ -131,6 +134,7 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validateViewportsOption,
     validatePixelateOption,
     validateCaptureOption,
+    validateCameraOption,
     validateWorldOption,
     validateWorldChildOption,
     worldOption,
@@ -182,6 +186,7 @@ var runDocument = (runPath is not null)
         ValidateViewports = parseResult.GetValue(validateViewportsOption),
         ValidatePixelate = parseResult.GetValue(validatePixelateOption),
         ValidateCapture = parseResult.GetValue(validateCaptureOption),
+        ValidateCamera = parseResult.GetValue(validateCameraOption),
         ValidateWorld = parseResult.GetValue(validateWorldOption),
         ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
         World = parseResult.GetValue(worldOption),

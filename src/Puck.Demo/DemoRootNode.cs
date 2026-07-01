@@ -172,6 +172,7 @@ internal static class DemoRootNode {
             "viewports" => new ViewportParityNode(result: result, serviceProvider: serviceProvider),
             "pixelate" => new PixelateParityNode(result: result, serviceProvider: serviceProvider),
             "capture" => new CaptureValidationNode(result: result, serviceProvider: serviceProvider),
+            "camera" => new CameraValidationNode(result: result, serviceProvider: serviceProvider),
             "mini-action" => new MiniAction.MiniActionDeterminismNode(result: result),
             "determinism" => new Replay.DeterminismGateNode(result: result),
             "cli-determinism" => new Replay.CliDeterminismGateNode(result: result),
