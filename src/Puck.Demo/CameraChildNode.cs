@@ -40,6 +40,7 @@ internal sealed class CameraChildNode : IRenderNode {
     private readonly int m_requestedHeight;
     private readonly int m_requestedWidth;
     private readonly ReadOnlyMemory<byte> m_resampleBytecode;
+    private readonly string m_sourceId;
     private readonly byte[] m_resamplePush = new byte[ResamplePushByteLength];
 
     // Re-open cadence after a feed ends or an open fails, in render frames (~10 s at 60 Hz): long enough that device
@@ -49,7 +50,7 @@ internal sealed class CameraChildNode : IRenderNode {
     private DirectXComputeWorldDevice? m_allocatorDevice;
     private nint m_boundSourceView;
     private bool m_cameraChecked;
-    private ExternalPresentClock? m_externalClock;
+    private ExternalClockSource? m_clockSource;
     private long m_lastPublishedVersion = -1;
     private bool m_noDeviceLogged;
     private int m_reopenCountdown;
@@ -87,16 +88,20 @@ internal sealed class CameraChildNode : IRenderNode {
     /// <param name="gpuServices">The world's neutral GPU compute services (the child produces on the world's device).</param>
     /// <param name="cameraServices">The application services that resolve <see cref="ICameraCaptureService"/> (device-agnostic CPU pixels).</param>
     /// <param name="source">The document live-camera source (requested mode + fit policy).</param>
+    /// <param name="sourceId">The stable rhythm-source identity this camera registers with the external-clock registry
+    /// (e.g. <c>"camera:3"</c>) — the id a document's <c>host.genlock</c> elects; this node never elects itself.</param>
     /// <param name="directX">Whether the world device is Direct3D 12 (selects the DXIL resample kernel).</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public CameraChildNode(IServiceProvider gpuServices, IServiceProvider cameraServices, LiveCameraSource source, bool directX) {
+    public CameraChildNode(IServiceProvider gpuServices, IServiceProvider cameraServices, LiveCameraSource source, string sourceId, bool directX) {
         ArgumentNullException.ThrowIfNull(cameraServices);
         ArgumentNullException.ThrowIfNull(gpuServices);
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(sourceId);
 
         m_cameraServices = cameraServices;
         m_fit = source.Fit;
         m_gpuServices = gpuServices;
+        m_sourceId = sourceId;
         m_requestedHeight = source.RequestedHeight;
         m_requestedWidth = source.RequestedWidth;
         m_resampleBytecode = File.ReadAllBytes(path: Path.Combine(
@@ -136,13 +141,14 @@ internal sealed class CameraChildNode : IRenderNode {
         var cameraVersion = (m_sharedSession?.FrameVersion ?? m_cameraSession?.FrameVersion ?? 0L);
 
         // Genlock: forward each NEW frame's arrival timestamp (stamped on the grabber thread, so it is accurate even
-        // though this forwarding is render-quantized) to the pacer's external clock. Published before the skip below —
-        // the pacer needs arrivals even on frames this node does no GPU work for.
-        if ((m_externalClock is not null) && (cameraVersion != m_lastPublishedVersion) && (cameraVersion > 0L)) {
+        // though this forwarding is render-quantized) into this camera's OWN rhythm channel. Whether the pacer follows
+        // it is the HOST's election (host.genlock), never this node's decision. Published before the skip below — the
+        // registry needs arrivals even on frames this node does no GPU work for.
+        if ((m_clockSource is not null) && (cameraVersion != m_lastPublishedVersion) && (cameraVersion > 0L)) {
             var arrival = (m_sharedSession?.LastFrameTimestamp ?? m_cameraSession?.LastFrameTimestamp ?? 0L);
 
             if (0L != arrival) {
-                m_externalClock.Publish(arrivalTimestamp: arrival, frameVersion: cameraVersion);
+                m_clockSource.Publish(arrivalTimestamp: arrival, frameVersion: cameraVersion);
             }
 
             m_lastPublishedVersion = cameraVersion;
@@ -210,8 +216,6 @@ internal sealed class CameraChildNode : IRenderNode {
         }
 
         m_cameraChecked = true;
-        // The genlock ingestion seam (absent = no genlock; the pacer stays free-running).
-        m_externalClock = (m_cameraServices.GetService(serviceType: typeof(ExternalPresentClock)) as ExternalPresentClock);
 
         if (m_cameraServices.GetService(serviceType: typeof(ICameraCaptureService)) is not ICameraCaptureService service || !service.IsSupported) {
             if (!m_noDeviceLogged) {
@@ -233,6 +237,7 @@ internal sealed class CameraChildNode : IRenderNode {
         if (service.TryOpenDefault(requestedWidth: requestedWidth, requestedHeight: requestedHeight, session: out var session)) {
             m_cameraSession = session;
 
+            RegisterRhythmSource();
             Console.Out.WriteLine(value: $"[camera] viewport source '{session.Name}' {session.Width}x{session.Height} (CPU-upload tier).");
 
             return;
@@ -303,6 +308,7 @@ internal sealed class CameraChildNode : IRenderNode {
 
             session.Start(sharedTargetHandles: handles);
 
+            RegisterRhythmSource();
             Console.Out.WriteLine(value: $"[camera] viewport source '{session.Name}' {session.Width}x{session.Height} (GPU zero-copy tier).");
 
             return true;
@@ -312,6 +318,13 @@ internal sealed class CameraChildNode : IRenderNode {
 
             return false;
         }
+    }
+
+    // A rhythm source registers only once a device has actually opened (so a camera-less pane never pollutes the
+    // registry's auto-election), under this pane's stable identity — which a document's host.genlock may elect.
+    // Idempotent across replug re-opens; whether anyone follows the rhythm is never this node's decision.
+    private void RegisterRhythmSource() {
+        m_clockSource ??= (m_cameraServices.GetService(serviceType: typeof(ExternalClockRegistry)) as ExternalClockRegistry)?.RegisterSource(sourceId: m_sourceId);
     }
 
     // GPU-tier teardown (open failure, device loss, dispose): stop the writer FIRST (the session's D3D11 device holds

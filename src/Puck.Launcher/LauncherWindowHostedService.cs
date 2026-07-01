@@ -28,7 +28,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private const int MaxConsecutiveDeviceLossRecoveries = 8;
 
     private readonly IHostApplicationLifetime m_applicationLifetime;
-    private readonly ExternalPresentClock m_externalClock;
+    private readonly ExternalClockRegistry m_externalClocks;
     private readonly IInputClock m_inputClock;
     private readonly ILogger<LauncherWindowHostedService> m_logger;
     private readonly LauncherOptions m_options;
@@ -41,7 +41,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
     public LauncherWindowHostedService(
         IHostApplicationLifetime applicationLifetime,
-        ExternalPresentClock externalClock,
+        ExternalClockRegistry externalClocks,
         IInputClock inputClock,
         ILogger<LauncherWindowHostedService> logger,
         LauncherOptions options,
@@ -53,7 +53,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         INativeWindowFactory windowFactory
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
-        ArgumentNullException.ThrowIfNull(externalClock);
+        ArgumentNullException.ThrowIfNull(externalClocks);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(options);
@@ -65,7 +65,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(windowFactory);
 
         m_applicationLifetime = applicationLifetime;
-        m_externalClock = externalClock;
+        m_externalClocks = externalClocks;
         m_inputClock = inputClock;
         m_logger = logger;
         m_options = options;
@@ -151,7 +151,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // error, so the frame that samples a fresh arrival starts (and presents) as soon after it as possible —
                 // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher; PUCK_GENLOCK=0
                 // disables it.
-                var genlock = new GenlockPhaseAligner(clock: m_externalClock, logger: m_logger, logPhase: logPresentTiming);
+                var genlock = new GenlockPhaseAligner(clock: m_externalClocks.PacerClock, logger: m_logger, logPhase: logPresentTiming);
                 var renderPeriod = ResolveRenderPeriod(refreshRange: refreshRange, frequency: frequency);
                 var spinThreshold = ((frequency / 1000L) * SpinThresholdMilliseconds);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: TargetUpdateRate);

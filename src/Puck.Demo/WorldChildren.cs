@@ -35,7 +35,9 @@ internal static class WorldChildren {
 
         if (liveSources is not null) {
             foreach (var (slot, source) in liveSources) {
-                (children ??= [])[slot] = new CameraChildNode(cameraServices: cameraServices, directX: directX, gpuServices: gpuServices, source: source);
+                // The slot doubles as the camera's stable rhythm-source identity ("camera:<slot>") — the id a
+                // document's host.genlock elects.
+                (children ??= [])[slot] = new CameraChildNode(cameraServices: cameraServices, directX: directX, gpuServices: gpuServices, source: source, sourceId: $"camera:{slot}");
             }
         }
 

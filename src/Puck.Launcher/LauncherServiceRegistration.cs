@@ -32,10 +32,11 @@ public static class LauncherServiceRegistration {
         services.TryAddSingleton<InputClock>(implementationFactory: static _ => InputClock.Start());
         services.TryAddSingleton<IInputClock>(implementationFactory: static sp => sp.GetRequiredService<InputClock>());
 
-        // The genlock (latency phase-align) ingestion seam: an external frame producer (a live camera) publishes its
-        // arrival timestamps here and the pacer biases its render deadline toward them. Neutral and always registered;
-        // with no publisher it stays silent and the pacer is unaffected.
-        services.TryAddSingleton<ExternalPresentClock>();
+        // The genlock (latency phase-align) ingestion seam: external rhythm producers (cameras, capture cards, network
+        // feeds) register named sources here, and the HOST's election policy decides which single one the pacer
+        // phase-aligns to. TryAdd default = automatic single-source election; a composition root overrides with a
+        // document-configured instance. With no publisher (or no election) the pacer is unaffected.
+        services.TryAddSingleton<ExternalClockRegistry>();
 
         services.TryAddSingleton<TerminalControl>();
         services.TryAddSingleton<ITerminalControl>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());

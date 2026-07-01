@@ -54,6 +54,66 @@ internal sealed class GenlockGateNode : IRenderNode {
     }
 
     private static void Validate() {
+        ValidateElection();
+        ValidateConvergence();
+    }
+
+    // The registry's election rules — the host decides which rhythm the pacer follows; producers never do.
+    private static void ValidateElection() {
+        // AUTO: a sole source is elected; the moment a second registers, forwarding stops (no arbitrary winner).
+        var auto = new ExternalClockRegistry();
+        var first = auto.RegisterSource(sourceId: "camera:0");
+
+        first.Publish(arrivalTimestamp: 100L, frameVersion: 1L);
+
+        if (!auto.PacerClock.TryRead(arrivalTimestamp: out var autoArrival, frameVersion: out _) || (100L != autoArrival)) {
+            throw new InvalidOperationException(message: "auto election did not forward the sole source's arrival to the pacer");
+        }
+
+        var second = auto.RegisterSource(sourceId: "camera:1");
+
+        second.Publish(arrivalTimestamp: 200L, frameVersion: 1L);
+        first.Publish(arrivalTimestamp: 300L, frameVersion: 2L);
+
+        _ = auto.PacerClock.TryRead(arrivalTimestamp: out autoArrival, frameVersion: out _);
+
+        if (100L != autoArrival) {
+            throw new InvalidOperationException(message: $"plural sources with no election must stop forwarding (pacer read {autoArrival}, expected the pre-plurality 100)");
+        }
+
+        // NAMED: exactly the elected source forwards; the other's publishes stay in its own channel.
+        var named = new ExternalClockRegistry(electionPolicy: "camera:1");
+        var bystander = named.RegisterSource(sourceId: "camera:0");
+        var elected = named.RegisterSource(sourceId: "camera:1");
+
+        bystander.Publish(arrivalTimestamp: 50L, frameVersion: 1L);
+
+        if (named.PacerClock.TryRead(arrivalTimestamp: out _, frameVersion: out _)) {
+            throw new InvalidOperationException(message: "an unelected source's publish reached the pacer under a named election");
+        }
+
+        elected.Publish(arrivalTimestamp: 60L, frameVersion: 1L);
+
+        if (!named.PacerClock.TryRead(arrivalTimestamp: out var namedArrival, frameVersion: out _) || (60L != namedArrival)) {
+            throw new InvalidOperationException(message: "the named source's publish did not reach the pacer");
+        }
+
+        // OFF: nothing ever forwards. And registration is idempotent (a replugged device keeps its channel).
+        var off = new ExternalClockRegistry(electionPolicy: ExternalClockRegistry.PolicyOff);
+        var muted = off.RegisterSource(sourceId: "camera:0");
+
+        muted.Publish(arrivalTimestamp: 70L, frameVersion: 1L);
+
+        if (off.PacerClock.TryRead(arrivalTimestamp: out _, frameVersion: out _)) {
+            throw new InvalidOperationException(message: "a publish reached the pacer under genlock \"off\"");
+        }
+
+        if (!ReferenceEquals(muted, off.RegisterSource(sourceId: "camera:0"))) {
+            throw new InvalidOperationException(message: "re-registering a source id must return the same channel");
+        }
+    }
+
+    private static void ValidateConvergence() {
         const long Frequency = 10_000_000L; // simulated Stopwatch frequency: 10 MHz (0.1 µs ticks)
 
         var renderPeriod = (Frequency / 240L);          // the design-target high render rate
@@ -99,14 +159,10 @@ internal sealed class GenlockGateNode : IRenderNode {
         const int ArrivalCount = 600;
         const int WarmupArrivals = 200;
 
-        var aligner = new GenlockPhaseAligner(clock: new ExternalPresentClock(), logger: NullLogger.Instance, logPhase: false);
         var clock = new ExternalPresentClock();
+        var aligner = new GenlockPhaseAligner(clock: clock, logger: NullLogger.Instance, logPhase: false);
         var jitter = new Random(Seed: 20260701);
         var jitterRange = (frequency / 2000L); // ±0.5 ms of arrival jitter (decode/copy wobble)
-
-        if (aligned) {
-            aligner = new GenlockPhaseAligner(clock: clock, logger: NullLogger.Instance, logPhase: false);
-        }
 
         var arrivalIndex = 0L;
         var deadline = 0L;

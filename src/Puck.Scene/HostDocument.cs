@@ -37,6 +37,11 @@ public sealed record HostDocument {
     /// <summary>Whether per-pass GPU timing is emitted (the <c>PUCK_TIMING</c> toggle). When omitted the
     /// environment/default decides.</summary>
     public bool? Timing { get; init; }
+    /// <summary>The genlock election: which external rhythm source the render pacer phase-aligns to. <c>"off"</c>
+    /// disables genlock; a source id (e.g. <c>"camera:0"</c>) elects exactly that source; omitted = AUTO — genlock
+    /// engages only while exactly one rhythm source is registered, and disengages the moment a second appears (no
+    /// arbitrary winner). Producers never elect themselves; this is host pacing policy, beside <c>presentMode</c>.</summary>
+    public string? Genlock { get; init; }
 
     internal void Validate(string path, ValidationErrors errors) {
         RequireOneOf(errors: errors, name: "backend", path: $"{path}.backend", value: Backend, allowed: ["vulkan", "directx"]);
@@ -57,6 +62,12 @@ public sealed record HostDocument {
 
         if (RenderRate is < 0) {
             errors.Add(path: $"{path}.renderRate", message: $"renderRate must be >= 0 (was {RenderRate})");
+        }
+
+        // Genlock names a dynamic source id ("off", "camera:0", "net:metronome", ...), so only its SHAPE is validated
+        // here — whether the named source ever registers is a runtime condition, not a document error.
+        if ((Genlock is not null) && string.IsNullOrWhiteSpace(value: Genlock)) {
+            errors.Add(path: $"{path}.genlock", message: "genlock must be \"off\" or a rhythm source id (e.g. \"camera:0\"); omit the field for automatic single-source election");
         }
     }
 

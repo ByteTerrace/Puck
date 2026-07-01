@@ -38,6 +38,9 @@ internal sealed class HostSettings {
     public required bool? RayQuery { get; init; }
     /// <summary>The timing toggle to push to <c>PUCK_TIMING</c>, or <see langword="null"/> to leave the env/default.</summary>
     public required bool? Timing { get; init; }
+    /// <summary>The genlock election policy (<c>"off"</c>, a rhythm source id, or <see langword="null"/> for automatic
+    /// single-source election) — host pacing policy, applied as the external-clock registry's configuration.</summary>
+    public required string? Genlock { get; init; }
 
     /// <summary>Resolves the host config from a run document's host section; each omitted field falls back to the
     /// corresponding CLI flag (or the built-in default where there is no flag).</summary>
@@ -55,6 +58,7 @@ internal sealed class HostSettings {
         return new HostSettings {
             ExitAfter = ToExitAfter(seconds: (host?.ExitAfterSeconds ?? flagExitAfterSeconds)),
             Fullscreen = (host?.Fullscreen ?? false),
+            Genlock = host?.Genlock,
             Height = (hasSize ? (uint)size![1] : DefaultHeight),
             HostBackendIsDirectX = IsDirectX(backend: (host?.Backend ?? flagBackend)),
             PresentMode = (host?.PresentMode ?? flagPresentMode),
@@ -86,6 +90,9 @@ internal sealed class HostSettings {
             ExitAfter = ExitAfter,
             TargetRenderRate = RenderRate,
         });
+        // The external-clock registry, configured with the document's genlock election (host pacing policy). Registered
+        // as a concrete instance so it precedes — and wins over — the launcher's TryAdd default (auto election).
+        services.AddSingleton(implementationInstance: new ExternalClockRegistry(electionPolicy: Genlock));
         _ = services.AddDemoPresentation(presentMode: PresentMode, surfaceFormat: SurfaceFormat);
 
         // Surface the env-var feature toggles as document fields: set the variable the nodes already read so the

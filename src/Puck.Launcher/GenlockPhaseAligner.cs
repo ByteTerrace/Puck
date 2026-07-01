@@ -93,13 +93,24 @@ public sealed class GenlockPhaseAligner {
 
     // Trains the producer-period estimate (EMA over cadence-plausible deltas) and announces the lock once. The delta is
     // divided by the VERSION advance, so a forwarding cadence that skips frames (two arrivals inside one render frame)
-    // still measures the true per-frame period rather than a multiple of it.
+    // still measures the true per-frame period rather than a multiple of it. A version REGRESSION means the elected
+    // source changed (each producer counts its own frames) — and different sources run at different rates, so the
+    // period estimate is discarded and re-trained from the new rhythm rather than blended across producers.
     private void ObserveArrival(long arrival, long frequency, long version) {
         if (arrival == m_lastArrival) {
             return;
         }
 
-        if ((0L != m_lastArrival) && (version > m_lastVersion)) {
+        if ((0L != m_lastArrival) && (version <= m_lastVersion)) {
+            m_integral = 0.0;
+            m_lastArrival = arrival;
+            m_lastVersion = version;
+            m_period = 0L;
+
+            return;
+        }
+
+        if (0L != m_lastArrival) {
             var delta = ((arrival - m_lastArrival) / (version - m_lastVersion));
 
             // Sanity: only cadence-plausible per-frame deltas (2 ms .. 1 s) train the estimate.

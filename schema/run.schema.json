@@ -69,6 +69,12 @@
             "boolean",
             "null"
           ]
+        },
+        "genlock": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
