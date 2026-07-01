@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions;
 using Puck.Commands;
+using Puck.DirectX.Presentation;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.Memory;
@@ -9,11 +10,13 @@ using Puck.Platform;
 using Puck.Post;
 using Puck.Vulkan.Presentation;
 
-// The POST has no rich CLI surface — the battery is a fixed, ordered list in code. Only three knobs, parsed by hand to
-// avoid pulling in a command-line library: where artifacts land, and an optional tier/name subset for iterating.
+// The POST has no rich CLI surface — the battery is a fixed, ordered list in code. Only four knobs, parsed by hand to
+// avoid pulling in a command-line library: where artifacts land, an optional tier/name subset for iterating, and the
+// internal --probe mode the Tier-D stages relaunch this executable in (a live multi-frame run instead of the battery).
 var artifactsDirectory = ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "post");
 var tierFilter = ArgValue(args: args, name: "--tier");
 var nameFilter = ArgValue(args: args, name: "--filter");
+var probeMode = ArgValue(args: args, name: "--probe");
 
 var stages = PostStages.Create()
     .Where(predicate: stage => TierMatches(stage: stage, tierFilter: tierFilter))
@@ -44,20 +47,47 @@ services.AddSingleton(implementationInstance: new PresentationOptions {
 services.AddSingleton(implementationFactory: static _ => new BindingCommandSource(bindings: new Dictionary<string, IReadOnlyList<CommandBinding>>()));
 services.AddLauncherTerminal();
 services.AddPlatformWindowing();
+// The camera-share stage (Tier C) resolves the platform camera-capture service to decide its environment-lenient
+// skip (the null implementation means the camera seam has nothing to prove on this machine).
+services.AddCameraCapture();
 services.AddPuckAllocator();
+// ORDER MATTERS: AddVulkanPresenter MUST precede AddDirectXPresenter — both chain the neutral compute seam into this
+// one container and the Vulkan-hosted stages need the Vulkan device's adapters to win (same rule as the demo's root).
+// The Direct3D 12 presenter exists as the SECOND named backend for the Tier-D hot-switch probe; battery runs are
+// unaffected (the switcher prefers vulkan and only the probe ever toggles it).
 services.AddVulkanPresenter();
+if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
+    services.AddDirectXPresenter();
+}
 services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(Name: "vulkan", Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()));
+if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
+    services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
+        Name: "directx",
+        Presenter: (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)
+            ? sp.GetRequiredService<DirectXSurfacePresenter>()
+            : throw new PlatformNotSupportedException())));
+}
 services.AddBackendSwitcher(preferredBackend: "vulkan");
 
 var runResult = new PostRunResult();
-var battery = new PostBattery(stages: stages);
 
-services.AddSingleton<IRenderNode>(implementationFactory: sp => new PostBatteryNode(
-    artifactsDirectory: artifactsDirectory,
-    battery: battery,
-    runResult: runResult,
-    services: sp
-));
+if (probeMode is not null) {
+    // A Tier-D probe child: host the live probe node instead of the battery.
+    services.AddSingleton<IRenderNode>(implementationFactory: sp => new PostProbeNode(
+        mode: probeMode,
+        runResult: runResult,
+        services: sp
+    ));
+} else {
+    var battery = new PostBattery(stages: stages);
+
+    services.AddSingleton<IRenderNode>(implementationFactory: sp => new PostBatteryNode(
+        artifactsDirectory: artifactsDirectory,
+        battery: battery,
+        runResult: runResult,
+        services: sp
+    ));
+}
 
 await builder.Build().RunAsync();
 

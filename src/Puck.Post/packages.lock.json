@@ -314,6 +314,15 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
         }
       },
+      "puck.cameras": {
+        "type": "Project"
+      },
+      "puck.capture": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
       "puck.commands": {
         "type": "Project",
         "dependencies": {
@@ -325,6 +334,21 @@
         "dependencies": {
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Assets": "[1.0.0, )"
+        }
+      },
+      "puck.directx": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
+      "puck.directx.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.Hosting": "[10.*, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.DirectX": "[1.0.0, )",
+          "Puck.Hosting": "[1.0.0, )"
         }
       },
       "puck.hosting": {
@@ -361,6 +385,24 @@
           "Puck.Commands": "[1.0.0, )",
           "Puck.Input": "[1.0.0, )",
           "System.Drawing.Common": "[10.*, )"
+        }
+      },
+      "puck.scene": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Cameras": "[1.0.0, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )"
+        }
+      },
+      "puck.sdfvm": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.Cameras": "[1.0.0, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.Hosting": "[1.0.0, )",
+          "Puck.Shaders": "[1.0.0, )"
         }
       },
       "puck.shaders": {

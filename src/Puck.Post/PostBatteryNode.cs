@@ -51,7 +51,8 @@ internal sealed class PostBatteryNode : IRenderNode {
             // Tier A ignores it, the GPU tiers require it.
             _ = context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var gpuDevice);
 
-            var report = m_battery.Run(context: new PostContext(services: m_services, gpuDevice: gpuDevice, artifactsDirectory: m_artifactsDirectory));
+            using var postContext = new PostContext(services: m_services, gpuDevice: gpuDevice, artifactsDirectory: m_artifactsDirectory);
+            var report = m_battery.Run(context: postContext);
 
             report.Write(artifactsDirectory: m_artifactsDirectory);
             m_runResult.ExitCode = report.ExitCode;

@@ -13,6 +13,11 @@
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
+        <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
+        <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
+        <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
+        <ProjectReference Include="..\Puck.Scene\Puck.Scene.csproj" />
+        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
         <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
     </ItemGroup>
 
