@@ -1,11 +1,13 @@
 # Plan: live camera as a first-class viewport content source
 
-This document travels with the branch. Status: **M0(a) implemented & verified (2026-07-01); M0(b)/(c) deferred to
-M1.** The document-layer first-class seam is landed and gated green; the GPU-layer seams follow with their first
-consumer. The scope below was validated against the current code by a fan-out reading pass and then
-stress-tested by an adversarial design review that rated the first-pass design "weak" on all three axes; this file is
-the corrected, executable summary. The one remaining design fork (genlock flavor) is called out as an explicit open
-item to resolve when we reach it — not now.
+This document travels with the branch. Status: **M0(a)/M1a/M1b/M1c/M2a/M2b DONE & GPU-verified (2026-07-01) on an
+RTX 4070 + HD Pro Webcam C920.** A live webcam is now a first-class per-viewport content source, authored in the run
+document, sampled into the SDF/effects pipeline, and rendered at full engine FPS between the camera's own arrivals.
+**Remaining/deferred:** M3 (the GPU-resident DXVA NV12 zero-copy tier — a large, high-risk COM/GPU interop milestone,
+intentionally not half-implemented; the practical no-stall goal is already met by the CPU tier), M4 robustness extras
+(MJPEG, auto re-open on replug), M5 genlock (an unresolved pacer-redesign fork), and M6 Linux/macOS verticals (wrong OS
+to verify here). The scope below was validated against the code by a fan-out reading pass and stress-tested by an
+adversarial design review; this file is the executable summary, updated with what actually shipped and verified.
 
 ## Vision
 
@@ -182,11 +184,33 @@ Vulkan.
   **Verified on the RTX 4070:** `--camera --exit-after-seconds 3` opened the window, presented the live foreign-produced
   feed, and exited 0 with no crash; full solution builds; M0a/M1a gates still green; schema regenerated (drift covered).
   This is the running skeleton M2 fills with Media Foundation.
-- **M1c — Sampled + per-viewport first-class. REMAINING.** Bind the imported camera view as a **sampled** SDF/effects
-  input (`WriteCombinedImageSampler` — the stated end goal), and make it a per-viewport source: document-layer
-  `LiveCameraSource : ViewportSource` + `ViewportBuilder` slot→`IRenderNode` map + `WorldNode`/host-node rewiring (drop
-  `WorldNode.Child`, thread a children map). This is where the deferred M0(b) neutral external-memory descriptor +
-  planar/YCbCr and M0(c) `Surface` layout tag land against their first live consumer.
+- **M1c — Sampled + per-viewport first-class. ✅ DONE & GPU-verified (2026-07-01).** A camera is now an authorable
+  per-viewport source, interchangeable with an SDF camera, and **sampled** into the effects pipeline.
+  - Document layer: `LiveCameraViewportSource : ViewportSource` (`$type "live-camera"`, with authored `pixelSize`/
+    `quantize` effect knobs), registered by reachability; `ViewportBuilder` gained a third output (`LiveCameraSlot[]`) and
+    synthesizes a **placeholder** camera per live-camera slot (its SDF render is discarded, overwritten by the pane —
+    exactly the child-slot contract); `JsonSdfFrameSource` carries `LiveCameraSlots`.
+  - GPU layer: `CameraPaneNode` (a HOST-device node like `ChildSurfaceNode`) opens the default webcam via the neutral
+    `ICameraCaptureService`, uploads each frame with `IGpuSurfaceUpload`, and **samples** it through `resample.comp`
+    (`WriteCombinedImageSampler`) into the pane's exact pixel rect — the `pixelSize`/`quantize` knobs drive the retro
+    pixelation + quantization. A missing camera feeds an animated pattern through the identical path (always demoable).
+    `WorldPaneChildren` centralizes the slot→node map (legacy child + one `CameraPaneNode` per live-camera viewport),
+    wired at all four world host sites.
+  - **Design deviation from the plan:** `WorldNode.Child` was **kept**, not dropped — it is load-bearing for the
+    `--validate-world-child` cross-backend parity gate. The live-camera path layers on top of the *same* children
+    machinery (a document-authored per-viewport source is strictly more general than the bool), so first-classness is
+    achieved without destabilizing that gate. Because the CPU-upload path is already ShaderReadOnly→sampled and the
+    composite reads a same-device General-layout image, the deferred M0(b) neutral external-memory descriptor + planar/
+    YCbCr and M0(c) `Surface` layout tag are **not needed on the CPU tier**; they return as M3 prerequisites (the NV12
+    zero-copy path is where a `Surface` layout tag and a planar/YCbCr import descriptor actually bite).
+  - **Verified on the RTX 4070 + HD Pro Webcam C920:** `--run docs/examples/world-camera.json` renders a 2x2 with three
+    SDF orbit views and the live webcam in the bottom-right, upright + correctly colored, captured via
+    `PUCK_CAPTURE_FRAME`. `--validate-world` / `--validate-world-child` cross-backend parity still pass; schema
+    regenerated with the `live-camera` type.
+  - **High-FPS follow-up (shipped):** the pane originally re-uploaded (synchronous `SubmitAndWait`) every rendered frame.
+    A monotonic `FrameVersion` on the capture seam now lets `CameraPaneNode` **skip** the upload/dispatch/submit when the
+    camera has not advanced, so the engine renders at full rate between the camera's ~30 fps arrivals — the high-FPS
+    property for the correctness-floor tier, without the DXVA work.
 - **M2a — MF capture foundation. ✅ DONE (2026-07-01); MF path pending hardware bring-up.** The neutral seam +
   Media Foundation implementation + wiring are in place and build clean; the fallback is verified here; the real capture
   awaits a machine with a webcam.
@@ -208,16 +232,39 @@ Vulkan.
     negotiation, ReadSample, ConvertToContiguousBuffer, buffer Lock) is UNVERIFIED and is the hardware bring-up.
   - **Hardware bring-up caveats to confirm:** RGB32 row orientation (top-down vs bottom-up) and any contiguous-buffer row
     padding; sample-null stream-tick handling; refcount hygiene on the device-enum array.
-- **M2b — Hardware bring-up. PENDING (another machine, real webcam).** Confirm a real feed presents through `--camera`;
-  fix any orientation/stride/interop issue the enumeration path couldn't surface. Then M1c sampling makes it SDF-usable.
-- **M3 — Windows MF GPU-resident zero-copy tier.** `MF_SOURCE_READER_D3D_MANAGER` DXVA NV12 → one `CopyResource` into the
-  M1 keyed-mutex ring → existing import path; NV12→RGB in-shader (ycbcr) or VideoProcessor MFT. **Success:** per-frame
-  transport = one copy + mutex + convert, no queue drain; measured high-FPS at 1080p on RTX 4060-class HW via
-  `PUCK_TIMING` counters (which distinguish the tiers).
-- **M4 — Format + robustness.** MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback), late-frame drop policy,
-  ring sizing, keyed-mutex timeout handling, device-unplug recovery through `OnDeviceLost`.
-- **M5 — Genlock.** Resolve the flavor fork (latency-phase vs harmonic-PLL); add the external-clock ingestion seam;
-  reconcile the MF/QPC/present-timing clock domains; handle the DX-vs-Vulkan scanout-timestamp asymmetry.
+- **M2b — Hardware bring-up. ✅ DONE & verified (2026-07-01, RTX 4070 + HD Pro Webcam C920).** A real feed presents.
+  Added a bring-up gate `--validate-camera-live` (`CameraLiveProbeNode`) that opens the default device through the
+  neutral `ICameraCaptureService`, polls until a frame arrives, and dumps `artifacts/camera-live.png`. Findings on the
+  C920 via the video-processing source reader: the full capture path (`ActivateObject` → media-type negotiation →
+  `ReadSample` → `ConvertToContiguousBuffer` → `Lock` → publish) works; RGB32 is **top-down** (no vertical flip needed);
+  colors are correct (B8G8R8A8 → the GPU format handles the swizzle; only the raw-byte PNG probe swaps B/R); and the
+  contiguous buffer is **tightly packed** (stride 2560 = 640·4, no row padding). So the M2a caveats (bottom-up / padding)
+  do **not** apply to this device — the interop was correct as-written. Read-loop errors + end-of-stream are now logged
+  (a disconnected device freezes the pane on its last frame rather than stopping silently).
+- **M3 — Windows MF GPU-resident zero-copy tier. DEFERRED (large, high-interop-risk; not started).** This is the one
+  headline optimization left. It is deliberately *not* half-implemented: it is a multi-step COM/GPU interop endeavor that
+  must be verified at each step on hardware, and a broken partial would be worse than the working, non-stalling CPU tier
+  now shipped. Precise remaining requirements (each new): (1) a **D3D11 device LUID-matched** to the host adapter;
+  (2) `IMFDXGIDeviceManager` + `MF_SOURCE_READER_D3D_MANAGER` on the reader config; (3) `IMFSample`→`IMFDXGIBuffer`→
+  `ID3D11Texture2D` (transient, non-shareable) extraction; (4) a **persistent ring** of
+  `D3D11_RESOURCE_MISC_SHARED_NTHANDLE | KEYED_MUTEX` textures; (5) per-frame `CopyResource` decode→ring with keyed-mutex
+  acquire/release; (6) hand the **stable** shared NT handle into the existing `VulkanSurfaceImport`/`DirectXGpuSurfaceImport`
+  (imported once per ring slot); (7) **NV12→RGB**, which is the real blocker — the external-memory format model is
+  RGBA8/BGRA8 only, so this needs a planar/YCbCr import descriptor + `VkSamplerYcbcrConversion` (gap #2) or a VideoProcessor
+  MFT pass. **Success:** per-frame transport = one copy + mutex + convert, no queue drain; measured high-FPS at 1080p via
+  `PUCK_TIMING`. **Note:** the practical "don't stall the pump" goal is *already met* by the M1c non-stalling CPU tier;
+  M3's remaining win is eliminating the per-camera-frame host round-trip + upload (matters most at high camera resolution).
+- **M4 — Format + robustness. PARTIALLY DONE.** Done: newest-frame-wins **late-frame drop** (the `FrameVersion` skip);
+  **device-loss rebuild** through `CameraPaneNode.OnDeviceLost` (mirrors the verified `ChildSurfaceNode` pattern; the
+  CPU-side camera session survives GPU device loss); **graceful unplug** (the read loop exits + logs, the pane freezes on
+  the last frame, no crash). Deferred: MJPEG webcams (vendor HW MJPEG MFT + VideoProcessor fallback), *automatic re-open*
+  on device replug (currently a frozen-on-last-frame degrade, not a recover), keyed-mutex timeout handling / ring sizing
+  (those belong to M3's ring).
+- **M5 — Genlock. DEFERRED (unresolved design fork — intentionally left open).** The plan itself defers the flavor
+  decision (latency-phase vs harmonic-PLL) to this milestone; it is a large, risky change to `LauncherWindowHostedService`
+  present pacing (a new external-clock ingestion seam, a three-clock system, and the DX-vs-Vulkan scanout-timestamp
+  asymmetry). Not attempted this session — it is a pacer redesign, not camera plumbing, and would risk the verified
+  present-timing behavior. See [[vrr-present-timing-status]].
 - **M6 — Cross-platform verticals (seams already shaped in M0).** Linux V4L2: `VIDIOC_EXPBUF` dma-buf fd →
   `VkImportMemoryFdInfoKHR` (`DMA_BUF_BIT_EXT`) + DRM format modifier + ycbcr (Vulkan-only). macOS AVFoundation:
   IOSurface-backed `CVPixelBuffer` → `CVMetalTextureCache` (native Metal) or `VK_EXT_metal_objects` (MoltenVK). Both slot

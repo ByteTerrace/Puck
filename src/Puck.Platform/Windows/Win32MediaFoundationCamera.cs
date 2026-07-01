@@ -234,10 +234,16 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
             );
 
             if (hr < 0) {
+                // A read error mid-stream is usually the device being unplugged or reset; report it (the pane then
+                // freezes on the last frame rather than crashing) instead of stopping silently.
+                Console.Error.WriteLine(value: $"[camera] '{m_name}' read loop stopped (0x{hr:X8}); the device may have been disconnected.");
+
                 break;
             }
 
             if ((flags & MfInterop.EndOfStream) != 0) {
+                Console.Error.WriteLine(value: $"[camera] '{m_name}' reported end of stream; the live feed has stopped.");
+
                 break;
             }
 
