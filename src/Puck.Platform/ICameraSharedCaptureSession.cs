@@ -16,6 +16,9 @@ public interface ICameraSharedCaptureSession : IDisposable {
     /// <summary>A monotonically increasing counter of frames published into the shared targets; a consumer compares it
     /// against the value it last sampled to skip unchanged frames (the newest-frame-wins drop policy).</summary>
     long FrameVersion { get; }
+    /// <summary>Whether the feed has permanently stopped (device unplugged, end of stream, or a mid-stream error) — the
+    /// consumer's signal to tear this tier down and re-open the device.</summary>
+    bool IsEnded { get; }
     /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent slot publication (stamped on
     /// the grabber thread, so it shares the render pacer's clock domain) — the genlock arrival signal.</summary>
     long LastFrameTimestamp { get; }

@@ -69,6 +69,7 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
     private readonly Thread m_thread;
     private int m_defaultStride;
     private bool m_disposed;
+    private volatile bool m_ended;
     private bool m_firstFrameLogged;
     private int m_height;
     private string? m_initError;
@@ -97,6 +98,8 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
 
     /// <inheritdoc/>
     public long FrameVersion => m_latest.Version;
+    /// <inheritdoc/>
+    public bool IsEnded => m_ended;
     /// <inheritdoc/>
     public long LastFrameTimestamp => m_latest.LastTimestamp;
     /// <inheritdoc/>
@@ -160,6 +163,10 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
         if (m_initOk && (reader is not null)) {
             ReadLoop(reader: reader);
         }
+
+        // Whatever ended the loop (unplug, end of stream, stop), the feed will never publish again — the consumer's
+        // re-open signal.
+        m_ended = true;
 
         if (reader is not null) {
             _ = Marshal.ReleaseComObject(o: reader);

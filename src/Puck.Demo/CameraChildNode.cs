@@ -42,11 +42,17 @@ internal sealed class CameraChildNode : IRenderNode {
     private readonly ReadOnlyMemory<byte> m_resampleBytecode;
     private readonly byte[] m_resamplePush = new byte[ResamplePushByteLength];
 
+    // Re-open cadence after a feed ends or an open fails, in render frames (~10 s at 60 Hz): long enough that device
+    // re-enumeration is not hammered, short enough that replugging a camera comes back without a restart.
+    private const int ReopenCooldownFrames = 600;
+
     private DirectXComputeWorldDevice? m_allocatorDevice;
     private nint m_boundSourceView;
     private bool m_cameraChecked;
     private ExternalPresentClock? m_externalClock;
     private long m_lastPublishedVersion = -1;
+    private bool m_noDeviceLogged;
+    private int m_reopenCountdown;
     private IGpuSurfaceUpload? m_cameraUpload;
     private nint m_cameraView;
     private uint m_cameraViewHeight;
@@ -120,6 +126,7 @@ internal sealed class CameraChildNode : IRenderNode {
         }
 
         EnsureResources(gpuDevice: gpuDevice, height: context.TargetHeight, width: context.TargetWidth);
+        MaintainCamera();
         EnsureCamera();
 
         // Newest-frame-wins: skip the upload + resample dispatch (and its submit) when the camera has not delivered a new
@@ -163,11 +170,42 @@ internal sealed class CameraChildNode : IRenderNode {
         );
     }
 
-    // Resolve the camera service once and open the default device — the GPU-resident zero-copy tier first (frames
-    // never visit host memory), the CPU-upload tier as the correctness floor; on failure the placeholder fills the
-    // slot. The active tier is logged (the plan's tier telemetry).
+    // Replug recovery: a feed that has permanently ended (device unplugged, end of stream) is torn down here, and the
+    // device is re-opened after a cooldown — so plugging a camera back in brings the pane back without a restart. A
+    // failed open also retries on the same cooldown rather than never. The last shown frame persists in the output
+    // image while disconnected (never a black pane).
+    private void MaintainCamera() {
+        if ((m_sharedSession is not null) && m_sharedSession.IsEnded) {
+            Console.Out.WriteLine(value: $"[camera] '{m_sharedSession.Name}' feed ended; re-opening in ~{ReopenCooldownFrames} frames.");
+            ReleaseGpuTier();
+
+            m_cameraChecked = false;
+            m_reopenCountdown = ReopenCooldownFrames;
+        } else if ((m_cameraSession is not null) && m_cameraSession.IsEnded) {
+            Console.Out.WriteLine(value: $"[camera] '{m_cameraSession.Name}' feed ended; re-opening in ~{ReopenCooldownFrames} frames.");
+            m_cameraSession.Dispose();
+
+            m_cameraSession = null;
+            m_cameraChecked = false;
+            m_reopenCountdown = ReopenCooldownFrames;
+        } else if (m_cameraChecked && (m_sharedSession is null) && (m_cameraSession is null) && (0 == m_reopenCountdown)) {
+            // No feed at all (the last open found no device or failed): retry on the cooldown cadence.
+            m_cameraChecked = false;
+            m_reopenCountdown = ReopenCooldownFrames;
+        }
+    }
+
+    // Resolve the camera service and open the default device — the GPU-resident zero-copy tier first (frames never
+    // visit host memory), the CPU-upload tier as the correctness floor; on failure the placeholder fills the slot (and
+    // MaintainCamera retries later). The active tier is logged (the plan's tier telemetry).
     private void EnsureCamera() {
         if (m_cameraChecked) {
+            return;
+        }
+
+        if (m_reopenCountdown > 0) {
+            m_reopenCountdown--;
+
             return;
         }
 
@@ -176,7 +214,11 @@ internal sealed class CameraChildNode : IRenderNode {
         m_externalClock = (m_cameraServices.GetService(serviceType: typeof(ExternalPresentClock)) as ExternalPresentClock);
 
         if (m_cameraServices.GetService(serviceType: typeof(ICameraCaptureService)) is not ICameraCaptureService service || !service.IsSupported) {
-            Console.Out.WriteLine(value: "[camera] no capture backend for the viewport source; showing a placeholder.");
+            if (!m_noDeviceLogged) {
+                m_noDeviceLogged = true;
+
+                Console.Out.WriteLine(value: "[camera] no capture backend for the viewport source; showing a placeholder.");
+            }
 
             return;
         }
@@ -196,7 +238,12 @@ internal sealed class CameraChildNode : IRenderNode {
             return;
         }
 
-        Console.Out.WriteLine(value: "[camera] no capture device for the viewport source; showing a placeholder.");
+        // Logged once; MaintainCamera keeps retrying quietly on its cooldown (a replugged device then comes back).
+        if (!m_noDeviceLogged) {
+            m_noDeviceLogged = true;
+
+            Console.Out.WriteLine(value: "[camera] no capture device for the viewport source; showing a placeholder (re-probing periodically).");
+        }
     }
 
     // The GPU-resident zero-copy tier: a Media Foundation GPU session converts frames to BGRA on the GPU and copies

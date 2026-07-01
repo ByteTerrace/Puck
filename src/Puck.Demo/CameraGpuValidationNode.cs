@@ -24,8 +24,8 @@ namespace Puck.Demo;
 /// </summary>
 internal sealed class CameraGpuValidationNode : IRenderNode {
     private const int FramePollBudget = 300; // ~5s at 16ms/attempt — a cold sensor's first frame plus DXVA spin-up.
-    private const int RequestedHeight = 720;
-    private const int RequestedWidth = 1280;
+    private const int DefaultRequestedHeight = 720;
+    private const int DefaultRequestedWidth = 1280;
     private const int TargetCount = 2;
     private const uint VulkanFormatB8G8R8A8Unorm = 44; // VK_FORMAT_B8G8R8A8_UNORM
 
@@ -92,9 +92,24 @@ internal sealed class CameraGpuValidationNode : IRenderNode {
             physicalDeviceHandle: vulkanDeviceContext.LogicalDevice.PhysicalDevice.Handle
         );
 
+        // Bring-up knob: PUCK_CAMERA_GPU_SIZE=WxH overrides the requested output (e.g. 1920x1080 exercises the
+        // MJPEG/H.264 decode modes many webcams require above 720p — the GPU processor decodes + converts either way).
+        var requestedWidth = DefaultRequestedWidth;
+        var requestedHeight = DefaultRequestedHeight;
+        var sizeOverride = Environment.GetEnvironmentVariable(variable: "PUCK_CAMERA_GPU_SIZE");
+
+        if (!string.IsNullOrEmpty(value: sizeOverride)) {
+            var parts = sizeOverride.Split(separator: 'x');
+
+            if ((2 == parts.Length) && int.TryParse(s: parts[0], result: out var width) && int.TryParse(s: parts[1], result: out var height)) {
+                requestedHeight = height;
+                requestedWidth = width;
+            }
+        }
+
         ICameraCaptureService service = new Win32MediaFoundationCameraService();
 
-        if (!service.IsSupported || !service.TryOpenSharedDefault(adapterLuid: adapterLuid, requestedWidth: RequestedWidth, requestedHeight: RequestedHeight, session: out var session)) {
+        if (!service.IsSupported || !service.TryOpenSharedDefault(adapterLuid: adapterLuid, requestedWidth: requestedWidth, requestedHeight: requestedHeight, session: out var session)) {
             Console.Out.WriteLine(value: "CAMERA-GPU skip | no capture device (or no Media Foundation GPU path)");
 
             return;

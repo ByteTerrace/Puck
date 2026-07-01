@@ -26,6 +26,7 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private readonly Thread m_thread;
 
     private bool m_disposed;
+    private volatile bool m_ended;
     private int m_height;
     private string? m_initError;
     private bool m_initOk;
@@ -60,6 +61,8 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
 
     /// <inheritdoc/>
     public long FrameVersion => Interlocked.Read(location: ref m_version);
+    /// <inheritdoc/>
+    public bool IsEnded => m_ended;
     /// <inheritdoc/>
     public long LastFrameTimestamp => Interlocked.Read(location: ref m_lastTimestamp);
     /// <inheritdoc/>
@@ -158,6 +161,10 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
 
             ReadLoop(device: device!, reader: reader!, targets: targets);
         } finally {
+            // Whatever ended the grabber (unplug, end of stream, a failed target open, stop), the feed will never
+            // publish again — the consumer's tear-down/re-open signal.
+            m_ended = true;
+
             foreach (var target in targets) {
                 Win32D3D11VideoDevice.ReleaseTexture(texture: target);
             }
