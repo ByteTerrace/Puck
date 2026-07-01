@@ -88,6 +88,10 @@ public static class RunDocumentValidator {
         if ((graph is ShowcaseNode) && (graph.Produce is string produce) && string.Equals(produce, "vulkan", StringComparison.OrdinalIgnoreCase)) {
             errors.Add(path: "graph.produce", message: "produce:\"vulkan\" is incompatible with host.backend:\"directx\" on a showcase (there is no reverse cross-backend showcase); omit produce, set host.backend:\"vulkan\", or use the 'world' graph for the reverse cross-backend live path");
         }
+
+        if (graph is CameraNode) {
+            errors.Add(path: "host.backend", message: "host.backend:\"directx\" is incompatible with the 'camera' node; it produces on a bespoke Direct3D 12 device that only a Vulkan host can import zero-copy — omit host.backend or set it to \"vulkan\"");
+        }
     }
 
     // Unknown top-level members were captured into the root's [JsonExtensionData] rather than rejected (so a strict

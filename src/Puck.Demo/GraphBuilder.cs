@@ -67,6 +67,11 @@ internal static class GraphBuilder {
                 serviceProvider: serviceProvider,
                 width: width
             ),
+            CameraNode => new LiveCameraNode(
+                height: height,
+                serviceProvider: serviceProvider,
+                width: width
+            ),
             _ => throw new NotSupportedException(message: $"Unsupported graph node kind '{graph.GetType().Name}'."),
         };
     }

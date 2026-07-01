@@ -138,6 +138,16 @@ internal static class DemoRunDocuments {
             };
         }
 
+        if (flags.Camera) {
+            // The live camera owns its own Direct3D 12 producer device and hands the host a shared handle; the host must
+            // be Vulkan to import it. It renders its own content (no document scene/viewports), like the showcase.
+            return new PuckRunDocument {
+                Graph = new CameraNode(),
+                Host = (host with { Backend = "vulkan" }),
+                Version = PuckRunDocument.CurrentVersion,
+            };
+        }
+
         if (flags.WorldRt) {
             // The ray-query world: the built-in scene + one full-frame viewport, host device chosen by host.backend.
             return new PuckRunDocument {

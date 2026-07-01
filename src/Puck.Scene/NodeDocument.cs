@@ -13,6 +13,7 @@ namespace Puck.Scene;
 [JsonDerivedType(typeof(WorldNode), typeDiscriminator: "world")]
 [JsonDerivedType(typeof(RtNode), typeDiscriminator: "rt")]
 [JsonDerivedType(typeof(MiniActionNode), typeDiscriminator: "mini-action")]
+[JsonDerivedType(typeof(CameraNode), typeDiscriminator: "camera")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record NodeDocument {
     /// <summary>The backend this node renders on: <c>"vulkan"</c> or <c>"directx"</c>. When null the builder picks the
@@ -77,6 +78,21 @@ public sealed record MiniActionNode : NodeDocument {
     internal override void Validate(string path, int viewportCount, ValidationErrors errors) {
         if (Produce is not null) {
             errors.Add(path: $"{path}.produce", message: "the 'mini-action' node ignores 'produce' (it renders on the host device); use host.backend");
+        }
+    }
+}
+
+/// <summary>A LIVE camera content source: a bespoke Direct3D 12 device (a stand-in for a hardware camera's decode
+/// device) produces a frame into a shared image each frame, which the Vulkan host imports zero-copy and presents. It
+/// owns its own producer device, so <c>produce</c> is meaningless (rejected), and it renders its own content (no
+/// document scene/viewports). The host must be Vulkan — only a Direct3D 12 shared handle is cross-openable.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CameraNode : NodeDocument {
+    private protected override string DefaultBackend => "vulkan";
+
+    internal override void Validate(string path, int viewportCount, ValidationErrors errors) {
+        if (Produce is not null) {
+            errors.Add(path: $"{path}.produce", message: "the 'camera' node ignores 'produce' (it owns its own Direct3D 12 producer device); the host must be Vulkan");
         }
     }
 }

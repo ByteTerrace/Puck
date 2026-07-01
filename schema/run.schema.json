@@ -604,6 +604,26 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "properties": {
+            "$type": {
+              "const": "camera"
+            },
+            "produce": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "capture": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },

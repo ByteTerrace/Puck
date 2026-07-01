@@ -86,6 +86,9 @@ var validateCaptureOption = new Option<bool>(name: "--validate-capture") {
 var validateCameraOption = new Option<bool>(name: "--validate-camera") {
     Description = "Camera-source zero-copy gate: a bespoke Direct3D 12 device (standing in for a camera's decode device) produces a frame (sdf-child) into a shared image, which the Vulkan host imports zero-copy and reads back — asserting the foreign-device content survived. Exits (0 pass/skip, 2 infra-fail). Forces a Vulkan host.",
 };
+var cameraOption = new Option<bool>(name: "--camera") {
+    Description = "Live camera content source: a bespoke Direct3D 12 device (a stand-in for a hardware camera's decode device) produces an animated feed into a shared image each frame, which the Vulkan host imports zero-copy and presents. The running skeleton the real camera fills later. Forces a Vulkan host.",
+};
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
     Description = "With --validate-world, renders a fuzz-generated SDF scene program (deterministic from this seed, identical on both backends) instead of the showcase — one cross-backend differential-fuzzing iteration. A negative value (default) disables fuzzing.",
@@ -135,6 +138,7 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validatePixelateOption,
     validateCaptureOption,
     validateCameraOption,
+    cameraOption,
     validateWorldOption,
     validateWorldChildOption,
     worldOption,
@@ -179,6 +183,7 @@ var runDocument = (runPath is not null)
         ValidateDeterminism = parseResult.GetValue(validateDeterminismOption),
         ValidateCliDeterminism = parseResult.GetValue(validateCliDeterminismOption),
         MiniAction = parseResult.GetValue(miniActionOption),
+        Camera = parseResult.GetValue(cameraOption),
         ValidateExport = parseResult.GetValue(validateExportOption),
         ValidateReverseShare = parseResult.GetValue(validateReverseShareOption),
         ValidateIndirect = parseResult.GetValue(validateIndirectOption),

@@ -171,12 +171,22 @@ Vulkan.
   pass`, exit 0, `px0 != px_center`. Reuses `DirectXComputeWorldDevice` + `DirectXGpuSurfaceExportFactory` +
   `IVulkanExternalMemoryApi` (import direction flipped vs `CrossShareReverseNode`). Confirms the load-bearing bet —
   compute-dispatch *into* a D3D12 exportable storage image — works.
-- **M1b — Live content-source binding. REMAINING.** Package the proof as a `LiveCameraNode : IRenderNode` that hands the
-  host `Surface { SharedHandle }` each frame (the existing `SurfaceCompositor` import path consumes it with **no new host
-  code** — verified template) and/or binds the imported view as a **sampled** SDF/effects input
-  (`WriteCombinedImageSampler`). Then the document-layer `LiveCameraSource` + `ViewportBuilder` slot→`IRenderNode` map +
-  `WorldNode` rewiring (the per-viewport first-class completion). This is where the deferred M0(b) external-memory
-  descriptor + planar/YCbCr and M0(c) `Surface` layout tag land against their first live consumer.
+- **M1b — Live content-source node. ✅ DONE & GPU-verified (2026-07-01).** `LiveCameraNode` (`src/Puck.Demo/LiveCameraNode.cs`,
+  the `--camera` / `camera` graph node) packages the M1a producer as a *persistent per-frame* source: its own bespoke
+  Direct3D 12 device produces an animated `sdf-child` frame into a shared storage image every frame and hands the host a
+  `Surface { SharedHandle }`; the existing Vulkan `SurfaceCompositor` imports + presents it with **no new host code**
+  (verified template). Data-driven & first-class at the graph level via a new `CameraNode : NodeDocument` (`$type`
+  `"camera"`, host forced Vulkan, `produce` rejected, validator guards a directx host) + a `GraphBuilder` arm — the same
+  seam `showcase`/`world` use. Drains the producer each frame via `FinalizeForExport` (correctness-floor cadence; the
+  keyed-mutex + ring optimization is a later milestone). `OnDeviceLost` tears down + rebuilds (new handle re-imported).
+  **Verified on the RTX 4070:** `--camera --exit-after-seconds 3` opened the window, presented the live foreign-produced
+  feed, and exited 0 with no crash; full solution builds; M0a/M1a gates still green; schema regenerated (drift covered).
+  This is the running skeleton M2 fills with Media Foundation.
+- **M1c — Sampled + per-viewport first-class. REMAINING.** Bind the imported camera view as a **sampled** SDF/effects
+  input (`WriteCombinedImageSampler` — the stated end goal), and make it a per-viewport source: document-layer
+  `LiveCameraSource : ViewportSource` + `ViewportBuilder` slot→`IRenderNode` map + `WorldNode`/host-node rewiring (drop
+  `WorldNode.Child`, thread a children map). This is where the deferred M0(b) neutral external-memory descriptor +
+  planar/YCbCr and M0(c) `Surface` layout tag land against their first live consumer.
 - **M2 — Windows MF live capture, CPU fallback tier.** MF async callback → latest-frame triple buffer →
   `IGpuSurfaceUpload` (RGB32). New `ICameraCaptureService` (`IsSupported` + `TryOpen`) + a `Null` fallback, **DI-registered
   parallel to `AddPlatformWindowing`** (capture has no DI registration today — add it). Ship **tier telemetry** here.

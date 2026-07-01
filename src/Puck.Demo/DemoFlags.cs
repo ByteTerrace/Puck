@@ -30,6 +30,8 @@ internal sealed record DemoFlags {
     public required bool ValidateCliDeterminism { get; init; }
     /// <summary>The <c>--mini-action</c> live controller-driven action demo (Vulkan host).</summary>
     public required bool MiniAction { get; init; }
+    /// <summary>The <c>--camera</c> live camera content source: a Direct3D 12-produced feed the Vulkan host imports zero-copy and presents.</summary>
+    public required bool Camera { get; init; }
     /// <summary>The <c>--validate-export</c> same-device export/import gate.</summary>
     public required bool ValidateExport { get; init; }
     /// <summary>The <c>--validate-reverse-share</c> reverse cross-API share gate.</summary>
