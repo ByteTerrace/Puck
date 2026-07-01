@@ -54,7 +54,7 @@
     },
     "viewports": [
         {
-            "camera": {
+            "source": {
                 "$type": "orbit",
                 "angularSpeed": 0.4,
                 "azimuth": 0.0,

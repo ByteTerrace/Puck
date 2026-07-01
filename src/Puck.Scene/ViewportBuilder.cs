@@ -23,7 +23,14 @@ public static class ViewportBuilder {
             var viewport = viewports[index];
             var region = viewport.Region;
 
-            cameras[index] = viewport.Camera!.Build();
+            // M0: every source is a virtual camera (the only registered ViewportSource kinds are orbit/perspective, so
+            // the validator has already guaranteed this). A live capture source will grow a parallel slot->IRenderNode
+            // output here rather than an ICamera.
+            if (viewport.Source is not CameraDocument camera) {
+                throw new NotSupportedException(message: $"viewport[{index}] source '{viewport.Source?.GetType().Name ?? "null"}' is not a camera; ViewportBuilder does not yet build non-camera sources");
+            }
+
+            cameras[index] = camera.Build();
             regions[index] = new NormalizedRect(
                 Height: region[3],
                 Width: region[2],

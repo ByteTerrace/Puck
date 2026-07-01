@@ -36,7 +36,7 @@ internal static class DemoRunDocuments {
             ]
         },
         "viewports": [
-            { "camera": { "$type": "orbit", "angularSpeed": 0.4, "azimuth": 0.0, "fieldOfView": 60.0, "height": 1.6, "radius": 5.2, "target": [0.0, 0.1, 0.0] }, "region": [0.0, 0.0, 1.0, 1.0] }
+            { "source": { "$type": "orbit", "angularSpeed": 0.4, "azimuth": 0.0, "fieldOfView": 60.0, "height": 1.6, "radius": 5.2, "target": [0.0, 0.1, 0.0] }, "region": [0.0, 0.0, 1.0, 1.0] }
         ],
         "graph": { "$type": "world" }
     }
@@ -59,10 +59,10 @@ internal static class DemoRunDocuments {
             ]
         },
         "viewports": [
-            { "camera": { "$type": "orbit", "angularSpeed": 0.4, "azimuth": 0.0, "fieldOfView": 55.0, "height": 1.7, "radius": 5.0, "target": [0.0, 0.0, -0.3] }, "region": [0.0, 0.0, 0.5, 0.5] },
-            { "camera": { "$type": "orbit", "angularSpeed": -0.55, "azimuth": 3.141592653589793, "fieldOfView": 52.0, "height": 0.5, "radius": 3.6, "target": [0.0, 0.15, -0.3] }, "region": [0.5, 0.0, 0.5, 0.5] },
-            { "camera": { "$type": "orbit", "angularSpeed": 0.25, "azimuth": 0.0, "fieldOfView": 55.0, "height": 5.0, "radius": 0.9, "target": [0.0, -0.5, -0.3] }, "region": [0.0, 0.5, 0.5, 0.5] },
-            { "camera": { "$type": "orbit", "angularSpeed": 0.6, "azimuth": 0.0, "fieldOfView": 50.0, "height": 0.3, "radius": 1.8, "target": [-1.3, 0.0, 0.0] }, "region": [0.5, 0.5, 0.5, 0.5] }
+            { "source": { "$type": "orbit", "angularSpeed": 0.4, "azimuth": 0.0, "fieldOfView": 55.0, "height": 1.7, "radius": 5.0, "target": [0.0, 0.0, -0.3] }, "region": [0.0, 0.0, 0.5, 0.5] },
+            { "source": { "$type": "orbit", "angularSpeed": -0.55, "azimuth": 3.141592653589793, "fieldOfView": 52.0, "height": 0.5, "radius": 3.6, "target": [0.0, 0.15, -0.3] }, "region": [0.5, 0.0, 0.5, 0.5] },
+            { "source": { "$type": "orbit", "angularSpeed": 0.25, "azimuth": 0.0, "fieldOfView": 55.0, "height": 5.0, "radius": 0.9, "target": [0.0, -0.5, -0.3] }, "region": [0.0, 0.5, 0.5, 0.5] },
+            { "source": { "$type": "orbit", "angularSpeed": 0.6, "azimuth": 0.0, "fieldOfView": 50.0, "height": 0.3, "radius": 1.8, "target": [-1.3, 0.0, 0.0] }, "region": [0.5, 0.5, 0.5, 0.5] }
         ],
         "graph": { "$type": "world" }
     }

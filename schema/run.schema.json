@@ -440,7 +440,7 @@
           "null"
         ],
         "properties": {
-          "camera": {
+          "source": {
             "type": [
               "object",
               "null"
@@ -569,6 +569,26 @@
           "properties": {
             "$type": {
               "const": "rt"
+            },
+            "produce": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "capture": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "$type": {
+              "const": "mini-action"
             },
             "produce": {
               "type": [
