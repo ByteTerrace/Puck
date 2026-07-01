@@ -91,7 +91,7 @@ internal sealed partial class Win32NativeWindow : IDisplayRefreshInfo, IPrecisio
     }
 
     /// <inheritdoc/>
-    public bool Wait(TimeSpan dueTime) {
+    public bool TryWait(TimeSpan duration) {
         if (!m_precisionTimerResolved) {
             // Resolve once: TryCreate returns null where the high-resolution flag (or the platform) is unsupported, and
             // the timer is disposed in the window's Dispose.
@@ -103,8 +103,8 @@ internal sealed partial class Win32NativeWindow : IDisplayRefreshInfo, IPrecisio
             return false;
         }
 
-        if (dueTime > TimeSpan.Zero) {
-            _ = m_precisionTimer.WaitOne(dueTime: dueTime, cancellationWaitHandle: null);
+        if (duration > TimeSpan.Zero) {
+            _ = m_precisionTimer.WaitOne(dueTime: duration, cancellationWaitHandle: null);
         }
 
         return true;

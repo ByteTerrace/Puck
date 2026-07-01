@@ -7,7 +7,7 @@ namespace Puck.Abstractions;
 /// it cannot recover (the loss propagates). Implementations must tolerate teardown against an already-lost device (e.g.
 /// a wait-for-idle that itself fails), and — because the device may be a shared, capability-published singleton — should
 /// rebuild it IN PLACE so render nodes that hold the same context reference remain valid (they release and rebuild their
-/// own resources via <c>IRenderNode.OnDeviceLost</c>).
+/// own resources via Puck.Hosting's <c>IRenderNode.OnDeviceLost</c>).
 /// </summary>
 public interface IDeviceLostRecoverable {
     /// <summary>Rebuilds the graphics device and presentation resources after a device loss. Called on the pump thread,

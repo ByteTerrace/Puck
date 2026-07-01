@@ -1,9 +1,12 @@
 namespace Puck.Abstractions;
 
 /// <summary>
-/// The rendered pixels a node hands its host to composite, in one of two variants.
+/// The rendered pixels a node hands its host to composite, in one of three variants. At most one of
+/// <see cref="ImageViewHandle"/>, <see cref="Pixels"/>, and <see cref="SharedHandle"/> is populated — the
+/// consumer discriminates via <see cref="IsCpuPixels"/> and <see cref="IsSharedHandle"/> (else same-device GPU),
+/// with <see cref="IsEmpty"/> meaning "no content this frame".
 /// <para>
-/// The <em>GPU</em> variant carries a shared image-view handle (<see cref="ImageViewHandle"/>) — valid only
+/// The <em>same-device GPU</em> variant carries an image-view handle (<see cref="ImageViewHandle"/>) — valid only
 /// while producer and consumer share one device chain, already in a shader-readable layout — so the consumer
 /// may sample it immediately.
 /// </para>
@@ -13,7 +16,12 @@ namespace Puck.Abstractions;
 /// boundary: a producer on one backend reads its result back to host memory, and the consumer uploads those
 /// pixels onto its own device before sampling. Rows are packed with no padding, in <see cref="Format"/> order.
 /// </para>
-/// In both variants the producer has serialized its work before returning.
+/// <para>
+/// The <em>shared-handle</em> variant carries an external shareable handle (<see cref="SharedHandle"/>) to a
+/// texture the producer allocated in shared GPU memory, so a consumer on a DIFFERENT backend/device can import
+/// and sample it zero-copy — no host-memory round trip.
+/// </para>
+/// In all variants the producer has serialized its work before returning.
 /// </summary>
 /// <param name="ImageViewHandle">The native image-view handle of the same-device GPU variant, or zero otherwise.</param>
 /// <param name="Width">The width, in pixels, of the surface.</param>

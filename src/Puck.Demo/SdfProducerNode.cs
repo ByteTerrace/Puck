@@ -328,7 +328,16 @@ public sealed class SdfProducerNode : IRenderNode, IDebugViewTarget {
 
         var deviceHandle = m_deviceContext.DeviceHandle;
 
-        m_descriptorPool = m_descriptorAllocator.CreatePool(combinedImageSamplerCount: 0, deviceHandle: deviceHandle, maxSets: 1, storageBufferCount: 1, storageImageCount: 0);
+        m_descriptorPool = m_descriptorAllocator.CreatePool(
+            deviceHandle: deviceHandle,
+            sizes: new GpuDescriptorPoolSizes(
+                MaxSets: 1,
+                CombinedImageSamplerCount: 0,
+                StorageBufferCount: 1,
+                StorageImageCount: 0,
+                AccelerationStructureCount: 0
+            )
+        );
         m_descriptorSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: m_descriptorPool);
         m_descriptorAllocator.WriteStorageBuffer(binding: m_storageBufferBinding, bufferHandle: m_programBuffer.BufferHandle, bufferSize: programByteLength, descriptorSetHandle: m_descriptorSet, deviceHandle: deviceHandle);
 

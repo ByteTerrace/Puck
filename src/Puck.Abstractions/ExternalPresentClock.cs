@@ -5,7 +5,8 @@ namespace Puck.Abstractions;
 /// grabber thread) publishes each frame's ARRIVAL timestamp — <see cref="System.Diagnostics.Stopwatch"/> ticks, stamped
 /// at the publish site so it shares the pacer's QPC clock domain — and the render pacer reads the latest one to bias its
 /// deadline toward the arrivals (present a fresh frame with minimum latency while rendering at full VRR rate). One
-/// writer at a time is assumed (multiple sources devolve to last-writer-wins); reads and writes are lock-free.
+/// writer at a time is assumed (multiple sources devolve to last-writer-wins); reads and writes take a brief internal
+/// lock so the (timestamp, version) pair is always observed consistently.
 /// </summary>
 public sealed class ExternalPresentClock {
     private readonly Lock m_gate = new();

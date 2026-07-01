@@ -15,7 +15,6 @@ public interface IGpuCommandRecorder {
         nint commandBufferHandle,
         nint renderPassHandle,
         nint framebufferHandle,
-        nint pipelineHandle,
         uint width,
         uint height
     );

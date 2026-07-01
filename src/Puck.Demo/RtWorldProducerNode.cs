@@ -214,14 +214,7 @@ internal sealed class RtWorldProducerNode : IRenderNode {
         // so adding a binding can't silently under-provision it.
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
 
-        m_pool = m_descriptorAllocator.CreatePool(
-            accelerationStructureCount: poolSizes.AccelerationStructureCount,
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: m_deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
         m_set = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_computePipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
 
         m_descriptorAllocator.WriteStorageImage(arrayElement: 0, binding: OutputBindingIndex, descriptorSetHandle: m_set, deviceHandle: m_deviceHandle, imageViewHandle: m_storageImage.ImageViewHandle);

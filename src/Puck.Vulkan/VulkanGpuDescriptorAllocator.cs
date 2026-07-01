@@ -15,17 +15,17 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
             poolHandle: poolHandle
         );
     /// <inheritdoc/>
-    public nint CreatePool(nint deviceHandle, uint maxSets, uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount, uint accelerationStructureCount = 0) {
+    public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) {
         var poolSizes = BuildPoolSizes(
-            accelerationStructureCount: accelerationStructureCount,
-            combinedImageSamplerCount: combinedImageSamplerCount,
-            storageBufferCount: storageBufferCount,
-            storageImageCount: storageImageCount
+            accelerationStructureCount: sizes.AccelerationStructureCount,
+            combinedImageSamplerCount: sizes.CombinedImageSamplerCount,
+            storageBufferCount: sizes.StorageBufferCount,
+            storageImageCount: sizes.StorageImageCount
         );
 
         return allocator.CreatePool(
             deviceHandle: deviceHandle,
-            maxSets: maxSets,
+            maxSets: sizes.MaxSets,
             poolSizes: poolSizes
         );
     }

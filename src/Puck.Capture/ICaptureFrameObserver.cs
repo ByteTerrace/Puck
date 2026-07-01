@@ -1,4 +1,6 @@
-namespace Puck.Abstractions;
+using Puck.Abstractions;
+
+namespace Puck.Capture;
 
 /// <summary>
 /// Observes each captured frame as the sink consumes it — for diagnostics that derive a signal from the

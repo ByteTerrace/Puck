@@ -103,13 +103,7 @@ internal sealed class ResampleStage : IPostStage {
 
         var sampler = gpu.DescriptorAllocator.CreateSampler(deviceHandle: deviceHandle, filter: filter);
         var poolSizes = GpuDescriptorPoolSizes.ForSets(childBindings, resampleBindings);
-        var pool = gpu.DescriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        var pool = gpu.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
 
         try {
             var childSet = gpu.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: childPipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: pool);

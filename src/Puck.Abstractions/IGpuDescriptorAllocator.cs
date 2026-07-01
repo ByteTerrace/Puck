@@ -6,15 +6,13 @@ namespace Puck.Abstractions;
 public interface IGpuDescriptorAllocator {
     /// <summary>Allocates a single descriptor set of the given layout from a pool.</summary>
     nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle);
-    /// <summary>Creates a descriptor pool for combined image samplers, storage buffers, and/or storage images.</summary>
+    /// <summary>Creates a descriptor pool for combined image samplers, storage buffers, storage images, and/or
+    /// acceleration structures.</summary>
     /// <param name="deviceHandle">The native device handle.</param>
-    /// <param name="maxSets">The maximum number of descriptor sets the pool can allocate.</param>
-    /// <param name="combinedImageSamplerCount">The number of combined image-sampler descriptors, or 0.</param>
-    /// <param name="storageBufferCount">The number of storage buffer descriptors, or 0.</param>
-    /// <param name="storageImageCount">The number of storage image descriptors, or 0.</param>
-    /// <param name="accelerationStructureCount">The number of acceleration-structure descriptors, or 0 (ray-query only).</param>
+    /// <param name="sizes">The per-descriptor-kind capacity the pool must provide, DERIVED from the binding lists
+    /// of the sets it will back (see <see cref="GpuDescriptorPoolSizes.ForSets"/>) rather than hand-tallied.</param>
     /// <returns>The native descriptor pool handle.</returns>
-    nint CreatePool(nint deviceHandle, uint maxSets, uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount, uint accelerationStructureCount = 0);
+    nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes);
     /// <summary>Creates a sampler with the given filter (see <see cref="GpuSamplerFilter"/>) and clamp-to-edge
     /// addressing. On Direct3D 12 samplers are static in the root signature, so this returns a non-zero sentinel and
     /// the filter is applied by the compute pipeline's static sampler instead.</summary>

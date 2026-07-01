@@ -93,16 +93,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             using var window = m_windowFactory.Create();
 
             try {
-                if (window is not INativeSurfaceSourceProvider surfaceSource) {
-                    throw new InvalidOperationException(message: "The launcher requires a window that can provide a native surface binding.");
-                }
-
                 if (window is not IWindowInputSource inputSource) {
                     throw new InvalidOperationException(message: "The launcher requires a window that can provide input.");
                 }
 
                 m_presenter.Activate(
-                    binding: surfaceSource.CreateSurfaceBinding(),
+                    binding: window.CreateSurfaceBinding(),
                     height: window.Height,
                     width: window.Width
                 );
@@ -152,6 +148,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher; PUCK_GENLOCK=0
                 // disables it.
                 var genlock = new GenlockPhaseAligner(clock: m_externalClocks.PacerClock, logger: m_logger, logPhase: logPresentTiming);
+                // Starts behind any possible registry state so the first loop iteration always evaluates (and, when
+                // sources registered before the loop, announces) the current election.
+                var observedElectionGeneration = -1;
                 var renderPeriod = ResolveRenderPeriod(refreshRange: refreshRange, frequency: frequency);
                 var spinThreshold = ((frequency / 1000L) * SpinThresholdMilliseconds);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: TargetUpdateRate);
@@ -194,6 +193,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             renderPeriod = ResolveRenderPeriod(refreshRange: refreshRange, frequency: frequency);
                         }
                     }
+
+                    // GENLOCK election watch: announce (once per election change) when plural rhythm sources are
+                    // registered with no election, so the resulting silent free-run is visible to the operator.
+                    NoteExternalClockContention(observedElectionGeneration: ref observedElectionGeneration);
 
                     // When the window is not focused, key/button releases are not delivered, so drop any held
                     // inputs — otherwise a value down at the moment focus was lost would stay stuck.
@@ -288,7 +291,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         NoteFrameSucceeded(streak: ref deviceLossStreak);
                     } catch (DeviceLostException deviceLost) {
                         if (!TryRecoverFromDeviceLoss(
-                            binding: surfaceSource.CreateSurfaceBinding(),
+                            binding: window.CreateSurfaceBinding(),
                             deviceLost: deviceLost,
                             height: height,
                             streak: ref deviceLossStreak,
@@ -443,6 +446,29 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             return true;
         }
     }
+    // GENLOCK election watch: when plural rhythm sources are registered with no election to break the tie, nothing
+    // forwards to the pacer (the registry never picks an arbitrary winner) — announce it, with the ids, so the operator
+    // can name one. The registry exposes the condition structurally (generation + contention flag), so this is a cheap
+    // per-frame check that logs only when the election actually changes; the registry itself stays log-free.
+    private void NoteExternalClockContention(ref int observedElectionGeneration) {
+        var generation = m_externalClocks.ElectionGeneration;
+
+        if (generation == observedElectionGeneration) {
+            return;
+        }
+
+        observedElectionGeneration = generation;
+
+        if (m_externalClocks.IsContended) {
+            var sourceIds = m_externalClocks.SourceIds;
+
+            m_logger.LogWarning(
+                message: "Genlock: {Count} rhythm sources are registered ({SourceIds}) with no genlock election; the pacer free-runs until one is named.",
+                sourceIds.Count,
+                string.Join(", ", sourceIds)
+            );
+        }
+    }
     // A clean frame rendered: if it follows one or more device-loss recoveries, announce that rendering is back and clear
     // the streak. (Without the announcement a recovery only logged "recovering…" then went quiet — reading as a failure
     // even though presents had resumed.)
@@ -510,7 +536,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // remainder for an accurate edge; fall back to a coarse 1 ms sleep where no precision waiter exists.
                 var sleepTicks = (remaining - spinThreshold);
 
-                if ((precisionWaiter is null) || !precisionWaiter.Wait(dueTime: TimeSpan.FromSeconds((double)sleepTicks / frequency))) {
+                if ((precisionWaiter is null) || !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds((double)sleepTicks / frequency))) {
                     Thread.Sleep(millisecondsTimeout: 1);
                 }
             } else {

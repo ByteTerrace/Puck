@@ -19,21 +19,8 @@ public sealed class GpuPushConstantBinding {
     /// <param name="stageFlags">A bitmask of shader stage flags identifying the stages that read the range.</param>
     /// <param name="data">The push constant data to upload.</param>
     public GpuPushConstantBinding(uint offset, uint stageFlags, ReadOnlyMemory<byte> data) {
-        if (stageFlags == 0) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: stageFlags,
-                message: "Push-constant stage flags must be non-zero.",
-                paramName: nameof(stageFlags)
-            );
-        }
-
-        if (data.Length == 0) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: data.Length,
-                message: "Push-constant data must be non-empty.",
-                paramName: nameof(data)
-            );
-        }
+        ArgumentOutOfRangeException.ThrowIfZero(value: stageFlags);
+        ArgumentOutOfRangeException.ThrowIfZero(value: data.Length, paramName: nameof(data));
 
         Offset = offset;
         StageFlags = stageFlags;

@@ -91,16 +91,6 @@ internal static partial class User32 {
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool UpdateWindow(nint windowHandle);
     [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool InvalidateRect(nint windowHandle, nint rectangle, [MarshalAs(UnmanagedType.Bool)] bool eraseBackground);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool GetClientRect(nint windowHandle, out Rectangle rectangle);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    public static partial int FillRect(nint deviceContextHandle, in Rectangle rectangle, nint brushHandle);
-    [LibraryImport("user32.dll", EntryPoint = "DrawTextW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    public static partial int DrawText(nint deviceContextHandle, string text, int textLength, ref Rectangle rectangle, uint format);
-    [LibraryImport("user32.dll", SetLastError = true)]
     public static partial nint BeginPaint(nint windowHandle, out PaintStruct paintStruct);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

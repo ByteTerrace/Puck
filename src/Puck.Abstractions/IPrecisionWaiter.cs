@@ -8,8 +8,8 @@ namespace Puck.Abstractions;
 /// without busy-waiting the whole interval.
 /// </summary>
 public interface IPrecisionWaiter {
-    /// <summary>Blocks until <paramref name="dueTime"/> elapses, using the platform's high-resolution wait.</summary>
-    /// <param name="dueTime">The relative duration to wait; non-positive returns immediately.</param>
+    /// <summary>Blocks until <paramref name="duration"/> elapses, using the platform's high-resolution wait.</summary>
+    /// <param name="duration">The relative duration to wait; non-positive returns immediately.</param>
     /// <returns><see langword="true"/> if the high-resolution wait was used; <see langword="false"/> if unsupported (the caller should fall back to a coarse sleep).</returns>
-    bool Wait(TimeSpan dueTime);
+    bool TryWait(TimeSpan duration);
 }

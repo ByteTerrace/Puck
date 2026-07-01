@@ -65,9 +65,6 @@ public sealed class VulkanRenderer(
     /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>
     public VulkanSurface Surface => (m_surface ?? throw new InvalidOperationException(message: "The renderer must be initialized before its surface is used."));
 
-    /// <summary>Whether the device chain has been initialized.</summary>
-    public bool IsInitialized => (m_device is not null);
-
     /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));

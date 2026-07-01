@@ -228,13 +228,7 @@ internal sealed class PostProbeNode : IRenderNode {
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
 
-        m_pool = m_gpu.DescriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        m_pool = m_gpu.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
         m_set = m_gpu.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: m_pool);
         m_gpu.DescriptorAllocator.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: m_set, deviceHandle: deviceHandle, imageViewHandle: m_image.ImageViewHandle);
         m_commandPool = m_gpu.CommandPoolFactory.Create(deviceContext: device);

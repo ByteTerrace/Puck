@@ -91,13 +91,7 @@ internal sealed class ViewportsStage : IPostStage {
 
         var sampler = gpu.DescriptorAllocator.CreateSampler(deviceHandle: deviceHandle, filter: GpuSamplerFilter.Nearest);
         var poolSizes = GpuDescriptorPoolSizes.ForSets(childBindings, childBindings, resampleBindings, compositeBindings);
-        var pool = gpu.DescriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        var pool = gpu.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
 
         try {
             var rawSet = gpu.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: childPipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: pool);

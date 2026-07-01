@@ -21,21 +21,8 @@ public readonly record struct GpuDrawParameters {
     /// <param name="firstInstance">The index of the first instance to draw.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="vertexCount"/> or <paramref name="instanceCount"/> is zero.</exception>
     public GpuDrawParameters(uint vertexCount, uint instanceCount, uint firstVertex = 0, uint firstInstance = 0) {
-        if (vertexCount == 0) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: vertexCount,
-                message: "Draw vertex count must be greater than zero.",
-                paramName: nameof(vertexCount)
-            );
-        }
-
-        if (instanceCount == 0) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: instanceCount,
-                message: "Draw instance count must be greater than zero.",
-                paramName: nameof(instanceCount)
-            );
-        }
+        ArgumentOutOfRangeException.ThrowIfZero(value: vertexCount);
+        ArgumentOutOfRangeException.ThrowIfZero(value: instanceCount);
 
         FirstInstance = firstInstance;
         FirstVertex = firstVertex;

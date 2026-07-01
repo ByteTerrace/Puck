@@ -187,13 +187,7 @@ internal sealed class LiveCameraNode : IRenderNode {
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
 
-        m_pool = m_gpu.DescriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: m_deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        m_pool = m_gpu.DescriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
         m_set = m_gpu.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
         m_gpu.DescriptorAllocator.WriteStorageImage(arrayElement: 0, binding: ChildOutputBinding, descriptorSetHandle: m_set, deviceHandle: m_deviceHandle, imageViewHandle: m_exportable.ImageViewHandle);
         m_commandPool = m_gpu.CommandPoolFactory.Create(deviceContext: device);

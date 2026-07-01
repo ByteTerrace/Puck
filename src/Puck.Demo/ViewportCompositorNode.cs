@@ -171,13 +171,7 @@ internal sealed class ViewportCompositorNode : IRenderNode {
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
 
-        m_pool = m_descriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: m_deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
         m_compositeSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_compositePipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
         m_descriptorAllocator.WriteStorageImage(arrayElement: 0, binding: OutputBindingIndex, descriptorSetHandle: m_compositeSet, deviceHandle: m_deviceHandle, imageViewHandle: m_storageImage.ImageViewHandle);
         m_commandPool = m_gpu.CommandPoolFactory.Create(deviceContext: gpuDevice);

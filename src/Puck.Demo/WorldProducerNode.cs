@@ -539,13 +539,7 @@ internal sealed class WorldProducerNode : IRenderNode {
         // MaxViewports changes — replacing the hand-tallied count that previously had to be kept in step by comment.
         var poolSizes = GpuDescriptorPoolSizes.ForSets(beamBindings, cullArgsBindings, viewsBindings, compositeBindings);
 
-        m_pool = m_descriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: m_deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
 
         m_beamSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_beamPipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
         WriteStorageBuffer(set: m_beamSet, binding: ProgramBindingIndex, buffer: m_programBuffer);

@@ -282,11 +282,6 @@
         "resolved": "10.0.9",
         "contentHash": "fmEbAUFsaIKirgLt/lYhuFRBwhcSJN31jjHgCdbQxJiWOum6EdLjkbgGuukSP9z/a+9LibaxII/kF+GwOXgC4g=="
       },
-      "Microsoft.Win32.SystemEvents": {
-        "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "dk5HKolAR9bBxlL4dl6Koaf0s/Q47QApog+/o341LSuvWGW6ig4q5fTsgYG0MrK//l2Slv6mygncMK/8lgXVDg=="
-      },
       "System.CommandLine": {
         "type": "Transitive",
         "resolved": "2.0.9",
@@ -297,34 +292,13 @@
         "resolved": "10.0.9",
         "contentHash": "s2PcxHK4IYQ6gmD3VSBkym9tWGkFisKjcjWBdl7a+n4Yy66ae4beJ1ZdjDp060SSll4W3Rt4H2LW87dWckv+QQ=="
       },
-      "System.Drawing.Common": {
-        "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "ShkEj8jOhklJgrN3SoaVbCcopvqyIgVXHso2/eibQBL7IZxzJjND77UYVlViHqpwPxyQeA67IOut4b41clBkQw==",
-        "dependencies": {
-          "Microsoft.Win32.SystemEvents": "10.0.9"
-        }
-      },
       "puck.abstractions": {
         "type": "Project"
-      },
-      "puck.assets": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
-        }
       },
       "puck.commands": {
         "type": "Project",
         "dependencies": {
           "System.CommandLine": "[2.*, )"
-        }
-      },
-      "puck.compositing": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Assets": "[1.0.0, )"
         }
       },
       "puck.hosting": {
@@ -338,25 +312,6 @@
         "type": "Project",
         "dependencies": {
           "Puck.Commands": "[1.0.0, )"
-        }
-      },
-      "puck.platform": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
-          "Microsoft.Extensions.Options": "[10.*, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )",
-          "Puck.Input": "[1.0.0, )",
-          "Puck.Platform.Abstractions": "[1.0.0, )",
-          "System.Drawing.Common": "[10.*, )"
-        }
-      },
-      "puck.platform.abstractions": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Input": "[1.0.0, )"
         }
       }
     }

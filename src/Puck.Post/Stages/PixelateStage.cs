@@ -65,13 +65,7 @@ internal sealed class PixelateStage : IPostStage {
         using var commandPool = gpu.CommandPoolFactory.Create(deviceContext: device);
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets(childBindings, pixelateBindings);
-        var pool = gpu.DescriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        var pool = gpu.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
 
         try {
             var childSet = gpu.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: childPipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: pool);

@@ -25,7 +25,7 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
     ) {
         surfaceHandle = 0;
 
-        if (0 == binding.Window) {
+        if (0 == binding.WindowHandle) {
             throw new ArgumentException(
                 message: "Nintendo Switch (VI) Vulkan surface creation requires a non-zero native window handle.",
                 paramName: nameof(binding)
@@ -40,7 +40,7 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
 
         var createInfo = new VkViSurfaceCreateInfoNn {
             StructureType = VkStructureTypeViSurfaceCreateInfoNn,
-            Window = binding.Window,
+            Window = binding.WindowHandle,
         };
 
         return createSurface(
@@ -59,8 +59,8 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
         surfaceHandle = 0;
 
         if (
-            (0 == binding.Display) ||
-            (0 == binding.Surface)
+            (0 == binding.DisplayHandle) ||
+            (0 == binding.SurfaceHandle)
         ) {
             throw new ArgumentException(
                 message: "Wayland Vulkan surface creation requires non-zero display and surface handles.",
@@ -75,9 +75,9 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
         }
 
         var createInfo = new VkWaylandSurfaceCreateInfoKhr {
-            Display = binding.Display,
+            Display = binding.DisplayHandle,
             StructureType = VkStructureTypeWaylandSurfaceCreateInfoKhr,
-            Surface = binding.Surface,
+            Surface = binding.SurfaceHandle,
         };
 
         return createSurface(

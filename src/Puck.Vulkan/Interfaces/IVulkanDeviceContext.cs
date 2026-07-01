@@ -10,8 +10,6 @@ namespace Puck.Vulkan.Interfaces;
 public interface IVulkanDeviceContext {
     /// <summary>Gets the Vulkan instance.</summary>
     VulkanInstance Instance { get; }
-    /// <summary>Gets a value indicating whether the context has been fully initialized.</summary>
-    bool IsInitialized { get; }
     /// <summary>Gets the logical device.</summary>
     VulkanLogicalDevice LogicalDevice { get; }
     /// <summary>Gets the selected physical device.</summary>

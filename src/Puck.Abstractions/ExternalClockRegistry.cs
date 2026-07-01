@@ -6,7 +6,7 @@ namespace Puck.Abstractions;
 /// its own rate), and the HOST's election policy decides which single source, if any, is forwarded to the pacer-facing
 /// <see cref="PacerClock"/>. Producers never decide; the pacer never sees more than one rhythm (a deadline grid can
 /// phase-align to exactly one clock — plurality is a selection problem, not a controller problem).
-/// <para>Election policy (from the run document's <c>host.genlock</c>): <c>"off"</c> = never forward; a source id =
+/// <para>Election policy (the host's genlock configuration): <c>"off"</c> = never forward; a source id =
 /// forward exactly that source once it registers; absent (<see langword="null"/>) = AUTO — forward when exactly one
 /// source is registered, and refuse (silently un-elect) the moment a second appears, so plural rhythms never race for
 /// the pacer by accident. Registration is idempotent (a re-opened device keeps its channel), and network sources fit
@@ -14,13 +14,15 @@ namespace Puck.Abstractions;
 /// exactly as a local grabber thread does.</para>
 /// </summary>
 public sealed class ExternalClockRegistry {
-    /// <summary>The <c>host.genlock</c> token that disables forwarding entirely.</summary>
+    /// <summary>The genlock-policy token that disables forwarding entirely.</summary>
     public const string PolicyOff = "off";
 
     private readonly Lock m_gate = new();
     private readonly string? m_policy;
     private readonly Dictionary<string, ExternalClockSource> m_sources = new(comparer: StringComparer.OrdinalIgnoreCase);
     private volatile ExternalClockSource? m_elected;
+    private int m_electionGeneration;
+    private volatile bool m_isContended;
 
     /// <summary>Initializes a new instance of the <see cref="ExternalClockRegistry"/> class.</summary>
     /// <param name="electionPolicy"><see cref="PolicyOff"/>, a source id to elect, or <see langword="null"/> for AUTO
@@ -28,6 +30,14 @@ public sealed class ExternalClockRegistry {
     public ExternalClockRegistry(string? electionPolicy = null) {
         m_policy = (string.IsNullOrWhiteSpace(value: electionPolicy) ? null : electionPolicy.Trim());
     }
+
+    /// <summary>Advances every time the election is re-evaluated (a new source registered), so a host can observe
+    /// election changes — pair with <see cref="IsContended"/> and <see cref="SourceIds"/> — without polling strings.</summary>
+    public int ElectionGeneration => Volatile.Read(location: ref m_electionGeneration);
+
+    /// <summary>Whether plural sources are registered with no election to break the tie (the AUTO policy never picks
+    /// an arbitrary winner), so nothing forwards to <see cref="PacerClock"/> until the host names a source.</summary>
+    public bool IsContended => m_isContended;
 
     /// <summary>The single channel the render pacer reads — fed only by the elected source.</summary>
     public ExternalPresentClock PacerClock { get; } = new();
@@ -47,9 +57,7 @@ public sealed class ExternalClockRegistry {
     /// <returns>The source's publish channel.</returns>
     /// <exception cref="ArgumentException"><paramref name="sourceId"/> is empty.</exception>
     public ExternalClockSource RegisterSource(string sourceId) {
-        if (string.IsNullOrWhiteSpace(value: sourceId)) {
-            throw new ArgumentException(message: "A source id is required.", paramName: nameof(sourceId));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourceId);
 
         lock (m_gate) {
             if (!m_sources.TryGetValue(key: sourceId, value: out var source)) {
@@ -68,43 +76,45 @@ public sealed class ExternalClockRegistry {
         ReferenceEquals(m_elected, source);
 
     // Applies the policy over the current registrations. Named: elect the named source when present. Auto: elect the
-    // sole source, and un-elect when plurality appears (no arbitrary winner, ever). Off: never elect.
+    // sole source, and un-elect when plurality appears (no arbitrary winner, ever). Off: never elect. The structural
+    // outcome (ElectionGeneration + IsContended) is published so a host can observe — and announce — election changes;
+    // the registry itself never logs.
     private void ReevaluateElection() {
+        ++m_electionGeneration;
+
         if (string.Equals(m_policy, PolicyOff, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             m_elected = null;
+            m_isContended = false;
 
             return;
         }
 
         if (m_policy is not null) {
             m_elected = (m_sources.TryGetValue(key: m_policy, value: out var named) ? named : null);
+            m_isContended = false;
 
             return;
         }
 
         m_elected = ((1 == m_sources.Count) ? m_sources.Values.First() : null);
-
-        if ((m_sources.Count > 1) && (m_elected is null)) {
-            Console.Out.WriteLine(value: $"[genlock] {m_sources.Count} rhythm sources are registered ({string.Join(", ", m_sources.Keys)}) with no host.genlock election; the pacer free-runs until one is named.");
-        }
+        m_isContended = (m_sources.Count > 1);
     }
 }
 
 /// <summary>
-/// One registered rhythm source: its own conflating channel (so every source's latest arrival and rate stay observable
-/// and independent — sources at different rates never pollute each other), plus the forwarding hook that feeds the
+/// One registered rhythm source: its own conflating channel (so every source's latest arrival and rate stay
+/// independent — sources at different rates never pollute each other), plus the forwarding hook that feeds the
 /// registry's pacer channel while — and only while — this source is elected.
 /// </summary>
 public sealed class ExternalClockSource {
+    // This source's own latest-arrival channel; every publish lands here regardless of election.
+    private readonly ExternalPresentClock m_channel = new();
     private readonly ExternalClockRegistry m_registry;
 
     internal ExternalClockSource(ExternalClockRegistry registry, string sourceId) {
         m_registry = registry;
         SourceId = sourceId;
     }
-
-    /// <summary>This source's own latest-arrival channel (diagnostics / future per-source consumers).</summary>
-    public ExternalPresentClock Channel { get; } = new();
 
     /// <summary>The stable source identity this channel registered under.</summary>
     public string SourceId { get; }
@@ -114,7 +124,7 @@ public sealed class ExternalClockSource {
     /// <param name="arrivalTimestamp">The arrival time in <see cref="System.Diagnostics.Stopwatch"/> ticks (local receipt time for a network source).</param>
     /// <param name="frameVersion">The producer's monotonically increasing frame counter at this arrival.</param>
     public void Publish(long arrivalTimestamp, long frameVersion) {
-        Channel.Publish(arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);
+        m_channel.Publish(arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);
 
         if (m_registry.IsElected(source: this)) {
             m_registry.PacerClock.Publish(arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);

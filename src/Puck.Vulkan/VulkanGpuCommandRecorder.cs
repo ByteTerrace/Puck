@@ -22,12 +22,11 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
         ).ThrowIfFailed(operation: "vkEndCommandBuffer");
     }
     /// <inheritdoc/>
-    public void BeginRenderPass(nint deviceHandle, nint commandBufferHandle, nint renderPassHandle, nint framebufferHandle, nint pipelineHandle, uint width, uint height) {
+    public void BeginRenderPass(nint deviceHandle, nint commandBufferHandle, nint renderPassHandle, nint framebufferHandle, uint width, uint height) {
         commandBufferRecordingApi.StartRenderPass(request: new VulkanCommandBufferRecordRequest(
             CommandBufferHandle: commandBufferHandle,
             DeviceHandle: deviceHandle,
             FramebufferHandle: framebufferHandle,
-            GraphicsPipelineHandle: pipelineHandle,
             Height: height,
             RenderPassHandle: renderPassHandle,
             Width: width

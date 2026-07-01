@@ -185,14 +185,7 @@ internal sealed class RtStage : IPostStage {
 
         // One set (output image + program + acceleration structure); the pool capacity is derived from the bindings.
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
-        var pool = gpu.DescriptorAllocator.CreatePool(
-            accelerationStructureCount: poolSizes.AccelerationStructureCount,
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        var pool = gpu.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
 
         try {
             var set = gpu.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: computePipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: pool);

@@ -1060,12 +1060,5 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 paramName: nameof(request)
             );
         }
-
-        if (0 == request.GraphicsPipelineHandle) {
-            throw new ArgumentException(
-                message: "Vulkan graphics-pipeline handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
     }
 }

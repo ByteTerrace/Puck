@@ -10,7 +10,7 @@ public interface IDisplayRefreshInfo {
     /// <summary>Queries the refresh characteristics of the display the window currently occupies.</summary>
     /// <returns>The display's refresh range, or <see cref="DisplayRefreshRange.Unknown"/> when unavailable.</returns>
     DisplayRefreshRange QueryRefreshRange();
-    /// <summary>A monotonically increasing version that changes whenever the refresh range may have — because the display
+    /// <summary>A monotonically increasing version that changes whenever the refresh range may have changed — because the display
     /// mode/topology changed (e.g. a resolution or refresh-rate change) or the window moved to a different monitor. The
     /// host pacer polls this and re-runs <see cref="QueryRefreshRange"/> only when it advances, so a once-at-startup query
     /// does not go stale when the window is dragged between a 60 Hz and a 240 Hz panel. A provider that cannot detect

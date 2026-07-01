@@ -471,13 +471,7 @@ internal sealed class CameraChildNode : IRenderNode {
 
             var poolSizes = GpuDescriptorPoolSizes.ForSets(resampleBindings);
 
-            m_pool = m_descriptorAllocator.CreatePool(
-                combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-                deviceHandle: m_deviceHandle,
-                maxSets: poolSizes.MaxSets,
-                storageBufferCount: poolSizes.StorageBufferCount,
-                storageImageCount: poolSizes.StorageImageCount
-            );
+            m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
             m_resampleSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_resamplePipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
             m_commandPool = m_gpu.CommandPoolFactory.Create(deviceContext: gpuDevice);
             m_cameraUpload = m_gpu.SurfaceTransferFactory.CreateUpload(deviceContext: gpuDevice);

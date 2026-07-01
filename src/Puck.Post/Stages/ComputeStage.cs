@@ -35,13 +35,7 @@ internal sealed class ComputeStage : IPostStage {
         using var pipeline = services.ComputePipelineFactory.Create(bindings: bindings, computeShaderModule: shaderModule, deviceContext: device, pushConstantBinding: null);
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
-        var pool = allocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        var pool = allocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
 
         try {
             using var commandPool = services.CommandPoolFactory.Create(deviceContext: device);

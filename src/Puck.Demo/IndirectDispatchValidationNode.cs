@@ -141,13 +141,7 @@ internal sealed class IndirectDispatchValidationNode : IRenderNode {
         var argumentBuffer = (indirect ? gpu.StorageBufferFactory.CreateIndirectArgs(deviceContext: deviceContext, sizeBytes: 12) : null);
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
-        var pool = gpu.DescriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        var pool = gpu.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
 
         try {
             argumentBuffer?.Write<uint>(data: [Groups, Groups, 1]);

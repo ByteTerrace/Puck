@@ -47,7 +47,6 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         nint commandBufferHandle,
         nint renderPassHandle,
         nint framebufferHandle,
-        nint pipelineHandle,
         uint width,
         uint height
     ) {

@@ -75,7 +75,6 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
             CommandBufferHandle: commandResources.CommandBufferHandles[imageIndex],
             DeviceHandle: commandResources.DeviceHandle,
             FramebufferHandle: framebufferSet.FramebufferHandles[imageIndex],
-            GraphicsPipelineHandle: primaryPipeline.Value.Handle,
             Height: swapchain.ImageExtentHeight,
             RenderPassHandle: renderPass.Handle,
             Width: swapchain.ImageExtentWidth

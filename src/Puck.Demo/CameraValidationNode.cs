@@ -135,13 +135,7 @@ internal sealed class CameraValidationNode : IRenderNode {
         );
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
-        var pool = gpu.DescriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        var pool = gpu.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: poolSizes);
 
         try {
             using var commandPool = gpu.CommandPoolFactory.Create(deviceContext: device);

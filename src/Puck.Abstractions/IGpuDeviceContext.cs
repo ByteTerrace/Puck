@@ -8,8 +8,6 @@ namespace Puck.Abstractions;
 public interface IGpuDeviceContext {
     /// <summary>Gets the opaque native device handle (e.g. <c>VkDevice</c>, <c>ID3D12Device*</c>).</summary>
     nint DeviceHandle { get; }
-    /// <summary>Gets a value indicating whether the context has been fully initialized.</summary>
-    bool IsInitialized { get; }
 
     /// <summary>Blocks until the device is idle — all queued work has completed.</summary>
     void WaitIdle();

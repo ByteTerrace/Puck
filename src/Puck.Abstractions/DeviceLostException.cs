@@ -5,8 +5,9 @@ namespace Puck.Abstractions;
 /// current frame cannot complete — DirectX <c>DXGI_ERROR_DEVICE_REMOVED</c>/<c>DEVICE_RESET</c> or Vulkan
 /// <c>VK_ERROR_DEVICE_LOST</c>/<c>VK_ERROR_SURFACE_LOST_KHR</c>. It is a RECOVERABLE signal, distinct from an ordinary
 /// failure: the host pump catches it, asks an <see cref="IDeviceLostRecoverable"/> presenter to rebuild the device and
-/// its resources, tells the render tree to release device-derived resources (<see cref="System.Action"/>-free, via the
-/// node contract), and resumes — without disturbing the fixed-step simulation. A backend raises this INSTEAD of its
+/// its resources, tells the render tree to release device-derived resources (each node implements Puck.Hosting's
+/// <c>IRenderNode.OnDeviceLost</c>; no callback registration is involved), and resumes — without disturbing the
+/// fixed-step simulation. A backend raises this INSTEAD of its
 /// native exception once it has classified the result as a device loss.
 /// </summary>
 public sealed class DeviceLostException : Exception {

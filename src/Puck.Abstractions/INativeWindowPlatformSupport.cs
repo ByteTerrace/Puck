@@ -1,5 +1,9 @@
 namespace Puck.Abstractions;
 
+/// <summary>
+/// Answers "can this environment open a platform window, and with which windowing system?" — the detection seam
+/// behind window-options validation and the factory's display-kind resolution.
+/// </summary>
 public interface INativeWindowPlatformSupport {
     /// <summary>The display kind auto-detected from the current environment.</summary>
     NativeDisplayKind CurrentDisplayKind { get; }

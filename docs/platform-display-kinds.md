@@ -2,7 +2,7 @@
 
 Puck separates **surfaces** (the Vulkan `VkSurfaceKHR` and its `NativeSurfaceBinding`) from
 **windows** (`INativeWindow` and its native backends). A window produces a
-`NativeSurfaceBinding` via `INativeSurfaceSourceProvider.CreateSurfaceBinding()`, and
+`NativeSurfaceBinding` via `INativeWindow.CreateSurfaceBinding()`, and
 `VulkanSurfaceFactory` turns that binding into a `VkSurfaceKHR`. Both layers dispatch on
 `NativeDisplayKind`.
 

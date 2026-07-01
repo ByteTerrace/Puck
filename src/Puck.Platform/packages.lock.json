@@ -29,24 +29,10 @@
           "Microsoft.Windows.WDK.Win32Metadata": "0.12.8-experimental"
         }
       },
-      "System.Drawing.Common": {
-        "type": "Direct",
-        "requested": "[10.*, )",
-        "resolved": "10.0.9",
-        "contentHash": "ShkEj8jOhklJgrN3SoaVbCcopvqyIgVXHso2/eibQBL7IZxzJjND77UYVlViHqpwPxyQeA67IOut4b41clBkQw==",
-        "dependencies": {
-          "Microsoft.Win32.SystemEvents": "10.0.9"
-        }
-      },
       "Microsoft.Extensions.Primitives": {
         "type": "Transitive",
         "resolved": "10.0.9",
         "contentHash": "fmEbAUFsaIKirgLt/lYhuFRBwhcSJN31jjHgCdbQxJiWOum6EdLjkbgGuukSP9z/a+9LibaxII/kF+GwOXgC4g=="
-      },
-      "Microsoft.Win32.SystemEvents": {
-        "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "dk5HKolAR9bBxlL4dl6Koaf0s/Q47QApog+/o341LSuvWGW6ig4q5fTsgYG0MrK//l2Slv6mygncMK/8lgXVDg=="
       },
       "Microsoft.Windows.SDK.Win32Docs": {
         "type": "Transitive",
@@ -84,13 +70,6 @@
         "type": "Project",
         "dependencies": {
           "Puck.Commands": "[1.0.0, )"
-        }
-      },
-      "puck.platform.abstractions": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Input": "[1.0.0, )"
         }
       }
     }

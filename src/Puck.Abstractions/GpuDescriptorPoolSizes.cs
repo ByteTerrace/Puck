@@ -2,7 +2,7 @@ namespace Puck.Abstractions;
 
 /// <summary>
 /// The per-descriptor-kind capacity a pool must provide to back one or more compute descriptor sets, DERIVED from
-/// their binding lists rather than hand-tallied. Pass the fields to <see cref="IGpuDescriptorAllocator.CreatePool"/>
+/// their binding lists rather than hand-tallied. Pass it to <see cref="IGpuDescriptorAllocator.CreatePool"/>
 /// so a pool can never silently drift out of sync with the bindings it must satisfy — a hand-counted capacity that
 /// under-provisions throws at <c>AllocateSet</c> (or, on a backend that bump-allocates a shared heap, corrupts it).
 /// </summary>

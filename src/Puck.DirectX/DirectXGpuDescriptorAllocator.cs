@@ -46,10 +46,10 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
     }
 
     /// <inheritdoc/>
-    public nint CreatePool(nint deviceHandle, uint maxSets, uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount, uint accelerationStructureCount = 0) {
+    public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) {
         var device = (ID3D12Device*)deviceHandle;
         // An acceleration-structure SRV is just another CBV_SRV_UAV heap slot, so it adds to the total like the rest.
-        var totalDescriptors = (combinedImageSamplerCount + storageBufferCount + storageImageCount + accelerationStructureCount);
+        var totalDescriptors = (sizes.CombinedImageSamplerCount + sizes.StorageBufferCount + sizes.StorageImageCount + sizes.AccelerationStructureCount);
         var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
             NumDescriptors = (totalDescriptors > 0) ? totalDescriptors : 1,

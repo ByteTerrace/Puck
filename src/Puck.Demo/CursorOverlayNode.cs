@@ -231,7 +231,16 @@ internal sealed class CursorOverlayNode : IRenderNode {
 
         var deviceHandle = m_deviceContext.DeviceHandle;
 
-        m_descriptorPool = m_descriptorAllocator.CreatePool(combinedImageSamplerCount: 1, deviceHandle: deviceHandle, maxSets: 1, storageBufferCount: 0, storageImageCount: 0);
+        m_descriptorPool = m_descriptorAllocator.CreatePool(
+            deviceHandle: deviceHandle,
+            sizes: new GpuDescriptorPoolSizes(
+                MaxSets: 1,
+                CombinedImageSamplerCount: 1,
+                StorageBufferCount: 0,
+                StorageImageCount: 0,
+                AccelerationStructureCount: 0
+            )
+        );
         m_descriptorSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: m_descriptorPool);
         m_sampler = m_descriptorAllocator.CreateSampler(deviceHandle: deviceHandle);
         m_pipelines = new Dictionary<AssetContentHash, IGpuPipeline> {
