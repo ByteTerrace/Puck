@@ -3,6 +3,7 @@ using System.Runtime.Versioning;
 using Puck.Abstractions;
 using Puck.DirectX;
 using Puck.Hosting;
+using Puck.Platform;
 
 namespace Puck.Demo;
 
@@ -34,6 +35,8 @@ internal sealed class LiveCameraNode : IRenderNode {
     private readonly IServiceProvider m_serviceProvider;
     private readonly uint m_width;
 
+    private bool m_cameraChecked;
+    private ICameraCaptureSession? m_cameraSession;
     private IGpuComputeCommandPool? m_commandPool;
     private nint m_deviceHandle;
     private DirectXComputeWorldDevice? m_directX;
@@ -75,6 +78,16 @@ internal sealed class LiveCameraNode : IRenderNode {
             return default;
         }
 
+        EnsureCamera();
+
+        // A real capture device (Media Foundation, the M2 CPU-upload tier): hand the host its newest frame as CPU
+        // pixels; the SurfaceCompositor uploads and presents it. Blank until the first frame arrives.
+        if (m_cameraSession is not null) {
+            return m_cameraSession.TryCapture(out var frame) ? frame : default;
+        }
+
+        // Fallback: the Direct3D 12-produced sdf-child test pattern (the M1b zero-copy path) — shown when no camera or no
+        // Media Foundation is available, so --camera is always demoable.
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
             if (!m_warnedUnsupported) {
                 Console.Error.WriteLine(value: "[camera] Direct3D 12 unavailable; the live camera source requires Windows 10.0.10240+ (presenting a blank surface).");
@@ -86,6 +99,28 @@ internal sealed class LiveCameraNode : IRenderNode {
         }
 
         return ProduceFrameWindows(deltaSeconds: context.DeltaSeconds);
+    }
+
+    // Resolve the camera service once and try to open the default device. On success the CPU-upload tier is used; on
+    // failure the node falls back to the Direct3D 12 test pattern. Logs which tier is active (the plan's tier telemetry).
+    private void EnsureCamera() {
+        if (m_cameraChecked) {
+            return;
+        }
+
+        m_cameraChecked = true;
+
+        if ((m_serviceProvider.GetService(serviceType: typeof(ICameraCaptureService)) is ICameraCaptureService service)
+            && service.IsSupported
+            && service.TryOpenDefault(requestedWidth: (int)m_width, requestedHeight: (int)m_height, session: out var session)) {
+            m_cameraSession = session;
+
+            Console.Out.WriteLine(value: $"[camera] live capture device '{session.Name}' {session.Width}x{session.Height} (CPU-upload tier).");
+
+            return;
+        }
+
+        Console.Out.WriteLine(value: "[camera] no capture device (or Media Foundation unavailable); presenting the sdf-child test pattern.");
     }
 
     [SupportedOSPlatform("windows10.0.10240")]
@@ -234,6 +269,8 @@ internal sealed class LiveCameraNode : IRenderNode {
         }
 
         m_disposed = true;
+        m_cameraSession?.Dispose();
+        m_cameraSession = null;
         ReleaseProducer();
     }
 

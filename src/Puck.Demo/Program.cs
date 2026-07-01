@@ -226,6 +226,7 @@ services.AddLauncherTerminal();
 // The launcher run loop is platform-agnostic; the composition root supplies the concrete native windowing (the window
 // factory + clipboard + display probe) it resolves from the container at runtime.
 services.AddPlatformWindowing();
+services.AddCameraCapture();
 // Bind the concrete unmanaged allocator here, at the composition root — the Vulkan backend depends only on the
 // IAllocator abstraction and resolves it from the container.
 services.AddPuckAllocator();

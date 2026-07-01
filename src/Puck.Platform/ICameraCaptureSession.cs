@@ -1,0 +1,18 @@
+namespace Puck.Platform;
+
+/// <summary>
+/// A live camera capture session: a backend-neutral <see cref="IFrameCaptureSource"/> whose frames arrive
+/// asynchronously on an internal grabber thread and are handed to the (single-threaded) puller as the most recent
+/// frame — latest-frame-wins, stale frames dropped, the puller never blocks. This confines all threading to the
+/// implementation and preserves the single-threaded pull contract for everything downstream.
+/// <see cref="IFrameCaptureSource.TryCapture"/> returns the newest frame as a CPU-pixel <see cref="Surface"/> in
+/// <see cref="SurfaceFormat.B8G8R8A8Unorm"/>, or <see langword="false"/> until the first frame arrives.
+/// </summary>
+public interface ICameraCaptureSession : IFrameCaptureSource, IDisposable {
+    /// <summary>The negotiated frame height in pixels.</summary>
+    int Height { get; }
+    /// <summary>A human-readable device name, for diagnostics.</summary>
+    string Name { get; }
+    /// <summary>The negotiated frame width in pixels.</summary>
+    int Width { get; }
+}

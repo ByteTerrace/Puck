@@ -187,10 +187,29 @@ Vulkan.
   `LiveCameraSource : ViewportSource` + `ViewportBuilder` slot→`IRenderNode` map + `WorldNode`/host-node rewiring (drop
   `WorldNode.Child`, thread a children map). This is where the deferred M0(b) neutral external-memory descriptor +
   planar/YCbCr and M0(c) `Surface` layout tag land against their first live consumer.
-- **M2 — Windows MF live capture, CPU fallback tier.** MF async callback → latest-frame triple buffer →
-  `IGpuSurfaceUpload` (RGB32). New `ICameraCaptureService` (`IsSupported` + `TryOpen`) + a `Null` fallback, **DI-registered
-  parallel to `AddPlatformWindowing`** (capture has no DI registration today — add it). Ship **tier telemetry** here.
-  **Success:** a real webcam renders into a viewport, sampled by SDF; known upload stall accepted and *visible*.
+- **M2a — MF capture foundation. ✅ DONE (2026-07-01); MF path pending hardware bring-up.** The neutral seam +
+  Media Foundation implementation + wiring are in place and build clean; the fallback is verified here; the real capture
+  awaits a machine with a webcam.
+  - Neutral seam (`Puck.Platform`): `ICameraCaptureService` (`IsSupported` + `TryOpenDefault`),
+    `ICameraCaptureSession : IFrameCaptureSource` (latest-frame-wins, B8G8R8A8Unorm CPU pixels), `NullCameraCaptureService`,
+    `LatestFrameBuffer` (the async→sync bridge, lock-based double-copy). DI via `AddCameraCapture` (MF on Windows / Null
+    else), called by the composition root parallel to `AddPlatformWindowing`.
+  - MF impl (`Puck.Platform/Windows/Win32MediaFoundationCamera*.cs`): a dedicated **MTA grabber thread** owns all MF
+    state — `MFStartup`, enumerate the default video-capture device, a **video-processing** `IMFSourceReader`, negotiate
+    **RGB32**, then a sync `ReadSample` loop publishing each frame into `LatestFrameBuffer`. Hand-rolled COM interop
+    (vtable slots declared in order, real signatures only on called methods). Degrades gracefully: any failure →
+    `TryOpenDefault` returns false → fallback.
+  - `LiveCameraNode` wiring: resolves `ICameraCaptureService`, opens the default camera; on success uses the CPU-upload
+    tier (hand the host `Surface { Pixels }`, `SurfaceCompositor` uploads+presents — **no new host code**); otherwise the
+    M1b test pattern. Logs which tier is active (**tier telemetry**).
+  - **Verified on this machine (no webcam):** `--camera` — MFStartup + `MFCreateAttributes` + `SetGUID` +
+    `MFEnumDeviceSources` all executed correctly (0 devices found → clean fallback), exit 0, no crash; full solution
+    builds. So the enumeration interop is exercised; the device-open + frame-read path (ActivateObject, media-type
+    negotiation, ReadSample, ConvertToContiguousBuffer, buffer Lock) is UNVERIFIED and is the hardware bring-up.
+  - **Hardware bring-up caveats to confirm:** RGB32 row orientation (top-down vs bottom-up) and any contiguous-buffer row
+    padding; sample-null stream-tick handling; refcount hygiene on the device-enum array.
+- **M2b — Hardware bring-up. PENDING (another machine, real webcam).** Confirm a real feed presents through `--camera`;
+  fix any orientation/stride/interop issue the enumeration path couldn't surface. Then M1c sampling makes it SDF-usable.
 - **M3 — Windows MF GPU-resident zero-copy tier.** `MF_SOURCE_READER_D3D_MANAGER` DXVA NV12 → one `CopyResource` into the
   M1 keyed-mutex ring → existing import path; NV12→RGB in-shader (ycbcr) or VideoProcessor MFT. **Success:** per-frame
   transport = one copy + mutex + convert, no queue drain; measured high-FPS at 1080p on RTX 4060-class HW via
