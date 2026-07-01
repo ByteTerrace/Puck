@@ -28,6 +28,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private const int MaxConsecutiveDeviceLossRecoveries = 8;
 
     private readonly IHostApplicationLifetime m_applicationLifetime;
+    private readonly ExternalPresentClock m_externalClock;
     private readonly IInputClock m_inputClock;
     private readonly ILogger<LauncherWindowHostedService> m_logger;
     private readonly LauncherOptions m_options;
@@ -40,6 +41,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
     public LauncherWindowHostedService(
         IHostApplicationLifetime applicationLifetime,
+        ExternalPresentClock externalClock,
         IInputClock inputClock,
         ILogger<LauncherWindowHostedService> logger,
         LauncherOptions options,
@@ -51,6 +53,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         INativeWindowFactory windowFactory
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
+        ArgumentNullException.ThrowIfNull(externalClock);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(options);
@@ -62,6 +65,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(windowFactory);
 
         m_applicationLifetime = applicationLifetime;
+        m_externalClock = externalClock;
         m_inputClock = inputClock;
         m_logger = logger;
         m_options = options;
@@ -142,6 +146,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // Opt-in (PUCK_PRESENT_TIMING=1): periodically log the measured present interval — proof the closed loop
                 // is live and what the real display cadence is. Off by default so a shipped run isn't noisy.
                 var logPresentTiming = string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_PRESENT_TIMING"), "1", comparisonType: StringComparison.Ordinal);
+                // GENLOCK (latency phase-align): when an external frame producer (a live camera) publishes arrival
+                // timestamps, the aligner biases the render deadline toward them with a light PI filter on the phase
+                // error, so the frame that samples a fresh arrival starts (and presents) as soon after it as possible —
+                // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher; PUCK_GENLOCK=0
+                // disables it.
+                var genlock = new GenlockPhaseAligner(clock: m_externalClock, logger: m_logger, logPhase: logPresentTiming);
                 var renderPeriod = ResolveRenderPeriod(refreshRange: refreshRange, frequency: frequency);
                 var spinThreshold = ((frequency / 1000L) * SpinThresholdMilliseconds);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: TargetUpdateRate);
@@ -342,7 +352,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             }
                         }
 
-                        nextRenderDeadline += renderPeriod;
+                        // GENLOCK: bias the accumulated deadline toward the latest external arrival (see
+                        // GenlockPhaseAligner); a no-op with no publisher or a stale feed.
+                        nextRenderDeadline = genlock.Apply(deadline: (nextRenderDeadline + renderPeriod), frequency: frequency, renderPeriod: renderPeriod);
 
                         var nowTimestamp = Stopwatch.GetTimestamp();
 

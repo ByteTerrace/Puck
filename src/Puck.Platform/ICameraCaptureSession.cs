@@ -13,6 +13,9 @@ public interface ICameraCaptureSession : IFrameCaptureSource, IDisposable {
     /// value it last processed to skip re-uploading an unchanged frame (the newest-frame-wins drop policy), so the render
     /// pump is never blocked re-doing work between the camera's own (e.g. 30 fps) arrivals.</summary>
     long FrameVersion { get; }
+    /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent frame's arrival (stamped on
+    /// the grabber thread at publish, so it shares the render pacer's clock domain) — the genlock arrival signal.</summary>
+    long LastFrameTimestamp { get; }
     /// <summary>The negotiated frame height in pixels.</summary>
     int Height { get; }
     /// <summary>A human-readable device name, for diagnostics.</summary>

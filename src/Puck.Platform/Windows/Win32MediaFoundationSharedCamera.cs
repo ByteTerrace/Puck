@@ -29,6 +29,7 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private int m_height;
     private string? m_initError;
     private bool m_initOk;
+    private long m_lastTimestamp;
     private volatile int m_latestSlot = -1;
     private string m_name = "camera";
     private nint[] m_targetHandles = [];
@@ -59,6 +60,8 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
 
     /// <inheritdoc/>
     public long FrameVersion => Interlocked.Read(location: ref m_version);
+    /// <inheritdoc/>
+    public long LastFrameTimestamp => Interlocked.Read(location: ref m_lastTimestamp);
     /// <inheritdoc/>
     public int Height => m_height;
     /// <inheritdoc/>
@@ -323,6 +326,7 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
                         device.CopyToTarget(targetTexture: targets[next], sourceTexture: frameTexture, sourceSubresource: subresource);
 
                         m_latestSlot = next;
+                        _ = Interlocked.Exchange(location1: ref m_lastTimestamp, value: System.Diagnostics.Stopwatch.GetTimestamp());
                         _ = Interlocked.Increment(location: ref m_version);
                         next = ((next + 1) % targets.Length);
                     } finally {

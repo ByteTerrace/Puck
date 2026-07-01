@@ -52,6 +52,8 @@ internal sealed record DemoFlags {
     public required bool ValidateCameraLive { get; init; }
     /// <summary>The <c>--validate-camera-gpu</c> GPU-resident zero-copy camera tier gate (DXVA → shared targets → Vulkan import).</summary>
     public required bool ValidateCameraGpu { get; init; }
+    /// <summary>The <c>--validate-genlock</c> pure-CPU genlock phase-align determinism gate.</summary>
+    public required bool ValidateGenlock { get; init; }
     /// <summary>The <c>--validate-world</c> cross-backend compute-world parity gate.</summary>
     public required bool ValidateWorld { get; init; }
     /// <summary>The <c>--validate-world-child</c> compute-world parity gate with a hosted child viewport.</summary>

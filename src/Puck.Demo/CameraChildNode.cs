@@ -45,6 +45,8 @@ internal sealed class CameraChildNode : IRenderNode {
     private DirectXComputeWorldDevice? m_allocatorDevice;
     private nint m_boundSourceView;
     private bool m_cameraChecked;
+    private ExternalPresentClock? m_externalClock;
+    private long m_lastPublishedVersion = -1;
     private IGpuSurfaceUpload? m_cameraUpload;
     private nint m_cameraView;
     private uint m_cameraViewHeight;
@@ -126,6 +128,19 @@ internal sealed class CameraChildNode : IRenderNode {
         // (via EnsureResources), forcing a re-render into the fresh output.
         var cameraVersion = (m_sharedSession?.FrameVersion ?? m_cameraSession?.FrameVersion ?? 0L);
 
+        // Genlock: forward each NEW frame's arrival timestamp (stamped on the grabber thread, so it is accurate even
+        // though this forwarding is render-quantized) to the pacer's external clock. Published before the skip below —
+        // the pacer needs arrivals even on frames this node does no GPU work for.
+        if ((m_externalClock is not null) && (cameraVersion != m_lastPublishedVersion) && (cameraVersion > 0L)) {
+            var arrival = (m_sharedSession?.LastFrameTimestamp ?? m_cameraSession?.LastFrameTimestamp ?? 0L);
+
+            if (0L != arrival) {
+                m_externalClock.Publish(arrivalTimestamp: arrival, frameVersion: cameraVersion);
+            }
+
+            m_lastPublishedVersion = cameraVersion;
+        }
+
         if (m_outputInitialized && (cameraVersion == m_lastRenderedVersion)) {
             return CurrentSurface();
         }
@@ -157,6 +172,8 @@ internal sealed class CameraChildNode : IRenderNode {
         }
 
         m_cameraChecked = true;
+        // The genlock ingestion seam (absent = no genlock; the pacer stays free-running).
+        m_externalClock = (m_cameraServices.GetService(serviceType: typeof(ExternalPresentClock)) as ExternalPresentClock);
 
         if (m_cameraServices.GetService(serviceType: typeof(ICameraCaptureService)) is not ICameraCaptureService service || !service.IsSupported) {
             Console.Out.WriteLine(value: "[camera] no capture backend for the viewport source; showing a placeholder.");

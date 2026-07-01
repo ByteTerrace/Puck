@@ -11,8 +11,20 @@ internal sealed class LatestFrameBuffer {
     private byte[] m_frame = [];
     private bool m_hasFrame;
     private int m_height;
+    private long m_timestamp;
     private long m_version;
     private int m_width;
+
+    /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent <see cref="Publish"/> —
+    /// stamped at the publish site (the grabber thread), so it shares the render pacer's clock domain; the genlock
+    /// arrival signal.</summary>
+    public long LastTimestamp {
+        get {
+            lock (m_gate) {
+                return m_timestamp;
+            }
+        }
+    }
 
     /// <summary>A monotonically increasing counter bumped on every <see cref="Publish"/> — lets a puller detect whether a
     /// new frame has arrived (and skip re-processing an unchanged one) without copying the pixels out.</summary>
@@ -38,6 +50,7 @@ internal sealed class LatestFrameBuffer {
             m_height = height;
             m_width = width;
             m_hasFrame = true;
+            m_timestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             m_version++;
         }
     }

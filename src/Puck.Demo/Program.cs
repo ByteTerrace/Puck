@@ -95,6 +95,9 @@ var validateCameraLiveOption = new Option<bool>(name: "--validate-camera-live") 
 var validateCameraGpuOption = new Option<bool>(name: "--validate-camera-gpu") {
     Description = "GPU-resident zero-copy camera gate (the M3 tier): opens the real webcam with a Media Foundation D3D manager so DXVA converts frames to ARGB32 on-GPU, copies them into D3D12-allocated simultaneous-access shared targets on a D3D11 decode device, then Vulkan-imports the latest target and reads it back — no frame ever visits host memory — writing artifacts/camera-gpu.png. Exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
 };
+var validateGenlockOption = new Option<bool>(name: "--validate-genlock") {
+    Description = "Genlock phase-align determinism gate: a pure-CPU simulation of the pacer's deadline grid against jittered ~30 Hz arrivals (the VRR present-follows-deadline regime), asserting the PI aligner converges the arrival->deadline latency to the guard offset, collapses its spread versus free-running, and never exceeds the per-frame VRR-safe nudge bound. Exits 0 (pass) or 2 (fail). No camera, window, or GPU.",
+};
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
     Description = "With --validate-world, renders a fuzz-generated SDF scene program (deterministic from this seed, identical on both backends) instead of the showcase — one cross-backend differential-fuzzing iteration. A negative value (default) disables fuzzing.",
@@ -146,6 +149,7 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     validateCameraOption,
     validateCameraLiveOption,
     validateCameraGpuOption,
+    validateGenlockOption,
     cameraOption,
     validateWorldOption,
     validateWorldChildOption,
@@ -202,6 +206,7 @@ var runDocument = (runPath is not null)
         ValidateCamera = parseResult.GetValue(validateCameraOption),
         ValidateCameraLive = parseResult.GetValue(validateCameraLiveOption),
         ValidateCameraGpu = parseResult.GetValue(validateCameraGpuOption),
+        ValidateGenlock = parseResult.GetValue(validateGenlockOption),
         ValidateWorld = parseResult.GetValue(validateWorldOption),
         ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
         World = parseResult.GetValue(worldOption),

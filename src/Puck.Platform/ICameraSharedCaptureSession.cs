@@ -16,6 +16,9 @@ public interface ICameraSharedCaptureSession : IDisposable {
     /// <summary>A monotonically increasing counter of frames published into the shared targets; a consumer compares it
     /// against the value it last sampled to skip unchanged frames (the newest-frame-wins drop policy).</summary>
     long FrameVersion { get; }
+    /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent slot publication (stamped on
+    /// the grabber thread, so it shares the render pacer's clock domain) — the genlock arrival signal.</summary>
+    long LastFrameTimestamp { get; }
     /// <summary>The negotiated frame height in pixels — the height the shared targets must be created with.</summary>
     int Height { get; }
     /// <summary>The index (into the <see cref="Start"/> target list) of the most recently published frame, or
