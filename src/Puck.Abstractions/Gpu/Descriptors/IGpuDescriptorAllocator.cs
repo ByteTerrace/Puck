@@ -19,7 +19,7 @@ public interface IGpuDescriptorAllocator {
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="filter">The min/mag filter (<see cref="GpuSamplerFilter.Linear"/> or <see cref="GpuSamplerFilter.Nearest"/>).</param>
     /// <returns>The native sampler handle.</returns>
-    nint CreateSampler(nint deviceHandle, uint filter = GpuSamplerFilter.Linear);
+    nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear);
     /// <summary>Destroys a descriptor pool.</summary>
     void DestroyPool(nint deviceHandle, nint poolHandle);
     /// <summary>Destroys a sampler.</summary>

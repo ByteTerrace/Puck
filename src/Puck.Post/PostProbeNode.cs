@@ -40,7 +40,7 @@ internal sealed class PostProbeNode : IRenderNode {
     // before the swap reproduces the 0xC0000005. Raising this restores the content-across-switch repro.
     private const int ContentFramesBeforeSwitch = 0;
     private const int DrainFramesBeforeSwitch = 10;     // frames between the last content present and the swap
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int FramesAfterSwitch = 30;           // presents on the new backend before declaring success
     private const int FramesAfterRecovery = 60;         // frames on the rebuilt resources before declaring success
     private const uint RenderSize = 256;

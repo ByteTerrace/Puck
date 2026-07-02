@@ -13,9 +13,9 @@ public interface IGpuSurfaceImport : IDisposable {
     /// handle/extent/format replaces the single cached image, invalidating the previous handle).</summary>
     /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="sharedHandle">The shared external handle (a Windows NT handle, or a POSIX file descriptor on other platforms).</param>
+    /// <param name="format">The pixel format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
-    /// <param name="format">The pixel format (a <see cref="GpuPixelFormat"/> constant).</param>
     /// <returns>The native image view handle, owned by this import object.</returns>
-    nint Import(IGpuDeviceContext deviceContext, nint sharedHandle, uint width, uint height, uint format);
+    nint Import(IGpuDeviceContext deviceContext, nint sharedHandle, GpuPixelFormat format, uint width, uint height);
 }

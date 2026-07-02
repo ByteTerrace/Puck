@@ -65,14 +65,14 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
         );
     }
     /// <inheritdoc/>
-    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, uint stageFlags, uint offset, ReadOnlySpan<byte> data) {
+    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
         commandBufferRecordingApi.PushConstants(
             commandBufferHandle: commandBufferHandle,
             data: data,
             deviceHandle: deviceHandle,
             offset: offset,
             pipelineLayoutHandle: pipelineLayoutHandle,
-            stageFlags: stageFlags
+            stageFlags: (uint)stageFlags
         );
     }
     /// <inheritdoc/>

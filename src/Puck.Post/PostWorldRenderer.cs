@@ -26,7 +26,7 @@ internal sealed class PostWorldRenderer : IDisposable {
     private const uint CullBoundsBindingIndex = 6; // sdf-cull-args.comp: bbox group origin (register u1); read by sdf-world-views.comp at binding 8
     private const uint DynamicTransformBindingIndex = 9; // sdf-vm.hlsli's [[vk::binding(9, 0)]] / register(t2) (world path)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 2); // 32-byte rigid transform: float4 position + float4 orientation quaternion (KEEP IN SYNC with sdf-vm.hlsli sdfDynamicTransforms)
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxViewports = 4; // the source array length in the kernels (sources[4])
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
     private const int PushConstantByteLength = ((sizeof(uint) * 4) * 2); // 32-byte CompositeParams (16-byte rounded)

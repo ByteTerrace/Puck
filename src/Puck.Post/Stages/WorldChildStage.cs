@@ -19,7 +19,7 @@ namespace Puck.Post;
 internal sealed class WorldChildStage : IPostStage {
     private const int ChildPushByteLength = 16; // ChildParams { uint2 extent; float time; uint pad; }
     private const int CompositePushByteLength = (16 + ((sizeof(float) * 4) * MaxViewports));
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxViewports = 4; // viewport-composite.comp: sources[4]
     private const uint OutputHeight = 256;
     private const uint OutputWidth = 512;

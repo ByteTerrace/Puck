@@ -31,7 +31,7 @@ public interface IGpuCommandRecorder {
         nint deviceHandle,
         nint commandBufferHandle,
         nint pipelineLayoutHandle,
-        uint stageFlags,
+        GpuShaderStage stageFlags,
         uint offset,
         ReadOnlySpan<byte> data
     );

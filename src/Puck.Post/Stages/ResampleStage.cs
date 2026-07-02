@@ -14,7 +14,7 @@ namespace Puck.Post;
 /// stages.
 /// </summary>
 internal sealed class ResampleStage : IPostStage {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint SourceSize = 64;
     private const uint UpscaleSize = 128;
     private const uint WorkgroupEdge = 8;
@@ -53,7 +53,7 @@ internal sealed class ResampleStage : IPostStage {
     // sampler at the given filter, reading BOTH images back. One command buffer: fill source → make it shader-readable
     // → resample (sample source, write output) → make output readable → submit-and-wait → read both. Ported from the
     // demo's ResampleValidationNode (the worked reference); drives only the neutral compute seam.
-    private static (byte[] Source, byte[] Output) Resample(IGpuComputeServices gpu, IGpuDeviceContext deviceContext, byte[] childBytecode, byte[] resampleBytecode, uint outSize, uint filter) {
+    private static (byte[] Source, byte[] Output) Resample(IGpuComputeServices gpu, IGpuDeviceContext deviceContext, byte[] childBytecode, byte[] resampleBytecode, uint outSize, GpuSamplerFilter filter) {
         var deviceHandle = deviceContext.DeviceHandle;
 
         var childPush = new byte[ChildPushByteLength];

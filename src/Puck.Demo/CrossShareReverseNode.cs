@@ -151,7 +151,7 @@ internal sealed class CrossShareReverseNode : IRenderNode {
                 DeviceHandle: deviceHandle,
                 ShaderModuleHandle: shaderModule.Handle,
                 DescriptorBindings: [
-                    new VkDescriptorSetLayoutBinding { Binding = 0, DescriptorCount = 1, DescriptorType = DescriptorTypeStorageImage, StageFlags = GpuShaderStage.Compute, },
+                    new VkDescriptorSetLayoutBinding { Binding = 0, DescriptorCount = 1, DescriptorType = DescriptorTypeStorageImage, StageFlags = (uint)GpuShaderStage.Compute, },
                 ],
                 PushConstantSize: 0,
                 PushConstantStageFlags: 0
@@ -247,7 +247,7 @@ internal sealed class CrossShareReverseNode : IRenderNode {
     // Record a single Direct3D 12 image-layout transition (through the compute recorder, whose tracked state is the
     // single source of truth) and drain — used both to hand the resource to Vulkan in COMMON and to take it back.
     [SupportedOSPlatform("windows10.0.10240")]
-    private static void RecordDirectXTransition(DirectXComputeWorldDevice directX, nint imageHandle, uint newLayout) {
+    private static void RecordDirectXTransition(DirectXComputeWorldDevice directX, nint imageHandle, GpuImageLayout newLayout) {
         var recorder = (IGpuComputeRecorder)directX.Services.GetService(serviceType: typeof(IGpuComputeRecorder))!;
         var commandPool = ((IGpuComputeCommandPoolFactory)directX.Services.GetService(serviceType: typeof(IGpuComputeCommandPoolFactory))!).Create(deviceContext: directX.DeviceContext);
         var deviceHandle = directX.DeviceContext.DeviceHandle;

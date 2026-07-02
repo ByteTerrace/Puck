@@ -80,7 +80,7 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
     /// <inheritdoc/>
     // The filter is ignored: Direct3D 12 samplers are static in the root signature, so the filter is baked into the
     // compute pipeline's static sampler (via the factory's samplerFilter) rather than carried by this handle.
-    public nint CreateSampler(nint deviceHandle, uint filter = GpuSamplerFilter.Linear) => SamplerSentinel;
+    public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) => SamplerSentinel;
 
     /// <inheritdoc/>
     public void DestroyPool(nint deviceHandle, nint poolHandle) {

@@ -13,7 +13,7 @@ namespace Puck.Post;
 /// </summary>
 internal sealed class PixelateStage : IPostStage {
     private const uint CellSize = 10;       // chunky blocks (deliberately not dividing the extent: exercises the clamp)
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint QuantizeLevels = 6;  // posterized palette
     private const uint RenderSize = 256;
     private const uint WorkgroupEdge = 8;

@@ -125,7 +125,7 @@ internal sealed class ComputeValidationNode : IRenderNode {
                         Binding = 0,
                         DescriptorCount = 1,
                         DescriptorType = DescriptorTypeStorageImage,
-                        StageFlags = GpuShaderStage.Compute,
+                        StageFlags = (uint)GpuShaderStage.Compute,
                     },
                 ],
                 PushConstantSize: 0,

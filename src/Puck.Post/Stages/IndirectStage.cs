@@ -16,7 +16,7 @@ namespace Puck.Post;
 /// no hand-computed expected pixels are needed. The Direct3D 12 half runs on the shared Tier-C device.
 /// </summary>
 internal sealed class IndirectStage : IPostStage {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint RenderSize = 64;
     private const uint WorkgroupEdge = 8;
     private const uint Groups = ((RenderSize + (WorkgroupEdge - 1)) / WorkgroupEdge); // 8 — covers the 64x64 image

@@ -12,9 +12,9 @@ public interface IGpuSurfaceUpload : IDisposable {
     /// extent/format are unchanged).</summary>
     /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="pixels">The tightly packed pixel data to upload.</param>
+    /// <param name="format">The pixel format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
-    /// <param name="format">The pixel format (a <see cref="GpuPixelFormat"/> constant).</param>
     /// <returns>The native image view handle, owned by this upload object.</returns>
-    nint Upload(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, uint width, uint height, uint format);
+    nint Upload(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height);
 }

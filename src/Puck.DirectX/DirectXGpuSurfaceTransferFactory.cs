@@ -42,9 +42,9 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     public ReadOnlyMemory<byte> Read(
         IGpuDeviceContext deviceContextArg,
         nint sourceImageHandle,
+        GpuPixelFormat format,
         uint width,
         uint height,
-        uint format,
         uint bytesPerPixel
     ) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
@@ -224,9 +224,9 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
     public nint Upload(
         IGpuDeviceContext deviceContext,
         ReadOnlyMemory<byte> pixels,
+        GpuPixelFormat format,
         uint width,
-        uint height,
-        uint format
+        uint height
     ) {
         var dxFormat = DirectXGpuFormats.ToDirectXPixelFormat(gpuPixelFormat: format);
 
@@ -269,9 +269,9 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
     public nint Import(
         IGpuDeviceContext deviceContextArg,
         nint sharedHandle,
+        GpuPixelFormat format,
         uint width,
-        uint height,
-        uint format
+        uint height
     ) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 

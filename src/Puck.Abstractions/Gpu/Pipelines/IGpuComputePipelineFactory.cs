@@ -14,5 +14,5 @@ public interface IGpuComputePipelineFactory {
     /// <see cref="GpuComputeBindingKind.SampledImage"/>. Direct3D 12 only — Vulkan's sampler is a bound descriptor, so
     /// this is ignored there. Has no effect when no binding samples an image.</param>
     /// <returns>The created compute pipeline.</returns>
-    IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, IReadOnlyList<GpuComputeBinding> bindings, GpuPushConstantBinding? pushConstantBinding, uint samplerFilter = GpuSamplerFilter.Linear);
+    IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, IReadOnlyList<GpuComputeBinding> bindings, GpuPushConstantBinding? pushConstantBinding, GpuSamplerFilter samplerFilter = GpuSamplerFilter.Linear);
 }

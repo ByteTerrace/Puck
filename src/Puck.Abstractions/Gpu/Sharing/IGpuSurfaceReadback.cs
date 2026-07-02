@@ -11,10 +11,10 @@ public interface IGpuSurfaceReadback : IDisposable {
     /// reuses one output buffer across calls) — copy it if it must live longer.</summary>
     /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="sourceImageHandle">The native image handle to read back from.</param>
+    /// <param name="format">The pixel format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
-    /// <param name="format">The pixel format (a <see cref="GpuPixelFormat"/> constant).</param>
     /// <param name="bytesPerPixel">The number of bytes per pixel.</param>
     /// <returns>The tightly packed pixel data; valid until the next <see cref="Read"/> or this object's disposal.</returns>
-    ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, uint width, uint height, uint format, uint bytesPerPixel);
+    ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel);
 }

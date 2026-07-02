@@ -16,7 +16,7 @@ public interface IGpuComputeRecorder {
     /// <summary>Binds the descriptor set at set 0 for the compute bind point.</summary>
     void BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle);
     /// <summary>Records an update of the push-constant range.</summary>
-    void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, uint stageFlags, uint offset, ReadOnlySpan<byte> data);
+    void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data);
     /// <summary>Records a compute dispatch.</summary>
     void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ);
     /// <summary>Records an INDIRECT compute dispatch: the (x, y, z) group counts are read by the GPU from three
@@ -26,13 +26,13 @@ public interface IGpuComputeRecorder {
     /// identical on both backends (Vulkan <c>VkDispatchIndirectCommand</c> / Direct3D 12 <c>D3D12_DISPATCH_ARGUMENTS</c>).</summary>
     void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset);
     /// <summary>Records a barrier transitioning a storage image between <see cref="GpuImageLayout"/> values over the given access and stage scopes.</summary>
-    void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, uint oldLayout, uint newLayout, uint sourceAccessMask, uint destinationAccessMask, uint sourceStageMask, uint destinationStageMask);
+    void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask);
     /// <summary>Records a global memory barrier over the given access and stage scopes.</summary>
-    void MemoryBarrier(nint deviceHandle, nint commandBufferHandle, uint sourceAccessMask, uint destinationAccessMask, uint sourceStageMask, uint destinationStageMask);
+    void MemoryBarrier(nint deviceHandle, nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask);
     /// <summary>Records a barrier on a SPECIFIC buffer over the given access and stage scopes. Unlike
     /// <see cref="MemoryBarrier"/> (a global barrier), this targets one resource — required on Direct3D 12 to
     /// transition a GPU-written buffer into <c>INDIRECT_ARGUMENT</c> before an indirect dispatch reads it (a global
     /// barrier does not prepare a specific buffer's state for <c>ExecuteIndirect</c>). On Vulkan it is a memory barrier
     /// over the same scopes.</summary>
-    void TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, uint sourceAccessMask, uint destinationAccessMask, uint sourceStageMask, uint destinationStageMask);
+    void TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask);
 }

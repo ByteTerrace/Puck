@@ -11,15 +11,17 @@ public sealed class GpuPushConstantBinding {
     public uint Offset { get; }
     /// <summary>Gets the size, in bytes, of the data (the length of <see cref="Data"/>).</summary>
     public uint Size => checked((uint)Data.Length);
-    /// <summary>Gets the bitmask of shader stage flags identifying the stages that read the range.</summary>
-    public uint StageFlags { get; }
+    /// <summary>Gets the shader stages that read the range.</summary>
+    public GpuShaderStage StageFlags { get; }
 
     /// <summary>Initializes a new instance of the <see cref="GpuPushConstantBinding"/> class.</summary>
     /// <param name="offset">The byte offset of the range within the push constant block.</param>
-    /// <param name="stageFlags">A bitmask of shader stage flags identifying the stages that read the range.</param>
+    /// <param name="stageFlags">The shader stages that read the range; must name at least one stage.</param>
     /// <param name="data">The push constant data to upload.</param>
-    public GpuPushConstantBinding(uint offset, uint stageFlags, ReadOnlyMemory<byte> data) {
-        ArgumentOutOfRangeException.ThrowIfZero(value: stageFlags);
+    public GpuPushConstantBinding(uint offset, GpuShaderStage stageFlags, ReadOnlyMemory<byte> data) {
+        if (stageFlags == GpuShaderStage.None) {
+            throw new ArgumentOutOfRangeException(actualValue: stageFlags, message: "The push constant range must name at least one shader stage.", paramName: nameof(stageFlags));
+        }
         ArgumentOutOfRangeException.ThrowIfZero(value: data.Length, paramName: nameof(data));
 
         Offset = offset;

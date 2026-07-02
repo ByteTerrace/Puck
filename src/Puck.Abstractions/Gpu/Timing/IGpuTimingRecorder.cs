@@ -11,7 +11,7 @@ public interface IGpuTimingRecorder {
     /// a no-op on Direct3D 12 (its resolve is destructive, so there is nothing to reset).</summary>
     void ResetTimestamps(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint firstQuery, uint queryCount);
     /// <summary>Records a command writing a timestamp into one query once the given <see cref="GpuTimingStage"/> completes.</summary>
-    void WriteTimestamp(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint queryIndex, uint stageFlags);
+    void WriteTimestamp(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint queryIndex, GpuTimingStage stageFlags);
     /// <summary>Records a command resolving a range of queries into the pool's readback storage. A no-op on Vulkan
     /// (results are read directly from the pool); on Direct3D 12 it copies the query heap into the readback buffer.</summary>
     void ResolveTimestamps(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint firstQuery, uint queryCount);

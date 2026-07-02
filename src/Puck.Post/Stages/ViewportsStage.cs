@@ -13,7 +13,7 @@ namespace Puck.Post;
 /// cross-backend dependency (Tier C carries that half).
 /// </summary>
 internal sealed class ViewportsStage : IPostStage {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxViewports = 4;   // viewport-composite.comp: sources[4]
     private const uint OutputHeight = 256;
     private const uint OutputWidth = 512;

@@ -9,19 +9,19 @@ namespace Puck.Abstractions.Gpu;
 public interface IGpuSurfaceExportFactory {
     /// <summary>Creates an exportable render target backed by shared GPU memory on the given device.</summary>
     /// <param name="deviceContext">The GPU device context.</param>
+    /// <param name="format">The pixel format of the render target.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
-    /// <param name="format">The pixel format of the render target (a <see cref="GpuPixelFormat"/> constant).</param>
     /// <returns>A new, owning <see cref="IGpuExportableRenderTarget"/>.</returns>
-    IGpuExportableRenderTarget CreateExportableTarget(IGpuDeviceContext deviceContext, uint width, uint height, uint format);
+    IGpuExportableRenderTarget CreateExportableTarget(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height);
 
     /// <summary>Creates an exportable compute storage image backed by shared GPU memory on the given device — the
     /// compute-dispatch counterpart of <see cref="CreateExportableTarget"/>, for handing a compute result to another
     /// backend zero-copy.</summary>
     /// <param name="deviceContext">The GPU device context.</param>
+    /// <param name="format">The pixel format of the storage image.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
-    /// <param name="format">The pixel format of the storage image (a <see cref="GpuPixelFormat"/> constant).</param>
     /// <returns>A new, owning <see cref="IGpuExportableStorageImage"/>.</returns>
-    IGpuExportableStorageImage CreateExportableStorageImage(IGpuDeviceContext deviceContext, uint width, uint height, uint format);
+    IGpuExportableStorageImage CreateExportableStorageImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height);
 }

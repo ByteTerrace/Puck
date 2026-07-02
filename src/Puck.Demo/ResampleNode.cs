@@ -18,7 +18,7 @@ namespace Puck.Demo;
 /// </para>
 /// </summary>
 internal sealed class ResampleNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint OutputBindingIndex = 0;  // both kernels: Output at binding 0 (register u0)
     private const uint SourceBindingIndex = 1;  // resample.comp: Source combined-image-sampler at binding 1 (t0/s0)
     private const uint WorkgroupEdge = 8;
@@ -32,7 +32,7 @@ internal sealed class ResampleNode : IRenderNode {
         Name: "resample",
         SurfaceId: SurfaceId.New()
     );
-    private readonly uint m_filter;
+    private readonly GpuSamplerFilter m_filter;
     private readonly uint m_inputSize;
     private readonly uint m_quantizeLevels;
     private readonly ReadOnlyMemory<byte> m_resampleBytecode;
@@ -70,7 +70,7 @@ internal sealed class ResampleNode : IRenderNode {
     /// <param name="cellSize">The pixelation cell size in output pixels (1 = off).</param>
     /// <param name="quantizeLevels">The per-channel color levels (0 = off).</param>
     /// <param name="inputSize">The square source extent the pattern is rendered at before resampling (small to make scaling visible).</param>
-    public ResampleNode(IServiceProvider serviceProvider, ReadOnlyMemory<byte> childBytecode, ReadOnlyMemory<byte> resampleBytecode, uint filter, uint cellSize = 1, uint quantizeLevels = 0, uint inputSize = 48) {
+    public ResampleNode(IServiceProvider serviceProvider, ReadOnlyMemory<byte> childBytecode, ReadOnlyMemory<byte> resampleBytecode, GpuSamplerFilter filter, uint cellSize = 1, uint quantizeLevels = 0, uint inputSize = 48) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
         m_cellSize = cellSize;

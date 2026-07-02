@@ -19,7 +19,7 @@ namespace Puck.Demo;
 /// <see cref="ISdfFrameSource"/>. The current kernel renders the instance BOUNDS (the SDF march integration is later).
 /// </summary>
 internal sealed class RtWorldProducerNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint InstanceCapacity = 64; // the instance buffer / TLAS capacity; the scene fills as many as it has
     private const int PushConstantByteLength = sizeof(float) * 24; // RtParams: uint2 extent + uint2 pad + 4x float4 camera + float4 ground plane
     private const uint OutputBindingIndex = 0; // RWTexture2D at binding 0 / register(u0)

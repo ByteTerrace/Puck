@@ -18,7 +18,7 @@ namespace Puck.Demo;
 /// no hand-computed expected pixels are needed. 0 = pass, 2 = infra-fail. It never presents.
 /// </summary>
 internal sealed class IndirectDispatchValidationNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint RenderSize = 64;
     private const uint WorkgroupEdge = 8;
     private const uint Groups = ((RenderSize + (WorkgroupEdge - 1)) / WorkgroupEdge); // 8 — covers the 64x64 image

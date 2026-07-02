@@ -23,7 +23,7 @@ internal sealed class WorldProducerNode : IRenderNode {
     private const uint CompositeOutputBindingIndex = 0; // sdf-world-composite.comp: Output at binding 0
     private const int CompositePushByteLength = (16 + ((sizeof(float) * 4) * MaxViewports)); // CompositeParams2: uint2 extent + uint count + uint pad + float4 rects[4]
     private const uint CompositeSourceBindingIndex = 1; // sdf-world-composite.comp: sources[] at binding 1
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxViewports = 4; // the source array length in the kernels (sources[4])
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
     private const int PushConstantByteLength = ((sizeof(uint) * 4) * 2); // 32-byte CompositeParams (16-byte rounded)

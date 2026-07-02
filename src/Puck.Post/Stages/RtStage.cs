@@ -22,7 +22,7 @@ namespace Puck.Post;
 /// missing hardware/driver capability is NEVER a failure. Artifacts: both backend renders and the diff heatmap.
 /// </summary>
 internal sealed class RtStage : IPostStage {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint InstanceCapacity = 64; // the instance buffer / TLAS capacity (matches the reference); the scene fills as many as it has
     private const uint OutputBindingIndex = 0; // RWTexture2D at binding 0 / register(u0)
     private const uint ProgramBindingIndex = 1; // the SDF program at binding 1 / register(t0) (matches sdf-vm.hlsli)

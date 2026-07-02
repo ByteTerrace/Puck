@@ -9,7 +9,7 @@ namespace Puck.Vulkan;
 /// </summary>
 public sealed class VulkanGpuShaderModuleFactory(IVulkanShaderModuleFactory shaderModuleFactory) : IGpuShaderModuleFactory {
     /// <inheritdoc/>
-    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, uint stage, ReadOnlyMemory<byte> bytecode) {
+    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         ShaderBytecode.ValidateFormat(bytecode: bytecode.Span);
 
         var logicalDevice = ((IVulkanDeviceContext)deviceContext).LogicalDevice;
@@ -27,7 +27,7 @@ public sealed class VulkanGpuShaderModuleFactory(IVulkanShaderModuleFactory shad
         );
     }
 
-    private static ShaderStage ToShaderStage(uint stageFlags) => stageFlags switch {
+    private static ShaderStage ToShaderStage(GpuShaderStage stageFlags) => stageFlags switch {
         GpuShaderStage.Vertex => ShaderStage.Vertex,
         GpuShaderStage.Fragment => ShaderStage.Fragment,
         GpuShaderStage.Compute => ShaderStage.Compute,

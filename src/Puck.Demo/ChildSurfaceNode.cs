@@ -20,7 +20,7 @@ namespace Puck.Demo;
 /// </para>
 /// </summary>
 internal sealed class ChildSurfaceNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint OutputBindingIndex = 0; // sdf-child.comp: Output at binding 0 (register u0)
     private const int PushConstantByteLength = (sizeof(uint) * 4); // ChildParams: uint2 extent + float time + uint pad
     private const uint WorkgroupEdge = 8;

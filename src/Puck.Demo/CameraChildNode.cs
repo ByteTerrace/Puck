@@ -23,7 +23,7 @@ namespace Puck.Demo;
 /// neutral placeholder fills the slot so the compositor always sees a valid same-device view.
 /// </summary>
 internal sealed class CameraChildNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;  // output format
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;  // output format
     private const uint OutputBindingIndex = 0;                 // resample.comp: Output at binding 0 (register u0)
     private const uint PlaceholderEdge = 8;                    // the pre-first-frame gray placeholder source extent
     private const int ResamplePushByteLength = 32;             // ResampleParams { uint2 outExtent; float2 srcOrigin; float2 srcSize; uint cellSize; uint quantizeLevels; }

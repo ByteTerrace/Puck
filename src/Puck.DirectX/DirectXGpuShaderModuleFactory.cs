@@ -10,7 +10,7 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuShaderModuleFactory : IGpuShaderModuleFactory {
     /// <inheritdoc/>
-    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, uint stage, ReadOnlyMemory<byte> bytecode) {
+    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         ShaderBytecode.ValidateFormat(bytecode: bytecode.Span);
 
         return new DirectXGpuShaderModule(bytecode: bytecode);

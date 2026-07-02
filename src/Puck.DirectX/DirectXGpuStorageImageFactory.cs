@@ -11,7 +11,7 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuStorageImageFactory : IGpuStorageImageFactory {
     /// <inheritdoc/>
-    public IGpuStorageImage Create(IGpuDeviceContext deviceContext, uint format, uint width, uint height) =>
+    public IGpuStorageImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
         new DirectXGpuStorageImage(
             deviceContext: (IDirectXDeviceContext)deviceContext,
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),

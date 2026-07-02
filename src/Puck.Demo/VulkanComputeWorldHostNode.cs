@@ -30,7 +30,7 @@ namespace Puck.Demo;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class VulkanComputeWorldHostNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint VulkanFormat = 37; // VK_FORMAT_R8G8B8A8_UNORM
 
     private readonly NodeDescriptor m_descriptor = new(
@@ -49,7 +49,7 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
     private bool m_disposed;
     private IGpuComputeCommandPool? m_hostCommandPool;
     // The Direct3D 12 image is created in UNORDERED_ACCESS, which the neutral recorder maps from General.
-    private uint m_lastHostLayout = GpuImageLayout.General;
+    private GpuImageLayout m_lastHostLayout = GpuImageLayout.General;
     private ReverseSharedStorageImage? m_seam;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanComputeWorldHostNode"/> class.</summary>
@@ -171,7 +171,7 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
 
     // Records and drains a single Direct3D 12 layout transition of the host-owned shared image on the host device's
     // queue, tracking the prior layout so the barrier's old layout is accurate frame to frame.
-    private void RecordHostTransition(uint newLayout) {
+    private void RecordHostTransition(GpuImageLayout newLayout) {
         m_hostCommandPool ??= new DirectXGpuComputeCommandPoolFactory().Create(deviceContext: m_hostDevice);
 
         var commandBuffer = m_hostCommandPool.CommandBufferHandle;

@@ -25,7 +25,7 @@ internal readonly record struct ViewportPane(NormalizedRect Region, IRenderNode 
 /// </para>
 /// </summary>
 internal sealed class ViewportCompositorNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxViewports = 4; // the source array length in viewport-composite.comp (sources[4])
     private const uint OutputBindingIndex = 0; // viewport-composite.comp: Output at binding 0 (register u0)
     private const uint SourceBindingIndex = 1; // viewport-composite.comp: sources[] at binding 1 (register u1)

@@ -28,7 +28,7 @@ namespace Puck.Demo;
 /// </para>
 /// </summary>
 internal sealed class ResampleValidationNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint SourceSize = 64;
     private const uint UpscaleSize = 128;
     private const uint WorkgroupEdge = 8;
@@ -142,7 +142,7 @@ internal sealed class ResampleValidationNode : IRenderNode {
     // Renders sdf-child into a SourceSize source image, then resamples it into an outSize output through the compute
     // sampler at the given filter, reading BOTH images back. One command buffer: fill source → make it shader-readable
     // → resample (sample source, write output) → make output readable → submit-and-wait → read both.
-    private static (byte[] Source, byte[] Output) Resample(IGpuComputeServices gpu, IGpuDeviceContext deviceContext, byte[] childBytecode, byte[] resampleBytecode, uint outSize, uint filter) {
+    private static (byte[] Source, byte[] Output) Resample(IGpuComputeServices gpu, IGpuDeviceContext deviceContext, byte[] childBytecode, byte[] resampleBytecode, uint outSize, GpuSamplerFilter filter) {
         var deviceHandle = deviceContext.DeviceHandle;
 
         var childPush = new byte[ChildPushByteLength];

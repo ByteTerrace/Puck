@@ -17,7 +17,7 @@ namespace Puck.Demo;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class CrossBackendComputeWorldNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
 
     private readonly NodeDescriptor m_descriptor = new(
         Name: "cross-backend-compute-world",

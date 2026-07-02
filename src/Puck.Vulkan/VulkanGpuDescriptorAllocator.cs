@@ -30,7 +30,7 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
         );
     }
     /// <inheritdoc/>
-    public nint CreateSampler(nint deviceHandle, uint filter = GpuSamplerFilter.Linear) {
+    public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) {
         var vulkanFilter = ((filter == GpuSamplerFilter.Nearest) ? VulkanFilter.Nearest : VulkanFilter.Linear);
 
         return allocator.CreateSampler(request: new VulkanSamplerCreateRequest(

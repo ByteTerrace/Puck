@@ -15,7 +15,7 @@ namespace Puck.Demo;
 /// so ANY source can be retro-ified.
 /// </summary>
 internal sealed class PixelateNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint OutputBindingIndex = 0; // pixelate.comp: Output at binding 0 (register u0)
     private const uint SourceBindingIndex = 1; // pixelate.comp: Source at binding 1 (register u1)
     private const uint WorkgroupEdge = 8;

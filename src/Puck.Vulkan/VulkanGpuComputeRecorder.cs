@@ -21,8 +21,8 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) =>
         recordingApi.BindComputeDescriptorSets(commandBufferHandle: commandBufferHandle, descriptorSetHandles: [descriptorSetHandle], deviceHandle: deviceHandle, pipelineLayoutHandle: pipelineLayoutHandle);
     /// <inheritdoc/>
-    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, uint stageFlags, uint offset, ReadOnlySpan<byte> data) =>
-        recordingApi.PushConstants(commandBufferHandle: commandBufferHandle, data: data, deviceHandle: deviceHandle, offset: offset, pipelineLayoutHandle: pipelineLayoutHandle, stageFlags: stageFlags);
+    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) =>
+        recordingApi.PushConstants(commandBufferHandle: commandBufferHandle, data: data, deviceHandle: deviceHandle, offset: offset, pipelineLayoutHandle: pipelineLayoutHandle, stageFlags: (uint)stageFlags);
     /// <inheritdoc/>
     public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) =>
         recordingApi.Dispatch(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, groupCountX: groupCountX, groupCountY: groupCountY, groupCountZ: groupCountZ);
@@ -30,7 +30,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) =>
         recordingApi.DispatchIndirect(bufferHandle: argumentBufferHandle, commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, offset: argumentBufferOffset);
     /// <inheritdoc/>
-    public void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, uint oldLayout, uint newLayout, uint sourceAccessMask, uint destinationAccessMask, uint sourceStageMask, uint destinationStageMask) =>
+    public void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
         recordingApi.TransitionImageLayout(
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
@@ -45,7 +45,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
     /// <inheritdoc/>
-    public void MemoryBarrier(nint deviceHandle, nint commandBufferHandle, uint sourceAccessMask, uint destinationAccessMask, uint sourceStageMask, uint destinationStageMask) =>
+    public void MemoryBarrier(nint deviceHandle, nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
         recordingApi.PipelineMemoryBarrier(
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
@@ -55,7 +55,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
     /// <inheritdoc/>
-    public void TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, uint sourceAccessMask, uint destinationAccessMask, uint sourceStageMask, uint destinationStageMask) =>
+    public void TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
         // Vulkan needs no per-buffer transition for an indirect read — a global memory barrier over the same
         // access/stage scopes (carrying VK_ACCESS_INDIRECT_COMMAND_READ_BIT / VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
         // already orders the producing write before the indirect fetch. (Direct3D 12 is where a per-resource barrier matters.)
@@ -68,7 +68,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
 
-    private static uint ToVulkanAccess(uint access) {
+    private static uint ToVulkanAccess(GpuComputeAccess access) {
         uint result = 0;
 
         if (0 != (access & GpuComputeAccess.ShaderRead)) {
@@ -85,7 +85,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
 
         return result;
     }
-    private static uint ToVulkanLayout(uint layout) {
+    private static uint ToVulkanLayout(GpuImageLayout layout) {
         return layout switch {
             GpuImageLayout.General => VulkanImageLayout.General,
             GpuImageLayout.ShaderReadOnly => VulkanImageLayout.ShaderReadOnlyOptimal,
@@ -94,7 +94,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             _ => VulkanImageLayout.Undefined,
         };
     }
-    private static uint ToVulkanStage(uint stage) {
+    private static uint ToVulkanStage(GpuComputeStage stage) {
         uint result = 0;
 
         if (0 != (stage & GpuComputeStage.TopOfPipe)) {
