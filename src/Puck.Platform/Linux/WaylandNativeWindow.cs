@@ -14,7 +14,7 @@ namespace Puck.Platform.Linux;
 /// <remarks>Unverified off-device — the protocol glue (hand-built xdg-shell tables, the
 /// non-blocking dispatch in <see cref="PollEvents"/>) is expected to need on-device
 /// iteration.</remarks>
-internal sealed unsafe class WaylandNativeWindow : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
+internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSource {
     private const uint WlCompositorMaxVersion = 4;
     private const uint XdgWmBaseMaxVersion = 1;
 
@@ -132,8 +132,8 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, INativeSurface
         return new NativeSurfaceBinding(
             DisplayKind: DisplayKind,
             Wayland: new WaylandNativeSurfaceBinding(
-                Display: m_display,
-                Surface: m_surface
+                DisplayHandle: m_display,
+                SurfaceHandle: m_surface
             )
         );
     }

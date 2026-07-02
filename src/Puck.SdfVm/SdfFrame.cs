@@ -10,7 +10,6 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 /// these into the per-frame dynamic-transform buffer the <c>SdfOp.TransformDynamic</c> opcode indexes by slot, so an
 /// entity moves without rebuilding the scene program. The slot is the entity's index in <see cref="SdfFrame.DynamicTransforms"/>.</summary>
 public readonly record struct DynamicTransform(Vector3 Position, Quaternion Orientation);
-
 public sealed record SdfFrame(
     SdfProgram Program,
     bool ProgramChanged,

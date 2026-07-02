@@ -3,22 +3,22 @@ using System.Text.Json.Serialization;
 namespace Puck.Scene;
 
 /// <summary>
-/// One viewport: a camera and the normalized screen region it fills. The region is authored as <c>[x, y, w, h]</c>
-/// in 0..1 screen space. A single full-frame viewport reproduces the hero view; four quadrant viewports reproduce the
-/// 2x2 split-screen. The compositor supports at most four.
+/// One viewport: a content source and the normalized screen region it fills. The region is authored as
+/// <c>[x, y, w, h]</c> in 0..1 screen space. A single full-frame viewport reproduces the hero view; four quadrant
+/// viewports reproduce the 2x2 split-screen. The compositor supports at most four.
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record Viewport {
-    /// <summary>The viewport's camera.</summary>
-    public CameraDocument? Camera { get; init; }
+    /// <summary>The viewport's content source (a virtual camera today; a live capture source later).</summary>
+    public ViewportSource? Source { get; init; }
     /// <summary>The normalized screen region <c>[x, y, w, h]</c> in 0..1.</summary>
     public IReadOnlyList<float> Region { get; init; } = [];
 
     internal void Validate(string path, ValidationErrors errors) {
-        if (Camera is null) {
-            errors.Add(path: $"{path}.camera", message: "a viewport requires a camera");
+        if (Source is null) {
+            errors.Add(path: $"{path}.source", message: "a viewport requires a source");
         } else {
-            Camera.Validate(errors: errors, path: $"{path}.camera");
+            Source.Validate(errors: errors, path: $"{path}.source");
         }
 
         if (!JsonVector.IsValid(components: Region, length: 4)) {

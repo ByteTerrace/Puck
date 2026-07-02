@@ -7,8 +7,7 @@ namespace Puck.Input.Devices;
 /// GameInput Xbox backend in <c>Puck.Platform</c>, which owns its own poll thread. The manager calls
 /// <see cref="Start"/> once and disposes the source on shutdown.
 /// </summary>
-public interface IGamepadAcquisitionSource : IDisposable
-{
+public interface IGamepadAcquisitionSource : IDisposable {
     /// <summary>
     /// Starts acquisition. The source begins discovering devices and registering them with
     /// <paramref name="registry"/>; it owns any background thread it needs until disposed.

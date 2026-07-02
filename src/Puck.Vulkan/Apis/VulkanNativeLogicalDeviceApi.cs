@@ -46,6 +46,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     // the driver read the adjacent block's sType as a bogus VkBool32, tripping a validation error. 256 bytes
     // comfortably exceeds any current Vulkan feature struct (even the aggregate VkPhysicalDeviceVulkan1xFeatures).
     private const int FeatureStructureByteSize = 256;
+
     private readonly Lock m_syncRoot = new();
     private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
     private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;

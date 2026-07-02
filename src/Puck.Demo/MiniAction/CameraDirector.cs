@@ -24,7 +24,9 @@ public sealed class CameraDirector {
 
     private static readonly Vector3 ChaseOffset = new(0f, 6.5f, 11f);
     private static readonly Vector3 TargetLift = new(0f, 0.4f, 0f);
-
+    // Reused per-frame view buffer — refilled (never reallocated) each Compose() call so a high-rate VRR present loop
+    // allocates nothing here; valid only until the next Compose() (the renderer consumes it synchronously per frame).
+    private readonly SdfViewSnapshot[] m_views = new SdfViewSnapshot[MiniActionWorld.MaxPlayers];
     private bool m_initialized;
     private bool m_split;
     private float m_transition;
@@ -36,7 +38,7 @@ public sealed class CameraDirector {
     public IReadOnlyList<SdfViewSnapshot> Compose(IReadOnlyList<Vector3> activePositions, uint imageWidth, uint imageHeight, float deltaSeconds) {
         ArgumentNullException.ThrowIfNull(activePositions);
 
-        var views = new SdfViewSnapshot[MiniActionWorld.MaxPlayers];
+        var views = m_views;
         var count = Math.Min(activePositions.Count, MiniActionWorld.MaxPlayers);
 
         if (count == 0) {

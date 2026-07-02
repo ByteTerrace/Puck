@@ -18,8 +18,7 @@ namespace Puck.Platform.Windows.Hid;
 /// <c>CreateFile</c> I/O, <c>HidP</c> caps). Created and enumerated through <see cref="Win32HidDeviceSource"/>.
 /// </summary>
 [SupportedOSPlatform(platformName: "windows5.1.2600")]
-internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32HumanInterfaceDevice>
-{
+internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32HumanInterfaceDevice> {
     private const uint DISPOSED_FALSE = uint.MinValue;
     private const uint DISPOSED_TRUE = 1U;
 
@@ -33,6 +32,9 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     /// <returns>An opened device, or <see langword="null"/> if it could not be opened.</returns>
     public static Win32HumanInterfaceDevice? Open(string devicePath) {
         ArgumentNullException.ThrowIfNull(devicePath);
+
+        // The transport is inferred from the path form; VID/PID come from HidD_GetAttributes below (authoritative).
+        _ = TryGetVidPid(path: devicePath, productId: out _, transport: out var transport, vendorId: out _);
 
         var fileStream = GetFileStream(
             devicePath: devicePath,
@@ -81,10 +83,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 capabilities: capabilities,
                 devicePath: devicePath,
                 fileStream: fileStream,
-                preparsedData: preparsedData
+                preparsedData: preparsedData,
+                transport: transport
             );
-        }
-        catch {
+        } catch {
             if (nint.Zero != preparsedData) {
                 _ = PInvoke.HidD_FreePreparsedData(PreparsedData: preparsedData);
             }
@@ -94,6 +96,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             return null;
         }
     }
+
     [SupportedOSPlatform(platformName: "windows5.1.2600")]
     private static FileStream? GetFileStream(
         string devicePath,
@@ -217,14 +220,12 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                         RequiredSize: &deviceInterfaceDetailDataSize
                     )) {
                         errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
-                    }
-                    else {
+                    } else {
                         devicePath = new string(value: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((char*)Unsafe.AsPointer(ref deviceInterfaceDetail->DevicePath.e0))));
                         errorCode = WIN32_ERROR.NO_ERROR;
                     }
                 }
-            }
-            finally {
+            } finally {
                 ArrayPool<byte>.Shared.Return(array: deviceInterfaceDetailDataBuffer);
             }
         }
@@ -290,25 +291,45 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 _ = TryGetVidPid(
                     path: devicePath,
                     productId: out var productId,
+                    transport: out var transport,
                     vendorId: out var vendorId
                 );
 
                 yield return new HidDeviceInfo(
                     Path: devicePath,
                     ProductId: productId,
+                    Transport: transport,
                     VendorId: vendorId
                 );
             }
         }
     }
 
-    private static bool TryGetVidPid(string path, out ushort vendorId, out ushort productId) {
-        var hasVendor = TryParseHexField(path: path, token: "vid_", value: out vendorId);
-        var hasProduct = TryParseHexField(path: path, token: "pid_", value: out productId);
+    private static bool TryGetVidPid(string path, out ushort vendorId, out ushort productId, out HidTransport transport) {
+        // USB device paths carry "vid_XXXX&pid_XXXX"; Bluetooth paths carry "..._VID&sssspppp_PID&pppp" — an
+        // 8-hex vid field whose high word is the id-source. The separator after the token (`_` vs `&`) is what
+        // distinguishes the two forms, so the token includes it.
+        if (TryParseHexRun(path: path, token: "vid_", value: out vendorId) && TryParseHexRun(path: path, token: "pid_", value: out productId)) {
+            transport = HidTransport.Usb;
 
-        return (hasVendor && hasProduct);
+            return true;
+        }
+
+        if (TryParseHexRun(path: path, token: "vid&", value: out vendorId) && TryParseHexRun(path: path, token: "pid&", value: out productId)) {
+            transport = HidTransport.Bluetooth;
+
+            return true;
+        }
+
+        vendorId = 0;
+        productId = 0;
+        transport = HidTransport.Unknown;
+
+        return false;
     }
-    private static bool TryParseHexField(string path, string token, out ushort value) {
+    // Parses the contiguous hex run that follows the token (case-insensitive), keeping the low 16 bits so the
+    // 8-hex Bluetooth vid field (id-source word + vendor) and the 4-hex USB field both yield the vendor id.
+    private static bool TryParseHexRun(string path, string token, out ushort value) {
         value = 0;
 
         var index = path.IndexOf(value: token, comparisonType: StringComparison.OrdinalIgnoreCase);
@@ -318,23 +339,31 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         }
 
         var start = (index + token.Length);
+        var end = start;
 
-        if ((start + 4) > path.Length) {
+        while ((end < path.Length) && char.IsAsciiHexDigit(c: path[end])) {
+            ++end;
+        }
+
+        if ((end == start) || !uint.TryParse(
+            provider: CultureInfo.InvariantCulture,
+            result: out var parsed,
+            s: path.AsSpan(start: start, length: (end - start)),
+            style: NumberStyles.HexNumber
+        )) {
             return false;
         }
 
-        return ushort.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out value,
-            s: path.AsSpan(start: start, length: 4),
-            style: NumberStyles.HexNumber
-        );
+        value = ((ushort)parsed);
+
+        return true;
     }
 
     private readonly HIDD_ATTRIBUTES m_attributes;
     private readonly HIDP_CAPS m_capabilities;
     private readonly string m_devicePath;
     private readonly FileStream? m_fileStream;
+    private readonly HidTransport m_transport;
     private uint m_isDisposed = DISPOSED_FALSE;
     private PHIDP_PREPARSED_DATA m_preparsedData = ((PHIDP_PREPARSED_DATA)nint.Zero);
 
@@ -349,22 +378,28 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     /// <inheritdoc />
     public ushort Usage { get => m_capabilities.Usage; }
     /// <inheritdoc />
+    public HidTransport Transport { get => m_transport; }
+    /// <inheritdoc />
     public int InputReportByteLength { get => m_capabilities.InputReportByteLength; }
     /// <inheritdoc />
     public int OutputReportByteLength { get => m_capabilities.OutputReportByteLength; }
+    /// <inheritdoc />
+    public int FeatureReportByteLength { get => m_capabilities.FeatureReportByteLength; }
 
     private Win32HumanInterfaceDevice(
         HIDD_ATTRIBUTES attributes,
         HIDP_CAPS capabilities,
         string devicePath,
         FileStream? fileStream,
-        PHIDP_PREPARSED_DATA preparsedData
+        PHIDP_PREPARSED_DATA preparsedData,
+        HidTransport transport
     ) {
         m_attributes = attributes;
         m_capabilities = capabilities;
         m_devicePath = devicePath;
         m_fileStream = fileStream;
         m_preparsedData = preparsedData;
+        m_transport = transport;
     }
 
     ~Win32HumanInterfaceDevice() => Dispose(disposing: false);
@@ -440,8 +475,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                     buffer: buffer,
                     cancellationToken: linkedCancellationTokenSource.Token
                 );
-            }
-            catch (OperationCanceledException) when (limitCancellationTokenSource.IsCancellationRequested) {
+            } catch (OperationCanceledException) when (limitCancellationTokenSource.IsCancellationRequested) {
                 if (throwOnTimeout) {
                     throw;
                 }

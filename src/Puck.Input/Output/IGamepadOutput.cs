@@ -9,8 +9,7 @@ namespace Puck.Input.Output;
 /// <see langword="false"/> when the feature is unsupported (see <see cref="Capabilities"/>) or the device has
 /// disconnected.
 /// </summary>
-public interface IGamepadOutput
-{
+public interface IGamepadOutput {
     /// <summary>The device this handle drives.</summary>
     InputDeviceId DeviceId { get; }
 
@@ -33,8 +32,29 @@ public interface IGamepadOutput
     bool SetLed(in LedColor color);
 
     /// <summary>
-    /// Sends a raw, device-specific output report (the escape hatch for DualSense adaptive triggers, Switch
-    /// HD-rumble waveforms, and other effects without a portable shape).
+    /// Applies a typed adaptive-trigger effect to each trigger (L2 = <paramref name="left"/>, R2 =
+    /// <paramref name="right"/>), as on the DualSense. The effect is composed into the controller's normal output
+    /// report, so it coexists with rumble and the LED. Pass <see cref="TriggerEffectSpec.Off"/> to clear a trigger.
+    /// </summary>
+    /// <param name="left">The left trigger's effect.</param>
+    /// <param name="right">The right trigger's effect.</param>
+    /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
+    bool SetTriggerEffect(in TriggerEffectSpec left, in TriggerEffectSpec right);
+
+    /// <summary>
+    /// Schedules an adaptive-trigger effect (as <see cref="SetTriggerEffect"/>) to be applied when the shared
+    /// capture clock (<see cref="IInputClock"/>) reaches <paramref name="fireAtTick"/> — rhythm-grade haptics
+    /// timed against the same clock that stamps input. A tick already in the past applies immediately.
+    /// </summary>
+    /// <param name="left">The left trigger's effect.</param>
+    /// <param name="right">The right trigger's effect.</param>
+    /// <param name="fireAtTick">The capture-clock engine tick to apply the effect at.</param>
+    /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
+    bool SetTriggerEffectAt(in TriggerEffectSpec left, in TriggerEffectSpec right, ulong fireAtTick);
+
+    /// <summary>
+    /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as
+    /// Switch HD-rumble waveforms).
     /// </summary>
     /// <param name="data">The raw report payload, in the device's report format.</param>
     /// <returns><see langword="true"/> if the device has a raw channel and the payload was accepted; otherwise <see langword="false"/>.</returns>

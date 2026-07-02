@@ -47,7 +47,6 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         nint commandBufferHandle,
         nint renderPassHandle,
         nint framebufferHandle,
-        nint pipelineHandle,
         uint width,
         uint height
     ) {
@@ -182,7 +181,7 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         nint deviceHandle,
         nint commandBufferHandle,
         nint pipelineLayoutHandle,
-        uint stageFlags,
+        GpuShaderStage stageFlags,
         uint offset,
         ReadOnlySpan<byte> data
     ) {

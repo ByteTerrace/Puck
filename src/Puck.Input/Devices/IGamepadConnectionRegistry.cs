@@ -6,8 +6,7 @@ namespace Puck.Input.Devices;
 /// external source (e.g. the Windows XInput poll loop in <c>Puck.Platform</c>) drives its own acquisition and
 /// pushes connections here.
 /// </summary>
-public interface IGamepadConnectionRegistry
-{
+public interface IGamepadConnectionRegistry {
     /// <summary>
     /// Atomically allocates the lowest free player slot, builds the connection with
     /// <paramref name="connectionFactory"/> (passed the allocated slot), and tracks it — so the slot is never

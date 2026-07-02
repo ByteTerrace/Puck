@@ -4,14 +4,8 @@ namespace Puck.Platform.Windows.Interop;
 
 internal static partial class Gdi32 {
     [LibraryImport("gdi32.dll", SetLastError = true)]
-    public static partial nint CreateSolidBrush(uint colorRef);
-    [LibraryImport("gdi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DeleteObject(nint objectHandle);
-    [LibraryImport("gdi32.dll")]
-    public static partial int SetBkMode(nint deviceContextHandle, int mode);
-    [LibraryImport("gdi32.dll")]
-    public static partial uint SetTextColor(nint deviceContextHandle, uint colorRef);
     [LibraryImport("gdi32.dll", SetLastError = true)]
     public static partial nint CreateCompatibleDC(nint deviceContextHandle);
     [LibraryImport("gdi32.dll", SetLastError = true)]

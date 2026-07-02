@@ -19,7 +19,7 @@ public sealed class VulkanGpuTimingRecorder(IVulkanQueryPoolApi queryPoolApi) : 
         );
 
     /// <inheritdoc/>
-    public void WriteTimestamp(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint queryIndex, uint stageFlags) =>
+    public void WriteTimestamp(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint queryIndex, GpuTimingStage stageFlags) =>
         queryPoolApi.CmdWriteTimestamp(
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle,
@@ -46,7 +46,7 @@ public sealed class VulkanGpuTimingRecorder(IVulkanQueryPoolApi queryPoolApi) : 
             : 0u;
     }
 
-    private static uint ToVulkanStage(uint stage) {
+    private static uint ToVulkanStage(GpuTimingStage stage) {
         return (0 != (stage & GpuTimingStage.BottomOfPipe))
             ? VulkanPipelineStageFlags.BottomOfPipe
             : VulkanPipelineStageFlags.TopOfPipe;

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
 
@@ -22,7 +23,7 @@ internal sealed class WorldProducerNode : IRenderNode {
     private const uint CompositeOutputBindingIndex = 0; // sdf-world-composite.comp: Output at binding 0
     private const int CompositePushByteLength = (16 + ((sizeof(float) * 4) * MaxViewports)); // CompositeParams2: uint2 extent + uint count + uint pad + float4 rects[4]
     private const uint CompositeSourceBindingIndex = 1; // sdf-world-composite.comp: sources[] at binding 1
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxViewports = 4; // the source array length in the kernels (sources[4])
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
     private const int PushConstantByteLength = ((sizeof(uint) * 4) * 2); // 32-byte CompositeParams (16-byte rounded)
@@ -42,7 +43,6 @@ internal sealed class WorldProducerNode : IRenderNode {
     private const ulong TimingReportInterval = 60; // print the digest roughly once per second at 60 fps
 
     private static readonly IReadOnlyDictionary<int, IRenderNode> EmptyChildren = new Dictionary<int, IRenderNode>();
-
     private readonly ReadOnlyMemory<byte> m_beamBytecode;
     private readonly nint[] m_boundSourceViews = new nint[MaxViewports];
     private readonly ReadOnlyMemory<byte> m_cullArgsBytecode;
@@ -63,7 +63,6 @@ internal sealed class WorldProducerNode : IRenderNode {
     private readonly uint m_tileGridY;
     private readonly ReadOnlyMemory<byte> m_viewsBytecode;
     private readonly uint m_width;
-
     private IGpuComputePipeline? m_beamPipeline;
     private nint m_beamSet;
     private IGpuShaderModule? m_beamShaderModule;
@@ -97,6 +96,12 @@ internal sealed class WorldProducerNode : IRenderNode {
     private IGpuQueueSubmitter? m_queueSubmitter;
     private IGpuSurfaceReadback? m_readback;
     private bool m_resourcesReady;
+    private bool m_programUploadPending;
+    private int m_produceFrameIndex;
+
+    private static int CaptureDelayFrames() {
+        return (int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_CAPTURE_FRAME"), out var frame) && (frame > 0)) ? frame : 0;
+    }
     private IGpuStorageImage?[] m_sourceTextures = [];
     private IGpuStorageImage? m_storageImage;
     private GpuTimestampCapabilities m_timingCapabilities;
@@ -173,7 +178,7 @@ internal sealed class WorldProducerNode : IRenderNode {
             return default;
         }
 
-        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds);
+        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds, interpolationAlpha: (float)context.InterpolationAlpha);
 
         // Produce each child viewport's surface first (so its image-view is known before the source array is bound),
         // then build/refresh resources, then (re)bind the source array — SDF view textures and child surfaces alike.
@@ -181,19 +186,28 @@ internal sealed class WorldProducerNode : IRenderNode {
         EnsureResources(gpuDevice: gpuDevice, frame: frame);
         BindSources();
 
-        if (frame.ProgramChanged) {
+        if (frame.ProgramChanged || m_programUploadPending) {
             m_programBuffer!.Write<uint>(data: frame.Program.Words);
+            m_programUploadPending = false;
         }
 
         PackViewports(frame: frame);
         m_viewportBuffer!.Write<byte>(data: m_viewportScratch);
         PackDynamicTransforms(frame: frame);
         m_dynamicTransformBuffer!.Write<byte>(data: m_dynamicTransformScratch);
+        // Rebuild the Stage-2 composite rects from the LIVE regions every frame — the camera director animates the
+        // split layout, so a frozen first-frame layout composited stale/blank rects mid-transition.
+        BuildCompositePush(frame: frame);
         Render();
+
+        // PUCK_CAPTURE_FRAME=N delays the one-shot --capture to the Nth produced frame (default 0 = first), so a capture
+        // can grab a post-transition frame (e.g. an animated split-screen settled) instead of frame 1. Diagnostic aid.
+        ++m_produceFrameIndex;
 
         if (
             (m_capturePath is not null) &&
-            !m_captured
+            !m_captured &&
+            (m_produceFrameIndex > CaptureDelayFrames())
         ) {
             // Retain a copy of the readback (the readback buffer is reused across calls) so a parity gate can diff
             // two backends' output without a second GPU read.
@@ -275,7 +289,6 @@ internal sealed class WorldProducerNode : IRenderNode {
             m_boundSourceViews[element] = view;
         }
     }
-
     private nint SourceViewForSlot(int slot) {
         if (IsChildSlot(slot: slot)) {
             var view = m_childSurfaces[slot].ImageViewHandle;
@@ -289,7 +302,6 @@ internal sealed class WorldProducerNode : IRenderNode {
 
         return m_sourceTextures[slot]!.ImageViewHandle;
     }
-
     private bool IsChildSlot(int slot) =>
         (0u != (m_childMask & (1u << slot)));
 
@@ -337,7 +349,6 @@ internal sealed class WorldProducerNode : IRenderNode {
             floats[b + 4] = transform.Orientation.X; floats[b + 5] = transform.Orientation.Y; floats[b + 6] = transform.Orientation.Z; floats[b + 7] = transform.Orientation.W;
         }
     }
-
     private void EnsureResources(IGpuDeviceContext gpuDevice, SdfFrame frame) {
         if (m_resourcesReady) {
             return;
@@ -390,33 +401,31 @@ internal sealed class WorldProducerNode : IRenderNode {
 
         pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = m_viewportCount; pushWords[5] = m_childMask;
 
-        BuildCompositePush(frame: frame);
+        // NOTE: the Stage-2 composite rects (BuildCompositePush) are rebuilt EVERY frame in ProduceFrame, not here — the
+        // camera director ANIMATES the per-view regions, so freezing them to this first frame blanked panes mid-transition.
 
         m_beamShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_beamBytecode);
         m_cullArgsShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_cullArgsBytecode);
         m_viewsShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_viewsBytecode);
         m_compositeShaderModule = shaderModuleFactory.Create(deviceContext: gpuDevice, stage: GpuShaderStage.Compute, bytecode: m_compositeBytecode);
 
-        // One rect-sized source texture per NON-child viewport — Stage 1 renders into it, Stage 2 copies it into its
-        // region. Child slots stay null: their source is the hosted child's storage image (bound in BindSources), and
-        // the child owns that image's layout, so the parent never creates or transitions one. Sized from this (first)
-        // frame's regions; the demo's layouts are stable for the run.
+        // One FULL-SIZE source texture per NON-child viewport — Stage 1 renders the viewport's region-extent into it,
+        // Stage 2 copies that into the screen region. Sized to the FULL frame extent (the largest any region can reach),
+        // NOT this first frame's region: the camera director animates regions every frame, so a frozen region-sized
+        // texture (e.g. 1x1 from a zero-area first frame, or a half-width split) under-allocated the pane and blanked it
+        // when the layout grew. Writes/reads stay within the live region (≤ full), so full-size is always in-bounds.
+        // Child slots stay null: their source is the hosted child's storage image (bound in BindSources), and the child
+        // owns that image's layout, so the parent never creates or transitions one.
         m_sourceTextures = new IGpuStorageImage?[(int)m_viewportCount];
+        m_maxRectWidth = m_width;
+        m_maxRectHeight = m_height;
 
         for (var index = 0; (index < (int)m_viewportCount); index++) {
-            // Child slots are excluded from the Stage 1 max-rect too: Stage 1 skips them via childMask, so its
-            // dispatch never needs to cover their extent.
             if (IsChildSlot(slot: index)) {
                 continue;
             }
 
-            var region = frame.Views[index].Region;
-            var rectWidth = Math.Max(1u, (uint)(region.Width * m_width));
-            var rectHeight = Math.Max(1u, (uint)(region.Height * m_height));
-
-            m_sourceTextures[index] = storageImageFactory.Create(deviceContext: gpuDevice, format: Format, height: rectHeight, width: rectWidth);
-            m_maxRectWidth = Math.Max(m_maxRectWidth, rectWidth);
-            m_maxRectHeight = Math.Max(m_maxRectHeight, rectHeight);
+            m_sourceTextures[index] = storageImageFactory.Create(deviceContext: gpuDevice, format: Format, height: m_height, width: m_width);
         }
 
         // The output image is either a plain same-device storage image (resolved from the neutral factory) or an
@@ -429,6 +438,10 @@ internal sealed class WorldProducerNode : IRenderNode {
         m_exportMode = (m_exportableImage is not null);
 
         m_programBuffer = storageBufferFactory.Create(deviceContext: gpuDevice, sizeBytes: ((ulong)frame.Program.Words.Length * sizeof(uint)));
+        // The program is normally uploaded only when frame.ProgramChanged (it is static after the first frame). A freshly
+        // (re)created buffer — first build OR a device-loss rebuild — is empty, so force the next ProduceFrame to upload
+        // it even when ProgramChanged is false; otherwise a recovered device would render an empty scene (clear color).
+        m_programUploadPending = true;
         m_viewportBuffer = storageBufferFactory.Create(deviceContext: gpuDevice, sizeBytes: (ulong)m_viewportScratch.Length);
         m_dynamicTransformBuffer = storageBufferFactory.Create(deviceContext: gpuDevice, sizeBytes: (ulong)m_dynamicTransformScratch.Length);
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
@@ -527,13 +540,7 @@ internal sealed class WorldProducerNode : IRenderNode {
         // MaxViewports changes — replacing the hand-tallied count that previously had to be kept in step by comment.
         var poolSizes = GpuDescriptorPoolSizes.ForSets(beamBindings, cullArgsBindings, viewsBindings, compositeBindings);
 
-        m_pool = m_descriptorAllocator.CreatePool(
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: m_deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
 
         m_beamSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_beamPipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
         WriteStorageBuffer(set: m_beamSet, binding: ProgramBindingIndex, buffer: m_programBuffer);
@@ -619,7 +626,6 @@ internal sealed class WorldProducerNode : IRenderNode {
             floats[b + 0] = region.X; floats[b + 1] = region.Y; floats[b + 2] = region.Width; floats[b + 3] = region.Height;
         }
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;
@@ -845,7 +851,6 @@ internal sealed class WorldProducerNode : IRenderNode {
     }
     private static int Percent(double part, double whole) =>
         (int)Math.Round(a: ((100.0 * part) / whole));
-
     private void WriteStorageBuffer(nint set, uint binding, IGpuStorageBuffer buffer) {
         m_descriptorAllocator!.WriteStorageBuffer(
             binding: binding,
@@ -898,45 +903,102 @@ internal sealed class WorldProducerNode : IRenderNode {
         m_disposed = true;
         // Drain before tearing down GPU resources: in same-device mode the per-frame submits are fire-and-forget
         // (nothing fences them), so a frame could still be in flight at teardown.
-        m_deviceContext?.WaitIdle();
+        m_deviceContext.TryWaitIdle();
 
         foreach (var child in m_children.Values) {
             child.Dispose();
         }
 
+        ReleaseGpuResources();
+    }
+
+    /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // Device-loss recovery: reset the subtree on the still-valid (lost) device, child-first (children are device
+        // children too, and must be torn down before the device is). Unlike Dispose there is NO idle drain — the device
+        // is lost, so nothing in flight will ever complete, and the host pump recreates the device immediately after.
+        // The next ProduceFrame re-runs EnsureResources (the latch is cleared below) against the recreated device,
+        // re-reading the device handle from the context, so every resource is rebuilt fresh.
+        foreach (var child in m_children.Values) {
+            child.OnDeviceLost();
+        }
+
+        ReleaseGpuResources();
+
+        Array.Clear(array: m_boundSourceViews);
+        m_deviceHandle = 0;
+        m_imageInitialized = false;
+        m_resourcesReady = false;
+        // Re-arm the one-shot capture so a --capture run writes a POST-recovery frame (lets device-loss recovery be
+        // visually verified from the readback; harmless when no capture path is set).
+        m_captured = false;
+    }
+
+    // The device-resource teardown shared by Dispose and OnDeviceLost: the body of Dispose MINUS the idle drain and the
+    // child handling (which differ — Dispose disposes children, OnDeviceLost resets them). Every field is nulled after
+    // release so a rebuild starts clean and a repeat call is a harmless no-op. Wait-free, so it is safe to call against a
+    // lost device. The descriptor pool is destroyed via the still-current m_deviceHandle BEFORE the caller clears it.
+    private void ReleaseGpuResources() {
         if (m_timingPools is not null) {
             foreach (var pool in m_timingPools) {
                 pool.Dispose();
             }
+
+            m_timingPools = null;
         }
 
         m_readback?.Dispose();
+        m_readback = null;
         m_commandPool?.Dispose();
+        m_commandPool = null;
         m_tileBuffer?.Dispose();
+        m_tileBuffer = null;
         m_compositeArgsBuffer?.Dispose();
+        m_compositeArgsBuffer = null;
         m_viewsArgsBuffer?.Dispose();
+        m_viewsArgsBuffer = null;
         m_cullBoundsBuffer?.Dispose();
+        m_cullBoundsBuffer = null;
         m_viewportBuffer?.Dispose();
+        m_viewportBuffer = null;
         m_dynamicTransformBuffer?.Dispose();
+        m_dynamicTransformBuffer = null;
         m_programBuffer?.Dispose();
+        m_programBuffer = null;
         m_beamPipeline?.Dispose();
+        m_beamPipeline = null;
         m_cullArgsPipeline?.Dispose();
+        m_cullArgsPipeline = null;
         m_viewsPipeline?.Dispose();
+        m_viewsPipeline = null;
         m_compositePipeline?.Dispose();
+        m_compositePipeline = null;
 
         if ((0 != m_pool) && (m_descriptorAllocator is not null)) {
             m_descriptorAllocator.DestroyPool(deviceHandle: m_deviceHandle, poolHandle: m_pool);
             m_pool = 0;
         }
 
+        m_beamSet = 0;
+        m_cullArgsSet = 0;
+        m_viewsSet = 0;
+        m_compositeSet = 0;
+
         foreach (var source in m_sourceTextures) {
             source?.Dispose();
         }
 
+        m_sourceTextures = [];
+
         m_storageImage?.Dispose();
+        m_storageImage = null;
         m_beamShaderModule?.Dispose();
+        m_beamShaderModule = null;
         m_cullArgsShaderModule?.Dispose();
+        m_cullArgsShaderModule = null;
         m_viewsShaderModule?.Dispose();
+        m_viewsShaderModule = null;
         m_compositeShaderModule?.Dispose();
+        m_compositeShaderModule = null;
     }
 }

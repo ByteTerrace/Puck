@@ -18,6 +18,9 @@ namespace Puck.Input.Devices;
 /// <param name="Touch0">The first touchpad contact (inactive on devices without a touchpad).</param>
 /// <param name="Touch1">The second touchpad contact, for multitouch (inactive on devices without a touchpad).</param>
 /// <param name="Accelerometer">The accelerometer specific force, in g (zero on devices without one); at rest it reads gravity, so it doubles as a tilt sensor.</param>
+/// <param name="SensorTimestamp">The device's own motion-sensor timestamp, in the device's native units (DualSense: 1/3 µs; zero on devices that report none). Carried as data for sub-frame rhythm timing; the parser sets it.</param>
+/// <param name="ArrivalTicks">The engine-tick instant the report arrived, stamped on the device I/O thread right after parsing (zero until stamped). The authority for attributing input to a fixed-step tick at sub-frame precision.</param>
+/// <param name="SequenceNumber">A per-device monotonic report counter, stamped on the I/O thread (zero until stamped); orders reports a coalesced drain folded together.</param>
 public readonly record struct GamepadState(
     GamepadButtons Buttons,
     Vector2 LeftStick,
@@ -28,7 +31,10 @@ public readonly record struct GamepadState(
     Quaternion Orientation,
     GamepadTouchPoint Touch0 = default,
     GamepadTouchPoint Touch1 = default,
-    Vector3 Accelerometer = default
+    Vector3 Accelerometer = default,
+    uint SensorTimestamp = 0u,
+    ulong ArrivalTicks = 0UL,
+    ulong SequenceNumber = 0UL
 ) {
     /// <summary>A neutral state: no buttons, centered sticks, released triggers, no motion, identity pose.</summary>
     public static GamepadState Neutral => new(

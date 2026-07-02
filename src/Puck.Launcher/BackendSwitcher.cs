@@ -1,5 +1,5 @@
-using Puck.Abstractions;
-
+using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Windowing;
 namespace Puck.Launcher;
 
 /// <summary>
@@ -9,7 +9,7 @@ namespace Puck.Launcher;
 /// no-op. It is backend-neutral (it knows only <see cref="ISurfacePresenter"/> + a display name), so it lives in the
 /// generic launcher; the composition root supplies the concrete presenters via <see cref="SurfacePresenterDescriptor"/>.
 /// </summary>
-public sealed class BackendSwitcher : ISurfacePresenter {
+public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable {
     private ISurfacePresenter m_current;
     private string m_currentName;
     private ISurfacePresenter? m_other;
@@ -38,6 +38,26 @@ public sealed class BackendSwitcher : ISurfacePresenter {
 
     /// <summary>Gets the active backend's display name.</summary>
     public string ActiveBackendName => m_currentName;
+
+    /// <inheritdoc/>
+    /// <remarks>Forwards to the active backend when it reports present timing (closed-loop pacing); a backend that does
+    /// not implement <see cref="IPresentTimingFeedback"/> yields <see cref="PresentTimingSample.Unavailable"/>, so the
+    /// pacer stays open-loop until/unless a switch makes a timing-capable backend active.</remarks>
+    public PresentTimingSample LastPresentTiming =>
+        ((m_current is IPresentTimingFeedback feedback)
+            ? feedback.LastPresentTiming
+            : PresentTimingSample.Unavailable);
+
+    /// <inheritdoc/>
+    /// <remarks>Forwards to the active backend when it can recover; throws otherwise so the host treats the loss as
+    /// unrecoverable (a backend without the capability cannot rebuild its device).</remarks>
+    public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
+        if (m_current is not IDeviceLostRecoverable recoverable) {
+            throw new NotSupportedException(message: $"The active backend '{m_currentName}' cannot recover from device loss.");
+        }
+
+        recoverable.RecoverFromDeviceLoss(binding: binding, height: height, width: width);
+    }
 
     /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {

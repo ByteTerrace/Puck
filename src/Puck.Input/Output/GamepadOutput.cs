@@ -8,8 +8,7 @@ namespace Puck.Input.Output;
 /// device's liveness, then enqueues a <see cref="GamepadOutputCommand"/> for the device's I/O loop to write —
 /// it never touches the native handle directly, so callers on any thread are safe.
 /// </summary>
-public sealed class GamepadOutput : IGamepadOutput
-{
+public sealed class GamepadOutput : IGamepadOutput {
     private readonly ConcurrentQueue<GamepadOutputCommand> m_queue;
     private volatile bool m_alive = true;
 
@@ -82,6 +81,37 @@ public sealed class GamepadOutput : IGamepadOutput
                 TriggerRumble: default
             ),
             required: GamepadOutputCapabilities.Led
+        );
+    }
+    /// <inheritdoc />
+    public bool SetTriggerEffect(in TriggerEffectSpec left, in TriggerEffectSpec right) {
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                Kind: GamepadOutputKind.TriggerEffect,
+                Led: default,
+                Raw: null,
+                Rumble: default,
+                TriggerRumble: default,
+                TriggerEffectLeft: left,
+                TriggerEffectRight: right
+            ),
+            required: GamepadOutputCapabilities.TriggerEffect
+        );
+    }
+    /// <inheritdoc />
+    public bool SetTriggerEffectAt(in TriggerEffectSpec left, in TriggerEffectSpec right, ulong fireAtTick) {
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                Kind: GamepadOutputKind.TriggerEffect,
+                Led: default,
+                Raw: null,
+                Rumble: default,
+                TriggerRumble: default,
+                TriggerEffectLeft: left,
+                TriggerEffectRight: right,
+                ScheduleTick: fireAtTick
+            ),
+            required: GamepadOutputCapabilities.TriggerEffect
         );
     }
     /// <inheritdoc />

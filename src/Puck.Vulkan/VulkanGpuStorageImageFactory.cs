@@ -10,7 +10,7 @@ namespace Puck.Vulkan;
 /// </summary>
 public sealed class VulkanGpuStorageImageFactory(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuStorageImageFactory {
     /// <inheritdoc/>
-    public IGpuStorageImage Create(IGpuDeviceContext deviceContext, uint format, uint width, uint height) {
+    public IGpuStorageImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
         var vkContext = (IVulkanDeviceContext)deviceContext;

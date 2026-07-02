@@ -28,7 +28,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
             : new VulkanPushConstantBinding(
                 data: pushConstantBinding.Data,
                 offset: pushConstantBinding.Offset,
-                stageFlags: pushConstantBinding.StageFlags
+                stageFlags: (uint)pushConstantBinding.StageFlags
             );
 
         return pipelineFactory.Create(

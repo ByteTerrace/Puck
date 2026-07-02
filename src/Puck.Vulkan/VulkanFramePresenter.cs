@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -28,8 +29,18 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             or VkResult.ErrorSurfaceLostKhr);
     }
 
+    private const ulong PresentWaitTimeoutNanoseconds = 50_000_000UL; // 50 ms bound — a missed present can never hang the pump
+
     private readonly IVulkanFramePresentationApi m_framePresentationApi;
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
+    // Closed-loop present timing (VK_KHR_present_wait). All accessed only on the single pump thread that presents.
+    private bool? m_presentWaitSupported;    // resolved per-device (re-resolved when m_presentWaitResolvedForDevice changes); null = not yet probed
+    private nint m_presentWaitResolvedForDevice; // the device handle m_presentWaitSupported was resolved for; 0 = none yet
+    private ulong m_nextPresentId = 1UL;     // monotonic per-swapchain; 0 is the "no id" sentinel
+    private ulong m_priorPresentId;          // the id queued last frame, waited on this frame; 0 = none yet
+    private nint m_priorSwapchainHandle;     // present ids are per-swapchain, so the counter resets when this changes
+    private long m_lastPresentTimestamp;     // Stopwatch ticks of the last confirmed present; 0 = none
+    private uint m_presentCount;             // monotonic confirmed-present count (the pacer's "new present" signal)
 
     /// <summary>Initializes a new instance of the <see cref="VulkanFramePresenter"/> class.</summary>
     /// <param name="framePresentationApi">The API used to acquire, submit, and present frames.</param>
@@ -164,9 +175,40 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
 
         submitResult.ThrowIfFailed(operation: "vkQueueSubmit");
 
+        // Closed-loop present timing (only when VK_KHR_present_wait is enabled): tag this present with a monotonic id;
+        // a zero id leaves the present unchanged. Present ids are per-swapchain, so reset the counter when it changes.
+        var deviceHandle = logicalDevice.Handle;
+
+        // Present-wait support (and the present-API's per-device function pointers) are tied to the DEVICE, so re-resolve
+        // when the device handle CHANGES — and drop the stale function-pointer cache for the prior device. No live path
+        // recreates the device today (a device-lost ResetVulkanResources is produced but consumed nowhere), so this is
+        // correct-by-construction hardening for a future where device-lost recovery yields a DIFFERENT device handle. A
+        // self-disable below sets the flag false and, since the device handle is unchanged, it stays false for that
+        // device's lifetime. RESIDUAL GAP (only matters once device-lost recovery is wired): this keys on the raw handle
+        // VALUE, so a new device that happens to REUSE the prior handle value would not re-resolve; closing that needs a
+        // device generation/epoch counter rather than the handle value (and a self-disable would then need to reset it).
+        if (deviceHandle != m_presentWaitResolvedForDevice) {
+            if (m_presentWaitResolvedForDevice != 0) {
+                m_framePresentationApi.InvalidateDevice(deviceHandle: m_presentWaitResolvedForDevice);
+            }
+
+            m_presentWaitSupported = m_framePresentationApi.SupportsPresentWait(deviceHandle: deviceHandle);
+            m_presentWaitResolvedForDevice = deviceHandle;
+            m_priorPresentId = 0UL;
+            m_nextPresentId = 1UL;
+        }
+
+        if (swapchain.Handle != m_priorSwapchainHandle) {
+            m_priorSwapchainHandle = swapchain.Handle;
+            m_priorPresentId = 0UL;
+            m_nextPresentId = 1UL;
+        }
+
+        var presentId = ((m_presentWaitSupported == true) ? m_nextPresentId : 0UL);
         var presentRequest = new VulkanPresentRequest(
-            DeviceHandle: logicalDevice.Handle,
+            DeviceHandle: deviceHandle,
             ImageIndex: imageIndex,
+            PresentId: presentId,
             PresentQueueHandle: logicalDevice.PresentQueue.Handle,
             RenderFinishedSemaphoreHandle: renderFinishedSemaphoreHandle,
             SwapchainHandle: swapchain.Handle
@@ -182,6 +224,61 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         }
 
         presentResult.ThrowIfFailed(operation: "vkQueuePresentKHR");
+
+        if (presentId != 0UL) {
+            RecordPresentTiming(deviceHandle: deviceHandle, swapchainHandle: swapchain.Handle);
+        }
+
         return VulkanFramePresentationOutcome.Presented(imageIndex: imageIndex);
+    }
+
+    /// <inheritdoc/>
+    public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) {
+        presentCount = m_presentCount;
+        presentTimestampTicks = m_lastPresentTimestamp;
+
+        return (m_lastPresentTimestamp > 0L);
+    }
+
+    // Waits (bounded) for the PRIOR present to be displayed and timestamps it, then advances the id. Waiting on the prior
+    // id (not this frame's) overlaps the wait with the next frame's CPU work. An unexpected hard error disables further
+    // waits for the session (graceful → open-loop); a timeout/swapchain status code just skips this one sample.
+    private void RecordPresentTiming(nint deviceHandle, nint swapchainHandle) {
+        if (m_priorPresentId != 0UL) {
+            var waitResult = m_framePresentationApi.WaitForPresent(
+                deviceHandle: deviceHandle,
+                presentId: m_priorPresentId,
+                swapchainHandle: swapchainHandle,
+                timeoutNanoseconds: PresentWaitTimeoutNanoseconds
+            );
+
+            if (waitResult == VkResult.Success) {
+                m_lastPresentTimestamp = Stopwatch.GetTimestamp();
+
+                unchecked {
+                    m_presentCount++;
+                }
+            } else if (
+                !NeedsVulkanReset(result: waitResult) &&
+                !NeedsPresentationResourceRecreate(result: waitResult) &&
+                (waitResult != VkResult.Timeout)
+            ) {
+                // An unexpected hard error (the extension misbehaving, or a wiring bug surfacing on a present_wait-capable
+                // driver): stop using present-wait for the session and surface the code so it can be debugged.
+                m_presentWaitSupported = false;
+
+                Console.Error.WriteLine(value: $"[present-timing] vkWaitForPresentKHR returned {waitResult}; disabling closed-loop present timing for this session (open-loop pacing).");
+            }
+        }
+
+        m_priorPresentId = m_nextPresentId;
+
+        unchecked {
+            m_nextPresentId++;
+
+            if (m_nextPresentId == 0UL) {
+                m_nextPresentId = 1UL; // never reuse the "no id" sentinel
+            }
+        }
     }
 }

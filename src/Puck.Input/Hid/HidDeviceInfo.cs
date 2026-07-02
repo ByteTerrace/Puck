@@ -7,4 +7,5 @@ namespace Puck.Input.Hid;
 /// <param name="Path">The device interface path used to open the device.</param>
 /// <param name="VendorId">The USB vendor id parsed from the path.</param>
 /// <param name="ProductId">The USB product id parsed from the path.</param>
-public readonly record struct HidDeviceInfo(string Path, ushort VendorId, ushort ProductId);
+/// <param name="Transport">The transport (USB / Bluetooth) inferred from the path.</param>
+public readonly record struct HidDeviceInfo(string Path, ushort VendorId, ushort ProductId, HidTransport Transport);

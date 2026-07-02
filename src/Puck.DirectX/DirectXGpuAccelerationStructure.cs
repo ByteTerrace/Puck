@@ -13,7 +13,6 @@ namespace Puck.DirectX;
 public sealed class DirectXGpuAccelerationStructure : IGpuAccelerationStructure {
     private readonly DirectXWorldAccelerationApi m_api;
     private readonly nint m_deviceHandle;
-
     private bool m_created;
     private bool m_disposed;
     private DirectXWorldAccelerationResources m_resources;

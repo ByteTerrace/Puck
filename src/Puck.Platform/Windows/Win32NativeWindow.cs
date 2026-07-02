@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using Microsoft.Extensions.Options;
 using Puck.Commands;
 using Puck.Input;
@@ -8,13 +7,8 @@ using Puck.Platform.Windows.Interop;
 
 namespace Puck.Platform.Windows;
 
-internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceSourceProvider, INativeWindowLoadingPresenter, IWindowInputSource {
-    private const int BkModeTransparent = 1;
+internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSource {
     private const int CwUseDefault = unchecked((int)0x80000000);
-    private const uint DtCenter = 0x00000001;
-    private const uint DtSingleLine = 0x00000020;
-    private const uint DtVCenter = 0x00000004;
-    private const uint DtWordBreak = 0x00000010;
     private const int ErrorClassAlreadyExists = 1410;
     private const int GwlStyle = -16;
     private const int GwlpUserData = -21;
@@ -62,6 +56,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
     private const uint WmChar = 0x0102;
     private const uint WmClose = 0x0010;
     private const uint WmDestroy = 0x0002;
+    private const uint WmDisplayChange = 0x007E;
+    private const uint WmWindowPosChanged = 0x0047;
     private const uint WmEraseBkgnd = 0x0014;
     private const uint WmInput = 0x00FF;
     private const uint WmKeyDown = 0x0100;
@@ -106,11 +102,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
     private int? m_lastMouseY;
     private int? m_lastRawAbsoluteX;
     private int? m_lastRawAbsoluteY;
-    private string m_loadingFrameDetail = string.Empty;
-    private string m_loadingFrameHeading = string.Empty;
-    private string? m_loadingFrameImagePath;
     private ulong m_resizeCount;
-    private bool m_showLoadingFrame;
     private bool m_suppressNextCharacterInput;
     private Rectangle m_windowedBounds;
     private nint m_windowedStyle;
@@ -171,45 +163,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             throw new InvalidOperationException(message: $"UpdateWindow failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
     }
-    public void RenderLoadingFrame(string heading, string detail, string? imagePath) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        if (
-            (m_windowHandle == 0) ||
-            !m_isOpen
-        ) {
-            return;
-        }
-
-        m_loadingFrameHeading = (string.IsNullOrWhiteSpace(value: heading)
-            ? "Puck Loading"
-            : heading);
-        m_loadingFrameDetail = (string.IsNullOrWhiteSpace(value: detail)
-            ? "Initializing Vulkan resources"
-            : detail);
-        m_loadingFrameImagePath = (string.IsNullOrWhiteSpace(value: imagePath)
-            ? null
-            : imagePath);
-        m_showLoadingFrame = true;
-
-        RequestLoadingFramePaint();
-    }
-    public void ClearLoadingFrame() {
-        if (
-            m_disposed ||
-            (m_windowHandle == 0)
-        ) {
-            return;
-        }
-
-        m_showLoadingFrame = false;
-        m_loadingFrameHeading = string.Empty;
-        m_loadingFrameDetail = string.Empty;
-        m_loadingFrameImagePath = null;
-    }
     public void PollEvents() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -232,6 +185,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
 
         FlushPointerFrame();
     }
+
     private void FlushPointerFrame() {
         // Emit at most one pointer.move (the frame's summed relative motion) and one pointer.position per
         // frame, so a high-rate mouse that produced many WM_INPUT packets collapses to a single delta the
@@ -253,6 +207,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             m_pointerPositionDirty = false;
         }
     }
+
     public bool TryDequeueInput(out WindowInputEvent inputEvent) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -311,6 +266,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
             _ = User32.DestroyWindow(windowHandle: m_windowHandle);
             m_windowHandle = 0;
         }
+
+        m_precisionTimer?.Dispose();
 
         if (m_selfHandle.IsAllocated) {
             m_selfHandle.Free();
@@ -472,18 +429,32 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
                 }
 
                 return 0;
+            case WmDisplayChange:
+                // Display mode/topology changed — the VRR range may differ now; let the pacer re-query. Still forward to
+                // DefWindowProc so any default processing runs.
+                OnDisplayConfigurationChanged();
+                return User32.DefWindowProc(
+                    lParam: lParam,
+                    message: message,
+                    wParam: wParam,
+                    windowHandle: windowHandle
+                );
+            case WmWindowPosChanged:
+                // A move/resize/z-order change; bump the refresh-config version only if the window crossed to a different
+                // monitor. MUST forward to DefWindowProc so it still generates WM_SIZE/WM_MOVE (the resize path depends on it).
+                OnWindowPositionChanged(windowHandle: windowHandle);
+                return User32.DefWindowProc(
+                    lParam: lParam,
+                    message: message,
+                    wParam: wParam,
+                    windowHandle: windowHandle
+                );
             case WmPaint:
                 _ = User32.BeginPaint(
                     paintStruct: out var paintStruct,
                     windowHandle: windowHandle
                 );
                 m_hasPainted = true;
-                if (m_showLoadingFrame) {
-                    DrawLoadingFrame(
-                        paintStruct: in paintStruct,
-                        windowHandle: windowHandle
-                    );
-                }
 
                 if (!User32.EndPaint(
                     paintStruct: in paintStruct,
@@ -546,372 +517,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeSurfaceS
 
         _ = User32.SetCursor(cursorHandle: 0);
         return 1;
-    }
-    private void RequestLoadingFramePaint() {
-        if (!User32.InvalidateRect(
-            m_windowHandle,
-            0,
-            eraseBackground: false
-        )) {
-            return;
-        }
-
-        _ = User32.UpdateWindow(windowHandle: m_windowHandle);
-    }
-    private void DrawLoadingFrame(nint windowHandle, in PaintStruct paintStruct) {
-        if (!User32.GetClientRect(
-            rectangle: out var clientRect,
-            windowHandle: windowHandle
-        )) {
-            return;
-        }
-
-        var width = (clientRect.Right - clientRect.Left);
-        var height = (clientRect.Bottom - clientRect.Top);
-
-        if (
-            (width <= 0) ||
-            (height <= 0)
-        ) {
-            return;
-        }
-
-        if (
-            OperatingSystem.IsWindowsVersionAtLeast(
-                6,
-                1
-            ) &&
-            TryDrawLoadingSplashImage(
-                clientRect: clientRect,
-                deviceContextHandle: paintStruct.DeviceContextHandle,
-                height: height,
-                width: width
-            )
-        ) {
-            DrawLoadingSplashTextOverlay(
-                clientRect: clientRect,
-                deviceContextHandle: paintStruct.DeviceContextHandle,
-                height: height,
-                width: width
-            );
-            return;
-        }
-
-        DrawLoadingTextPanel(
-            clientRect: clientRect,
-            deviceContextHandle: paintStruct.DeviceContextHandle,
-            height: height,
-            width: width
-        );
-    }
-    private void DrawLoadingTextPanel(nint deviceContextHandle, Rectangle clientRect, int width, int height) {
-        FillRect(
-            deviceContextHandle,
-            clientRect,
-            red: 16,
-            green: 22,
-            blue: 35
-        );
-
-        var panelRect = new Rectangle {
-            Bottom = ((clientRect.Top + Math.Max(
-                val1: 20,
-                val2: (height / 3)
-            )) + Math.Max(
-                val1: 88,
-                val2: (height / 4)
-            )),
-            Left = (clientRect.Left + Math.Max(
-                val1: 24,
-                val2: (width / 8)
-            )),
-            Right = (clientRect.Right - Math.Max(
-                val1: 24,
-                val2: (width / 8)
-            )),
-            Top = (clientRect.Top + Math.Max(
-                val1: 20,
-                val2: (height / 3)
-            )),
-        };
-
-        FillRect(
-            deviceContextHandle,
-            panelRect,
-            red: 52,
-            green: 178,
-            blue: 153
-        );
-
-        var contentRect = new Rectangle {
-            Bottom = (panelRect.Bottom - 3),
-            Left = (panelRect.Left + 3),
-            Right = (panelRect.Right - 3),
-            Top = (panelRect.Top + 3),
-        };
-
-        FillRect(
-            deviceContextHandle,
-            contentRect,
-            red: 21,
-            green: 30,
-            blue: 47
-        );
-
-        _ = Gdi32.SetBkMode(
-            deviceContextHandle: deviceContextHandle,
-            mode: BkModeTransparent
-        );
-
-        var headingRect = new Rectangle {
-            Bottom = (contentRect.Top + ((contentRect.Bottom - contentRect.Top) / 2)),
-            Left = (contentRect.Left + 12),
-            Right = (contentRect.Right - 12),
-            Top = (contentRect.Top + 6),
-        };
-
-        _ = Gdi32.SetTextColor(
-            colorRef: CreateColorRef(
-                blue: 255,
-                green: 248,
-                red: 244
-            ),
-            deviceContextHandle: deviceContextHandle
-        );
-        _ = User32.DrawText(
-            deviceContextHandle: deviceContextHandle,
-            format: DtCenter | DtSingleLine | DtVCenter,
-            rectangle: ref headingRect,
-            text: m_loadingFrameHeading,
-            textLength: -1
-        );
-
-        var detailRect = new Rectangle {
-            Bottom = (contentRect.Bottom - 6),
-            Left = (contentRect.Left + 12),
-            Right = (contentRect.Right - 12),
-            Top = headingRect.Bottom,
-        };
-
-        _ = Gdi32.SetTextColor(
-            colorRef: CreateColorRef(
-                blue: 208,
-                green: 188,
-                red: 174
-            ),
-            deviceContextHandle: deviceContextHandle
-        );
-        _ = User32.DrawText(
-            deviceContextHandle: deviceContextHandle,
-            format: DtCenter | DtWordBreak,
-            rectangle: ref detailRect,
-            text: m_loadingFrameDetail,
-            textLength: -1
-        );
-    }
-    private void DrawLoadingSplashTextOverlay(nint deviceContextHandle, Rectangle clientRect, int width, int height) {
-        _ = Gdi32.SetBkMode(
-            deviceContextHandle: deviceContextHandle,
-            mode: BkModeTransparent
-        );
-
-        var horizontalInset = Math.Max(
-            val1: 32,
-            val2: (width / 12)
-        );
-        var textBandHeight = Math.Max(
-            val1: 88,
-            val2: (height / 5)
-        );
-        var headingRect = new Rectangle {
-            Bottom = (clientRect.Bottom - (textBandHeight / 2)),
-            Left = (clientRect.Left + horizontalInset),
-            Right = (clientRect.Right - horizontalInset),
-            Top = (clientRect.Bottom - textBandHeight),
-        };
-
-        _ = Gdi32.SetTextColor(
-            colorRef: CreateColorRef(
-                blue: 255,
-                green: 251,
-                red: 248
-            ),
-            deviceContextHandle: deviceContextHandle
-        );
-        _ = User32.DrawText(
-            deviceContextHandle: deviceContextHandle,
-            format: DtCenter | DtSingleLine | DtVCenter,
-            rectangle: ref headingRect,
-            text: m_loadingFrameHeading,
-            textLength: -1
-        );
-
-        var detailRect = new Rectangle {
-            Bottom = (clientRect.Bottom - Math.Max(
-                val1: 16,
-                val2: (height / 36)
-            )),
-            Left = headingRect.Left,
-            Right = headingRect.Right,
-            Top = headingRect.Bottom,
-        };
-
-        _ = Gdi32.SetTextColor(
-            colorRef: CreateColorRef(
-                blue: 240,
-                green: 224,
-                red: 214
-            ),
-            deviceContextHandle: deviceContextHandle
-        );
-        _ = User32.DrawText(
-            deviceContextHandle: deviceContextHandle,
-            format: DtCenter | DtWordBreak,
-            rectangle: ref detailRect,
-            text: m_loadingFrameDetail,
-            textLength: -1
-        );
-    }
-    [SupportedOSPlatform("windows6.1")]
-    private bool TryDrawLoadingSplashImage(nint deviceContextHandle, Rectangle clientRect, int width, int height) {
-        if (
-            string.IsNullOrWhiteSpace(value: m_loadingFrameImagePath) ||
-            !File.Exists(path: m_loadingFrameImagePath)
-        ) {
-            return false;
-        }
-
-        try {
-            using var image = System.Drawing.Image.FromFile(m_loadingFrameImagePath);
-            using var graphics = System.Drawing.Graphics.FromHdc(deviceContextHandle);
-
-            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-            graphics.DrawImage(
-                image,
-                CreateCoverDestinationRectangle(
-                    clientRect,
-                    width,
-                    height,
-                    image.Width,
-                    image.Height
-                )
-            );
-
-            using var washBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(
-                alpha: 34,
-                blue: 30,
-                green: 18,
-                red: 10
-            ));
-
-            graphics.FillRectangle(
-                washBrush,
-                clientRect.Left,
-                clientRect.Top,
-                width,
-                height
-            );
-
-            using var textBandBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
-                new System.Drawing.Rectangle(
-                    height: height,
-                    width: width,
-                    x: clientRect.Left,
-                    y: clientRect.Top
-                ),
-                System.Drawing.Color.FromArgb(
-                    alpha: 0,
-                    blue: 22,
-                    green: 13,
-                    red: 8
-                ),
-                System.Drawing.Color.FromArgb(
-                    alpha: 172,
-                    blue: 22,
-                    green: 13,
-                    red: 8
-                ),
-                System.Drawing.Drawing2D.LinearGradientMode.Vertical
-            );
-
-            graphics.FillRectangle(
-                textBandBrush,
-                clientRect.Left,
-                clientRect.Top,
-                width,
-                height
-            );
-            return true;
-        } catch (ArgumentException) {
-            return false;
-        } catch (ExternalException) {
-            return false;
-        } catch (IOException) {
-            return false;
-        } catch (OutOfMemoryException) {
-            return false;
-        } catch (UnauthorizedAccessException) {
-            return false;
-        }
-    }
-    [SupportedOSPlatform("windows6.1")]
-    private static System.Drawing.Rectangle CreateCoverDestinationRectangle(
-        Rectangle clientRect,
-        int clientWidth,
-        int clientHeight,
-        int imageWidth,
-        int imageHeight
-    ) {
-        var clientAspectRatio = (clientWidth / (double)clientHeight);
-        var imageAspectRatio = (imageWidth / (double)imageHeight);
-
-        if (imageAspectRatio > clientAspectRatio) {
-            var destinationHeight = clientHeight;
-            var destinationWidth = (int)Math.Ceiling(a: (destinationHeight * imageAspectRatio));
-
-            return new System.Drawing.Rectangle(
-                height: destinationHeight,
-                width: destinationWidth,
-                x: (clientRect.Left - ((destinationWidth - clientWidth) / 2)),
-                y: clientRect.Top
-            );
-        }
-
-        var coverWidth = clientWidth;
-        var coverHeight = (int)Math.Ceiling(a: (coverWidth / imageAspectRatio));
-
-        return new System.Drawing.Rectangle(
-            height: coverHeight,
-            width: coverWidth,
-            x: clientRect.Left,
-            y: (clientRect.Top - ((coverHeight - clientHeight) / 2))
-        );
-    }
-    private static void FillRect(nint deviceContextHandle, Rectangle rectangle, byte red, byte green, byte blue) {
-        var brushHandle = Gdi32.CreateSolidBrush(colorRef: CreateColorRef(
-            blue: blue,
-            green: green,
-            red: red
-        ));
-
-        if (brushHandle == 0) {
-            return;
-        }
-
-        try {
-            _ = User32.FillRect(
-                brushHandle: brushHandle,
-                deviceContextHandle: deviceContextHandle,
-                rectangle: in rectangle
-            );
-        } finally {
-            _ = Gdi32.DeleteObject(objectHandle: brushHandle);
-        }
-    }
-    private static uint CreateColorRef(byte red, byte green, byte blue) {
-        return (uint)(red | (green << 8) | (blue << 16));
     }
     private nint HandleCharacterInput(nint windowHandle, nint wParam, nint lParam) {
         var character = checked((char)wParam.ToInt64());

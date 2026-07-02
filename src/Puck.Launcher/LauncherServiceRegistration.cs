@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Puck.Abstractions;
+using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher.Commands;
@@ -26,6 +27,18 @@ public static class LauncherServiceRegistration {
         // hosted children do not — the capability-permission system. The window loop drains exit + routes
         // input through them.
         services.TryAddSingleton<LauncherOptions>();
+
+        // The shared monotonic capture clock: every input backend stamps CaptureTick from this one instance, and
+        // the window pump uses it to time-stamp drained input. One origin so all stamps are comparable.
+        services.TryAddSingleton<InputClock>(implementationFactory: static _ => InputClock.Start());
+        services.TryAddSingleton<IInputClock>(implementationFactory: static sp => sp.GetRequiredService<InputClock>());
+
+        // The genlock (latency phase-align) ingestion seam: external rhythm producers (cameras, capture cards, network
+        // feeds) register named sources here, and the HOST's election policy decides which single one the pacer
+        // phase-aligns to. TryAdd default = automatic single-source election; a composition root overrides with a
+        // document-configured instance. With no publisher (or no election) the pacer is unaffected.
+        services.TryAddSingleton<ExternalClockRegistry>();
+
         services.TryAddSingleton<TerminalControl>();
         services.TryAddSingleton<ITerminalControl>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
         services.TryAddSingleton<IInputFocus>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());

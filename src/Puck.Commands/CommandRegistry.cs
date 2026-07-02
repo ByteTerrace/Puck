@@ -31,6 +31,14 @@ public sealed class CommandRegistry : ICommandSink {
     private readonly List<ICommandSource> m_sources = [];
     private readonly Dictionary<string, CommandValue> m_state = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CommandValue> m_held = new(comparer: StringComparer.OrdinalIgnoreCase);
+    // Interned command identity: a stable ushort id per command, assigned by ordinal-sorting the canonical
+    // names so the id↔name mapping is identical on every machine. This is the command's deterministic,
+    // hashable, wire-compact identity in a CommandSnapshot — strings stay on the text/config side.
+    private readonly Dictionary<string, ushort> m_idByName = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly string[] m_nameById;
+    // The deterministic-input sink a Simulation-class submitted command is folded into instead of running inline;
+    // null until a host wires one (the live console-driving registry), so every other registry keeps the inline path.
+    private ICommandInjectionSink? m_injectionSink;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandRegistry"/> class, registering the commands
@@ -63,6 +71,46 @@ public sealed class CommandRegistry : ICommandSink {
         }
 
         m_root.Subcommands.Add(m_helpCommand);
+
+        // Intern a stable id per distinct command. Ordinal-sort the canonical names so the assignment is
+        // identical across machines and builds (independent of module registration order); aliases resolve to
+        // their command's id. `help` is handled by the text path and is never bound to input, so it is not interned.
+        m_nameById = m_byName.Values
+            .Select(selector: static definition => definition.Name)
+            .Distinct(comparer: StringComparer.OrdinalIgnoreCase)
+            .OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        for (var id = 0; (id < m_nameById.Length); id++) {
+            m_idByName[m_nameById[id]] = (ushort)id;
+        }
+
+        foreach (var (name, definition) in m_byName) {
+            m_idByName[name] = m_idByName[definition.Name];
+        }
+    }
+
+    /// <summary>The number of distinct commands; each has an interned id in <c>[0, <see cref="CommandCount"/>)</c>.</summary>
+    public int CommandCount => m_nameById.Length;
+
+    /// <summary>Gets the stable interned id for a command name or alias.</summary>
+    /// <param name="name">The command name or alias to resolve.</param>
+    /// <param name="id">When this method returns, the interned id, or <c>0</c> when the name is unknown.</param>
+    /// <returns><see langword="true"/> when <paramref name="name"/> names a known command; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    public bool TryGetId(string name, out ushort id) {
+        ArgumentNullException.ThrowIfNull(name);
+
+        return m_idByName.TryGetValue(key: name, value: out id);
+    }
+    /// <summary>Gets the canonical name for an interned command id.</summary>
+    /// <param name="id">The interned id, in <c>[0, <see cref="CommandCount"/>)</c>.</param>
+    /// <returns>The command's canonical name.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is not a valid interned id.</exception>
+    public string GetName(ushort id) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: id, other: (ushort)m_nameById.Length);
+
+        return m_nameById[id];
     }
 
     /// <summary>Returns the default "fully active" value used for a text invocation that supplies no explicit value.</summary>
@@ -164,6 +212,63 @@ public sealed class CommandRegistry : ICommandSink {
         return m_activeMaps.Contains(item: map);
     }
     /// <summary>
+    /// Applies one fixed-step tick's <see cref="CommandSnapshot"/>: records each command's value for polling
+    /// (<see cref="GetValue"/>) and dispatches edge handlers, gated by the active command maps. This is the
+    /// snapshot-driven peer of the per-render-frame <see cref="Collect"/> path; the <see cref="InputRouter"/>
+    /// owns held-folding, so this never touches the registry's own held state.
+    /// </summary>
+    /// <param name="snapshot">The tick's input snapshot to apply.</param>
+    public void ApplySnapshot(in CommandSnapshot snapshot) {
+        m_state.Clear();
+
+        if (snapshot.Lanes.IsDefaultOrEmpty) {
+            return;
+        }
+
+        foreach (var lane in snapshot.Lanes) {
+            foreach (var entry in lane.Entries) {
+                var name = m_nameById[entry.CommandId];
+
+                if (!m_byName.TryGetValue(
+                    key: name,
+                    value: out var definition
+                )) {
+                    continue;
+                }
+
+                if (!m_activeMaps.Contains(item: definition.Map)) {
+                    continue;
+                }
+
+                m_state[name] = entry.Value;
+
+                // Dispatch matches the default ActivateOn: a press edge or a continuous axis fires the handler;
+                // a held-digital re-assert (Active + Digital) and a release edge do not — a handler that wants a
+                // release reads the phase. Polling (GetValue) still sees the held value via m_state above.
+                var dispatch = ((entry.Phase == CommandPhase.Started) ||
+                    ((entry.Phase == CommandPhase.Active) && (entry.Value.Kind != CommandValueKind.Digital)));
+
+                if (!dispatch) {
+                    continue;
+                }
+
+                var context = new CommandContext(
+                    DeviceId: entry.Device,
+                    Parse: null,
+                    Phase: entry.Phase,
+                    Registry: this,
+                    Text: null,
+                    Value: entry.Value
+                );
+
+                _ = Dispatch(
+                    context: in context,
+                    definition: definition
+                );
+            }
+        }
+    }
+    /// <summary>
     /// Records a signal's value as the command's value for the current frame and runs the command's
     /// handler.
     /// </summary>
@@ -251,13 +356,28 @@ public sealed class CommandRegistry : ICommandSink {
 
         m_sources.Add(item: source);
     }
+    /// <summary>
+    /// Routes <see cref="CommandRouting.Simulation"/>-class submitted commands to a deterministic input sink instead
+    /// of running them inline — the seam that makes a console / STDIN line drive the simulation deterministically.
+    /// </summary>
+    /// <param name="sink">The sink (the host's <see cref="InputRouter"/>) folded-into per tick; <see langword="null"/> restores inline execution.</param>
+    /// <remarks>Wire this only on the host's live console-driving registry; an unwired registry runs every submitted command inline.</remarks>
+    public void RouteSimulationTo(ICommandInjectionSink? sink) {
+        m_injectionSink = sink;
+    }
     /// <summary>Parses a command line, runs the matching handler, and returns its transcript output.</summary>
     /// <param name="line">The command line to parse and execute.</param>
     /// <returns>
     /// The handler's result; <see cref="CommandResult.None"/> for an empty or whitespace line; the help
-    /// listing for the <c>help</c> command; or a message describing parse errors or an unknown command.
+    /// listing for the <c>help</c> command; a queued acknowledgement for a simulation command routed to the
+    /// deterministic input path; or a message describing parse errors or an unknown command.
     /// </returns>
-    /// <remarks>This path is never gated by command maps; it is the deliberate console entry point.</remarks>
+    /// <remarks>
+    /// This path is never gated by command maps; it is the deliberate console entry point. A
+    /// <see cref="CommandRouting.Simulation"/> command is injected into the per-tick <see cref="CommandSnapshot"/>
+    /// (so it is tick-aligned, recorded, and replayed) when a sink is wired via <see cref="RouteSimulationTo"/>;
+    /// otherwise — and for every <see cref="CommandRouting.Immediate"/> command — the handler runs inline.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
     public CommandResult Submit(string line) {
         ArgumentNullException.ThrowIfNull(line);
@@ -286,6 +406,18 @@ public sealed class CommandRegistry : ICommandSink {
             value: out var definition
         )) {
             var value = (definition.ValueSelector?.Invoke(arg: parseResult) ?? ImpulseValue(kind: definition.ValueKind));
+
+            // A simulation command's effect mutates the deterministic sim, so it must be tick-aligned and recorded:
+            // fold it into the snapshot stream rather than run it here. The handler still runs — later, when the
+            // host applies that tick's snapshot — so a recording reproduces it. Console impulses inject as a Started
+            // edge (the press the snapshot dispatch fires on) on the local slot.
+            if ((definition.Routing == CommandRouting.Simulation) &&
+                (m_injectionSink is { } sink) &&
+                TryGetId(name: definition.Name, id: out var commandId)) {
+                sink.Inject(injection: new CommandInjection(CommandId: commandId, Value: value, Phase: CommandPhase.Started));
+
+                return new CommandResult($"[queued: {definition.Name}]");
+            }
 
             m_state[definition.Name] = value;
 

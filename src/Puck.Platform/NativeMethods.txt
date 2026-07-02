@@ -26,3 +26,23 @@ HidP_MaxUsageListLength
 SetupDiEnumDeviceInterfaces
 SetupDiGetClassDevs
 SetupDiGetDeviceInterfaceDetail
+
+// Live-camera GPU tier: the D3D11 video device (Media Foundation's decode/processing device), DXGI adapter
+// selection by LUID, and the GPU copy/sync objects. The Media Foundation DXGI device manager itself stays
+// hand-rolled beside the other MF interop.
+CreateDXGIFactory1
+D3D11CreateDevice
+D3D11_SDK_VERSION
+IUnknown
+ID3D10Multithread
+ID3D11Device1
+ID3D11DeviceContext
+ID3D11Query
+ID3D11Texture2D
+IDXGIAdapter1
+IDXGIFactory1
+D3D11_CREATE_DEVICE_FLAG
+D3D11_QUERY_DESC
+D3D_DRIVER_TYPE
+D3D_FEATURE_LEVEL
+DXGI_ERROR_NOT_FOUND

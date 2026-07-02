@@ -1,6 +1,6 @@
 using System.CommandLine;
 using System.Numerics;
-using Puck.Abstractions;
+using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Input;
@@ -18,6 +18,7 @@ internal sealed class DemoCommandModule(
     DemoConsole console,
     CursorStore cursors,
     GamepadManager gamepads,
+    IInputClock inputClock,
     IRenderNode rootNode
 ) : ICommandModule {
     private const string TextMap = "text";
@@ -162,7 +163,6 @@ internal sealed class DemoCommandModule(
             valueKind: CommandValueKind.Digital
         );
     }
-
     private IEnumerable<CommandDefinition> GetControllerCommands() {
         yield return CommandDefinition.Verb(
             description: "Logs a Switch Pro south-face button press (controller input proof).",
@@ -255,19 +255,19 @@ internal sealed class DemoCommandModule(
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
-            description: "Arms DualSense adaptive-trigger resistance on the pressing pad (raw-effect proof); pull L2/R2 to feel it.",
+            description: "Arms DualSense adaptive-trigger resistance on the pressing pad (typed trigger effect); pull L2/R2 to feel it.",
             handler: context => {
                 if (!gamepads.TryGetOutput(deviceId: context.DeviceId, output: out var output)) {
                     return new CommandResult("[trigger-effect: no device]");
                 }
 
-                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.RawEffect)) {
+                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.TriggerEffect)) {
                     return new CommandResult("[trigger-effect: unsupported]");
                 }
 
-                // Strong resistance from roughly the first third of the pull to the end — felt on a DualSense,
-                // a silent no-op on a pad that ignores the report (no portable trigger-effect shape exists).
-                var accepted = output.SendEffect(data: DualSenseAdaptiveTrigger.Resistance(startPosition: 90, force: 255));
+                // Strong, uniform resistance from roughly the first third of the pull to the end, on both triggers.
+                var resistance = TriggerEffectSpec.Feedback(position: 3, strength: 8);
+                var accepted = output.SetTriggerEffect(left: resistance, right: resistance);
 
                 return new CommandResult(accepted ? "[trigger-effect: resistance armed]" : "[trigger-effect: rejected]");
             },
@@ -281,15 +281,36 @@ internal sealed class DemoCommandModule(
                     return new CommandResult("[trigger-effect: no device]");
                 }
 
-                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.RawEffect)) {
+                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.TriggerEffect)) {
                     return new CommandResult("[trigger-effect: unsupported]");
                 }
 
-                var accepted = output.SendEffect(data: DualSenseAdaptiveTrigger.Off());
+                var accepted = output.SetTriggerEffect(left: TriggerEffectSpec.Off, right: TriggerEffectSpec.Off);
 
                 return new CommandResult(accepted ? "[trigger-effect: cleared]" : "[trigger-effect: rejected]");
             },
             name: "gamepad-trigger-effect-off",
+            valueKind: CommandValueKind.Digital
+        );
+        yield return CommandDefinition.Verb(
+            description: "Schedules a DualSense trigger buzz one second out (clock-timed haptics); press, wait, feel it land. D-pad Down clears it.",
+            handler: context => {
+                if (!gamepads.TryGetOutput(deviceId: context.DeviceId, output: out var output)) {
+                    return new CommandResult("[trigger-schedule: no device]");
+                }
+
+                if (!output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.TriggerEffect)) {
+                    return new CommandResult("[trigger-schedule: unsupported]");
+                }
+
+                // Schedule a buzz to land one second from now against the SAME capture clock that stamps input, so
+                // the effect arrives on a precise tick rather than whenever the write happens to be serviced.
+                var buzz = TriggerEffectSpec.Vibration(position: 2, amplitude: 6, frequency: 30);
+                var accepted = output.SetTriggerEffectAt(left: buzz, right: buzz, fireAtTick: (inputClock.NowTicks + EngineTicks.PerSecond));
+
+                return new CommandResult(accepted ? "[trigger-schedule: buzz in 1s]" : "[trigger-schedule: rejected]");
+            },
+            name: "gamepad-trigger-schedule",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -429,7 +450,6 @@ internal sealed class DemoCommandModule(
         );
 
     }
-
     private IEnumerable<CommandDefinition> GetDebugViewCommands() {
         var viewModeArgument = new Argument<string>(name: "mode") {
             Description = $"One of: {string.Join(separator: ", ", values: DebugViewModes.Names)}.",

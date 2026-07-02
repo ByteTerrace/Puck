@@ -8,8 +8,7 @@ namespace Puck.Launcher;
 /// and tears them down on shutdown. The manager's input is consumed by a <see cref="GamepadInputSource"/>
 /// already registered with the command registry, so this service only governs device lifetime.
 /// </summary>
-public sealed class GamepadHostedService : IHostedService
-{
+public sealed class GamepadHostedService : IHostedService {
     private readonly GamepadManager m_manager;
 
     /// <summary>Initializes a new instance of the <see cref="GamepadHostedService"/> class.</summary>

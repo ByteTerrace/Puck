@@ -14,7 +14,6 @@ public sealed class VulkanGpuAccelerationStructure : IGpuAccelerationStructure {
     private readonly nint m_deviceHandle;
     private readonly nint m_instanceHandle;
     private readonly nint m_physicalDeviceHandle;
-
     private bool m_created;
     private bool m_disposed;
     private VulkanWorldAccelerationResources m_resources;

@@ -21,8 +21,9 @@ coverage.cobertura.xml
 *.userosscache
 *.sln.docstates
 
-# Claude Code local-only files
-.claude/
+# Claude Code local-only files (skills are shared and versioned)
+.claude/*
+!.claude/skills/
 
 # VS Code local-only files
 .vscode/*
@@ -43,3 +44,8 @@ Desktop.ini
 # Assets
 __azurite_db_blob*.json
 __blobstorage__
+
+# ROMS
+*.gb
+*.gba
+*.gbc

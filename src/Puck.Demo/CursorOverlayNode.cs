@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Compositing;
 using Puck.Hosting;
@@ -14,8 +15,7 @@ namespace Puck.Demo;
 /// same-device producer); the inner node is configured to block on submit so its result is complete before this
 /// pass samples it.
 /// </summary>
-internal sealed class CursorOverlayNode : IRenderNode
-{
+internal sealed class CursorOverlayNode : IRenderNode {
     private const int MaxCursors = 4;
     // Push constant: float4 header (count, radius, gizmoLength, lineWidth) + per cursor a float4 (x, y, packed
     // color, _) and a float4 orientation quaternion = (1 + 2*MaxCursors) float4s = 144 bytes.
@@ -232,7 +232,16 @@ internal sealed class CursorOverlayNode : IRenderNode
 
         var deviceHandle = m_deviceContext.DeviceHandle;
 
-        m_descriptorPool = m_descriptorAllocator.CreatePool(combinedImageSamplerCount: 1, deviceHandle: deviceHandle, maxSets: 1, storageBufferCount: 0, storageImageCount: 0);
+        m_descriptorPool = m_descriptorAllocator.CreatePool(
+            deviceHandle: deviceHandle,
+            sizes: new GpuDescriptorPoolSizes(
+                MaxSets: 1,
+                CombinedImageSamplerCount: 1,
+                StorageBufferCount: 0,
+                StorageImageCount: 0,
+                AccelerationStructureCount: 0
+            )
+        );
         m_descriptorSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: m_descriptorPool);
         m_sampler = m_descriptorAllocator.CreateSampler(deviceHandle: deviceHandle);
         m_pipelines = new Dictionary<AssetContentHash, IGpuPipeline> {

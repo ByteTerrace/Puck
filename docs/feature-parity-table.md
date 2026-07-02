@@ -10,6 +10,11 @@ be done. Reach for ⦿/❌/🟡 only when there is a real gap a future change co
 
 _Last updated: 2026-06-21 (gate sweep re-verified on the NVIDIA RTX 4070, Win11 26200)._
 
+> **Note (2026-07-02):** the demo `--validate-reverse-share` / `--validate-indirect` / `--validate-resample` gates cited
+> below as offscreen proofs were **retired into the `Puck.Post` battery** (C3 / C4 / B2) when Puck.Demo's superseded
+> conformance gates were removed — see `docs/demo-post-rework-plan.md`. The parity findings themselves are unchanged;
+> only the gate that demonstrates each moved.
+
 **Legend:** ✅ full · 🟡 partial (real, closeable gap) · ⦿ stub (no-op/sentinel/throws) · ❌ absent (not built) · ◆ by design (intrinsic API difference — correct as-is, not a gap)
 
 ### Device / Adapter / Instance
@@ -29,7 +34,11 @@ _Last updated: 2026-06-21 (gate sweep re-verified on the NVIDIA RTX 4070, Win11 
 |---|---|---|---|
 | Windowed present | ✅ | ✅ | Symmetric `ISurfacePresenter` |
 | Swapchain resize | ✅ | ✅ | VK also handles out-of-date/suboptimal |
-| Present-mode select (vsync/mailbox) | ✅ | ✅ | Neutral `PresentationOptions.PresentMode` (Vsync/Mailbox/Immediate) honored by both — VK maps to FIFO/MAILBOX/IMMEDIATE and feeds the selector; DX maps to the `Present` sync interval (1/0) plus an `ALLOW_TEARING` swapchain+present for Immediate where the display supports it |
+| Present-mode select (vsync/mailbox/immediate) | ✅ | ✅ | Neutral `PresentationOptions.PresentMode` (Vsync/Mailbox/Immediate) honored by both — VK maps to FIFO/MAILBOX/IMMEDIATE and feeds the selector; DX maps to the `Present` sync interval (1/0) plus an `ALLOW_TEARING` swapchain+present for Immediate where the display supports it |
+| Adaptive (VRR) present mode | ✅ | ✅ | Neutral `PresentMode.Adaptive` — VK maps to `FIFO_RELAXED` (adaptive vsync; tears only on a late frame); DX takes the same `ALLOW_TEARING` swapchain+present path as Immediate where the display supports it. `--present-mode adaptive` |
+| Display refresh-range query (Vmin/Vmax) | ✅ | ✅ | Backend-neutral: the window publishes `IDisplayRefreshInfo` (Win32 `EnumDisplaySettings`/`DEVMODE` over the window's monitor → current + min/max Hz). Used by the host pacer; both backends share the one platform query (returns "unknown" → pacer keeps its fixed period) |
+| Adaptive (display-aware) pacer | ✅ | ✅ | `LauncherWindowHostedService` clamps the render cadence into `[Vmin, Vmax − 3 Hz]` from the queried range (uncapped → just below Vmax), waking via the high-resolution `IPrecisionWaiter` (Win32 ~0.5 ms timer) and spinning only the sub-ms remainder. Presentation-only — the fixed-step sim is untouched |
+| Closed-loop present-timing feedback | ✅ | ✅ | Neutral `IPresentTimingFeedback` returns a display-confirmed present timestamp (QPC≡Stopwatch ticks); the pacer phase-locks `nextRenderDeadline` to it (else open-loop). DX reads `IDXGISwapChain::GetFrameStatistics` after Present (DISJOINT → unavailable). VK chains `VkPresentIdKHR` + waits via `vkWaitForPresentKHR` (`VK_KHR_present_id`/`present_wait`), gated on device support — when absent it stays open-loop. Both fall back gracefully; render-side only |
 | Surface-format select | ✅ | ✅ | Neutral `PresentationOptions.SurfaceFormat` honored by both — VK picks the supported surface format matching the desired `VkFormat`; DX sets the swapchain, resize, and blit-PSO render-target format |
 | Host non-Win32 windows (Wayland/Xcb) | ✅ | ◆ | D3D12 is a Win32 API — Wayland/Xcb aren't in its model; throws on non-Win32 surfaces — ◆ by design, not an unfinished port |
 | Live VK↔DX backend swap | ✅ | ✅ | `BackendSwitcher`, backend-neutral (a live cross-backend producer can't survive the swap — it needs the host's LUID) |

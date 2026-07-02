@@ -97,7 +97,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         nint deviceHandle,
         nint commandBufferHandle,
         nint pipelineLayoutHandle,
-        uint stageFlags,
+        GpuShaderStage stageFlags,
         uint offset,
         ReadOnlySpan<byte> data
     ) {
@@ -152,12 +152,12 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         nint deviceHandle,
         nint commandBufferHandle,
         nint imageHandle,
-        uint oldLayout,
-        uint newLayout,
-        uint sourceAccessMask,
-        uint destinationAccessMask,
-        uint sourceStageMask,
-        uint destinationStageMask
+        GpuImageLayout oldLayout,
+        GpuImageLayout newLayout,
+        GpuComputeAccess sourceAccessMask,
+        GpuComputeAccess destinationAccessMask,
+        GpuComputeStage sourceStageMask,
+        GpuComputeStage destinationStageMask
     ) {
         var state = DecodeState(commandBufferHandle);
 
@@ -216,10 +216,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
     public void MemoryBarrier(
         nint deviceHandle,
         nint commandBufferHandle,
-        uint sourceAccessMask,
-        uint destinationAccessMask,
-        uint sourceStageMask,
-        uint destinationStageMask
+        GpuComputeAccess sourceAccessMask,
+        GpuComputeAccess destinationAccessMask,
+        GpuComputeStage sourceStageMask,
+        GpuComputeStage destinationStageMask
     ) {
         var state = DecodeState(commandBufferHandle);
 
@@ -262,10 +262,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         nint deviceHandle,
         nint commandBufferHandle,
         nint bufferHandle,
-        uint sourceAccessMask,
-        uint destinationAccessMask,
-        uint sourceStageMask,
-        uint destinationStageMask
+        GpuComputeAccess sourceAccessMask,
+        GpuComputeAccess destinationAccessMask,
+        GpuComputeStage sourceStageMask,
+        GpuComputeStage destinationStageMask
     ) {
         var state = DecodeState(commandBufferHandle);
 
@@ -320,7 +320,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         commandList->ResourceBarrier(1, &transition);
     }
     // Access mask -> the legacy buffer resource state (used only when Enhanced Barriers are unavailable).
-    private static D3D12_RESOURCE_STATES ToBufferResourceState(uint accessMask) {
+    private static D3D12_RESOURCE_STATES ToBufferResourceState(GpuComputeAccess accessMask) {
         if (0 != (accessMask & GpuComputeAccess.IndirectCommandRead)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
         }
@@ -411,7 +411,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
     }
     // Stage mask → barrier sync scope. TopOfPipe (no prior work) contributes nothing, so a source-only TopOfPipe maps
     // to SYNC_NONE; the compute and pixel stages map to their shading sync scopes.
-    private static D3D12_BARRIER_SYNC ToBarrierSync(uint stageMask) {
+    private static D3D12_BARRIER_SYNC ToBarrierSync(GpuComputeStage stageMask) {
         var sync = D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE;
 
         if (0 != (stageMask & GpuComputeStage.ComputeShader)) {
@@ -429,7 +429,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         return sync;
     }
     // Image layout → the access compatible with it (the access a texture barrier carries must match its layout).
-    private static D3D12_BARRIER_ACCESS ToTextureAccess(uint layout) {
+    private static D3D12_BARRIER_ACCESS ToTextureAccess(GpuImageLayout layout) {
         return layout switch {
             GpuImageLayout.General => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
             GpuImageLayout.ShaderReadOnly => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
@@ -439,7 +439,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         };
     }
     // Image layout → first-class barrier layout (the Vulkan image-layout peer).
-    private static D3D12_BARRIER_LAYOUT ToBarrierLayout(uint layout) {
+    private static D3D12_BARRIER_LAYOUT ToBarrierLayout(GpuImageLayout layout) {
         return layout switch {
             GpuImageLayout.General => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
             GpuImageLayout.ShaderReadOnly => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_SHADER_RESOURCE,
@@ -448,7 +448,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         };
     }
     // Access mask → global-barrier access scope. A shader read may be a UAV read or a sampled read, so it spans both.
-    private static D3D12_BARRIER_ACCESS ToGlobalAccess(uint accessMask) {
+    private static D3D12_BARRIER_ACCESS ToGlobalAccess(GpuComputeAccess accessMask) {
         if (accessMask == GpuComputeAccess.None) {
             return D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_NO_ACCESS;
         }
@@ -469,10 +469,9 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
 
         return access;
     }
-
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         (DirectXCommandBufferState)GCHandle.FromIntPtr(commandBufferHandle).Target!;
-    private static D3D12_RESOURCE_STATES ToResourceState(uint layout) {
+    private static D3D12_RESOURCE_STATES ToResourceState(GpuImageLayout layout) {
         return layout switch {
             GpuImageLayout.ShaderReadOnly => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
             // The cross-backend handoff state: a shared resource must rest in COMMON for a foreign device to open it.

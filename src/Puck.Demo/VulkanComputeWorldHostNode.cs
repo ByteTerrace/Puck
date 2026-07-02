@@ -1,9 +1,11 @@
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.DirectX;
 using Puck.DirectX.Interfaces;
 using Puck.Hosting;
+using Puck.Scene;
 using Puck.SdfVm;
 using Puck.Vulkan;
 using Puck.Vulkan.Interfaces;
@@ -28,7 +30,7 @@ namespace Puck.Demo;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class VulkanComputeWorldHostNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint VulkanFormat = 37; // VK_FORMAT_R8G8B8A8_UNORM
 
     private readonly NodeDescriptor m_descriptor = new(
@@ -44,22 +46,22 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
     private readonly IGpuQueueSubmitter m_hostSubmitter = new DirectXGpuQueueSubmitter();
     private readonly WorldProducerNode m_inner;
     private readonly uint m_width;
-
     private bool m_disposed;
     private IGpuComputeCommandPool? m_hostCommandPool;
     // The Direct3D 12 image is created in UNORDERED_ACCESS, which the neutral recorder maps from General.
-    private uint m_lastHostLayout = GpuImageLayout.General;
+    private GpuImageLayout m_lastHostLayout = GpuImageLayout.General;
     private ReverseSharedStorageImage? m_seam;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanComputeWorldHostNode"/> class.</summary>
     /// <param name="serviceProvider">The application service provider (resolves the Direct3D 12 host device and seeds the bespoke Vulkan producer).</param>
     /// <param name="frameSource">The data-driven scene/camera source to render.</param>
     /// <param name="withChild">Whether the bottom-right slot is a hosted <see cref="ChildSurfaceNode"/> instead of an SDF camera.</param>
+    /// <param name="liveSources">The document's live-camera viewport slots (each becomes a <see cref="CameraChildNode"/>); null/empty for none.</param>
     /// <param name="capturePath">An optional PNG path; the inner producer reads its first rendered frame back from the bespoke Vulkan device and writes it there.</param>
     /// <param name="width">The render width in pixels (defaults to 960).</param>
     /// <param name="height">The render height in pixels (defaults to 600).</param>
     /// <exception cref="ArgumentNullException"><paramref name="serviceProvider"/> or <paramref name="frameSource"/> is <see langword="null"/>.</exception>
-    public VulkanComputeWorldHostNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, bool withChild = false, string? capturePath = null, uint width = 960, uint height = 600) {
+    public VulkanComputeWorldHostNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, bool withChild = false, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null, string? capturePath = null, uint width = 960, uint height = 600) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -73,7 +75,7 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.spv")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.spv")),
             capturePath: capturePath,
-            children: withChild ? ChildSurfaceNode.CreateWorldChildren(serviceProvider: m_device.Services, directX: false) : null,
+            children: WorldChildren.Build(cameraServices: serviceProvider, directX: false, gpuServices: m_device.Services, liveSources: liveSources, testChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.spv")),
             createStorageImage: CreateReverseSharedImage,
             frameSource: frameSource,
@@ -169,7 +171,7 @@ internal sealed class VulkanComputeWorldHostNode : IRenderNode {
 
     // Records and drains a single Direct3D 12 layout transition of the host-owned shared image on the host device's
     // queue, tracking the prior layout so the barrier's old layout is accurate frame to frame.
-    private void RecordHostTransition(uint newLayout) {
+    private void RecordHostTransition(GpuImageLayout newLayout) {
         m_hostCommandPool ??= new DirectXGpuComputeCommandPoolFactory().Create(deviceContext: m_hostDevice);
 
         var commandBuffer = m_hostCommandPool.CommandBufferHandle;

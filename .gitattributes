@@ -1,0 +1,36 @@
+# Line endings: normalize to LF in the repo, check out native per OS.
+* text=auto
+*.sh   text eol=lf
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+*.slnx text eol=crlf
+
+# Richer diffs.
+*.cs diff=csharp
+*.c  diff=cpp
+*.h  diff=cpp
+
+# Binary artifacts: never diff or EOL-convert.
+*.png  binary
+*.dll  binary
+*.so   binary
+*.lib  binary
+*.pdb  binary
+*.spv  binary linguist-generated
+*.dxil binary linguist-generated
+
+# Vendored / prebuilt third-party code: keep off code metrics.
+lib/**                                  linguist-vendored
+experimental/Puck.BareMetal/lwip/**     linguist-vendored
+experimental/Puck.BareMetal/mbedtls/**  linguist-vendored
+experimental/Puck.BareMetal/mimalloc/** linguist-vendored
+
+# All C/C++ under the experimental tree is native/systems code (bare-metal shims + vendored libs) —
+# keep it off GitHub language metrics regardless of subdirectory. The C# emulator cores are unaffected.
+experimental/**/*.c    linguist-vendored
+experimental/**/*.cc   linguist-vendored
+experimental/**/*.cpp  linguist-vendored
+experimental/**/*.cxx  linguist-vendored
+experimental/**/*.h    linguist-vendored
+experimental/**/*.hpp  linguist-vendored
+experimental/**/*.hxx  linguist-vendored

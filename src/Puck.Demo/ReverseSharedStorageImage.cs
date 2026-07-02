@@ -1,5 +1,5 @@
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
 

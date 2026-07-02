@@ -15,8 +15,7 @@ namespace Puck.Platform.Windows.Gamepad;
 /// through the identical coalescer → command pipeline. Xbox controllers have no motion sensor, so gyro and
 /// orientation are always neutral.
 /// </summary>
-public sealed class XInputGamepadConnection : IGamepadConnection
-{
+public sealed class XInputGamepadConnection : IGamepadConnection {
     private const short LeftThumbDeadzone = 7849;   // XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE
     private const short RightThumbDeadzone = 8689;  // XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE
     private const byte TriggerThreshold = 30;       // XINPUT_GAMEPAD_TRIGGER_THRESHOLD
@@ -27,7 +26,6 @@ public sealed class XInputGamepadConnection : IGamepadConnection
     private readonly GamepadOutput m_output;
     private readonly ConcurrentQueue<GamepadOutputCommand> m_outputQueue = new();
     private readonly uint m_slot;
-
     private int m_correlationCountdown;
     private volatile bool m_faulted;
     private float m_highFrequency;
@@ -101,8 +99,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection
         if ((m_haptics is not null) && (GameInputDevice is null) && (m_latestGameInputButtons != 0u)) {
             if (m_correlationCountdown > 0) {
                 --m_correlationCountdown;
-            }
-            else {
+            } else {
                 m_correlationCountdown = CorrelationIntervalTicks;
                 GameInputDevice = m_haptics.Bind(targetButtons: m_latestGameInputButtons);
             }
@@ -221,15 +218,13 @@ public sealed class XInputGamepadConnection : IGamepadConnection
         if ((0f >= m_lowFrequency) && (0f >= m_highFrequency) && (0f >= m_leftTrigger) && (0f >= m_rightTrigger)) {
             m_rumbleActive = false;
             m_rumbleExpiry = long.MaxValue;
-        }
-        else {
+        } else {
             m_rumbleActive = true;
             m_rumbleExpiry = ((0u < durationMilliseconds)
                 ? (Stopwatch.GetTimestamp() + ((long)(durationMilliseconds * (Stopwatch.Frequency / 1000.0))))
                 : long.MaxValue);
         }
     }
-
     private static GamepadState Convert(in XInputGamepad pad) {
         var raw = pad.Buttons;
         var buttons = GamepadButtons.None;
@@ -296,11 +291,9 @@ public sealed class XInputGamepadConnection : IGamepadConnection
 
                 try {
                     device.SetRumbleState(rumbleParams: in off);
-                }
-                catch (COMException) {
+                } catch (COMException) {
                     // The device is already gone; nothing to silence.
-                }
-                catch (InvalidComObjectException) {
+                } catch (InvalidComObjectException) {
                     // The RCW was torn down; nothing to silence.
                 }
             }

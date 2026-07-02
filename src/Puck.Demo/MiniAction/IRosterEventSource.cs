@@ -15,17 +15,17 @@ public interface IRosterEventSource {
 
 /// <summary>Re-emits a recording's roster events verbatim, for replay.</summary>
 public sealed class ReplayRosterEventSource : IRosterEventSource {
-    private readonly MiniActionReplay m_replay;
+    private readonly MiniActionRecording m_recording;
 
-    public ReplayRosterEventSource(MiniActionReplay replay) {
-        ArgumentNullException.ThrowIfNull(replay);
+    public ReplayRosterEventSource(MiniActionRecording recording) {
+        ArgumentNullException.ThrowIfNull(recording);
 
-        m_replay = replay;
+        m_recording = recording;
     }
 
     /// <inheritdoc/>
     public IReadOnlyList<RosterEvent> EventsForTick(ulong tick) {
-        return ((tick < (ulong)m_replay.RosterEvents.Count) ? m_replay.RosterEvents[(int)tick] : []);
+        return m_recording.RosterEventsForTick(tick: tick);
     }
 }
 

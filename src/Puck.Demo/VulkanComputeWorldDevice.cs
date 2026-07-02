@@ -1,6 +1,6 @@
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.Hosting;

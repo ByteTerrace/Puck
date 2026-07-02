@@ -48,7 +48,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
 }
 
 file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSurfaceReadback {
-    public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, uint width, uint height, uint format, uint bytesPerPixel) =>
+    public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel) =>
         inner.Read(
             bytesPerPixel: bytesPerPixel,
             deviceContext: (IVulkanDeviceContext)deviceContext,
@@ -60,7 +60,7 @@ file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSu
     public void Dispose() => inner.Dispose();
 }
 file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfaceUpload {
-    public nint Upload(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, uint width, uint height, uint format) =>
+    public nint Upload(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) =>
         inner.Upload(
             deviceContext: (IVulkanDeviceContext)deviceContext,
             height: height,
@@ -71,7 +71,7 @@ file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfac
     public void Dispose() => inner.Dispose();
 }
 file sealed class VulkanGpuSurfaceImport(VulkanSurfaceImport inner) : IGpuSurfaceImport {
-    public nint Import(IGpuDeviceContext deviceContext, nint sharedHandle, uint width, uint height, uint format) =>
+    public nint Import(IGpuDeviceContext deviceContext, nint sharedHandle, GpuPixelFormat format, uint width, uint height) =>
         inner.Import(
             deviceContext: (IVulkanDeviceContext)deviceContext,
             height: height,

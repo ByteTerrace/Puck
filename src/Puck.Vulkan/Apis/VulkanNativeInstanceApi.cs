@@ -205,7 +205,6 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
         return 0;
     }
-
     private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
         lock (m_syncRoot) {
             if (m_getInstanceProcAddr is not null) {
@@ -217,7 +216,6 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return m_getInstanceProcAddr;
         }
     }
-
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> GetCreateInstance() {
         lock (m_syncRoot) {
             if (m_createInstance is not null) {

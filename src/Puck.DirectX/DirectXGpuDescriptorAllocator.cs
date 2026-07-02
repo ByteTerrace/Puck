@@ -46,10 +46,10 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
     }
 
     /// <inheritdoc/>
-    public nint CreatePool(nint deviceHandle, uint maxSets, uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount, uint accelerationStructureCount = 0) {
+    public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) {
         var device = (ID3D12Device*)deviceHandle;
         // An acceleration-structure SRV is just another CBV_SRV_UAV heap slot, so it adds to the total like the rest.
-        var totalDescriptors = (combinedImageSamplerCount + storageBufferCount + storageImageCount + accelerationStructureCount);
+        var totalDescriptors = (sizes.CombinedImageSamplerCount + sizes.StorageBufferCount + sizes.StorageImageCount + sizes.AccelerationStructureCount);
         var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
             NumDescriptors = (totalDescriptors > 0) ? totalDescriptors : 1,
@@ -80,7 +80,7 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
     /// <inheritdoc/>
     // The filter is ignored: Direct3D 12 samplers are static in the root signature, so the filter is baked into the
     // compute pipeline's static sampler (via the factory's samplerFilter) rather than carried by this handle.
-    public nint CreateSampler(nint deviceHandle, uint filter = GpuSamplerFilter.Linear) => SamplerSentinel;
+    public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) => SamplerSentinel;
 
     /// <inheritdoc/>
     public void DestroyPool(nint deviceHandle, nint poolHandle) {

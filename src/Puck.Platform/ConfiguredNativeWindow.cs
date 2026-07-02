@@ -4,7 +4,7 @@ using Puck.Input;
 
 namespace Puck.Platform;
 
-internal sealed class ConfiguredNativeWindow(IOptions<NativeWindowOptions> options) : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
+internal sealed class ConfiguredNativeWindow(IOptions<NativeWindowOptions> options) : INativeWindow, IWindowInputSource {
     private bool m_disposed;
     private readonly NativeWindowOptions m_options = options.Value;
     private bool m_visible;

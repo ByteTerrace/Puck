@@ -52,6 +52,12 @@
             "null"
           ]
         },
+        "fullscreen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "rayQuery": {
           "type": [
             "boolean",
@@ -61,6 +67,12 @@
         "timing": {
           "type": [
             "boolean",
+            "null"
+          ]
+        },
+        "genlock": {
+          "type": [
+            "string",
             "null"
           ]
         }
@@ -434,7 +446,7 @@
           "null"
         ],
         "properties": {
-          "camera": {
+          "source": {
             "type": [
               "object",
               "null"
@@ -491,6 +503,35 @@
                     "items": {
                       "type": "number"
                     }
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "$type": {
+                    "const": "live-camera"
+                  },
+                  "deviceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "fit": {
+                    "enum": [
+                      "Sample",
+                      "Fill"
+                    ]
+                  },
+                  "requestedFps": {
+                    "type": "integer"
+                  },
+                  "requestedHeight": {
+                    "type": "integer"
+                  },
+                  "requestedWidth": {
+                    "type": "integer"
                   }
                 },
                 "additionalProperties": false
@@ -563,6 +604,46 @@
           "properties": {
             "$type": {
               "const": "rt"
+            },
+            "produce": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "capture": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "$type": {
+              "const": "mini-action"
+            },
+            "produce": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "capture": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "$type": {
+              "const": "camera"
             },
             "produce": {
               "type": [

@@ -47,6 +47,7 @@ internal static class GraphBuilder {
                 capturePath: capture,
                 frameSource: RunDocument.CreateFrameSource(document: document),
                 height: height,
+                liveSources: ViewportBuilder.LiveSources(viewports: document.Viewports),
                 onDirectX: hostsOnDirectX,
                 produceBackend: produce,
                 serviceProvider: serviceProvider,
@@ -63,6 +64,11 @@ internal static class GraphBuilder {
             ),
             MiniActionNode => DemoRootNode.CreateMiniActionRootNode(
                 capturePath: capture,
+                height: height,
+                serviceProvider: serviceProvider,
+                width: width
+            ),
+            CameraNode => new LiveCameraNode(
                 height: height,
                 serviceProvider: serviceProvider,
                 width: width

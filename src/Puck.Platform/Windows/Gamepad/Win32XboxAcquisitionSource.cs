@@ -11,14 +11,12 @@ namespace Puck.Platform.Windows.Gamepad;
 /// driven through GameInput (which reaches wireless transports and the impulse-trigger motors) with an
 /// <c>XInputSetState</c> fallback. The poll thread is the sole owner of the <see cref="GameInputHaptics"/> service.
 /// </summary>
-public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource
-{
+public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
     private const int XInputSlotCount = 4;
     private const int XInputPollHz = 250;
 
     private readonly CancellationTokenSource m_cancellation = new();
     private readonly Action<string>? m_diagnostics;
-
     private GameInputHaptics? m_gameInputHaptics;
     private IGamepadConnectionRegistry? m_registry;
     private int m_started;
@@ -55,13 +53,11 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource
     private void RunXInputLoop(CancellationToken cancellationToken) {
         try {
             _ = XInput.GetStateEx(userIndex: 0u, state: out _);
-        }
-        catch (DllNotFoundException) {
+        } catch (DllNotFoundException) {
             m_diagnostics?.Invoke("[gamepad] XInput unavailable (xinput1_4.dll not found); Xbox controllers disabled");
 
             return;
-        }
-        catch (EntryPointNotFoundException) {
+        } catch (EntryPointNotFoundException) {
             m_diagnostics?.Invoke("[gamepad] XInput unavailable (entry point missing); Xbox controllers disabled");
 
             return;
@@ -74,8 +70,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource
         if (haptics.TryInitialize()) {
             m_gameInputHaptics = haptics;
             m_diagnostics?.Invoke("[gamepad] GameInput haptics ready (Xbox rumble incl. wireless)");
-        }
-        else {
+        } else {
             m_diagnostics?.Invoke("[gamepad] GameInput unavailable; Xbox rumble via XInput (USB only)");
         }
 
@@ -116,8 +111,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource
 
                         // The connection owns its own output actuation (GameInput correlation + dual-path rumble).
                         connection.ServiceOutput();
-                    }
-                    else {
+                    } else {
                         if (connection is not null) {
                             CloseSlot(connection: connection);
                             connections[slot] = null;
@@ -129,13 +123,11 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource
 
                 PaceTo(deadline: (cycleStart + pollPeriodTicks), cancellationToken: cancellationToken);
             }
-        }
-        catch (Exception exception) {
+        } catch (Exception exception) {
             // This runs on a dedicated thread, where an unhandled exception would terminate the process. Fail
             // soft: drop Xbox support for this session rather than take the app down.
             m_diagnostics?.Invoke($"[gamepad] XInput poll loop stopped: {exception.GetType().Name}: {exception.Message}");
-        }
-        finally {
+        } finally {
             _ = XInput.TimeEndPeriod(period: 1u);
 
             // The poll thread is the sole owner of the haptics service, so dispose it here, keeping ownership off
@@ -171,8 +163,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource
 
             if (remainingMs > 1L) {
                 Thread.Sleep(millisecondsTimeout: ((int)(remainingMs - 1L)));
-            }
-            else {
+            } else {
                 Thread.SpinWait(iterations: 64);
             }
         }

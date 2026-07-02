@@ -1,7 +1,9 @@
 using System.Runtime.Versioning;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.DirectX;
 using Puck.Hosting;
+using Puck.Scene;
 using Puck.SdfVm;
 
 namespace Puck.Demo;
@@ -15,7 +17,7 @@ namespace Puck.Demo;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class CrossBackendComputeWorldNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
 
     private readonly NodeDescriptor m_descriptor = new(
         Name: "cross-backend-compute-world",
@@ -28,12 +30,13 @@ internal sealed class CrossBackendComputeWorldNode : IRenderNode {
     /// <summary>Initializes a new instance of the <see cref="CrossBackendComputeWorldNode"/> class.</summary>
     /// <param name="serviceProvider">The application service provider (resolves the live Vulkan device for the adapter LUID).</param>
     /// <param name="withChild">Whether the bottom-right slot is a hosted <see cref="ChildSurfaceNode"/> instead of an SDF camera (the injected frame source then supplies the four-viewport split).</param>
+    /// <param name="liveSources">The document's live-camera viewport slots (each becomes a <see cref="CameraChildNode"/>); null/empty for none.</param>
     /// <param name="frameSource">The data-driven scene/camera source to render (a <c>JsonSdfFrameSource</c> over the document's scene + viewports).</param>
     /// <param name="capturePath">An optional PNG path; the inner producer reads its first rendered frame back from the bespoke Direct3D 12 device and writes it there.</param>
     /// <param name="width">The render width in pixels (defaults to 960).</param>
     /// <param name="height">The render height in pixels (defaults to 600).</param>
     /// <exception cref="ArgumentNullException"><paramref name="serviceProvider"/> or <paramref name="frameSource"/> is <see langword="null"/>.</exception>
-    public CrossBackendComputeWorldNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, bool withChild = false, string? capturePath = null, uint width = 960, uint height = 600) {
+    public CrossBackendComputeWorldNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, bool withChild = false, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null, string? capturePath = null, uint width = 960, uint height = 600) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -42,7 +45,7 @@ internal sealed class CrossBackendComputeWorldNode : IRenderNode {
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.dxil")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.dxil")),
             capturePath: capturePath,
-            children: withChild ? ChildSurfaceNode.CreateWorldChildren(serviceProvider: m_device.Services, directX: true) : null,
+            children: WorldChildren.Build(cameraServices: serviceProvider, directX: true, gpuServices: m_device.Services, liveSources: liveSources, testChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.dxil")),
             createStorageImage: deviceContext => new DirectXGpuSurfaceExportFactory().CreateExportableStorageImage(
                 deviceContext: deviceContext,

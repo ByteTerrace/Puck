@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
+using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Hosting;
 using Puck.Shaders;

@@ -8,8 +8,7 @@ namespace Puck.Input.Devices;
 /// stays serialized with the report reads and with rumble writes on the same device — important where the LED
 /// and the motors share one output report.
 /// </summary>
-internal interface ILedParser
-{
+internal interface ILedParser {
     /// <summary>Sets the controller's RGB indicator, preserving any current rumble state.</summary>
     /// <param name="color">The color to display.</param>
     /// <param name="cancellationToken">A token that cancels the write.</param>

@@ -51,6 +51,19 @@ public static class RunDocument {
         return Parse(bounds: bounds, utf8Json: File.ReadAllBytes(path: path));
     }
 
+    /// <summary>Serializes a document back to JSON through the same source-generation options that parse it — the
+    /// write half of the round-trip seam (document tooling; the POST's bit-stability check). The output is not
+    /// validated: serialize-then-<see cref="Parse"/> is the round trip that proves a document survives its own
+    /// serialization.</summary>
+    /// <param name="document">The document to serialize.</param>
+    /// <returns>The document's JSON text.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static string Serialize(PuckRunDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        return JsonSerializer.Serialize(options: s_options, value: document);
+    }
+
     /// <summary>Compiles a validated document's scene + viewports into a frame source.</summary>
     /// <param name="document">The validated document.</param>
     /// <returns>The frame source a producer node drives.</returns>

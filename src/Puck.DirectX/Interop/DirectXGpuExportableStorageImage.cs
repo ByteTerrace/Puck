@@ -43,10 +43,14 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
     /// <param name="format">The pixel format.</param>
     /// <param name="width">The image width in pixels.</param>
     /// <param name="height">The image height in pixels.</param>
+    /// <param name="simultaneousAccess">Whether to create the texture with <c>ALLOW_SIMULTANEOUS_ACCESS</c> (and a
+    /// <c>COMMON</c> initial state) — required for Direct3D 11 to open the shared handle (e.g. the camera GPU tier,
+    /// where Media Foundation's D3D11 device writes the texture and this device never touches it). The default keeps
+    /// the historic D3D12-writes shape byte-identical.</param>
     /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
-    public DirectXGpuExportableStorageImage(IDirectXDeviceContext deviceContext, DXGI_FORMAT format, uint width, uint height) {
+    public DirectXGpuExportableStorageImage(IDirectXDeviceContext deviceContext, DXGI_FORMAT format, uint width, uint height, bool simultaneousAccess = false) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
         if (
@@ -64,10 +68,16 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
+        // The simultaneous-access (cross-API-writable) variant swaps UAV capability for RENDER_TARGET: its foreign
+        // Direct3D 11 writer opens the handle with D3D11-expressible binds (BGRA has no D3D11 UAV, so a UAV-flagged
+        // texture is refused with E_INVALIDARG), and this device never dispatches into it. The historic D3D12-writes
+        // shape keeps ALLOW_UNORDERED_ACCESS (the compute producer's UAV).
         var textureDesc = new D3D12_RESOURCE_DESC {
             DepthOrArraySize = 1,
             Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            Flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            Flags = (simultaneousAccess
+                ? (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS)
+                : D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
             Format = format,
             Height = height,
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN,
@@ -79,11 +89,13 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         void* resource;
         var resourceIid = ID3D12Resource.IID_Guid;
 
+        // A simultaneous-access texture rests in (and decays to) COMMON — the cross-API handoff state its foreign
+        // writer expects; the historic D3D12-writes shape keeps UNORDERED_ACCESS (the compute recorder's seeded state).
         device->CreateCommittedResource(
             in heapProperties,
             D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
             in textureDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            (simultaneousAccess ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
             (D3D12_CLEAR_VALUE?)null,
             in resourceIid,
             &resource

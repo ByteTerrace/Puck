@@ -194,7 +194,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         }
 
         m_disposed = true;
-        m_device?.WaitIdle();
+        m_device?.TryWaitIdle();
         DisposeResources();
     }
 }

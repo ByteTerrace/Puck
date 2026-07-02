@@ -7,7 +7,7 @@ namespace Puck.Platform.Switch;
 /// <see cref="ISwitchViWindowBackend"/> (the licensed SDK shim) to the engine's window
 /// contract and emitting a <see cref="ViNativeSurfaceBinding"/> for Vulkan surface creation.
 /// HID/controller input is handled separately and is out of scope here.</summary>
-internal sealed class ViNativeWindow : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
+internal sealed class ViNativeWindow : INativeWindow, IWindowInputSource {
     private readonly ISwitchViWindowBackend m_backend;
     private readonly NativeWindowOptions m_options;
     private bool m_disposed;
@@ -54,7 +54,7 @@ internal sealed class ViNativeWindow : INativeWindow, INativeSurfaceSourceProvid
 
         return new NativeSurfaceBinding(
             DisplayKind: DisplayKind,
-            Vi: new ViNativeSurfaceBinding(Window: m_backend.NativeWindowHandle)
+            Vi: new ViNativeSurfaceBinding(WindowHandle: m_backend.NativeWindowHandle)
         );
     }
     public void Dispose() {

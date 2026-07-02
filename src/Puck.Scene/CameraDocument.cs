@@ -4,14 +4,12 @@ using Puck.Cameras;
 namespace Puck.Scene;
 
 /// <summary>
-/// A viewport's camera, authored as data. The <c>$type</c> string is the JSON discriminator; field-of-view is
-/// authored in DEGREES (converted to the engine's radians at build time, exactly as the demo's hand-authored cameras
-/// do). Adding a camera kind is a new derived record carrying its own <see cref="Build"/> and <see cref="Validate"/>.
+/// A viewport's virtual SDF camera, authored as data — a <see cref="ViewportSource"/> kind. Field-of-view is authored
+/// in DEGREES (converted to the engine's radians at build time, exactly as the demo's hand-authored cameras do). The
+/// concrete <c>orbit</c>/<c>perspective</c> discriminators are declared on <see cref="ViewportSource"/>; adding a camera
+/// kind is a new derived record carrying its own <see cref="Build"/> and <see cref="ViewportSource.Validate"/>.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-[JsonDerivedType(typeof(OrbitCameraDocument), typeDiscriminator: "orbit")]
-[JsonDerivedType(typeof(PerspectiveCameraDocument), typeDiscriminator: "perspective")]
-public abstract record CameraDocument {
+public abstract record CameraDocument : ViewportSource {
     // Degrees -> radians using the EXACT expression the demo uses, so a JSON camera reproduces a hand-authored one
     // bit-for-bit (float rounding included).
     private protected static float ToRadians(float degrees) {
@@ -19,7 +17,6 @@ public abstract record CameraDocument {
     }
 
     internal abstract ICamera Build();
-    internal abstract void Validate(string path, ValidationErrors errors);
 }
 
 /// <summary>An orbiting camera that circles a target at a fixed height and radius (maps to <see cref="OrbitCamera"/>).</summary>

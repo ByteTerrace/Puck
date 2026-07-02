@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Demo;
@@ -19,7 +20,7 @@ namespace Puck.Demo;
 /// </para>
 /// </summary>
 internal sealed class ChildSurfaceNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint OutputBindingIndex = 0; // sdf-child.comp: Output at binding 0 (register u0)
     private const int PushConstantByteLength = (sizeof(uint) * 4); // ChildParams: uint2 extent + float time + uint pad
     private const uint WorkgroupEdge = 8;
@@ -31,7 +32,6 @@ internal sealed class ChildSurfaceNode : IRenderNode {
     );
     private readonly byte[] m_pushConstant = new byte[PushConstantByteLength];
     private readonly IServiceProvider m_serviceProvider;
-
     private IGpuComputeCommandPool? m_commandPool;
     private IGpuComputeRecorder? m_computeRecorder;
     private IGpuComputeServices? m_gpu;
@@ -148,13 +148,7 @@ internal sealed class ChildSurfaceNode : IRenderNode {
             // Pool capacity derived from the bindings, not hand-counted.
             var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
 
-            m_pool = m_descriptorAllocator.CreatePool(
-                combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-                deviceHandle: m_deviceHandle,
-                maxSets: poolSizes.MaxSets,
-                storageBufferCount: poolSizes.StorageBufferCount,
-                storageImageCount: poolSizes.StorageImageCount
-            );
+            m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
             m_set = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
             m_commandPool = m_gpu.CommandPoolFactory.Create(deviceContext: gpuDevice);
         }
@@ -169,7 +163,6 @@ internal sealed class ChildSurfaceNode : IRenderNode {
         m_resourcesReady = true;
         m_width = width;
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;
@@ -226,17 +219,39 @@ internal sealed class ChildSurfaceNode : IRenderNode {
         }
 
         m_disposed = true;
-        // The per-frame submits are fire-and-forget, so a frame may still be in flight at teardown.
-        m_deviceContext?.WaitIdle();
+        // The per-frame submits are fire-and-forget, so a frame may still be in flight at teardown. Tolerant of an
+        // already-lost device (a device-loss teardown drains nothing).
+        m_deviceContext.TryWaitIdle();
+        ReleaseGpuResources();
+    }
+
+    /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // Reset on the still-valid (lost) device, wait-free (nothing in flight can complete). The next ProduceFrame
+        // re-runs EnsureResources (latch cleared) and rebuilds against the recreated device.
+        ReleaseGpuResources();
+        m_deviceHandle = 0;
+        m_imageInitialized = false;
+        m_resourcesReady = false;
+    }
+
+    // Device-resource teardown shared by Dispose and OnDeviceLost (the body of Dispose minus the idle drain). Wait-free,
+    // idempotent (fields nulled), safe against a lost device; destroys the pool via the still-current m_deviceHandle.
+    private void ReleaseGpuResources() {
         m_commandPool?.Dispose();
+        m_commandPool = null;
         m_pipeline?.Dispose();
+        m_pipeline = null;
 
         if ((0 != m_pool) && (m_descriptorAllocator is not null)) {
             m_descriptorAllocator.DestroyPool(deviceHandle: m_deviceHandle, poolHandle: m_pool);
             m_pool = 0;
         }
 
+        m_set = 0;
         m_storageImage?.Dispose();
+        m_storageImage = null;
         m_shaderModule?.Dispose();
+        m_shaderModule = null;
     }
 }

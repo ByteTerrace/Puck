@@ -10,13 +10,11 @@ namespace Puck.Platform.Windows.Gamepad;
 /// specific device for an XInput slot via <see cref="Bind"/> and rumble exactly that controller — the "current
 /// reading" device is global and can't distinguish controllers.
 /// </summary>
-public sealed class GameInputHaptics : IDisposable
-{
+public sealed class GameInputHaptics : IDisposable {
     private readonly HashSet<IGameInputDevice> m_bound = [];
     private readonly Action<string>? m_diagnostics;
     private readonly Dictionary<nint, IGameInputDevice> m_devices = [];
     private readonly object m_deviceLock = new();
-
     private ulong m_callbackToken;
     private GameInputDeviceCallback? m_deviceCallback;
     private IGameInput? m_gameInput;
@@ -64,11 +62,9 @@ public sealed class GameInputHaptics : IDisposable
             }
 
             return true;
-        }
-        catch (DllNotFoundException) {
+        } catch (DllNotFoundException) {
             return false;
-        }
-        catch (EntryPointNotFoundException) {
+        } catch (EntryPointNotFoundException) {
             return false;
         }
     }
@@ -87,16 +83,14 @@ public sealed class GameInputHaptics : IDisposable
                         m_devices[device] = (IGameInputDevice)Marshal.GetObjectForIUnknown(pUnk: device);
                         m_diagnostics?.Invoke($"[gameinput] device connected (0x{device:x})");
                     }
-                }
-                else if (m_devices.Remove(key: device, value: out var removed)) {
+                } else if (m_devices.Remove(key: device, value: out var removed)) {
                     // Drop the reference (the GC finalizes the RCW; explicitly releasing it would separate a
                     // handle a connection may still borrow) and free any binding so a slot can rebind.
                     _ = m_bound.Remove(item: removed);
                     m_diagnostics?.Invoke($"[gameinput] device disconnected (0x{device:x})");
                 }
             }
-        }
-        catch {
+        } catch {
             // This runs on a GameInput thread; an exception must never propagate into native code.
         }
     }
@@ -143,8 +137,7 @@ public sealed class GameInputHaptics : IDisposable
 
                         match = device;
                     }
-                }
-                finally {
+                } finally {
                     _ = Marshal.ReleaseComObject(o: reading);
                 }
             }
@@ -200,15 +193,12 @@ public sealed class GameInputHaptics : IDisposable
             device.SetRumbleState(rumbleParams: in rumbleParams);
 
             return true;
-        }
-        catch (COMException) {
+        } catch (COMException) {
             return false;
-        }
-        catch (InvalidComObjectException) {
+        } catch (InvalidComObjectException) {
             return false;
         }
     }
-
     public void Dispose() {
         if (!OperatingSystem.IsWindows()) {
             m_gameInput = null;

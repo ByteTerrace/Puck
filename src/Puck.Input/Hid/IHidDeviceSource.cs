@@ -6,8 +6,7 @@ namespace Puck.Input.Hid;
 /// changing <c>Puck.Input</c>. Implementations that have no HID support on the current OS return an empty
 /// enumeration and <see langword="null"/> from <see cref="Open"/>.
 /// </summary>
-public interface IHidDeviceSource
-{
+public interface IHidDeviceSource {
     /// <summary>
     /// Enumerates present HID device interfaces (path + VID/PID) without opening any device, so a caller can
     /// filter on VID/PID and open only the few it cares about.

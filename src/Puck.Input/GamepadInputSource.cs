@@ -11,8 +11,7 @@ namespace Puck.Input;
 /// <see cref="BindingCommandSource"/> so the same binding/chord logic the keyboard uses applies here too. Each
 /// signal carries its device's <see cref="InputDeviceId"/>, preserving per-controller focus and routing.
 /// </summary>
-public sealed class GamepadInputSource : ICommandSource
-{
+public sealed class GamepadInputSource : ICommandSource {
     private static readonly (GamepadButtons Flag, string Source)[] ButtonSources = [
         (GamepadButtons.ButtonSouth, InputSources.Gamepad.ButtonSouth),
         (GamepadButtons.ButtonEast, InputSources.Gamepad.ButtonEast),

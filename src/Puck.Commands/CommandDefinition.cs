@@ -39,6 +39,12 @@ public sealed record CommandDefinition(
     /// source-driven paths. Empty by default.</summary>
     public IReadOnlyList<string> Aliases { get; init; } = [];
 
+    /// <summary>
+    /// Gets the command's determinism class — whether a submitted text line runs inline or is folded into the
+    /// deterministic per-tick <see cref="CommandSnapshot"/>. Defaults to <see cref="CommandRouting.Immediate"/>.
+    /// </summary>
+    public CommandRouting Routing { get; init; } = CommandRouting.Immediate;
+
     /// <summary>Creates a definition whose text command is a bare verb with no arguments or options.</summary>
     /// <param name="name">The unique name used to identify and dispatch the command.</param>
     /// <param name="description">A human-readable description shown in help output.</param>
@@ -48,6 +54,10 @@ public sealed record CommandDefinition(
     /// The command map that gates source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.
     /// </param>
     /// <param name="aliases">Optional alternate names that also resolve to the command.</param>
+    /// <param name="routing">
+    /// The determinism class for a submitted text line. Defaults to <see cref="CommandRouting.Immediate"/>; pass
+    /// <see cref="CommandRouting.Simulation"/> for a command whose effect mutates the deterministic simulation.
+    /// </param>
     /// <returns>A new <see cref="CommandDefinition"/> backed by a bare-verb text command.</returns>
     public static CommandDefinition Verb(
         string name,
@@ -55,7 +65,8 @@ public sealed record CommandDefinition(
         CommandValueKind valueKind,
         Func<CommandContext, CommandResult> handler,
         string map = CommandMaps.Global,
-        IReadOnlyList<string>? aliases = null
+        IReadOnlyList<string>? aliases = null,
+        CommandRouting routing = CommandRouting.Immediate
     ) {
         return new CommandDefinition(
             Name: name,
@@ -69,6 +80,7 @@ public sealed record CommandDefinition(
             Map: map
         ) {
             Aliases = (aliases ?? []),
+            Routing = routing,
         };
     }
 }

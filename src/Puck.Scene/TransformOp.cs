@@ -9,7 +9,6 @@ namespace Puck.Scene;
 /// the JSON type discriminator. Adding a transform is a new derived record (carrying its own <see cref="Apply"/> and
 /// <see cref="Validate"/>) — never an edit to a central switch.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "op")]
 [JsonDerivedType(typeof(TranslateOp), typeDiscriminator: "translate")]
 [JsonDerivedType(typeof(RotateOp), typeDiscriminator: "rotate")]
 [JsonDerivedType(typeof(ScaleOp), typeDiscriminator: "scale")]
@@ -18,6 +17,7 @@ namespace Puck.Scene;
 [JsonDerivedType(typeof(SymmetryXOp), typeDiscriminator: "symmetryX")]
 [JsonDerivedType(typeof(SymmetryYOp), typeDiscriminator: "symmetryY")]
 [JsonDerivedType(typeof(SymmetryZOp), typeDiscriminator: "symmetryZ")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "op")]
 public abstract record TransformOp {
     // Applies this transform's builder verb. The point reset + every preceding op have already run.
     internal abstract void Apply(SdfProgramBuilder builder);

@@ -6,8 +6,7 @@ namespace Puck.Input.Devices;
 /// PlayStation cross, Switch B-position), and so on clockwise.
 /// </summary>
 [Flags]
-public enum GamepadButtons : uint
-{
+public enum GamepadButtons : uint {
     /// <summary>No buttons pressed.</summary>
     None = 0u,
     /// <summary>The bottom face button (Xbox A / PlayStation Cross / Switch B).</summary>

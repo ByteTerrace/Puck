@@ -31,11 +31,4 @@ public static class NativeDisplayKindSelector {
 
         return NativeDisplayKind.Unsupported;
     }
-    public static NativeDisplayKind SelectCurrent() {
-        return Select(
-            platform: Environment.OSVersion.Platform,
-            waylandDisplay: Environment.GetEnvironmentVariable(variable: "WAYLAND_DISPLAY"),
-            xdgSessionType: Environment.GetEnvironmentVariable(variable: "XDG_SESSION_TYPE")
-        );
-    }
 }

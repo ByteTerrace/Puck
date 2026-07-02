@@ -11,7 +11,7 @@ Our main focus right now is putting together a new minimal showcase in Puck.Demo
 
 ## Controller input
 
-The controller-input subsystem (Switch Pro / Xbox Series / PS5 DualSense, all flowing through
+The controller-input subsystem (Switch Pro / Xbox Series / PlayStation 5 DualSense, all flowing through
 `Puck.Commands`) lives in `src/Puck.Input`. See [`src/Puck.Input/README.md`](src/Puck.Input/README.md)
 for its architecture, the cross-family feature matrix, hardware-verified status, deferred work,
 and debugging notes — it is the handoff doc for picking the work up on another machine.

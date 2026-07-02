@@ -29,14 +29,11 @@ var produceOption = new Option<string>(name: "--produce") {
 var validateOption = new Option<bool>(name: "--validate") {
     Description = "Runs the cross-backend parity gate: renders both backends offscreen, diffs them tolerance-aware, writes artifacts/parity/, and exits with 0 (pass), 1 (gate-fail), or 2 (infra-fail). Forces a Vulkan host.",
 };
-var validateExportOption = new Option<bool>(name: "--validate-export") {
-    Description = "Runs the same-device export/import smoke test on both backends (Vulkan OPAQUE_WIN32 and Direct3D 12 shared handles) and exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
-};
-var validateComputeOption = new Option<bool>(name: "--validate-compute") {
-    Description = "Runs the Vulkan compute smoke test (dispatch gradient.comp into a storage image, read it back) and exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
-};
 var validateMiniActionOption = new Option<bool>(name: "--validate-mini-action") {
     Description = "Runs the MiniAction determinism + replay self-check (pure CPU: a scripted input run twice must produce identical per-tick state hashes, and a record->replay must reproduce them bit-for-bit) and exits (0 pass, 1 divergence, 2 infra-fail).",
+};
+var validateDeterminismOption = new Option<bool>(name: "--validate-determinism") {
+    Description = "Runs the engine determinism + replay self-check (pure CPU): verifies the fixed-point sim is correct, then records a per-tick CommandSnapshot stream, round-trips it through the neutral binary format, and replays it — asserting identical per-tick state hashes and that every command value kind survives the round-trip. Exits (0 pass, 1 divergence, 2 infra-fail).",
 };
 var miniActionOption = new Option<bool>(name: "--mini-action") {
     Description = "Renders the live MiniAction prototype: a controller-driven player box running around a room on a Vulkan host. Move with the left stick, jump with the South (A / Cross / B) button.",
@@ -59,23 +56,14 @@ var validateWorldOption = new Option<bool>(name: "--validate-world") {
 var validateWorldChildOption = new Option<bool>(name: "--validate-world-child") {
     Description = "Like --validate-world, but the bottom-right viewport is a hosted child node; captures both backends to artifacts/parity-world-child-*.png for the per-viewport child-surface seam. Forces a Vulkan host.",
 };
-var validateReverseShareOption = new Option<bool>(name: "--validate-reverse-share") {
-    Description = "Reverse cross-API share gate: Direct3D 12 owns a shared storage image, Vulkan imports it and computes a gradient INTO it, then Direct3D 12 reads it back. Exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
+var cameraOption = new Option<bool>(name: "--camera") {
+    Description = "Live camera content source: a bespoke Direct3D 12 device (a stand-in for a hardware camera's decode device) produces an animated feed into a shared image each frame, which the Vulkan host imports zero-copy and presents. The running skeleton the real camera fills later. Forces a Vulkan host.",
 };
-var validateIndirectOption = new Option<bool>(name: "--validate-indirect") {
-    Description = "Indirect-compute-dispatch gate: dispatches sdf-child via Dispatch and DispatchIndirect (GPU-read group counts) on BOTH Vulkan (vkCmdDispatchIndirect) and Direct3D 12 (ExecuteIndirect), asserting the two are bit-identical. Exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
+var validateCameraLiveOption = new Option<bool>(name: "--validate-camera-live") {
+    Description = "Live-camera hardware bring-up gate: opens the real default webcam through Media Foundation, polls until a frame arrives, and writes artifacts/camera-live.png (so RGB32 orientation/content can be verified). Lenient about the environment (no device/privacy-blocked yields skip); exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
 };
-var validateResampleOption = new Option<bool>(name: "--validate-resample") {
-    Description = "Sampled-image-in-compute gate: renders sdf-child then SAMPLES it in resample.comp (a combined-image-sampler on Vulkan, an SRV + static sampler on Direct3D 12) on BOTH backends — asserting a nearest identity resample equals the source bit-for-bit and a 2x linear upscale matches cross-backend. Exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
-};
-var validateViewportsOption = new Option<bool>(name: "--validate-viewports") {
-    Description = "Generic-compositor gate: composites a heterogeneous layout (a raw integer-copy pane beside a NEAREST-resampled pane) through the source-agnostic ViewportCompositorNode on BOTH backends, capturing each to a PNG and asserting they agree within 1 LSB. Exits (0 pass, 1 cross-backend diff, 2 infra-fail). Forces a Vulkan host.",
-};
-var validatePixelateOption = new Option<bool>(name: "--validate-pixelate") {
-    Description = "Retro-pixelation gate: composites a raw pane beside the same pattern wrapped in a PixelateNode (cell-blocked + posterized) through ViewportCompositorNode on BOTH backends, capturing each to a PNG and asserting they agree within 1 LSB. Exits (0 pass, 1 cross-backend diff, 2 infra-fail). Forces a Vulkan host.",
-};
-var validateCaptureOption = new Option<bool>(name: "--validate-capture") {
-    Description = "Live screen-capture gate: grabs one desktop frame via the DXGI Desktop Duplication API into a shared (NT-handle) BGRA GPU texture, reads it back to artifacts/capture-desktop.png, and asserts it carries real signal. Exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
+var validateCameraGpuOption = new Option<bool>(name: "--validate-camera-gpu") {
+    Description = "GPU-resident zero-copy camera gate (the M3 tier): opens the real webcam with a Media Foundation D3D manager so DXVA converts frames to ARGB32 on-GPU, copies them into D3D12-allocated simultaneous-access shared targets on a D3D11 decode device, then Vulkan-imports the latest target and reads it back — no frame ever visits host memory — writing artifacts/camera-gpu.png. Exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
 };
 var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
     DefaultValueFactory = static _ => -1,
@@ -95,7 +83,7 @@ var checkRunOption = new Option<string?>(name: "--check-run") {
 };
 var presentModeOption = new Option<string>(name: "--present-mode") {
     DefaultValueFactory = static _ => "vsync",
-    Description = "The swapchain present mode (both backends honor it): vsync (default), mailbox, or immediate.",
+    Description = "The swapchain present mode (both backends honor it): vsync (default), mailbox, immediate, or adaptive (VRR).",
 };
 var surfaceFormatOption = new Option<string>(name: "--surface-format") {
     DefaultValueFactory = static _ => "r8g8b8a8",
@@ -113,16 +101,12 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     runOption,
     surfaceFormatOption,
     validateOption,
-    validateExportOption,
-    validateComputeOption,
     validateMiniActionOption,
+    validateDeterminismOption,
     miniActionOption,
-    validateReverseShareOption,
-    validateIndirectOption,
-    validateResampleOption,
-    validateViewportsOption,
-    validatePixelateOption,
-    validateCaptureOption,
+    validateCameraLiveOption,
+    validateCameraGpuOption,
+    cameraOption,
     validateWorldOption,
     validateWorldChildOption,
     worldOption,
@@ -131,19 +115,21 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     worldRtOption,
 };
 var parseResult = launchCommand.Parse(args);
+// Fail loudly on an unrecognized/invalid option rather than silently falling through to the default showcase (a
+// removed --validate-* flag, a typo, or a bad value). Otherwise a stale script or CI job that still passes a retired
+// gate flag would get a 30-second showcase window and a misleading exit 0. Headless utilities are checked next.
+if (!DemoRootNode.ReportParseErrors(parseResult: parseResult)) {
+    return 1;
+}
 // Headless utilities short-circuit before any window/host is created.
 var emitSchemaPath = parseResult.GetValue(emitSchemaOption);
-
 if (emitSchemaPath is not null) {
     return DemoRootNode.EmitSchema(path: emitSchemaPath);
 }
-
 var checkRunPath = parseResult.GetValue(checkRunOption);
-
 if (checkRunPath is not null) {
     return DemoRootNode.CheckRunDocument(runPath: checkRunPath);
 }
-
 var backend = parseResult.GetValue(backendOption) ?? "vulkan";
 var capturePath = parseResult.GetValue(captureOption);
 var exitAfterSeconds = parseResult.GetValue(exitAfterSecondsOption);
@@ -166,16 +152,12 @@ var runDocument = (runPath is not null)
         Produce = produceBackend,
         SurfaceFormat = surfaceFormat,
         Validate = parseResult.GetValue(validateOption),
-        ValidateCompute = parseResult.GetValue(validateComputeOption),
         ValidateMiniAction = parseResult.GetValue(validateMiniActionOption),
+        ValidateDeterminism = parseResult.GetValue(validateDeterminismOption),
         MiniAction = parseResult.GetValue(miniActionOption),
-        ValidateExport = parseResult.GetValue(validateExportOption),
-        ValidateReverseShare = parseResult.GetValue(validateReverseShareOption),
-        ValidateIndirect = parseResult.GetValue(validateIndirectOption),
-        ValidateResample = parseResult.GetValue(validateResampleOption),
-        ValidateViewports = parseResult.GetValue(validateViewportsOption),
-        ValidatePixelate = parseResult.GetValue(validatePixelateOption),
-        ValidateCapture = parseResult.GetValue(validateCaptureOption),
+        Camera = parseResult.GetValue(cameraOption),
+        ValidateCameraLive = parseResult.GetValue(validateCameraLiveOption),
+        ValidateCameraGpu = parseResult.GetValue(validateCameraGpuOption),
         ValidateWorld = parseResult.GetValue(validateWorldOption),
         ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
         World = parseResult.GetValue(worldOption),
@@ -210,6 +192,7 @@ services.AddLauncherTerminal();
 // The launcher run loop is platform-agnostic; the composition root supplies the concrete native windowing (the window
 // factory + clipboard + display probe) it resolves from the container at runtime.
 services.AddPlatformWindowing();
+services.AddCameraCapture();
 // Bind the concrete unmanaged allocator here, at the composition root — the Vulkan backend depends only on the
 // IAllocator abstraction and resolves it from the container.
 services.AddPuckAllocator();

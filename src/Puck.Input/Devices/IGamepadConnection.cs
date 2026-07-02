@@ -8,8 +8,7 @@ namespace Puck.Input.Devices;
 /// surface the manager drives: a stable identity, a player slot, a coalescer the frame thread drains, an
 /// output handle, and a fault flag for pruning. The transport owns how the coalescer is fed.
 /// </summary>
-public interface IGamepadConnection : IDisposable
-{
+public interface IGamepadConnection : IDisposable {
     /// <summary>The device's stable, content-addressed identity.</summary>
     InputDeviceId DeviceId { get; }
 

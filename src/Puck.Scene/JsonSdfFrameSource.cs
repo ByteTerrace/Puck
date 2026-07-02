@@ -43,7 +43,10 @@ public sealed class JsonSdfFrameSource : ISdfFrameSource {
     }
 
     /// <inheritdoc/>
-    public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds) {
+    public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        // A data-driven static/orbit scene: presentation state is a pure function of elapsed time, so the inter-tick
+        // interpolation alpha is not needed here.
+        _ = interpolationAlpha;
         m_time += deltaSeconds;
 
         var views = new SdfViewSnapshot[m_cameras.Length];

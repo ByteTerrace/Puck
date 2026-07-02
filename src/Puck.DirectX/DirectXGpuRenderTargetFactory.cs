@@ -12,7 +12,7 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuRenderTargetFactory : IGpuRenderTargetFactory {
     /// <inheritdoc/>
-    public IGpuRenderTarget Create(IGpuDeviceContext deviceContext, uint format, uint width, uint height) =>
+    public IGpuRenderTarget Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
         new DirectXGpuRenderTarget(
             deviceContext: (IDirectXDeviceContext)deviceContext,
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),

@@ -12,14 +12,14 @@ namespace Puck.Input.Devices;
 /// reads and writes for a device are serialized on it; input flows handle → coalescer, output flows queue →
 /// handle.
 /// </summary>
-internal sealed class GamepadDevice : IGamepadConnection
-{
+internal sealed class GamepadDevice : IGamepadConnection {
     private const int ReportBufferSize = 64;            // fallback when the device reports no input length
     private const int StartupPollMilliseconds = 100;    // bound reads before streaming starts so the watchdog can fire
 
     private static readonly long StreamingDeadlineTicks = (5L * Stopwatch.Frequency);  // fault if never streaming
     private readonly GamepadCoalescer m_coalescer = new();
     private readonly CancellationTokenSource m_cancellation = new();
+    private readonly IInputClock? m_clock;
     private readonly Action<string>? m_diagnostics;
     private readonly IHidDevice m_hid;
     private readonly GamepadOutput m_output;
@@ -29,6 +29,11 @@ internal sealed class GamepadDevice : IGamepadConnection
     private volatile bool m_faulted;
     private bool m_rumbleActive;
     private long m_rumbleExpiry = long.MaxValue;
+    private bool m_scheduledTriggerActive;
+    private ulong m_scheduledTriggerFireTick;
+    private TriggerEffectSpec m_scheduledTriggerLeft;
+    private TriggerEffectSpec m_scheduledTriggerRight;
+    private ulong m_sequence;
     private Task? m_loop;
 
     public GamepadDevice(
@@ -36,7 +41,8 @@ internal sealed class GamepadDevice : IGamepadConnection
         IGamepadParser parser,
         InputDeviceId deviceId,
         int playerIndex,
-        Action<string>? diagnostics = null
+        Action<string>? diagnostics = null,
+        IInputClock? clock = null
     ) {
         ArgumentNullException.ThrowIfNull(hid);
         ArgumentNullException.ThrowIfNull(parser);
@@ -45,6 +51,7 @@ internal sealed class GamepadDevice : IGamepadConnection
 
         DeviceId = deviceId;
         PlayerIndex = playerIndex;
+        m_clock = clock;
         m_diagnostics = diagnostics;
         m_hid = hid;
         m_output = new GamepadOutput(
@@ -85,6 +92,10 @@ internal sealed class GamepadDevice : IGamepadConnection
             capabilities |= GamepadOutputCapabilities.Led;
         }
 
+        if (parser is ITriggerEffectParser) {
+            capabilities |= GamepadOutputCapabilities.TriggerEffect;
+        }
+
         return capabilities;
     }
 
@@ -122,15 +133,13 @@ internal sealed class GamepadDevice : IGamepadConnection
                         cancellationToken: cancellationToken,
                         timeoutInMilliseconds: StartupPollMilliseconds
                     );
-                }
-                else if (m_rumbleActive && (m_rumbleExpiry != long.MaxValue)) {
+                } else if (m_rumbleActive && (m_rumbleExpiry != long.MaxValue)) {
                     read = await m_hid.ReadAsync(
                         buffer: buffer,
                         cancellationToken: cancellationToken,
                         timeoutInMilliseconds: RemainingMilliseconds(expiryTimestamp: m_rumbleExpiry)
                     );
-                }
-                else {
+                } else {
                     read = await m_hid.ReadAsync(
                         buffer: buffer,
                         cancellationToken: cancellationToken
@@ -139,14 +148,20 @@ internal sealed class GamepadDevice : IGamepadConnection
 
                 if (0 < read) {
                     if (m_parser.TryParse(report: buffer.AsSpan(start: 0, length: read), state: out var state)) {
+                        // Stamp the report's arrival on the I/O thread — the earliest accurate point — and a
+                        // per-device sequence, so the coalescer can carry true sub-frame edge times forward and a
+                        // drain can order what it folded. The parser stays pure; timing is layered on here.
+                        state = state with {
+                            ArrivalTicks = (m_clock?.NowTicks ?? 0UL),
+                            SequenceNumber = ++m_sequence,
+                        };
                         m_coalescer.Update(state: in state);
 
                         if (!firstParsed) {
                             firstParsed = true;
                             m_diagnostics?.Invoke($"[gamepad] {Type} streaming (first parsed report, len={read})");
                         }
-                    }
-                    else if (!loggedUnparsed) {
+                    } else if (!loggedUnparsed) {
                         // Data is arriving but not in the expected report shape — e.g. the report-mode subcommand
                         // didn't take and the controller is still sending its simple (0x3F) report.
                         loggedUnparsed = true;
@@ -161,11 +176,9 @@ internal sealed class GamepadDevice : IGamepadConnection
                     throw new TimeoutException(message: $"{Type} did not begin streaming within {StreamingDeadlineTicks / Stopwatch.Frequency}s of init");
                 }
             }
-        }
-        catch (OperationCanceledException) {
+        } catch (OperationCanceledException) {
             // Expected on disposal.
-        }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested) {
+        } catch (Exception exception) when (!cancellationToken.IsCancellationRequested) {
             // The device disconnected, errored mid-I/O (e.g. ERROR_DEVICE_NOT_CONNECTED), or never streamed.
             // Mark it faulted so the manager prunes it instead of leaving a zombie that replays stale state.
             m_faulted = true;
@@ -195,6 +208,22 @@ internal sealed class GamepadDevice : IGamepadConnection
                     await led.SetLedAsync(color: command.Led, cancellationToken: cancellationToken);
 
                     break;
+                case GamepadOutputKind.TriggerEffect when (m_parser is ITriggerEffectParser triggerEffect):
+                    // Apply immediately when unscheduled, the clock is absent, or its fire tick has already passed;
+                    // otherwise hold it until the capture clock reaches that tick (serviced below). A new effect
+                    // supersedes any still-pending schedule.
+                    if ((command.ScheduleTick == 0UL) || (m_clock is null) || (m_clock.NowTicks >= command.ScheduleTick)) {
+                        m_scheduledTriggerActive = false;
+
+                        await triggerEffect.SetTriggerEffectAsync(left: command.TriggerEffectLeft, right: command.TriggerEffectRight, cancellationToken: cancellationToken);
+                    } else {
+                        m_scheduledTriggerActive = true;
+                        m_scheduledTriggerFireTick = command.ScheduleTick;
+                        m_scheduledTriggerLeft = command.TriggerEffectLeft;
+                        m_scheduledTriggerRight = command.TriggerEffectRight;
+                    }
+
+                    break;
                 case GamepadOutputKind.Raw when (command.Raw is { } raw):
                     await m_hid.WriteAsync(buffer: raw, cancellationToken: cancellationToken);
 
@@ -209,6 +238,14 @@ internal sealed class GamepadDevice : IGamepadConnection
         // Honor a finite rumble duration by returning the motors to rest once it elapses.
         if (m_rumbleActive && (Stopwatch.GetTimestamp() >= m_rumbleExpiry)) {
             await ApplyRumbleAsync(effect: RumbleEffect.Off, cancellationToken: cancellationToken);
+        }
+
+        // Fire a scheduled trigger effect once the capture clock reaches its tick. This runs each loop iteration
+        // (≈ once per arriving report, so sub-frame on a streaming pad); the device clock is the timing authority.
+        if (m_scheduledTriggerActive && (m_clock is not null) && (m_clock.NowTicks >= m_scheduledTriggerFireTick) && (m_parser is ITriggerEffectParser scheduledParser)) {
+            m_scheduledTriggerActive = false;
+
+            await scheduledParser.SetTriggerEffectAsync(left: m_scheduledTriggerLeft, right: m_scheduledTriggerRight, cancellationToken: cancellationToken);
         }
     }
     private async ValueTask ApplyRumbleAsync(RumbleEffect effect, CancellationToken cancellationToken) {
@@ -225,8 +262,7 @@ internal sealed class GamepadDevice : IGamepadConnection
         if ((0f >= effect.HighFrequency) && (0f >= effect.LowFrequency)) {
             m_rumbleActive = false;
             m_rumbleExpiry = long.MaxValue;
-        }
-        else {
+        } else {
             m_rumbleActive = true;
             m_rumbleExpiry = ((0u < effect.DurationMilliseconds)
                 ? (Stopwatch.GetTimestamp() + ((long)(effect.DurationMilliseconds * (Stopwatch.Frequency / 1000.0))))
@@ -240,8 +276,7 @@ internal sealed class GamepadDevice : IGamepadConnection
 
         try {
             m_loop?.Wait(timeout: TimeSpan.FromMilliseconds(value: 250));
-        }
-        catch (AggregateException) {
+        } catch (AggregateException) {
             // The loop faulted or was canceled during teardown; nothing actionable here.
         }
 

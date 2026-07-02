@@ -27,4 +27,20 @@ public interface IVulkanFramePresentationApi {
     /// <param name="fenceHandle">The native <c>VkFence</c> handle signaled when the submission completes.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the submission succeeded.</returns>
     VkResult Submit(nint deviceHandle, nint graphicsQueueHandle, nint commandBufferHandle, nint fenceHandle);
+    /// <summary>Whether the device exposes <c>vkWaitForPresentKHR</c> (i.e. <c>VK_KHR_present_wait</c> was enabled at device creation).</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <returns><see langword="true"/> when present-wait is available, enabling closed-loop present timing.</returns>
+    bool SupportsPresentWait(nint deviceHandle);
+    /// <summary>Blocks until the present identified by <paramref name="presentId"/> has been displayed, or the bounded timeout elapses.</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="swapchainHandle">The native <c>VkSwapchainKHR</c> the present was queued against.</param>
+    /// <param name="presentId">The present id (from a prior present's <c>VkPresentIdKHR</c>) to wait for.</param>
+    /// <param name="timeoutNanoseconds">A bound, in nanoseconds, so a missed present can never hang the caller.</param>
+    /// <returns><see cref="VkResult.Success"/> when the present was confirmed; <see cref="VkResult.Timeout"/> or a swapchain status code otherwise.</returns>
+    VkResult WaitForPresent(nint deviceHandle, nint swapchainHandle, ulong presentId, ulong timeoutNanoseconds);
+    /// <summary>Drops any cached per-device function pointers for <paramref name="deviceHandle"/>, so a later device reusing
+    /// the same handle value re-resolves them rather than calling through pointers bound to the destroyed device. Safe to
+    /// call with a handle that was never cached (a no-op).</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle whose cached entry points should be discarded.</param>
+    void InvalidateDevice(nint deviceHandle);
 }

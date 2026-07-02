@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
-
+using Puck.Abstractions.Presentation;
 namespace Puck.Demo;
 
 /// <summary>
@@ -11,13 +10,14 @@ namespace Puck.Demo;
 internal static class DemoPresentation {
     /// <summary>Registers the neutral presentation preferences parsed from the demo flags.</summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="presentMode">The raw <c>--present-mode</c> value (vsync/mailbox/immediate).</param>
+    /// <param name="presentMode">The raw <c>--present-mode</c> value (vsync/mailbox/immediate/adaptive).</param>
     /// <param name="surfaceFormat">The raw <c>--surface-format</c> value (r8g8b8a8/b8g8r8a8).</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddDemoPresentation(this IServiceCollection services, string presentMode, string surfaceFormat) {
         var mode = presentMode.ToLowerInvariant() switch {
             "mailbox" => PresentMode.Mailbox,
             "immediate" => PresentMode.Immediate,
+            "adaptive" => PresentMode.Adaptive,
             _ => PresentMode.Vsync,
         };
         var format = surfaceFormat.ToLowerInvariant() switch {

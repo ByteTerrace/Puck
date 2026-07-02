@@ -252,6 +252,46 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         infoQueue->ClearStoredMessages();
     }
 
+    /// <summary>Recreates the device, command queue, and idle fence IN PLACE after a device removal — preserving this
+    /// instance's identity so the published <c>IGpuDeviceContext</c> capability (and every node that resolved it) stays
+    /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the
+    /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
+    /// debug layer is NOT re-enabled here (it cannot be toggled per-process and can poison creation on some configs);
+    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does.</summary>
+    public void Recreate() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (0 != m_idleFence) {
+            _ = ((IUnknown*)m_idleFence)->Release();
+            m_idleFence = 0;
+        }
+
+        if (!m_idleFenceEvent.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_idleFenceEvent);
+            m_idleFenceEvent = HANDLE.Null;
+        }
+
+        if (0 != m_commandQueue) {
+            _ = ((IUnknown*)m_commandQueue)->Release();
+            m_commandQueue = 0;
+        }
+
+        if (0 != m_infoQueue) {
+            _ = ((IUnknown*)m_infoQueue)->Release();
+            m_infoQueue = 0;
+        }
+
+        m_device?.Dispose();
+        m_device = null;
+        m_idleFenceValue = 1;
+
+        // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
+        EnsureCreated();
+    }
+
     /// <summary>Releases the command queue and the owned device. Safe to call more than once.</summary>
     public void Dispose() {
         if (m_disposed) {

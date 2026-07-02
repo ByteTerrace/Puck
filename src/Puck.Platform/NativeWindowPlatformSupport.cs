@@ -1,6 +1,6 @@
 namespace Puck.Platform;
 
-public sealed class NativeWindowPlatformSupport(INativeDisplayEnvironment nativeDisplayEnvironment) : INativeWindowPlatformSupport {
+internal sealed class NativeWindowPlatformSupport(INativeDisplayEnvironment nativeDisplayEnvironment) : INativeWindowPlatformSupport {
     public static bool HasWindowBackend(NativeDisplayKind displayKind) {
         return (displayKind is NativeDisplayKind.Win32
             or NativeDisplayKind.Wayland

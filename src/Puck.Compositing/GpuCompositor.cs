@@ -1,4 +1,4 @@
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Assets;
 
 namespace Puck.Compositing;
@@ -69,7 +69,6 @@ public sealed class GpuCompositor {
             deviceHandle: deviceHandle,
             framebufferHandle: target.FramebufferHandle,
             height: target.Height,
-            pipelineHandle: Resolve(pipelines: pipelines, pipelineId: drawCommands[0].PipelineId).Handle,
             renderPassHandle: target.RenderPassHandle,
             width: target.Width
         );

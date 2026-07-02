@@ -1,5 +1,7 @@
 using System.Numerics;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
+using Puck.Commands;
 using Puck.Hosting;
 using Puck.Input;
 
@@ -23,7 +25,6 @@ internal sealed class MiniActionRenderNode : IRenderNode {
         Name: "mini-action",
         SurfaceId: SurfaceId.New()
     );
-
     private MiniActionWorld? m_world;
     private IPlayerIntentSource? m_intentSource;
     private IRosterEventSource? m_rosterSource;
@@ -61,8 +62,12 @@ internal sealed class MiniActionRenderNode : IRenderNode {
 
         var tickSeconds = (float)EngineTicks.ToSeconds(ticks: context.StepTicks);
         var room = MiniActionRoom.Default;
+        // PUCK_MINIACTION_CELL places the whole room at a far world cell (applied to X and Z) to demonstrate the
+        // planet-scale coordinate path: the sim is cell-agnostic (identical local motion) and the floating-origin render
+        // seam keeps it crisp. Default 0 = the origin cell.
+        var farCell = DebugSpawnCell();
 
-        m_world = new MiniActionWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u);
+        m_world = new MiniActionWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u, spawnCellX: farCell, spawnCellZ: farCell);
 
         var debugPlayers = DebugPlayerCount();
 
@@ -76,10 +81,17 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             m_intentSource = new ScriptedIntentSource(script: DebugScript);
             m_rosterSource = new ScriptedRosterEventSource(schedule: []);
         } else if (m_serviceProvider.GetService(serviceType: typeof(GamepadManager)) is GamepadManager manager) {
-            // Live: controllers join/leave at runtime; each binds to a player and drives it per-device.
+            // Live: controllers join/leave at runtime; each binds to a player and drives it per-device. Input
+            // flows through the engine's deterministic router (RouterIntentSource) when the capture clock is
+            // available; LocalIntentSource (the direct manager drain) remains the fallback.
             var registry = new ControllerPlayerRegistry();
 
-            m_intentSource = new LocalIntentSource(manager: manager, registry: registry, world: m_world);
+            if (m_serviceProvider.GetService(serviceType: typeof(IInputClock)) is IInputClock clock) {
+                m_intentSource = new RouterIntentSource(clock: clock, manager: manager, registry: registry, world: m_world);
+            } else {
+                m_intentSource = new LocalIntentSource(manager: manager, registry: registry, world: m_world);
+            }
+
             m_rosterSource = new LocalRosterEventSource(manager: manager, registry: registry);
         } else {
             // No gamepad service: an empty room (overview camera) until input is available.
@@ -102,7 +114,6 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             width: m_width
         );
     }
-
     private void AdvanceSimulation(in FrameContext context) {
         if (context.StepTicks == 0UL) {
             return;
@@ -131,11 +142,13 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             m_world.Advance(intentsBySlot: intents);
         }
     }
-
     private static int DebugPlayerCount() {
         return ((int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_MINIACTION_DEBUG_PLAYERS"), out var count))
             ? Math.Clamp(count, 0, MiniActionWorld.MaxPlayers)
             : 0);
+    }
+    private static long DebugSpawnCell() {
+        return (long.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_MINIACTION_CELL"), out var cell) ? cell : 0L);
     }
 
     // Each debug player walks toward its corner so the swarm spreads past the split threshold.
@@ -147,13 +160,18 @@ internal sealed class MiniActionRenderNode : IRenderNode {
             JumpReleased: false
         );
     }
-
     private static Guid DeterministicGuid(uint salt) {
         var bytes = new byte[16];
 
         BitConverter.TryWriteBytes(destination: bytes, value: (0xA571_0000u | salt));
 
         return new Guid(b: bytes);
+    }
+
+    /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // Forward to the SDF producer (which owns all the GPU resources); the CPU-only world simulation is untouched.
+        m_producer?.OnDeviceLost();
     }
 
     /// <inheritdoc/>

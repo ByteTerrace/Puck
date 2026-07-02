@@ -1,7 +1,8 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
 
@@ -18,7 +19,7 @@ namespace Puck.Demo;
 /// <see cref="ISdfFrameSource"/>. The current kernel renders the instance BOUNDS (the SDF march integration is later).
 /// </summary>
 internal sealed class RtWorldProducerNode : IRenderNode {
-    private const uint Format = GpuPixelFormat.R8G8B8A8Unorm;
+    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const uint InstanceCapacity = 64; // the instance buffer / TLAS capacity; the scene fills as many as it has
     private const int PushConstantByteLength = sizeof(float) * 24; // RtParams: uint2 extent + uint2 pad + 4x float4 camera + float4 ground plane
     private const uint OutputBindingIndex = 0; // RWTexture2D at binding 0 / register(u0)
@@ -37,7 +38,6 @@ internal sealed class RtWorldProducerNode : IRenderNode {
     private readonly byte[] m_pushConstant = new byte[PushConstantByteLength];
     private readonly IServiceProvider m_serviceProvider;
     private readonly uint m_width;
-
     private IGpuAccelerationStructure? m_acceleration;
     private bool m_blasBuilt;
     private bool m_captured;
@@ -104,7 +104,7 @@ internal sealed class RtWorldProducerNode : IRenderNode {
             return default;
         }
 
-        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds);
+        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: (float)context.DeltaSeconds, interpolationAlpha: (float)context.InterpolationAlpha);
 
         EnsureResources(gpuDevice: gpuDevice, frame: frame);
 
@@ -215,14 +215,7 @@ internal sealed class RtWorldProducerNode : IRenderNode {
         // so adding a binding can't silently under-provision it.
         var poolSizes = GpuDescriptorPoolSizes.ForSets(bindings);
 
-        m_pool = m_descriptorAllocator.CreatePool(
-            accelerationStructureCount: poolSizes.AccelerationStructureCount,
-            combinedImageSamplerCount: poolSizes.CombinedImageSamplerCount,
-            deviceHandle: m_deviceHandle,
-            maxSets: poolSizes.MaxSets,
-            storageBufferCount: poolSizes.StorageBufferCount,
-            storageImageCount: poolSizes.StorageImageCount
-        );
+        m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
         m_set = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_computePipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
 
         m_descriptorAllocator.WriteStorageImage(arrayElement: 0, binding: OutputBindingIndex, descriptorSetHandle: m_set, deviceHandle: m_deviceHandle, imageViewHandle: m_storageImage.ImageViewHandle);
@@ -249,7 +242,6 @@ internal sealed class RtWorldProducerNode : IRenderNode {
         floats[16] = camera.Forward.X; floats[17] = camera.Forward.Y; floats[18] = camera.Forward.Z; floats[19] = 0f;
         floats[20] = m_groundPlane.X; floats[21] = m_groundPlane.Y; floats[22] = m_groundPlane.Z; floats[23] = m_groundPlane.W;
     }
-
     private void Render() {
         var recorder = m_computeRecorder!;
         var commandBuffer = m_commandPool!.CommandBufferHandle;
@@ -310,7 +302,6 @@ internal sealed class RtWorldProducerNode : IRenderNode {
         m_blasBuilt = true;
         m_imageInitialized = true;
     }
-
     private ReadOnlyMemory<byte> ReadPixels() {
         m_readback ??= m_gpu!.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext!);
 
@@ -332,7 +323,8 @@ internal sealed class RtWorldProducerNode : IRenderNode {
 
         m_disposed = true;
         // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget (nothing fences them).
-        m_deviceContext?.WaitIdle();
+        // Tolerant of an already-lost device (a device-loss teardown drains nothing).
+        m_deviceContext.TryWaitIdle();
 
         m_readback?.Dispose();
         m_commandPool?.Dispose();

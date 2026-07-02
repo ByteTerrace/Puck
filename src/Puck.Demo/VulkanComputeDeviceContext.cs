@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Windowing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
@@ -102,8 +103,6 @@ internal sealed class VulkanComputeDeviceContext : IVulkanDeviceContext, IGpuDev
 
     /// <inheritdoc/>
     public VulkanInstance Instance => m_instance;
-    /// <inheritdoc/>
-    public bool IsInitialized => !m_disposed;
     /// <inheritdoc/>
     public VulkanLogicalDevice LogicalDevice => m_logicalDevice;
     /// <inheritdoc/>

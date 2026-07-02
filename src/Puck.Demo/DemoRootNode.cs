@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Hosting;
@@ -13,6 +14,26 @@ namespace Puck.Demo;
 /// composition-graph producer. Kept out of <c>Program</c> so the entry point stays loosely coupled.
 /// </summary>
 internal static class DemoRootNode {
+    /// <summary>Writes any CLI parse errors (an unrecognized/retired flag, a typo, or a bad option value) to stderr.
+    /// Kept out of the top-level <c>Program</c> so the entry point does not couple to the parser's error types.</summary>
+    /// <param name="parseResult">The command-line parse result.</param>
+    /// <returns><see langword="true"/> when the parse was clean; <see langword="false"/> when errors were reported (the
+    /// caller should exit non-zero rather than fall through to the default showcase).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="parseResult"/> is <see langword="null"/>.</exception>
+    public static bool ReportParseErrors(ParseResult parseResult) {
+        ArgumentNullException.ThrowIfNull(parseResult);
+
+        if (parseResult.Errors.Count == 0) {
+            return true;
+        }
+
+        foreach (var error in parseResult.Errors) {
+            Console.Error.WriteLine(value: $"[args] {error.Message}");
+        }
+
+        return false;
+    }
+
     /// <summary>Whether a fuzzing run names a seed RANGE with no single-seed override — which must go through the
     /// process-isolated <c>tools fuzz</c> loop rather than a single in-process <c>--run</c> (a malformed program can TDR
     /// the GPU, so each seed runs in its own process). Logs the redirect when true.</summary>
@@ -159,20 +180,19 @@ internal static class DemoRootNode {
     }
 
     // Maps a validation gate name to its node. The 'world' gate is data-driven: it renders THIS document's scene on
-    // both backends via the injected frame-source factory, with optional threshold + artifact-dir overrides. The other
-    // four gates are self-contained smoke tests. (Fuzzing a GENERATED scene is the separate `fuzzing` section.)
+    // both backends via the injected frame-source factory, with optional threshold + artifact-dir overrides. The
+    // remaining gates are the ones with NO Puck.Post equivalent, kept in the demo on purpose: the showcase debug-mode
+    // parity sweep, the two real-webcam hardware bring-up gates, and the CPU determinism self-checks over the actual
+    // MiniAction / engine command sims. (The cross-backend engine gates whose coverage now lives in Puck.Post's POST
+    // battery — export/compute/reverse-share/indirect/resample/viewports/pixelate/capture/camera/genlock/cli-determinism
+    // — were retired; the POST is their single home. Fuzzing a GENERATED scene is the separate `fuzzing` section.)
     private static IRenderNode CreateValidationNode(ValidationDocument validation, PuckRunDocument document, ParityResult result, IServiceProvider serviceProvider) {
         return validation.Gate.ToLowerInvariant() switch {
             "parity" => new ParityValidationNode(result: result, serviceProvider: serviceProvider),
-            "export" => new ExportRoundTripNode(result: result, serviceProvider: serviceProvider),
-            "compute" => new ComputeValidationNode(result: result, serviceProvider: serviceProvider),
-            "reverse" => new CrossShareReverseNode(result: result, serviceProvider: serviceProvider),
-            "indirect" => new IndirectDispatchValidationNode(result: result, serviceProvider: serviceProvider),
-            "resample" => new ResampleValidationNode(result: result, serviceProvider: serviceProvider),
-            "viewports" => new ViewportParityNode(result: result, serviceProvider: serviceProvider),
-            "pixelate" => new PixelateParityNode(result: result, serviceProvider: serviceProvider),
-            "capture" => new CaptureValidationNode(result: result, serviceProvider: serviceProvider),
+            "camera-live" => new CameraLiveProbeNode(result: result, serviceProvider: serviceProvider),
+            "camera-gpu" => new CameraGpuValidationNode(result: result, serviceProvider: serviceProvider),
             "mini-action" => new MiniAction.MiniActionDeterminismNode(result: result),
+            "determinism" => new Replay.DeterminismGateNode(result: result),
             "world" => new WorldParityNode(
                 artifactDir: validation.ArtifactDir,
                 frameSourceFactory: () => RunDocument.CreateFrameSource(document: document),
@@ -316,7 +336,7 @@ internal static class DemoRootNode {
     // Picks the live compute-world root node: hosted on Direct3D 12 (same-device on the D3D12 window, or — with
     // produce:"vulkan" — a bespoke Vulkan producer whose content the D3D12 host imports zero-copy) when requested,
     // otherwise the Vulkan-hosted path (same-device on Vulkan, or D3D12-produced + Vulkan-imported by default).
-    internal static IRenderNode CreateWorldRootNode(IServiceProvider serviceProvider, bool withChild, bool onDirectX, string? produceBackend, string? capturePath, ISdfFrameSource frameSource, uint width = 960, uint height = 600) {
+    internal static IRenderNode CreateWorldRootNode(IServiceProvider serviceProvider, bool withChild, bool onDirectX, string? produceBackend, string? capturePath, ISdfFrameSource frameSource, uint width = 960, uint height = 600, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null) {
         if (
             onDirectX &&
             OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)
@@ -325,14 +345,15 @@ internal static class DemoRootNode {
             // producer renders into a host-owned shared image the D3D12 window blits. produce omitted/anything else
             // runs the world same-device on Direct3D 12 (#2).
             return string.Equals(produceBackend, "vulkan", StringComparison.OrdinalIgnoreCase)
-                ? new VulkanComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, serviceProvider: serviceProvider, width: width, withChild: withChild)
-                : new DirectXComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, hostProvider: serviceProvider, width: width, withChild: withChild);
+                ? new VulkanComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, liveSources: liveSources, serviceProvider: serviceProvider, width: width, withChild: withChild)
+                : new DirectXComputeWorldHostNode(capturePath: capturePath, frameSource: frameSource, height: height, hostProvider: serviceProvider, liveSources: liveSources, width: width, withChild: withChild);
         }
 
         return CreateWorldNode(
             capturePath: capturePath,
             frameSource: frameSource,
             height: height,
+            liveSources: liveSources,
             produceBackend: produceBackend,
             serviceProvider: serviceProvider,
             width: width,
@@ -344,19 +365,19 @@ internal static class DemoRootNode {
     // and the Vulkan host imports the shared result zero-copy. --produce vulkan (or a non-Windows OS, where there is
     // no Direct3D 12) runs it same-device on the Vulkan host instead. With a hosted child, the bottom-right viewport
     // shows that child node's surface instead of an SDF camera.
-    internal static IRenderNode CreateWorldNode(IServiceProvider serviceProvider, string? produceBackend, string? capturePath, bool withChild, ISdfFrameSource frameSource, uint width = 960, uint height = 600) {
+    internal static IRenderNode CreateWorldNode(IServiceProvider serviceProvider, string? produceBackend, string? capturePath, bool withChild, ISdfFrameSource frameSource, uint width = 960, uint height = 600, IReadOnlyDictionary<int, LiveCameraSource>? liveSources = null) {
         if (
             OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240) &&
             !string.Equals(produceBackend, "vulkan", StringComparison.OrdinalIgnoreCase)
         ) {
-            return new CrossBackendComputeWorldNode(capturePath: capturePath, frameSource: frameSource, height: height, serviceProvider: serviceProvider, width: width, withChild: withChild);
+            return new CrossBackendComputeWorldNode(capturePath: capturePath, frameSource: frameSource, height: height, liveSources: liveSources, serviceProvider: serviceProvider, width: width, withChild: withChild);
         }
 
         return new WorldProducerNode(
             beamBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-beam.comp.spv")),
             cullArgsBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-cull-args.comp.spv")),
             capturePath: capturePath,
-            children: (withChild ? ChildSurfaceNode.CreateWorldChildren(serviceProvider: serviceProvider, directX: false) : null),
+            children: WorldChildren.Build(cameraServices: serviceProvider, directX: false, gpuServices: serviceProvider, liveSources: liveSources, testChild: withChild),
             compositeBytecode: File.ReadAllBytes(path: Path.Combine(path1: CrossBackendShowcase.ShaderDirectory, path2: "sdf-world-composite.comp.spv")),
             frameSource: frameSource,
             height: height,

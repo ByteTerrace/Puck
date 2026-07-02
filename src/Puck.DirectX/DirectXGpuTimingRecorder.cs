@@ -17,7 +17,7 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
     }
 
     /// <inheritdoc/>
-    public void WriteTimestamp(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint queryIndex, uint stageFlags) {
+    public void WriteTimestamp(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint queryIndex, GpuTimingStage stageFlags) {
         var commandList = (ID3D12GraphicsCommandList*)DecodeCommand(commandBufferHandle: commandBufferHandle).CommandList;
         var pool = DecodePool(poolHandle: poolHandle);
 

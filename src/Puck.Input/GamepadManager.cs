@@ -17,16 +17,16 @@ namespace Puck.Input;
 /// GameInput Xbox backend — are supplied as an <see cref="IGamepadAcquisitionSource"/> that owns its own thread
 /// and publishes connections through the manager's registry.
 /// </remarks>
-public sealed class GamepadManager : IDisposable
-{
+public sealed class GamepadManager : IDisposable {
     private const ushort VendorMicrosoft = 1118;
     private const ushort VendorSony = 1356;
     private const ushort VendorNintendo = 1406;
-    private const ushort ProductSwitchProUsb = 8201;
-    private const ushort ProductDualSenseUsb = 3302;   // 0x0CE6
+    private const ushort ProductSwitchPro = 8201;      // 0x2009 (same over USB and Bluetooth)
+    private const ushort ProductDualSense = 3302;      // 0x0CE6 (same over USB and Bluetooth)
 
     private static readonly TimeSpan RescanInterval = TimeSpan.FromSeconds(value: 1.5);
     private readonly IGamepadAcquisitionSource? m_acquisitionSource;
+    private readonly IInputClock? m_clock;
     private readonly Action<string>? m_diagnostics;
     private readonly List<IGamepadConnection> m_devices = [];
     private readonly object m_gate = new();
@@ -51,15 +51,22 @@ public sealed class GamepadManager : IDisposable
     /// An optional sink for human-readable lifecycle/diagnostic messages (device discovery, handshake, read
     /// errors). Useful for hardware bring-up; pass <see langword="null"/> to disable.
     /// </param>
+    /// <param name="clock">
+    /// The shared capture clock the HID I/O loops stamp each report's arrival from (sub-frame timing authority).
+    /// Pass <see langword="null"/> to leave reports unstamped (arrival ticks zero); the snapshot capture then
+    /// falls back to a per-frame stamp.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="hidSource"/> is <see langword="null"/>.</exception>
     public GamepadManager(
         IHidDeviceSource hidSource,
         IGamepadAcquisitionSource? acquisitionSource = null,
-        Action<string>? diagnostics = null
+        Action<string>? diagnostics = null,
+        IInputClock? clock = null
     ) {
         ArgumentNullException.ThrowIfNull(hidSource);
 
         m_acquisitionSource = acquisitionSource;
+        m_clock = clock;
         m_diagnostics = diagnostics;
         m_hidSource = hidSource;
         m_registry = new Registry(owner: this);
@@ -70,11 +77,11 @@ public sealed class GamepadManager : IDisposable
     }
     private static IGamepadParser? CreateParser(IHidDevice hid) {
         // Switch Pro and DualSense are wired up over HID; Xbox flows through the acquisition source, not here.
-        if ((VendorNintendo == hid.VendorId) && (ProductSwitchProUsb == hid.ProductId)) {
+        if ((VendorNintendo == hid.VendorId) && (ProductSwitchPro == hid.ProductId)) {
             return new NintendoSwitchController(device: hid);
         }
 
-        if ((VendorSony == hid.VendorId) && (ProductDualSenseUsb == hid.ProductId)) {
+        if ((VendorSony == hid.VendorId) && (ProductDualSense == hid.ProductId)) {
             return new DualSenseController(device: hid);
         }
 
@@ -121,8 +128,7 @@ public sealed class GamepadManager : IDisposable
             while (await timer.WaitForNextTickAsync(cancellationToken: cancellationToken)) {
                 Rescan();
             }
-        }
-        catch (OperationCanceledException) {
+        } catch (OperationCanceledException) {
             // Expected on disposal.
         }
     }
@@ -134,8 +140,7 @@ public sealed class GamepadManager : IDisposable
 
         try {
             candidates = EnumerateControllerInterfaces();
-        }
-        catch (Exception exception) {
+        } catch (Exception exception) {
             m_diagnostics?.Invoke($"[gamepad] enumeration failed: {exception.GetType().Name}: {exception.Message}");
 
             return;
@@ -164,8 +169,7 @@ public sealed class GamepadManager : IDisposable
 
                 try {
                     hid = m_hidSource.Open(devicePath: candidate.Path);
-                }
-                catch {
+                } catch {
                     hid = null;
                 }
 
@@ -200,6 +204,7 @@ public sealed class GamepadManager : IDisposable
                     // Content-addressed from the device path: the same physical port yields the same id across
                     // reconnects (and restarts), so a controller that briefly drops keeps its identity, while
                     // two identical controllers on different ports stay distinct.
+                    clock: m_clock,
                     deviceId: InputDeviceId.FromKey(key: candidate.Path),
                     diagnostics: m_diagnostics,
                     hid: hid,
@@ -209,7 +214,7 @@ public sealed class GamepadManager : IDisposable
 
                 m_devices.Add(item: device);
                 device.Start();
-                m_diagnostics?.Invoke($"[gamepad] opened {parser.Type} as player {playerIndex + 1} (vendor=0x{candidate.VendorId:x4} product=0x{candidate.ProductId:x4}, {device.DeviceId})");
+                m_diagnostics?.Invoke($"[gamepad] opened {parser.Type} as player {playerIndex + 1} ({candidate.Transport.ToString().ToLowerInvariant()} vendor=0x{candidate.VendorId:x4} product=0x{candidate.ProductId:x4}, {device.DeviceId})");
             }
         }
 
@@ -323,6 +328,7 @@ public sealed class GamepadManager : IDisposable
                     gyro: out var gyro,
                     latest: out var latest,
                     pressed: out var pressed,
+                    pressEdges: out var pressEdges,
                     released: out var released
                 )) {
                     buffer.Add(item: new GamepadDrain(
@@ -330,6 +336,7 @@ public sealed class GamepadManager : IDisposable
                         Gyro: gyro,
                         Latest: latest,
                         Pressed: pressed,
+                        PressEdges: pressEdges,
                         Released: released
                     ));
                 }
@@ -442,8 +449,7 @@ public sealed class GamepadManager : IDisposable
 
         try {
             loop?.Wait(timeout: TimeSpan.FromMilliseconds(value: 500));
-        }
-        catch (AggregateException) {
+        } catch (AggregateException) {
             // The rescan loop faulted or was canceled during teardown; nothing actionable here.
         }
 
@@ -466,8 +472,7 @@ public sealed class GamepadManager : IDisposable
 
     // The surface handed to an acquisition source: it allocates a player slot, builds the connection, and tracks
     // it atomically under the gate, mirroring how the HID rescan opens and registers a device.
-    private sealed class Registry : IGamepadConnectionRegistry
-    {
+    private sealed class Registry : IGamepadConnectionRegistry {
         private readonly GamepadManager m_owner;
 
         public Registry(GamepadManager owner) {

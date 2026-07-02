@@ -12,7 +12,7 @@ namespace Puck.Platform.Linux;
 /// fixed set of navigation/function keys on the standard Linux evdev keymap). Full keysym
 /// text input and clipboard integration are out of scope; on the Steam Deck this path runs
 /// under XWayland, while the native Gamescope path is <see cref="WaylandNativeWindow"/>.</summary>
-internal sealed class XcbNativeWindow : INativeWindow, INativeSurfaceSourceProvider, IWindowInputSource {
+internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     private const uint XcbAtomAtom = 4;
     private const uint XcbAtomString = 31;
     private const uint XcbAtomWmName = 39;

@@ -12,7 +12,7 @@ namespace Puck.Vulkan;
 /// </summary>
 public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi computePipelineApi) : IGpuComputePipelineFactory {
     /// <inheritdoc/>
-    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, IReadOnlyList<GpuComputeBinding> bindings, GpuPushConstantBinding? pushConstantBinding, uint samplerFilter = GpuSamplerFilter.Linear) {
+    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, IReadOnlyList<GpuComputeBinding> bindings, GpuPushConstantBinding? pushConstantBinding, GpuSamplerFilter samplerFilter = GpuSamplerFilter.Linear) {
         // samplerFilter is a Direct3D 12 static-sampler concern; on Vulkan the sampler is a bound descriptor whose
         // filter the caller chose at CreateSampler time, so the combined-image-sampler layout binding is filter-agnostic.
         _ = samplerFilter;
@@ -37,7 +37,7 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
                     GpuComputeBindingKind.AccelerationStructure => VulkanDescriptorType.AccelerationStructure,
                     _ => VulkanDescriptorType.StorageBuffer,
                 },
-                StageFlags = GpuShaderStage.Compute,
+                StageFlags = (uint)GpuShaderStage.Compute,
             };
         }
 
@@ -47,7 +47,7 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
                 ShaderModuleHandle: computeShaderModule.Handle,
                 DescriptorBindings: descriptorBindings,
                 PushConstantSize: (pushConstantBinding?.Size ?? 0u),
-                PushConstantStageFlags: (pushConstantBinding?.StageFlags ?? 0u)
+                PushConstantStageFlags: (uint)(pushConstantBinding?.StageFlags ?? GpuShaderStage.None)
             ),
             descriptorSetLayoutHandle: out var setLayout,
             pipelineLayoutHandle: out var pipelineLayout,

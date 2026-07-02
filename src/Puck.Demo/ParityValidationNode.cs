@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Demo;
@@ -163,6 +163,7 @@ internal sealed class ParityValidationNode : IRenderNode {
 
         PngImage.Write(height: height, path: path, rgba: diff, width: width);
     }
+
     private static ParityModeReport BuildModeReport(string verdict, ParityMetrics metrics, IReadOnlyList<string> failures, ParityThresholdSet thresholds) {
         return new ParityModeReport {
             Verdict = verdict,

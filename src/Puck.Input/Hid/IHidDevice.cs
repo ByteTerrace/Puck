@@ -6,8 +6,7 @@ namespace Puck.Input.Hid;
 /// a platform backend (e.g. the Windows <c>Win32</c> transport in <c>Puck.Platform</c>); nothing in
 /// <c>Puck.Input</c> binds to a specific OS.
 /// </summary>
-public interface IHidDevice : IDisposable
-{
+public interface IHidDevice : IDisposable {
     /// <summary>The device interface path that opened this device (a transport-unique identity).</summary>
     string DevicePath { get; }
 
@@ -23,11 +22,17 @@ public interface IHidDevice : IDisposable
     /// <summary>The HID usage of the device's top-level collection (e.g. <c>0x05</c> gamepad, <c>0x04</c> joystick).</summary>
     ushort Usage { get; }
 
+    /// <summary>The transport (USB / Bluetooth) this device is connected over, inferred from its path.</summary>
+    HidTransport Transport { get; }
+
     /// <summary>The declared input report length in bytes (zero if the device does not declare one).</summary>
     int InputReportByteLength { get; }
 
     /// <summary>The declared output report length in bytes (zero if the device does not declare one).</summary>
     int OutputReportByteLength { get; }
+
+    /// <summary>The declared feature report length in bytes (zero if the device does not declare one).</summary>
+    int FeatureReportByteLength { get; }
 
     /// <summary>
     /// Reads the next input report, awaiting until a report arrives or the token is cancelled (no internal

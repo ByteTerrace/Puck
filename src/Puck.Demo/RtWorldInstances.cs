@@ -40,25 +40,25 @@ internal static class RtWorldInstances {
         foreach (var instruction in program.Instructions) {
             switch (instruction.Op) {
                 case SdfOp.ResetPoint: {
-                    center = Vector3.Zero;
+                        center = Vector3.Zero;
 
-                    break;
-                }
+                        break;
+                    }
                 case SdfOp.Translate: {
-                    center += new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z);
+                        center += new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z);
 
-                    break;
-                }
+                        break;
+                    }
                 case SdfOp.ShapeBlend when ((SdfShapeType)instruction.Shape == SdfShapeType.Plane): {
-                    var normal = Vector3.Normalize(value: new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z));
-                    // A translate shifts the point by -center, so the world offset gains -dot(center, normal).
-                    var offset = (instruction.Data0.W - Vector3.Dot(vector1: center, vector2: normal));
+                        var normal = Vector3.Normalize(value: new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z));
+                        // A translate shifts the point by -center, so the world offset gains -dot(center, normal).
+                        var offset = (instruction.Data0.W - Vector3.Dot(vector1: center, vector2: normal));
 
-                    return new Vector4(normal, offset);
-                }
+                        return new Vector4(normal, offset);
+                    }
                 default: {
-                    break;
-                }
+                        break;
+                    }
             }
         }
 
@@ -79,49 +79,49 @@ internal static class RtWorldInstances {
         foreach (var instruction in program.Instructions) {
             switch (instruction.Op) {
                 case SdfOp.ResetPoint: {
-                    center = Vector3.Zero;
-                    isotropic = false;
-                    skip = false;
+                        center = Vector3.Zero;
+                        isotropic = false;
+                        skip = false;
 
-                    break;
-                }
+                        break;
+                    }
                 case SdfOp.Translate: {
-                    center += new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z);
+                        center += new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z);
 
-                    break;
-                }
+                        break;
+                    }
                 case SdfOp.Rotate:
                 case SdfOp.Scale: {
-                    // Not modeled exactly here — fall back to an isotropic (bounding-sphere) extent so the bound
-                    // stays conservative regardless of the orientation/scale.
-                    isotropic = true;
+                        // Not modeled exactly here — fall back to an isotropic (bounding-sphere) extent so the bound
+                        // stays conservative regardless of the orientation/scale.
+                        isotropic = true;
 
-                    break;
-                }
+                        break;
+                    }
                 case SdfOp.Repeat:
                 case SdfOp.RepeatLimited:
                 case SdfOp.SymmetryX:
                 case SdfOp.SymmetryY:
                 case SdfOp.SymmetryZ: {
-                    // These produce many/mirrored copies; a single instance cannot represent them.
-                    skip = true;
+                        // These produce many/mirrored copies; a single instance cannot represent them.
+                        skip = true;
 
-                    break;
-                }
-                case SdfOp.ShapeBlend: {
-                    if (!skip && TryShapeHalfExtent(instruction: instruction, isotropic: isotropic, halfExtent: out var halfExtent)) {
-                        instances.Add(item: new RtWorldInstance(
-                            Center: center,
-                            CustomIndex: (uint)instances.Count,
-                            HalfExtent: halfExtent
-                        ));
+                        break;
                     }
+                case SdfOp.ShapeBlend: {
+                        if (!skip && TryShapeHalfExtent(instruction: instruction, isotropic: isotropic, halfExtent: out var halfExtent)) {
+                            instances.Add(item: new RtWorldInstance(
+                                Center: center,
+                                CustomIndex: (uint)instances.Count,
+                                HalfExtent: halfExtent
+                            ));
+                        }
 
-                    break;
-                }
+                        break;
+                    }
                 default: {
-                    break;
-                }
+                        break;
+                    }
             }
         }
 
@@ -139,38 +139,38 @@ internal static class RtWorldInstances {
         switch ((SdfShapeType)instruction.Shape) {
             case SdfShapeType.Box:
             case SdfShapeType.ScreenSlab: {
-                // Data0 = (halfX, halfY, halfZ, roundingRadius).
-                halfExtent = new Vector3(data.X, data.Y, data.Z) + new Vector3(data.W + smooth);
+                    // Data0 = (halfX, halfY, halfZ, roundingRadius).
+                    halfExtent = new Vector3(data.X, data.Y, data.Z) + new Vector3(data.W + smooth);
 
-                break;
-            }
+                    break;
+                }
             case SdfShapeType.Sphere: {
-                // Data0.x = radius.
-                halfExtent = new Vector3(data.X + smooth);
+                    // Data0.x = radius.
+                    halfExtent = new Vector3(data.X + smooth);
 
-                break;
-            }
+                    break;
+                }
             case SdfShapeType.Torus: {
-                // Data0 = (majorRadius, minorRadius, _, _); the ring lies in the XZ plane.
-                var ring = (data.X + data.Y + smooth);
+                    // Data0 = (majorRadius, minorRadius, _, _); the ring lies in the XZ plane.
+                    var ring = (data.X + data.Y + smooth);
 
-                halfExtent = new Vector3(ring, (data.Y + smooth), ring);
+                    halfExtent = new Vector3(ring, (data.Y + smooth), ring);
 
-                break;
-            }
+                    break;
+                }
             case SdfShapeType.RoundCone: {
-                // Data0 = (lowerRadius, upperRadius, height, _); conservative upright bound.
-                var radius = (MathF.Max(data.X, data.Y) + smooth);
+                    // Data0 = (lowerRadius, upperRadius, height, _); conservative upright bound.
+                    var radius = (MathF.Max(data.X, data.Y) + smooth);
 
-                halfExtent = new Vector3(radius, ((data.Z * 0.5f) + radius), radius);
+                    halfExtent = new Vector3(radius, ((data.Z * 0.5f) + radius), radius);
 
-                break;
-            }
+                    break;
+                }
             case SdfShapeType.Plane:
             default: {
-                // Infinite (or unknown): no finite bound — skip.
-                return false;
-            }
+                    // Infinite (or unknown): no finite bound — skip.
+                    return false;
+                }
         }
 
         if (isotropic) {

@@ -3,6 +3,7 @@
         <Project Path="src/Puck.Abstractions/Puck.Abstractions.csproj" />
         <Project Path="src/Puck.Assets/Puck.Assets.csproj" />
         <Project Path="src/Puck.Cameras/Puck.Cameras.csproj" />
+        <Project Path="src/Puck.Capture/Puck.Capture.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
         <Project Path="src/Puck.Compositing/Puck.Compositing.csproj" />
         <Project Path="src/Puck.Demo/Puck.Demo.csproj" />
@@ -13,6 +14,7 @@
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />
         <Project Path="src/Puck.Platform/Puck.Platform.csproj" />
+        <Project Path="src/Puck.Post/Puck.Post.csproj" />
         <Project Path="src/Puck.Scene/Puck.Scene.csproj" />
         <Project Path="src/Puck.SdfVm/Puck.SdfVm.csproj" />
         <Project Path="src/Puck.Shaders/Puck.Shaders.csproj" />

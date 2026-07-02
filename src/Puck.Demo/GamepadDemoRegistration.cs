@@ -10,8 +10,7 @@ namespace Puck.Demo;
 
 /// <summary>Composition-root wiring for the demo's controller support, kept out of the top-level program to
 /// keep its class coupling in check.</summary>
-internal static class GamepadDemoRegistration
-{
+internal static class GamepadDemoRegistration {
     /// <summary>
     /// Registers the gamepad manager, optionally a focus-gated <see cref="GamepadInputSource"/> (picked up by the
     /// command shell as an additional source), the demo's gamepad bindings, and the hosted service that governs device
@@ -28,10 +27,12 @@ internal static class GamepadDemoRegistration
 
         // Per-controller cursor state: command handlers write it, the cursor overlay node reads it.
         services.AddSingleton<CursorStore>();
-        services.AddSingleton(implementationFactory: static _ => new GamepadManager(
+        services.AddSingleton(implementationFactory: static sp => new GamepadManager(
             // The Windows HID transport and the Windows Xbox (XInput + GameInput) backend live in Puck.Platform;
             // a Linux build would inject hidraw / evdev implementations of the same abstractions instead.
             acquisitionSource: new Win32XboxAcquisitionSource(diagnostics: static message => Console.Error.WriteLine(value: message)),
+            // The shared capture clock so each HID report is stamped with its true arrival time on the I/O thread.
+            clock: sp.GetService<IInputClock>(),
             diagnostics: static message => Console.Error.WriteLine(value: message),
             hidSource: new Win32HidDeviceSource()
         ));
@@ -46,6 +47,7 @@ internal static class GamepadDemoRegistration
                     [InputSources.Gamepad.Start] = [new(Command: "gamepad-start")],
                     [InputSources.Gamepad.DpadUp] = [new(Command: "gamepad-trigger-effect")],
                     [InputSources.Gamepad.DpadDown] = [new(Command: "gamepad-trigger-effect-off")],
+                    [InputSources.Gamepad.LeftShoulder] = [new(Command: "gamepad-trigger-schedule")],
                     [InputSources.Gamepad.Touchpad] = [new(Command: "gamepad-touchpad")],
                     [InputSources.Gamepad.Mute] = [new(Command: "gamepad-mute")],
                     [InputSources.Gamepad.Touchpad0] = [new(Command: "gamepad-touch0"), new(Command: "cursor-touch")],
