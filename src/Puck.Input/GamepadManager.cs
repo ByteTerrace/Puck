@@ -405,6 +405,26 @@ public sealed class GamepadManager : IDisposable {
         return false;
     }
 
+    /// <summary>Resolves the controller family of a connected device (drives per-family UI glyphs).</summary>
+    /// <param name="deviceId">The device to resolve.</param>
+    /// <param name="type">The device's controller family when found.</param>
+    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetType(InputDeviceId deviceId, out GamepadType type) {
+        lock (m_gate) {
+            foreach (var device in m_devices) {
+                if ((device.DeviceId == deviceId) && !device.IsFaulted) {
+                    type = device.Type;
+
+                    return true;
+                }
+            }
+        }
+
+        type = GamepadType.Unknown;
+
+        return false;
+    }
+
     /// <summary>Resolves the input capabilities (gyro, analog triggers) of a connected device.</summary>
     /// <param name="deviceId">The device to resolve.</param>
     /// <param name="capabilities">The device's input capabilities when found.</param>

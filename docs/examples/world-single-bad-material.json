@@ -1,7 +1,7 @@
 {
     "$schema": "../../schema/run.schema.json",
     "version": "puck.run.v1",
-    "_comment": "Illustrative INVALID example (not wired to an automated gate): the sphere references material 99 but only 4 materials are declared. Run `Puck.Demo --run docs/examples/world-single-bad-material.json` (or `--check-run`) to see it rejected with a clear, source-attributed error at scene.objects[1].material and exit code 2 — never a GPU crash.",
+    "_comment": "Illustrative INVALID example (not wired to a live-render gate; its rejection is asserted by the Post `run-document` stage as one of the corpus's checked-in negatives): the sphere references material 99 but only 4 materials are declared. Run `Puck.Demo --run docs/examples/world-single-bad-material.json` to see it rejected with a clear, source-attributed error at scene.objects[1].material and exit code 2 — never a GPU crash.",
     "scene": {
         "materials": [
             { "albedo": [0.46, 0.48, 0.54] },

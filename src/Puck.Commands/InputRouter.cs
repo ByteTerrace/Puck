@@ -157,7 +157,7 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         // Resolve the device's slot first, then ask for THAT slot's bindings — so each player's mapping (an
         // optional override layered over the engine default) drives their own input.
         var slot = m_slotResolver(arg: signal.DeviceId);
-        var bindings = m_bindings.Resolve(slot: slot, source: signal.Source);
+        var bindings = m_bindings.Resolve(slot: slot, signal: signal);
 
         if (bindings is null) {
             return;

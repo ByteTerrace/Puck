@@ -7,12 +7,13 @@ namespace Puck.Scene;
 /// <summary>
 /// Turns the validated <see cref="Viewport"/> list into the parallel <see cref="ICamera"/> + <see cref="NormalizedRect"/>
 /// arrays an <c>ISdfFrameSource</c> drives. Each camera DTO becomes its concrete engine camera (degrees converted to
-/// radians by the DTO), and each <c>[x, y, w, h]</c> region becomes a <see cref="NormalizedRect"/>. A live-capture
-/// (<see cref="LiveCameraSource"/>) slot builds a placeholder camera here — the host overrides that slot's rendered view
-/// with the imported camera surface — and is surfaced separately by <see cref="LiveSources"/>.
+/// radians by the DTO), and each <c>[x, y, w, h]</c> region becomes a <see cref="NormalizedRect"/>. A child-content
+/// slot (<see cref="LiveCameraSource"/>, <see cref="GamingBrickSource"/>) builds a placeholder camera here — the host
+/// overrides that slot's rendered view with the child's produced surface — and is surfaced separately by
+/// <see cref="ChildSources"/>.
 /// </summary>
 public static class ViewportBuilder {
-    private static readonly IReadOnlyDictionary<int, LiveCameraSource> EmptyLiveSources = new Dictionary<int, LiveCameraSource>();
+    private static readonly IReadOnlyDictionary<int, ViewportSource> EmptyChildSources = new Dictionary<int, ViewportSource>();
 
     /// <summary>Builds the cameras and regions for a viewport list. A <see cref="LiveCameraSource"/> slot gets a
     /// placeholder camera (its rendered view is overridden by the imported camera surface at composite).</summary>
@@ -31,9 +32,9 @@ public static class ViewportBuilder {
 
             cameras[index] = viewport.Source switch {
                 CameraDocument camera => camera.Build(),
-                // A live-capture slot still renders an SDF view (a placeholder camera keeps the frame well-formed); the
-                // host composites the imported camera surface over it — the camera's parameters are never seen.
-                LiveCameraSource => PlaceholderCamera(),
+                // A child-content slot still renders an SDF view (a placeholder camera keeps the frame well-formed); the
+                // host composites the child's produced surface over it — the camera's parameters are never seen.
+                LiveCameraSource or GamingBrickSource => PlaceholderCamera(),
                 _ => throw new NotSupportedException(message: $"viewport[{index}] source '{viewport.Source?.GetType().Name ?? "null"}' is not a buildable viewport source"),
             };
             regions[index] = new NormalizedRect(
@@ -47,26 +48,27 @@ public static class ViewportBuilder {
         return (cameras, regions);
     }
 
-    /// <summary>Extracts the live-capture slots (viewport index → its <see cref="LiveCameraSource"/>) so the host can
-    /// build a per-slot camera child node. Empty when no viewport uses a live camera.</summary>
+    /// <summary>Extracts the child-content slots (viewport index → its <see cref="LiveCameraSource"/> or
+    /// <see cref="GamingBrickSource"/>) so the host can build a per-slot child node. Empty when every viewport is a
+    /// virtual SDF camera.</summary>
     /// <param name="viewports">The validated viewport section.</param>
     /// <returns>A slot → source map (empty if none).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="viewports"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyDictionary<int, LiveCameraSource> LiveSources(IReadOnlyList<Viewport> viewports) {
+    public static IReadOnlyDictionary<int, ViewportSource> ChildSources(IReadOnlyList<Viewport> viewports) {
         ArgumentNullException.ThrowIfNull(argument: viewports);
 
-        Dictionary<int, LiveCameraSource>? live = null;
+        Dictionary<int, ViewportSource>? children = null;
 
         for (var index = 0; (index < viewports.Count); index++) {
-            if (viewports[index].Source is LiveCameraSource source) {
-                (live ??= []).Add(key: index, value: source);
+            if (viewports[index].Source is { } source and (LiveCameraSource or GamingBrickSource)) {
+                (children ??= []).Add(key: index, value: source);
             }
         }
 
-        return (live ?? EmptyLiveSources);
+        return (children ?? EmptyChildSources);
     }
 
-    // A benign stand-in camera for a live-capture slot; never visible (the imported camera surface overrides the slot).
+    // A benign stand-in camera for a child-content slot; never visible (the child's produced surface overrides the slot).
     private static ICamera PlaceholderCamera() {
         return new OrbitCamera {
             FieldOfViewRadians = (MathF.PI / 3f),

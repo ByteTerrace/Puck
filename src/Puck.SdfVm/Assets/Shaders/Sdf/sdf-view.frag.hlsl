@@ -60,6 +60,9 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     float tanHalfFov = camera.right.w;
     float aspect = camera.up.w;
     float3 rayOrigin = camera.position.xyz;
+
+    // The symmetry-LOD origin: the camera (the per-sample wallpaper LOD rule measures from it).
+    sdfLodOrigin = rayOrigin;
     float3 rayDirection = normalize(
         camera.forward.xyz +
         (((ndc.x * aspect) * tanHalfFov) * camera.right.xyz) +
@@ -108,8 +111,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         if (material == SDF_SCREEN_MATERIAL) {
             color = (screenContent(surfacePoint, camera.position.w) * (0.85 + (0.15 * diffuse)));
         } else {
-            float3 albedo = sdfMaterialAlbedo(material);
-            color = (albedo * (ambient + (0.85 * diffuse)));
+            color = sdfMaterialShade(sdfMaterialLoad(material), (float3(1.0, 1.0, 1.0) * (ambient + (0.85 * diffuse))), normal, rayDirection, lightDirection, 1.0);
         }
 
         float fog = (1.0 - exp(-0.015 * traveled));

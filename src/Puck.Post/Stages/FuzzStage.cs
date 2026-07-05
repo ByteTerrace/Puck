@@ -1,3 +1,4 @@
+using Puck.Capture;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,12 +14,13 @@ namespace Puck.Post;
 /// Tier-C stage C7. Cross-backend DIFFERENTIAL FUZZING of the SDF VM over a FIXED, deterministic seed list — the
 /// POST's fast sample of the demo's <c>--validate-world --fuzz-seed N</c> gate (whose overnight fuzzer ran 64
 /// iterations; the POST wants deterministic, repeatable coverage in seconds). Each seed generates a
-/// random-but-renderable scene program through the ported <see cref="FuzzSdfProgram"/> generator (values and
-/// algorithm identical to the demo's, so every POST seed reproduces in the demo gate), renders it through the
-/// identical <see cref="PostWorldRenderer"/> harness on BOTH backends — the Vulkan host (SPIR-V) and the shared
+/// random-but-renderable scene program through the SHARED <see cref="Puck.Scene.FuzzSdfProgram"/> generator (the one
+/// implementation the demo gate also consumes, so every POST seed reproduces in the demo gate), renders it through the
+/// identical <see cref="Puck.SdfVm.SdfWorldEngine"/> on BOTH backends — the Vulkan host (SPIR-V) and the shared
 /// LUID-matched Tier-C Direct3D 12 device (DXIL) — and diffs under the <c>WorldFuzz</c> thresholds: fuzz scenes span
 /// the whole shape/blend parameter space, so benign ±1-LSB codegen noise legitimately clusters along gradients, and
-/// the oracle keys on the definitive benign signature (every delta exactly ±1) instead of the showcase isolation
+/// the oracle keys on the benign signature (the delta mass exactly ±1, an isolated march-amplified few-LSB tail
+/// bounded by the max-delta cap — see the <c>WorldFuzz</c> threshold doc) instead of the showcase isolation
 /// guard. A failure names the offending seed, so the finding is immediately reproducible (here and in the demo).
 /// Artifacts: the first seed's backend pair as smoke; a failing seed additionally writes its pair + diff heatmap.
 /// </summary>
@@ -28,12 +30,26 @@ internal sealed class FuzzStage : IPostStage {
     private static readonly Vector3 CameraPosition = new(5.2f, 1.7f, 0f);
     private static readonly Vector3 CameraTarget = new(0f, 0.1f, 0f);
     private const float FieldOfViewRadians = (60f * (MathF.PI / 180f));
-    // The fixed seed list: 7 is the demo cross-check seed (`--validate-world --fuzz-seed 7`); the rest spread the
-    // deterministic generator across its branch space (shape mix, blend ops, the 30%/20% rotate/scale rolls) —
-    // five seeds keep the battery fast while every one stays individually reproducible.
-    private static readonly int[] Seeds = [1, 7, 23, 42, 91];
+    // The default fixed seed list: 7 is the demo cross-check seed (`--validate-world --fuzz-seed 7`); the rest
+    // spread the deterministic generator across its branch space (shape mix, blend ops, the 30%/20% rotate/scale
+    // rolls) — five seeds keep the battery fast while every one stays individually reproducible.
+    private static readonly int[] DefaultSeeds = [1, 7, 23, 42, 91];
     private const uint WorldHeight = 600;
     private const uint WorldWidth = 960;
+
+    private readonly int[] m_seeds;
+
+    /// <summary>Initializes a new instance of the <see cref="FuzzStage"/> class with the default fixed seed list.</summary>
+    public FuzzStage() : this(seeds: DefaultSeeds) { }
+
+    /// <summary>Initializes a new instance of the <see cref="FuzzStage"/> class with an overridden seed list — the
+    /// <c>--fuzz-seed</c> CLI seam, for a single-seed sweep run outside the battery's default sample.</summary>
+    /// <param name="seeds">The seed list to render and diff.</param>
+    public FuzzStage(int[] seeds) {
+        ArgumentNullException.ThrowIfNull(argument: seeds);
+
+        m_seeds = seeds;
+    }
 
     /// <inheritdoc/>
     public string Name => "fuzz";
@@ -96,7 +112,7 @@ internal sealed class FuzzStage : IPostStage {
     }
 
     [SupportedOSPlatform("windows10.0.10240")]
-    private static PostStageOutcome RunCore(PostContext context) {
+    private PostStageOutcome RunCore(PostContext context) {
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
         var directX = context.RequireDirectXDevice();
@@ -107,33 +123,33 @@ internal sealed class FuzzStage : IPostStage {
         var worstDescription = string.Empty;
         var worstPercent = -1.0;
 
-        foreach (var seed in Seeds) {
+        foreach (var seed in m_seeds) {
             var program = FuzzSdfProgram.Generate(bounds: ShapeBounds.Default, seed: seed);
             var frame = BuildFuzzFrame(program: program);
 
             // Vulkan reference: the host device + the host's neutral compute services, SPIR-V kernels.
             byte[] vulkanPixels;
 
-            using (var vulkanRenderer = new PostWorldRenderer(
-                bytecodeExtension: ".spv",
+            using (var vulkanRenderer = new SdfWorldEngine(
                 device: vulkanDevice,
                 gpu: vulkanGpu,
                 height: WorldHeight,
-                program: program,
+                kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
+                options: new SdfWorldEngineOptions(Program: program),
                 width: WorldWidth
             )) {
                 vulkanPixels = vulkanRenderer.RenderFrame(frame: frame);
             }
 
             // Direct3D 12 comparand: the SHARED Tier-C device + its neutral compute services, DXIL kernels — the
-            // identical harness and the identical generated program, only the backend differs.
+            // identical engine and the identical generated program, only the backend differs.
             var directXPixels = WorldStage.RenderDirectXDiagnosed(directX: directX, render: () => {
-                using var directXRenderer = new PostWorldRenderer(
-                    bytecodeExtension: ".dxil",
+                using var directXRenderer = new SdfWorldEngine(
                     device: directX.DeviceContext,
                     gpu: directXGpu,
                     height: WorldHeight,
-                    program: program,
+                    kernels: SdfWorldKernels.Load(bytecodeExtension: ".dxil"),
+                    options: new SdfWorldEngineOptions(Program: program),
                     width: WorldWidth
                 );
 
@@ -141,9 +157,9 @@ internal sealed class FuzzStage : IPostStage {
             });
 
             // Smoke artifact: the first seed's backend pair is always written, so a green run still leaves evidence.
-            if (seed == Seeds[0]) {
-                PngImage.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-                PngImage.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
+            if (seed == m_seeds[0]) {
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
             }
 
             var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
@@ -154,8 +170,8 @@ internal sealed class FuzzStage : IPostStage {
                 // the full artifact triple for it.
                 var diffPath = Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-diff.png");
 
-                PngImage.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-                PngImage.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
                 ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
 
                 return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"seed {seed} diverged | {ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
@@ -174,12 +190,12 @@ internal sealed class FuzzStage : IPostStage {
         // A single low-signal seed can be legitimate (the generator's parameter space includes sparse scenes), but if
         // EVERY seed renders degenerate the generator itself regressed to flat/empty output — and the cross-backend
         // diff passes trivially on identical-degenerate frames, so it would otherwise go green with only a note. Fail.
-        if (degenerateSeeds.Count == Seeds.Length) {
-            return PostStageOutcome.Fail(detail: $"every fuzz seed rendered a degenerate (near-flat) scene — the generator regressed to empty output (seeds {string.Join(separator: ",", values: Seeds)})");
+        if (degenerateSeeds.Count == m_seeds.Length) {
+            return PostStageOutcome.Fail(detail: $"every fuzz seed rendered a degenerate (near-flat) scene — the generator regressed to empty output (seeds {string.Join(separator: ",", values: m_seeds)})");
         }
 
         var coverageNote = ((degenerateSeeds.Count == 0) ? string.Empty : $" | low-signal (degenerate) seeds: {string.Join(separator: ",", values: degenerateSeeds)}");
 
-        return PostStageOutcome.Pass(detail: $"{Seeds.Length} seeds ({string.Join(separator: ",", values: Seeds)}) at {WorldWidth}x{WorldHeight} | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldFuzz thresholds | {worstDescription}{coverageNote}");
+        return PostStageOutcome.Pass(detail: $"{m_seeds.Length} seeds ({string.Join(separator: ",", values: m_seeds)}) at {WorldWidth}x{WorldHeight} | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldFuzz thresholds | {worstDescription}{coverageNote}");
     }
 }

@@ -1,232 +1,131 @@
-using System.Numerics;
-using System.Text;
 using Puck.Scene;
-using Puck.SdfVm;
 
 namespace Puck.Demo;
 
 /// <summary>
-/// The demo's BUILT-IN run documents, plus the synthesizer that turns the legacy CLI flags into the SAME
-/// <see cref="PuckRunDocument"/> the <c>--run</c> path consumes. This is what collapses the old imperative flag path
-/// into the single data-driven one: every <c>--world</c>/<c>--validate*</c> flag is now a thin alias that builds a
-/// document. The canonical world scene + camera layouts are authored as DATA (the two embedded documents below, verified
-/// bit-identical to <see cref="BuildReferenceScene"/> and the historic inline cameras) rather than as builder calls.
+/// The synthesizer that turns the legacy CLI flags into the SAME <see cref="PuckRunDocument"/> the <c>--run</c> path
+/// consumes. Every <c>--validate-overworld</c>/<c>--overworld</c> flag is a thin alias that builds a document, so there is
+/// no second imperative path to keep in sync.
 /// </summary>
 internal static class DemoRunDocuments {
-    // The canonical world: a ground plane with three primitives smooth-melded above it, viewed by one hero orbit
-    // (the 1-up layout) or four independent orbits (the 2x2 split). These two literals ARE the lifted
-    // WorldSdfFrameSource.BuildScene + camera layouts; docs/examples/world-single.json and world-split.json are the
-    // same documents (kept in sync). A trailing 'world' graph is present only so each parses as a complete run; the
-    // synthesizer reuses just the scene + viewports.
-    private const string SingleDocumentJson = """
-    {
-        "version": "puck.run.v1",
-        "scene": {
-            "materials": [
-                { "albedo": [0.46, 0.48, 0.54] },
-                { "albedo": [0.90, 0.27, 0.21] },
-                { "albedo": [0.30, 0.80, 0.40] },
-                { "albedo": [0.27, 0.45, 0.92] }
-            ],
-            "objects": [
-                { "shape": "plane", "normal": [0.0, 1.0, 0.0], "offset": 1.0, "material": 0 },
-                { "shape": "sphere", "ops": [{ "op": "translate", "offset": [-1.3, 0.0, 0.0] }], "radius": 0.85, "material": 1, "blend": "SmoothUnion", "smooth": 0.35 },
-                { "shape": "box", "ops": [{ "op": "translate", "offset": [1.3, 0.0, 0.2] }], "halfExtents": [0.65, 0.65, 0.65], "round": 0.12, "material": 3, "blend": "SmoothUnion", "smooth": 0.35 },
-                { "shape": "torus", "ops": [{ "op": "translate", "offset": [0.0, 0.1, -1.6] }], "majorRadius": 0.9, "minorRadius": 0.3, "material": 2, "blend": "SmoothUnion", "smooth": 0.35 }
-            ]
-        },
-        "viewports": [
-            { "source": { "$type": "orbit", "angularSpeed": 0.4, "azimuth": 0.0, "fieldOfView": 60.0, "height": 1.6, "radius": 5.2, "target": [0.0, 0.1, 0.0] }, "region": [0.0, 0.0, 1.0, 1.0] }
-        ],
-        "graph": { "$type": "world" }
-    }
-    """;
-    private const string SplitDocumentJson = """
-    {
-        "version": "puck.run.v1",
-        "scene": {
-            "materials": [
-                { "albedo": [0.46, 0.48, 0.54] },
-                { "albedo": [0.90, 0.27, 0.21] },
-                { "albedo": [0.30, 0.80, 0.40] },
-                { "albedo": [0.27, 0.45, 0.92] }
-            ],
-            "objects": [
-                { "shape": "plane", "normal": [0.0, 1.0, 0.0], "offset": 1.0, "material": 0 },
-                { "shape": "sphere", "ops": [{ "op": "translate", "offset": [-1.3, 0.0, 0.0] }], "radius": 0.85, "material": 1, "blend": "SmoothUnion", "smooth": 0.35 },
-                { "shape": "box", "ops": [{ "op": "translate", "offset": [1.3, 0.0, 0.2] }], "halfExtents": [0.65, 0.65, 0.65], "round": 0.12, "material": 3, "blend": "SmoothUnion", "smooth": 0.35 },
-                { "shape": "torus", "ops": [{ "op": "translate", "offset": [0.0, 0.1, -1.6] }], "majorRadius": 0.9, "minorRadius": 0.3, "material": 2, "blend": "SmoothUnion", "smooth": 0.35 }
-            ]
-        },
-        "viewports": [
-            { "source": { "$type": "orbit", "angularSpeed": 0.4, "azimuth": 0.0, "fieldOfView": 55.0, "height": 1.7, "radius": 5.0, "target": [0.0, 0.0, -0.3] }, "region": [0.0, 0.0, 0.5, 0.5] },
-            { "source": { "$type": "orbit", "angularSpeed": -0.55, "azimuth": 3.141592653589793, "fieldOfView": 52.0, "height": 0.5, "radius": 3.6, "target": [0.0, 0.15, -0.3] }, "region": [0.5, 0.0, 0.5, 0.5] },
-            { "source": { "$type": "orbit", "angularSpeed": 0.25, "azimuth": 0.0, "fieldOfView": 55.0, "height": 5.0, "radius": 0.9, "target": [0.0, -0.5, -0.3] }, "region": [0.0, 0.5, 0.5, 0.5] },
-            { "source": { "$type": "orbit", "angularSpeed": 0.6, "azimuth": 0.0, "fieldOfView": 50.0, "height": 0.3, "radius": 1.8, "target": [-1.3, 0.0, 0.0] }, "region": [0.5, 0.5, 0.5, 0.5] }
-        ],
-        "graph": { "$type": "world" }
-    }
-    """;
-
-    private static readonly PuckRunDocument s_single = RunDocument.Parse(utf8Json: Encoding.UTF8.GetBytes(SingleDocumentJson));
-    private static readonly PuckRunDocument s_split = RunDocument.Parse(utf8Json: Encoding.UTF8.GetBytes(SplitDocumentJson));
-
-    /// <summary>The canonical world scene (four materials, a ground plane + three smooth-melded primitives).</summary>
-    internal static SceneDocument WorldScene => s_single.Scene;
-    /// <summary>The 1-up hero-orbit viewport filling the frame.</summary>
-    internal static IReadOnlyList<Viewport> SingleViewports => s_single.Viewports;
-    /// <summary>The 2x2 split-screen of four independent orbits over the same scene.</summary>
-    internal static IReadOnlyList<Viewport> SplitViewports => s_split.Viewports;
-
-    /// <summary>Turns the resolved CLI flags into the run document the single data-driven path consumes. Mirrors the
-    /// historic flag precedence exactly: the self-contained gates first, then the <c>world</c> gates, then the live
-    /// world/showcase producers.</summary>
+    /// <summary>Turns the resolved CLI flags into the run document the single data-driven path consumes: the
+    /// self-contained <c>--validate-overworld</c> gate, a fullscreen single-machine boot for <c>--rom &lt;path&gt;</c>,
+    /// or the OVERWORLD for <c>--overworld</c> or no flags at all (the demo IS the overworld).</summary>
     /// <param name="flags">The parsed launch flags.</param>
     /// <returns>The synthesized run document (always valid).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="flags"/> is <see langword="null"/>.</exception>
     public static PuckRunDocument Synthesize(DemoFlags flags) {
         ArgumentNullException.ThrowIfNull(argument: flags);
 
-        // The validation/fuzzing gates render OFFSCREEN on a forced Vulkan host (host.backend:"directx" is rejected for
-        // them); a live render hosts on the requested backend. produce selects the world's render backend: on a Vulkan
-        // host it picks the producer (Direct3D 12 zero-copy import, or same-device Vulkan); on a Direct3D 12 host
-        // produce:"vulkan" is the REVERSE cross-backend live path (a bespoke Vulkan producer the host imports). It is
-        // dropped only for a Direct3D 12 SHOWCASE host, which has no reverse cross-backend path (it would yield a blank
-        // window — the validator rejects that combination).
-        var offscreen = (flags.Validate || flags.ValidateMiniAction || flags.ValidateDeterminism || flags.ValidateCameraLive || flags.ValidateCameraGpu || flags.ValidateWorld || flags.ValidateWorldChild);
-        var directXHost = (!offscreen && string.Equals(flags.Backend, "directx", StringComparison.OrdinalIgnoreCase));
-        var directXShowcaseHost = (directXHost && !flags.World && !flags.WorldSplit && !flags.WorldChild && !flags.WorldRt);
+        // The validation gate renders OFFSCREEN on a forced Vulkan host (host.backend:"directx" is rejected for it);
+        // a live render hosts on the requested backend.
         var host = new HostDocument {
-            Backend = (offscreen ? null : flags.Backend),
+            Backend = (flags.ValidateOverworld ? null : flags.Backend),
             ExitAfterSeconds = flags.ExitAfterSeconds,
             PresentMode = flags.PresentMode,
             SurfaceFormat = flags.SurfaceFormat,
         };
-        var produce = (directXShowcaseHost ? null : flags.Produce);
 
-        // The self-contained gates (each a full-frame offscreen smoke test) map one flag to one gate name; collapsing
-        // them into a single lookup keeps this synthesizer's branching in check as gates are added.
-        if (SelfContainedGateName(flags: flags) is string selfContainedGate) {
-            return Gate(host: host, gate: selfContainedGate);
+        if (flags.ValidateOverworld) {
+            return Gate(host: host, gate: "overworld");
         }
 
-        if (flags.ValidateWorldChild) {
-            return WorldGate(child: true, host: host, split: flags.WorldSplit);
-        }
+        // --rom: boot straight INTO the cartridge — the IMMERSED overworld. One stand per potential player (up to
+        // MaxConsoles), all seating the same ROM: each connecting pad's player is auto-seated at (boots + takes
+        // over) their own stand and sees only the game panes; when any machine's exit condition fires (--rom-exit,
+        // e.g. "0xDA22>=1" for a representative cartridge's save flag) the fourth wall breaks and the room is revealed — all active
+        // players standing at their machines, the games continuing on the diegetic screens. Without --rom-exit the
+        // run is a plain immersed multi-machine boot (exit by closing the window / exitAfterSeconds).
+        if (flags.RomPath is { } bootRomPath) {
+            var exit = ((flags.RomExit is { } spec) ? ParseExitSpec(spec: spec) : null);
 
-        if (flags.ValidateWorld) {
-            if (flags.FuzzSeed >= 0) {
-                // --validate-world --fuzz-seed N: one in-process differential-fuzzing iteration on a GENERATED scene over
-                // the canonical single hero view (the same view `tools fuzz` uses); --world-split has no effect here.
-                if (flags.WorldSplit) {
-                    Console.Error.WriteLine(value: "[run] --world-split is ignored with --fuzz-seed; a fuzz run diffs the single canonical view.");
-                }
-
-                return new PuckRunDocument { Fuzzing = new FuzzingDocument { Seed = flags.FuzzSeed }, Host = host, Version = PuckRunDocument.CurrentVersion };
-            }
-
-            return WorldGate(child: false, host: host, split: flags.WorldSplit);
-        }
-
-        if (flags.MiniAction) {
-            // The live action demo builds its own dynamic scene + chase camera (no document scene/viewports), like the
-            // showcase. Vulkan host for this milestone (a Direct3D 12 host is a later phase).
             return new PuckRunDocument {
-                Graph = new MiniActionNode(),
+                Graph = new OverworldNode { Consoles = StandingMachines(romPath: bootRomPath, exit: exit), Immersed = true },
                 Host = (host with { Backend = "vulkan" }),
                 Version = PuckRunDocument.CurrentVersion,
             };
         }
 
-        if (flags.Camera) {
-            // The live camera owns its own Direct3D 12 producer device and hands the host a shared handle; the host must
-            // be Vulkan to import it. It renders its own content (no document scene/viewports), like the showcase.
-            return new PuckRunDocument {
-                Graph = new CameraNode(),
-                Host = (host with { Backend = "vulkan" }),
-                Version = PuckRunDocument.CurrentVersion,
-            };
-        }
-
-        if (flags.WorldRt) {
-            // The ray-query world: the built-in scene + one full-frame viewport, host device chosen by host.backend.
-            return new PuckRunDocument {
-                Graph = new RtNode(),
-                Host = host,
-                Scene = WorldScene,
-                Version = PuckRunDocument.CurrentVersion,
-                Viewports = SingleViewports,
-            };
-        }
-
-        if (flags.World || flags.WorldSplit || flags.WorldChild) {
-            var split = (flags.WorldSplit || flags.WorldChild);
-
-            return new PuckRunDocument {
-                Graph = new WorldNode { Child = flags.WorldChild, Produce = produce },
-                Host = host,
-                Scene = WorldScene,
-                Version = PuckRunDocument.CurrentVersion,
-                Viewports = (split ? SplitViewports : SingleViewports),
-            };
-        }
-
-        // Default: the cross-backend SDF showcase (renders its own built-in scene; consumes no document scene/viewports).
+        // The OVERWORLD is the demo: the default with no flags at all, and the explicit --overworld alias. It opens IMMERSED
+        // in the WORLD-LENS game — up to four players, each inside their own world-lens on the room: you walk the room
+        // and your brick mirrors you, seeing the room through the lens (no room pane, just the game panes tiling).
+        // First player to reach their goal breaks the fourth wall — the winner's screen fills the space and the ROOM is
+        // revealed, all players in it, freed to walk away and act. Needs no showcase ROM on disk (the world-lens is a
+        // built-in, pure-CPU cart); the walk-in-and-boot overworld lives on behind an explicit --run document. Vulkan host.
         return new PuckRunDocument {
-            Graph = new ShowcaseNode { Produce = produce },
-            Host = host,
+            Graph = new OverworldNode {
+                Consoles = WorldLensMachines(),
+                Immersed = true,
+            },
+            Host = (host with { Backend = "vulkan" }),
             Version = PuckRunDocument.CurrentVersion,
         };
     }
 
-    /// <summary>The hand-authored reference scene the data-driven <c>--check-run</c> gate asserts a JSON scene
-    /// reproduces word-for-word. It is the independent oracle the canonical <see cref="WorldScene"/> is checked against,
-    /// so the data form can never silently drift from the intended geometry.</summary>
-    /// <returns>The reference scene program.</returns>
-    public static SdfProgram BuildReferenceScene() {
-        var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.46f, 0.48f, 0.54f)));
-        var red = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.90f, 0.27f, 0.21f)));
-        var green = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.30f, 0.80f, 0.40f)));
-        var blue = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.27f, 0.45f, 0.92f)));
+    // The world-lens game's cabinets: four Advanced machines, each running the built-in world-lens cart (peripheral
+    // "world" binds the room→machine sensor feed) with no pre-inserted file ROM, and each instrumented with the WIN
+    // exit — the ROM raises the win flag (0xC004) the frame its player reaches the goal tile, and the host polls it to
+    // break the fourth wall. All four identical: player i walks the room, cabinet i's lens mirrors player i.
+    private static GamingBrickSource[] WorldLensMachines() {
+        var win = new BrickExitCondition { Address = "0xC004", Label = "reached the goal", Op = ">=", Value = 1 };
+        var machines = new GamingBrickSource[OverworldNode.MaxConsoles];
 
-        _ = builder.ResetPoint().Plane(normal: new Vector3(0f, 1f, 0f), offset: 1f, material: ground);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-1.3f, 0f, 0f)).Sphere(radius: 0.85f, material: red, blend: SdfBlendOp.SmoothUnion, smooth: 0.35f);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(1.3f, 0f, 0.2f)).Box(halfExtents: new Vector3(0.65f, 0.65f, 0.65f), round: 0.12f, material: blue, blend: SdfBlendOp.SmoothUnion, smooth: 0.35f);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0.1f, -1.6f)).Torus(majorRadius: 0.9f, minorRadius: 0.3f, material: green, blend: SdfBlendOp.SmoothUnion, smooth: 0.35f);
+        for (var index = 0; (index < machines.Length); index++) {
+            machines[index] = new GamingBrickSource { Exit = win, Model = "agb", Peripheral = "world" };
+        }
 
-        return builder.Build();
+        return machines;
     }
 
-    // Maps the self-contained validation flags (each a full-frame offscreen smoke test) to their gate name, in the
-    // historic precedence order; null when none is set (the caller falls through to the world gates / live producers).
-    private static string? SelfContainedGateName(DemoFlags flags) {
-        if (flags.Validate) { return "parity"; }
-        if (flags.ValidateMiniAction) { return "mini-action"; }
-        if (flags.ValidateDeterminism) { return "determinism"; }
-        if (flags.ValidateCameraLive) { return "camera-live"; }
-        if (flags.ValidateCameraGpu) { return "camera-gpu"; }
+    // The overworld's standing machines: ALWAYS four (OverworldNode.MaxConsoles), each pre-inserted with romPath and booting
+    // on the Advanced (agb) costume — the one world's cabinets, identical at start and DEMOTABLE to cgb/dmg live via the
+    // mode-verb binds. BOTH boot directions build the same four machines; only the immersion (start inside the ROM vs
+    // in the room) and the exit instrumentation differ, so a player who joins inherits whatever mode the world booted in.
+    private static GamingBrickSource[] StandingMachines(string romPath, BrickExitCondition? exit) {
+        var machines = new GamingBrickSource[OverworldNode.MaxConsoles];
+
+        for (var index = 0; (index < machines.Length); index++) {
+            machines[index] = new GamingBrickSource { Exit = exit, Model = "agb", RomPath = romPath };
+        }
+
+        return machines;
+    }
+
+    // Parses a --rom-exit spec ("<0xADDR><op><value>", e.g. "0xDA22>=1") into the document exit condition. A
+    // malformed spec is reported LOUDLY and dropped (the boot proceeds without instrumentation) rather than
+    // producing an inert half-parsed condition.
+    private static BrickExitCondition? ParseExitSpec(string spec) {
+        foreach (var op in BrickExitCondition.SupportedOps.OrderByDescending(keySelector: static candidate => candidate.Length)) {
+            var split = spec.IndexOf(value: op, comparisonType: StringComparison.Ordinal);
+
+            if (split <= 0) {
+                continue;
+            }
+
+            var condition = new BrickExitCondition {
+                Address = spec[..split].Trim(),
+                Label = spec,
+                Op = op,
+                Value = (int.TryParse(s: spec[(split + op.Length)..].Trim(), result: out var value) ? value : -1),
+            };
+
+            if (condition.TryParseAddress(address: out _) && (condition.Value is >= 0 and <= 255)) {
+                return condition;
+            }
+
+            break;
+        }
+
+        Console.Error.WriteLine(value: $"[rom] --rom-exit '{spec}' is not <0xADDR><op><value> (ops: {string.Join(separator: " ", values: BrickExitCondition.SupportedOps)}; address 0xC000-0xDFFF; value 0-255); booting without exit instrumentation.");
 
         return null;
     }
+
     private static PuckRunDocument Gate(HostDocument host, string gate) {
         return new PuckRunDocument {
             Host = host,
             Validation = new ValidationDocument { Gate = gate },
             Version = PuckRunDocument.CurrentVersion,
-        };
-    }
-    // The 'world' validation gate over the canonical scene. A child viewport OR an explicit --world-split uses the 2x2
-    // split layout (four-up); plain --validate-world uses the single hero view.
-    private static PuckRunDocument WorldGate(HostDocument host, bool child, bool split) {
-        var fourUp = (child || split);
-
-        return new PuckRunDocument {
-            Host = host,
-            Scene = WorldScene,
-            Validation = new ValidationDocument { Child = child, Gate = "world" },
-            Version = PuckRunDocument.CurrentVersion,
-            Viewports = (fourUp ? SplitViewports : SingleViewports),
         };
     }
 }

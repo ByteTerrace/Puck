@@ -1,4 +1,4 @@
-// Fullscreen triangle — HLSL port of fullscreen.vert (dual-source; the GLSL stays the Vulkan form). Three
+// Fullscreen triangle — single-source HLSL, compiled by DXC to both SPIR-V and DXIL. Three
 // clip-space float2 positions from the vertex buffer, passed straight through; the SDF raymarch and the
 // composite happen entirely in the pixel stage.
 struct VSOutput {

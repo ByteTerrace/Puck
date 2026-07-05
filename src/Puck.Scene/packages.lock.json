@@ -24,6 +24,12 @@
       "puck.cameras": {
         "type": "Project"
       },
+      "puck.capture": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
       "puck.commands": {
         "type": "Project",
         "dependencies": {
@@ -47,8 +53,10 @@
       "puck.sdfvm": {
         "type": "Project",
         "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
           "Puck.Assets": "[1.0.0, )",
           "Puck.Cameras": "[1.0.0, )",
+          "Puck.Capture": "[1.0.0, )",
           "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Shaders": "[1.0.0, )"

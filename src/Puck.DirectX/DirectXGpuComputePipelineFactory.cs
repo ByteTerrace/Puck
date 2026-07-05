@@ -18,7 +18,10 @@ namespace Puck.DirectX;
 /// buffer) takes the next <c>t#</c>, and an array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes
 /// that many consecutive registers and heap slots — so each binding list lays out exactly as its kernel declares
 /// its registers. Every parameter is
-/// <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class), a SampledImage binding adds one CLAMP static sampler at s0 (else none), and the input-layout
+/// <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); EACH SampledImage binding adds its own CLAMP static
+/// sampler, at s0, s1, ... in binding-list order (all sharing the pipeline's one requested filter — DXC's
+/// <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a kernel with several
+/// screen-like sources declares several distinct sampler symbols at distinct registers); the input-layout
 /// flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
 /// </para>
 /// </summary>
@@ -173,44 +176,56 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             parameters[paramIndex++] = constantsParam;
         }
 
-        // A SampledImage binding reads its SRV through a sampler; D3D12 samplers are static in the root signature, so
-        // bake one in at s0 with the requested filter (CLAMP-addressed, all-stage visible) when any binding samples an
-        // image. Existing compute pipelines (world/rt/validation/indirect) declare no SampledImage binding, so they keep
-        // NumStaticSamplers = 0 and serialize byte-identically.
-        var hasSampledImage = false;
+        // Each SampledImage binding reads its SRV through its OWN sampler register (s0, s1, ... in binding-list
+        // order): DXC's vk::combinedImageSampler only fuses a SCALAR Texture2D+SamplerState pair (never an array), so
+        // a shader with several screen-like sources declares several distinct sampler symbols at distinct registers —
+        // one static sampler per SampledImage binding, all with the SAME requested filter (CLAMP-addressed, all-stage
+        // visible), matches that 1:1. Existing compute pipelines (world/rt/validation/indirect) declare no
+        // SampledImage binding, so they keep NumStaticSamplers = 0 and serialize byte-identically; a single-binding
+        // pipeline (resample, the GamingBrick child resample) still gets exactly one static sampler at s0, unchanged.
+        var sampledImageCount = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
             if (bindings[index].Kind == GpuComputeBindingKind.SampledImage) {
-                hasSampledImage = true;
-
-                break;
+                sampledImageCount++;
             }
         }
 
-        var staticSampler = new D3D12_STATIC_SAMPLER_DESC {
-            AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            BorderColor = D3D12_STATIC_BORDER_COLOR.D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
-            ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
-            Filter = ((samplerFilter == GpuSamplerFilter.Nearest)
-                ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
-                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
-            MaxAnisotropy = 0,
-            MaxLOD = float.MaxValue,
-            MinLOD = 0f,
-            MipLODBias = 0f,
-            RegisterSpace = 0,
-            ShaderRegister = 0,
-            ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL,
-        };
+        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[(sampledImageCount > 0) ? (int)sampledImageCount : 1];
+        var samplerRegister = 0u;
+
+        for (var index = 0; (index < bindings.Count); index++) {
+            if (bindings[index].Kind != GpuComputeBindingKind.SampledImage) {
+                continue;
+            }
+
+            staticSamplers[(int)samplerRegister] = new D3D12_STATIC_SAMPLER_DESC {
+                AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                BorderColor = D3D12_STATIC_BORDER_COLOR.D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
+                ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
+                Filter = ((samplerFilter == GpuSamplerFilter.Nearest)
+                    ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
+                    : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
+                MaxAnisotropy = 0,
+                MaxLOD = float.MaxValue,
+                MinLOD = 0f,
+                MipLODBias = 0f,
+                RegisterSpace = 0,
+                ShaderRegister = samplerRegister,
+                ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL,
+            };
+
+            samplerRegister++;
+        }
 
         var desc = new D3D12_ROOT_SIGNATURE_DESC {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE,
             NumParameters = (uint)paramCount,
-            NumStaticSamplers = (hasSampledImage ? 1u : 0u),
+            NumStaticSamplers = sampledImageCount,
             pParameters = (0 < paramCount) ? parameters : null,
-            pStaticSamplers = (hasSampledImage ? &staticSampler : null),
+            pStaticSamplers = (sampledImageCount > 0) ? staticSamplers : null,
         };
 
         return SerializeAndCreate(device: device, desc: in desc);

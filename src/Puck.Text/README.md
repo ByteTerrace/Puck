@@ -12,7 +12,7 @@ rasterizer**: the actual glyph-to-image step is an extension point you plug in.
 ```text
 namespace Puck.Text
 target     net10.0
-deps       Puck.Platform   (content-addressed LRU cache + content hashing)
+deps       Puck.Assets   (content-addressed LRU cache + content hashing)
 ```
 
 ---

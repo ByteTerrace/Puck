@@ -124,7 +124,7 @@ internal static class SmokeTests {
         // Interrupt controller: the IE/IF/IME pipeline is double-buffered (ARES stepIRQ). Writes land in the
         // "next" stage and only reach the synchronizer (the CPU's line) after StepSync shifts them through — the
         // 2-cycle recognition latency. IF is write-one-to-clear.
-        var controller = new GbaInterruptController();
+        var controller = new AgbInterruptController();
         var timer0Bit = (ushort)(1u << (int)InterruptSource.Timer0);
 
         Check(name: "IRQ line low at rest", ok: !controller.Synchronizer);
@@ -150,14 +150,14 @@ internal static class SmokeTests {
         // (steps every cycle). Cycle 0 commits the enable (arms the reload); cycle 1 reload-latches 0xFFFE; cycles
         // 2 and 3 count 0xFFFF then overflow. The IRQ lands in flag[1] and reaches HasPendingInterrupt one StepSync
         // later — no (now+2) heuristic.
-        var timerInterrupts = new GbaInterruptController();
+        var timerInterrupts = new AgbInterruptController();
 
         timerInterrupts.WriteRegister(offset: 0x208u, value: 1);
         timerInterrupts.WriteRegister(offset: 0x200u, value: timer0Bit);
         timerInterrupts.StepSync(stallingCpu: false);
         timerInterrupts.StepSync(stallingCpu: false);
 
-        var timers = new GbaTimerController(interrupts: timerInterrupts, apu: new GbaApu());
+        var timers = new AgbTimerController(interrupts: timerInterrupts, apu: new AgbApu());
 
         timers.WriteRegister(offset: 0x100u, value: 0xFFFE);         // reload (overflows after two ticks)
         timers.WriteRegister(offset: 0x102u, value: 0x00C0);         // enable + IRQ, prescaler 1
@@ -176,17 +176,17 @@ internal static class SmokeTests {
         Check(name: "timer overflow raises IRQ", ok: timerInterrupts.HasPendingInterrupt);
 
         // Immediate DMA copies a word through the full bus I/O path.
-        var dmaInterrupts = new GbaInterruptController();
-        var bus = new GbaBus(
-            scheduler: new GbaScheduler(),
+        var dmaInterrupts = new AgbInterruptController();
+        var bus = new AgbBus(
+            scheduler: new AgbScheduler(),
             bios: new ReplacementBios(image: new byte[ReplacementBios.ImageSize]),
-            cartridge: new GbaCartridge(rom: new byte[256]),
+            cartridge: new AgbCartridge(rom: new byte[256]),
             interrupts: dmaInterrupts,
-            timers: new GbaTimerController(interrupts: dmaInterrupts, apu: new GbaApu()),
-            dma: new GbaDmaController(interrupts: dmaInterrupts),
-            serial: new GbaSerialController(scheduler: new GbaScheduler(), interrupts: dmaInterrupts),
-            ppu: new GbaPpu(scheduler: new GbaScheduler(), interrupts: dmaInterrupts),
-            apu: new GbaApu());
+            timers: new AgbTimerController(interrupts: dmaInterrupts, apu: new AgbApu()),
+            dma: new AgbDmaController(interrupts: dmaInterrupts),
+            serial: new AgbSerialController(scheduler: new AgbScheduler(), interrupts: dmaInterrupts),
+            ppu: new AgbPpu(scheduler: new AgbScheduler(), interrupts: dmaInterrupts),
+            apu: new AgbApu());
 
         bus.Write32(address: 0x03000000u, value: 0xCAFEBABEu, access: BusAccessType.NonSequential);
         bus.Write16(address: 0x040000B0u, value: 0x0000, access: BusAccessType.NonSequential); // SAD lo
@@ -202,9 +202,9 @@ internal static class SmokeTests {
     }
 
     private static void PpuTiming() {
-        var interrupts = new GbaInterruptController();
-        var scheduler = new GbaScheduler();
-        var ppu = new GbaPpu(scheduler: scheduler, interrupts: interrupts);
+        var interrupts = new AgbInterruptController();
+        var scheduler = new AgbScheduler();
+        var ppu = new AgbPpu(scheduler: scheduler, interrupts: interrupts);
 
         interrupts.WriteRegister(offset: 0x208u, value: 1);
         interrupts.WriteRegister(offset: 0x200u, value: (ushort)(1u << (int)InterruptSource.VBlank));
@@ -240,8 +240,8 @@ internal static class SmokeTests {
     private const int TotalLinesForTest = 228;
 
     private static void SpriteRendering() {
-        var scheduler = new GbaScheduler();
-        var ppu = new GbaPpu(scheduler: scheduler, interrupts: new GbaInterruptController());
+        var scheduler = new AgbScheduler();
+        var ppu = new AgbPpu(scheduler: scheduler, interrupts: new AgbInterruptController());
 
         // Mode 0, OBJ enabled (bit 12), 1-D tile mapping (bit 6).
         ppu.WriteRegister(offset: 0x00u, value: 0x1040);
@@ -270,8 +270,8 @@ internal static class SmokeTests {
     }
 
     private static void AffineBackgroundRendering() {
-        var scheduler = new GbaScheduler();
-        var ppu = new GbaPpu(scheduler: scheduler, interrupts: new GbaInterruptController());
+        var scheduler = new AgbScheduler();
+        var ppu = new AgbPpu(scheduler: scheduler, interrupts: new AgbInterruptController());
 
         // Mode 2 with BG2 (affine) enabled.
         ppu.WriteRegister(offset: 0x00u, value: 0x0402);
@@ -299,8 +299,8 @@ internal static class SmokeTests {
     }
 
     private static void BrightnessBlend() {
-        var scheduler = new GbaScheduler();
-        var ppu = new GbaPpu(scheduler: scheduler, interrupts: new GbaInterruptController());
+        var scheduler = new AgbScheduler();
+        var ppu = new AgbPpu(scheduler: scheduler, interrupts: new AgbInterruptController());
 
         // Mode 0, BG0 enabled.
         ppu.WriteRegister(offset: 0x00u, value: 0x0100);
@@ -327,7 +327,7 @@ internal static class SmokeTests {
     }
 
     private static void ApuPulseOutput() {
-        var apu = new GbaApu();
+        var apu = new AgbApu();
 
         apu.ConfigureOutput(sampleRate: 32768);
         apu.WriteRegister(offset: 0x84u, value: 0x0080);   // SOUNDCNT_X: master enable (must precede channel writes)
@@ -361,7 +361,7 @@ internal static class SmokeTests {
         Check(name: "APU pulse produces a varying waveform", ok: varied);
 
         // Noise channel: trigger it and confirm the LFSR drives a varying output.
-        var noiseApu = new GbaApu();
+        var noiseApu = new AgbApu();
 
         noiseApu.ConfigureOutput(sampleRate: 32768);
         noiseApu.WriteRegister(offset: 0x84u, value: 0x0080);   // master enable
@@ -394,7 +394,7 @@ internal static class SmokeTests {
         Check(name: "APU noise produces a varying waveform", ok: noiseVaried);
 
         // Direct Sound FIFO: enqueue samples, pop one on a timer overflow, and confirm the low FIFO asks for a refill.
-        var fifoApu = new GbaApu();
+        var fifoApu = new AgbApu();
 
         fifoApu.WriteRegister(offset: 0x84u, value: 0x0080); // master enable
         fifoApu.WriteRegister(offset: 0x82u, value: 0x0000); // SOUNDCNT_H: FIFO A clocked by timer 0
@@ -420,14 +420,14 @@ internal static class SmokeTests {
 
         var services = new ServiceCollection();
 
-        _ = services.AddGameBoyAdvance();
+        _ = services.AddAdvancedGamingBrick();
         _ = services.AddReplacementBios(image: s_bios);
-        services.AddScoped<GbaCartridge>(implementationFactory: _ => new GbaCartridge(rom: rom));
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => new AgbCartridge(rom: rom));
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        var machine = scope.ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+        var machine = scope.ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
 
         machine.DirectBoot();
 
@@ -460,8 +460,8 @@ internal static class SmokeTests {
 
         var services = new ServiceCollection();
 
-        _ = services.AddGameBoyAdvance();
-        services.AddScoped<IGbaBus>(implementationFactory: _ => bus);
+        _ = services.AddAdvancedGamingBrick();
+        services.AddScoped<IAgbBus>(implementationFactory: _ => bus);
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();

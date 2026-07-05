@@ -20,7 +20,12 @@ public static class SceneBuilder {
         var builder = new SdfProgramBuilder();
 
         foreach (var material in (scene.Materials ?? [])) {
-            _ = builder.AddMaterial(material: new SdfMaterial(Albedo: JsonVector.ToVector3(components: material.Albedo)));
+            _ = builder.AddMaterial(material: new SdfMaterial(
+                Albedo: JsonVector.ToVector3(components: material.Albedo),
+                Emissive: material.Emissive,
+                Shininess: (material.Shininess ?? 32f),
+                Specular: material.Specular
+            ));
         }
 
         foreach (var sceneObject in (scene.Objects ?? [])) {

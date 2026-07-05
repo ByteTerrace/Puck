@@ -6,6 +6,10 @@ using Puck.HumbleGamingBrick.Post;
 // tier/name subset for iterating. Tier A runs anywhere on a synthetic ROM; Tier B (later) needs the reference corpus,
 // found via the PUCK_GB_TESTROMS environment variable and skipped when absent.
 
+if (Diagnostics.TryRun(args: args, exitCode: out var diagnosticExitCode)) {
+    return diagnosticExitCode;
+}
+
 var artifactsDirectory = ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gb-post");
 var tierFilter = ArgValue(args: args, name: "--tier");
 var nameFilter = ArgValue(args: args, name: "--filter");

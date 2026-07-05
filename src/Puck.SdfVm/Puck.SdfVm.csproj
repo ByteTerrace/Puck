@@ -1,10 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <!--
         The signed-distance-function engine: the instruction ISA, the program representation, the fluent
-        authoring builder, and the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
-        view/composite/fullscreen stages), plus the GPU host that runs the VM — cameras, viewports,
-        split-screen compositing, and an SdfEngineNode that renders the world into its own offscreen surface
-        for a host to composite. The C# and the shaders are halves of one engine and must stay in sync.
+        authoring builder, the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
+        view/composite/fullscreen stages), and the GPU host that runs the VM — SdfWorldEngine (the
+        device-explicit pipeline core: beam cull → per-view render → split-screen composite over a viewport
+        table of cameras + regions) and SdfEngineNode (the host-model IRenderNode that renders the world into
+        its own offscreen surface for a host to composite). Fully backend-neutral: only the IGpuCompute*
+        seams from Puck.Abstractions, never Vulkan or DirectX types. The C# and the shaders are halves of
+        one engine and must stay in sync.
     -->
     <PropertyGroup>
         <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the single
@@ -13,17 +16,22 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Cameras\Puck.Cameras.csproj" />
+        <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Ship the compiled bytecode: SPIR-V for the Vulkan SDF renderer, DXIL for the DirectX SDF producer. -->
-        <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="Assets\Shaders\**\*.dxil" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The committed bytecode: SPIR-V for the Vulkan SDF renderer, DXIL for the DirectX SDF producer. Declared
+             ONCE as ShaderBytecode (the ValidateShaderBytecodeSources staleness guard batches over it) and shipped by
+             deriving Content from it, so a new bytecode glob can never be shipped without also being guarded. -->
+        <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
+        <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+        <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
@@ -36,6 +44,13 @@
         <RayQueryComputeShaderSource Include="Assets\Shaders\**\*.rq.comp.hlsl" />
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
     </ItemGroup>
+
+    <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
+        <Error
+            Condition="'%(ShaderBytecode.Identity)' != '' and !Exists('%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl')"
+            Text="Shader bytecode '%(ShaderBytecode.Identity)' has no matching HLSL source '%(ShaderBytecode.Filename).hlsl'. Remove stale bytecode or add the source."
+        />
+    </Target>
 
     <!-- Compile each *.vert.hlsl / *.frag.hlsl to BOTH SPIR-V (Vulkan; entry renamed to "main") and DXIL
          (DirectX). DXC resolves #include relative to the source directory. The vk:: binding/push-constant

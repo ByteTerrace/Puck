@@ -161,6 +161,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float tanHalfFov = params.cameraRight.w;
     float aspect = params.cameraUp.w;
     float3 rayOrigin = params.cameraPosition.xyz;
+
+    // The symmetry-LOD origin: the camera; shadow rays inherit it, so an instance's LOD level stays self-consistent.
+    sdfLodOrigin = rayOrigin;
     float3 rayDirection = normalize(
         params.cameraForward.xyz +
         (((ndc.x * aspect) * tanHalfFov) * params.cameraRight.xyz) +
@@ -206,9 +209,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             // RT shadow: the second TLAS query of the frame, accelerating the occlusion test.
             float shadow = lerp(ShadowAmbient, 1.0, lightShadow(position, normal, lightDirection));
             float diffuse = (max(0.0, dot(normal, lightDirection)) * shadow);
-            float3 albedo = sdfMaterialAlbedo(surface.material);
 
-            color = (albedo * (0.25 + (0.75 * diffuse)));
+            // The highlight attenuates by the same RT shadow term as the diffuse (a highlight never glows in shadow).
+            color = sdfMaterialShade(sdfMaterialLoad(surface.material), (float3(1.0, 1.0, 1.0) * (0.25 + (0.75 * diffuse))), normal, rayDirection, lightDirection, shadow);
         } else {
             color = skyColor(rayDirection);
         }

@@ -2,7 +2,7 @@ namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The coupled mode-3 pixel-pipeline timing knobs, isolated behind one injectable so they can be co-swept against the
-/// SameBoy oracle without a rebuild (see the <c>Mode3Sweep</c> verification tool). The <see cref="Default"/> values
+/// hardware-accurate reference without a rebuild (see the <c>Mode3Sweep</c> verification tool). The <see cref="Default"/> values
 /// reproduce the shipped, oracle-tuned behavior bit-for-bit, so the standard machine composition is unchanged; only a
 /// sweep harness registers a non-default instance. Like <see cref="MachineConfiguration"/> and the tick resolution, this
 /// is immutable startup configuration — the PPU copies the knobs into its own fields, so the parameters are never
@@ -18,7 +18,7 @@ public sealed class PpuTimingParameters {
     /// <summary>The shipped default knobs — the mode-3 values remain that thread's joint-sweep optimum (entry latency 4
     /// dots, coarse-column phase 0, mode-0 edge at the hardware's 172 + SCX%8 dots), and the LY/LYC/STAT schedule values
     /// (line-event phase −1, OAM pulse −3, mode-0 IRQ/polled lags 2/2, polled mode-3 lag 4) are the <c>StatSweep</c>
-    /// joint-grid optimum against the gambatte hardware verdicts (574/726 over the STAT-coupled families).</summary>
+    /// joint-grid optimum against the hardware verdicts (574/726 over the STAT-coupled families).</summary>
     public static PpuTimingParameters Default { get; } = new();
 
     /// <summary>The offset added to the pipeline's output position when the background fetcher derives its

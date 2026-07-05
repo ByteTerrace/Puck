@@ -109,7 +109,7 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable 
             m_bitsRemaining = 8;
             m_edgeToggle = 0;
 
-            // Surface the byte being sent for a host observer (e.g. a blargg serial-text reader). This is the value
+            // Surface the byte being sent for a host observer (e.g. a serial-text test-output reader). This is the value
             // latched in SB at the start of the transfer; the shift below overwrites it with incoming ones.
             ByteTransmitted?.Invoke(obj: m_data);
         }

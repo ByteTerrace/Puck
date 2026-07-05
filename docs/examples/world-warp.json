@@ -1,0 +1,78 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "scene": {
+        "materials": [
+            { "albedo": [0.50, 0.52, 0.58] },
+            { "albedo": [0.80, 0.35, 0.25] },
+            { "albedo": [0.20, 0.70, 0.70] },
+            { "albedo": [0.90, 0.70, 0.30] }
+        ],
+        "objects": [
+            {
+                "shape": "plane",
+                "normal": [0.0, 1.0, 0.0],
+                "offset": 1.0,
+                "material": 0
+            },
+            {
+                "shape": "box",
+                "ops": [
+                    { "op": "translate", "offset": [-1.6, 0.0, 0.0] },
+                    { "op": "twistY", "rate": 1.5 }
+                ],
+                "halfExtents": [0.4, 0.9, 0.4],
+                "round": 0.06,
+                "material": 1
+            },
+            {
+                "shape": "capsule",
+                "ops": [
+                    { "op": "translate", "offset": [0.4, -0.6, -0.6] },
+                    { "op": "bendX", "rate": 0.9 }
+                ],
+                "endpoint": [1.1, 0.0, 0.0],
+                "radius": 0.26,
+                "material": 2
+            },
+            {
+                "shape": "sphere",
+                "ops": [
+                    { "op": "translate", "offset": [1.4, -0.65, 0.9] },
+                    { "op": "elongate", "extents": [0.5, 0.0, 0.12] }
+                ],
+                "radius": 0.28,
+                "material": 3,
+                "dilate": 0.02
+            },
+            {
+                "shape": "sphere",
+                "ops": [{ "op": "translate", "offset": [-0.3, 0.6, 0.8] }],
+                "radius": 0.4,
+                "material": 1
+            },
+            {
+                "shape": "sphere",
+                "ops": [{ "op": "translate", "offset": [0.1, 0.6, 0.8] }],
+                "radius": 0.4,
+                "material": 2,
+                "blend": "Xor"
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.35,
+                "azimuth": 0.0,
+                "fieldOfView": 60.0,
+                "height": 1.8,
+                "radius": 5.6,
+                "target": [0.0, -0.3, 0.0]
+            },
+            "region": [0.0, 0.0, 1.0, 1.0]
+        }
+    ],
+    "graph": { "$type": "world", "produce": "vulkan" }
+}

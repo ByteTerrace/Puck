@@ -3,7 +3,7 @@ namespace Puck.AdvancedGamingBrick;
 /// <summary>
 /// The ARM7TDMI core: an ARMv4T processor with a 3-stage (fetch/decode/execute) pipeline, running either the
 /// 32-bit ARM or the 16-bit Thumb instruction set. Timing emerges from the bus accessors — the core counts no
-/// cycles itself; each fetch, data transfer, and idle charges the machine through <see cref="IGbaBus"/>, the
+/// cycles itself; each fetch, data transfer, and idle charges the machine through <see cref="IAgbBus"/>, the
 /// same deferred-cycle discipline proven on the DMG/CGB core. The pipeline is modelled so that reading R15
 /// yields the executing instruction's address plus the architectural prefetch offset (8 in ARM, 4 in Thumb).
 /// </summary>
@@ -17,7 +17,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private const uint FlagT = 1u << 5;
     private const uint ModeMask = 0x1Fu;
 
-    private readonly IGbaBus m_bus;
+    private readonly IAgbBus m_bus;
 
     // The 16 currently visible general-purpose registers (R0–R15); R13=SP, R14=LR, R15=PC.
     private readonly uint[] m_gpr = new uint[16];
@@ -31,10 +31,10 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private readonly uint[] m_fiqR8to12 = new uint[5];
     private readonly uint[] m_usrR8to12 = new uint[5];
 
-    // ARES's 3-stage instruction pipeline (component/processor/arm7tdmi). Each slot carries the fetched word; the
+    // The ARM7TDMI 3-stage instruction pipeline. Each slot carries the fetched word; the
     // decode/execute slots also carry the instruction's address (for the exception link register) and the Thumb/IRQ
     // flags sampled when it was fetched. Fills are LAZY — a branch sets m_reload and the NEXT Step pays the refill —
-    // so the per-instruction cycle accounting (and the boot pipeline-fill) is byte-identical to ARES.
+    // so the per-instruction cycle accounting (and the boot pipeline-fill) is byte-identical to the hardware.
     private uint m_fetchWord;
     private uint m_decodeWord;
     private uint m_executeWord;
@@ -48,7 +48,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private uint m_cpsr;
     private bool m_irqLine;
 
-    // ARES's two-stage interrupt-recognition pipeline (component/processor/arm7tdmi/instruction.cpp). m_decodeIrq
+    // The ARM7TDMI two-stage interrupt-recognition pipeline. m_decodeIrq
     // is sampled from CPSR.I when an instruction is fetched; it slides into m_executeIrq one boundary later, gated
     // by the live synchronizer, to decide whether that instruction is pre-empted by an IRQ. This delay is the
     // hardware's interrupt-recognition latency — not a tuned constant.
@@ -61,7 +61,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     /// <summary>Creates the core bound to a bus and resets it.</summary>
     /// <param name="bus">The system bus the core drives every access through.</param>
     /// <exception cref="ArgumentNullException"><paramref name="bus"/> is <see langword="null"/>.</exception>
-    public Arm7Tdmi(IGbaBus bus) {
+    public Arm7Tdmi(IAgbBus bus) {
         ArgumentNullException.ThrowIfNull(bus);
 
         m_bus = bus;
@@ -119,7 +119,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_gpr[15] = 0x00000000u;
 
         // Lazy reload: the first Step refills the pipeline from the reset vector, charging the fill to that
-        // instruction exactly as ARES does (no eager pre-fill before the clock starts).
+        // instruction exactly as hardware does (no eager pre-fill before the clock starts).
         m_reload = true;
     }
 
@@ -127,7 +127,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     public void SetupDirectBoot(uint entryPoint) {
         Reset();
 
-        // Lay down the stack pointers the GBA BIOS leaves for each mode, then settle in System mode and vector
+        // Lay down the stack pointers the BIOS leaves for each mode, then settle in System mode and vector
         // to the entry point. Each SwitchMode banks the SP just written before loading the next mode's bank.
         m_gpr[13] = 0x03007FE0u; // SP_svc (we are in Supervisor after Reset)
         SwitchMode(newMode: (uint)CpuMode.Irq);
@@ -138,7 +138,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_cpsr = (uint)CpuMode.System; // System mode, ARM state, interrupts unmasked at the CPSR level
         m_gpr[15] = entryPoint;
 
-        m_reload = true; // lazily refill from the cartridge entry on the first Step (ARES boot accounting)
+        m_reload = true; // lazily refill from the cartridge entry on the first Step (hardware boot accounting)
     }
 
     /// <inheritdoc/>
@@ -151,7 +151,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
             m_bus.RunUntilInterrupt();
         }
 
-        // ARES ARM7TDMI::instruction (instruction.cpp:23-41): refill the pipeline if a branch/exception left it
+        // ARM7TDMI instruction step: refill the pipeline if a branch/exception left it
         // stale (lazy — the refill is charged here, to the consuming instruction), slide one stage, then either
         // take a pre-empting IRQ or execute the instruction now in the execute slot.
         if (m_reload) {
@@ -237,7 +237,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_cpsr = value;
     }
 
-    // ARES ARM7TDMI::fetch (instruction.cpp:10-21): slide the pipeline one stage, gate the freshly-promoted
+    // ARM7TDMI fetch: slide the pipeline one stage, gate the freshly-promoted
     // execute-stage IRQ flag against the live synchronizer (so it fires only if the line is still asserted), sample
     // the decode-stage Thumb/IRQ flags from the current CPSR, then advance R15 and refill the fetch slot.
     private void Fetch() {
@@ -271,9 +271,9 @@ public sealed partial class Arm7Tdmi : IArmCpu {
             : m_bus.ReadCode32(address: address & ~3u, access: access);
     }
 
-    // ARES ARM7TDMI::reload (instruction.cpp:1-8): after a branch/exception writes R15, the pipeline is refilled
+    // ARM7TDMI reload: after a branch/exception writes R15, the pipeline is refilled
     // lazily on the next Step — the first refill fetch is non-sequential, then fetch() slides+refills again, so the
-    // three refill reads are charged to the instruction that consumes them (matching ARES, including at boot).
+    // three refill reads are charged to the instruction that consumes them (matching hardware, including at boot).
     private void Reload() {
         m_reload = false;
         m_nextFetchNonSequential = true;
@@ -286,14 +286,14 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         Fetch();
     }
 
-    // Redirects execution to an address; the pipeline reloads lazily on the next Step (ARES sets pipeline.reload
+    // Redirects execution to an address; the pipeline reloads lazily on the next Step (the reload flag is set
     // when R15 is written, rather than refetching immediately).
     private void BranchTo(uint address) {
         m_gpr[15] = address;
         m_reload = true;
     }
 
-    // ARES ARM7TDMI::exception (instruction.cpp:43-52): bank the mode, save the old CPSR to its SPSR, set the
+    // ARM7TDMI exception entry: bank the mode, save the old CPSR to its SPSR, set the
     // return link from the decode-stage address, mask IRQ, enter ARM state, and vector (which arms the reload).
     private void Exception(CpuMode mode, uint vector, uint linkRegister) {
         var savedCpsr = m_cpsr;
@@ -309,7 +309,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     }
 
     // A pre-empting IRQ recognised in Step. The link register is the decode-stage address (the instruction that was
-    // about to execute); ARES adds 2 in Thumb so SUBS PC,LR,#4 returns to re-run it (instruction.cpp:27-30).
+    // about to execute); hardware adds 2 in Thumb so SUBS PC,LR,#4 returns to re-run it.
     private void TakeIrqException() {
         var linkRegister = m_decodeAddress + (m_executeThumb ? 2u : 0u);
 

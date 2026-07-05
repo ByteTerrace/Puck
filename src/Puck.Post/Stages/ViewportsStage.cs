@@ -1,3 +1,4 @@
+using Puck.Capture;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 namespace Puck.Post;
@@ -159,7 +160,7 @@ internal sealed class ViewportsStage : IPostStage {
             var artifactPath = Path.Combine(context.ArtifactsDirectory, "viewports.png");
 
             _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-            PngImage.Write(height: (int)OutputHeight, path: artifactPath, rgba: composite, width: (int)OutputWidth);
+            PngEncoder.Write(height: (int)OutputHeight, path: artifactPath, rgba: composite, width: (int)OutputWidth);
 
             // The CPU oracle: left half = the raw pane texel; right half = the small source under the exact 4x nearest
             // mapping (destination pixel centers land strictly inside source texels, so the mapping is x/4 integer).

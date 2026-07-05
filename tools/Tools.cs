@@ -3,26 +3,21 @@
 // usage/build/run failure. Capture runs open hands-off windows that self-terminate.
 //
 // parity [-NoBuild]
-//   Cross-backend parity gate. Builds, then runs the
-//   Puck.Demo --validate gate: it renders the SDF scene on both the Vulkan and Direct3D 12 backends offscreen,
-//   diffs them tolerance-aware, writes artifacts/parity/ (the two PNGs, an amplified diff heatmap, report.json),
-//   and exits 0 pass / 1 gate-fail / 2 infra-fail. -NoBuild skips the build.
+//   Cross-backend parity gate. Builds, then runs Puck.Post's Tier C battery (WorldStage, WorldChildStage,
+//   ExportStage, ReverseShareStage): it renders the SDF scene on both the Vulkan and Direct3D 12 backends
+//   offscreen, diffs them tolerance-aware, writes artifacts/post/ (the backend PNGs, an amplified diff heatmap,
+//   post-report.txt), and exits 0 pass / 1 gate-fail / 2 infra-fail. -NoBuild skips the build.
 //
 // schema [<out=schema/run.schema.json>] [-NoBuild]
 //   Emits the data-driven run-document JSON Schema by running the demo's headless --emit-schema. The schema is
 //   exported from the live System.Text.Json source-gen model, so it cannot drift from the document types. -NoBuild
 //   skips the build.
 //
-// scene-words [<run.json=docs/examples/world-single.json>] [-NoBuild]
-//   Determinism gate for the data-driven scene path: runs the demo's headless --check-run to assert a run document's
-//   SdfProgram words are bit-identical to the hand-authored showcase scene (the data-driven path never bakes a
-//   different program than the flag path). Exits 0 match / 1 mismatch / 2 load-or-build failure. -NoBuild skips the build.
-//
 // compare-frames <a.png> <b.png>                       Pixel-diff two APNG captures frame-by-frame.
 // extract-frame <capture.png> <frameIndex> <out.png>   Composite frames 0..index into one PNG.
 // frame-count <capture.png>                            Count frames in an APNG capture.
 //
-// scan [<root=src>] [-Only comments,comment-smells,locks,vk-structs,clones]
+// scan [<root=src>] [-Only comments,comment-smells,locks,clones]
 //      [-OutDir dir] [-Grouped] [-MaxPerChunk N] [-MinTokens N] [-MinStatements N] [-NoBlocks]
 //   Roslyn source sweep: parses every .cs under <root> (obj/bin pruned) once and runs the
 //   selected analyzers over the shared corpus (default: all). Emits one JSONL record per finding
@@ -34,17 +29,20 @@
 //                      shader-file or UPPER_SNAKE-define references.
 //     locks          — synchronization sites, kind-tagged (lock statements, lock-primitive
 //                      declarations, Monitor.*/Interlocked.* calls, [MethodImpl(Synchronized)]).
-//     vk-structs     — every Vk*-named and [StructLayout] struct with its layout kind/pack/size
-//                      and ordered fields: the ABI layout-contract inventory.
 //     clones         — structurally identical callable bodies and nested blocks, Type-1/Type-2
 //                      fingerprinted; gated by -MinTokens/-MinStatements, -NoBlocks drops blocks.
 //
-// format [<root=src>] [-Check]
+// format [<root=src>] [-WhatIf] [-Verify]
 //        [-Only attr-order,member-spacing,member-order,null-pattern,paren-clarity,logical-lines,
 //               arg-lines,ternary-lines,init-order,trailing-comma,decl-spacing,literal-var,named-args]
 //   Source rewriters for conventions .editorconfig cannot express. The bare command runs the
-//   tree-wide passes (attr-order, member-spacing); the rest are opt-in via -Only. -Check reports
-//   drift and exits 1 instead of rewriting.
+//   semantics-preserving normalizers (attr-order, member-spacing, member-order, null-pattern,
+//   paren-clarity, init-order, trailing-comma, decl-spacing, literal-var, named-args); the
+//   vertical line-wrappers (arg-lines, logical-lines, ternary-lines) stay opt-in via -Only. -WhatIf reports
+//   drift and exits 1 instead of rewriting. -Verify audits without writing: it also fails if a
+//   pass would introduce syntax errors, or if a rewrite is not a fixed point (running the pipeline
+//   twice differs from once — a non-idempotent pass). A pass that would corrupt a file is always
+//   skipped, never written, even in a plain rewrite run.
 //     attr-order     — one attribute per list/line, alphabetized.
 //     member-spacing — blank-line grouping between type members.
 //     member-order   — a const block or property block (same kind + scope, comment-free) is
@@ -71,15 +69,12 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-return Puck.Tools.Toolbox.Run(
-    args
-);
+return Puck.Tools.Toolbox.Run(args);
 
 namespace Puck.Tools
 {
@@ -97,79 +92,46 @@ namespace Puck.Tools
             switch (args[0].ToLowerInvariant())
             {
                 case "parity":
-                    return Parity(
-                        commandArguments
-                    );
+                    return Parity(commandArguments);
                 case "schema":
-                    return SchemaCommand(
-                        commandArguments
-                    );
-                case "scene-words":
-                    return SceneWordsCommand(
-                        commandArguments
-                    );
+                    return SchemaCommand(commandArguments);
                 case "fuzz":
-                    return Fuzz(
-                        commandArguments
-                    );
+                    return Fuzz(commandArguments);
                 case "compare-frames":
-                    return CompareFrames(
-                        commandArguments
-                    );
+                    return CompareFrames(commandArguments);
                 case "extract-frame":
-                    return ExtractFrame(
-                        commandArguments
-                    );
+                    return ExtractFrame(commandArguments);
                 case "frame-count":
-                    return FrameCount(
-                        commandArguments
-                    );
+                    return FrameCount(commandArguments);
                 case "scan":
-                    return ScanCommand.Run(
-                        commandArguments
-                    );
+                    return ScanCommand.Run(commandArguments);
                 case "format":
-                    return FormatCommand.Run(
-                        commandArguments
-                    );
+                    return FormatCommand.Run(commandArguments);
                 default:
-                    Console.Error.WriteLine(
-                        $"ERROR: unknown command '{args[0]}'."
-                    );
+                    Console.Error.WriteLine($"ERROR: unknown command '{args[0]}'.");
                     PrintUsage();
                     return 2;
             }
         }
 
-        // Cross-backend parity gate: builds the solution, runs the
-        // demo's --validate, and propagates its exit code (0 pass / 1 gate-fail / 2 infra-fail), re-printing the
-        // report.json failures for the CI log.
+        // Cross-backend parity gate: builds the solution, runs Puck.Post's Tier C battery (the cross-backend world
+        // parity stages: WorldStage, WorldChildStage, ExportStage, ReverseShareStage), and propagates its exit code
+        // (0 pass / 1 gate-fail / 2 infra-fail). Puck.Post streams its own per-stage table live (console inherited),
+        // so there is nothing left to re-print here. Release, matching Puck.Post's own documented invocation.
         private static int Parity(string[] arguments)
         {
-            var noBuild = arguments.Any(
-                static argument => string.Equals(
-                argument,
-                "-NoBuild",
-                StringComparison.OrdinalIgnoreCase
-            )
-            );
+            var noBuild = arguments.Any(static argument => string.Equals(argument, "-NoBuild", StringComparison.OrdinalIgnoreCase));
             if (!noBuild)
             {
-                var buildExit = EngineRun.Build(
-                    "Debug"
-                );
+                var buildExit = EngineRun.Build("Release");
                 if (buildExit != 0)
                 {
-                    Console.Error.WriteLine(
-                        "ERROR: build failed."
-                    );
+                    Console.Error.WriteLine("ERROR: build failed.");
                     return 2;
                 }
             }
 
-            var exitCode = EngineRun.RunDemoParity();
-            ReprintParityFailures();
-            return exitCode;
+            return EngineRun.RunPostTier("C");
         }
 
         // Emits the data-driven run-document JSON Schema by running the demo's headless --emit-schema (so the schema
@@ -177,80 +139,23 @@ namespace Puck.Tools
         // positional argument overrides the output path (default schema/run.schema.json); -NoBuild skips the build.
         private static int SchemaCommand(string[] arguments)
         {
-            var output = arguments.FirstOrDefault(
-                static argument => !argument.StartsWith(
-                "-",
-                StringComparison.Ordinal
-            )
-            ) ?? Path.Combine(
-                EngineRun.RepositoryRoot,
-                "schema",
-                "run.schema.json"
-            );
+            var output = arguments.FirstOrDefault(static argument => !argument.StartsWith("-", StringComparison.Ordinal)) ?? Path.Combine(EngineRun.RepositoryRoot, "schema", "run.schema.json");
 
             if (!ToolsNoBuild(arguments) && (EngineRun.Build("Debug") != 0))
             {
-                Console.Error.WriteLine(
-                    "ERROR: build failed."
-                );
+                Console.Error.WriteLine("ERROR: build failed.");
                 return 2;
             }
 
-            return EngineRun.RunDemo(
-                "--emit-schema",
-                output
-            );
-        }
-
-        // Determinism gate for the data-driven scene path: runs the demo's headless --check-run to assert a run
-        // document's SdfProgram words are bit-identical to the hand-authored showcase scene (0 match / 1 mismatch /
-        // 2 load-or-build error). The first positional argument overrides the document (default world-single example).
-        private static int SceneWordsCommand(string[] arguments)
-        {
-            var document = arguments.FirstOrDefault(
-                static argument => !argument.StartsWith(
-                "-",
-                StringComparison.Ordinal
-            )
-            ) ?? Path.Combine(
-                EngineRun.RepositoryRoot,
-                "docs",
-                "examples",
-                "world-single.json"
-            );
-
-            if (!ToolsNoBuild(arguments) && (EngineRun.Build("Debug") != 0))
-            {
-                Console.Error.WriteLine(
-                    "ERROR: build failed."
-                );
-                return 2;
-            }
-
-            return EngineRun.RunDemo(
-                "--check-run",
-                document
-            );
+            return EngineRun.RunDemo("--emit-schema", output);
         }
 
         private static bool ToolsNoBuild(string[] arguments) =>
-            arguments.Any(
-                static argument => string.Equals(
-                argument,
-                "-NoBuild",
-                StringComparison.OrdinalIgnoreCase
-            )
-            );
+            arguments.Any(static argument => string.Equals(argument, "-NoBuild", StringComparison.OrdinalIgnoreCase));
 
-        // The most seeds a -Run sweep may span; mirrors Puck.Scene's FuzzingDocument.MaxSeedSpan (this file-based
-        // toolbox does not reference Puck.Scene, so the ceiling is restated rather than imported).
-        private const int FuzzMaxSeedSpan = 100_000;
-
-        // Cross-backend DIFFERENTIAL FUZZER. Spawns one ISOLATED child per seed running the demo's
-        // `--validate-world --fuzz-seed <n>` (a fuzz-generated SDF program rendered identically on both backends and
-        // diffed by the parity oracle), under a hard wall-clock timeout. With `-Run <doc.json>` the seed range + per-seed
-        // timeout come from the document's fuzzing section and each child runs `--run <doc> --fuzz-seed <n>` instead, so
-        // the document's bounds drive generation (the data-driven seed-range loop). Process isolation is mandatory: a malformed
+        // Cross-backend DIFFERENTIAL FUZZER. Spawns one ISOLATED child per seed running Puck.Post's
+        // `--stage fuzz --fuzz-seed <n>` (a fuzz-generated SDF program rendered identically on both backends and
+        // diffed by the parity oracle), under a hard wall-clock timeout. Process isolation is mandatory: a malformed
         // program can device-loss / TDR / hang the GPU or native-crash, which would otherwise take down the harness.
         // A child that diverges (exit 1), throws (exit 2), native-crashes (other exit), or hangs (timeout -> killed)
         // is a finding: its seed, verdict line, captured output, and the parity PNGs are preserved to artifacts/fuzz/.
@@ -261,89 +166,27 @@ namespace Puck.Tools
             var start = FuzzIntArg(arguments, "-Start", 0);
             var timeoutSeconds = FuzzIntArg(arguments, "-Timeout", 30);
             var configuration = FuzzStringArg(arguments, "-Config", "Debug");
-            var runDocument = FuzzStringArg(arguments, "-Run", string.Empty);
-            var noBuild = arguments.Any(
-                static argument => string.Equals(
-                argument,
-                "-NoBuild",
-                StringComparison.OrdinalIgnoreCase
-            )
-            );
-
-            // -Run <doc>: data-driven mode. The seed range and per-seed timeout come from the document's fuzzing
-            // section, and each child runs `--run <doc> --fuzz-seed N` (its bounds drive generation) instead of the
-            // hardcoded `--validate-world`.
-            if (!string.IsNullOrEmpty(runDocument))
-            {
-                try
-                {
-                    var (rangeStart, rangeCount, rangeTimeout) = FuzzRunRange(
-                        runDocument
-                    );
-                    start = rangeStart;
-                    // The document's seedRange drives the sweep; an explicit -Count caps it (to dry-run a prefix of a
-                    // large range) but never extends it.
-                    count = (FuzzHasFlag(
-                        arguments,
-                        "-Count"
-                    )
-                        ? Math.Min(count, rangeCount)
-                        : rangeCount);
-                    if (rangeTimeout is int documentTimeout)
-                    {
-                        timeoutSeconds = documentTimeout;
-                    }
-                }
-                catch (Exception exception)
-                {
-                    Console.Error.WriteLine(
-                        $"ERROR: could not read fuzzing.seedRange from '{runDocument}': {exception.Message}"
-                    );
-                    return 2;
-                }
-            }
+            var noBuild = arguments.Any(static argument => string.Equals(argument, "-NoBuild", StringComparison.OrdinalIgnoreCase));
 
             if (!noBuild)
             {
-                var buildExit = EngineRun.Build(
-                    configuration
-                );
+                var buildExit = EngineRun.Build(configuration);
                 if (buildExit != 0)
                 {
-                    Console.Error.WriteLine(
-                        "ERROR: build failed."
-                    );
+                    Console.Error.WriteLine("ERROR: build failed.");
                     return 2;
                 }
             }
 
-            var demoExecutable = Path.Combine(
-                EngineRun.RepositoryRoot,
-                "src",
-                "Puck.Demo",
-                "bin",
-                configuration,
-                "net10.0",
-                "Puck.Demo.exe"
-            );
-            if (!File.Exists(
-                demoExecutable
-            ))
+            var sweepExecutable = Path.Combine(EngineRun.RepositoryRoot, "src", "Puck.Post", "bin", configuration, "net10.0", "Puck.Post.exe");
+            if (!File.Exists(sweepExecutable))
             {
-                Console.Error.WriteLine(
-                    $"ERROR: demo executable not found at {demoExecutable} (build first)."
-                );
+                Console.Error.WriteLine($"ERROR: sweep executable not found at {sweepExecutable} (build first).");
                 return 2;
             }
 
-            var fuzzDirectory = Path.Combine(
-                EngineRun.RepositoryRoot,
-                "artifacts",
-                "fuzz"
-            );
-            Directory.CreateDirectory(
-                fuzzDirectory
-            );
+            var fuzzDirectory = Path.Combine(EngineRun.RepositoryRoot, "artifacts", "fuzz");
+            Directory.CreateDirectory(fuzzDirectory);
 
             var timeoutMilliseconds = (timeoutSeconds * 1000);
             var passes = 0;
@@ -353,24 +196,14 @@ namespace Puck.Tools
             var infra = 0;
             var findings = new List<string>();
 
-            Console.WriteLine(
-                $"FUZZ start | {count} seeds from {start} | timeout {timeoutSeconds}s/iter | {configuration}"
-            );
+            Console.WriteLine($"FUZZ start | {count} seeds from {start} | timeout {timeoutSeconds}s/iter | {configuration}");
 
             for (var index = 0; (index < count); index++)
             {
                 var seed = (start + index);
-                var seedText = seed.ToString(
-                    CultureInfo.InvariantCulture
-                );
-                var demoArguments = (string.IsNullOrEmpty(runDocument)
-                    ? new[] { "--validate-world", "--fuzz-seed", seedText }
-                    : new[] { "--run", runDocument, "--fuzz-seed", seedText });
-                var (exitCode, timedOut, output) = ToolProcess.RunWithTimeout(
-                    timeoutMilliseconds,
-                    demoExecutable,
-                    demoArguments
-                );
+                var seedText = seed.ToString(CultureInfo.InvariantCulture);
+                var sweepArguments = new[] { "--stage", "fuzz", "--fuzz-seed", seedText };
+                var (exitCode, timedOut, output) = ToolProcess.RunWithTimeout(timeoutMilliseconds, sweepExecutable, sweepArguments);
 
                 string classification;
                 var finding = true;
@@ -403,46 +236,23 @@ namespace Puck.Tools
                     }
                 }
 
-                var verdictLine = FuzzVerdictLine(
-                    output
-                );
-                Console.WriteLine(
-                    $"  seed {seed,7}: {classification,-18} {verdictLine}"
-                );
+                var verdictLine = FuzzVerdictLine(output);
+                Console.WriteLine($"  seed {seed,7}: {classification,-18} {verdictLine}");
 
                 if (finding)
                 {
-                    findings.Add(
-                        $"seed {seed}: {classification} | {verdictLine}"
-                    );
-                    File.WriteAllText(
-                        Path.Combine(
-                            fuzzDirectory,
-                            $"seed-{seed}-output.txt"
-                        ),
-                        output
-                    );
-                    FuzzPreserveArtifacts(
-                        fuzzDirectory,
-                        seed
-                    );
+                    findings.Add($"seed {seed}: {classification} | {verdictLine}");
+                    File.WriteAllText(Path.Combine(fuzzDirectory, $"seed-{seed}-output.txt"), output);
+                    FuzzPreserveArtifacts(fuzzDirectory, seed);
                 }
             }
 
             var summary =
                 $"FUZZ summary | {count} runs from {start} | pass {passes} | divergence {divergences} | timeout {timeouts} | crash {crashes} | infra {infra} | findings {findings.Count}";
-            Console.WriteLine(
-                summary
-            );
+            Console.WriteLine(summary);
             File.WriteAllText(
-                Path.Combine(
-                    fuzzDirectory,
-                    "findings.txt"
-                ),
-                (summary + Environment.NewLine + Environment.NewLine + string.Join(
-                    Environment.NewLine,
-                    findings
-                ))
+                Path.Combine(fuzzDirectory, "findings.txt"),
+                (summary + Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, findings))
             );
             return ((findings.Count == 0) ? 0 : 1);
         }
@@ -451,16 +261,7 @@ namespace Puck.Tools
         {
             for (var index = 0; (index < (arguments.Length - 1)); index++)
             {
-                if (string.Equals(
-                    arguments[index],
-                    name,
-                    StringComparison.OrdinalIgnoreCase
-                ) && int.TryParse(
-                    arguments[index + 1],
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out var value
-                ))
+                if (string.Equals(arguments[index], name, StringComparison.OrdinalIgnoreCase) && int.TryParse(arguments[index + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
                 {
                     return value;
                 }
@@ -472,11 +273,7 @@ namespace Puck.Tools
         {
             for (var index = 0; (index < (arguments.Length - 1)); index++)
             {
-                if (string.Equals(
-                    arguments[index],
-                    name,
-                    StringComparison.OrdinalIgnoreCase
-                ))
+                if (string.Equals(arguments[index], name, StringComparison.OrdinalIgnoreCase))
                 {
                     return arguments[index + 1];
                 }
@@ -484,73 +281,14 @@ namespace Puck.Tools
 
             return fallback;
         }
-        // Reads the seed range + per-seed timeout from a run document's fuzzing section (via reflection-free
-        // JsonDocument, honoring the toolbox's no-reflection-JSON canary). Returns the inclusive [start, end] as a
-        // (start, count) plus the optional timeout. Throws when the fuzzing.seedRange is absent/malformed.
-        private static (int Start, int Count, int? Timeout) FuzzRunRange(string documentPath)
-        {
-            using var stream = File.OpenRead(
-                documentPath
-            );
-            using var json = JsonDocument.Parse(
-                stream
-            );
-
-            var fuzzing = json.RootElement.GetProperty(
-                "fuzzing"
-            );
-            var range = fuzzing.GetProperty(
-                "seedRange"
-            );
-            var start = range[0].GetInt32();
-            var end = range[1].GetInt32();
-
-            // The same invariants FuzzingDocument.Validate enforces in-process — but tools fuzz -Run never constructs a
-            // RunDocument, so re-assert them here (a reversed/empty range would otherwise spawn zero children yet exit 0,
-            // and an unbounded span would launch a runaway number of GPU processes). Thrown errors surface as exit 2.
-            if ((start < 0) || (end < start))
-            {
-                throw new InvalidOperationException(
-                    $"fuzzing.seedRange [{start}, {end}] must satisfy 0 <= start <= end"
-                );
-            }
-
-            var span = (((long)end - start) + 1);
-            if (span > FuzzMaxSeedSpan)
-            {
-                throw new InvalidOperationException(
-                    $"fuzzing.seedRange [{start}, {end}] spans {span} seeds; the limit is {FuzzMaxSeedSpan}"
-                );
-            }
-
-            int? timeout = (fuzzing.TryGetProperty(
-                "timeoutSeconds",
-                out var timeoutElement
-            )
-                ? timeoutElement.GetInt32()
-                : null);
-
-            return (start, (int)span, timeout);
-        }
-        // Whether a bare flag (with or without a following value) is present in the argument list.
-        private static bool FuzzHasFlag(string[] arguments, string name) =>
-            arguments.Any(
-                argument => string.Equals(
-                    argument,
-                    name,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            );
+        // Picks the fuzz stage's own verdict line out of a Puck.Post battery run's console output — Puck.Post logs
+        // each stage as "[<tier>] <name>: <verdict> | <detail>" (PostBattery.Run); the fuzz stage is Tier C, named
+        // "fuzz", so "] fuzz:" identifies its line regardless of tier label or verdict.
         private static string FuzzVerdictLine(string output)
         {
-            foreach (var line in output.Split(
-                '\n'
-            ))
+            foreach (var line in output.Split('\n'))
             {
-                if (line.Contains(
-                    "WORLD-FUZZ",
-                    StringComparison.Ordinal
-                ))
+                if (line.Contains("] fuzz:", StringComparison.Ordinal))
                 {
                     return line.Trim();
                 }
@@ -558,78 +296,22 @@ namespace Puck.Tools
 
             return "(no verdict line)";
         }
+        // Preserves the cross-backend artifact triple for a diverging seed: Puck.Post's FuzzStage writes
+        // fuzz-{seed}-{vulkan,directx,diff}.png under its own artifacts directory (default artifacts/post).
         private static void FuzzPreserveArtifacts(string fuzzDirectory, int seed)
         {
-            foreach (var (source, suffix) in new[] {
-                ("parity-world-vulkan.png", "vulkan"),
-                ("parity-world-directx.png", "directx"),
-                ("parity-world-diff.png", "diff"),
-            })
-            {
-                var sourcePath = Path.Combine(
-                    EngineRun.RepositoryRoot,
-                    "artifacts",
-                    source
-                );
-                if (File.Exists(
-                    sourcePath
-                ))
-                {
-                    File.Copy(
-                        sourcePath,
-                        Path.Combine(
-                            fuzzDirectory,
-                            $"seed-{seed}-{suffix}.png"
-                        ),
-                        overwrite: true
-                    );
-                }
-            }
-        }
+            var sources = new[] {
+                (Path.Combine("post", $"fuzz-{seed}-vulkan.png"), "vulkan"),
+                (Path.Combine("post", $"fuzz-{seed}-directx.png"), "directx"),
+                (Path.Combine("post", $"fuzz-{seed}-diff.png"), "diff"),
+            };
 
-        // Echoes the verdict and any tripped thresholds from the last parity run's report.json, so the gate's
-        // reason for failing is in the tool's own output even if the child's stdout scrolled past.
-        private static void ReprintParityFailures()
-        {
-            var reportPath = Path.Combine(
-                EngineRun.RepositoryRoot,
-                "artifacts",
-                "parity",
-                "report.json"
-            );
-            if (!File.Exists(
-                reportPath
-            ))
+            foreach (var (source, suffix) in sources)
             {
-                Console.Error.WriteLine(
-                    $"WARNING: no parity report at {reportPath}."
-                );
-                return;
-            }
-
-            using var document = JsonDocument.Parse(
-                File.ReadAllText(
-                reportPath
-            )
-            );
-            var root = document.RootElement;
-            var verdict = root.TryGetProperty(
-                "verdict",
-                out var verdictElement
-            ) ? verdictElement.GetString() : "?";
-            Console.WriteLine(
-                $"parity verdict: {verdict}"
-            );
-            if (root.TryGetProperty(
-                "failures",
-                out var failures
-            ) && failures.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var failure in failures.EnumerateArray())
+                var sourcePath = Path.Combine(EngineRun.RepositoryRoot, "artifacts", source);
+                if (File.Exists(sourcePath))
                 {
-                    Console.WriteLine(
-                        $"  tripped: {failure.GetString()}"
-                    );
+                    File.Copy(sourcePath, Path.Combine(fuzzDirectory, $"seed-{seed}-{suffix}.png"), overwrite: true);
                 }
             }
         }
@@ -638,30 +320,17 @@ namespace Puck.Tools
         {
             if (arguments.Length != 2)
             {
-                Console.Error.WriteLine(
-                    "ERROR: usage: compare-frames <captureA.png> <captureB.png>"
-                );
+                Console.Error.WriteLine("ERROR: usage: compare-frames <captureA.png> <captureB.png>");
                 return 2;
             }
 
-            var result = ApngFrameExtractor.CompareCaptures(
-                Path.GetFullPath(
-                arguments[0]
-            ),
-                Path.GetFullPath(
-                arguments[1]
-            )
-            );
+            var result = ApngFrameExtractor.CompareCaptures(Path.GetFullPath(arguments[0]), Path.GetFullPath(arguments[1]));
             foreach (var frame in result.Diffs)
             {
-                Console.WriteLine(
-                    $"frame {frame.FrameIndex}: diffPixels={frame.DiffPixelCount} maxChannelDelta={frame.MaxChannelDelta}"
-                );
+                Console.WriteLine($"frame {frame.FrameIndex}: diffPixels={frame.DiffPixelCount} maxChannelDelta={frame.MaxChannelDelta}");
             }
 
-            var overallMaxDelta = result.Diffs.Count == 0 ? 0 : result.Diffs.Max(
-                static frame => frame.MaxChannelDelta
-            );
+            var overallMaxDelta = result.Diffs.Count == 0 ? 0 : result.Diffs.Max(static frame => frame.MaxChannelDelta);
             Console.WriteLine(
                 $"frames compared: {result.FrameCount} ({result.Width}x{result.Height}); frames with diffs: {result.Diffs.Count}; max channel delta: {overallMaxDelta}"
             );
@@ -670,31 +339,14 @@ namespace Puck.Tools
 
         private static int ExtractFrame(string[] arguments)
         {
-            if (arguments.Length != 3 || !int.TryParse(
-                arguments[1],
-                out var frameIndex
-            ))
+            if (arguments.Length != 3 || !int.TryParse(arguments[1], out var frameIndex))
             {
-                Console.Error.WriteLine(
-                    "ERROR: usage: extract-frame <capture.png> <frameIndex> <out.png>"
-                );
+                Console.Error.WriteLine("ERROR: usage: extract-frame <capture.png> <frameIndex> <out.png>");
                 return 2;
             }
 
-            var (width, height) = ApngFrameExtractor.ExtractFrame(
-                Path.GetFullPath(
-                arguments[0]
-            ),
-                frameIndex,
-                Path.GetFullPath(
-                arguments[2]
-            )
-            );
-            Console.WriteLine(
-                $"frame {frameIndex} -> {Path.GetFullPath(
-                arguments[2]
-            )} ({width}x{height})"
-            );
+            var (width, height) = ApngFrameExtractor.ExtractFrame(Path.GetFullPath(arguments[0]), frameIndex, Path.GetFullPath(arguments[2]));
+            Console.WriteLine($"frame {frameIndex} -> {Path.GetFullPath(arguments[2])} ({width}x{height})");
             return 0;
         }
 
@@ -702,53 +354,28 @@ namespace Puck.Tools
         {
             if (arguments.Length != 1)
             {
-                Console.Error.WriteLine(
-                    "ERROR: usage: frame-count <capture.png>"
-                );
+                Console.Error.WriteLine("ERROR: usage: frame-count <capture.png>");
                 return 2;
             }
 
-            Console.WriteLine(
-                ApngFrameExtractor.GetFrameCount(
-                Path.GetFullPath(
-                arguments[0]
-            )
-            )
-            );
+            Console.WriteLine(ApngFrameExtractor.GetFrameCount(Path.GetFullPath(arguments[0])));
             return 0;
         }
 
         private static void PrintUsage()
         {
+            Console.Error.WriteLine("usage: dotnet run tools/Tools.cs -- <command> [options]");
+            Console.Error.WriteLine("  parity          [-NoBuild]");
+            Console.Error.WriteLine("  schema          [<out=schema/run.schema.json>] [-NoBuild]");
+            Console.Error.WriteLine("  fuzz            [-Count N] [-Start S] [-Timeout secs] [-Config Debug] [-NoBuild]");
+            Console.Error.WriteLine("  compare-frames  <captureA.png> <captureB.png>");
+            Console.Error.WriteLine("  extract-frame   <capture.png> <frameIndex> <out.png>");
+            Console.Error.WriteLine("  frame-count     <capture.png>");
             Console.Error.WriteLine(
-                "usage: dotnet run tools/Tools.cs -- <command> [options]"
+                "  scan            [<root=src>] [-Only comments,comment-smells,locks,clones] [-OutDir <dir>] [-Grouped] [-MaxPerChunk N] [-MinTokens N] [-MinStatements N] [-NoBlocks]"
             );
             Console.Error.WriteLine(
-                "  parity          [-NoBuild]"
-            );
-            Console.Error.WriteLine(
-                "  schema          [<out=schema/run.schema.json>] [-NoBuild]"
-            );
-            Console.Error.WriteLine(
-                "  scene-words     [<run.json=docs/examples/world-single.json>] [-NoBuild]"
-            );
-            Console.Error.WriteLine(
-                "  fuzz            [-Run <doc.json>] [-Count N] [-Start S] [-Timeout secs] [-Config Debug] [-NoBuild]"
-            );
-            Console.Error.WriteLine(
-                "  compare-frames  <captureA.png> <captureB.png>"
-            );
-            Console.Error.WriteLine(
-                "  extract-frame   <capture.png> <frameIndex> <out.png>"
-            );
-            Console.Error.WriteLine(
-                "  frame-count     <capture.png>"
-            );
-            Console.Error.WriteLine(
-                "  scan            [<root=src>] [-Only comments,comment-smells,locks,vk-structs,clones] [-OutDir <dir>] [-Grouped] [-MaxPerChunk N] [-MinTokens N] [-MinStatements N] [-NoBlocks]"
-            );
-            Console.Error.WriteLine(
-                "  format          [<root=src>] [-Check] [-Only attr-order,member-spacing,member-order,null-pattern,paren-clarity,logical-lines,arg-lines,ternary-lines,init-order,trailing-comma,decl-spacing,literal-var,named-args]"
+                "  format          [<root=src>] [-WhatIf] [-Only attr-order,member-spacing,member-order,null-pattern,paren-clarity,logical-lines,arg-lines,ternary-lines,init-order,trailing-comma,decl-spacing,literal-var,named-args]"
             );
         }
     }
@@ -780,34 +407,16 @@ namespace Puck.Tools
         /// (how FAR did drifted frames move, not just whether).</summary>
         public static CaptureComparison CompareCaptures(string apngPathA, string apngPathB)
         {
-            ParseApng(
-                apngPathA,
-                out var widthA,
-                out var heightA,
-                out var colorTypeA,
-                out var paletteA,
-                out var framesA
-            );
-            ParseApng(
-                apngPathB,
-                out var widthB,
-                out var heightB,
-                out var colorTypeB,
-                out var paletteB,
-                out var framesB
-            );
+            ParseApng(apngPathA, out var widthA, out var heightA, out var colorTypeA, out var paletteA, out var framesA);
+            ParseApng(apngPathB, out var widthB, out var heightB, out var colorTypeB, out var paletteB, out var framesB);
             if (widthA != widthB || heightA != heightB)
             {
-                throw new InvalidDataException(
-                    $"Capture canvases differ: {widthA}x{heightA} vs {widthB}x{heightB}."
-                );
+                throw new InvalidDataException($"Capture canvases differ: {widthA}x{heightA} vs {widthB}x{heightB}.");
             }
 
             if (framesA.Count != framesB.Count)
             {
-                throw new InvalidDataException(
-                    $"Capture frame counts differ: {framesA.Count} vs {framesB.Count}."
-                );
+                throw new InvalidDataException($"Capture frame counts differ: {framesA.Count} vs {framesB.Count}.");
             }
 
             var bytesPerPixelA = colorTypeA == 6 ? 4 : 1;
@@ -817,28 +426,10 @@ namespace Puck.Tools
             var diffs = new List<FrameDiff>();
             for (var index = 0; index < framesA.Count; index++)
             {
-                ApplyFrame(
-                    canvasA,
-                    framesA[index],
-                    index,
-                    widthA,
-                    bytesPerPixelA
-                );
-                ApplyFrame(
-                    canvasB,
-                    framesB[index],
-                    index,
-                    widthB,
-                    bytesPerPixelB
-                );
-                var rgbaA = colorTypeA == 6 ? canvasA : ExpandIndexed(
-                    canvasA,
-                    paletteA!
-                );
-                var rgbaB = colorTypeB == 6 ? canvasB : ExpandIndexed(
-                    canvasB,
-                    paletteB!
-                );
+                ApplyFrame(canvasA, framesA[index], index, widthA, bytesPerPixelA);
+                ApplyFrame(canvasB, framesB[index], index, widthB, bytesPerPixelB);
+                var rgbaA = colorTypeA == 6 ? canvasA : ExpandIndexed(canvasA, paletteA!);
+                var rgbaB = colorTypeB == 6 ? canvasB : ExpandIndexed(canvasB, paletteB!);
                 var diffPixelCount = 0;
                 var maxChannelDelta = 0;
                 for (var pixelOffset = 0; pixelOffset < rgbaA.Length; pixelOffset += 4)
@@ -846,54 +437,28 @@ namespace Puck.Tools
                     var delta = 0;
                     for (var channel = 0; channel < 4; channel++)
                     {
-                        delta = Math.Max(
-                            delta,
-                            Math.Abs(
-                            rgbaA[pixelOffset + channel] - rgbaB[pixelOffset + channel]
-                        )
-                        );
+                        delta = Math.Max(delta, Math.Abs(rgbaA[pixelOffset + channel] - rgbaB[pixelOffset + channel]));
                     }
 
                     if (delta > 0)
                     {
                         diffPixelCount++;
-                        maxChannelDelta = Math.Max(
-                            maxChannelDelta,
-                            delta
-                        );
+                        maxChannelDelta = Math.Max(maxChannelDelta, delta);
                     }
                 }
 
                 if (diffPixelCount > 0)
                 {
-                    diffs.Add(
-                        new FrameDiff(
-                        index,
-                        diffPixelCount,
-                        maxChannelDelta
-                    )
-                    );
+                    diffs.Add(new FrameDiff(index, diffPixelCount, maxChannelDelta));
                 }
             }
 
-            return new CaptureComparison(
-                widthA,
-                heightA,
-                framesA.Count,
-                diffs
-            );
+            return new CaptureComparison(widthA, heightA, framesA.Count, diffs);
         }
 
         public static int GetFrameCount(string apngPath)
         {
-            ParseApng(
-                apngPath,
-                out _,
-                out _,
-                out _,
-                out _,
-                out var frames
-            );
+            ParseApng(apngPath, out _, out _, out _, out _, out var frames);
             return frames.Count;
         }
 
@@ -901,48 +466,21 @@ namespace Puck.Tools
         /// RGBA8 PNG. Returns the canvas dimensions.</summary>
         public static (int Width, int Height) ExtractFrame(string apngPath, int frameIndex, string outputPngPath)
         {
-            ParseApng(
-                apngPath,
-                out var width,
-                out var height,
-                out var colorType,
-                out var palette,
-                out var frames
-            );
+            ParseApng(apngPath, out var width, out var height, out var colorType, out var palette, out var frames);
             if (frameIndex < 0 || frameIndex >= frames.Count)
             {
-                throw new ArgumentOutOfRangeException(
-                    nameof(
-                    frameIndex
-                ),
-                    frameIndex,
-                    $"APNG holds {frames.Count} frames."
-                );
+                throw new ArgumentOutOfRangeException(nameof(frameIndex), frameIndex, $"APNG holds {frames.Count} frames.");
             }
 
             var bytesPerPixel = colorType == 6 ? 4 : 1;
             var canvas = new byte[width * height * bytesPerPixel];
             for (var index = 0; index <= frameIndex; index++)
             {
-                ApplyFrame(
-                    canvas,
-                    frames[index],
-                    index,
-                    width,
-                    bytesPerPixel
-                );
+                ApplyFrame(canvas, frames[index], index, width, bytesPerPixel);
             }
 
-            var rgba = colorType == 6 ? canvas : ExpandIndexed(
-                canvas,
-                palette!
-            );
-            WritePng(
-                outputPngPath,
-                width,
-                height,
-                rgba
-            );
+            var rgba = colorType == 6 ? canvas : ExpandIndexed(canvas, palette!);
+            WritePng(outputPngPath, width, height, rgba);
             return (width, height);
         }
 
@@ -950,16 +488,12 @@ namespace Puck.Tools
         /// delta region onto the canvas.</summary>
         private static void ApplyFrame(byte[] canvas, FrameRecord frame, int index, int width, int bytesPerPixel)
         {
-            var raw = Inflate(
-                frame.CompressedParts
-            );
+            var raw = Inflate(frame.CompressedParts);
             var rowByteLength = frame.Width * bytesPerPixel;
             var expectedLength = (rowByteLength + 1) * frame.Height;
             if (raw.Length != expectedLength)
             {
-                throw new InvalidDataException(
-                    $"Frame {index}: inflated {raw.Length} bytes, expected {expectedLength}."
-                );
+                throw new InvalidDataException($"Frame {index}: inflated {raw.Length} bytes, expected {expectedLength}.");
             }
 
             for (var row = 0; row < frame.Height; row++)
@@ -967,18 +501,10 @@ namespace Puck.Tools
                 var rowOffset = row * (rowByteLength + 1);
                 if (raw[rowOffset] != 0)
                 {
-                    throw new InvalidDataException(
-                        $"Frame {index} row {row}: filter {raw[rowOffset]} unsupported (writer emits 0)."
-                    );
+                    throw new InvalidDataException($"Frame {index} row {row}: filter {raw[rowOffset]} unsupported (writer emits 0).");
                 }
 
-                Array.Copy(
-                    raw,
-                    rowOffset + 1,
-                    canvas,
-                    (((frame.Top + row) * width) + frame.Left) * bytesPerPixel,
-                    rowByteLength
-                );
+                Array.Copy(raw, rowOffset + 1, canvas, (((frame.Top + row) * width) + frame.Left) * bytesPerPixel, rowByteLength);
             }
         }
 
@@ -1002,22 +528,13 @@ namespace Puck.Tools
             using var concatenated = new MemoryStream();
             foreach (var part in compressedParts)
             {
-                concatenated.Write(
-                    part,
-                    0,
-                    part.Length
-                );
+                concatenated.Write(part, 0, part.Length);
             }
 
             concatenated.Position = 0;
-            using var zlibStream = new ZLibStream(
-                concatenated,
-                CompressionMode.Decompress
-            );
+            using var zlibStream = new ZLibStream(concatenated, CompressionMode.Decompress);
             using var inflated = new MemoryStream();
-            zlibStream.CopyTo(
-                inflated
-            );
+            zlibStream.CopyTo(inflated);
             return inflated.ToArray();
         }
 
@@ -1030,9 +547,7 @@ namespace Puck.Tools
             out List<FrameRecord> frames
         )
         {
-            var bytes = File.ReadAllBytes(
-                apngPath
-            );
+            var bytes = File.ReadAllBytes(apngPath);
             width = 0;
             height = 0;
             colorType = 0;
@@ -1042,39 +557,18 @@ namespace Puck.Tools
             var offset = 8;
             while (offset + 8 <= bytes.Length)
             {
-                var length = (int)BinaryPrimitives.ReadUInt32BigEndian(
-                    bytes.AsSpan(
-                    offset,
-                    4
-                )
-                );
-                var type = Encoding.ASCII.GetString(
-                    bytes,
-                    offset + 4,
-                    4
-                );
-                var data = bytes.AsSpan(
-                    offset + 8,
-                    length
-                );
+                var length = (int)BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset, 4));
+                var type = Encoding.ASCII.GetString(bytes, offset + 4, 4);
+                var data = bytes.AsSpan(offset + 8, length);
                 switch (type)
                 {
                     case "IHDR":
-                        width = (int)BinaryPrimitives.ReadUInt32BigEndian(
-                            data[..4]
-                        );
-                        height = (int)BinaryPrimitives.ReadUInt32BigEndian(
-                            data.Slice(
-                            4,
-                            4
-                        )
-                        );
+                        width = (int)BinaryPrimitives.ReadUInt32BigEndian(data[..4]);
+                        height = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(4, 4));
                         colorType = data[9];
                         if (data[8] != 8 || (colorType != 6 && colorType != 3))
                         {
-                            throw new InvalidDataException(
-                                $"Unsupported PNG: bit depth {data[8]}, color type {colorType}."
-                            );
+                            throw new InvalidDataException($"Unsupported PNG: bit depth {data[8]}, color type {colorType}.");
                         }
 
                         break;
@@ -1084,44 +578,18 @@ namespace Puck.Tools
                     case "fcTL":
                         currentFrame = new FrameRecord
                         {
-                            Width = (int)BinaryPrimitives.ReadUInt32BigEndian(
-                                data.Slice(
-                                4,
-                                4
-                            )
-                            ),
-                            Height = (int)BinaryPrimitives.ReadUInt32BigEndian(
-                                data.Slice(
-                                8,
-                                4
-                            )
-                            ),
-                            Left = (int)BinaryPrimitives.ReadUInt32BigEndian(
-                                data.Slice(
-                                12,
-                                4
-                            )
-                            ),
-                            Top = (int)BinaryPrimitives.ReadUInt32BigEndian(
-                                data.Slice(
-                                16,
-                                4
-                            )
-                            )
+                            Width = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(4, 4)),
+                            Height = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(8, 4)),
+                            Left = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(12, 4)),
+                            Top = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(16, 4))
                         };
-                        frames.Add(
-                            currentFrame
-                        );
+                        frames.Add(currentFrame);
                         break;
                     case "IDAT":
-                        currentFrame?.CompressedParts.Add(
-                            data.ToArray()
-                        );
+                        currentFrame?.CompressedParts.Add(data.ToArray());
                         break;
                     case "fdAT":
-                        currentFrame?.CompressedParts.Add(
-                            data[4..].ToArray()
-                        );
+                        currentFrame?.CompressedParts.Add(data[4..].ToArray());
                         break;
                 }
 
@@ -1132,103 +600,48 @@ namespace Puck.Tools
         private static void WriteChunk(Stream stream, string type, ReadOnlySpan<byte> data)
         {
             Span<byte> lengthBytes = stackalloc byte[4];
-            BinaryPrimitives.WriteUInt32BigEndian(
-                lengthBytes,
-                (uint)data.Length
-            );
-            stream.Write(
-                lengthBytes
-            );
+            BinaryPrimitives.WriteUInt32BigEndian(lengthBytes, (uint)data.Length);
+            stream.Write(lengthBytes);
             Span<byte> typeBytes = stackalloc byte[4];
             for (var index = 0; index < 4; index++)
             {
                 typeBytes[index] = (byte)type[index];
             }
 
-            stream.Write(
-                typeBytes
-            );
-            stream.Write(
-                data
-            );
+            stream.Write(typeBytes);
+            stream.Write(data);
             var crc = 0xFFFFFFFFu;
-            crc = UpdateCrc(
-                crc,
-                typeBytes
-            );
-            crc = UpdateCrc(
-                crc,
-                data
-            );
-            BinaryPrimitives.WriteUInt32BigEndian(
-                lengthBytes,
-                crc ^ 0xFFFFFFFFu
-            );
-            stream.Write(
-                lengthBytes
-            );
+            crc = UpdateCrc(crc, typeBytes);
+            crc = UpdateCrc(crc, data);
+            BinaryPrimitives.WriteUInt32BigEndian(lengthBytes, crc ^ 0xFFFFFFFFu);
+            stream.Write(lengthBytes);
         }
 
         private static void WritePng(string path, int width, int height, byte[] rgba)
         {
-            using var stream = File.Create(
-                path
-            );
-            stream.Write(
-                [137, 80, 78, 71, 13, 10, 26, 10]
-            );
+            using var stream = File.Create(path);
+            stream.Write([137, 80, 78, 71, 13, 10, 26, 10]);
 
             Span<byte> ihdr = stackalloc byte[13];
-            BinaryPrimitives.WriteUInt32BigEndian(
-                ihdr[..4],
-                (uint)width
-            );
-            BinaryPrimitives.WriteUInt32BigEndian(
-                ihdr.Slice(
-                4,
-                4
-            ),
-                (uint)height
-            );
+            BinaryPrimitives.WriteUInt32BigEndian(ihdr[..4], (uint)width);
+            BinaryPrimitives.WriteUInt32BigEndian(ihdr.Slice(4, 4), (uint)height);
             ihdr[8] = 8;
             ihdr[9] = 6;
-            WriteChunk(
-                stream,
-                "IHDR",
-                ihdr
-            );
+            WriteChunk(stream, "IHDR", ihdr);
 
             using var compressed = new MemoryStream();
-            using (var zlibStream = new ZLibStream(
-                compressed,
-                CompressionLevel.Fastest,
-                leaveOpen: true
-            ))
+            using (var zlibStream = new ZLibStream(compressed, CompressionLevel.Fastest, leaveOpen: true))
             {
                 var rowByteLength = width * 4;
                 for (var row = 0; row < height; row++)
                 {
-                    zlibStream.WriteByte(
-                        0
-                    );
-                    zlibStream.Write(
-                        rgba,
-                        row * rowByteLength,
-                        rowByteLength
-                    );
+                    zlibStream.WriteByte(0);
+                    zlibStream.Write(rgba, row * rowByteLength, rowByteLength);
                 }
             }
 
-            WriteChunk(
-                stream,
-                "IDAT",
-                compressed.ToArray()
-            );
-            WriteChunk(
-                stream,
-                "IEND",
-                []
-            );
+            WriteChunk(stream, "IDAT", compressed.ToArray());
+            WriteChunk(stream, "IEND", []);
         }
 
         private static uint UpdateCrc(uint crc, ReadOnlySpan<byte> data)
@@ -1282,49 +695,13 @@ namespace Puck.Tools
                     var endLine = span.EndLinePosition.Line + 1;
                     var text = trivia.ToString().Trim();
 
-                    jsonl.Append(
-                        '{'
-                    )
-                        .Append(
-                            "\"file\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            relative
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"line\":"
-                        ).Append(
-                            startLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"endLine\":"
-                        ).Append(
-                            endLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"kind\":"
-                        ).Append(
-                            isSingle ? "\"single\"" : "\"multi\""
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"text\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            text
-                        )
-                        )
-                        .Append(
-                            "}\n"
-                        );
+                    jsonl.Append('{')
+                        .Append("\"file\":").Append(ScanJsonl.JsonString(relative)).Append(',')
+                        .Append("\"line\":").Append(startLine).Append(',')
+                        .Append("\"endLine\":").Append(endLine).Append(',')
+                        .Append("\"kind\":").Append(isSingle ? "\"single\"" : "\"multi\"").Append(',')
+                        .Append("\"text\":").Append(ScanJsonl.JsonString(text))
+                        .Append("}\n");
 
                     if (isSingle)
                     {
@@ -1335,21 +712,14 @@ namespace Puck.Tools
                         multi++;
                     }
 
-                    perFile[relative] = perFile.GetValueOrDefault(
-                        relative
-                    ) + 1;
-                    if (!byFile.TryGetValue(
-                        relative,
-                        out var lines
-                    ))
+                    perFile[relative] = perFile.GetValueOrDefault(relative) + 1;
+                    if (!byFile.TryGetValue(relative, out var lines))
                     {
                         lines = [];
                         byFile[relative] = lines;
                     }
 
-                    lines.Add(
-                        (startLine, text)
-                    );
+                    lines.Add((startLine, text));
                 }
             }
 
@@ -1357,19 +727,12 @@ namespace Puck.Tools
             Console.Error.WriteLine(
                 $"scan[comments]: {total} inline comments ({single} single-line, {multi} block) across {perFile.Count} files (of {corpus.FileCount} scanned)."
             );
-            foreach (var line in ScanJsonl.TopFiles(
-                perFile
-            ))
+            foreach (var line in ScanJsonl.TopFiles(perFile))
             {
-                Console.Error.WriteLine(
-                    line
-                );
+                Console.Error.WriteLine(line);
             }
 
-            return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(
-                byFile,
-                options.MaxPerChunk
-            ));
+            return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(byFile, options.MaxPerChunk));
         }
     }
 
@@ -1405,14 +768,8 @@ namespace Puck.Tools
             @"keep[\s\w]{0,16}in sync|kept in sync|stay(?:s|ing)? in sync|in lockstep|do not (?:alphabetize|reorder|re-order|sort)|load-bearing|same order as|must (?:match|mirror)\b[^.\n]*\b(?:layout|order|struct|block|offset|enum|field|kernel|glsl|shader|push-constant)\b|mirror of the",
             RegexOptions.IgnoreCase | RegexOptions.Compiled
         );
-        private static readonly Regex DebtPattern = new(
-            @"\b(?:TODO|FIXME|HACK|XXX|KLUDGE|REVISIT)\b|\bfor now\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled
-        );
-        private static readonly Regex BannerPattern = new(
-            @"[-=*#_~]{4,}",
-            RegexOptions.Compiled
-        );
+        private static readonly Regex DebtPattern = new(@"\b(?:TODO|FIXME|HACK|XXX|KLUDGE|REVISIT)\b|\bfor now\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BannerPattern = new(@"[-=*#_~]{4,}", RegexOptions.Compiled);
         // A C# code signal: a trailing terminator, a leading statement keyword, or an
         // operator prose rarely carries. The gate keeps an English sentence that happens to
         // parse as a bare expression out of the commented-out-code bucket.
@@ -1423,28 +780,17 @@ namespace Puck.Tools
         // Cross-artifact referents a stale comment would dangle: a shader file name, or an
         // UPPER_SNAKE define (>= one underscore, so single words like NOTE/RED and acronyms
         // like RGBA never register).
-        private static readonly Regex ShaderFilePattern = new(
-            @"\b[\w-]+\.(?:glsl|comp|frag|vert|hlsl)\b",
-            RegexOptions.Compiled
-        );
-        private static readonly Regex SymbolPattern = new(
-            @"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b",
-            RegexOptions.Compiled
-        );
+        private static readonly Regex ShaderFilePattern = new(@"\b[\w-]+\.(?:glsl|comp|frag|vert|hlsl)\b", RegexOptions.Compiled);
+        private static readonly Regex SymbolPattern = new(@"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b", RegexOptions.Compiled);
 
         public string Name => "comment-smells";
 
         public (string Jsonl, string Grouped) Analyze(SourceCorpus corpus, ScanOptions options)
         {
-            var haystack = BuildReferentHaystack(
-                corpus,
-                out var shaderFileNames
-            );
+            var haystack = BuildReferentHaystack(corpus, out var shaderFileNames);
             var jsonl = new StringBuilder();
             var byFile = new Dictionary<string, List<(int Line, string Text)>>();
-            var bucketCounts = new SortedDictionary<string, int>(
-                StringComparer.Ordinal
-            );
+            var bucketCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var unresolved = 0;
 
             foreach (var parsed in corpus.Files)
@@ -1459,21 +805,10 @@ namespace Puck.Tools
                     }
 
                     var text = trivia.ToString().Trim();
-                    var body = StripMarkers(
-                        text
-                    );
-                    var bucket = Classify(
-                        body
-                    );
-                    bucketCounts[bucket] = bucketCounts.GetValueOrDefault(
-                        bucket
-                    ) + 1;
-                    var references = ResolveReferences(
-                        body,
-                        haystack,
-                        shaderFileNames,
-                        out var anyUnresolved
-                    );
+                    var body = StripMarkers(text);
+                    var bucket = Classify(body);
+                    bucketCounts[bucket] = bucketCounts.GetValueOrDefault(bucket) + 1;
+                    var references = ResolveReferences(body, haystack, shaderFileNames, out var anyUnresolved);
                     if (anyUnresolved)
                     {
                         unresolved++;
@@ -1481,82 +816,27 @@ namespace Puck.Tools
 
                     var span = trivia.GetLocation().GetLineSpan();
                     var startLine = span.StartLinePosition.Line + 1;
-                    jsonl.Append(
-                        '{'
-                    )
-                        .Append(
-                            "\"file\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            parsed.Relative
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"line\":"
-                        ).Append(
-                            startLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"endLine\":"
-                        ).Append(
-                            span.EndLinePosition.Line + 1
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"kind\":"
-                        ).Append(
-                            isSingle ? "\"single\"" : "\"multi\""
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"bucket\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            bucket
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"text\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            text
-                        )
-                        );
+                    jsonl.Append('{')
+                        .Append("\"file\":").Append(ScanJsonl.JsonString(parsed.Relative)).Append(',')
+                        .Append("\"line\":").Append(startLine).Append(',')
+                        .Append("\"endLine\":").Append(span.EndLinePosition.Line + 1).Append(',')
+                        .Append("\"kind\":").Append(isSingle ? "\"single\"" : "\"multi\"").Append(',')
+                        .Append("\"bucket\":").Append(ScanJsonl.JsonString(bucket)).Append(',')
+                        .Append("\"text\":").Append(ScanJsonl.JsonString(text));
                     if (references.Length > 0)
                     {
-                        jsonl.Append(
-                            ",\"references\":["
-                        ).Append(
-                            references
-                        ).Append(
-                            ']'
-                        );
+                        jsonl.Append(",\"references\":[").Append(references).Append(']');
                     }
 
-                    jsonl.Append(
-                        "}\n"
-                    );
+                    jsonl.Append("}\n");
 
-                    if (!byFile.TryGetValue(
-                        parsed.Relative,
-                        out var lines
-                    ))
+                    if (!byFile.TryGetValue(parsed.Relative, out var lines))
                     {
                         lines = [];
                         byFile[parsed.Relative] = lines;
                     }
 
-                    lines.Add(
-                        (startLine, text)
-                    );
+                    lines.Add((startLine, text));
                 }
             }
 
@@ -1564,50 +844,33 @@ namespace Puck.Tools
             Console.Error.WriteLine(
                 $"scan[comment-smells]: {total} inline comments classified across {byFile.Count} files (of {corpus.FileCount} scanned)."
             );
-            foreach (var (bucket, count) in bucketCounts.OrderByDescending(
-                static pair => pair.Value
-            ))
+            foreach (var (bucket, count) in bucketCounts.OrderByDescending(static pair => pair.Value))
             {
-                Console.Error.WriteLine(
-                    $"{count,5}  {bucket}"
-                );
+                Console.Error.WriteLine($"{count,5}  {bucket}");
             }
 
-            Console.Error.WriteLine(
-                $"{unresolved,5}  (comments with an UNRESOLVED cross-artifact referent — provable staleness)"
-            );
-            return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(
-                byFile,
-                options.MaxPerChunk
-            ));
+            Console.Error.WriteLine($"{unresolved,5}  (comments with an UNRESOLVED cross-artifact referent — provable staleness)");
+            return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(byFile, options.MaxPerChunk));
         }
 
         private static string Classify(string body)
         {
-            if (SyncPattern.IsMatch(
-                body
-            ))
+            if (SyncPattern.IsMatch(body))
             {
                 return "sync-coupling";
             }
 
-            if (DebtPattern.IsMatch(
-                body
-            ))
+            if (DebtPattern.IsMatch(body))
             {
                 return "debt-marker";
             }
 
-            if (BannerPattern.IsMatch(
-                body
-            ))
+            if (BannerPattern.IsMatch(body))
             {
                 return "banner-divider";
             }
 
-            if (LooksLikeCode(
-                body
-            ))
+            if (LooksLikeCode(body))
             {
                 return "commented-out-code";
             }
@@ -1620,18 +883,12 @@ namespace Puck.Tools
         // bare expression statement does not.
         private static bool LooksLikeCode(string body)
         {
-            if (body.Length == 0 || !CodeSignalPattern.IsMatch(
-                body
-            ))
+            if (body.Length == 0 || !CodeSignalPattern.IsMatch(body))
             {
                 return false;
             }
 
-            return !SyntaxFactory.ParseStatement(
-                body
-            ).GetDiagnostics().Any(
-                static d => d.Severity == DiagnosticSeverity.Error
-            );
+            return !SyntaxFactory.ParseStatement(body).GetDiagnostics().Any(static d => d.Severity == DiagnosticSeverity.Error);
         }
 
         // The comment text without its // or /* */ delimiters, so the classifiers see only
@@ -1639,23 +896,14 @@ namespace Puck.Tools
         private static string StripMarkers(string text)
         {
             var trimmed = text;
-            if (trimmed.StartsWith(
-                "//",
-                StringComparison.Ordinal
-            ))
+            if (trimmed.StartsWith("//", StringComparison.Ordinal))
             {
                 trimmed = trimmed[2..];
             }
-            else if (trimmed.StartsWith(
-                "/*",
-                StringComparison.Ordinal
-            ))
+            else if (trimmed.StartsWith("/*", StringComparison.Ordinal))
             {
                 trimmed = trimmed[2..];
-                if (trimmed.EndsWith(
-                    "*/",
-                    StringComparison.Ordinal
-                ))
+                if (trimmed.EndsWith("*/", StringComparison.Ordinal))
                 {
                     trimmed = trimmed[..^2];
                 }
@@ -1670,48 +918,21 @@ namespace Puck.Tools
         private static string BuildReferentHaystack(SourceCorpus corpus, out HashSet<string> shaderFileNames)
         {
             var builder = new StringBuilder();
-            shaderFileNames = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase
-            );
+            shaderFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var parsed in corpus.Files)
             {
-                builder.Append(
-                    parsed.Text
-                ).Append(
-                    '\n'
-                );
+                builder.Append(parsed.Text).Append('\n');
             }
 
-            var sourceRoot = Path.Combine(
-                EngineRun.RepositoryRoot,
-                "src"
-            );
-            if (Directory.Exists(
-                sourceRoot
-            ))
+            var sourceRoot = Path.Combine(EngineRun.RepositoryRoot, "src");
+            if (Directory.Exists(sourceRoot))
             {
-                foreach (var path in Directory.EnumerateFiles(
-                    sourceRoot,
-                    "*.*",
-                    SearchOption.AllDirectories
-                ))
+                foreach (var path in Directory.EnumerateFiles(sourceRoot, "*.*", SearchOption.AllDirectories))
                 {
-                    if (Path.GetExtension(
-                        path
-                    ).ToLowerInvariant() is ".glsl" or ".comp" or ".frag" or ".vert" or ".hlsl")
+                    if (Path.GetExtension(path).ToLowerInvariant() is ".glsl" or ".comp" or ".frag" or ".vert" or ".hlsl")
                     {
-                        shaderFileNames.Add(
-                            Path.GetFileName(
-                            path
-                        )
-                        );
-                        builder.Append(
-                            File.ReadAllText(
-                            path
-                        )
-                        ).Append(
-                            '\n'
-                        );
+                        shaderFileNames.Add(Path.GetFileName(path));
+                        builder.Append(File.ReadAllText(path)).Append('\n');
                     }
                 }
             }
@@ -1724,69 +945,37 @@ namespace Puck.Tools
         private static string ResolveReferences(string body, string haystack, HashSet<string> shaderFileNames, out bool anyUnresolved)
         {
             anyUnresolved = false;
-            var seen = new HashSet<string>(
-                StringComparer.Ordinal
-            );
+            var seen = new HashSet<string>(StringComparer.Ordinal);
             var parts = new List<string>();
-            foreach (Match match in ShaderFilePattern.Matches(
-                body
-            ))
+            foreach (Match match in ShaderFilePattern.Matches(body))
             {
-                if (!seen.Add(
-                    match.Value
-                ))
+                if (!seen.Add(match.Value))
                 {
                     continue;
                 }
 
-                var resolved = shaderFileNames.Contains(
-                    match.Value
-                );
+                var resolved = shaderFileNames.Contains(match.Value);
                 anyUnresolved |= !resolved;
-                parts.Add(
-                    Reference(
-                    match.Value,
-                    "file",
-                    resolved
-                )
-                );
+                parts.Add(Reference(match.Value, "file", resolved));
             }
 
-            foreach (Match match in SymbolPattern.Matches(
-                body
-            ))
+            foreach (Match match in SymbolPattern.Matches(body))
             {
-                if (!seen.Add(
-                    match.Value
-                ))
+                if (!seen.Add(match.Value))
                 {
                     continue;
                 }
 
-                var resolved = haystack.Contains(
-                    match.Value,
-                    StringComparison.Ordinal
-                );
+                var resolved = haystack.Contains(match.Value, StringComparison.Ordinal);
                 anyUnresolved |= !resolved;
-                parts.Add(
-                    Reference(
-                    match.Value,
-                    "symbol",
-                    resolved
-                )
-                );
+                parts.Add(Reference(match.Value, "symbol", resolved));
             }
 
-            return string.Join(
-                ",",
-                parts
-            );
+            return string.Join(",", parts);
         }
 
         private static string Reference(string token, string kind, bool resolved) =>
-            $"{{\"token\":{ScanJsonl.JsonString(
-                token
-            )},\"kind\":\"{kind}\",\"resolved\":{(resolved ? "true" : "false")}}}";
+            $"{{\"token\":{ScanJsonl.JsonString(token)},\"kind\":\"{kind}\",\"resolved\":{(resolved ? "true" : "false")}}}";
     }
 
     // Shared output helpers for the Roslyn scan commands (comment-scan, lock-scan): the
@@ -1797,162 +986,89 @@ namespace Puck.Tools
     {
         public static string BuildGroupedChunks(Dictionary<string, List<(int Line, string Text)>> byFile, int maxPerChunk)
         {
-            var builder = new StringBuilder(
-                "["
-            );
+            var builder = new StringBuilder("[");
             var firstChunk = true;
-            foreach (var (file, sites) in byFile.OrderByDescending(
-                static pair => pair.Value.Count
-            ))
+            foreach (var (file, sites) in byFile.OrderByDescending(static pair => pair.Value.Count))
             {
                 var chunkCount = (sites.Count + maxPerChunk - 1) / maxPerChunk;
                 for (var offset = 0; offset < sites.Count; offset += maxPerChunk)
                 {
                     if (!firstChunk)
                     {
-                        builder.Append(
-                            ','
-                        );
+                        builder.Append(',');
                     }
 
                     firstChunk = false;
-                    builder.Append(
-                        '{'
-                    )
-                        .Append(
-                            "\"file\":"
-                        ).Append(
-                            JsonString(
-                            file
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"chunk\":"
-                        ).Append(
-                            offset / maxPerChunk
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"chunks\":"
-                        ).Append(
-                            chunkCount
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"lines\":["
-                        );
-                    var end = Math.Min(
-                        offset + maxPerChunk,
-                        sites.Count
-                    );
+                    builder.Append('{')
+                        .Append("\"file\":").Append(JsonString(file)).Append(',')
+                        .Append("\"chunk\":").Append(offset / maxPerChunk).Append(',')
+                        .Append("\"chunks\":").Append(chunkCount).Append(',')
+                        .Append("\"lines\":[");
+                    var end = Math.Min(offset + maxPerChunk, sites.Count);
                     for (var lineIndex = offset; lineIndex < end; lineIndex++)
                     {
                         if (lineIndex > offset)
                         {
-                            builder.Append(
-                                ','
-                            );
+                            builder.Append(',');
                         }
 
-                        builder.Append(
-                            sites[lineIndex].Line
-                        );
+                        builder.Append(sites[lineIndex].Line);
                     }
 
-                    builder.Append(
-                        "]}"
-                    );
+                    builder.Append("]}");
                 }
             }
 
-            return builder.Append(
-                ']'
-            ).ToString();
+            return builder.Append(']').ToString();
         }
 
         // The densest files first, formatted for the stderr digest every record analyzer
         // prints — `<count>  <file>`, top 30 by default.
         public static IEnumerable<string> TopFiles(Dictionary<string, int> perFile, int take = 30) =>
-            perFile.OrderByDescending(
-                static pair => pair.Value
-            )
-                .ThenBy(
-                    static pair => pair.Key,
-                    StringComparer.Ordinal
-                )
-                .Take(
-                    take
-                )
-                .Select(
-                    static pair => $"{pair.Value,5}  {pair.Key}"
-                );
+            perFile.OrderByDescending(static pair => pair.Value)
+                .ThenBy(static pair => pair.Key, StringComparer.Ordinal)
+                .Take(take)
+                .Select(static pair => $"{pair.Value,5}  {pair.Key}");
 
         // Minimal JSON string escaper. The toolbox only ever reads json back through
         // JsonDocument, so this needs to round-trip, not to be a general serializer.
         public static string JsonString(string value)
         {
-            var builder = new StringBuilder(
-                "\""
-            );
+            var builder = new StringBuilder("\"");
             foreach (var character in value)
             {
                 switch (character)
                 {
                     case '"':
-                        builder.Append(
-                            "\\\""
-                        );
+                        builder.Append("\\\"");
                         break;
                     case '\\':
-                        builder.Append(
-                            "\\\\"
-                        );
+                        builder.Append("\\\\");
                         break;
                     case '\n':
-                        builder.Append(
-                            "\\n"
-                        );
+                        builder.Append("\\n");
                         break;
                     case '\r':
-                        builder.Append(
-                            "\\r"
-                        );
+                        builder.Append("\\r");
                         break;
                     case '\t':
-                        builder.Append(
-                            "\\t"
-                        );
+                        builder.Append("\\t");
                         break;
                     default:
                         if (character < 0x20)
                         {
-                            builder.Append(
-                                "\\u"
-                            ).Append(
-                                ((int)character).ToString(
-                                "x4",
-                                CultureInfo.InvariantCulture
-                            )
-                            );
+                            builder.Append("\\u").Append(((int)character).ToString("x4", CultureInfo.InvariantCulture));
                         }
                         else
                         {
-                            builder.Append(
-                                character
-                            );
+                            builder.Append(character);
                         }
 
                         break;
                 }
             }
 
-            return builder.Append(
-                '"'
-            ).ToString();
+            return builder.Append('"').ToString();
         }
     }
 
@@ -1978,18 +1094,14 @@ namespace Puck.Tools
         // stderr summary as comment-scan; like the other analyzers it hand-writes its json.
 
         // Static synchronization classes whose member calls are themselves the lock site.
-        private static readonly Dictionary<string, string> StaticLockClasses = new(
-            StringComparer.Ordinal
-        )
+        private static readonly Dictionary<string, string> StaticLockClasses = new(StringComparer.Ordinal)
         {
             ["Monitor"] = "monitor",
             ["Interlocked"] = "interlocked"
         };
 
         // Instance synchronization types, recorded where they are DECLARED.
-        private static readonly Dictionary<string, string> InstanceLockTypes = new(
-            StringComparer.Ordinal
-        )
+        private static readonly Dictionary<string, string> InstanceLockTypes = new(StringComparer.Ordinal)
         {
             ["Lock"] = "lock-type",
             ["SemaphoreSlim"] = "semaphore",
@@ -1999,9 +1111,7 @@ namespace Puck.Tools
             ["SpinLock"] = "spinlock"
         };
 
-        private static readonly Regex WhitespaceRun = new(
-            "\\s+"
-        );
+        private static readonly Regex WhitespaceRun = new("\\s+");
 
         public string Name => "locks";
 
@@ -2010,116 +1120,47 @@ namespace Puck.Tools
             var jsonl = new StringBuilder();
             var perFile = new Dictionary<string, int>();
             var byFile = new Dictionary<string, List<(int Line, string Text)>>();
-            var kindCounts = new SortedDictionary<string, int>(
-                StringComparer.Ordinal
-            );
+            var kindCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
             foreach (var parsed in corpus.Files)
             {
                 var relative = parsed.Relative;
                 foreach (var node in parsed.Root.DescendantNodes())
                 {
-                    if (!Classify(
-                        node,
-                        out var kind,
-                        out var text,
-                        out var startLine,
-                        out var endLine
-                    ))
+                    if (!Classify(node, out var kind, out var text, out var startLine, out var endLine))
                     {
                         continue;
                     }
 
-                    jsonl.Append(
-                        '{'
-                    )
-                        .Append(
-                            "\"file\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            relative
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"line\":"
-                        ).Append(
-                            startLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"endLine\":"
-                        ).Append(
-                            endLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"kind\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            kind
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"text\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            text
-                        )
-                        )
-                        .Append(
-                            "}\n"
-                        );
+                    jsonl.Append('{')
+                        .Append("\"file\":").Append(ScanJsonl.JsonString(relative)).Append(',')
+                        .Append("\"line\":").Append(startLine).Append(',')
+                        .Append("\"endLine\":").Append(endLine).Append(',')
+                        .Append("\"kind\":").Append(ScanJsonl.JsonString(kind)).Append(',')
+                        .Append("\"text\":").Append(ScanJsonl.JsonString(text))
+                        .Append("}\n");
 
-                    kindCounts[kind] = kindCounts.GetValueOrDefault(
-                        kind
-                    ) + 1;
-                    perFile[relative] = perFile.GetValueOrDefault(
-                        relative
-                    ) + 1;
-                    if (!byFile.TryGetValue(
-                        relative,
-                        out var sites
-                    ))
+                    kindCounts[kind] = kindCounts.GetValueOrDefault(kind) + 1;
+                    perFile[relative] = perFile.GetValueOrDefault(relative) + 1;
+                    if (!byFile.TryGetValue(relative, out var sites))
                     {
                         sites = [];
                         byFile[relative] = sites;
                     }
 
-                    sites.Add(
-                        (startLine, text)
-                    );
+                    sites.Add((startLine, text));
                 }
             }
 
             var total = kindCounts.Values.Sum();
-            var breakdown = total == 0 ? "none" : string.Join(
-                ", ",
-                kindCounts.Select(
-                static pair => $"{pair.Value} {pair.Key}"
-            )
-            );
-            Console.Error.WriteLine(
-                $"scan[locks]: {total} lock sites ({breakdown}) across {perFile.Count} files (of {corpus.FileCount} scanned)."
-            );
-            foreach (var line in ScanJsonl.TopFiles(
-                perFile
-            ))
+            var breakdown = total == 0 ? "none" : string.Join(", ", kindCounts.Select(static pair => $"{pair.Value} {pair.Key}"));
+            Console.Error.WriteLine($"scan[locks]: {total} lock sites ({breakdown}) across {perFile.Count} files (of {corpus.FileCount} scanned).");
+            foreach (var line in ScanJsonl.TopFiles(perFile))
             {
-                Console.Error.WriteLine(
-                    line
-                );
+                Console.Error.WriteLine(line);
             }
 
-            return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(
-                byFile,
-                options.MaxPerChunk
-            ));
+            return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(byFile, options.MaxPerChunk));
         }
 
         // Pure-syntax classification of one node into a lock site, or false for anything
@@ -2138,95 +1179,44 @@ namespace Puck.Tools
                 // expression; the body would bloat the record and the target is the signal.
                 case LockStatementSyntax lockStatement:
                     kind = "lock";
-                    text = Condense(
-                        lockStatement.Expression.ToString()
-                    );
-                    SetSpan(
-                        lockStatement.LockKeyword.GetLocation(),
-                        lockStatement.CloseParenToken.GetLocation(),
-                        out startLine,
-                        out endLine
-                    );
+                    text = Condense(lockStatement.Expression.ToString());
+                    SetSpan(lockStatement.LockKeyword.GetLocation(), lockStatement.CloseParenToken.GetLocation(), out startLine, out endLine);
                     return true;
 
                 // Monitor.Enter(...) / Interlocked.Increment(...), including a qualified
                 // receiver like System.Threading.Monitor.Enter (rightmost name is matched).
                 case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess } invocation
-                    when ReceiverTypeName(
-                        memberAccess.Expression
-                    ) is { } receiver
-                        && StaticLockClasses.TryGetValue(
-                            receiver,
-                            out var staticKind
-                        ):
+                    when ReceiverTypeName(memberAccess.Expression) is { } receiver
+                        && StaticLockClasses.TryGetValue(receiver, out var staticKind):
                     kind = staticKind;
-                    text = Condense(
-                        invocation.ToString()
-                    );
-                    SetSpan(
-                        invocation.GetLocation(),
-                        out startLine,
-                        out endLine
-                    );
+                    text = Condense(invocation.ToString());
+                    SetSpan(invocation.GetLocation(), out startLine, out endLine);
                     return true;
 
                 // Field / local / using / for declaration of an instance primitive.
                 case VariableDeclarationSyntax variableDeclaration
-                    when InstanceLockTypes.TryGetValue(
-                        SimpleTypeName(
-                        variableDeclaration.Type
-                    ),
-                        out var declaredKind
-                    ):
+                    when InstanceLockTypes.TryGetValue(SimpleTypeName(variableDeclaration.Type), out var declaredKind):
                     kind = declaredKind;
-                    text = Condense(
-                        variableDeclaration.ToString()
-                    );
-                    SetSpan(
-                        variableDeclaration.GetLocation(),
-                        out startLine,
-                        out endLine
-                    );
+                    text = Condense(variableDeclaration.ToString());
+                    SetSpan(variableDeclaration.GetLocation(), out startLine, out endLine);
                     return true;
 
                 // Property of an instance primitive (rare; PropertyDeclaration is not a
                 // VariableDeclaration, so it needs its own case).
                 case PropertyDeclarationSyntax propertyDeclaration
-                    when InstanceLockTypes.TryGetValue(
-                        SimpleTypeName(
-                        propertyDeclaration.Type
-                    ),
-                        out var propertyKind
-                    ):
+                    when InstanceLockTypes.TryGetValue(SimpleTypeName(propertyDeclaration.Type), out var propertyKind):
                     kind = propertyKind;
-                    text = Condense(
-                        $"{propertyDeclaration.Type} {propertyDeclaration.Identifier.ValueText}"
-                    );
-                    SetSpan(
-                        propertyDeclaration.GetLocation(),
-                        out startLine,
-                        out endLine
-                    );
+                    text = Condense($"{propertyDeclaration.Type} {propertyDeclaration.Identifier.ValueText}");
+                    SetSpan(propertyDeclaration.GetLocation(), out startLine, out endLine);
                     return true;
 
                 // [MethodImpl(MethodImplOptions.Synchronized)] — a whole-method monitor lock.
                 case AttributeSyntax attribute
-                    when SimpleTypeName(
-                        attribute.Name
-                    ) is "MethodImpl" or "MethodImplAttribute"
-                        && attribute.ToString().Contains(
-                            "Synchronized",
-                            StringComparison.Ordinal
-                        ):
+                    when SimpleTypeName(attribute.Name) is "MethodImpl" or "MethodImplAttribute"
+                        && attribute.ToString().Contains("Synchronized", StringComparison.Ordinal):
                     kind = "synchronized-method";
-                    text = Condense(
-                        attribute.ToString()
-                    );
-                    SetSpan(
-                        attribute.GetLocation(),
-                        out startLine,
-                        out endLine
-                    );
+                    text = Condense(attribute.ToString());
+                    SetSpan(attribute.GetLocation(), out startLine, out endLine);
                     return true;
 
                 default:
@@ -2250,35 +1240,21 @@ namespace Puck.Tools
         private static string SimpleTypeName(TypeSyntax type)
         {
             var name = type.ToString();
-            var lastDot = name.LastIndexOf(
-                '.'
-            );
+            var lastDot = name.LastIndexOf('.');
             if (lastDot >= 0)
             {
                 name = name[(lastDot + 1)..];
             }
 
-            return name.TrimEnd(
-                '?',
-                ' '
-            );
+            return name.TrimEnd('?', ' ');
         }
 
         // Collapses a node's source text to a trimmed single line and caps the length, so
         // every record is a readable one-liner rather than a wrapped, indented fragment.
         private static string Condense(string text)
         {
-            var condensed = WhitespaceRun.Replace(
-                text.Trim(),
-                " "
-            );
-            return condensed.Length <= 200 ? condensed : string.Concat(
-                condensed.AsSpan(
-                0,
-                197
-            ),
-                "..."
-            );
+            var condensed = WhitespaceRun.Replace(text.Trim(), " ");
+            return condensed.Length <= 200 ? condensed : string.Concat(condensed.AsSpan(0, 197), "...");
         }
 
         private static void SetSpan(Location location, out int startLine, out int endLine)
@@ -2293,394 +1269,6 @@ namespace Puck.Tools
             startLine = start.GetLineSpan().StartLinePosition.Line + 1;
             endLine = end.GetLineSpan().EndLinePosition.Line + 1;
         }
-    }
-
-    internal sealed class VkStructAnalyzer : ISourceAnalyzer
-    {
-        // Roslyn-backed inventory of the engine's layout-contract structs — the union of
-        //   vk     — a struct whose name starts with "Vk" (the native Vulkan ABI mirror
-        //            types nested as private structs in the VulkanNative*Api files), and
-        //   layout — a struct decorated with [StructLayout(...)] (GPU buffer payloads
-        //            written to device memory: the *GpuData / Avatar* / glyph structs).
-        // A struct that is both Vk-named and [StructLayout]-decorated is tagged "both".
-        // Detection is purely syntactic (no semantic model): the attribute is matched on
-        // its written name, so a fully-aliased StructLayout would slip through — none
-        // exists in this tree. record-structs are intentionally out of scope (no Vulkan
-        // struct is one). Each record carries the layout kind/pack/size and the ordered
-        // field list with any [FieldOffset], because that ordering IS the ABI contract.
-
-        public string Name => "vk-structs";
-
-        public (string Jsonl, string Grouped) Analyze(SourceCorpus corpus, ScanOptions options)
-        {
-            var jsonl = new StringBuilder();
-            var perFile = new Dictionary<string, int>();
-            var byFile = new Dictionary<string, List<(int Line, string Text)>>();
-            var categoryCounts = new SortedDictionary<string, int>(
-                StringComparer.Ordinal
-            );
-            var layoutCounts = new SortedDictionary<string, int>(
-                StringComparer.Ordinal
-            );
-            var total = 0;
-
-            foreach (var parsed in corpus.Files)
-            {
-                var relative = parsed.Relative;
-                foreach (var structDeclaration in parsed.Root.DescendantNodes().OfType<StructDeclarationSyntax>())
-                {
-                    var name = structDeclaration.Identifier.ValueText;
-                    var isVkNamed = name.StartsWith(
-                        "Vk",
-                        StringComparison.Ordinal
-                    );
-                    var layout = ReadStructLayout(
-                        structDeclaration
-                    );
-                    if (!isVkNamed && layout is null)
-                    {
-                        continue;
-                    }
-
-                    var category = isVkNamed ? (layout is not null ? "both" : "vk") : "layout";
-                    var span = structDeclaration.Identifier.GetLocation().GetLineSpan();
-                    var startLine = span.StartLinePosition.Line + 1;
-                    var endLine = structDeclaration.CloseBraceToken.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                    var fields = ReadFields(
-                        structDeclaration
-                    );
-
-                    jsonl.Append(
-                        '{'
-                    )
-                        .Append(
-                            "\"file\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            relative
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"line\":"
-                        ).Append(
-                            startLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"endLine\":"
-                        ).Append(
-                            endLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"name\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            name
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"category\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            category
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"layoutKind\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            layout?.Kind ?? ""
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"pack\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            layout?.Pack ?? ""
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"size\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            layout?.Size ?? ""
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"fieldCount\":"
-                        ).Append(
-                            fields.Count
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"fields\":["
-                        );
-                    for (var fieldIndex = 0; fieldIndex < fields.Count; fieldIndex++)
-                    {
-                        if (fieldIndex > 0)
-                        {
-                            jsonl.Append(
-                                ','
-                            );
-                        }
-
-                        var field = fields[fieldIndex];
-                        jsonl.Append(
-                            '{'
-                        )
-                            .Append(
-                                "\"name\":"
-                            ).Append(
-                                ScanJsonl.JsonString(
-                                field.Name
-                            )
-                            ).Append(
-                                ','
-                            )
-                            .Append(
-                                "\"type\":"
-                            ).Append(
-                                ScanJsonl.JsonString(
-                                field.Type
-                            )
-                            ).Append(
-                                ','
-                            )
-                            .Append(
-                                "\"offset\":"
-                            ).Append(
-                                ScanJsonl.JsonString(
-                                field.Offset ?? ""
-                            )
-                            )
-                            .Append(
-                                '}'
-                            );
-                    }
-
-                    jsonl.Append(
-                        "]}\n"
-                    );
-
-                    total++;
-                    categoryCounts[category] = categoryCounts.GetValueOrDefault(
-                        category
-                    ) + 1;
-                    layoutCounts[layout?.Kind ?? "(none)"] = layoutCounts.GetValueOrDefault(
-                        layout?.Kind ?? "(none)"
-                    ) + 1;
-                    perFile[relative] = perFile.GetValueOrDefault(
-                        relative
-                    ) + 1;
-                    if (!byFile.TryGetValue(
-                        relative,
-                        out var sites
-                    ))
-                    {
-                        sites = [];
-                        byFile[relative] = sites;
-                    }
-
-                    sites.Add(
-                        (startLine, name)
-                    );
-                }
-            }
-
-            var categoryBreakdown = total == 0 ? "none" : string.Join(
-                ", ",
-                categoryCounts.Select(
-                static pair => $"{pair.Value} {pair.Key}"
-            )
-            );
-            var layoutBreakdown = total == 0 ? "none" : string.Join(
-                ", ",
-                layoutCounts.Select(
-                static pair => $"{pair.Value} {pair.Key}"
-            )
-            );
-            Console.Error.WriteLine(
-                $"scan[vk-structs]: {total} Vulkan structs ({categoryBreakdown}) across {perFile.Count} files (of {corpus.FileCount} scanned)."
-            );
-            Console.Error.WriteLine(
-                $"scan[vk-structs]: layout kinds — {layoutBreakdown}."
-            );
-            foreach (var line in ScanJsonl.TopFiles(
-                perFile
-            ))
-            {
-                Console.Error.WriteLine(
-                    line
-                );
-            }
-
-            return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(
-                byFile,
-                options.MaxPerChunk
-            ));
-        }
-
-        // The [StructLayout(...)] of a struct, or null if it has none. Kind is the
-        // LayoutKind member name (Sequential/Explicit/Auto); Pack/Size are the named-arg
-        // values when present. Matched on the written attribute name, so an aliased
-        // StructLayout would not be seen — none exists in this tree.
-        private static StructLayoutInfo? ReadStructLayout(StructDeclarationSyntax structDeclaration)
-        {
-            foreach (var attributeList in structDeclaration.AttributeLists)
-            {
-                foreach (var attribute in attributeList.Attributes)
-                {
-                    if (SimpleName(
-                        attribute.Name
-                    ) is not ("StructLayout" or "StructLayoutAttribute"))
-                    {
-                        continue;
-                    }
-
-                    var kind = string.Empty;
-                    string? pack = null;
-                    string? size = null;
-                    if (attribute.ArgumentList is { } argumentList)
-                    {
-                        foreach (var argument in argumentList.Arguments)
-                        {
-                            var argumentName = argument.NameEquals?.Name.Identifier.ValueText;
-                            if (argumentName == "Pack")
-                            {
-                                pack = argument.Expression.ToString();
-                            }
-                            else if (argumentName == "Size")
-                            {
-                                size = argument.Expression.ToString();
-                            }
-                            else if (argumentName is null && kind.Length == 0)
-                            {
-                                // First positional argument is the LayoutKind member.
-                                kind = argument.Expression is MemberAccessExpressionSyntax memberAccess
-                                    ? memberAccess.Name.Identifier.ValueText
-                                    : argument.Expression.ToString();
-                            }
-                        }
-                    }
-
-                    return new StructLayoutInfo(
-                        kind,
-                        pack,
-                        size
-                    );
-                }
-            }
-
-            return null;
-        }
-
-        // The struct's ordered fields, as the bytes are laid out: instance field
-        // declarations (each variable in a multi-declarator field is its own entry, in
-        // source order) carrying any [FieldOffset], followed by primary-constructor
-        // parameters for the `readonly struct Vk*(...)` shapes. const and static fields
-        // are skipped — they occupy no instance storage and so are not part of the layout.
-        private static List<FieldInfo> ReadFields(StructDeclarationSyntax structDeclaration)
-        {
-            var fields = new List<FieldInfo>();
-            foreach (var member in structDeclaration.Members)
-            {
-                if (member is not FieldDeclarationSyntax field)
-                {
-                    continue;
-                }
-
-                if (field.Modifiers.Any(
-                    static modifier => modifier.IsKind(
-                    SyntaxKind.ConstKeyword
-                ) || modifier.IsKind(
-                    SyntaxKind.StaticKeyword
-                )
-                ))
-                {
-                    continue;
-                }
-
-                var offset = ReadFieldOffset(
-                    field
-                );
-                var typeName = field.Declaration.Type.ToString();
-                foreach (var variable in field.Declaration.Variables)
-                {
-                    fields.Add(
-                        new FieldInfo(
-                        variable.Identifier.ValueText,
-                        typeName,
-                        offset
-                    )
-                    );
-                }
-            }
-
-            if (structDeclaration.ParameterList is { } parameterList)
-            {
-                foreach (var parameter in parameterList.Parameters)
-                {
-                    fields.Add(
-                        new FieldInfo(
-                        parameter.Identifier.ValueText,
-                        parameter.Type?.ToString() ?? "",
-                        null
-                    )
-                    );
-                }
-            }
-
-            return fields;
-        }
-
-        // The [FieldOffset(n)] of a field as written, or null. Multi-declarator fields
-        // cannot carry FieldOffset (each needs its own), so one value covers the field.
-        private static string? ReadFieldOffset(FieldDeclarationSyntax field)
-        {
-            foreach (var attributeList in field.AttributeLists)
-            {
-                foreach (var attribute in attributeList.Attributes)
-                {
-                    if (SimpleName(
-                        attribute.Name
-                    ) is "FieldOffset" or "FieldOffsetAttribute"
-                        && attribute.ArgumentList?.Arguments.Count > 0)
-                    {
-                        return attribute.ArgumentList.Arguments[0].Expression.ToString();
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        // Rightmost identifier of a possibly-qualified attribute name:
-        // System.Runtime.InteropServices.StructLayout -> StructLayout.
-        private static string SimpleName(NameSyntax name) => name switch
-        {
-            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
-            SimpleNameSyntax simple => simple.Identifier.ValueText,
-            _ => name.ToString()
-        };
-
-        private readonly record struct StructLayoutInfo(string Kind, string? Pack, string? Size);
-        private readonly record struct FieldInfo(string Name, string Type, string? Offset);
     }
 
     internal sealed class CloneAnalyzer : ISourceAnalyzer
@@ -2716,82 +1304,37 @@ namespace Puck.Tools
 
         public (string Jsonl, string Grouped) Analyze(SourceCorpus corpus, ScanOptions options)
         {
-            var trees = corpus.Files.Select(
-                static file => (file.Relative, file.Root)
-            ).ToList();
+            var trees = corpus.Files.Select(static file => (file.Relative, file.Root)).ToList();
 
             var unitBodies = new HashSet<SyntaxNode>();
-            var units = CollectUnits(
-                trees,
-                unitBodies
-            );
+            var units = CollectUnits(trees, unitBodies);
             var unitClusters = units
-                .Where(
-                    member => member.Weight >= options.MinTokens
-                )
-                .GroupBy(
-                    static member => member.Structural,
-                    StringComparer.Ordinal
-                )
-                .Where(
-                    static group => group.Count() >= 2
-                )
-                .Select(
-                    static group => group.ToList()
-                )
+                .Where(member => member.Weight >= options.MinTokens)
+                .GroupBy(static member => member.Structural, StringComparer.Ordinal)
+                .Where(static group => group.Count() >= 2)
+                .Select(static group => group.ToList())
                 .ToList();
 
-            var clusteredBodies = BodySpansByFile(
-                unitClusters
-            );
+            var clusteredBodies = BodySpansByFile(unitClusters);
             var blockClusters = options.IncludeBlocks
-                ? CollectBlockClusters(
-                    trees,
-                    unitBodies,
-                    clusteredBodies,
-                    options.MinStatements,
-                    options.MinTokens
-                )
+                ? CollectBlockClusters(trees, unitBodies, clusteredBodies, options.MinStatements, options.MinTokens)
                 : [];
 
             var clusters = new List<Cluster>();
             foreach (var group in unitClusters)
             {
-                clusters.Add(
-                    BuildCluster(
-                    "unit",
-                    group
-                )
-                );
+                clusters.Add(BuildCluster("unit", group));
             }
 
             foreach (var group in blockClusters)
             {
-                clusters.Add(
-                    BuildCluster(
-                    "block",
-                    group
-                )
-                );
+                clusters.Add(BuildCluster("block", group));
             }
 
-            clusters = OrderAndNumber(
-                clusters
-            );
+            clusters = OrderAndNumber(clusters);
 
-            PrintSummary(
-                clusters,
-                options.MinTokens,
-                options.MinStatements,
-                options.IncludeBlocks,
-                corpus.FileCount
-            );
-            return (BuildJsonl(
-                clusters
-            ), BuildCloneGroups(
-                clusters,
-                options.MaxPerChunk
-            ));
+            PrintSummary(clusters, options.MinTokens, options.MinStatements, options.IncludeBlocks, corpus.FileCount);
+            return (BuildJsonl(clusters), BuildCloneGroups(clusters, options.MaxPerChunk));
         }
 
         // Pass 1: every callable body, fingerprinted. unitBodies records the block bodies
@@ -2803,9 +1346,7 @@ namespace Puck.Tools
             {
                 foreach (var node in treeRoot.DescendantNodes())
                 {
-                    var body = UnitBody(
-                        node
-                    );
+                    var body = UnitBody(node);
                     if (body is null)
                     {
                         continue;
@@ -2813,24 +1354,11 @@ namespace Puck.Tools
 
                     if (body is BlockSyntax)
                     {
-                        unitBodies.Add(
-                            body
-                        );
+                        unitBodies.Add(body);
                     }
 
-                    var (structural, exact, weight) = Fingerprint(
-                        body
-                    );
-                    units.Add(
-                        CreateMember(
-                        relative,
-                        node,
-                        body,
-                        structural,
-                        exact,
-                        weight
-                    )
-                    );
+                    var (structural, exact, weight) = Fingerprint(body);
+                    units.Add(CreateMember(relative, node, body, structural, exact, weight));
                 }
             }
 
@@ -2841,25 +1369,18 @@ namespace Puck.Tools
         // redundant with the unit clone, so the block pass skips it.
         private static Dictionary<string, List<(int Start, int End)>> BodySpansByFile(List<List<Member>> clusters)
         {
-            var spansByFile = new Dictionary<string, List<(int Start, int End)>>(
-                StringComparer.Ordinal
-            );
+            var spansByFile = new Dictionary<string, List<(int Start, int End)>>(StringComparer.Ordinal);
             foreach (var cluster in clusters)
             {
                 foreach (var member in cluster)
                 {
-                    if (!spansByFile.TryGetValue(
-                        member.File,
-                        out var spans
-                    ))
+                    if (!spansByFile.TryGetValue(member.File, out var spans))
                     {
                         spans = [];
                         spansByFile[member.File] = spans;
                     }
 
-                    spans.Add(
-                        (member.BodyStart, member.BodyEnd)
-                    );
+                    spans.Add((member.BodyStart, member.BodyEnd));
                 }
             }
 
@@ -2880,56 +1401,35 @@ namespace Puck.Tools
             var candidates = new List<(SyntaxNode Node, Member Member)>();
             foreach (var (relative, treeRoot) in trees)
             {
-                var bodies = clusteredBodies.GetValueOrDefault(
-                    relative
-                );
+                var bodies = clusteredBodies.GetValueOrDefault(relative);
                 foreach (var block in treeRoot.DescendantNodes().OfType<BlockSyntax>())
                 {
-                    if (unitBodies.Contains(
-                        block
-                    ) || block.Statements.Count < minStatements)
+                    if (unitBodies.Contains(block) || block.Statements.Count < minStatements)
                     {
                         continue;
                     }
 
                     var start = block.Span.Start;
                     var end = block.Span.End;
-                    if (bodies is not null && bodies.Any(
-                        span => span.Start <= start && end <= span.End
-                    ))
+                    if (bodies is not null && bodies.Any(span => span.Start <= start && end <= span.End))
                     {
                         continue;
                     }
 
-                    var (structural, exact, weight) = Fingerprint(
-                        block
-                    );
+                    var (structural, exact, weight) = Fingerprint(block);
                     if (weight < minTokens)
                     {
                         continue;
                     }
 
-                    candidates.Add(
-                        (block, CreateMember(
-                        relative,
-                        block,
-                        block,
-                        structural,
-                        exact,
-                        weight
-                    ))
-                    );
+                    candidates.Add((block, CreateMember(relative, block, block, structural, exact, weight)));
                 }
             }
 
-            var counts = new Dictionary<string, int>(
-                StringComparer.Ordinal
-            );
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var candidate in candidates)
             {
-                counts[candidate.Member.Structural] = counts.GetValueOrDefault(
-                    candidate.Member.Structural
-                ) + 1;
+                counts[candidate.Member.Structural] = counts.GetValueOrDefault(candidate.Member.Structural) + 1;
             }
 
             var clusteredNodes = new HashSet<SyntaxNode>();
@@ -2937,36 +1437,23 @@ namespace Puck.Tools
             {
                 if (counts[candidate.Member.Structural] >= 2)
                 {
-                    clusteredNodes.Add(
-                        candidate.Node
-                    );
+                    clusteredNodes.Add(candidate.Node);
                 }
             }
 
             var survivors = new List<Member>();
             foreach (var candidate in candidates)
             {
-                if (counts[candidate.Member.Structural] >= 2 && !candidate.Node.Ancestors().Any(
-                    clusteredNodes.Contains
-                ))
+                if (counts[candidate.Member.Structural] >= 2 && !candidate.Node.Ancestors().Any(clusteredNodes.Contains))
                 {
-                    survivors.Add(
-                        candidate.Member
-                    );
+                    survivors.Add(candidate.Member);
                 }
             }
 
             return survivors
-                .GroupBy(
-                    static member => member.Structural,
-                    StringComparer.Ordinal
-                )
-                .Where(
-                    static group => group.Count() >= 2
-                )
-                .Select(
-                    static group => group.ToList()
-                )
+                .GroupBy(static member => member.Structural, StringComparer.Ordinal)
+                .Where(static group => group.Count() >= 2)
+                .Select(static group => group.ToList())
                 .ToList();
         }
 
@@ -2975,16 +1462,9 @@ namespace Puck.Tools
         private static List<Cluster> OrderAndNumber(List<Cluster> clusters)
         {
             var ordered = clusters
-                .OrderByDescending(
-                    static cluster => (cluster.Members.Count - 1) * cluster.Weight
-                )
-                .ThenByDescending(
-                    static cluster => cluster.Members.Count
-                )
-                .ThenBy(
-                    static cluster => cluster.Fingerprint,
-                    StringComparer.Ordinal
-                )
+                .OrderByDescending(static cluster => (cluster.Members.Count - 1) * cluster.Weight)
+                .ThenByDescending(static cluster => cluster.Members.Count)
+                .ThenBy(static cluster => cluster.Fingerprint, StringComparer.Ordinal)
                 .ToList();
             for (var clusterIndex = 0; clusterIndex < ordered.Count; clusterIndex++)
             {
@@ -3000,148 +1480,37 @@ namespace Puck.Tools
             foreach (var cluster in clusters)
             {
                 var exactByHash = cluster.Members
-                    .GroupBy(
-                        static member => member.Exact,
-                        StringComparer.Ordinal
-                    )
-                    .ToDictionary(
-                        static group => group.Key,
-                        static group => group.Count(),
-                        StringComparer.Ordinal
-                    );
-                jsonl.Append(
-                    '{'
-                )
-                    .Append(
-                        "\"id\":"
-                    ).Append(
-                        cluster.Id
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"kind\":"
-                    ).Append(
-                        ScanJsonl.JsonString(
-                        cluster.Kind
-                    )
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"fingerprint\":"
-                    ).Append(
-                        ScanJsonl.JsonString(
-                        cluster.Fingerprint
-                    )
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"memberCount\":"
-                    ).Append(
-                        cluster.Members.Count
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"exactCount\":"
-                    ).Append(
-                        cluster.ExactCount
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"tokenWeight\":"
-                    ).Append(
-                        cluster.Weight
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"redundantMass\":"
-                    ).Append(
-                        (cluster.Members.Count - 1) * cluster.Weight
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"abiTainted\":"
-                    ).Append(
-                        cluster.Abi ? "true" : "false"
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"label\":"
-                    ).Append(
-                        ScanJsonl.JsonString(
-                        cluster.Label
-                    )
-                    ).Append(
-                        ','
-                    )
-                    .Append(
-                        "\"members\":["
-                    );
+                    .GroupBy(static member => member.Exact, StringComparer.Ordinal)
+                    .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
+                jsonl.Append('{')
+                    .Append("\"id\":").Append(cluster.Id).Append(',')
+                    .Append("\"kind\":").Append(ScanJsonl.JsonString(cluster.Kind)).Append(',')
+                    .Append("\"fingerprint\":").Append(ScanJsonl.JsonString(cluster.Fingerprint)).Append(',')
+                    .Append("\"memberCount\":").Append(cluster.Members.Count).Append(',')
+                    .Append("\"exactCount\":").Append(cluster.ExactCount).Append(',')
+                    .Append("\"tokenWeight\":").Append(cluster.Weight).Append(',')
+                    .Append("\"redundantMass\":").Append((cluster.Members.Count - 1) * cluster.Weight).Append(',')
+                    .Append("\"abiTainted\":").Append(cluster.Abi ? "true" : "false").Append(',')
+                    .Append("\"label\":").Append(ScanJsonl.JsonString(cluster.Label)).Append(',')
+                    .Append("\"members\":[");
                 for (var memberIndex = 0; memberIndex < cluster.Members.Count; memberIndex++)
                 {
                     if (memberIndex > 0)
                     {
-                        jsonl.Append(
-                            ','
-                        );
+                        jsonl.Append(',');
                     }
 
                     var member = cluster.Members[memberIndex];
-                    jsonl.Append(
-                        '{'
-                    )
-                        .Append(
-                            "\"file\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            member.File
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"line\":"
-                        ).Append(
-                            member.StartLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"endLine\":"
-                        ).Append(
-                            member.EndLine
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"unit\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            member.Unit
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"exact\":"
-                        ).Append(
-                            exactByHash[member.Exact] >= 2 ? "true" : "false"
-                        )
-                        .Append(
-                            '}'
-                        );
+                    jsonl.Append('{')
+                        .Append("\"file\":").Append(ScanJsonl.JsonString(member.File)).Append(',')
+                        .Append("\"line\":").Append(member.StartLine).Append(',')
+                        .Append("\"endLine\":").Append(member.EndLine).Append(',')
+                        .Append("\"unit\":").Append(ScanJsonl.JsonString(member.Unit)).Append(',')
+                        .Append("\"exact\":").Append(exactByHash[member.Exact] >= 2 ? "true" : "false")
+                        .Append('}');
                 }
 
-                jsonl.Append(
-                    "]}\n"
-                );
+                jsonl.Append("]}\n");
             }
 
             return jsonl.ToString();
@@ -3149,33 +1518,17 @@ namespace Puck.Tools
 
         private static void PrintSummary(List<Cluster> clusters, int minTokens, int minStatements, bool includeBlocks, int filesScanned)
         {
-            var unitClusterCount = clusters.Count(
-                static cluster => cluster.Kind == "unit"
-            );
-            var blockClusterCount = clusters.Count(
-                static cluster => cluster.Kind == "block"
-            );
-            var siteCount = clusters.Sum(
-                static cluster => cluster.Members.Count
-            );
-            var redundantMass = clusters.Sum(
-                static cluster => (cluster.Members.Count - 1) * cluster.Weight
-            );
-            var abiClusters = clusters.Count(
-                static cluster => cluster.Abi
-            );
+            var unitClusterCount = clusters.Count(static cluster => cluster.Kind == "unit");
+            var blockClusterCount = clusters.Count(static cluster => cluster.Kind == "block");
+            var siteCount = clusters.Sum(static cluster => cluster.Members.Count);
+            var redundantMass = clusters.Sum(static cluster => (cluster.Members.Count - 1) * cluster.Weight);
+            var abiClusters = clusters.Count(static cluster => cluster.Abi);
             Console.Error.WriteLine(
                 $"scan[clones]: {clusters.Count} clone clusters ({unitClusterCount} unit, {blockClusterCount} block; {abiClusters} abi-tainted) over {siteCount} sites; redundant token mass ~{redundantMass} (minTokens={minTokens}, minStatements={minStatements}, blocks={(includeBlocks ? "on" : "off")}, files scanned={filesScanned})."
             );
-            foreach (var cluster in clusters.Take(
-                30
-            ))
+            foreach (var cluster in clusters.Take(30))
             {
-                var fileCount = cluster.Members.Select(
-                    static member => member.File
-                ).Distinct(
-                    StringComparer.Ordinal
-                ).Count();
+                var fileCount = cluster.Members.Select(static member => member.File).Distinct(StringComparer.Ordinal).Count();
                 var abiTag = cluster.Abi ? "[abi] " : "";
                 var exactTag = cluster.ExactCount == cluster.Members.Count ? "exact" : $"{cluster.ExactCount}/{cluster.Members.Count} exact";
                 Console.Error.WriteLine(
@@ -3188,9 +1541,7 @@ namespace Puck.Tools
         // a fan-out triage spends one agent per duplication cluster.
         private static string BuildCloneGroups(List<Cluster> clusters, int maxPerChunk)
         {
-            var builder = new StringBuilder(
-                "["
-            );
+            var builder = new StringBuilder("[");
             var firstChunk = true;
             foreach (var cluster in clusters)
             {
@@ -3199,125 +1550,40 @@ namespace Puck.Tools
                 {
                     if (!firstChunk)
                     {
-                        builder.Append(
-                            ','
-                        );
+                        builder.Append(',');
                     }
 
                     firstChunk = false;
-                    builder.Append(
-                        '{'
-                    )
-                        .Append(
-                            "\"cluster\":"
-                        ).Append(
-                            cluster.Id
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"kind\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            cluster.Kind
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"chunk\":"
-                        ).Append(
-                            offset / maxPerChunk
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"chunks\":"
-                        ).Append(
-                            chunkCount
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"abiTainted\":"
-                        ).Append(
-                            cluster.Abi ? "true" : "false"
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"label\":"
-                        ).Append(
-                            ScanJsonl.JsonString(
-                            cluster.Label
-                        )
-                        ).Append(
-                            ','
-                        )
-                        .Append(
-                            "\"members\":["
-                        );
-                    var end = Math.Min(
-                        offset + maxPerChunk,
-                        cluster.Members.Count
-                    );
+                    builder.Append('{')
+                        .Append("\"cluster\":").Append(cluster.Id).Append(',')
+                        .Append("\"kind\":").Append(ScanJsonl.JsonString(cluster.Kind)).Append(',')
+                        .Append("\"chunk\":").Append(offset / maxPerChunk).Append(',')
+                        .Append("\"chunks\":").Append(chunkCount).Append(',')
+                        .Append("\"abiTainted\":").Append(cluster.Abi ? "true" : "false").Append(',')
+                        .Append("\"label\":").Append(ScanJsonl.JsonString(cluster.Label)).Append(',')
+                        .Append("\"members\":[");
+                    var end = Math.Min(offset + maxPerChunk, cluster.Members.Count);
                     for (var memberIndex = offset; memberIndex < end; memberIndex++)
                     {
                         if (memberIndex > offset)
                         {
-                            builder.Append(
-                                ','
-                            );
+                            builder.Append(',');
                         }
 
                         var member = cluster.Members[memberIndex];
-                        builder.Append(
-                            '{'
-                        )
-                            .Append(
-                                "\"file\":"
-                            ).Append(
-                                ScanJsonl.JsonString(
-                                member.File
-                            )
-                            ).Append(
-                                ','
-                            )
-                            .Append(
-                                "\"line\":"
-                            ).Append(
-                                member.StartLine
-                            ).Append(
-                                ','
-                            )
-                            .Append(
-                                "\"endLine\":"
-                            ).Append(
-                                member.EndLine
-                            ).Append(
-                                ','
-                            )
-                            .Append(
-                                "\"unit\":"
-                            ).Append(
-                                ScanJsonl.JsonString(
-                                member.Unit
-                            )
-                            )
-                            .Append(
-                                '}'
-                            );
+                        builder.Append('{')
+                            .Append("\"file\":").Append(ScanJsonl.JsonString(member.File)).Append(',')
+                            .Append("\"line\":").Append(member.StartLine).Append(',')
+                            .Append("\"endLine\":").Append(member.EndLine).Append(',')
+                            .Append("\"unit\":").Append(ScanJsonl.JsonString(member.Unit))
+                            .Append('}');
                     }
 
-                    builder.Append(
-                        "]}"
-                    );
+                    builder.Append("]}");
                 }
             }
 
-            return builder.Append(
-                ']'
-            ).ToString();
+            return builder.Append(']').ToString();
         }
 
         private static Cluster BuildCluster(string kind, List<Member> members)
@@ -3325,44 +1591,21 @@ namespace Puck.Tools
             members.Sort(
                 static (left, right) =>
             {
-                var byFile = string.CompareOrdinal(
-                    left.File,
-                    right.File
-                );
-                return byFile != 0 ? byFile : left.StartLine.CompareTo(
-                    right.StartLine
-                );
+                var byFile = string.CompareOrdinal(left.File, right.File);
+                return byFile != 0 ? byFile : left.StartLine.CompareTo(right.StartLine);
             }
             );
             var exactCount = members
-                .GroupBy(
-                    static member => member.Exact,
-                    StringComparer.Ordinal
-                )
-                .Max(
-                    static group => group.Count()
-                );
-            var abi = members.Any(
-                static member => member.Abi
-            );
-            return new Cluster(
-                -1,
-                kind,
-                members[0].Structural,
-                members[0].Weight,
-                exactCount,
-                abi,
-                members[0].Unit,
-                members
-            );
+                .GroupBy(static member => member.Exact, StringComparer.Ordinal)
+                .Max(static group => group.Count());
+            var abi = members.Any(static member => member.Abi);
+            return new Cluster(-1, kind, members[0].Structural, members[0].Weight, exactCount, abi, members[0].Unit, members);
         }
 
         private static Member CreateMember(string relative, SyntaxNode node, SyntaxNode body, string structural, string exact, int weight)
         {
             var lineSpan = node.GetLocation().GetLineSpan();
-            var (typeName, memberName) = Describe(
-                node
-            );
+            var (typeName, memberName) = Describe(node);
             var unit = typeName.Length == 0 ? memberName : $"{typeName}.{memberName}";
             return new Member(
                 relative,
@@ -3374,10 +1617,7 @@ namespace Puck.Tools
                 exact,
                 weight,
                 unit,
-                IsAbi(
-                    relative,
-                    typeName
-                )
+                IsAbi(relative, typeName)
             );
         }
 
@@ -3424,18 +1664,12 @@ namespace Puck.Tools
                 case ConversionOperatorDeclarationSyntax:
                     return (typeName, "operator");
                 case AccessorDeclarationSyntax accessor:
-                    return (typeName, AccessorName(
-                        accessor
-                    ));
+                    return (typeName, AccessorName(accessor));
                 case LocalFunctionStatementSyntax local:
                     return (typeName, $"local:{local.Identifier.ValueText}");
                 case BlockSyntax block:
-                    var owner = block.Ancestors().FirstOrDefault(
-                        IsUnitNode
-                    );
-                    var ownerName = owner is null ? "" : Describe(
-                        owner
-                    ).Member;
+                    var owner = block.Ancestors().FirstOrDefault(IsUnitNode);
+                    var ownerName = owner is null ? "" : Describe(owner).Member;
                     var line = block.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
                     return (typeName, $"{ownerName} block@{line}");
                 default:
@@ -3445,9 +1679,7 @@ namespace Puck.Tools
 
         private static string AccessorName(AccessorDeclarationSyntax accessor)
         {
-            var owner = accessor.Ancestors().FirstOrDefault(
-                static node => node is BasePropertyDeclarationSyntax
-            );
+            var owner = accessor.Ancestors().FirstOrDefault(static node => node is BasePropertyDeclarationSyntax);
             var ownerName = owner switch
             {
                 PropertyDeclarationSyntax property => property.Identifier.ValueText,
@@ -3461,18 +1693,9 @@ namespace Puck.Tools
         // True when a member lives in a marshalling/ABI context the NEVER-list guards, so
         // triage can separate deliberate Vulkan mirrors from real copy-paste.
         private static bool IsAbi(string relative, string typeName) =>
-            relative.Contains(
-                "VulkanNative",
-                StringComparison.OrdinalIgnoreCase
-            )
-            || relative.Contains(
-                "Vulkan/Bindings",
-                StringComparison.OrdinalIgnoreCase
-            )
-            || typeName.StartsWith(
-                "Vk",
-                StringComparison.Ordinal
-            );
+            relative.Contains("VulkanNative", StringComparison.OrdinalIgnoreCase)
+            || relative.Contains("Vulkan/Bindings", StringComparison.OrdinalIgnoreCase)
+            || typeName.StartsWith("Vk", StringComparison.Ordinal);
 
         // Two hashes over the body's token stream (trivia excluded, so whitespace and
         // comments never matter): STRUCTURAL abstracts identifiers and literals to a
@@ -3484,26 +1707,12 @@ namespace Puck.Tools
             var weight = 0;
             foreach (var token in body.DescendantTokens())
             {
-                structural.Append(
-                    CanonicalToken(
-                    token
-                )
-                ).Append(
-                    '\u0001'
-                );
-                exact.Append(
-                    token.Text
-                ).Append(
-                    '\u0001'
-                );
+                structural.Append(CanonicalToken(token)).Append('\u0001');
+                exact.Append(token.Text).Append('\u0001');
                 weight++;
             }
 
-            return (Hash(
-                structural.ToString()
-            ), Hash(
-                exact.ToString()
-            ), weight);
+            return (Hash(structural.ToString()), Hash(exact.ToString()), weight);
         }
 
         // Structural canonicalization: identifiers and literals collapse to a kind marker
@@ -3525,24 +1734,9 @@ namespace Puck.Tools
             _ => token.Text
         };
 
-        private static string Hash(string value) => Convert.ToHexString(
-            SHA256.HashData(
-            Encoding.UTF8.GetBytes(
-            value
-        )
-        )
-        );
+        private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
-        private sealed record Cluster(
-            int Id,
-            string Kind,
-            string Fingerprint,
-            int Weight,
-            int ExactCount,
-            bool Abi,
-            string Label,
-            List<Member> Members
-        );
+        private sealed record Cluster(int Id, string Kind, string Fingerprint, int Weight, int ExactCount, bool Abi, string Label, List<Member> Members);
 
         private sealed record Member(
             string File,
@@ -3568,71 +1762,33 @@ namespace Puck.Tools
     // formatter cannot express.
     internal sealed class MemberSpacingRewriter : CSharpSyntaxRewriter
     {
-        public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitClassDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitClassDeclaration(node)!);
 
-        public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitStructDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitStructDeclaration(node)!);
 
-        public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitInterfaceDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node)!);
 
-        public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitRecordDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitRecordDeclaration(node)!);
 
         public override SyntaxNode? VisitCompilationUnit(CompilationUnitSyntax node)
         {
-            var visited = (CompilationUnitSyntax)base.VisitCompilationUnit(
-                node
-            )!;
-            return visited.WithMembers(
-                Normalize(
-                visited.Members
-            )
-            );
+            var visited = (CompilationUnitSyntax)base.VisitCompilationUnit(node)!;
+            return visited.WithMembers(Normalize(visited.Members));
         }
 
         public override SyntaxNode? VisitNamespaceDeclaration(NamespaceDeclarationSyntax node)
         {
-            var visited = (NamespaceDeclarationSyntax)base.VisitNamespaceDeclaration(
-                node
-            )!;
-            return visited.WithMembers(
-                Normalize(
-                visited.Members
-            )
-            );
+            var visited = (NamespaceDeclarationSyntax)base.VisitNamespaceDeclaration(node)!;
+            return visited.WithMembers(Normalize(visited.Members));
         }
 
         public override SyntaxNode? VisitFileScopedNamespaceDeclaration(FileScopedNamespaceDeclarationSyntax node)
         {
-            var visited = (FileScopedNamespaceDeclarationSyntax)base.VisitFileScopedNamespaceDeclaration(
-                node
-            )!;
-            return visited.WithMembers(
-                Normalize(
-                visited.Members
-            )
-            );
+            var visited = (FileScopedNamespaceDeclarationSyntax)base.VisitFileScopedNamespaceDeclaration(node)!;
+            return visited.WithMembers(Normalize(visited.Members));
         }
 
-        private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) => node.WithMembers(
-            Normalize(
-            node.Members
-        )
-        );
+        private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) => node.WithMembers(Normalize(node.Members));
 
         // The accessibility-scope key two adjacent members are grouped by. Only the access
         // modifiers count (public/private/protected/internal); ordering is normalized so
@@ -3644,26 +1800,13 @@ namespace Puck.Tools
             member.Modifiers
                 .Where(
                     static m =>
-                    m.IsKind(
-                        SyntaxKind.PublicKeyword
-                    )
-                    || m.IsKind(
-                        SyntaxKind.PrivateKeyword
-                    )
-                    || m.IsKind(
-                        SyntaxKind.ProtectedKeyword
-                    )
-                    || m.IsKind(
-                        SyntaxKind.InternalKeyword
-                    )
+                    m.IsKind(SyntaxKind.PublicKeyword)
+                    || m.IsKind(SyntaxKind.PrivateKeyword)
+                    || m.IsKind(SyntaxKind.ProtectedKeyword)
+                    || m.IsKind(SyntaxKind.InternalKeyword)
                 )
-                .Select(
-                    static m => m.ValueText
-                )
-                .OrderBy(
-                    static text => text,
-                    StringComparer.Ordinal
-                )
+                .Select(static m => m.ValueText)
+                .OrderBy(static text => text, StringComparer.Ordinal)
         );
 
         private static SyntaxList<MemberDeclarationSyntax> Normalize(SyntaxList<MemberDeclarationSyntax> members)
@@ -3681,58 +1824,29 @@ namespace Puck.Tools
                 var lead = current.GetLeadingTrivia();
                 if (lead.Any(
                     static t =>
-                    t.IsKind(
-                        SyntaxKind.SingleLineCommentTrivia
-                    )
-                    || t.IsKind(
-                        SyntaxKind.MultiLineCommentTrivia
-                    )
-                    || t.IsKind(
-                        SyntaxKind.SingleLineDocumentationCommentTrivia
-                    )
-                    || t.IsKind(
-                        SyntaxKind.MultiLineDocumentationCommentTrivia
-                    )
+                    t.IsKind(SyntaxKind.SingleLineCommentTrivia)
+                    || t.IsKind(SyntaxKind.MultiLineCommentTrivia)
+                    || t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+                    || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia)
                     || t.IsDirective
                 ))
                 {
-                    result.Add(
-                        current
-                    );
+                    result.Add(current);
                     continue;
                 }
 
-                var sameSubject = Bucket(
-                    previous
-                ) == Bucket(
-                    current
-                ) && Scope(
-                    previous
-                ) == Scope(
-                    current
-                );
-                result.Add(
-                    current.WithLeadingTrivia(
-                    SetBlankLines(
-                    lead,
-                    sameSubject ? 0 : 1
-                )
-                )
-                );
+                var sameSubject = Bucket(previous) == Bucket(current) && Scope(previous) == Scope(current);
+                result.Add(current.WithLeadingTrivia(SetBlankLines(lead, sameSubject ? 0 : 1)));
             }
 
-            return SyntaxFactory.List(
-                result
-            );
+            return SyntaxFactory.List(result);
         }
 
         private static SyntaxTriviaList SetBlankLines(SyntaxTriviaList lead, int desired)
         {
             var trivia = lead.ToList();
             var start = 0;
-            while (start < trivia.Count && trivia[start].IsKind(
-                SyntaxKind.EndOfLineTrivia
-            ))
+            while (start < trivia.Count && trivia[start].IsKind(SyntaxKind.EndOfLineTrivia))
             {
                 start++;
             }
@@ -3740,28 +1854,16 @@ namespace Puck.Tools
             var rebuilt = new List<SyntaxTrivia>();
             for (var k = 0; k < desired; k++)
             {
-                rebuilt.Add(
-                    SyntaxFactory.CarriageReturnLineFeed
-                );
+                rebuilt.Add(SyntaxFactory.CarriageReturnLineFeed);
             }
 
-            rebuilt.AddRange(
-                trivia.Skip(
-                start
-            )
-            );
-            return SyntaxFactory.TriviaList(
-                rebuilt
-            );
+            rebuilt.AddRange(trivia.Skip(start));
+            return SyntaxFactory.TriviaList(rebuilt);
         }
 
         private static string Bucket(MemberDeclarationSyntax member) => member switch
         {
-            FieldDeclarationSyntax field => field.Modifiers.Any(
-                static m => m.IsKind(
-                SyntaxKind.ConstKeyword
-            )
-            ) ? "const" : "field",
+            FieldDeclarationSyntax field => field.Modifiers.Any(static m => m.IsKind(SyntaxKind.ConstKeyword)) ? "const" : "field",
             EventFieldDeclarationSyntax => "event",
             PropertyDeclarationSyntax => "property",
             IndexerDeclarationSyntax => "indexer",
@@ -3788,35 +1890,15 @@ namespace Puck.Tools
     // is preserved and a second run is a no-op.
     internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter
     {
-        public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitClassDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitClassDeclaration(node)!);
 
-        public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitStructDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitStructDeclaration(node)!);
 
-        public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitInterfaceDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node)!);
 
-        public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix(
-            (TypeDeclarationSyntax)base.VisitRecordDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitRecordDeclaration(node)!);
 
-        private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) => node.WithMembers(
-            Reorder(
-            node.Members
-        )
-        );
+        private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) => node.WithMembers(Reorder(node.Members));
 
         private static SyntaxList<MemberDeclarationSyntax> Reorder(SyntaxList<MemberDeclarationSyntax> members)
         {
@@ -3825,83 +1907,60 @@ namespace Puck.Tools
                 return members;
             }
 
-            var result = new List<MemberDeclarationSyntax>(
-                members.Count
-            );
+            var result = new List<MemberDeclarationSyntax>(members.Count);
             var run = new List<MemberDeclarationSyntax>();
             string? runKey = null;
             foreach (var member in members)
             {
-                var key = HasCommentOrDirective(
-                    member
-                ) ? null : GroupKey(
-                    member
-                );
+                var key = HasCommentOrDirective(member) ? null : GroupKey(member);
                 if (key is not null && key == runKey)
                 {
-                    run.Add(
-                        member
-                    );
+                    run.Add(member);
                     continue;
                 }
 
-                FlushRun(
-                    result,
-                    run
-                );
+                FlushRun(result, run);
                 runKey = key;
                 if (key is null)
                 {
-                    result.Add(
-                        member
-                    );
+                    result.Add(member);
                 }
                 else
                 {
-                    run.Add(
-                        member
-                    );
+                    run.Add(member);
                 }
             }
 
-            FlushRun(
-                result,
-                run
-            );
-            return SyntaxFactory.List(
-                result
-            );
+            FlushRun(result, run);
+            return SyntaxFactory.List(result);
         }
 
         private static void FlushRun(List<MemberDeclarationSyntax> result, List<MemberDeclarationSyntax> run)
         {
             if (run.Count == 1)
             {
-                result.Add(
-                    run[0]
-                );
+                result.Add(run[0]);
             }
             else if (run.Count > 1)
             {
-                // The inter-member whitespace is positional (slot i always carries the same
-                // surrounding trivia); reassigning it by slot preserves the layout while the
-                // declarations move.
-                var slots = run.Select(
-                    static member => (member.GetLeadingTrivia(), member.GetTrailingTrivia())
-                ).ToArray();
-                var sorted = run.OrderBy(
-                    SortKey,
-                    StringComparer.Ordinal
-                ).ToArray();
-                for (var slot = 0; slot < sorted.Length; slot++)
+                // A property initializer is evaluated in declaration order (in the constructor);
+                // if any in the run has a side effect, reordering would change that order, so the
+                // run is left as written. (const initializers are compile-time — always safe.)
+                if (run.Any(static member => member is PropertyDeclarationSyntax { Initializer.Value: { } value } && ExpressionSafety.HasSideEffect(value)))
                 {
-                    result.Add(
-                        sorted[slot].WithLeadingTrivia(
-                        slots[slot].Item1
-                    ).WithTrailingTrivia(
-                        slots[slot].Item2
-                    )
-                    );
+                    result.AddRange(run);
+                }
+                else
+                {
+                    // The inter-member whitespace is positional (slot i always carries the same
+                    // surrounding trivia); reassigning it by slot preserves the layout while the
+                    // declarations move.
+                    var slots = run.Select(static member => (member.GetLeadingTrivia(), member.GetTrailingTrivia())).ToArray();
+                    var sorted = run.OrderBy(SortKey, StringComparer.Ordinal).ToArray();
+                    for (var slot = 0; slot < sorted.Length; slot++)
+                    {
+                        result.Add(sorted[slot].WithLeadingTrivia(slots[slot].Item1).WithTrailingTrivia(slots[slot].Item2));
+                    }
                 }
             }
 
@@ -3914,17 +1973,11 @@ namespace Puck.Tools
         {
             var kind = member switch
             {
-                FieldDeclarationSyntax field when field.Modifiers.Any(
-                    static modifier => modifier.IsKind(
-                    SyntaxKind.ConstKeyword
-                )
-                ) => "const",
+                FieldDeclarationSyntax field when field.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.ConstKeyword)) => "const",
                 PropertyDeclarationSyntax => "property",
                 _ => null
             };
-            return kind is null ? null : (kind + " " + Scope(
-                member
-            ));
+            return kind is null ? null : (kind + " " + Scope(member));
         }
 
         private static string SortKey(MemberDeclarationSyntax member) => member switch
@@ -3939,45 +1992,22 @@ namespace Puck.Tools
             member.Modifiers
                 .Where(
                     static m =>
-                    m.IsKind(
-                        SyntaxKind.PublicKeyword
-                    )
-                    || m.IsKind(
-                        SyntaxKind.PrivateKeyword
-                    )
-                    || m.IsKind(
-                        SyntaxKind.ProtectedKeyword
-                    )
-                    || m.IsKind(
-                        SyntaxKind.InternalKeyword
-                    )
+                    m.IsKind(SyntaxKind.PublicKeyword)
+                    || m.IsKind(SyntaxKind.PrivateKeyword)
+                    || m.IsKind(SyntaxKind.ProtectedKeyword)
+                    || m.IsKind(SyntaxKind.InternalKeyword)
                 )
-                .Select(
-                    static m => m.ValueText
-                )
-                .OrderBy(
-                    static text => text,
-                    StringComparer.Ordinal
-                )
+                .Select(static m => m.ValueText)
+                .OrderBy(static text => text, StringComparer.Ordinal)
         );
 
         private static bool HasCommentOrDirective(MemberDeclarationSyntax member) =>
-            member.GetLeadingTrivia().Concat(
-                member.GetTrailingTrivia()
-            ).Any(
+            member.GetLeadingTrivia().Concat(member.GetTrailingTrivia()).Any(
                 static t =>
-                t.IsKind(
-                    SyntaxKind.SingleLineCommentTrivia
-                )
-                || t.IsKind(
-                    SyntaxKind.MultiLineCommentTrivia
-                )
-                || t.IsKind(
-                    SyntaxKind.SingleLineDocumentationCommentTrivia
-                )
-                || t.IsKind(
-                    SyntaxKind.MultiLineDocumentationCommentTrivia
-                )
+                t.IsKind(SyntaxKind.SingleLineCommentTrivia)
+                || t.IsKind(SyntaxKind.MultiLineCommentTrivia)
+                || t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+                || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia)
                 || t.IsDirective
             );
     }
@@ -3989,137 +2019,54 @@ namespace Puck.Tools
     // trivia, so the multi-line layout is preserved).
     internal sealed class AttrRewriter : CSharpSyntaxRewriter
     {
-        public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node) => Reorder(
-            (MethodDeclarationSyntax)base.VisitMethodDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node) => Reorder((MethodDeclarationSyntax)base.VisitMethodDeclaration(node)!);
 
-        public override SyntaxNode? VisitConstructorDeclaration(ConstructorDeclarationSyntax node) => Reorder(
-            (ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitConstructorDeclaration(ConstructorDeclarationSyntax node) => Reorder((ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node)!);
 
-        public override SyntaxNode? VisitDestructorDeclaration(DestructorDeclarationSyntax node) => Reorder(
-            (DestructorDeclarationSyntax)base.VisitDestructorDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitDestructorDeclaration(DestructorDeclarationSyntax node) => Reorder((DestructorDeclarationSyntax)base.VisitDestructorDeclaration(node)!);
 
-        public override SyntaxNode? VisitOperatorDeclaration(OperatorDeclarationSyntax node) => Reorder(
-            (OperatorDeclarationSyntax)base.VisitOperatorDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitOperatorDeclaration(OperatorDeclarationSyntax node) => Reorder((OperatorDeclarationSyntax)base.VisitOperatorDeclaration(node)!);
 
-        public override SyntaxNode? VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node) => Reorder(
-            (ConversionOperatorDeclarationSyntax)base.VisitConversionOperatorDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node) => Reorder((ConversionOperatorDeclarationSyntax)base.VisitConversionOperatorDeclaration(node)!);
 
-        public override SyntaxNode? VisitPropertyDeclaration(PropertyDeclarationSyntax node) => Reorder(
-            (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitPropertyDeclaration(PropertyDeclarationSyntax node) => Reorder((PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node)!);
 
-        public override SyntaxNode? VisitIndexerDeclaration(IndexerDeclarationSyntax node) => Reorder(
-            (IndexerDeclarationSyntax)base.VisitIndexerDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitIndexerDeclaration(IndexerDeclarationSyntax node) => Reorder((IndexerDeclarationSyntax)base.VisitIndexerDeclaration(node)!);
 
-        public override SyntaxNode? VisitEventDeclaration(EventDeclarationSyntax node) => Reorder(
-            (EventDeclarationSyntax)base.VisitEventDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitEventDeclaration(EventDeclarationSyntax node) => Reorder((EventDeclarationSyntax)base.VisitEventDeclaration(node)!);
 
-        public override SyntaxNode? VisitEventFieldDeclaration(EventFieldDeclarationSyntax node) => Reorder(
-            (EventFieldDeclarationSyntax)base.VisitEventFieldDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitEventFieldDeclaration(EventFieldDeclarationSyntax node) => Reorder((EventFieldDeclarationSyntax)base.VisitEventFieldDeclaration(node)!);
 
-        public override SyntaxNode? VisitFieldDeclaration(FieldDeclarationSyntax node) => Reorder(
-            (FieldDeclarationSyntax)base.VisitFieldDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitFieldDeclaration(FieldDeclarationSyntax node) => Reorder((FieldDeclarationSyntax)base.VisitFieldDeclaration(node)!);
 
-        public override SyntaxNode? VisitDelegateDeclaration(DelegateDeclarationSyntax node) => Reorder(
-            (DelegateDeclarationSyntax)base.VisitDelegateDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitDelegateDeclaration(DelegateDeclarationSyntax node) => Reorder((DelegateDeclarationSyntax)base.VisitDelegateDeclaration(node)!);
 
-        public override SyntaxNode? VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node) => Reorder(
-            (EnumMemberDeclarationSyntax)base.VisitEnumMemberDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node) => Reorder((EnumMemberDeclarationSyntax)base.VisitEnumMemberDeclaration(node)!);
 
-        public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Reorder(
-            (ClassDeclarationSyntax)base.VisitClassDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Reorder((ClassDeclarationSyntax)base.VisitClassDeclaration(node)!);
 
-        public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Reorder(
-            (StructDeclarationSyntax)base.VisitStructDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Reorder((StructDeclarationSyntax)base.VisitStructDeclaration(node)!);
 
-        public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Reorder(
-            (InterfaceDeclarationSyntax)base.VisitInterfaceDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Reorder((InterfaceDeclarationSyntax)base.VisitInterfaceDeclaration(node)!);
 
-        public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Reorder(
-            (RecordDeclarationSyntax)base.VisitRecordDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Reorder((RecordDeclarationSyntax)base.VisitRecordDeclaration(node)!);
 
-        public override SyntaxNode? VisitEnumDeclaration(EnumDeclarationSyntax node) => Reorder(
-            (EnumDeclarationSyntax)base.VisitEnumDeclaration(
-            node
-        )!
-        );
+        public override SyntaxNode? VisitEnumDeclaration(EnumDeclarationSyntax node) => Reorder((EnumDeclarationSyntax)base.VisitEnumDeclaration(node)!);
 
         // Moves each attribute (with its own trailing newline) into its alphabetical slot
         // and reassigns each slot's leading trivia, preserving the one-per-line layout.
         private static T Reorder<T>(T node) where T : MemberDeclarationSyntax
         {
             var lists = node.AttributeLists;
-            if (lists.Count <= 1 || lists.Any(
-                static l => l.Attributes.Count != 1
-            ))
+            if (lists.Count <= 1 || lists.Any(static l => l.Attributes.Count != 1))
             {
                 return node;
             }
 
-            var order = Enumerable.Range(
-                0,
-                lists.Count
-            )
-                .OrderBy(
-                    i => SimpleName(
-                    lists[i].Attributes[0]
-                ),
-                    StringComparer.Ordinal
-                )
+            var order = Enumerable.Range(0, lists.Count)
+                .OrderBy(i => SimpleName(lists[i].Attributes[0]), StringComparer.Ordinal)
                 .ToList();
-            if (order.SequenceEqual(
-                Enumerable.Range(
-                0,
-                lists.Count
-            )
-            ))
+            if (order.SequenceEqual(Enumerable.Range(0, lists.Count)))
             {
                 return node;
             }
@@ -4127,18 +2074,10 @@ namespace Puck.Tools
             var newLists = new List<AttributeListSyntax>();
             for (var slot = 0; slot < lists.Count; slot++)
             {
-                newLists.Add(
-                    lists[order[slot]].WithLeadingTrivia(
-                    lists[slot].GetLeadingTrivia()
-                )
-                );
+                newLists.Add(lists[order[slot]].WithLeadingTrivia(lists[slot].GetLeadingTrivia()));
             }
 
-            return (T)node.WithAttributeLists(
-                SyntaxFactory.List(
-                newLists
-            )
-            );
+            return (T)node.WithAttributeLists(SyntaxFactory.List(newLists));
         }
 
         private static string SimpleName(AttributeSyntax attribute) => attribute.Name switch
@@ -4159,64 +2098,33 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
         {
-            var visited = (BinaryExpressionSyntax)base.VisitBinaryExpression(
-                node
-            )!;
+            var visited = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
             var kind = visited.Kind();
             if (kind is not (SyntaxKind.EqualsExpression or SyntaxKind.NotEqualsExpression))
             {
                 return visited;
             }
 
-            var leftIsNull = visited.Left.IsKind(
-                SyntaxKind.NullLiteralExpression
-            );
-            var rightIsNull = visited.Right.IsKind(
-                SyntaxKind.NullLiteralExpression
-            );
+            var leftIsNull = visited.Left.IsKind(SyntaxKind.NullLiteralExpression);
+            var rightIsNull = visited.Right.IsKind(SyntaxKind.NullLiteralExpression);
             if (leftIsNull == rightIsNull)
             {
                 return visited;
             }
 
             var subject = rightIsNull ? visited.Left : visited.Right;
-            PatternSyntax pattern = SyntaxFactory.ConstantPattern(
-                SyntaxFactory.LiteralExpression(
-                SyntaxKind.NullLiteralExpression
-            )
-            );
+            PatternSyntax pattern = SyntaxFactory.ConstantPattern(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression));
             if (kind is SyntaxKind.NotEqualsExpression)
             {
-                pattern = SyntaxFactory.UnaryPattern(
-                    SyntaxFactory.Token(
-                        SyntaxKind.NotKeyword
-                    ).WithTrailingTrivia(
-                        SyntaxFactory.Space
-                    ),
-                    pattern
-                );
+                pattern = SyntaxFactory.UnaryPattern(SyntaxFactory.Token(SyntaxKind.NotKeyword).WithTrailingTrivia(SyntaxFactory.Space), pattern);
             }
 
-            var isToken = SyntaxFactory.Token(
-                SyntaxKind.IsKeyword
-            )
-                .WithLeadingTrivia(
-                    SyntaxFactory.Space
-                )
-                .WithTrailingTrivia(
-                    SyntaxFactory.Space
-                );
-            return SyntaxFactory.IsPatternExpression(
-                subject.WithoutTrivia(),
-                isToken,
-                pattern
-            )
-                .WithLeadingTrivia(
-                    visited.GetLeadingTrivia()
-                )
-                .WithTrailingTrivia(
-                    visited.GetTrailingTrivia()
-                );
+            var isToken = SyntaxFactory.Token(SyntaxKind.IsKeyword)
+                .WithLeadingTrivia(SyntaxFactory.Space)
+                .WithTrailingTrivia(SyntaxFactory.Space);
+            return SyntaxFactory.IsPatternExpression(subject.WithoutTrivia(), isToken, pattern)
+                .WithLeadingTrivia(visited.GetLeadingTrivia())
+                .WithTrailingTrivia(visited.GetTrailingTrivia());
         }
     }
 
@@ -4232,28 +2140,13 @@ namespace Puck.Tools
     internal sealed class ParenClarityRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
-            => MaybeWrap(
-                node,
-                (ExpressionSyntax)base.VisitBinaryExpression(
-                node
-            )!
-            );
+            => MaybeWrap(node, (ExpressionSyntax)base.VisitBinaryExpression(node)!);
 
         public override SyntaxNode? VisitConditionalExpression(ConditionalExpressionSyntax node)
-            => MaybeWrap(
-                node,
-                (ExpressionSyntax)base.VisitConditionalExpression(
-                node
-            )!
-            );
+            => MaybeWrap(node, (ExpressionSyntax)base.VisitConditionalExpression(node)!);
 
         public override SyntaxNode? VisitIsPatternExpression(IsPatternExpressionSyntax node)
-            => MaybeWrap(
-                node,
-                (ExpressionSyntax)base.VisitIsPatternExpression(
-                node
-            )!
-            );
+            => MaybeWrap(node, (ExpressionSyntax)base.VisitIsPatternExpression(node)!);
 
         // Flag-combining bitwise (`a | b`) is idiomatic bare in value position — the gold
         // standard wraps it only inside a comparison (precedence vs ==/!=). Drop a redundant
@@ -4262,25 +2155,12 @@ namespace Puck.Tools
         // on the gold shape regardless of any extra parens already present.
         public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node)
         {
-            var visited = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(
-                node
-            )!;
+            var visited = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node)!;
             if (visited.Expression is BinaryExpressionSyntax inner
-                && IsBitwise(
-                    inner.Kind()
-                )
-                && (IsLooseContext(
-                    node.Parent
-                ) || IsSameOperatorChain(
-                    inner.Kind(),
-                    node.Parent
-                )))
+                && IsBitwise(inner.Kind())
+                && (IsLooseContext(node.Parent) || IsSameOperatorChain(inner.Kind(), node.Parent)))
             {
-                return inner.WithLeadingTrivia(
-                    visited.GetLeadingTrivia()
-                ).WithTrailingTrivia(
-                    visited.GetTrailingTrivia()
-                );
+                return inner.WithLeadingTrivia(visited.GetLeadingTrivia()).WithTrailingTrivia(visited.GetTrailingTrivia());
             }
 
             return visited;
@@ -4288,23 +2168,15 @@ namespace Puck.Tools
 
         private static ExpressionSyntax MaybeWrap(ExpressionSyntax original, ExpressionSyntax visited)
         {
-            if (!NeedsParens(
-                original
-            ))
+            if (!NeedsParens(original))
             {
                 return visited;
             }
 
             var inner = visited.WithoutLeadingTrivia().WithoutTrailingTrivia();
-            return SyntaxFactory.ParenthesizedExpression(
-                inner
-            )
-                .WithLeadingTrivia(
-                    visited.GetLeadingTrivia()
-                )
-                .WithTrailingTrivia(
-                    visited.GetTrailingTrivia()
-                );
+            return SyntaxFactory.ParenthesizedExpression(inner)
+                .WithLeadingTrivia(visited.GetLeadingTrivia())
+                .WithTrailingTrivia(visited.GetTrailingTrivia());
         }
 
         // Decided on the ORIGINAL node, so the parent is the real (pre-rewrite) context.
@@ -4340,13 +2212,9 @@ namespace Puck.Tools
                 // Flag-combining bitwise gets clarity parens only where precedence against a
                 // comparison is genuinely confusing (an operand of ==/!=/</> ...), matching
                 // the gold standard's bare `a | b` in plain value position.
-                if (IsBitwise(
-                    kind
-                ))
+                if (IsBitwise(kind))
                 {
-                    return parent is BinaryExpressionSyntax comparison && IsComparison(
-                        comparison.Kind()
-                    );
+                    return parent is BinaryExpressionSyntax comparison && IsComparison(comparison.Kind());
                 }
             }
 
@@ -4373,14 +2241,37 @@ namespace Puck.Tools
             or InitializerExpressionSyntax or ExpressionStatementSyntax;
     }
 
+    // Reorder-safety for the passes that alphabetize EVALUATED expressions (named-args,
+    // init-order). C# evaluates call arguments and object-initializer values in written order,
+    // so moving an expression that has a side effect — or that reads state another element
+    // mutates — changes behavior. An element is treated as side-effecting if its subtree holds a
+    // call, object creation, await, assignment, indexer access, or ++/--; those cover the
+    // observable-order hazards without a semantic model. Pure reads commute, so a group with none
+    // of these is safe to reorder; otherwise the pass leaves it in source order.
+    internal static class ExpressionSafety
+    {
+        public static bool HasSideEffect(SyntaxNode expression) => expression.DescendantNodesAndSelf().Any(static node =>
+            node is InvocationExpressionSyntax
+                or ObjectCreationExpressionSyntax
+                or ImplicitObjectCreationExpressionSyntax
+                or AwaitExpressionSyntax
+                or AssignmentExpressionSyntax
+                or ElementAccessExpressionSyntax
+            || node.IsKind(SyntaxKind.PreIncrementExpression)
+            || node.IsKind(SyntaxKind.PreDecrementExpression)
+            || node.IsKind(SyntaxKind.PostIncrementExpression)
+            || node.IsKind(SyntaxKind.PostDecrementExpression));
+    }
+
     // The named-argument normalizer (the `named-args` format pass). SEMANTIC: it resolves
     // each call's method symbol to read parameter names, so it runs against a Compilation
     // (NamedArgsPhase) rather than the syntactic Func pipeline. Every real method/ctor call
     // gets its arguments named (`name: value`) and sorted alphabetically by parameter name —
     // the Interop/Factories house convention. Left positional (skipped) when there is no
     // resolvable method symbol (function-pointer / delegate invokes have none), an out/ref/in
-    // or already-named argument, a `params` parameter, or an omitted optional argument — the
-    // cases where naming-and-reordering is unsafe or ambiguous.
+    // or already-named argument, a `params` parameter, an omitted optional argument, or when the
+    // reorder would move a side-effecting argument (see ExpressionSafety) — the cases where
+    // naming-and-reordering is unsafe or ambiguous.
     internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter
     {
         private readonly SemanticModel m_model;
@@ -4392,41 +2283,20 @@ namespace Puck.Tools
 
         public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
         {
-            var visited = (InvocationExpressionSyntax)base.VisitInvocationExpression(
-                node
-            )!;
-            return Rebuild(
-                node,
-                visited.ArgumentList
-            ) is { } rebuilt ? visited.WithArgumentList(
-                rebuilt
-            ) : visited;
+            var visited = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
+            return Rebuild(node, visited.ArgumentList) is { } rebuilt ? visited.WithArgumentList(rebuilt) : visited;
         }
 
         public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
         {
-            var visited = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(
-                node
-            )!;
-            return visited.ArgumentList is { } list && Rebuild(
-                node,
-                list
-            ) is { } rebuilt ? visited.WithArgumentList(
-                rebuilt
-            ) : visited;
+            var visited = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
+            return visited.ArgumentList is { } list && Rebuild(node, list) is { } rebuilt ? visited.WithArgumentList(rebuilt) : visited;
         }
 
         public override SyntaxNode? VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node)
         {
-            var visited = (ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(
-                node
-            )!;
-            return Rebuild(
-                node,
-                visited.ArgumentList
-            ) is { } rebuilt ? visited.WithArgumentList(
-                rebuilt
-            ) : visited;
+            var visited = (ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(node)!;
+            return Rebuild(node, visited.ArgumentList) is { } rebuilt ? visited.WithArgumentList(rebuilt) : visited;
         }
 
         // The ORIGINAL node carries the symbol (the rewritten copy is detached from the
@@ -4439,9 +2309,7 @@ namespace Puck.Tools
                 return null;
             }
 
-            if (m_model.GetSymbolInfo(
-                originalCall
-            ).Symbol is not IMethodSymbol method
+            if (m_model.GetSymbolInfo(originalCall).Symbol is not IMethodSymbol method
                 || method.MethodKind is MethodKind.FunctionPointerSignature or MethodKind.DelegateInvoke)
             {
                 return null;
@@ -4450,12 +2318,18 @@ namespace Puck.Tools
             var arguments = visitedList.Arguments;
             var parameters = method.Parameters;
             if (arguments.Count != parameters.Length
-                || parameters.Any(
-                    static parameter => parameter.IsParams
-                )
-                || arguments.Any(
-                    static argument => argument.NameColon is not null
-                ))
+                || parameters.Any(static parameter => parameter.IsParams)
+                || arguments.Any(static argument => argument.NameColon is not null))
+            {
+                return null;
+            }
+
+            // Naming preserves written positions, but the alphabetical SORT moves them. When that
+            // move is real AND any argument is side-effecting, leave the call positional — C#
+            // evaluates arguments left-to-right, so reordering would change evaluation order.
+            var parameterNames = parameters.Select(static parameter => parameter.Name);
+            if (!parameterNames.SequenceEqual(parameterNames.OrderBy(static name => name, StringComparer.Ordinal))
+                && arguments.Any(static argument => ExpressionSafety.HasSideEffect(argument.Expression)))
             {
                 return null;
             }
@@ -4469,67 +2343,32 @@ namespace Puck.Tools
             {
                 var argument = arguments[index];
                 var nameColon = SyntaxFactory
-                    .NameColon(
-                        SyntaxFactory.IdentifierName(
-                        parameters[index].Name
-                    )
-                    )
-                    .WithColonToken(
-                        SyntaxFactory.Token(
-                        SyntaxKind.ColonToken
-                    ).WithTrailingTrivia(
-                        SyntaxFactory.Space
-                    )
-                    );
-                var refKind = argument.RefKindKeyword.IsKind(
-                    SyntaxKind.None
-                )
+                    .NameColon(SyntaxFactory.IdentifierName(parameters[index].Name))
+                    .WithColonToken(SyntaxFactory.Token(SyntaxKind.ColonToken).WithTrailingTrivia(SyntaxFactory.Space));
+                var refKind = argument.RefKindKeyword.IsKind(SyntaxKind.None)
                     ? default
-                    : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(
-                        SyntaxFactory.Space
-                    );
+                    : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space);
                 var bareExpression = argument.Expression.WithoutLeadingTrivia().WithoutTrailingTrivia();
-                entries[index] = (parameters[index].Name, SyntaxFactory.Argument(
-                    nameColon,
-                    refKind,
-                    bareExpression
-                ));
+                entries[index] = (parameters[index].Name, SyntaxFactory.Argument(nameColon, refKind, bareExpression));
             }
 
-            var ordered = entries.OrderBy(
-                static entry => entry.Name,
-                StringComparer.Ordinal
-            ).Select(
-                static entry => entry.Argument
-            ).ToArray();
+            var ordered = entries.OrderBy(static entry => entry.Name, StringComparer.Ordinal).Select(static entry => entry.Argument).ToArray();
             var separators = arguments.GetSeparators().ToArray();
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(
-                arguments.Count * 2
-            );
+            var nodesAndTokens = new List<SyntaxNodeOrToken>(arguments.Count * 2);
             for (var slot = 0; slot < ordered.Length; slot++)
             {
                 nodesAndTokens.Add(
                     ordered[slot]
-                    .WithLeadingTrivia(
-                        arguments[slot].GetLeadingTrivia()
-                    )
-                    .WithTrailingTrivia(
-                        arguments[slot].GetTrailingTrivia()
-                    )
+                    .WithLeadingTrivia(arguments[slot].GetLeadingTrivia())
+                    .WithTrailingTrivia(arguments[slot].GetTrailingTrivia())
                 );
                 if (slot < separators.Length)
                 {
-                    nodesAndTokens.Add(
-                        separators[slot]
-                    );
+                    nodesAndTokens.Add(separators[slot]);
                 }
             }
 
-            return visitedList.WithArguments(
-                SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                nodesAndTokens
-            )
-            );
+            return visitedList.WithArguments(SyntaxFactory.SeparatedList<ArgumentSyntax>(nodesAndTokens));
         }
     }
 
@@ -4551,9 +2390,7 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
         {
-            var visited = (ArgumentListSyntax)base.VisitArgumentList(
-                node
-            )!;
+            var visited = (ArgumentListSyntax)base.VisitArgumentList(node)!;
             if (visited.Arguments.Count < 1)
             {
                 return visited;
@@ -4565,74 +2402,60 @@ namespace Puck.Tools
             if (visited.Arguments.Count == 1)
             {
                 return visited
-                    .WithOpenParenToken(
-                        visited.OpenParenToken.WithTrailingTrivia()
-                    )
+                    .WithOpenParenToken(visited.OpenParenToken.WithTrailingTrivia())
                     .WithArguments(
-                        SyntaxFactory.SingletonSeparatedList<ArgumentSyntax>(
-                        visited.Arguments[0].WithLeadingTrivia().WithTrailingTrivia()
+                        SyntaxFactory.SingletonSeparatedList<ArgumentSyntax>(visited.Arguments[0].WithLeadingTrivia().WithTrailingTrivia())
                     )
-                    )
-                    .WithCloseParenToken(
-                        visited.CloseParenToken.WithLeadingTrivia()
-                    );
+                    .WithCloseParenToken(visited.CloseParenToken.WithLeadingTrivia());
             }
 
-            var text = node.SyntaxTree.GetText();
-            var lineText = text.Lines.GetLineFromPosition(
-                node.OpenParenToken.SpanStart
-            ).ToString();
-            var lineIndent = lineText.Length - lineText.TrimStart().Length;
-            var argumentTrivia = SyntaxFactory.TriviaList(
-                SyntaxFactory.CarriageReturnLineFeed,
-                SyntaxFactory.Whitespace(
-                new string(
-                ' ',
-                lineIndent + 4
-            )
-            )
-            );
+            var lineIndent = WrappedIndent(node);
+            var argumentTrivia = SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(new string(' ', lineIndent + 4)));
 
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(
-                visited.Arguments.Count * 2
-            );
+            var nodesAndTokens = new List<SyntaxNodeOrToken>(visited.Arguments.Count * 2);
             for (var index = 0; index < visited.Arguments.Count; index++)
             {
-                nodesAndTokens.Add(
-                    visited.Arguments[index].WithLeadingTrivia(
-                    argumentTrivia
-                ).WithTrailingTrivia()
-                );
+                nodesAndTokens.Add(visited.Arguments[index].WithLeadingTrivia(argumentTrivia).WithTrailingTrivia());
                 if (index < visited.Arguments.Count - 1)
                 {
-                    nodesAndTokens.Add(
-                        SyntaxFactory.Token(
-                        SyntaxKind.CommaToken
-                    )
-                    );
+                    nodesAndTokens.Add(SyntaxFactory.Token(SyntaxKind.CommaToken));
                 }
             }
 
             return visited
-                .WithOpenParenToken(
-                    visited.OpenParenToken.WithTrailingTrivia()
-                )
-                .WithArguments(
-                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                    nodesAndTokens
-                )
-                )
+                .WithOpenParenToken(visited.OpenParenToken.WithTrailingTrivia())
+                .WithArguments(SyntaxFactory.SeparatedList<ArgumentSyntax>(nodesAndTokens))
                 .WithCloseParenToken(
-                    visited.CloseParenToken.WithLeadingTrivia(
-                    SyntaxFactory.CarriageReturnLineFeed,
-                    SyntaxFactory.Whitespace(
-                    new string(
-                    ' ',
-                    lineIndent
-                )
-                )
-                )
+                    visited.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(new string(' ', lineIndent)))
                 );
+        }
+
+        // The indent this call's wrapped body hangs from, computed STRUCTURALLY so it is stable
+        // across passes (idempotency). Anchoring to the input's current line would compound: once
+        // an enclosing call wraps, this call moves to a deeper line, and reading that line's indent
+        // would add 4 more spaces every run. Instead: take the enclosing statement's indent (which
+        // arg-lines never moves — it only wraps the argument lists inside a statement) and add one
+        // level per ENCLOSING multi-argument call, since every such call is itself wrapped and
+        // pushes this one deeper. The count is driven by argument counts, not the current layout,
+        // so a second pass reproduces the same value exactly.
+        private static int WrappedIndent(ArgumentListSyntax node)
+        {
+            var anchor = node.FirstAncestorOrSelf<StatementSyntax>() as SyntaxNode
+                ?? node.FirstAncestorOrSelf<MemberDeclarationSyntax>() as SyntaxNode
+                ?? node;
+            var anchorLine = node.SyntaxTree.GetText().Lines.GetLineFromPosition(anchor.GetFirstToken().SpanStart).ToString();
+            var baseIndent = anchorLine.Length - anchorLine.TrimStart().Length;
+
+            var depth = 0;
+            for (var ancestor = node.Parent; ancestor is not null && ancestor != anchor; ancestor = ancestor.Parent)
+            {
+                if (ancestor is ArgumentListSyntax { Arguments.Count: > 1 })
+                {
+                    depth++;
+                }
+            }
+
+            return baseIndent + (4 * depth);
         }
     }
 
@@ -4646,16 +2469,21 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node)
         {
-            var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(
-                node
-            )!;
-            if (!visited.IsKind(
-                SyntaxKind.ObjectInitializerExpression
-            )
+            var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(node)!;
+            if (!visited.IsKind(SyntaxKind.ObjectInitializerExpression)
                 || visited.Expressions.Count < 2
-                || !visited.Expressions.All(
-                    static expression => expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax }
-                ))
+                || !visited.Expressions.All(static expression => expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax }))
+            {
+                return visited;
+            }
+
+            // Initializer values are evaluated in written order. Leave the initializer as-is when
+            // it is already sorted (nothing to do) or when any value is side-effecting (reordering
+            // would change evaluation order).
+            var memberNames = visited.Expressions.Select(static expression =>
+                ((IdentifierNameSyntax)((AssignmentExpressionSyntax)expression).Left).Identifier.ValueText);
+            if (memberNames.SequenceEqual(memberNames.OrderBy(static name => name, StringComparer.Ordinal))
+                || visited.Expressions.Any(static expression => ExpressionSafety.HasSideEffect(((AssignmentExpressionSyntax)expression).Right)))
             {
                 return visited;
             }
@@ -4667,33 +2495,21 @@ namespace Puck.Tools
                 )
                 .ToArray();
             var separators = visited.Expressions.GetSeparators().ToArray();
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(
-                visited.Expressions.Count * 2
-            );
+            var nodesAndTokens = new List<SyntaxNodeOrToken>(visited.Expressions.Count * 2);
             for (var slot = 0; slot < ordered.Length; slot++)
             {
                 nodesAndTokens.Add(
                     ordered[slot]
-                    .WithLeadingTrivia(
-                        visited.Expressions[slot].GetLeadingTrivia()
-                    )
-                    .WithTrailingTrivia(
-                        visited.Expressions[slot].GetTrailingTrivia()
-                    )
+                    .WithLeadingTrivia(visited.Expressions[slot].GetLeadingTrivia())
+                    .WithTrailingTrivia(visited.Expressions[slot].GetTrailingTrivia())
                 );
                 if (slot < separators.Length)
                 {
-                    nodesAndTokens.Add(
-                        separators[slot]
-                    );
+                    nodesAndTokens.Add(separators[slot]);
                 }
             }
 
-            return visited.WithExpressions(
-                SyntaxFactory.SeparatedList<ExpressionSyntax>(
-                nodesAndTokens
-            )
-            );
+            return visited.WithExpressions(SyntaxFactory.SeparatedList<ExpressionSyntax>(nodesAndTokens));
         }
     }
 
@@ -4719,115 +2535,50 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
         {
-            var visited = (IfStatementSyntax)base.VisitIfStatement(
-                node
-            )!;
-            if (visited.Condition is not BinaryExpressionSyntax binary || !IsLogical(
-                binary
-            ))
+            var visited = (IfStatementSyntax)base.VisitIfStatement(node)!;
+            if (visited.Condition is not BinaryExpressionSyntax binary || !IsLogical(binary))
             {
                 return visited;
             }
 
-            var indent = LineIndentAt(
-                node,
-                node.IfKeyword.SpanStart
-            );
+            var indent = LineIndentAt(node, node.IfKeyword.SpanStart);
             return visited
-                .WithOpenParenToken(
-                    visited.OpenParenToken.WithTrailingTrivia()
-                )
-                .WithCondition(
-                    Layout(
-                    binary,
-                    indent + "    "
-                )
-                )
-                .WithCloseParenToken(
-                    visited.CloseParenToken.WithLeadingTrivia(
-                    SyntaxFactory.CarriageReturnLineFeed,
-                    SyntaxFactory.Whitespace(
-                    indent
-                )
-                )
-                );
+                .WithOpenParenToken(visited.OpenParenToken.WithTrailingTrivia())
+                .WithCondition(Layout(binary, indent + "    "))
+                .WithCloseParenToken(visited.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(indent)));
         }
 
         public override SyntaxNode? VisitWhileStatement(WhileStatementSyntax node)
         {
-            var visited = (WhileStatementSyntax)base.VisitWhileStatement(
-                node
-            )!;
-            if (visited.Condition is not BinaryExpressionSyntax binary || !IsLogical(
-                binary
-            ))
+            var visited = (WhileStatementSyntax)base.VisitWhileStatement(node)!;
+            if (visited.Condition is not BinaryExpressionSyntax binary || !IsLogical(binary))
             {
                 return visited;
             }
 
-            var indent = LineIndentAt(
-                node,
-                node.WhileKeyword.SpanStart
-            );
+            var indent = LineIndentAt(node, node.WhileKeyword.SpanStart);
             return visited
-                .WithOpenParenToken(
-                    visited.OpenParenToken.WithTrailingTrivia()
-                )
-                .WithCondition(
-                    Layout(
-                    binary,
-                    indent + "    "
-                )
-                )
-                .WithCloseParenToken(
-                    visited.CloseParenToken.WithLeadingTrivia(
-                    SyntaxFactory.CarriageReturnLineFeed,
-                    SyntaxFactory.Whitespace(
-                    indent
-                )
-                )
-                );
+                .WithOpenParenToken(visited.OpenParenToken.WithTrailingTrivia())
+                .WithCondition(Layout(binary, indent + "    "))
+                .WithCloseParenToken(visited.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(indent)));
         }
 
         public override SyntaxNode? VisitReturnStatement(ReturnStatementSyntax node)
         {
-            var visited = (ReturnStatementSyntax)base.VisitReturnStatement(
-                node
-            )!;
+            var visited = (ReturnStatementSyntax)base.VisitReturnStatement(node)!;
             if (visited.Expression is not ParenthesizedExpressionSyntax paren
                 || paren.Expression is not BinaryExpressionSyntax binary
-                || !IsLogical(
-                    binary
-                ))
+                || !IsLogical(binary))
             {
                 return visited;
             }
 
-            var indent = LineIndentAt(
-                node,
-                node.ReturnKeyword.SpanStart
-            );
+            var indent = LineIndentAt(node, node.ReturnKeyword.SpanStart);
             var laidOut = paren
-                .WithOpenParenToken(
-                    paren.OpenParenToken.WithTrailingTrivia()
-                )
-                .WithExpression(
-                    Layout(
-                    binary,
-                    indent + "    "
-                )
-                )
-                .WithCloseParenToken(
-                    paren.CloseParenToken.WithLeadingTrivia(
-                    SyntaxFactory.CarriageReturnLineFeed,
-                    SyntaxFactory.Whitespace(
-                    indent
-                )
-                )
-                );
-            return visited.WithExpression(
-                laidOut
-            );
+                .WithOpenParenToken(paren.OpenParenToken.WithTrailingTrivia())
+                .WithExpression(Layout(binary, indent + "    "))
+                .WithCloseParenToken(paren.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(indent)));
+            return visited.WithExpression(laidOut);
         }
 
         private static bool IsLogical(BinaryExpressionSyntax binary)
@@ -4840,33 +2591,15 @@ namespace Puck.Tools
             var kind = binary.Kind();
             var operands = new List<ExpressionSyntax>();
             var operators = new List<SyntaxToken>();
-            Flatten(
-                binary,
-                kind,
-                operands,
-                operators
-            );
+            Flatten(binary, kind, operands, operators);
 
-            var operandLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(
-                innerIndent
-            ) };
-            var result = operands[0].WithLeadingTrivia(
-                operandLead
-            ).WithTrailingTrivia();
+            var operandLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(innerIndent) };
+            var result = operands[0].WithLeadingTrivia(operandLead).WithTrailingTrivia();
             for (var index = 0; index < operators.Count; index++)
             {
-                var operatorToken = operators[index].WithLeadingTrivia(
-                    SyntaxFactory.Space
-                ).WithTrailingTrivia();
-                var right = operands[index + 1].WithLeadingTrivia(
-                    operandLead
-                ).WithTrailingTrivia();
-                result = SyntaxFactory.BinaryExpression(
-                    kind,
-                    result,
-                    operatorToken,
-                    right
-                );
+                var operatorToken = operators[index].WithLeadingTrivia(SyntaxFactory.Space).WithTrailingTrivia();
+                var right = operands[index + 1].WithLeadingTrivia(operandLead).WithTrailingTrivia();
+                result = SyntaxFactory.BinaryExpression(kind, result, operatorToken, right);
             }
 
             return result;
@@ -4879,33 +2612,20 @@ namespace Puck.Tools
         {
             if (binary.Left is BinaryExpressionSyntax leftBinary && leftBinary.Kind() == kind)
             {
-                Flatten(
-                    leftBinary,
-                    kind,
-                    operands,
-                    operators
-                );
+                Flatten(leftBinary, kind, operands, operators);
             }
             else
             {
-                operands.Add(
-                    binary.Left
-                );
+                operands.Add(binary.Left);
             }
 
-            operators.Add(
-                binary.OperatorToken
-            );
-            operands.Add(
-                binary.Right
-            );
+            operators.Add(binary.OperatorToken);
+            operands.Add(binary.Right);
         }
 
         private static string LineIndentAt(SyntaxNode node, int position)
         {
-            var line = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(
-                position
-            ).ToString();
+            var line = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(position).ToString();
             return line[..(line.Length - line.TrimStart().Length)];
         }
     }
@@ -4921,16 +2641,15 @@ namespace Puck.Tools
     // level deeper per link; the chain's root drives the layout so the nested links indent
     // off the rebuilt shape rather than their original source position. Condition and branch
     // inner trivia are preserved and only the outer layout trivia is reset, so a second run
-    // reproduces the same shape — the pass is idempotent. Indentation is taken from the
-    // condition's current line, so a ternary that another pass has already moved onto its own
-    // line (e.g. a multi-argument call's argument) settles over successive runs.
+    // reproduces the same shape — the pass is idempotent. Indentation is computed structurally
+    // (the enclosing statement's indent plus one level per enclosing ternary branch), never read
+    // from the condition's own line, so sibling ternaries in one expression cannot shift each
+    // other across runs.
     internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode? VisitConditionalExpression(ConditionalExpressionSyntax node)
         {
-            var visited = (ConditionalExpressionSyntax)base.VisitConditionalExpression(
-                node
-            )!;
+            var visited = (ConditionalExpressionSyntax)base.VisitConditionalExpression(node)!;
 
             // A conditional that is a branch of another conditional is a link in a `? : ? :`
             // chain — its root lays it out (one level deeper), so leave it alone here.
@@ -4940,67 +2659,55 @@ namespace Puck.Tools
                 return visited;
             }
 
-            return Layout(
-                visited,
-                LineIndentAt(
-                node,
-                node.SpanStart
-            )
-            );
+            return Layout(visited, ConditionIndent(node));
         }
 
         private static ConditionalExpressionSyntax Layout(ConditionalExpressionSyntax conditional, string conditionIndent)
         {
             var branchIndent = conditionIndent + "    ";
-            var branchLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(
-                branchIndent
-            ) };
+            var branchLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(branchIndent) };
 
             var whenTrue = conditional.WhenTrue is ConditionalExpressionSyntax trueChain
-                ? Layout(
-                    trueChain,
-                    branchIndent
-                ).WithLeadingTrivia()
+                ? Layout(trueChain, branchIndent).WithLeadingTrivia()
                 : conditional.WhenTrue.WithLeadingTrivia().WithTrailingTrivia();
             var whenFalse = conditional.WhenFalse is ConditionalExpressionSyntax falseChain
-                ? Layout(
-                    falseChain,
-                    branchIndent
-                ).WithLeadingTrivia()
+                ? Layout(falseChain, branchIndent).WithLeadingTrivia()
                 : conditional.WhenFalse.WithLeadingTrivia().WithTrailingTrivia();
 
             return conditional
-                .WithCondition(
-                    conditional.Condition.WithTrailingTrivia()
-                )
-                .WithQuestionToken(
-                    conditional.QuestionToken.WithLeadingTrivia(
-                    branchLead
-                ).WithTrailingTrivia(
-                    SyntaxFactory.Space
-                )
-                )
-                .WithWhenTrue(
-                    whenTrue
-                )
-                .WithColonToken(
-                    conditional.ColonToken.WithLeadingTrivia(
-                    branchLead
-                ).WithTrailingTrivia(
-                    SyntaxFactory.Space
-                )
-                )
-                .WithWhenFalse(
-                    whenFalse
-                );
+                .WithCondition(conditional.Condition.WithTrailingTrivia())
+                .WithQuestionToken(conditional.QuestionToken.WithLeadingTrivia(branchLead).WithTrailingTrivia(SyntaxFactory.Space))
+                .WithWhenTrue(whenTrue)
+                .WithColonToken(conditional.ColonToken.WithLeadingTrivia(branchLead).WithTrailingTrivia(SyntaxFactory.Space))
+                .WithWhenFalse(whenFalse);
         }
 
-        private static string LineIndentAt(SyntaxNode node, int position)
+        // The indent this ternary's `? t` / `: f` branches hang from, computed STRUCTURALLY for
+        // idempotency. Reading this ternary's own line would compound: a sibling ternary in the
+        // same expression (`(a ? 1 : 0) + (b ? 1 : 0)`) gets pushed onto a line the first ternary
+        // just indented, so the next run would read that deeper indent and shift again. Instead:
+        // anchor to the enclosing statement/member indent (which this pass never moves) and add
+        // one level per enclosing ternary whose BRANCH holds this node — a structural count that
+        // is the same on every run.
+        private static string ConditionIndent(ConditionalExpressionSyntax node)
         {
-            var line = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(
-                position
-            ).ToString();
-            return line[..(line.Length - line.TrimStart().Length)];
+            var anchor = node.FirstAncestorOrSelf<StatementSyntax>() as SyntaxNode
+                ?? node.FirstAncestorOrSelf<MemberDeclarationSyntax>() as SyntaxNode
+                ?? node;
+            var anchorLine = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(anchor.GetFirstToken().SpanStart).ToString();
+            var baseIndent = anchorLine.Length - anchorLine.TrimStart().Length;
+
+            var depth = 0;
+            var child = (SyntaxNode)node;
+            for (var ancestor = node.Parent; ancestor is not null && ancestor != anchor; child = ancestor, ancestor = ancestor.Parent)
+            {
+                if (ancestor is ConditionalExpressionSyntax cond && (cond.WhenTrue == child || cond.WhenFalse == child))
+                {
+                    depth++;
+                }
+            }
+
+            return new string(' ', baseIndent + (4 * depth));
         }
     }
 
@@ -5019,9 +2726,7 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node)
         {
-            var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(
-                node
-            )!;
+            var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(node)!;
             var expressions = visited.Expressions;
             var separators = expressions.GetSeparators().ToList();
             if (expressions.Count == 0 || separators.Count >= expressions.Count)
@@ -5030,41 +2735,23 @@ namespace Puck.Tools
             }
 
             var text = node.SyntaxTree!.GetText();
-            var lastExpressionLine = text.Lines.IndexOf(
-                node.Expressions[^1].Span.End
-            );
-            var closeBraceLine = text.Lines.IndexOf(
-                node.CloseBraceToken.SpanStart
-            );
+            var lastExpressionLine = text.Lines.IndexOf(node.Expressions[^1].Span.End);
+            var closeBraceLine = text.Lines.IndexOf(node.CloseBraceToken.SpanStart);
             if (lastExpressionLine == closeBraceLine)
             {
                 return visited;
             }
 
             var last = expressions[^1];
-            var trailingComma = SyntaxFactory.Token(
-                SyntaxKind.CommaToken
-            ).WithTrailingTrivia(
-                last.GetTrailingTrivia()
-            );
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(
-                expressions.Count * 2
-            );
+            var trailingComma = SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(last.GetTrailingTrivia());
+            var nodesAndTokens = new List<SyntaxNodeOrToken>(expressions.Count * 2);
             for (var index = 0; index < expressions.Count; index++)
             {
-                nodesAndTokens.Add(
-                    index == expressions.Count - 1 ? last.WithTrailingTrivia() : expressions[index]
-                );
-                nodesAndTokens.Add(
-                    index < separators.Count ? separators[index] : trailingComma
-                );
+                nodesAndTokens.Add(index == expressions.Count - 1 ? last.WithTrailingTrivia() : expressions[index]);
+                nodesAndTokens.Add(index < separators.Count ? separators[index] : trailingComma);
             }
 
-            return visited.WithExpressions(
-                SyntaxFactory.SeparatedList<ExpressionSyntax>(
-                nodesAndTokens
-            )
-            );
+            return visited.WithExpressions(SyntaxFactory.SeparatedList<ExpressionSyntax>(nodesAndTokens));
         }
     }
 
@@ -5083,9 +2770,7 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitBlock(BlockSyntax node)
         {
-            var visited = (BlockSyntax)base.VisitBlock(
-                node
-            )!;
+            var visited = (BlockSyntax)base.VisitBlock(node)!;
             var statements = visited.Statements;
             if (statements.Count < 2)
             {
@@ -5100,37 +2785,29 @@ namespace Puck.Tools
                 rebuilt.Add(
                     previous is LocalDeclarationStatementSyntax
                     && current is not LocalDeclarationStatementSyntax
-                    && !HasCommentOrDirective(
-                        current.GetLeadingTrivia()
-                    )
-                    ? WithLeadingBlankLine(
-                        current
-                    )
+                    && OnSeparateLines(previous, current)
+                    && !HasCommentOrDirective(current.GetLeadingTrivia())
+                    ? WithLeadingBlankLine(current)
                     : current
                 );
             }
 
-            return visited.WithStatements(
-                SyntaxFactory.List(
-                rebuilt
-            )
-            );
+            return visited.WithStatements(SyntaxFactory.List(rebuilt));
         }
+
+        // Only space declarations that already sit on their own lines: a single-line body
+        // (`{ int n = f(); return n; }`) must not be blown open — and splitting it was also the
+        // source of a non-idempotent run, since the inserted newline retriggered the rule.
+        private static bool OnSeparateLines(StatementSyntax previous, StatementSyntax current) =>
+            previous.GetTrailingTrivia().Any(static trivia => trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+            || current.GetLeadingTrivia().Any(static trivia => trivia.IsKind(SyntaxKind.EndOfLineTrivia));
 
         private static bool HasCommentOrDirective(SyntaxTriviaList lead) => lead.Any(
             static trivia =>
-            trivia.IsKind(
-                SyntaxKind.SingleLineCommentTrivia
-            )
-            || trivia.IsKind(
-                SyntaxKind.MultiLineCommentTrivia
-            )
-            || trivia.IsKind(
-                SyntaxKind.SingleLineDocumentationCommentTrivia
-            )
-            || trivia.IsKind(
-                SyntaxKind.MultiLineDocumentationCommentTrivia
-            )
+            trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
+            || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia)
+            || trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+            || trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia)
             || trivia.IsDirective
         );
 
@@ -5140,24 +2817,14 @@ namespace Puck.Tools
         {
             var lead = statement.GetLeadingTrivia().ToList();
             var start = 0;
-            while (start < lead.Count && lead[start].IsKind(
-                SyntaxKind.EndOfLineTrivia
-            ))
+            while (start < lead.Count && lead[start].IsKind(SyntaxKind.EndOfLineTrivia))
             {
                 start++;
             }
 
             var rebuilt = new List<SyntaxTrivia> { SyntaxFactory.CarriageReturnLineFeed };
-            rebuilt.AddRange(
-                lead.Skip(
-                start
-            )
-            );
-            return statement.WithLeadingTrivia(
-                SyntaxFactory.TriviaList(
-                rebuilt
-            )
-            );
+            rebuilt.AddRange(lead.Skip(start));
+            return statement.WithLeadingTrivia(SyntaxFactory.TriviaList(rebuilt));
         }
     }
 
@@ -5174,26 +2841,16 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node)
         {
-            var visited = (LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(
-                node
-            )!;
-            if (!visited.UsingKeyword.IsKind(
-                SyntaxKind.None
-            )
-                || visited.Modifiers.Any(
-                    static modifier => modifier.IsKind(
-                    SyntaxKind.ConstKeyword
-                )
-                ))
+            var visited = (LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(node)!;
+            if (!visited.UsingKeyword.IsKind(SyntaxKind.None)
+                || visited.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.ConstKeyword)))
             {
                 return visited;
             }
 
             var declaration = visited.Declaration;
             if (declaration.Type is not PredefinedTypeSyntax predefined
-                || SuffixFor(
-                    predefined.Keyword.Kind()
-                ) is not { } suffix
+                || SuffixFor(predefined.Keyword.Kind()) is not { } suffix
                 || declaration.Variables.Count != 1)
             {
                 return visited;
@@ -5201,63 +2858,31 @@ namespace Puck.Tools
 
             var variable = declaration.Variables[0];
             if (variable.Initializer?.Value is not LiteralExpressionSyntax literal
-                || !literal.Token.IsKind(
-                    SyntaxKind.NumericLiteralToken
-                ))
+                || !literal.Token.IsKind(SyntaxKind.NumericLiteralToken))
             {
                 return visited;
             }
 
             var literalText = literal.Token.Text;
-            if (literalText.StartsWith(
-                "0x",
-                StringComparison.OrdinalIgnoreCase
-            )
-                || literalText.StartsWith(
-                    "0b",
-                    StringComparison.OrdinalIgnoreCase
-                )
-                || HasTypeSuffix(
-                    literalText
-                )
-                || SyntaxFactory.ParseExpression(
-                    literalText + suffix
-                ) is not LiteralExpressionSyntax suffixed)
+            if (literalText.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                || literalText.StartsWith("0b", StringComparison.OrdinalIgnoreCase)
+                || HasTypeSuffix(literalText)
+                || SyntaxFactory.ParseExpression(literalText + suffix) is not LiteralExpressionSyntax suffixed)
             {
                 return visited;
             }
 
             var newLiteral = suffixed
-                .WithLeadingTrivia(
-                    literal.GetLeadingTrivia()
-                )
-                .WithTrailingTrivia(
-                    literal.GetTrailingTrivia()
-                );
-            var newVariable = variable.WithInitializer(
-                variable.Initializer!.WithValue(
-                newLiteral
-            )
-            );
-            var newType = SyntaxFactory.IdentifierName(
-                "var"
-            )
-                .WithLeadingTrivia(
-                    predefined.GetLeadingTrivia()
-                )
-                .WithTrailingTrivia(
-                    predefined.GetTrailingTrivia()
-                );
+                .WithLeadingTrivia(literal.GetLeadingTrivia())
+                .WithTrailingTrivia(literal.GetTrailingTrivia());
+            var newVariable = variable.WithInitializer(variable.Initializer!.WithValue(newLiteral));
+            var newType = SyntaxFactory.IdentifierName("var")
+                .WithLeadingTrivia(predefined.GetLeadingTrivia())
+                .WithTrailingTrivia(predefined.GetTrailingTrivia());
             return visited.WithDeclaration(
                 declaration
-                .WithType(
-                    newType
-                )
-                .WithVariables(
-                    SyntaxFactory.SingletonSeparatedList(
-                    newVariable
-                )
-                )
+                .WithType(newType)
+                .WithVariables(SyntaxFactory.SingletonSeparatedList(newVariable))
             );
         }
 
@@ -5284,42 +2909,18 @@ namespace Puck.Tools
         // back — but each file is written ONCE.
         private static readonly (string Name, Func<SyntaxNode, SyntaxNode> Apply)[] Passes =
         [
-            ("attr-order", static node => new AttrRewriter().Visit(
-                node
-            )!),
-            ("member-spacing", static node => new MemberSpacingRewriter().Visit(
-                node
-            )!),
-            ("member-order", static node => new MemberOrderRewriter().Visit(
-                node
-            )!),
-            ("null-pattern", static node => new NullPatternRewriter().Visit(
-                node
-            )!),
-            ("paren-clarity", static node => new ParenClarityRewriter().Visit(
-                node
-            )!),
-            ("logical-lines", static node => new LogicalLinesRewriter().Visit(
-                node
-            )!),
-            ("arg-lines", static node => new ArgLinesRewriter().Visit(
-                node
-            )!),
-            ("ternary-lines", static node => new TernaryLinesRewriter().Visit(
-                node
-            )!),
-            ("init-order", static node => new InitOrderRewriter().Visit(
-                node
-            )!),
-            ("trailing-comma", static node => new TrailingCommaRewriter().Visit(
-                node
-            )!),
-            ("decl-spacing", static node => new DeclSpacingRewriter().Visit(
-                node
-            )!),
-            ("literal-var", static node => new LiteralVarRewriter().Visit(
-                node
-            )!)
+            ("attr-order", static node => new AttrRewriter().Visit(node)!),
+            ("member-spacing", static node => new MemberSpacingRewriter().Visit(node)!),
+            ("member-order", static node => new MemberOrderRewriter().Visit(node)!),
+            ("null-pattern", static node => new NullPatternRewriter().Visit(node)!),
+            ("paren-clarity", static node => new ParenClarityRewriter().Visit(node)!),
+            ("logical-lines", static node => new LogicalLinesRewriter().Visit(node)!),
+            ("arg-lines", static node => new ArgLinesRewriter().Visit(node)!),
+            ("ternary-lines", static node => new TernaryLinesRewriter().Visit(node)!),
+            ("init-order", static node => new InitOrderRewriter().Visit(node)!),
+            ("trailing-comma", static node => new TrailingCommaRewriter().Visit(node)!),
+            ("decl-spacing", static node => new DeclSpacingRewriter().Visit(node)!),
+            ("literal-var", static node => new LiteralVarRewriter().Visit(node)!)
         ];
 
         // named-args is a SEMANTIC pass (it needs parameter names, so it resolves symbols
@@ -5327,98 +2928,58 @@ namespace Puck.Tools
         // after the syntactic passes above, not through SourceRewrite's Func pipeline.
         private const string NamedArgsPassName = "named-args";
 
-        // The bare-`format` set: applied tree-wide and kept green in CI. null-pattern,
-        // paren-clarity and named-args are real conventions too, but the wider tree is not
-        // converted yet, so they stay opt-in via -Only until a deliberate tree-wide sweep.
-        private static readonly string[] DefaultPassNames = ["attr-order", "member-spacing"];
+        // The bare-`format` set: the semantics-preserving normalizers. The vertical line-wrappers
+        // (arg-lines, logical-lines, ternary-lines) stay opt-in via -Only — their one-per-line
+        // layout is a deliberate choice, not a baseline. named-args is in despite its semantic
+        // cost. NOTE: the tree is not yet swept to these, so a bare `format`/`-WhatIf` reports (and
+        // fixes) drift until a deliberate tree-wide run converts it.
+        private static readonly string[] DefaultPassNames =
+        [
+            "attr-order", "member-spacing", "member-order", "null-pattern", "paren-clarity",
+            "init-order", "trailing-comma", "decl-spacing", "literal-var", "named-args"
+        ];
 
         public static int Run(string[] args)
         {
-            var scanner = new ArgScanner().Flag(
-                "Check"
-            ).Value(
-                "Only"
-            );
-            if (!scanner.Parse(
-                args
-            ))
+            var scanner = new ArgScanner().Flag("WhatIf").Flag("Verify").Value("Only");
+            if (!scanner.Parse(args))
             {
-                Console.Error.WriteLine(
-                    $"ERROR: {scanner.Error}"
-                );
+                Console.Error.WriteLine($"ERROR: {scanner.Error}");
                 return 2;
             }
 
-            var known = Passes.Select(
-                static pass => pass.Name
-            ).Append(
-                NamedArgsPassName
-            ).ToHashSet(
-                StringComparer.Ordinal
-            );
-            var selected = DefaultPassNames.ToHashSet(
-                StringComparer.Ordinal
-            );
-            if (scanner.Get(
-                "Only"
-            ) is { } only)
+            var known = Passes.Select(static pass => pass.Name).Append(NamedArgsPassName).ToHashSet(StringComparer.Ordinal);
+            var selected = DefaultPassNames.ToHashSet(StringComparer.Ordinal);
+            if (scanner.Get("Only") is { } only)
             {
-                selected = only.Split(
-                    ',',
-                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-                )
-                    .Select(
-                        static name => name.ToLowerInvariant()
-                    )
-                    .ToHashSet(
-                        StringComparer.Ordinal
-                    );
+                selected = only.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(static name => name.ToLowerInvariant())
+                    .ToHashSet(StringComparer.Ordinal);
                 foreach (var name in selected)
                 {
-                    if (!known.Contains(
-                        name
-                    ))
+                    if (!known.Contains(name))
                     {
-                        Console.Error.WriteLine(
-                            $"ERROR: unknown format pass '{name}' (known: attr-order, member-spacing, member-order, null-pattern, paren-clarity, logical-lines, arg-lines, ternary-lines, init-order, trailing-comma, decl-spacing, literal-var, named-args)."
-                        );
+                        var knownNames = string.Join(", ", Passes.Select(static pass => pass.Name).Append(NamedArgsPassName));
+                        Console.Error.WriteLine($"ERROR: unknown format pass '{name}' (known: {knownNames}).");
                         return 2;
                     }
                 }
             }
 
             var root = scanner.Positionals.Count > 0 ? scanner.Positionals[0] : "src";
-            var checkOnly = scanner.Has(
-                "Check"
-            );
+            var whatIf = scanner.Has("WhatIf");
+            var verify = scanner.Has("Verify");
 
             var result = 0;
-            var syntacticPasses = Passes.Where(
-                pass => selected.Contains(
-                pass.Name
-            )
-            ).ToList();
+            var syntacticPasses = Passes.Where(pass => selected.Contains(pass.Name)).ToList();
             if (syntacticPasses.Count > 0)
             {
-                result = SourceRewrite.Run(
-                    "format",
-                    root,
-                    checkOnly,
-                    syntacticPasses
-                );
+                result = SourceRewrite.Run("format", root, whatIf, verify, syntacticPasses);
             }
 
-            if (selected.Contains(
-                NamedArgsPassName
-            ))
+            if (selected.Contains(NamedArgsPassName))
             {
-                result = Math.Max(
-                    result,
-                    NamedArgsPhase.Run(
-                    root,
-                    checkOnly
-                )
-                );
+                result = Math.Max(result, NamedArgsPhase.Run(root, whatIf, verify));
             }
 
             return result;
@@ -5429,42 +2990,20 @@ namespace Puck.Tools
     // analyzers over that single shared corpus.
     internal static class ScanCommand
     {
-        private static readonly string[] AllAnalyzers = ["comments", "comment-smells", "locks", "vk-structs", "clones"];
+        private static readonly string[] AllAnalyzers = ["comments", "comment-smells", "locks", "clones"];
 
         public static int Run(string[] args)
         {
             var scanner = new ArgScanner()
-                .Value(
-                    "Only"
-                ).Value(
-                    "OutDir"
-                ).Flag(
-                    "Grouped"
-                )
-                .Value(
-                    "MaxPerChunk"
-                ).Value(
-                    "MinTokens"
-                ).Value(
-                    "MinStatements"
-                ).Flag(
-                    "NoBlocks"
-                );
-            if (!scanner.Parse(
-                args
-            ))
+                .Value("Only").Value("OutDir").Flag("Grouped")
+                .Value("MaxPerChunk").Value("MinTokens").Value("MinStatements").Flag("NoBlocks");
+            if (!scanner.Parse(args))
             {
-                Console.Error.WriteLine(
-                    $"ERROR: {scanner.Error}"
-                );
+                Console.Error.WriteLine($"ERROR: {scanner.Error}");
                 return 2;
             }
 
-            var selected = ResolveSelection(
-                scanner.Get(
-                "Only"
-            )
-            );
+            var selected = ResolveSelection(scanner.Get("Only"));
             if (selected is null)
             {
                 return 2;
@@ -5472,46 +3011,19 @@ namespace Puck.Tools
 
             var options = new ScanOptions
             {
-                OutDirectory = scanner.Get(
-                    "OutDir"
-                ) is { } outDir
-                    ? Path.GetFullPath(
-                        outDir
-                    )
-                    : Path.Combine(
-                        EngineRun.RepositoryRoot,
-                        "artifacts",
-                        "scan"
-                    ),
-                Grouped = scanner.Has(
-                    "Grouped"
-                ),
-                MaxPerChunk = scanner.TryGetInt(
-                    "MaxPerChunk",
-                    out var maxPerChunk
-                ) && maxPerChunk > 0 ? maxPerChunk : 40,
-                MinTokens = scanner.TryGetInt(
-                    "MinTokens",
-                    out var minTokens
-                ) && minTokens > 0 ? minTokens : 30,
-                MinStatements = scanner.TryGetInt(
-                    "MinStatements",
-                    out var minStatements
-                ) && minStatements > 0 ? minStatements : 4,
-                IncludeBlocks = !scanner.Has(
-                    "NoBlocks"
-                ),
-                SingleStdout = selected.Count == 1 && !scanner.Has(
-                    "OutDir"
-                ) && !scanner.Has(
-                    "Grouped"
-                )
+                OutDirectory = scanner.Get("OutDir") is { } outDir
+                    ? Path.GetFullPath(outDir)
+                    : Path.Combine(EngineRun.RepositoryRoot, "artifacts", "scan"),
+                Grouped = scanner.Has("Grouped"),
+                MaxPerChunk = scanner.TryGetInt("MaxPerChunk", out var maxPerChunk) && maxPerChunk > 0 ? maxPerChunk : 40,
+                MinTokens = scanner.TryGetInt("MinTokens", out var minTokens) && minTokens > 0 ? minTokens : 30,
+                MinStatements = scanner.TryGetInt("MinStatements", out var minStatements) && minStatements > 0 ? minStatements : 4,
+                IncludeBlocks = !scanner.Has("NoBlocks"),
+                SingleStdout = selected.Count == 1 && !scanner.Has("OutDir") && !scanner.Has("Grouped")
             };
 
             var root = scanner.Positionals.Count > 0 ? scanner.Positionals[0] : "src";
-            var corpus = SourceCorpus.TryLoad(
-                root
-            );
+            var corpus = SourceCorpus.TryLoad(root);
             if (corpus is null)
             {
                 return 2;
@@ -5524,22 +3036,11 @@ namespace Puck.Tools
                     "comments" => new CommentAnalyzer(),
                     "comment-smells" => new CommentSmellAnalyzer(),
                     "locks" => new LockAnalyzer(),
-                    "vk-structs" => new VkStructAnalyzer(),
                     "clones" => new CloneAnalyzer(),
-                    _ => throw new InvalidOperationException(
-                        name
-                    )
+                    _ => throw new InvalidOperationException(name)
                 };
-                var (jsonl, grouped) = analyzer.Analyze(
-                    corpus,
-                    options
-                );
-                ScanSink.Emit(
-                    name,
-                    jsonl,
-                    grouped,
-                    options
-                );
+                var (jsonl, grouped) = analyzer.Analyze(corpus, options);
+                ScanSink.Emit(name, jsonl, grouped, options);
             }
 
             return 0;
@@ -5554,35 +3055,19 @@ namespace Puck.Tools
                 return [.. AllAnalyzers];
             }
 
-            var requested = only.Split(
-                ',',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-            )
-                .Select(
-                    static name => name.ToLowerInvariant()
-                )
-                .ToHashSet(
-                    StringComparer.Ordinal
-                );
+            var requested = only.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(static name => name.ToLowerInvariant())
+                .ToHashSet(StringComparer.Ordinal);
             foreach (var name in requested)
             {
-                if (!AllAnalyzers.Contains(
-                    name
-                ))
+                if (!AllAnalyzers.Contains(name))
                 {
-                    Console.Error.WriteLine(
-                        $"ERROR: unknown scan analyzer '{name}' (known: {string.Join(
-                        ", ",
-                        AllAnalyzers
-                    )})."
-                    );
+                    Console.Error.WriteLine($"ERROR: unknown scan analyzer '{name}' (known: {string.Join(", ", AllAnalyzers)}).");
                     return null;
                 }
             }
 
-            return AllAnalyzers.Where(
-                requested.Contains
-            ).ToList();
+            return AllAnalyzers.Where(requested.Contains).ToList();
         }
     }
 
@@ -5599,48 +3084,25 @@ namespace Puck.Tools
     {
         public static bool TryEnumerate(string rootArgument, out string scanRoot, out string[] files)
         {
-            scanRoot = Path.IsPathRooted(
-                rootArgument
-            )
+            scanRoot = Path.IsPathRooted(rootArgument)
                 ? rootArgument
-                : Path.Combine(
-                    EngineRun.RepositoryRoot,
-                    rootArgument
-                );
+                : Path.Combine(EngineRun.RepositoryRoot, rootArgument);
             files = [];
-            if (!Directory.Exists(
-                scanRoot
-            ))
+            if (!Directory.Exists(scanRoot))
             {
-                Console.Error.WriteLine(
-                    $"ERROR: scan root not found: {scanRoot}"
-                );
+                Console.Error.WriteLine($"ERROR: scan root not found: {scanRoot}");
                 return false;
             }
 
-            files = Directory.EnumerateFiles(
-                scanRoot,
-                "*.cs",
-                SearchOption.AllDirectories
-            )
+            files = Directory.EnumerateFiles(scanRoot, "*.cs", SearchOption.AllDirectories)
                 .Where(
                     static path =>
                 {
-                    var normalized = path.Replace(
-                        '\\',
-                        '/'
-                    );
-                    return !normalized.Contains(
-                        "/obj/"
-                    ) && !normalized.Contains(
-                        "/bin/"
-                    );
+                    var normalized = path.Replace('\\', '/');
+                    return !normalized.Contains("/obj/") && !normalized.Contains("/bin/");
                 }
                 )
-                .OrderBy(
-                    static path => path,
-                    StringComparer.OrdinalIgnoreCase
-                )
+                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             return true;
         }
@@ -5662,47 +3124,21 @@ namespace Puck.Tools
 
         public static SourceCorpus? TryLoad(string rootArgument)
         {
-            if (!SourceFiles.TryEnumerate(
-                rootArgument,
-                out var scanRoot,
-                out var files
-            ))
+            if (!SourceFiles.TryEnumerate(rootArgument, out var scanRoot, out var files))
             {
                 return null;
             }
 
-            var parsed = new List<ParsedFile>(
-                files.Length
-            );
+            var parsed = new List<ParsedFile>(files.Length);
             foreach (var file in files)
             {
-                var text = File.ReadAllText(
-                    file
-                );
-                var root = CSharpSyntaxTree.ParseText(
-                    text
-                ).GetRoot();
-                var relative = Path.GetRelativePath(
-                    scanRoot,
-                    file
-                ).Replace(
-                    '\\',
-                    '/'
-                );
-                parsed.Add(
-                    new ParsedFile(
-                    file,
-                    relative,
-                    root,
-                    text
-                )
-                );
+                var text = File.ReadAllText(file);
+                var root = CSharpSyntaxTree.ParseText(text).GetRoot();
+                var relative = Path.GetRelativePath(scanRoot, file).Replace('\\', '/');
+                parsed.Add(new ParsedFile(file, relative, root, text));
             }
 
-            return new SourceCorpus(
-                scanRoot,
-                parsed
-            );
+            return new SourceCorpus(scanRoot, parsed);
         }
     }
 
@@ -5712,15 +3148,9 @@ namespace Puck.Tools
     // and -Out-Dir == -OutDir.
     internal sealed class ArgScanner
     {
-        private readonly Dictionary<string, bool> m_spec = new(
-            StringComparer.Ordinal
-        );
-        private readonly Dictionary<string, string> m_values = new(
-            StringComparer.Ordinal
-        );
-        private readonly HashSet<string> m_present = new(
-            StringComparer.Ordinal
-        );
+        private readonly Dictionary<string, bool> m_spec = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> m_values = new(StringComparer.Ordinal);
+        private readonly HashSet<string> m_present = new(StringComparer.Ordinal);
         private readonly List<string> m_positionals = [];
 
         public string? Error { get; private set; }
@@ -5728,17 +3158,13 @@ namespace Puck.Tools
 
         public ArgScanner Flag(string name)
         {
-            m_spec[Canonical(
-                name
-            )] = false;
+            m_spec[Canonical(name)] = false;
             return this;
         }
 
         public ArgScanner Value(string name)
         {
-            m_spec[Canonical(
-                name
-            )] = true;
+            m_spec[Canonical(name)] = true;
             return this;
         }
 
@@ -5747,23 +3173,14 @@ namespace Puck.Tools
             for (var index = 0; index < args.Length; index++)
             {
                 var argument = args[index];
-                if (!argument.StartsWith(
-                    '-'
-                ))
+                if (!argument.StartsWith('-'))
                 {
-                    m_positionals.Add(
-                        argument
-                    );
+                    m_positionals.Add(argument);
                     continue;
                 }
 
-                var name = Canonical(
-                    argument
-                );
-                if (!m_spec.TryGetValue(
-                    name,
-                    out var takesValue
-                ))
+                var name = Canonical(argument);
+                if (!m_spec.TryGetValue(name, out var takesValue))
                 {
                     Error = $"unknown argument '{argument}'.";
                     return false;
@@ -5771,9 +3188,7 @@ namespace Puck.Tools
 
                 if (!takesValue)
                 {
-                    m_present.Add(
-                        name
-                    );
+                    m_present.Add(name);
                     continue;
                 }
 
@@ -5784,64 +3199,25 @@ namespace Puck.Tools
                 }
 
                 m_values[name] = args[++index];
-                m_present.Add(
-                    name
-                );
+                m_present.Add(name);
             }
 
             return true;
         }
 
-        public bool Has(string name) => m_present.Contains(
-            Canonical(
-            name
-        )
-        );
+        public bool Has(string name) => m_present.Contains(Canonical(name));
 
-        public string? Get(string name) => m_values.TryGetValue(
-            Canonical(
-            name
-        ),
-            out var value
-        ) ? value : null;
+        public string? Get(string name) => m_values.TryGetValue(Canonical(name), out var value) ? value : null;
 
-        public string Get(string name, string fallback) => Get(
-            name
-        ) ?? fallback;
+        public string Get(string name, string fallback) => Get(name) ?? fallback;
 
-        public bool TryGetInt(string name, out int value) => int.TryParse(
-            Get(
-            name
-        ),
-            NumberStyles.Integer,
-            CultureInfo.InvariantCulture,
-            out value
-        );
+        public bool TryGetInt(string name, out int value) => int.TryParse(Get(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
 
-        public bool TryGetDouble(string name, out double value) => double.TryParse(
-            Get(
-            name
-        ),
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out value
-        );
+        public bool TryGetDouble(string name, out double value) => double.TryParse(Get(name), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 
-        public bool TryGetUInt(string name, out uint value) => uint.TryParse(
-            Get(
-            name
-        ),
-            NumberStyles.Integer,
-            CultureInfo.InvariantCulture,
-            out value
-        );
+        public bool TryGetUInt(string name, out uint value) => uint.TryParse(Get(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
 
-        private static string Canonical(string name) => name.TrimStart(
-            '-'
-        ).Replace(
-            "-",
-            string.Empty
-        ).ToLowerInvariant();
+        private static string Canonical(string name) => name.TrimStart('-').Replace("-", string.Empty).ToLowerInvariant();
     }
 
     // The knobs a scan analyzer may read; only the ones an analyzer uses matter to it.
@@ -5875,88 +3251,67 @@ namespace Puck.Tools
         {
             if (options.SingleStdout)
             {
-                Console.Out.Write(
-                    jsonl
-                );
+                Console.Out.Write(jsonl);
                 return;
             }
 
-            Directory.CreateDirectory(
-                options.OutDirectory
-            );
-            var jsonlPath = Path.Combine(
-                options.OutDirectory,
-                $"{name}.jsonl"
-            );
-            File.WriteAllText(
-                jsonlPath,
-                jsonl
-            );
-            Console.Error.WriteLine(
-                $"scan: wrote {jsonlPath}"
-            );
+            Directory.CreateDirectory(options.OutDirectory);
+            var jsonlPath = Path.Combine(options.OutDirectory, $"{name}.jsonl");
+            File.WriteAllText(jsonlPath, jsonl);
+            Console.Error.WriteLine($"scan: wrote {jsonlPath}");
             if (options.Grouped)
             {
-                var groupedPath = Path.Combine(
-                    options.OutDirectory,
-                    $"{name}.grouped.json"
-                );
-                File.WriteAllText(
-                    groupedPath,
-                    grouped
-                );
-                Console.Error.WriteLine(
-                    $"scan: wrote {groupedPath}"
-                );
+                var groupedPath = Path.Combine(options.OutDirectory, $"{name}.grouped.json");
+                File.WriteAllText(groupedPath, grouped);
+                Console.Error.WriteLine($"scan: wrote {groupedPath}");
             }
         }
     }
 
-    // The build + demo-run helpers shared by the parity, schema and scene-words gates. Wraps
+    // The build + demo-run helpers shared by the parity and schema gates. Wraps
     // ToolProcess so each gate stops re-spelling the dotnet invocation.
     internal static class EngineRun
     {
-        public static string RepositoryRoot => Path.GetDirectoryName(
-            ToolProcess.GetToolsDirectory()
-        )!;
+        public static string RepositoryRoot => Path.GetDirectoryName(ToolProcess.GetToolsDirectory())!;
 
         public static int Build(string configuration) =>
-            ToolProcess.RunStreamed(
-                environment: null,
-                "dotnet",
-                "build",
-                Path.Combine(
-                RepositoryRoot,
-                "Puck.slnx"
-            ),
-                "-c",
-                configuration
-            );
+            ToolProcess.RunStreamed(environment: null, "dotnet", "build", Path.Combine(RepositoryRoot, "Puck.slnx"), "-c", configuration);
 
         public static string DemoProject =>
-            Path.Combine(
-                RepositoryRoot,
-                "src",
-                "Puck.Demo",
-                "Puck.Demo.csproj"
-            );
+            Path.Combine(RepositoryRoot, "src", "Puck.Demo", "Puck.Demo.csproj");
 
-        // Runs the demo's cross-backend parity gate (--validate); the demo writes artifacts/parity/ relative
-        // to the working directory and exits 0 pass / 1 gate-fail / 2 infra-fail.
-        public static int RunDemoParity() =>
-            ToolProcess.RunStreamed(
-                null,
-                "dotnet",
+        public static string PostProject =>
+            Path.Combine(RepositoryRoot, "src", "Puck.Post", "Puck.Post.csproj");
+
+        // Runs the Puck.Post battery filtered to a single tier (A/B/C/D); the battery writes artifacts/post/
+        // (including post-report.txt) relative to the working directory and exits 0 pass / 1 gate-fail / 2 infra-fail.
+        public static int RunPostTier(string tier) =>
+            ToolProcess.RunStreamed(null, "dotnet", "run", "--no-build", "--project", PostProject, "-c", "Release", "--", "--tier", tier);
+
+        // Runs the Puck.Post battery filtered to a single named stage (case-insensitive substring match); used by
+        // the fuzz sweep to isolate FuzzStage per seed. Exits 0 pass / 1 gate-fail / 2 infra-fail.
+        public static int RunPostStage(string configuration, string stage, params string[] extraArguments)
+        {
+            var arguments = new List<string>
+            {
                 "run",
                 "--no-build",
                 "--project",
-                DemoProject,
+                PostProject,
+                "-c",
+                configuration,
                 "--",
-                "--validate"
-            );
+                "--stage",
+                stage,
+            };
+
+            arguments.AddRange(extraArguments);
+
+            return ToolProcess.RunStreamed(null, "dotnet", arguments.ToArray());
+        }
 
         // Runs the (already-built) demo with arbitrary arguments — used by the headless data-driven utilities
-        // (--emit-schema, --check-run), which short-circuit before any window is created.
+        // (--emit-schema), which short-circuit before any window is created.
         public static int RunDemo(params string[] demoArguments)
         {
             var arguments = new List<string>
@@ -5968,15 +3323,9 @@ namespace Puck.Tools
                 "--",
             };
 
-            arguments.AddRange(
-                demoArguments
-            );
+            arguments.AddRange(demoArguments);
 
-            return ToolProcess.RunStreamed(
-                null,
-                "dotnet",
-                arguments.ToArray()
-            );
+            return ToolProcess.RunStreamed(null, "dotnet", arguments.ToArray());
         }
     }
 
@@ -5984,276 +3333,402 @@ namespace Puck.Tools
     // formatters used to each own a copy of. Passes run in sequence with a re-parse between
     // them, so chaining is identical to running the old commands back to back — except the
     // file is written once.
-    internal static class SourceRewrite
+    // Shared IO + safety for the disk rewrite phases (SourceRewrite and NamedArgsPhase),
+    // so the drift-tracking, the write guard, the CRLF write, and the summary live once.
+    internal static class RewriteIo
     {
-        public static int Run(string label, string rootArgument, bool checkOnly, IReadOnlyList<(string Name, Func<SyntaxNode, SyntaxNode> Apply)> passes)
+        // Newline-insensitive equality, so a pass that only reflows whitespace reads as a no-op
+        // regardless of the working tree's line endings.
+        public static bool ContentEquals(string a, string b) =>
+            a.ReplaceLineEndings("\n") == b.ReplaceLineEndings("\n");
+
+        // The write guard: a pass must never leave a file with MORE syntax errors than it had.
+        // If it would, the rewrite is dropped and the file reported as corrupt, so a misfiring
+        // pass fails the run loudly instead of silently overwriting source with broken code.
+        public static bool IntroducesErrors(string original, string rewritten) =>
+            ErrorCount(rewritten) > ErrorCount(original);
+
+        // Source is committed CRLF; ReplaceLineEndings normalizes any mix (incl. lone \r) first.
+        public static void WriteCrlf(string file, string text) =>
+            File.WriteAllText(file, text.ReplaceLineEndings("\r\n"));
+
+        // The shared drift/normalize summary plus any number of labelled problem buckets
+        // (corruption, non-convergence, ...). Exit code is 1 on any problem or on drift in
+        // check mode, else 0.
+        public static int Report(string label, int fileCount, IReadOnlyList<string> drifted, bool whatIf, params ReadOnlySpan<(string Reason, IReadOnlyList<string> Files)> problems)
         {
-            if (!SourceFiles.TryEnumerate(
-                rootArgument,
-                out _,
-                out var files
-            ))
+            Console.Error.WriteLine(
+                whatIf
+                ? (drifted.Count == 0 ? $"{label}: consistent across {fileCount} files." : $"{label}: {drifted.Count} file(s) drifted from the convention:")
+                : $"{label}: normalized {drifted.Count} of {fileCount} files."
+            );
+            foreach (var path in drifted)
             {
-                return 2;
+                Console.Error.WriteLine($"  {path}");
             }
 
-            var repositoryRoot = EngineRun.RepositoryRoot;
-            var drifted = new List<string>();
-            foreach (var file in files)
+            var hadProblem = false;
+            foreach (var (reason, files) in problems)
             {
-                var original = File.ReadAllText(
-                    file
-                );
-                var current = original;
-                foreach (var pass in passes)
-                {
-                    var node = CSharpSyntaxTree.ParseText(
-                        current
-                    ).GetRoot();
-                    current = pass.Apply(
-                        node
-                    ).ToFullString();
-                }
-
-                if (NormalizeEndings(
-                    current
-                ) == NormalizeEndings(
-                    original
-                ))
+                if (files.Count == 0)
                 {
                     continue;
                 }
 
-                drifted.Add(
-                    Path.GetRelativePath(
-                    repositoryRoot,
-                    file
-                ).Replace(
-                    '\\',
-                    '/'
-                )
-                );
-                if (!checkOnly)
+                hadProblem = true;
+                Console.Error.WriteLine($"{label}: {files.Count} file(s) {reason}:");
+                foreach (var path in files)
                 {
-                    File.WriteAllText(
-                        file,
-                        NormalizeEndings(
-                        current
-                    ).Replace(
-                        "\n",
-                        "\r\n"
-                    )
-                    );
+                    Console.Error.WriteLine($"  {path}");
                 }
             }
 
-            Console.Error.WriteLine(
-                checkOnly
-                ? (drifted.Count == 0 ? $"{label}: consistent across {files.Length} files." : $"{label}: {drifted.Count} file(s) drifted from the convention:")
-                : $"{label}: normalized {drifted.Count} of {files.Length} files."
-            );
-            foreach (var path in drifted)
-            {
-                Console.Error.WriteLine(
-                    $"  {path}"
-                );
-            }
-
-            return checkOnly && drifted.Count > 0 ? 1 : 0;
+            return hadProblem || (whatIf && drifted.Count > 0) ? 1 : 0;
         }
 
-        private static string NormalizeEndings(string text) => text.Replace(
-            "\r\n",
-            "\n"
-        );
+        private static int ErrorCount(string text) =>
+            CSharpSyntaxTree.ParseText(text).GetDiagnostics().Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    internal static class SourceRewrite
+    {
+        public static int Run(string label, string rootArgument, bool whatIf, bool verify, IReadOnlyList<(string Name, Func<SyntaxNode, SyntaxNode> Apply)> passes)
+        {
+            if (!SourceFiles.TryEnumerate(rootArgument, out _, out var files))
+            {
+                return 2;
+            }
+
+            // -Verify audits the passes without touching the tree: it asserts every rewrite is
+            // a fixed point (a formatter run twice must equal running it once), never writes.
+            var writing = !whatIf && !verify;
+            var repositoryRoot = EngineRun.RepositoryRoot;
+            var drifted = new List<string>();
+            var corrupted = new List<string>();
+            var nonConvergent = new List<string>();
+            foreach (var file in files)
+            {
+                var original = File.ReadAllText(file);
+                var current = ApplyAll(original, passes);
+                if (RewriteIo.ContentEquals(current, original))
+                {
+                    continue;
+                }
+
+                var relative = Path.GetRelativePath(repositoryRoot, file).Replace('\\', '/');
+                if (RewriteIo.IntroducesErrors(original, current))
+                {
+                    corrupted.Add(relative);
+                    continue;
+                }
+
+                if (verify && !RewriteIo.ContentEquals(ApplyAll(current, passes), current))
+                {
+                    nonConvergent.Add(relative);
+                    continue;
+                }
+
+                drifted.Add(relative);
+                if (writing)
+                {
+                    RewriteIo.WriteCrlf(file, current);
+                }
+            }
+
+            return RewriteIo.Report(
+                label,
+                files.Length,
+                drifted,
+                whatIf || verify,
+                ("would introduce syntax errors — SKIPPED", corrupted),
+                ("do not converge (a pass is not idempotent) — SKIPPED", nonConvergent)
+            );
+        }
+
+        // Applies the pass pipeline once, re-parsing between passes so each sees the prior's output.
+        private static string ApplyAll(string text, IReadOnlyList<(string Name, Func<SyntaxNode, SyntaxNode> Apply)> passes)
+        {
+            foreach (var pass in passes)
+            {
+                var node = CSharpSyntaxTree.ParseText(text).GetRoot();
+                text = pass.Apply(node).ToFullString();
+            }
+
+            return text;
+        }
     }
 
     // The disk phase behind the semantic `named-args` pass: parses the whole src tree into
     // one Compilation (so a call's method symbol — BCL or in-repo — resolves) referencing the
     // runtime's assemblies, then runs NamedArgsRewriter against each target file's semantic
     // model. Symbol binding tolerates unrelated errors elsewhere, so a call is named whenever
-    // ITS own method resolves. Writes CRLF like SourceRewrite; -Check reports drift only.
+    // ITS own method resolves. Writes CRLF like SourceRewrite; -WhatIf reports drift only.
     internal static class NamedArgsPhase
     {
-        public static int Run(string rootArgument, bool checkOnly)
+        // Fallback when a project has not been built (no obj/*.GlobalUsings.g.cs to read): the
+        // SDK's default ImplicitUsings set. A built project supplies its real global usings.
+        private const string DefaultGlobalUsings = """
+            global using System;
+            global using System.Collections.Generic;
+            global using System.IO;
+            global using System.Linq;
+            global using System.Net.Http;
+            global using System.Threading;
+            global using System.Threading.Tasks;
+            """;
+
+        // Some assemblies in a build output are native (mimalloc, vulkan-1, ...) and are not valid
+        // managed metadata references. CreateFromFile is lazy (it wouldn't throw until the
+        // compilation reads the file), so probe the PE eagerly: PEReader.HasMetadata is true only
+        // for managed assemblies, and — unlike GetAssemblyName — reads no culture, so it is safe
+        // under globalization-invariant mode. Native / unreadable files are dropped.
+        private static MetadataReference? TryReference(string path)
         {
-            if (!SourceFiles.TryEnumerate(
-                rootArgument,
-                out var scanRoot,
-                out var targetFiles
-            ))
+            try
             {
-                return 2;
+                using var stream = File.OpenRead(path);
+                using var peReader = new System.Reflection.PortableExecutable.PEReader(stream);
+                return peReader.HasMetadata ? MetadataReference.CreateFromFile(path) : null;
+            }
+            catch (Exception exception) when (exception is BadImageFormatException or IOException)
+            {
+                return null;
+            }
+        }
+
+        // The project's NuGet package compile assemblies, read from the restore output
+        // (obj/project.assets.json). A LIBRARY project's transitive package DLLs are not copied to
+        // its own bin (they land in the consuming app's output), so bin alone misses them; the
+        // assets file lists every package's compile asset by path into the global packages folder.
+        private static IEnumerable<string> PackageReferences(string projectRoot)
+        {
+            var assetsPath = Path.Combine(projectRoot, "obj", "project.assets.json");
+            if (!File.Exists(assetsPath))
+            {
+                return [];
             }
 
-            // Resolve symbols against the OWNING project only — merging every project under
-            // src yields a noisy, cross-talking compilation, whereas one project's trees plus
-            // the runtime references bind its own calls cleanly.
-            var projectRoot = FindProjectDirectory(
-                scanRoot
-            ) ?? Path.Combine(
-                EngineRun.RepositoryRoot,
-                "src"
-            );
-            if (!SourceFiles.TryEnumerate(
-                projectRoot,
-                out _,
-                out var compilationFiles
-            ))
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(assetsPath));
+            var root = document.RootElement;
+            if (!root.TryGetProperty("packageFolders", out var folders)
+                || !root.TryGetProperty("targets", out var targets)
+                || !root.TryGetProperty("libraries", out var libraries))
             {
-                return 2;
+                return [];
             }
 
-            var parseOptions = new CSharpParseOptions(
-                LanguageVersion.Preview
-            );
-            var treesByPath = new Dictionary<string, SyntaxTree>(
-                StringComparer.OrdinalIgnoreCase
-            );
-            foreach (var file in compilationFiles)
+            var packageRoots = folders.EnumerateObject().Select(static folder => folder.Name).ToList();
+            var results = new List<string>();
+            foreach (var target in targets.EnumerateObject())
             {
-                treesByPath[Path.GetFullPath(
-                    file
-                )] = CSharpSyntaxTree.ParseText(
-                    File.ReadAllText(
-                    file
-                ),
-                    parseOptions,
-                    path: file
-                );
+                foreach (var library in target.Value.EnumerateObject())
+                {
+                    if (!library.Value.TryGetProperty("compile", out var compile)
+                        || !libraries.TryGetProperty(library.Name, out var entry)
+                        || !entry.TryGetProperty("path", out var libraryPath))
+                    {
+                        continue;
+                    }
+
+                    foreach (var asset in compile.EnumerateObject())
+                    {
+                        if (asset.Name.EndsWith("_._", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        var relative = asset.Name.Replace('/', Path.DirectorySeparatorChar);
+                        var resolved = packageRoots
+                            .Select(packageRoot => Path.Combine(packageRoot, libraryPath.GetString()!, relative))
+                            .FirstOrDefault(File.Exists);
+                        if (resolved is not null)
+                        {
+                            results.Add(resolved);
+                        }
+                    }
+                }
             }
 
-            // The SDK's implicit global usings live in an obj/ generated file that the source
-            // enumeration prunes; without them, System-namespace types (ArgumentException,
-            // Math, ...) don't bind and their calls would be silently skipped. Re-supply the
-            // default ImplicitUsings set so those calls resolve and get named.
-            var implicitUsings = CSharpSyntaxTree.ParseText(
-                """
-                global using System;
-                global using System.Collections.Generic;
-                global using System.IO;
-                global using System.Linq;
-                global using System.Net.Http;
-                global using System.Threading;
-                global using System.Threading.Tasks;
-                """,
+            return results;
+        }
+
+        // Builds a compilation over the project's trees against its REAL build closure, so calls
+        // into package / sibling-project types bind and get named instead of being silently
+        // skipped. Two inputs match the actual build: the SDK-generated global-usings file
+        // (obj/**/*.GlobalUsings.g.cs — the project's true implicit + explicit global usings) and
+        // every dependency assembly in the built output (bin/**/*.dll, minus the project's own
+        // output and native DLLs), unioned with the shared framework assemblies. Both need a prior
+        // build; without one, `degraded` is set and only the framework set + a default usings list
+        // are used, so coverage is reduced.
+        private static CSharpCompilation BuildProjectCompilation(string projectRoot, IEnumerable<SyntaxTree> trees, CSharpParseOptions parseOptions, out bool degraded)
+        {
+            var objDirectory = Path.Combine(projectRoot, "obj");
+            var globalUsingsFile = Directory.Exists(objDirectory)
+                ? Directory.EnumerateFiles(objDirectory, "*.GlobalUsings.g.cs", SearchOption.AllDirectories).FirstOrDefault()
+                : null;
+            var globalUsings = CSharpSyntaxTree.ParseText(
+                globalUsingsFile is not null ? File.ReadAllText(globalUsingsFile) : DefaultGlobalUsings,
                 parseOptions
             );
 
-            var references = ((string)AppContext.GetData(
-                "TRUSTED_PLATFORM_ASSEMBLIES"
-            )!)
-                .Split(
-                    Path.PathSeparator,
-                    StringSplitOptions.RemoveEmptyEntries
-                )
-                .Where(
-                    static path => path.EndsWith(
-                    ".dll",
-                    StringComparison.OrdinalIgnoreCase
-                )
-                )
-                .Select(
-                    static path => (MetadataReference)MetadataReference.CreateFromFile(
-                    path
-                )
-                );
-            var compilation = CSharpCompilation.Create(
+            // Source-generator output (CsWin32 interop, etc.) is produced in-memory during build
+            // and is absent from disk unless the project sets EmitCompilerGeneratedFiles. When it
+            // IS emitted (obj/**/generated/**/*.cs), include it so calls into generated types
+            // resolve too; otherwise those calls are reported as unresolved and left positional.
+            var generatedTrees = Directory.Exists(objDirectory)
+                ? Directory.EnumerateFiles(objDirectory, "*.cs", SearchOption.AllDirectories)
+                    .Where(static path => path.Contains($"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                    .Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), parseOptions, path: path))
+                : Enumerable.Empty<SyntaxTree>();
+
+            var frameworkDlls = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                .Where(static path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+            var projectName = Path.GetFileNameWithoutExtension(Directory.EnumerateFiles(projectRoot, "*.csproj").FirstOrDefault() ?? "");
+            var binDirectory = Path.Combine(projectRoot, "bin");
+            var outputDlls = Directory.Exists(binDirectory)
+                ? Directory.EnumerateFiles(binDirectory, "*.dll", SearchOption.AllDirectories)
+                    .Where(path => !string.Equals(Path.GetFileNameWithoutExtension(path), projectName, StringComparison.OrdinalIgnoreCase)
+                        && !path.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                : Enumerable.Empty<string>();
+            // Built dependency assemblies and NuGet package assemblies win over the framework on a
+            // name clash — they are the exact versions the project compiles against.
+            var references = outputDlls.Concat(PackageReferences(projectRoot)).Concat(frameworkDlls)
+                .GroupBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+                .Select(static group => TryReference(group.First()))
+                .Where(static reference => reference is not null)
+                .Select(static reference => reference!);
+
+            degraded = globalUsingsFile is null || !Directory.Exists(binDirectory);
+            return CSharpCompilation.Create(
                 "named-args",
-                treesByPath.Values.Append(
-                    implicitUsings
-                ),
+                trees.Append(globalUsings).Concat(generatedTrees),
                 references,
-                new CSharpCompilationOptions(
-                    OutputKind.DynamicallyLinkedLibrary,
-                    allowUnsafe: true
-                )
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true)
+            );
+        }
+
+        // Coverage probe: a call whose symbol binds to nothing (no symbol, no candidate) is one
+        // named-args must leave positional. Driving this to zero is the point of the real build
+        // closure; a nonzero count means the references are still incomplete. `nameof(...)` is
+        // syntactically an invocation but a contextual operator with no method symbol, so it is
+        // excluded — counting it would be a false positive.
+        private static int CountUnresolvedCalls(SyntaxNode root, SemanticModel model) =>
+            root.DescendantNodes().Count(node =>
+                node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
+                && node is not InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } }
+                && model.GetSymbolInfo(node) is { Symbol: null, CandidateSymbols.IsEmpty: true });
+
+        public static int Run(string rootArgument, bool whatIf, bool verify)
+        {
+            if (!SourceFiles.TryEnumerate(rootArgument, out _, out var targetFiles))
+            {
+                return 2;
+            }
+
+            // Resolve symbols against each file's OWNING project (its own trees + build closure),
+            // never one merged compilation — so a tree-wide root spanning many projects still binds
+            // every project's calls correctly. Files are grouped by owning project and processed
+            // against that project's compilation; each real method call then gets named.
+            var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
+            var byProject = targetFiles.GroupBy(
+                static file => FindProjectDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!) ?? "",
+                StringComparer.OrdinalIgnoreCase
             );
 
             var drifted = new List<string>();
-            foreach (var file in targetFiles)
+            var corrupted = new List<string>();
+            var degradedProjects = new List<string>();
+            var unresolved = 0;
+            foreach (var projectGroup in byProject)
             {
-                if (!treesByPath.TryGetValue(
-                    Path.GetFullPath(
-                    file
-                ),
-                    out var tree
-                ))
+                if (projectGroup.Key.Length == 0 || !SourceFiles.TryEnumerate(projectGroup.Key, out _, out var compilationFiles))
                 {
                     continue;
                 }
 
-                var rewritten = new NamedArgsRewriter(
-                    compilation.GetSemanticModel(
-                    tree
-                )
-                ).Visit(
-                    tree.GetRoot()
-                )!.ToFullString();
-                var original = File.ReadAllText(
-                    file
-                );
-                if (rewritten.Replace(
-                    "\r\n",
-                    "\n"
-                ) == original.Replace(
-                    "\r\n",
-                    "\n"
-                ))
-                {
-                    continue;
-                }
-
-                drifted.Add(
-                    Path.GetRelativePath(
-                    EngineRun.RepositoryRoot,
-                    file
-                ).Replace(
-                    '\\',
-                    '/'
-                )
-                );
-                if (!checkOnly)
-                {
-                    File.WriteAllText(
-                        file,
-                        rewritten.Replace(
-                        "\r\n",
-                        "\n"
-                    ).Replace(
-                        "\n",
-                        "\r\n"
-                    )
-                    );
-                }
+                unresolved += ProcessProject(projectGroup.Key, projectGroup, compilationFiles, parseOptions, whatIf, verify, drifted, corrupted, degradedProjects);
             }
 
-            Console.Error.WriteLine(
-                checkOnly
-                ? (drifted.Count == 0 ? $"named-args: consistent across {targetFiles.Length} files." : $"named-args: {drifted.Count} file(s) drifted from the convention:")
-                : $"named-args: normalized {drifted.Count} of {targetFiles.Length} files."
+            if (degradedProjects.Count > 0)
+            {
+                Console.Error.WriteLine($"named-args: {degradedProjects.Count} project(s) not built ({string.Join(", ", degradedProjects)}) — resolved against the framework only; some calls stay positional. Build for full coverage.");
+            }
+
+            if (unresolved > 0)
+            {
+                Console.Error.WriteLine($"named-args: {unresolved} call(s) could not be resolved and were left positional (see the not-built note above, or check references).");
+            }
+
+            return RewriteIo.Report(
+                "named-args",
+                targetFiles.Length,
+                drifted,
+                whatIf || verify,
+                ("would introduce syntax errors — SKIPPED", corrupted)
             );
-            foreach (var path in drifted)
+        }
+
+        // Names the target files of ONE project against a compilation of that project's trees and
+        // its real build closure; accumulates drift / corruption / not-built into the shared lists
+        // and returns the count of calls that could not be resolved (left positional).
+        private static int ProcessProject(string projectRoot, IEnumerable<string> targets, string[] compilationFiles, CSharpParseOptions parseOptions, bool whatIf, bool verify, List<string> drifted, List<string> corrupted, List<string> degradedProjects)
+        {
+            var treesByPath = new Dictionary<string, SyntaxTree>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in compilationFiles)
             {
-                Console.Error.WriteLine(
-                    $"  {path}"
-                );
+                treesByPath[Path.GetFullPath(file)] = CSharpSyntaxTree.ParseText(File.ReadAllText(file), parseOptions, path: file);
             }
 
-            return checkOnly && drifted.Count > 0 ? 1 : 0;
+            var compilation = BuildProjectCompilation(projectRoot, treesByPath.Values, parseOptions, out var degraded);
+            if (degraded)
+            {
+                degradedProjects.Add(Path.GetFileName(projectRoot));
+            }
+
+            var unresolved = 0;
+            foreach (var file in targets)
+            {
+                if (!treesByPath.TryGetValue(Path.GetFullPath(file), out var tree))
+                {
+                    continue;
+                }
+
+                var model = compilation.GetSemanticModel(tree);
+                unresolved += CountUnresolvedCalls(tree.GetRoot(), model);
+                var rewritten = new NamedArgsRewriter(model).Visit(tree.GetRoot())!.ToFullString();
+                var original = File.ReadAllText(file);
+                if (RewriteIo.ContentEquals(rewritten, original))
+                {
+                    continue;
+                }
+
+                var relative = Path.GetRelativePath(EngineRun.RepositoryRoot, file).Replace('\\', '/');
+                if (RewriteIo.IntroducesErrors(original, rewritten))
+                {
+                    corrupted.Add(relative);
+                    continue;
+                }
+
+                drifted.Add(relative);
+                // named-args only ADDS names where absent, so a second run is a no-op — idempotent
+                // by construction. -Verify still audits (report drift, never write) + the guard.
+                if (!whatIf && !verify)
+                {
+                    RewriteIo.WriteCrlf(file, rewritten);
+                }
+            }
+
+            return unresolved;
         }
 
         // The nearest ancestor directory (from the scan root up) that holds a .csproj — the
         // owning project whose trees form the compilation.
         private static string? FindProjectDirectory(string scanRoot)
         {
-            for (var directory = new DirectoryInfo(
-                scanRoot
-            ); directory is not null; directory = directory.Parent)
+            for (var directory = new DirectoryInfo(scanRoot); directory is not null; directory = directory.Parent)
             {
-                if (directory.EnumerateFiles(
-                    "*.csproj"
-                ).Any())
+                if (directory.EnumerateFiles("*.csproj").Any())
                 {
                     return directory.FullName;
                 }
@@ -6272,9 +3747,7 @@ namespace Puck.Tools
             var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false };
             foreach (var argument in arguments)
             {
-                startInfo.ArgumentList.Add(
-                    argument
-                );
+                startInfo.ArgumentList.Add(argument);
             }
 
             if (environment is not null)
@@ -6285,11 +3758,7 @@ namespace Puck.Tools
                 }
             }
 
-            using var process = Process.Start(
-                startInfo
-            ) ?? throw new InvalidOperationException(
-                $"Failed to start {fileName}."
-            );
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {fileName}.");
             process.WaitForExit();
             return process.ExitCode;
         }
@@ -6309,9 +3778,7 @@ namespace Puck.Tools
             };
             foreach (var argument in arguments)
             {
-                startInfo.ArgumentList.Add(
-                    argument
-                );
+                startInfo.ArgumentList.Add(argument);
             }
 
             var output = new StringBuilder();
@@ -6322,9 +3789,7 @@ namespace Puck.Tools
                 {
                     lock (output)
                     {
-                        output.AppendLine(
-                            eventArguments.Data
-                        );
+                        output.AppendLine(eventArguments.Data);
                     }
                 }
             };
@@ -6334,41 +3799,31 @@ namespace Puck.Tools
                 {
                     lock (output)
                     {
-                        output.AppendLine(
-                            eventArguments.Data
-                        );
+                        output.AppendLine(eventArguments.Data);
                     }
                 }
             };
 
             if (!process.Start())
             {
-                throw new InvalidOperationException(
-                    $"Failed to start {fileName}."
-                );
+                throw new InvalidOperationException($"Failed to start {fileName}.");
             }
 
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            if (!process.WaitForExit(
-                timeoutMilliseconds
-            ))
+            if (!process.WaitForExit(timeoutMilliseconds))
             {
                 try
                 {
-                    process.Kill(
-                        entireProcessTree: true
-                    );
+                    process.Kill(entireProcessTree: true);
                 }
                 catch
                 {
                     // The process may have exited between the timeout and the kill; ignore.
                 }
 
-                process.WaitForExit(
-                    5000
-                );
+                process.WaitForExit(5000);
 
                 lock (output)
                 {
@@ -6390,16 +3845,10 @@ namespace Puck.Tools
             var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false, RedirectStandardOutput = true };
             foreach (var argument in arguments)
             {
-                startInfo.ArgumentList.Add(
-                    argument
-                );
+                startInfo.ArgumentList.Add(argument);
             }
 
-            using var process = Process.Start(
-                startInfo
-            ) ?? throw new InvalidOperationException(
-                $"Failed to start {fileName}."
-            );
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {fileName}.");
             var output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
             return output;
@@ -6409,41 +3858,23 @@ namespace Puck.Tools
         // file-based-app property) — not AppContext.BaseDirectory — locates tools/.
         public static string GetToolsDirectory()
         {
-            if (AppContext.GetData(
-                "EntryPointFilePath"
-            ) is string entryPointFilePath)
+            if (AppContext.GetData("EntryPointFilePath") is string entryPointFilePath)
             {
-                return Path.GetDirectoryName(
-                    Path.GetFullPath(
-                    entryPointFilePath
-                )
-                )!;
+                return Path.GetDirectoryName(Path.GetFullPath(entryPointFilePath))!;
             }
 
-            var directory = new DirectoryInfo(
-                Environment.CurrentDirectory
-            );
+            var directory = new DirectoryInfo(Environment.CurrentDirectory);
             while (directory is not null)
             {
-                if (File.Exists(
-                    Path.Combine(
-                    directory.FullName,
-                    "Puck.slnx"
-                )
-                ))
+                if (File.Exists(Path.Combine(directory.FullName, "Puck.slnx")))
                 {
-                    return Path.Combine(
-                        directory.FullName,
-                        "tools"
-                    );
+                    return Path.Combine(directory.FullName, "tools");
                 }
 
                 directory = directory.Parent;
             }
 
-            throw new InvalidOperationException(
-                "Could not locate the repository root (no Puck.slnx above the current directory)."
-            );
+            throw new InvalidOperationException("Could not locate the repository root (no Puck.slnx above the current directory).");
         }
     }
 }

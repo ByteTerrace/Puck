@@ -21,6 +21,9 @@ internal static partial class User32 {
     // blittable — RegisterClassEx stays DllImport (the source generator cannot marshal it).
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern ushort RegisterClassEx(ref WindowClassEx windowClass);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AdjustWindowRectEx(ref Rectangle rectangle, uint style, [MarshalAs(UnmanagedType.Bool)] bool hasMenu, uint extendedStyle);
     [LibraryImport("user32.dll", EntryPoint = "CreateWindowExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     public static partial nint CreateWindowEx(
         uint extendedStyle,

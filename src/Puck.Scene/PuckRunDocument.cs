@@ -20,10 +20,16 @@ public sealed class PuckRunDocument {
     public HostDocument? Host { get; init; }
     /// <summary>The scene: materials + placed objects, compiled to the GPU program.</summary>
     public SceneDocument Scene { get; init; } = new();
-    /// <summary>The viewports: per-region cameras over the scene (1..4).</summary>
+    /// <summary>The viewports: per-region cameras over the scene (1..5).</summary>
     public IReadOnlyList<Viewport> Viewports { get; init; } = [];
+    /// <summary>The optional diegetic screen-source table: which provider feeds each sampled screen surface the
+    /// scene's screen slabs declare (see <see cref="ScreenSlabObject.ScreenIndex"/>). Consumed by the world graph;
+    /// a declared surface with no entry falls back to the flat/procedural screen material.</summary>
+    public IReadOnlyList<ScreenSourceDocument>? ScreenSources { get; init; }
     /// <summary>The composition graph's root node. Ignored (and optional) when <see cref="Validation"/> is present.</summary>
     public NodeDocument? Graph { get; init; }
+    /// <summary>The optional input section: controller→consumer routing policy.</summary>
+    public InputDocument? Input { get; init; }
     /// <summary>The optional validation gate: when present the run validates (installs a cross-backend gate and
     /// propagates its exit code) instead of presenting a live render.</summary>
     public ValidationDocument? Validation { get; init; }

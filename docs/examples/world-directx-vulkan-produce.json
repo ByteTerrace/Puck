@@ -1,7 +1,7 @@
 {
     "$schema": "../../schema/run.schema.json",
     "version": "puck.run.v1",
-    "_comment": "The REVERSE cross-backend live path: a Direct3D 12-hosted window presenting VULKAN-produced content. host.backend:\"directx\" hosts the window; graph.produce:\"vulkan\" runs the compute SDF world on a bespoke Vulkan device (LUID-matched to the D3D12 host adapter) that renders into a host-owned shared image the D3D12 host blits zero-copy. Reproduces `Puck.Demo --world --backend directx --produce vulkan` — the mirror of world-single.json's default (D3D12 produces, Vulkan presents). On an OS without Direct3D 12 the host degrades to Vulkan (logged).",
+    "_comment": "The REVERSE cross-backend live path: a Direct3D 12-hosted window presenting VULKAN-produced content. host.backend:\"directx\" hosts the window; graph.produce:\"vulkan\" runs the compute SDF world on a bespoke Vulkan device (LUID-matched to the D3D12 host adapter) that renders into a host-owned shared image the D3D12 host blits zero-copy. Parse/validation corpus: the shared world renderer runs host-backend only, so this mismatched produce is REJECTED with an attributed error (exit 2) pending the cross-backend re-host; the live zero-copy proofs are Puck.Post's export/reverse-share/camera-share stages.",
     "host": {
         "backend": "directx",
         "size": [960, 600],

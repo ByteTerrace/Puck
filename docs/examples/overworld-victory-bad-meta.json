@@ -1,0 +1,36 @@
+{
+    "version": "puck.run.v1",
+    "graph": {
+        "$type": "overworld",
+        "immersed": true,
+        "consoles": [
+            {
+                "model": "cgb",
+                "victory": {
+                    "mode": "meta",
+                    "target": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+                    "share": "11111111-1111-4111-8111-111111111111",
+                    "group": "triad"
+                }
+            },
+            {
+                "model": "cgb",
+                "victory": {
+                    "mode": "meta",
+                    "target": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+                    "share": "11111111-1111-4111-8111-111111111111",
+                    "group": "triad"
+                }
+            },
+            {
+                "model": "cgb",
+                "victory": {
+                    "mode": "meta",
+                    "target": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+                    "share": "11111111-1111-4111-8111-111111111111",
+                    "group": "triad"
+                }
+            }
+        ]
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "version": "puck.run.v1",
+    "host": {
+        "presentMode": "vsync",
+        "exitAfterSeconds": 15
+    },
+    "scene": {
+        "materials": [
+            { "albedo": [0.46, 0.48, 0.54] }
+        ],
+        "objects": [
+            { "shape": "plane", "normal": [0.0, 1.0, 0.0], "offset": 1.0, "material": 0 }
+        ]
+    },
+    "viewports": [
+        { "source": { "$type": "gaming-brick", "model": "dmg", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" }, "region": [0.0, 0.0, 0.5, 0.5] },
+        { "source": { "$type": "gaming-brick", "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" }, "region": [0.5, 0.0, 0.5, 0.5] },
+        { "source": { "$type": "gaming-brick", "model": "agb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" }, "region": [0.0, 0.5, 0.5, 0.5] },
+        { "source": { "$type": "live-camera", "fit": "Fill" }, "region": [0.5, 0.5, 0.5, 0.5] }
+    ],
+    "graph": { "$type": "world" }
+}

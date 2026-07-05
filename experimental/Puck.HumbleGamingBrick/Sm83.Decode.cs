@@ -10,14 +10,14 @@ public sealed partial class Sm83 {
     // lockstep through the component clock. Where inside those four T-cycles the bus actually settles is the access
     // dot-phase, expressed here as the number of T-cycles ticked BEFORE the bus is touched: a read latches late (the
     // CPU samples the bus on the access's final T-cycle), a write commits early (the value is driven on the first).
-    // These are Model B's starting hypothesis only; the exact phase is DERIVED and tuned against blargg mem_timing once
-    // the timer makes sub-instruction timing observable (Stage 3b step 3). They are not numbers copied from any oracle.
+    // These are Model B's starting hypothesis only; the exact phase is DERIVED and tuned against the hardware-accurate
+    // memory-timing verdicts once the timer makes sub-instruction timing observable (Stage 3b step 3). They are not numbers copied from any reference.
     private const int CpuTCyclesPerMachineCycle = 4;
     // The access dot-phase: how many of an access's four T-cycles tick BEFORE the bus is touched. A read latches at T2
-    // and a write commits on the first T-cycle. These were DERIVED by sweeping against the POST's mooneye *_timing
-    // oracle (experimental/Puck.HumbleGamingBrick.Post): read=2 clears the whole call/jp/ret/reti/push-pop/add_sp/
-    // ld_hl_sp/oam_dma timing family while keeping mooneye timer 26/26 and blargg cpu_instrs/instr_timing/mem_timing
-    // green. (read=3 was the earlier Model B hypothesis — it ran one T-cycle late.)
+    // and a write commits on the first T-cycle. These were DERIVED by sweeping against the POST's hardware-accurate
+    // timing verdicts (experimental/Puck.HumbleGamingBrick.Post): read=2 clears the whole call/jp/ret/reti/push-pop/add_sp/
+    // ld_hl_sp/oam_dma timing family while keeping the timer conformance and the CPU-instruction/instruction-timing/memory-timing
+    // suites green. (read=3 was the earlier Model B hypothesis — it ran one T-cycle late.)
     private const int LeadingTCyclesBeforeRead = 2;
     private const int LeadingTCyclesBeforeWrite = 0;
 

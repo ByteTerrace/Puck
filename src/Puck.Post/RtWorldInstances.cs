@@ -13,15 +13,16 @@ internal readonly record struct RtWorldInstance(Vector3 Center, Vector3 HalfExte
 
 /// <summary>
 /// Derives ray-tracing TLAS instances from an <see cref="SdfProgram"/> — one world-space AABB per FINITE primitive
-/// (the infinite ground plane is skipped). ALGORITHM PORTED EXACTLY from the demo's
-/// <c>src/Puck.Demo/RtWorldInstances.cs</c> (the worked reference), never code-shared, so the POST's ray-query stage
-/// builds the identical TLAS the demo's <c>--world-rt</c> producer builds over the same program. It walks the typed
+/// (the infinite ground plane is skipped). This is now the ONE implementation: it was ported from the demo's
+/// <c>RtWorldInstances</c>, and that copy retired with the demo's live <c>--world-rt</c> producer. It walks the typed
 /// instruction stream tracking the point translation the VM accumulates, so a primitive authored as
 /// <c>ResetPoint().Translate(c).Shape(...)</c> lands at world center <c>c</c> with a bound sized from the shape's
 /// dimensions plus its smooth-blend padding. It is deliberately CONSERVATIVE for the transforms it does not model
-/// exactly (rotation/scale fall back to an isotropic bounding-sphere extent; repeat/symmetry tile or mirror without
-/// bound, so a primitive under them is skipped rather than under-bounded) — a loose bound only costs a few wasted
-/// ray-box tests; an under-bound would drop geometry.
+/// exactly: rotation/scale fall back to an isotropic bounding-sphere extent, and any op that tiles, mirrors, or
+/// re-poses copies (repeat/symmetry/wallpaper/dynamic transforms — and every unknown FUTURE op, by default) routes
+/// the shapes after it into one whole-march-envelope catch-all instance. A loose bound only costs wasted ray-box
+/// tests; an under-bound (or the old silent skip, which dropped such geometry from the RT image entirely) would be
+/// wrong.
 /// </summary>
 internal static class RtWorldInstances {
     /// <summary>Extracts the scene's infinite ground plane (the first <c>Plane</c> primitive) in world space, as a
@@ -64,7 +65,16 @@ internal static class RtWorldInstances {
         return Vector4.Zero;
     }
 
-    /// <summary>Extracts the finite-primitive world bounds from a program, in instruction order.</summary>
+    /// <summary>The catch-all instance's per-axis half-extent: the march envelope (KEEP IN SYNC with
+    /// <c>MaxDistance</c> in <c>sdf-world.hlsli</c>), so every camera ray enters it at ~TMin and marches the full
+    /// field — slower, never wrong.</summary>
+    private const float CatchAllHalfExtent = 60f;
+
+    /// <summary>Extracts the finite-primitive world bounds from a program, in instruction order. A shape whose chain
+    /// holds an op no single AABB can represent (repeat/symmetry/wallpaper tile or mirror copies; a dynamic transform
+    /// can be anywhere per frame; any FUTURE op lands in the conservative default) emits a whole-march-envelope
+    /// CATCH-ALL instance instead of silently vanishing: rays over such geometry march from ~0 — slower, never
+    /// dropped.</summary>
     /// <param name="program">The SDF program to decompose.</param>
     /// <returns>The derived instances, each carrying its center, padded half-extent, and custom index.</returns>
     public static IReadOnlyList<RtWorldInstance> Extract(SdfProgram program) {
@@ -72,14 +82,17 @@ internal static class RtWorldInstances {
 
         var instances = new List<RtWorldInstance>();
         var center = Vector3.Zero;
-        var isotropic = false; // a transform we do not model exactly is active → bound by a sphere, not an AABB
-        var skip = false;      // a repeat/symmetry tiles without bound → the next shape cannot be a single instance
+        var isotropic = false;       // a transform we do not model exactly is active → bound by a sphere, not an AABB
+        var padding = Vector3.Zero;  // accumulated elongation extents, added to the following shapes' bounds
+        var skip = false;            // an op tiles/mirrors/moves without bound → the next shape cannot be a single instance
+        var anyUnbounded = false;    // some finite shape was skipped → the catch-all instance must cover it
 
         foreach (var instruction in program.Instructions) {
             switch (instruction.Op) {
                 case SdfOp.ResetPoint: {
                         center = Vector3.Zero;
                         isotropic = false;
+                        padding = Vector3.Zero;
                         skip = false;
 
                         break;
@@ -90,25 +103,52 @@ internal static class RtWorldInstances {
                         break;
                     }
                 case SdfOp.Rotate:
-                case SdfOp.Scale: {
+                case SdfOp.Scale:
+                case SdfOp.TwistY:
+                case SdfOp.BendX:
+                case SdfOp.BendY:
+                case SdfOp.BendZ: {
                         // Not modeled exactly here — fall back to an isotropic (bounding-sphere) extent so the bound
-                        // stays conservative regardless of the orientation/scale.
+                        // stays conservative regardless of the orientation/scale. The twist/bends preserve the norm
+                        // of the plane pair they rotate, so the bounding sphere survives them.
                         isotropic = true;
 
                         break;
                     }
-                case SdfOp.Repeat:
-                case SdfOp.RepeatLimited:
-                case SdfOp.SymmetryX:
-                case SdfOp.SymmetryY:
-                case SdfOp.SymmetryZ: {
-                        // These produce many/mirrored copies; a single instance cannot represent them.
-                        skip = true;
+                case SdfOp.Elongate: {
+                        // Elongation sweeps the shape's cross-section over ±extents: pad the following shapes by them.
+                        padding += new Vector3(MathF.Abs(instruction.Data0.X), MathF.Abs(instruction.Data0.Y), MathF.Abs(instruction.Data0.Z));
+
+                        break;
+                    }
+                case SdfOp.Onion:
+                case SdfOp.Dilate: {
+                        // FIELD ops thicken/inflate the ENTIRE field accumulated so far — retroactively pad every
+                        // instance already emitted (dilate pushes the surface out by r; onion's skin reaches abs(d)−t
+                        // ≤ 0, i.e. t outward).
+                        var inflate = new Vector3(MathF.Max(0f, instruction.Data0.X));
+
+                        for (var index = 0; (index < instances.Count); index++) {
+                            var instance = instances[index];
+
+                            instances[index] = instance with { HalfExtent = (instance.HalfExtent + inflate) };
+                        }
 
                         break;
                     }
                 case SdfOp.ShapeBlend: {
-                        if (!skip && TryShapeHalfExtent(instruction: instruction, isotropic: isotropic, halfExtent: out var halfExtent)) {
+                        if (skip) {
+                            // The chain tiles/mirrors/moves this shape beyond one AABB: covered by the catch-all.
+                            anyUnbounded |= ((SdfShapeType)instruction.Shape != SdfShapeType.Plane);
+                        } else if (TryShapeHalfExtent(instruction: instruction, isotropic: isotropic, halfExtent: out var halfExtent)) {
+                            // Elongation padding stretches the bound; under an isotropic fallback the padded box
+                            // re-collapses to its bounding sphere (a rotate may reorient the elongation).
+                            halfExtent += padding;
+
+                            if (isotropic && (padding != Vector3.Zero)) {
+                                halfExtent = new Vector3(MathF.Max(halfExtent.X, MathF.Max(halfExtent.Y, halfExtent.Z)));
+                            }
+
                             instances.Add(item: new RtWorldInstance(
                                 Center: center,
                                 CustomIndex: (uint)instances.Count,
@@ -119,9 +159,25 @@ internal static class RtWorldInstances {
                         break;
                     }
                 default: {
+                        // Repeat/RepeatLimited/Symmetry* tile or mirror copies, TransformDynamic moves per frame,
+                        // WallpaperFold tiles a lattice — and any FUTURE op is conservatively assumed to do the same:
+                        // a single instance cannot represent the shapes that follow. Skip-by-default replaces the old
+                        // silent ignore (an unknown op used to leave the bound WRONG rather than loose).
+                        skip = true;
+
                         break;
                     }
             }
+        }
+
+        // The vanish fix: without this, geometry under a skipped op got NO instance and rays over it read SKY. One
+        // march-envelope box restores correctness for all of it at march-from-zero cost.
+        if (anyUnbounded) {
+            instances.Add(item: new RtWorldInstance(
+                Center: Vector3.Zero,
+                CustomIndex: (uint)instances.Count,
+                HalfExtent: new Vector3(CatchAllHalfExtent)
+            ));
         }
 
         return instances;
@@ -158,10 +214,31 @@ internal static class RtWorldInstances {
                     break;
                 }
             case SdfShapeType.RoundCone: {
-                    // Data0 = (lowerRadius, upperRadius, height, _); conservative upright bound.
+                    // Data0 = (lowerRadius, upperRadius, height, _); the shape spans y in
+                    // [-lowerRadius, height + upperRadius] from its LOCAL ORIGIN (not centered), so a bound symmetric
+                    // about the center must reach the full height both ways — up to 2x loose, but conservative.
                     var radius = (MathF.Max(data.X, data.Y) + smooth);
 
-                    halfExtent = new Vector3(radius, ((data.Z * 0.5f) + radius), radius);
+                    halfExtent = new Vector3(radius, (data.Z + radius), radius);
+
+                    break;
+                }
+            case SdfShapeType.Capsule: {
+                    // Data0 = (endX, endY, endZ, radius); the segment runs from the local origin to the endpoint, so a
+                    // bound symmetric about the center must reach |endpoint| both ways — up to 2x loose, but conservative.
+                    halfExtent = (new Vector3(MathF.Abs(data.X), MathF.Abs(data.Y), MathF.Abs(data.Z)) + new Vector3(data.W + smooth));
+
+                    break;
+                }
+            case SdfShapeType.Cylinder: {
+                    // Data0 = (radius, halfHeight, _, _); upright and centered — exact.
+                    halfExtent = new Vector3((data.X + smooth), (data.Y + smooth), (data.X + smooth));
+
+                    break;
+                }
+            case SdfShapeType.Ellipsoid: {
+                    // Data0 = (radiusX, radiusY, radiusZ, _); centered — exact.
+                    halfExtent = (new Vector3(data.X, data.Y, data.Z) + new Vector3(smooth));
 
                     break;
                 }

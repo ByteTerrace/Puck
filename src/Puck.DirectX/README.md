@@ -1,6 +1,6 @@
 # Puck.DirectX
 
-An **exploration** of DirectX (DXGI + Direct3D 12) support for the Puck engine. Where
+The low-level Direct3D 12 (DXGI + D3D12) backend for the Puck engine. Where
 `Puck.Vulkan` hand-binds a flat C loader, DirectX is COM-based, so this project leans on
 **[Microsoft.Windows.CsWin32](https://github.com/microsoft/CsWin32)** — Microsoft's actively
 maintained, AOT-friendly P/Invoke + COM source generator — to emit the raw bindings. That
@@ -14,9 +14,13 @@ target      net10.0  (Windows-only at runtime; surface annotated [SupportedOSPla
 deps        Microsoft.Windows.CsWin32 (build-only, PrivateAssets=all — no runtime dependency)
 ```
 
-> This is a starting point, not a renderer. It proves the binding strategy works end to end:
-> enumerate GPUs, probe their Direct3D 12 capability, and create a device. Swap chains,
-> command queues, and the frame loop are intentionally **not** here yet.
+> What began as a binding-strategy proof (enumerate GPUs, probe Direct3D 12 capability,
+> create a device) has since grown into the full low-level D3D12 backend: the `DirectXGpu*`
+> types implement the neutral GPU seams from `Puck.Abstractions` (compute pipelines,
+> descriptor allocation, storage buffers/images, shared-surface export, acceleration
+> structures for DXR, queue submission, timestamp pools). Swap chains and the frame loop
+> live one level up, in `Puck.DirectX.Presentation` — mirroring how `Puck.Vulkan` /
+> `Puck.Vulkan.Presentation` split.
 
 ---
 
@@ -94,5 +98,6 @@ never fails.)
 - **COM lifetime is manual.** Every `IDXGIxxx`/`ID3D12xxx` pointer obtained must be
   `Release`d. The APIs use `try/finally` around transient factories and adapters; persistent
   objects are owned by an `IDisposable` `Interop` wrapper.
-- **Reference only, never `Puck.csproj`.** Like the rest of the split projects, this one
-  stands alone; it currently depends on nothing else in the repo.
+- **Dependencies.** This project references only `Puck.Abstractions` (the neutral GPU
+  seams it implements). Presentation, windowing, and shader compilation live upstream in
+  `Puck.DirectX.Presentation`.

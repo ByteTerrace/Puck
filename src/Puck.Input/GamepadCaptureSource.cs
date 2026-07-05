@@ -36,6 +36,16 @@ public sealed class GamepadCaptureSource {
     private readonly List<GamepadDrain> m_drains = [];
     private readonly GamepadManager m_manager;
     private readonly InputRouter m_router;
+    // Which triggers each device last reported active, so a trigger snapping back to rest emits an explicit
+    // release edge. Without it a consumer that latches on the trigger's VALUE (a binding-page modifier with
+    // hysteresis) can stick held: the value stream simply stops at rest, and the last emitted sample may sit
+    // above the release threshold. Buttons get their edges from the coalescer; triggers get theirs here.
+    private readonly Dictionary<InputDeviceId, TriggerLatch> m_triggerLatches = [];
+
+    private struct TriggerLatch {
+        public bool Left;
+        public bool Right;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="GamepadCaptureSource"/> class.</summary>
     /// <param name="manager">The manager whose connected devices supply input.</param>
@@ -102,53 +112,79 @@ public sealed class GamepadCaptureSource {
             m_router.Capture(signal: InputSignal.Axis(captureTick: latestTick, deviceId: deviceId, source: InputSources.Gamepad.Touchpad1, value: latest.Touch1.Position));
         }
 
-        if (0f < latest.LeftTrigger) {
-            m_router.Capture(signal: new InputSignal(
-                CaptureTick: latestTick,
-                DeviceId: deviceId,
-                Phase: CommandPhase.Active,
-                Source: InputSources.Gamepad.LeftTrigger,
-                Value: CommandValue.Axis(value: latest.LeftTrigger)
-            ));
-        }
-
-        if (0f < latest.RightTrigger) {
-            m_router.Capture(signal: new InputSignal(
-                CaptureTick: latestTick,
-                DeviceId: deviceId,
-                Phase: CommandPhase.Active,
-                Source: InputSources.Gamepad.RightTrigger,
-                Value: CommandValue.Axis(value: latest.RightTrigger)
-            ));
-        }
+        _ = m_triggerLatches.TryGetValue(
+            key: deviceId,
+            value: out var triggerLatch
+        );
+        triggerLatch.Left = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.LeftTrigger, tick: latestTick, value: latest.LeftTrigger, wasActive: triggerLatch.Left);
+        triggerLatch.Right = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.RightTrigger, tick: latestTick, value: latest.RightTrigger, wasActive: triggerLatch.Right);
+        m_triggerLatches[deviceId] = triggerLatch;
 
         if (Vector3.Zero != drain.Gyro) {
+            EmitGyro(deviceId: deviceId, gyro: drain.Gyro, tick: latestTick);
+        }
+
+        EmitAccelerometer(deviceId: deviceId, latest: in latest, tick: latestTick);
+    }
+
+    // An active trigger streams its analog value; the first rest report after activity emits one explicit release
+    // edge (Completed, value 0) so latching consumers always see the let-go. Returns whether the trigger is active.
+    private bool EmitTrigger(InputDeviceId deviceId, string source, float value, bool wasActive, ulong tick) {
+        if (0f < value) {
             m_router.Capture(signal: new InputSignal(
-                CaptureTick: latestTick,
+                CaptureTick: tick,
                 DeviceId: deviceId,
                 Phase: CommandPhase.Active,
-                Source: InputSources.Gamepad.Gyro,
-                Value: CommandValue.Axis(value: drain.Gyro)
+                Source: source,
+                Value: CommandValue.Axis(value: value)
+            ));
+
+            return true;
+        }
+
+        if (wasActive) {
+            m_router.Capture(signal: new InputSignal(
+                CaptureTick: tick,
+                DeviceId: deviceId,
+                Phase: CommandPhase.Completed,
+                Source: source,
+                Value: CommandValue.Axis(value: 0f)
             ));
         }
 
-        // The accelerometer reads gravity at rest, so a device that has one streams continuously and drives the
-        // fused orientation on the same gate; absent devices report zero and emit nothing.
-        if (Vector3.Zero != latest.Accelerometer) {
-            m_router.Capture(signal: new InputSignal(
-                CaptureTick: latestTick,
-                DeviceId: deviceId,
-                Phase: CommandPhase.Active,
-                Source: InputSources.Gamepad.Accelerometer,
-                Value: CommandValue.Axis(value: latest.Accelerometer)
-            ));
-            m_router.Capture(signal: new InputSignal(
-                CaptureTick: latestTick,
-                DeviceId: deviceId,
-                Phase: CommandPhase.Active,
-                Source: InputSources.Gamepad.Orientation,
-                Value: CommandValue.Orientation(value: latest.Orientation)
-            ));
+        return false;
+    }
+
+    private void EmitGyro(InputDeviceId deviceId, Vector3 gyro, ulong tick) {
+        m_router.Capture(signal: new InputSignal(
+            CaptureTick: tick,
+            DeviceId: deviceId,
+            Phase: CommandPhase.Active,
+            Source: InputSources.Gamepad.Gyro,
+            Value: CommandValue.Axis(value: gyro)
+        ));
+    }
+
+    // The accelerometer reads gravity at rest, so a device that has one streams continuously and drives the
+    // fused orientation on the same gate; absent devices report zero and emit nothing.
+    private void EmitAccelerometer(InputDeviceId deviceId, in GamepadState latest, ulong tick) {
+        if (Vector3.Zero == latest.Accelerometer) {
+            return;
         }
+
+        m_router.Capture(signal: new InputSignal(
+            CaptureTick: tick,
+            DeviceId: deviceId,
+            Phase: CommandPhase.Active,
+            Source: InputSources.Gamepad.Accelerometer,
+            Value: CommandValue.Axis(value: latest.Accelerometer)
+        ));
+        m_router.Capture(signal: new InputSignal(
+            CaptureTick: tick,
+            DeviceId: deviceId,
+            Phase: CommandPhase.Active,
+            Source: InputSources.Gamepad.Orientation,
+            Value: CommandValue.Orientation(value: latest.Orientation)
+        ));
     }
 }

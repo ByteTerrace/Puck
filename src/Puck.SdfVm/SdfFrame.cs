@@ -17,8 +17,17 @@ public sealed record SdfFrame(
     float Time,
     float WarpAmount
 ) {
-    /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Empty for a
-    /// static scene (the renderer then binds a single identity slot the program never references). Updating this list
-    /// is how entities move — the program (binding 1) is uploaded once and left untouched.</summary>
+    /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
+    /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame
+    /// throws otherwise — a dynamic slot silently rendering at identity is a bug, not a default); empty is therefore
+    /// valid only for a program with no dynamic slots (the renderer then binds a single identity slot the program
+    /// never references). Updating this list is how entities move — the program (binding 1) is uploaded once and left
+    /// untouched.</summary>
     public IReadOnlyList<DynamicTransform> DynamicTransforms { get; init; } = [];
+    /// <summary>A per-frame scale on the world path's AMBIENT term (default 1 = unchanged). Below 1 dims the room so
+    /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>
+    public float AmbientScale { get; init; } = 1f;
+    /// <summary>A per-frame scale on the world path's SUN (directional) term (default 1 = unchanged). Pairs with
+    /// <see cref="AmbientScale"/> to darken the room for the overworld mood.</summary>
+    public float SunScale { get; init; } = 1f;
 }

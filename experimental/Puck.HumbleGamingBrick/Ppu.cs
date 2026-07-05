@@ -15,7 +15,7 @@ namespace Puck.HumbleGamingBrick;
 /// line 144, and raises the STAT interrupt on the rising edge of any enabled STAT condition (a mode or the LY=LYC
 /// coincidence). All state is plain fields captured in a fixed order, so it snapshots and forks like every component.
 /// </summary>
-public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable {
+public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchable {
     private const byte AttributeDmgPalette = 0x10;
     private const byte AttributePaletteMask = 0x07;
     private const byte AttributePriority = 0x80;
@@ -87,12 +87,18 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable {
     private readonly byte[] m_spriteIndices = new byte[MaxSpritesPerLine];
     private readonly byte[] m_spriteX = new byte[MaxSpritesPerLine];
     private readonly byte[] m_spriteY = new byte[MaxSpritesPerLine];
-    private readonly bool m_supportsColor;
+    // The model-capability gates: mutable so a LIVE device swap (ApplyModel) can re-derive them without a reboot. Kept as
+    // plain fields — never properties — so the per-dot render path reads them at full field speed. The immutable cartridge
+    // header capability is retained separately because the dmgCompatibility/cgbNative split folds it in.
+    private bool m_supportsColor;
+    private readonly bool m_cartridgeSupportsColor;
+    private readonly CartridgeHeader m_header;
     // Color hardware running a monochrome cartridge boots into compatibility mode: rendering keeps the DMG rules (BGP/OBP
     // palette registers, X-coordinate sprite priority, no tile attributes) but resolves the four shades through the
-    // palettes the boot ROM assigned from its built-in table. Both flags and the resolved palettes are fixed per machine.
-    private readonly bool m_cgbNative;
-    private readonly bool m_dmgCompatibility;
+    // palettes the boot ROM assigned from its built-in table. The flags follow the live model; the resolved compat
+    // palettes are re-resolved from the (fixed) header whenever a swap first enters compatibility mode.
+    private bool m_cgbNative;
+    private bool m_dmgCompatibility;
     private readonly uint[] m_compatBackground = new uint[4];
     private readonly uint[] m_compatObject0 = new uint[4];
     private readonly uint[] m_compatObject1 = new uint[4];
@@ -203,8 +209,10 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable {
         m_interrupts = interrupts;
         m_key1 = key1;
         m_memory = memory;
-        m_supportsColor = (configuration.Model == ConsoleModel.Cgb);
-        m_dmgCompatibility = (m_supportsColor && !header.SupportsColor);
+        m_header = header;
+        m_cartridgeSupportsColor = header.SupportsColor;
+        m_supportsColor = configuration.Model.SupportsColor();
+        m_dmgCompatibility = (m_supportsColor && !m_cartridgeSupportsColor);
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
         m_coarseColumnPhase = timing.CoarseColumnPhase;
         m_lineEventPhase = timing.LineEventPhase;
@@ -223,7 +231,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable {
         // With a boot ROM the LCD powers on dark — LCDC clear, palettes zero, the counter parked at the top of the
         // frame — and the boot program raises all of it itself. Without one, the documented handoff is seeded: the LCD
         // on with the background enabled, the monochrome palettes set, and (on Color) the frame position the boot ROM
-        // leaves, which the grader's SameBoy reference starts from exactly.
+        // leaves, which the hardware-accurate reference starts from exactly.
         if (configuration.BootRom is null) {
             m_lcdc = 0x91;
             m_backgroundPalette = 0xFC;
@@ -253,17 +261,40 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable {
         }
 
         if (m_dmgCompatibility) {
-            Span<ushort> background = stackalloc ushort[4];
-            Span<ushort> object0 = stackalloc ushort[4];
-            Span<ushort> object1 = stackalloc ushort[4];
+            ResolveCompatibilityPalettes();
+        }
+    }
 
-            CompatibilityPalette.Resolve(header: header, background: background, object0: object0, object1: object1);
+    // Resolve the compatibility-mode shade palettes from the (immutable) cartridge header — a pure function of the ROM,
+    // so it yields the same table at construction and on any later live swap that first enters compatibility mode.
+    private void ResolveCompatibilityPalettes() {
+        Span<ushort> background = stackalloc ushort[4];
+        Span<ushort> object0 = stackalloc ushort[4];
+        Span<ushort> object1 = stackalloc ushort[4];
 
-            for (var shade = 0; (shade < 4); ++shade) {
-                m_compatBackground[shade] = ColorFromRgb555(rgb555: background[shade]);
-                m_compatObject0[shade] = ColorFromRgb555(rgb555: object0[shade]);
-                m_compatObject1[shade] = ColorFromRgb555(rgb555: object1[shade]);
-            }
+        CompatibilityPalette.Resolve(header: m_header, background: background, object0: object0, object1: object1);
+
+        for (var shade = 0; (shade < 4); ++shade) {
+            m_compatBackground[shade] = ColorFromRgb555(rgb555: background[shade]);
+            m_compatObject0[shade] = ColorFromRgb555(rgb555: object0[shade]);
+            m_compatObject1[shade] = ColorFromRgb555(rgb555: object1[shade]);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) {
+        // Re-derive the render-path capability gates for a LIVE swap. The three flags fold the model with the immutable
+        // header capability; entering compatibility mode for the first time needs its shade palettes resolved (idempotent
+        // — pure function of the header). This NEVER touches live render state (LY/dot/LCDC/palette RAM): a swap is not a
+        // boot, so the constructor's power-on seeding is deliberately not re-run.
+        var wasDmgCompatibility = m_dmgCompatibility;
+
+        m_supportsColor = model.SupportsColor();
+        m_dmgCompatibility = (m_supportsColor && !m_cartridgeSupportsColor);
+        m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
+
+        if (m_dmgCompatibility && !wasDmgCompatibility) {
+            ResolveCompatibilityPalettes();
         }
     }
 

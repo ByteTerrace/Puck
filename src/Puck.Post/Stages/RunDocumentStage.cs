@@ -5,7 +5,7 @@ using Puck.Scene;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-A stage A6. The scene document funnel: <c>Puck.Scene</c>'s parse→validate front door is the engine's
+/// Tier-A stage A7. The scene document funnel: <c>Puck.Scene</c>'s parse→validate front door is the engine's
 /// one-and-only data-driven scene path, so the POST proves it four ways. (1) Every checked-in example document
 /// (<c>docs/examples/*.json</c>) parses and validates — the examples are the funnel's contract corpus. (2) A fixed
 /// list of malformed documents is rejected, each with its source-attributed error. (3) Every example round-trips

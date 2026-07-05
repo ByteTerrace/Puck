@@ -1,3 +1,4 @@
+using Puck.Capture;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +14,8 @@ namespace Puck.Post;
 /// Tier-C stage C5. Cross-backend SDF world parity, hero view — the POST's central "one engine, two APIs" check,
 /// ported from the demo's <c>WorldParityNode</c> (the worked reference). The SAME deterministic scene — a ground
 /// plane and several primitives with distinct materials and blend variety (smooth-union, plain union, subtraction) —
-/// renders through the identical <see cref="PostWorldRenderer"/> harness twice: once on the Vulkan host device
-/// (SPIR-V kernels) and once on the shared LUID-matched Tier-C Direct3D 12 device (DXIL kernels). Because the harness
+/// renders through the identical <see cref="Puck.SdfVm.SdfWorldEngine"/> twice: once on the Vulkan host device
+/// (SPIR-V kernels) and once on the shared LUID-matched Tier-C Direct3D 12 device (DXIL kernels). Because the engine
 /// and the frame are identical, the two composited readbacks must agree within the calibrated <c>WorldComposite</c>
 /// thresholds (values copied from the demo's <c>ParityThresholds</c>): the residual is isolated ±1-LSB driver FP
 /// codegen noise, while a real divergence spreads, clumps, or exceeds ±1. Artifacts: both backend renders and an
@@ -40,6 +41,22 @@ internal sealed class WorldStage : IPostStage {
         return RunCore(context: context);
     }
 
+    /// <summary>Adds the hero material palette the cross-backend world stages share — the ground plus the
+    /// crimson/azure/amber/jade object albedos, in that fixed declaration order — to the builder and returns the
+    /// material ids. The ONE statement of the palette; <c>world</c>, <c>world-instanced</c>, and <c>world-swarm</c>
+    /// all build their scenes from it.</summary>
+    /// <param name="builder">The scene's program builder.</param>
+    /// <returns>The five material ids, in declaration order.</returns>
+    internal static (int Ground, int Crimson, int Azure, int Amber, int Jade) AddHeroPalette(SdfProgramBuilder builder) {
+        return (
+            Ground: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.55f, 0.6f, 0.65f))),
+            Crimson: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.25f, 0.2f))),
+            Azure: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.45f, 0.85f))),
+            Amber: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.7f, 0.2f))),
+            Jade: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.7f, 0.45f)))
+        );
+    }
+
     /// <summary>Builds the deterministic hero scene the cross-backend world stages share: a ground plane plus four
     /// primitives with distinct materials and blend variety — a sphere smooth-blended into the ground, a rounded box
     /// (plain union) with a sphere SUBTRACTED from its top, and a torus — so the parity diff covers the material
@@ -47,11 +64,7 @@ internal sealed class WorldStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildHeroScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.55f, 0.6f, 0.65f)));
-        var crimson = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.25f, 0.2f)));
-        var azure = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.45f, 0.85f)));
-        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.7f, 0.2f)));
-        var jade = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.7f, 0.45f)));
+        var (ground, crimson, azure, amber, jade) = AddHeroPalette(builder: builder);
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
@@ -124,27 +137,27 @@ internal sealed class WorldStage : IPostStage {
         // Vulkan reference: the host device + the host's neutral compute services, SPIR-V kernels.
         byte[] vulkanPixels;
 
-        using (var vulkanRenderer = new PostWorldRenderer(
-            bytecodeExtension: ".spv",
+        using (var vulkanRenderer = new SdfWorldEngine(
             device: context.RequireGpuDevice(),
             gpu: context.Resolve<IGpuComputeServices>(),
             height: WorldHeight,
-            program: program,
+            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
+            options: new SdfWorldEngineOptions(Program: program),
             width: WorldWidth
         )) {
             vulkanPixels = vulkanRenderer.RenderFrame(frame: frame);
         }
 
         // Direct3D 12 comparand: the SHARED Tier-C device (LUID-matched to the Vulkan host) + its neutral compute
-        // services, DXIL kernels — the identical harness, only the backend differs.
+        // services, DXIL kernels — the identical engine, only the backend differs.
         var directX = context.RequireDirectXDevice();
         var directXPixels = RenderDirectXDiagnosed(directX: directX, render: () => {
-            using var directXRenderer = new PostWorldRenderer(
-                bytecodeExtension: ".dxil",
+            using var directXRenderer = new SdfWorldEngine(
                 device: directX.DeviceContext,
                 gpu: directX.Services.GetRequiredService<IGpuComputeServices>(),
                 height: WorldHeight,
-                program: program,
+                kernels: SdfWorldKernels.Load(bytecodeExtension: ".dxil"),
+                options: new SdfWorldEngineOptions(Program: program),
                 width: WorldWidth
             );
 
@@ -155,8 +168,8 @@ internal sealed class WorldStage : IPostStage {
 
         var diffPath = Path.Combine(context.ArtifactsDirectory, "world-diff.png");
 
-        PngImage.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-        PngImage.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
         ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
 
         // Vulkan is the reference; Direct3D 12 is the comparand. The world composite has a richer benign-noise

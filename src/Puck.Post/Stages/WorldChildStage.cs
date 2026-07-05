@@ -1,13 +1,15 @@
+using Puck.Capture;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Gpu;
+using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
 /// Tier-C stage C6. The per-viewport CHILD-PANE seam, cross-backend — the demo's <c>--validate-world --with-child</c>
-/// flavour expressed through the POST's harness. <see cref="PostWorldRenderer"/> deliberately has no hosted-child
-/// slot (its composite always runs childMask 0), so the stage builds the hosted-pane layout the way the viewport
+/// flavour expressed through the POST's harness. The POST drives <see cref="SdfWorldEngine"/> with no hosted-child
+/// slot (its composite runs childMask 0), so the stage builds the hosted-pane layout the way the viewport
 /// compositor hosts ANY foreign source: on EACH backend it renders the shared hero world into the left pane (the
 /// world renderer's own output image, read in place — zero-copy), dispatches <c>sdf-child.comp</c> (the neutral
 /// child-surface kernel) into the right pane, and composites both with <c>viewport-composite.comp</c>. Every pixel of
@@ -64,8 +66,8 @@ internal sealed class WorldChildStage : IPostStage {
 
         var diffPath = Path.Combine(context.ArtifactsDirectory, "world-child-diff.png");
 
-        PngImage.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "world-child-vulkan.png"), rgba: vulkanPixels, width: (int)OutputWidth);
-        PngImage.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "world-child-directx.png"), rgba: directXPixels, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "world-child-vulkan.png"), rgba: vulkanPixels, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "world-child-directx.png"), rgba: directXPixels, width: (int)OutputWidth);
         ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)OutputHeight, path: diffPath, reference: vulkanPixels, width: (int)OutputWidth);
 
         var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)OutputWidth, height: (int)OutputHeight);
@@ -85,12 +87,12 @@ internal sealed class WorldChildStage : IPostStage {
         var deviceHandle = device.DeviceHandle;
 
         // The world half: render the shared hero scene at pane size; the output image rests ShaderReadOnly after.
-        using var worldRenderer = new PostWorldRenderer(
-            bytecodeExtension: bytecodeExtension,
+        using var worldRenderer = new SdfWorldEngine(
             device: device,
             gpu: gpu,
             height: PaneSize,
-            program: program,
+            kernels: SdfWorldKernels.Load(bytecodeExtension: bytecodeExtension),
+            options: new SdfWorldEngineOptions(Program: program),
             width: PaneSize
         );
 

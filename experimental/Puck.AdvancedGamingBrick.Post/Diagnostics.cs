@@ -168,22 +168,22 @@ internal static class Diagnostics {
 
         const long frameCycles = 280_896; // one GBA frame
         var logs = new List<string>();
-        var cartridge = new GbaCartridge(rom: File.ReadAllBytes(path: romPath));
+        var cartridge = new AgbCartridge(rom: File.ReadAllBytes(path: romPath));
         var services = new ServiceCollection();
 
-        services.AddScoped<GbaBus>();
-        services.AddScoped<IGbaBus>(implementationFactory: sp => new MgbaDebugBus(
-            inner: sp.GetRequiredService<GbaBus>(),
+        services.AddScoped<AgbBus>();
+        services.AddScoped<IAgbBus>(implementationFactory: sp => new MgbaDebugBus(
+            inner: sp.GetRequiredService<AgbBus>(),
             onLog: (level, text) => logs.Add(item: text)));
-        _ = services.AddGameBoyAdvance();
+        _ = services.AddAdvancedGamingBrick();
         _ = services.AddReplacementBios(image: BiosImage);
-        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
 
         using var provider = services.BuildServiceProvider();
         var scope = provider.CreateScope().ServiceProvider;
-        var machine = scope.GetRequiredService<GameBoyAdvanceMachine>();
-        var bus = scope.GetRequiredService<GbaBus>();
-        var debug = (MgbaDebugBus)scope.GetRequiredService<IGbaBus>();
+        var machine = scope.GetRequiredService<AdvancedGamingBrickMachine>();
+        var bus = scope.GetRequiredService<AgbBus>();
+        var debug = (MgbaDebugBus)scope.GetRequiredService<IAgbBus>();
 
         machine.DirectBoot();
 
@@ -380,7 +380,7 @@ internal static class Diagnostics {
 
         using (provider) {
             var cpu = machine.Cpu;
-            var bus = (GbaBus)machine.Bus;
+            var bus = (AgbBus)machine.Bus;
             var output = Console.Out;
 
             // Boot through the BIOS reset routine (undo TryLoad's direct boot) so the trace aligns with mGBA's
@@ -408,7 +408,7 @@ internal static class Diagnostics {
 
         using (provider) {
             var cpu = machine.Cpu;
-            var bus = (GbaBus)machine.Bus;
+            var bus = (AgbBus)machine.Bus;
             using var output = new StreamWriter(stream: Console.OpenStandardOutput(), bufferSize: 1 << 20);
             var sb = new System.Text.StringBuilder(capacity: 160);
 
@@ -483,7 +483,7 @@ internal static class Diagnostics {
 
         using (provider) {
             var cpu = machine.Cpu;
-            var bus = (GbaBus)machine.Bus;
+            var bus = (AgbBus)machine.Bus;
 
             // BIOS-boot mode: undo TryLoad's direct boot and run the BIOS reset to align with ares's full-BIOS boot.
             // Direct-boot mode: keep TryLoad's DirectBoot state so both cores start at the cartridge entry (0x08000000),
@@ -635,7 +635,7 @@ internal static class Diagnostics {
         }
 
         using (provider) {
-            var bus = (GbaBus)machine.Bus;
+            var bus = (AgbBus)machine.Bus;
 
             machine.Cpu.Reset();
 
@@ -682,22 +682,22 @@ internal static class Diagnostics {
     /// <paramref name="count"/> instructions with PC + r0..r6 + the SIO/timer/IRQ registers the link probe reads —
     /// to see exactly why Pokémon Emerald's link-init loops, with no external oracle.</summary>
     public static void EmeraldTrace(string romPath, uint triggerLo, uint triggerHi, long count, long skipAfter = 0) {
-        var cartridge = new GbaCartridge(rom: File.ReadAllBytes(path: romPath));
+        var cartridge = new AgbCartridge(rom: File.ReadAllBytes(path: romPath));
         var services = new ServiceCollection();
 
-        services.AddScoped<GbaBus>();
-        services.AddScoped<IGbaBus>(implementationFactory: sp => sp.GetRequiredService<GbaBus>());
-        _ = services.AddGameBoyAdvance();
+        services.AddScoped<AgbBus>();
+        services.AddScoped<IAgbBus>(implementationFactory: sp => sp.GetRequiredService<AgbBus>());
+        _ = services.AddAdvancedGamingBrick();
         _ = services.AddReplacementBios(image: BiosImage);
-        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
 
         using var provider = services.BuildServiceProvider();
-        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
 
         machine.DirectBoot();
         machine.Cpu.Reset(); // full BIOS boot
 
-        var bus = (GbaBus)machine.Bus;
+        var bus = (AgbBus)machine.Bus;
         var cpu = machine.Cpu;
 
         long i = 0;
@@ -744,17 +744,17 @@ internal static class Diagnostics {
 
         var sioWrites = new List<(long step, ushort value)>();
         var dispcntWrites = new List<(long step, uint pc, ushort value)>();
-        var cartridge = new GbaCartridge(rom: File.ReadAllBytes(path: romPath));
+        var cartridge = new AgbCartridge(rom: File.ReadAllBytes(path: romPath));
         var services = new ServiceCollection();
 
         Console.WriteLine($"  backup={cartridge.Backup}  hasRtc={cartridge.HasRtc}");
 
         long stepCounter = 0;
-        GameBoyAdvanceMachine? machineProbeRef = null;
-        services.AddScoped<GbaBus>();
-        services.AddScoped<IGbaBus>(implementationFactory: sp => {
-            var inner = new TracingGbaBus(
-                inner: sp.GetRequiredService<GbaBus>(),
+        AdvancedGamingBrickMachine? machineProbeRef = null;
+        services.AddScoped<AgbBus>();
+        services.AddScoped<IAgbBus>(implementationFactory: sp => {
+            var inner = new TracingAgbBus(
+                inner: sp.GetRequiredService<AgbBus>(),
                 watchAddress: 0x04000000u,
                 onStore: value => {
                     if (dispcntWrites.Count < 200) {
@@ -762,7 +762,7 @@ internal static class Diagnostics {
                         dispcntWrites.Add((stepCounter, pc, (ushort)value));
                     }
                 });
-            return new TracingGbaBus(
+            return new TracingAgbBus(
                 inner: inner,
                 watchAddress: 0x04000128u,
                 onStore: value => {
@@ -771,12 +771,12 @@ internal static class Diagnostics {
                     }
                 });
         });
-        _ = services.AddGameBoyAdvance();
+        _ = services.AddAdvancedGamingBrick();
         _ = services.AddReplacementBios(image: BiosImage);
-        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
 
         using var provider = services.BuildServiceProvider();
-        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
 
         machineProbeRef = machine;
         machine.DirectBoot();
@@ -907,7 +907,7 @@ internal static class Diagnostics {
         }
 
         using (provider) {
-            var bus = (GbaBus)machine.Bus;
+            var bus = (AgbBus)machine.Bus;
             var prev = bus.Cycles;
             var lastPc = 0xFFFFFFFFu;
             var stable = 0;
@@ -956,7 +956,7 @@ internal static class Diagnostics {
 
     /// <summary>
     /// Runs the AGS aging cartridge (the TCHK10 dump, md5 9f74b2ad…) headlessly. The ROM is patched in memory with
-    /// the DenSinH output-results patch so each test writes its result flags to 0x04; a <see cref="TracingGbaBus"/>
+    /// the DenSinH output-results patch so each test writes its result flags to 0x04; a <see cref="TracingAgbBus"/>
     /// captures that stream. A flag value of 0 means the test passed. Runs until the result stream goes quiet
     /// (the SIO interrupt test stalls waiting for a link cable, which is expected).
     /// </summary>
@@ -987,20 +987,20 @@ internal static class Diagnostics {
         var timer1Reads = new List<(int afterResults, uint value)>();
         var connectIoReads = new List<(int afterResults, uint address, uint value, long cycles)>();
         var connectIoWrites = new List<(int afterResults, uint address, uint value, long cycles)>();
-        var cartridge = new GbaCartridge(rom: rom);
+        var cartridge = new AgbCartridge(rom: rom);
         var services = new ServiceCollection();
 
         var trace = Environment.GetEnvironmentVariable(variable: "PUCK_AGS_TRACE") == "1";
-        GameBoyAdvanceMachine? machineRef = null;
-        GbaBus? busRef = null;
+        AdvancedGamingBrickMachine? machineRef = null;
+        AgbBus? busRef = null;
 
-        // Wire the tracing decorator in front of the real bus: register the concrete bus, then map IGbaBus to a
-        // TracingGbaBus that wraps it. Registering IGbaBus first makes AddGameBoyAdvance's TryAdd defer to ours.
-        services.AddScoped<GbaBus>();
-        services.AddScoped<IGbaBus>(implementationFactory: sp => {
-            busRef = sp.GetRequiredService<GbaBus>();
+        // Wire the tracing decorator in front of the real bus: register the concrete bus, then map IAgbBus to a
+        // TracingAgbBus that wraps it. Registering IAgbBus first makes AddAdvancedGamingBrick's TryAdd defer to ours.
+        services.AddScoped<AgbBus>();
+        services.AddScoped<IAgbBus>(implementationFactory: sp => {
+            busRef = sp.GetRequiredService<AgbBus>();
 
-            return new TracingGbaBus(
+            return new TracingAgbBus(
                 inner: busRef,
                 watchAddress: 0x04u,
                 onStore: value => {
@@ -1021,12 +1021,12 @@ internal static class Diagnostics {
                 writeRangeEnd: 0x04000110u,
                 onWriteRange: (addr, value) => connectIoWrites.Add((results.Count, addr, value, busRef?.Cycles ?? 0)));
         });
-        _ = services.AddGameBoyAdvance();
+        _ = services.AddAdvancedGamingBrick();
         _ = services.AddReplacementBios(image: BiosImage);
-        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
 
         using var provider = services.BuildServiceProvider();
-        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+        var machine = provider.CreateScope().ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
 
         machineRef = machine;
 
@@ -1135,7 +1135,7 @@ internal static class Diagnostics {
         return failed;
     }
 
-    private static bool TryLoad(string romPath, string name, out ServiceProvider provider, out GameBoyAdvanceMachine machine) {
+    private static bool TryLoad(string romPath, string name, out ServiceProvider provider, out AdvancedGamingBrickMachine machine) {
         provider = null!;
         machine = null!;
 
@@ -1145,15 +1145,15 @@ internal static class Diagnostics {
             return false;
         }
 
-        var cartridge = new GbaCartridge(rom: File.ReadAllBytes(path: romPath));
+        var cartridge = new AgbCartridge(rom: File.ReadAllBytes(path: romPath));
         var services = new ServiceCollection();
 
-        _ = services.AddGameBoyAdvance();
+        _ = services.AddAdvancedGamingBrick();
         _ = services.AddReplacementBios(image: BiosImage);
-        services.AddScoped<GbaCartridge>(implementationFactory: _ => cartridge);
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
 
         provider = services.BuildServiceProvider();
-        machine = provider.CreateScope().ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+        machine = provider.CreateScope().ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
 
         machine.DirectBoot();
 

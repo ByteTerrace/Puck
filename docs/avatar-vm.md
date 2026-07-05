@@ -1,3 +1,5 @@
+> **Historical record.** This describes the avatar-era monolith (`src/Puck.Avatars`, deleted — git history only). The VM's descendant is `src/Puck.SdfVm` with HLSL shaders. See [capability-catalog.md](capability-catalog.md).
+
 # Avatar SDF VM reference
 
 The avatar VM is a small instruction-stream interpreter that evaluates a signed

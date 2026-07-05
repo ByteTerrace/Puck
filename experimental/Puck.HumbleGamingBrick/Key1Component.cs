@@ -155,6 +155,23 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
         m_hdmaToggleCountdown = 0;
     }
     /// <inheritdoc/>
+    public void ForceNormalSpeed() {
+        // The live-swap demote to monochrome: drop double speed and tear down EVERY in-flight switch/block window so no
+        // stale countdown re-flips speed or re-opens a block on a later Tick. The caller re-syncs the component clock's
+        // own double-speed copy (which this unit deliberately does not own). Mono hardware has no KEY1, so nothing here
+        // can re-arm afterward.
+        m_armed = false;
+        m_isDoubleSpeed = false;
+        m_switchEnterCountdown = 0;
+        m_switchStallCountdown = 0;
+        m_interruptsBlocked = false;
+        m_interruptBlockCountdown = 0;
+        m_timersBlocked = false;
+        m_timerBlockCountdown = 0;
+        m_hdmaBlocked = false;
+        m_hdmaToggleCountdown = 0;
+    }
+    /// <inheritdoc/>
     public void EnterStop() =>
         m_stopped = true;
     /// <inheritdoc/>

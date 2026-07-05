@@ -15,17 +15,19 @@ namespace Puck.HumbleGamingBrick;
 /// oracle-measured conflict rules. A write during a running transfer restarts it after the same delay, the old transfer
 /// continuing until the new one takes over. All state is plain fields captured in a fixed order.
 /// </summary>
-public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable {
+public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable, IModeSwitchable {
     private const int ByteCount = 0xA0;
     private const int TCyclesPerByte = 4;
     // The startup delay between the register write and the transfer taking over OAM, in CPU T-cycles (two machine
-    // cycles). Derived against mooneye oam_dma_start, not guessed from any oracle's internals.
+    // cycles). Derived against the hardware-verified OAM-DMA-start timing, not guessed from any reference's internals.
     private const int StartupDelayTCycles = 8;
 
     private readonly ICartridgeSlot m_cartridgeSlot;
     private readonly IKey1 m_key1;
     private readonly SystemMemory m_memory;
-    private readonly bool m_supportsColor;
+    // Mutable so a LIVE device swap re-gates the color-only DMA rules (echo-RAM source reads 0xFF, the bus-conflict
+    // window). Idempotent single-field push; no boot-only model read here.
+    private bool m_supportsColor;
 
     private bool m_active;
     private ushort m_activeBase;
@@ -54,7 +56,7 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
         m_cartridgeSlot = cartridgeSlot;
         m_key1 = key1;
         m_memory = memory;
-        m_supportsColor = (configuration.Model == ConsoleModel.Cgb);
+        m_supportsColor = configuration.Model.SupportsColor();
     }
 
     /// <inheritdoc/>
@@ -183,6 +185,10 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
     /// <inheritdoc/>
     public void PoisonCurrentOamByte() =>
         m_poisonCurrentByte = true;
+    /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) =>
+        m_supportsColor = model.SupportsColor();
+
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteBoolean(value: m_active);

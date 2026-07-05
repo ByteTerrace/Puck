@@ -2,23 +2,23 @@ using System.Text;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
-// An IGbaBus decorator that emulates mGBA's debug-log register block and injects controller input, so the
+// An IAgbBus decorator that emulates mGBA's debug-log register block and injects controller input, so the
 // menu-driven mGBA test suite (mgba-emu/suite) can be run head-lessly. The suite probes for mGBA by writing
 // 0xC0DE to 0x04FFF780 and expecting 0x1DEA back; once "open" it prints each suite's "BEGIN:"/"END: p/t" line
 // by formatting into the 0x04FFF600 buffer and writing the level (| 0x100) to 0x04FFF700. KEYINPUT (0x04000130)
 // is overridden so the harness can drive the menu.
-internal sealed class MgbaDebugBus : IGbaBus {
+internal sealed class MgbaDebugBus : IAgbBus {
     private const uint DebugString = 0x04FFF600u;
     private const uint DebugFlags = 0x04FFF700u;
     private const uint DebugEnable = 0x04FFF780u;
     private const uint KeyInput = 0x04000130u;
 
-    private readonly IGbaBus m_inner;
+    private readonly IAgbBus m_inner;
     private readonly byte[] m_string = new byte[0x100];
     private readonly Action<int, string> m_onLog;
     private bool m_enabled;
 
-    public MgbaDebugBus(IGbaBus inner, Action<int, string> onLog) {
+    public MgbaDebugBus(IAgbBus inner, Action<int, string> onLog) {
         m_inner = inner;
         m_onLog = onLog;
     }

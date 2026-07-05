@@ -5,7 +5,7 @@ using Puck.Launcher;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-A stage A5. The genlock (latency phase-align) self-test, the POST port of the demo's
+/// Tier-A stage A6. The genlock (latency phase-align) self-test, the POST port of the demo's
 /// <c>--validate-genlock</c> gate: a pure-CPU simulation of the pacer's deadline grid against a jittered external
 /// producer, proving the <see cref="GenlockPhaseAligner"/> control law machine-independently — no window, no camera,
 /// no GPU. It first proves the <see cref="ExternalClockRegistry"/> election rules (auto / named / off; idempotent

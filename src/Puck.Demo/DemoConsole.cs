@@ -1,18 +1,58 @@
+using Puck.Demo.DevConsole;
+
 namespace Puck.Demo;
 
 /// <summary>
 /// A tiny single-line console for the demo: it tracks the in-progress input line, supports backspace, select-all,
 /// and clipboard editing, and redraws the line after output is written so log lines and the prompt do not
-/// clobber each other. Degrades gracefully when output is redirected (scripted runs).
+/// clobber each other. Degrades gracefully when output is redirected (scripted runs). Every edit is ALSO published
+/// to the <see cref="ConsoleTextStore"/> so the on-screen console overlay can mirror the input line and the recent
+/// output in-window (the terminal echo stays, for scripted/redirected runs).
 /// </summary>
 internal sealed class DemoConsole {
+    // The most output lines retained for the on-screen mirror (the terminal keeps its own scrollback).
+    private const int MaxHistory = 256;
+
+    private readonly ConsoleTextStore m_store;
+    private readonly List<string> m_history = new(capacity: MaxHistory);
     private bool m_allSelected = false;
     private int m_anchorLeft;
     private int m_anchorTop;
     private string m_line = "";
+    private bool m_visible;
+
+    /// <summary>Initializes a new instance of the <see cref="DemoConsole"/> class.</summary>
+    /// <param name="store">The store the on-screen console overlay reads.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="store"/> is <see langword="null"/>.</exception>
+    public DemoConsole(ConsoleTextStore store) {
+        ArgumentNullException.ThrowIfNull(argument: store);
+
+        m_store = store;
+
+        // A headless aid (like the PUCK_OVERWORLD_* envs): start with the on-screen console open + a couple of seeded
+        // lines so its rendering can be verified without a keyboard.
+        if (!string.IsNullOrEmpty(value: Environment.GetEnvironmentVariable(variable: "PUCK_CONSOLE_OPEN"))) {
+            m_visible = true;
+            AddHistory(message: "Puck developer console. Type 'creator' to enter creator mode.");
+            AddHistory(message: "abcdefghijklmnopqrstuvwxyz 0123456789 <>[]{}()#+-*/=");
+        }
+
+        Publish();
+    }
 
     /// <summary>Gets the selected text — the whole line when select-all is active, otherwise empty.</summary>
     public string Selected => (m_allSelected ? m_line : "");
+
+    /// <summary>Opens or closes the on-screen console panel (the terminal console is always live).</summary>
+    /// <param name="visible">Whether the panel should be shown.</param>
+    public void SetVisible(bool visible) {
+        if (m_visible == visible) {
+            return;
+        }
+
+        m_visible = visible;
+        Publish();
+    }
 
     /// <summary>Appends text to the input line (replacing the whole line first if it was select-all'd).</summary>
     /// <param name="text">The text to append.</param>
@@ -30,6 +70,7 @@ internal sealed class DemoConsole {
 
         m_line += text;
         Console.Out.Write(value: text);
+        Publish();
     }
     /// <summary>Deletes the last character of the input line (or clears the line when select-all is active).</summary>
     public void Backspace() {
@@ -44,6 +85,7 @@ internal sealed class DemoConsole {
         }
 
         m_line = m_line[..^1];
+        Publish();
 
         if (Console.IsOutputRedirected) {
             return;
@@ -75,11 +117,21 @@ internal sealed class DemoConsole {
         m_line = "";
         Console.Out.WriteLine();
 
+        // Echo the submitted command into the on-screen history so it reads like a real terminal.
+        if (line.Length > 0) {
+            AddHistory(message: $"> {line}");
+        }
+
+        Publish();
+
         return line;
     }
     /// <summary>Writes a message above the in-progress input line, then redraws the line beneath it.</summary>
     /// <param name="message">The message to write.</param>
     public void WriteLine(string message) {
+        AddHistory(message: message);
+        Publish();
+
         if (Console.IsOutputRedirected) {
             Console.Out.WriteLine(value: message);
             Console.Out.Write(value: m_line);
@@ -107,6 +159,7 @@ internal sealed class DemoConsole {
 
         m_allSelected = false;
         m_line = "";
+        Publish();
     }
     private void CaptureAnchor() {
         if (Console.IsOutputRedirected) {
@@ -115,6 +168,26 @@ internal sealed class DemoConsole {
 
         (m_anchorLeft, m_anchorTop) = Console.GetCursorPosition();
     }
+
+    // Appends a message (splitting embedded newlines into separate history rows) and trims to the retained window.
+    private void AddHistory(string message) {
+        foreach (var line in message.Replace(oldValue: "\r", newValue: "").Split(separator: '\n')) {
+            m_history.Add(item: line);
+        }
+
+        if (m_history.Count > MaxHistory) {
+            m_history.RemoveRange(index: 0, count: (m_history.Count - MaxHistory));
+        }
+    }
+
+    private void Publish() {
+        m_store.Publish(frame: new ConsoleTextFrame(
+            Input: m_line,
+            Lines: m_history.ToArray(),
+            Visible: m_visible
+        ));
+    }
+
     private static void SetCursor(int left, int top) {
         Console.SetCursorPosition(
             left: Math.Clamp(value: left, max: (Console.BufferWidth - 1), min: 0),

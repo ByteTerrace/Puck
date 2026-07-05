@@ -3,7 +3,7 @@ namespace Puck.AdvancedGamingBrick;
 /// <summary>
 /// The ARM7TDMI core, behind a swappable seam so the machine can host the production core, a tracing decorator,
 /// or an alternate implementation under test without changing its wiring. The CPU drives the machine entirely
-/// through its <see cref="IGbaBus"/>; this surface is what the machine and the conformance harness need: reset,
+/// through its <see cref="IAgbBus"/>; this surface is what the machine and the conformance harness need: reset,
 /// single-instruction stepping, the IRQ line, and register/CPSR inspection for test fingerprints.
 /// </summary>
 public interface IArmCpu {

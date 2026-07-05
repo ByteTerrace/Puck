@@ -8,16 +8,20 @@ namespace Puck.Demo;
 
 /// <summary>
 /// The resolved host configuration — window size, presentation, launcher, and host backend — applied to the
-/// composition root. It is the single place the historic 960x600 / vsync / 60Hz defaults live, resolved from the run
+/// composition root. It is the single place the default-size / vsync / 60Hz defaults live, resolved from the run
 /// document's host section (<see cref="FromDocument"/>, each field falling back to the corresponding CLI flag when the
 /// document omits it). Both entry paths reach this through a document now: a real <c>--run</c> document, or one the
 /// legacy flags synthesize. Keeping the resolution + DI wiring here (rather than in the entry point) keeps the
 /// composition root's coupling bounded.
 /// </summary>
 internal sealed class HostSettings {
-    private const uint DefaultHeight = 600;
+    /// <summary>The default window CLIENT height. 1280x800 (up from the historic 960x600) gives the overworld's 2×2
+    /// quad 640x400 per pane — a comfortable 2x-scale GamingBrick screen with margin — while still fitting a
+    /// 125%-scaled 1080p desktop with window decorations.</summary>
+    internal const uint DefaultHeight = 800;
     private const uint DefaultRenderRate = 60;
-    private const uint DefaultWidth = 960;
+    /// <summary>The default window CLIENT width (see <see cref="DefaultHeight"/>).</summary>
+    internal const uint DefaultWidth = 1280;
 
     /// <summary>The window width in pixels.</summary>
     public required uint Width { get; init; }

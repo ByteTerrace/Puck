@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
 
@@ -22,6 +23,9 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
     // One RTC second is 2^22 CPU T-cycles at normal speed, which is exactly 2^22 PPU dots; the LCD clock does not change
     // rate with the speed switch, matching the real RTC crystal's independence from CPU speed.
     private const int DotsPerSecond = 4194304;
+    // The de-facto standard MBC3 save-file RTC footer (the widely adopted emulator save-format convention): five live registers, five latched copies
+    // (each a 4-byte little-endian word in the RTC register encoding), then an 8-byte little-endian UNIX timestamp.
+    private const int PersistentClockFooterByteCount = 48;
     private const int RamBankSize = 0x2000;
     private const int RomBankSize = 0x4000;
 
@@ -61,6 +65,65 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
     /// <inheritdoc/>
     protected override bool RamAccessible =>
         (Header.HasRam && m_ramEnabled);
+
+    /// <inheritdoc/>
+    /// <remarks>This MBC3 always emulates the clock (the header's TIMER distinction is not modeled), so every MBC3
+    /// battery save carries the footer — a timer-less variant just persists an untouched clock.</remarks>
+    public override int PersistentClockByteCount =>
+        PersistentClockFooterByteCount;
+
+    /// <inheritdoc/>
+    public override byte[] ExportPersistentClock(long unixTimestampSeconds) {
+        var footer = new byte[PersistentClockFooterByteCount];
+        var span = footer.AsSpan();
+
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[0..], value: (uint)m_seconds);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[4..], value: (uint)m_minutes);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[8..], value: (uint)m_hours);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[12..], value: (uint)(m_dayCounter & 0xFF));
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[16..], value: PackDayHigh(dayCounter: m_dayCounter, halted: m_halted, dayCarry: m_dayCarry));
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[20..], value: (uint)m_latchedSeconds);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[24..], value: (uint)m_latchedMinutes);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[28..], value: (uint)m_latchedHours);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[32..], value: (uint)(m_latchedDayCounter & 0xFF));
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[36..], value: PackDayHigh(dayCounter: m_latchedDayCounter, halted: m_halted, dayCarry: m_latchedDayCarry));
+        BinaryPrimitives.WriteInt64LittleEndian(destination: span[40..], value: unixTimestampSeconds);
+
+        return footer;
+    }
+    /// <inheritdoc/>
+    public override void ImportPersistentClock(ReadOnlySpan<byte> source) {
+        if (source.Length < PersistentClockFooterByteCount) {
+            return;
+        }
+
+        // The register encodings sanitize a foreign file exactly as the RTC register writes would; the trailing
+        // timestamp is deliberately ignored (the deterministic clock resumes, never advancing from wall time), and
+        // the sub-second prescaler restarts — the one sub-second of drift a real battery swap also loses.
+        m_seconds = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0x3F);
+        m_minutes = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0x3F);
+        m_hours = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[8..]) & 0x1F);
+
+        var dayLow = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[12..]) & 0xFF);
+        var dayHigh = BinaryPrimitives.ReadUInt32LittleEndian(source: source[16..]);
+
+        m_dayCounter = (dayLow | (int)((dayHigh & 0x01) << 8));
+        m_halted = ((dayHigh & 0x40) != 0);
+        m_dayCarry = (int)((dayHigh >> 7) & 0x01);
+        m_latchedSeconds = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[20..]) & 0x3F);
+        m_latchedMinutes = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[24..]) & 0x3F);
+        m_latchedHours = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[28..]) & 0x1F);
+
+        var latchedDayLow = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[32..]) & 0xFF);
+        var latchedDayHigh = BinaryPrimitives.ReadUInt32LittleEndian(source: source[36..]);
+
+        m_latchedDayCounter = (latchedDayLow | (int)((latchedDayHigh & 0x01) << 8));
+        m_latchedDayCarry = (int)((latchedDayHigh >> 7) & 0x01);
+        m_dotAccumulator = 0;
+    }
+
+    private static uint PackDayHigh(int dayCounter, bool halted, int dayCarry) =>
+        (uint)(((dayCounter >> 8) & 0x01) | (halted ? 0x40 : 0x00) | ((dayCarry & 0x01) << 7));
 
     private bool RtcRegisterSelected =>
         (m_ramBankOrRtcRegister >= 0x08);

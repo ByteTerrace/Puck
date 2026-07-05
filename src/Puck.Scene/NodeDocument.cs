@@ -4,16 +4,15 @@ namespace Puck.Scene;
 
 /// <summary>
 /// The composition graph's root node, authored polymorphically: the <c>$type</c> string selects which producer the
-/// run builds (the SDF showcase, the compute world, or the ray-query world), and <c>produce</c> selects the backend
+/// run builds (the compute world compositor, or the overworld), and <c>produce</c> selects the backend
 /// it renders on. This is the BACKEND-NEUTRAL description; turning it into a concrete <c>IRenderNode</c> (resolving GPU
 /// services, applying OS/feature gates) is the GraphBuilder's job in Puck.Demo. Adding a node kind is a new derived
-/// record. Validation-gate node kinds (parity/export/compute/reverse) and per-slot child graphs arrive in later phases.
+/// record. (The retired <c>showcase</c>/<c>rt</c>/<c>camera</c> kinds were removed with the demo's slim-down to the
+/// four-quad world: a live camera is now a per-viewport <see cref="LiveCameraSource"/>, and the ray-query path's
+/// coverage lives in Puck.Post's RT stage.)
 /// </summary>
-[JsonDerivedType(typeof(ShowcaseNode), typeDiscriminator: "showcase")]
 [JsonDerivedType(typeof(WorldNode), typeDiscriminator: "world")]
-[JsonDerivedType(typeof(RtNode), typeDiscriminator: "rt")]
-[JsonDerivedType(typeof(MiniActionNode), typeDiscriminator: "mini-action")]
-[JsonDerivedType(typeof(CameraNode), typeDiscriminator: "camera")]
+[JsonDerivedType(typeof(OverworldNode), typeDiscriminator: "overworld")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record NodeDocument {
     /// <summary>The backend this node renders on: <c>"vulkan"</c> or <c>"directx"</c>. When null the builder picks the
@@ -42,18 +41,14 @@ public abstract record NodeDocument {
     }
 }
 
-/// <summary>The cross-backend SDF graphics showcase (a Vulkan-hosted window presenting a Direct3D 12- or
-/// Vulkan-rendered SDF). It does not consume the document's scene/viewports — it renders its own built-in showcase.</summary>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record ShowcaseNode : NodeDocument {
-    private protected override string DefaultBackend => "directx";
-}
-
 /// <summary>The generic compute SDF world compositor, driven by the document's scene + viewports.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNode : NodeDocument {
-    /// <summary>Whether the bottom-right viewport hosts an animated child surface instead of an SDF camera (requires a
-    /// four-viewport split layout).</summary>
+    /// <summary>RETIRED compatibility shim (the pre-purification animated test pane): still parses so old documents
+    /// stay loadable, but the VALIDATOR rejects <see langword="true"/> with a pointer at the replacement — a child
+    /// pane is a per-viewport SOURCE now (<see cref="GamingBrickSource"/>/<see cref="LiveCameraSource"/>), not a node
+    /// boolean. Retired-shape rejection is validation's job (host-independent, never valid); the builder pre-flight
+    /// owns only capability gaps (deferred/host-dependent paths).</summary>
     public bool Child { get; init; }
 
     private protected override string DefaultBackend => "directx";
@@ -61,60 +56,140 @@ public sealed record WorldNode : NodeDocument {
     internal override void Validate(string path, int viewportCount, ValidationErrors errors) {
         base.Validate(errors: errors, path: path, viewportCount: viewportCount);
 
-        if (Child && (viewportCount != 4)) {
-            errors.Add(path: $"{path}.child", message: $"a child viewport requires a four-viewport split layout, but the document declares {viewportCount} viewport(s)");
+        if (Child) {
+            errors.Add(path: $"{path}.child", message: "child is a retired affordance (the pre-purification animated test pane); declare the pane as a viewport source instead (e.g. \"source\": { \"$type\": \"gaming-brick\", ... })");
         }
     }
 }
 
-/// <summary>The MiniAction action-game prototype: a controller-driven player avatar that runs around a room, rendered
-/// by the compute SDF world path with a per-frame dynamic-entity transform. It builds its own dynamic scene + chase
-/// camera each frame, so it consumes no document scene/viewports (like the showcase). It renders on the host device, so
-/// <c>produce</c> is meaningless and rejected.</summary>
+/// <summary>The overworld: a controller-driven player avatar that runs around a room, rendered by the compute SDF world
+/// path with a per-frame dynamic-entity transform, with up to three console stands the player boots — each boot lights
+/// a GamingBrick pane and the screen layout walks its staged transition. It builds its own dynamic scene + views each
+/// frame, so it consumes no document scene/viewports (the console list here replaces per-viewport brick sources). It
+/// renders on the host device, so <c>produce</c> is meaningless and rejected.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record MiniActionNode : NodeDocument {
+public sealed record OverworldNode : NodeDocument {
+    /// <summary>The most console stands the room seats — the compositor's five view slots minus the room view.</summary>
+    public const int MaxConsoles = 4;
+
+    /// <summary>The bootable consoles, in stand order (left to right along the far wall). Each entry reuses the
+    /// gaming-brick source shape (console costume + fit + an OPTIONAL pre-inserted ROM path); a console with a ROM
+    /// path assembles its machine at build time (today's behavior), while a console with a null ROM path starts as an
+    /// EMPTY stand — its machine assembles once the player inserts a cartridge from <see cref="Library"/>. Empty (the
+    /// default) is the bare room. A later revision grows an entry with a peripheral field (e.g. the PC camera as a
+    /// GB-camera cartridge feed).</summary>
+    public IReadOnlyList<GamingBrickSource> Consoles { get; init; } = [];
+    // NOTE: nullable-optional-field pattern (see the note in GamingBrickSource) — a polymorphic-derived record
+    // deserialized through the run-document parse path skips property initializers, so an omitted member arrives
+    // NULL regardless of the initializer below.
+    /// <summary>The cartridge shelf: games the player can carry to an empty stand and insert. Null (the default,
+    /// matching every document authored before this field existed) is no shelf at all — every console must then be
+    /// pre-inserted (<see cref="GamingBrickSource.RomPath"/> set). A document with ANY empty stand must declare a
+    /// non-null, non-empty library, or that stand is unreachable dead weight.</summary>
+    public IReadOnlyList<CartridgeSource>? Library { get; init; }
+    /// <summary>IMMERSED start (the fourth-wall boot, null = false): the run opens INSIDE the machines — each
+    /// connecting player is seated at (boots and takes over) their own stand and sees only the game panes; the room
+    /// is revealed when a console's <see cref="GamingBrickSource.Exit"/> condition fires (all active players then
+    /// stand at their stands, the games continuing on the diegetic screens). Requires every console pre-inserted
+    /// (there is no walkable room to fetch a cartridge from until the reveal).</summary>
+    public bool? Immersed { get; init; }
+
     private protected override string DefaultBackend => "vulkan";
 
     internal override void Validate(string path, int viewportCount, ValidationErrors errors) {
+        // The nullable-optional-field pattern (see the Library note): an omitted `consoles` arrives NULL through the
+        // polymorphic parse path despite the initializer, so validation normalizes before touching it.
+        var consoles = (Consoles ?? []);
+
         if (Produce is not null) {
-            errors.Add(path: $"{path}.produce", message: "the 'mini-action' node ignores 'produce' (it renders on the host device); use host.backend");
+            errors.Add(path: $"{path}.produce", message: "the 'overworld' node ignores 'produce' (it renders on the host device); use host.backend");
+        }
+
+        if (consoles.Count > MaxConsoles) {
+            errors.Add(path: $"{path}.consoles", message: $"the overworld room seats at most {MaxConsoles} consoles, but the document declares {consoles.Count}");
+        }
+
+        for (var index = 0; (index < consoles.Count); index++) {
+            consoles[index].Validate(path: $"{path}.consoles[{index}]", errors: errors);
+        }
+
+        ValidateMetaVictoryGroups(consoles: consoles, errors: errors, path: path);
+
+        if (Library is not null) {
+            if (Library.Count > CartridgeSource.MaxEntries) {
+                errors.Add(path: $"{path}.library", message: $"the shelf holds at most {CartridgeSource.MaxEntries} cartridges, but the document declares {Library.Count}");
+            }
+
+            for (var index = 0; (index < Library.Count); index++) {
+                Library[index].Validate(path: $"{path}.library[{index}]", errors: errors);
+            }
+        }
+
+        // NOTE: the shelf/carry model was retired — an empty stand is fed by the cabinet's cart-cycle (Right bumper
+        // among the built-in cart types: world-lens, camera, showcase) or by a built-in immersed cart, NOT by a
+        // carried library cartridge. So an empty stand is no longer "dead weight" and needs no library.
+
+        if ((Immersed == true) && (consoles.Count == 0)) {
+            errors.Add(path: $"{path}.immersed", message: "an immersed start needs at least one console to seat the first player at");
+        }
+        // An immersed console may now start EMPTY: a built-in immersed cart (the world-lens) or the cabinet's own
+        // cart-cycle feeds it, so no pre-inserted romPath is required.
+    }
+
+    // Cross-cabinet META validation: cabinets sharing a group must (a) agree on the target, (b) number at least two, and
+    // (c) have shares whose XOR equals that target — the structural "no cabinet wins alone" guarantee. Checked here,
+    // where the whole console set is visible; a single source's own Validate can never see its peers. Solo victories and
+    // per-record shape (mode/target/share well-formedness) are already gated by GamingBrickSource.Validate.
+    private static void ValidateMetaVictoryGroups(IReadOnlyList<GamingBrickSource> consoles, string path, ValidationErrors errors) {
+        var groups = new Dictionary<string, List<(int Index, BrickVictoryCondition Victory)>>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < consoles.Count); index++) {
+            if (consoles[index].Victory is { IsMeta: true } victory) {
+                var key = (victory.Group ?? "");
+
+                if (!groups.TryGetValue(key: key, value: out var members)) {
+                    members = [];
+                    groups[key] = members;
+                }
+
+                members.Add(item: (index, victory));
+            }
+        }
+
+        foreach (var (group, members) in groups) {
+            var groupLabel = ((group.Length == 0) ? "(default)" : group);
+            var target = members[0].Victory.Target;
+
+            if (members.Count < 2) {
+                errors.Add(path: $"{path}.consoles[{members[0].Index}].victory", message: $"meta group '{groupLabel}' has only one cabinet; a meta victory needs at least two so no cabinet can win alone");
+
+                continue;
+            }
+
+            var accumulator = new byte[VictoryGate.RegionByteCount];
+            var allSharesParsed = true;
+
+            foreach (var (memberIndex, victory) in members) {
+                if (!string.Equals(a: victory.Target, b: target, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    errors.Add(path: $"{path}.consoles[{memberIndex}].victory.target", message: $"meta group '{groupLabel}' cabinets must all name the same target; found '{victory.Target}' and '{target}'");
+                }
+
+                var share = new byte[VictoryGate.RegionByteCount];
+
+                if (victory.TryParseShare(destination: share)) {
+                    VictoryGate.Xor(accumulator: accumulator, operand: share);
+                }
+                else {
+                    allSharesParsed = false;
+                }
+            }
+
+            var targetBytes = new byte[VictoryGate.RegionByteCount];
+
+            if (allSharesParsed && VictoryGate.TryParseGuidBytes(text: target, destination: targetBytes) && !VictoryGate.RegionEquals(region: accumulator, target: targetBytes)) {
+                errors.Add(path: $"{path}.consoles[{members[0].Index}].victory", message: $"meta group '{groupLabel}' shares do not XOR to the target — the cooperative win is unreachable (author the last share as the target XORed with the others)");
+            }
         }
     }
 }
 
-/// <summary>A LIVE camera content source: a bespoke Direct3D 12 device (a stand-in for a hardware camera's decode
-/// device) produces a frame into a shared image each frame, which the Vulkan host imports zero-copy and presents. It
-/// owns its own producer device, so <c>produce</c> is meaningless (rejected), and it renders its own content (no
-/// document scene/viewports). The host must be Vulkan — only a Direct3D 12 shared handle is cross-openable.</summary>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CameraNode : NodeDocument {
-    private protected override string DefaultBackend => "vulkan";
-
-    internal override void Validate(string path, int viewportCount, ValidationErrors errors) {
-        if (Produce is not null) {
-            errors.Add(path: $"{path}.produce", message: "the 'camera' node ignores 'produce' (it owns its own Direct3D 12 producer device); the host must be Vulkan");
-        }
-    }
-}
-
-/// <summary>The ray-query world: a per-frame TLAS over the scene's primitives, ray-traced by an inline RayQuery
-/// kernel rendering a single full-frame camera. Driven by the document's scene + the one viewport. The host device —
-/// Vulkan, or Direct3D 12 DXR via <c>host.backend:"directx"</c> — is chosen by the host section, not by <c>produce</c>.</summary>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record RtNode : NodeDocument {
-    private protected override string DefaultBackend => "vulkan";
-
-    internal override void Validate(string path, int viewportCount, ValidationErrors errors) {
-        // The rt node has no cross-backend producer: the ray-query kernel runs on whichever device host.backend selects.
-        // So produce is meaningless here — reject any explicit value rather than silently ignoring it (the base produce
-        // check is deliberately not called).
-        if (Produce is not null) {
-            errors.Add(path: $"{path}.produce", message: "the 'rt' node ignores 'produce' (the ray-query kernel runs on the host device); use host.backend to choose Vulkan or Direct3D 12");
-        }
-
-        // The ray-query kernel packs a single full-frame camera, so it can faithfully render exactly one viewport.
-        if (viewportCount != 1) {
-            errors.Add(path: path, message: $"the 'rt' node renders a single full-frame camera, but the document declares {viewportCount} viewport(s)");
-        }
-    }
-}

@@ -4,8 +4,8 @@ namespace Puck.HumbleGamingBrick;
 /// Predicts the DIV counter's post-boot value on a Color machine. The Color boot ROM's running time depends on the
 /// cartridge header — the color flag, the licensee code, and (for first-party titles) the title checksum and even the
 /// fourth title letter steer different boot paths — so the counter a game observes at <c>0x0100</c> is
-/// header-dependent. These tables are that factual boot-timing data (the same interop data every accurate emulator
-/// carries, validated by mooneye <c>boot_div-cgbABCDE</c>); they are measurements of the hardware, not emulator logic.
+/// header-dependent. These tables are that factual boot-timing data (the same interop data every accurate implementation
+/// carries, hardware-verified); they are measurements of the hardware, not emulator logic.
 /// </summary>
 internal static class CgbBootDivPrediction {
     // A base entry at or below the sentinel is an offset that still needs the title-checksum contribution; anything

@@ -95,6 +95,18 @@
                 "items": {
                   "type": "number"
                 }
+              },
+              "emissive": {
+                "type": "number"
+              },
+              "specular": {
+                "type": "number"
+              },
+              "shininess": {
+                "type": [
+                  "number",
+                  "null"
+                ]
               }
             },
             "additionalProperties": false
@@ -229,6 +241,118 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "wallpaperFold"
+                            },
+                            "group": {
+                              "enum": [
+                                "P1",
+                                "P2",
+                                "Pm",
+                                "Pg",
+                                "Cm",
+                                "Pmm",
+                                "Pmg",
+                                "Pgg",
+                                "Cmm",
+                                "P4",
+                                "P4M",
+                                "P4G",
+                                "P3",
+                                "P3M1",
+                                "P31M",
+                                "P6",
+                                "P6M"
+                              ]
+                            },
+                            "cell": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "limit": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "plane": {
+                              "enum": [
+                                "XZ",
+                                "XY",
+                                "YZ"
+                              ]
+                            },
+                            "materialStride": {
+                              "type": "integer"
+                            },
+                            "lodDistance": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "twistY"
+                            },
+                            "rate": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "bendX"
+                            },
+                            "rate": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "bendY"
+                            },
+                            "rate": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "bendZ"
+                            },
+                            "rate": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "elongate"
+                            },
+                            "extents": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       ]
                     }
@@ -241,10 +365,19 @@
                       "Union",
                       "SmoothUnion",
                       "Subtraction",
-                      "Intersection"
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
                     ]
                   },
                   "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
                     "type": "number"
                   }
                 },
@@ -278,10 +411,19 @@
                       "Union",
                       "SmoothUnion",
                       "Subtraction",
-                      "Intersection"
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
                     ]
                   },
                   "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
                     "type": "number"
                   }
                 },
@@ -312,10 +454,19 @@
                       "Union",
                       "SmoothUnion",
                       "Subtraction",
-                      "Intersection"
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
                     ]
                   },
                   "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
                     "type": "number"
                   }
                 },
@@ -349,10 +500,19 @@
                       "Union",
                       "SmoothUnion",
                       "Subtraction",
-                      "Intersection"
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
                     ]
                   },
                   "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
                     "type": "number"
                   }
                 },
@@ -386,10 +546,151 @@
                       "Union",
                       "SmoothUnion",
                       "Subtraction",
-                      "Intersection"
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
                     ]
                   },
                   "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "capsule"
+                  },
+                  "endpoint": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "cylinder"
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "halfHeight": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "ellipsoid"
+                  },
+                  "radii": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
                     "type": "number"
                   }
                 },
@@ -409,6 +710,39 @@
                   "round": {
                     "type": "number"
                   },
+                  "screenIndex": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "worldOrigin": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "worldRight": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "worldUp": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "number"
+                    }
+                  },
                   "ops": {
                     "type": "array",
                     "items": {
@@ -423,10 +757,19 @@
                       "Union",
                       "SmoothUnion",
                       "Subtraction",
-                      "Intersection"
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction"
                     ]
                   },
                   "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
                     "type": "number"
                   }
                 },
@@ -535,6 +878,104 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "$type": {
+                    "const": "gaming-brick"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "fit": {
+                    "enum": [
+                      "Sample",
+                      "Fill"
+                    ]
+                  },
+                  "romPath": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "runAs": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "exit": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "address": {
+                        "type": "string"
+                      },
+                      "op": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "integer"
+                      },
+                      "label": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "victory": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "mode": {
+                        "type": "string"
+                      },
+                      "target": {
+                        "type": "string"
+                      },
+                      "share": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "group": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "label": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "peripheral": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
               }
             ]
           },
@@ -543,6 +984,46 @@
             "items": {
               "type": "number"
             }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "screenSources": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "screenIndex": {
+            "type": "integer"
+          },
+          "source": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "properties": {
+                  "$type": {
+                    "const": "viewport"
+                  },
+                  "slot": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -557,26 +1038,6 @@
         "$type"
       ],
       "anyOf": [
-        {
-          "properties": {
-            "$type": {
-              "const": "showcase"
-            },
-            "produce": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "capture": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "additionalProperties": false
-        },
         {
           "properties": {
             "$type": {
@@ -603,47 +1064,89 @@
         {
           "properties": {
             "$type": {
-              "const": "rt"
+              "const": "overworld"
             },
-            "produce": {
+            "consoles": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "fit": {
+                    "enum": [
+                      "Sample",
+                      "Fill"
+                    ]
+                  },
+                  "romPath": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "runAs": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "exit": {
+                    "$ref": "#/properties/viewports/items/properties/source/anyOf/3/properties/exit"
+                  },
+                  "victory": {
+                    "$ref": "#/properties/viewports/items/properties/source/anyOf/3/properties/victory"
+                  },
+                  "peripheral": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "library": {
               "type": [
-                "string",
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "romPath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "romPath"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "immersed": {
+              "type": [
+                "boolean",
                 "null"
               ]
-            },
-            "capture": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "properties": {
-            "$type": {
-              "const": "mini-action"
-            },
-            "produce": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "capture": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "properties": {
-            "$type": {
-              "const": "camera"
             },
             "produce": {
               "type": [
@@ -661,6 +1164,18 @@
           "additionalProperties": false
         }
       ]
+    },
+    "input": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "gamepadRouting": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "validation": {
       "type": [

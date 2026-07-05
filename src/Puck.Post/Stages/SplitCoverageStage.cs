@@ -1,3 +1,4 @@
+using Puck.Capture;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Cameras;
@@ -10,10 +11,10 @@ namespace Puck.Post;
 /// Tier-B stage B6. The split-screen compositor under ANIMATED regions, decoupled from any game: the stage drives a
 /// synthetic merged↔split↔merged guillotine easing itself (the same dividers-slide-in layout math the demo's camera
 /// director animates) over a fixed set of steps for pane counts 2, 3, and 4, rebuilding the composite rects every
-/// step exactly the way <c>WorldProducerNode</c> rebuilds them every frame against full-size per-view sources. For
+/// step exactly the way <see cref="SdfWorldEngine"/> rebuilds them every frame against full-size per-view sources. For
 /// every step it (a) asserts on the CPU that the rects EXACTLY tile [0,1]² — every pixel-center UV is contained by
 /// exactly one rect under the compositor kernel's own containment test (no uncovered band, no overlap) and the areas
-/// sum to exactly 1 — then (b) renders the world composite through <see cref="PostWorldRenderer"/> and asserts every
+/// sum to exactly 1 — then (b) renders the world composite through <see cref="Puck.SdfVm.SdfWorldEngine"/> and asserts every
 /// active pane's pixel block is non-blank (not all one color, not all near-zero) and no letterbox-colored pixel (the
 /// kernel's outside-every-region constant) survives inside the frame. Deterministic: fixed steps, no wall clock.
 /// </summary>
@@ -56,13 +57,12 @@ internal sealed class SplitCoverageStage : IPostStage {
         var gpu = context.Resolve<IGpuComputeServices>();
         var program = BuildScene();
 
-        using var renderer = new PostWorldRenderer(
-            bytecodeExtension: ".spv",
+        using var renderer = new SdfWorldEngine(
             device: device,
-            dynamicTransformCapacity: 1,
             gpu: gpu,
             height: OutputHeight,
-            program: program,
+            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
+            options: new SdfWorldEngineOptions(DynamicTransformCapacity: 1, Program: program),
             width: OutputWidth
         );
 
@@ -169,7 +169,7 @@ internal sealed class SplitCoverageStage : IPostStage {
                 // One artifact per pane count, captured mid-transition (the layout state a frozen-rect bug blanks).
                 if ((step == 2) && (ease == 0.5f)) {
                     artifactPath = Path.Combine(context.ArtifactsDirectory, $"split-coverage-{paneCount}.png");
-                    PngImage.Write(height: (int)OutputHeight, path: artifactPath, rgba: pixels, width: (int)OutputWidth);
+                    PngEncoder.Write(height: (int)OutputHeight, path: artifactPath, rgba: pixels, width: (int)OutputWidth);
                 }
             }
         }

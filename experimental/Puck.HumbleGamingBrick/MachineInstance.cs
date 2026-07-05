@@ -40,6 +40,14 @@ public sealed class MachineInstance : IDisposable {
     public TService GetRequiredService<TService>() where TService : notnull =>
         m_scope.ServiceProvider.GetRequiredService<TService>();
 
+    /// <summary>The LIVE device swap seam (the boot shim): retargets the running machine's emulated model without a
+    /// reboot, keeping all progress. See <see cref="Machine.SwitchModel"/>.</summary>
+    /// <param name="model">The model to switch to.</param>
+    /// <param name="pokes">The per-ROM hardware-detection pokes that flip a GB-compatible game onto the target model's
+    /// code path (empty = a bare capability flip with no code-path change).</param>
+    public void SwitchModel(ConsoleModel model, ReadOnlySpan<ModePoke> pokes) =>
+        Machine.SwitchModel(model: model, pokes: pokes);
+
     /// <summary>Builds an independent sibling machine from the same configuration and loads this instance's current
     /// state into it. The two machines share nothing afterward, so stepping or running either one leaves the other
     /// untouched — divergent branches from a common point.</summary>

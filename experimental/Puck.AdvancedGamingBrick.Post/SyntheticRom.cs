@@ -3,7 +3,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// <summary>
 /// Builds a tiny, self-contained Game Boy Advance cartridge image so the core self-tests (Tier A) run anywhere, with no
 /// external ROM corpus. Execution begins at the cartridge entry point <c>0x08000000</c> (where
-/// <see cref="GameBoyAdvanceMachine.DirectBoot"/> lands) and runs a bounded, fully deterministic ARM loop: clear
+/// <see cref="AdvancedGamingBrickMachine.DirectBoot"/> lands) and runs a bounded, fully deterministic ARM loop: clear
 /// <c>DISPCNT</c> so the backdrop is displayed (not forced-blank), then walk the BG-palette backdrop colour by writing an
 /// ever-incrementing counter to palette entry 0 forever. The loop is not meant to compute anything meaningful — it exists
 /// only to advance CPU, bus, timer, and PPU state deterministically <em>and</em> to make the rendered framebuffer evolve,

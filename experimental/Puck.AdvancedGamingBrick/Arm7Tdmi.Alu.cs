@@ -170,7 +170,7 @@ public sealed partial class Arm7Tdmi {
 
     // ARM7TDMI early termination: the multiplier is consumed 8 bits per cycle, stopping once the remaining upper
     // bits are all zeros — or all ones for the SIGNED variants only, where they are just sign extension. Unsigned
-    // long multiplies get no all-ones shortcut (GBATEK; ares algorithms.cpp MUL vs instructions-arm.cpp:332-342).
+    // long multiplies get no all-ones shortcut (per the hardware spec and reference multiply timing).
     private static int MultiplyCycles(uint multiplier, bool signedMultiplier) {
         var cycles = 1;
 

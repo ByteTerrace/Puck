@@ -1,3 +1,4 @@
+using Puck.Capture;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 namespace Puck.Post;
@@ -109,7 +110,7 @@ internal sealed class PixelateStage : IPostStage {
             var artifactPath = Path.Combine(context.ArtifactsDirectory, "pixelate.png");
 
             _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-            PngImage.Write(height: (int)RenderSize, path: artifactPath, rgba: actual, width: (int)RenderSize);
+            PngEncoder.Write(height: (int)RenderSize, path: artifactPath, rgba: actual, width: (int)RenderSize);
 
             // The CPU oracle: replicate the kernel exactly from the same run's source readback.
             var maxDelta = 0;

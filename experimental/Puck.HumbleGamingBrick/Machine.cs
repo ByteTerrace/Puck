@@ -18,22 +18,38 @@ namespace Puck.HumbleGamingBrick;
 public sealed class Machine {
     private readonly ICpu? m_busMaster;
     private readonly ComponentClock m_componentClock;
+    private readonly IKey1 m_key1;
+    private readonly SystemMemory m_memory;
+    private readonly IModeSwitchable[] m_modeSwitchables;
+    private readonly ModelState m_modelState;
     private readonly ISnapshotable[] m_snapshotables;
 
     private ulong m_runTargetCycles;
 
     /// <summary>Assembles a machine from the clock and the services resolved for its scope.</summary>
     /// <param name="componentClock">The domain-aware per-T-cycle component clock.</param>
+    /// <param name="modelState">The owner of the machine's live-swappable emulated model.</param>
     /// <param name="snapshotables">The state-bearing components to snapshot, in registration order.</param>
+    /// <param name="modeSwitchables">The components whose model-capability gates a live swap re-pushes.</param>
+    /// <param name="memory">The internal RAM, for the demote-to-monochrome bank fixup and the mode-recipe pokes.</param>
+    /// <param name="key1">The speed switch, for the demote-to-monochrome double-speed drop.</param>
     /// <param name="busMasters">The bus master (CPU), if one is registered; the first is used.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public Machine(
         ComponentClock componentClock,
+        ModelState modelState,
         IEnumerable<ISnapshotable> snapshotables,
+        IEnumerable<IModeSwitchable> modeSwitchables,
+        SystemMemory memory,
+        IKey1 key1,
         IEnumerable<ICpu> busMasters
     ) {
         ArgumentNullException.ThrowIfNull(argument: componentClock);
+        ArgumentNullException.ThrowIfNull(argument: modelState);
         ArgumentNullException.ThrowIfNull(argument: snapshotables);
+        ArgumentNullException.ThrowIfNull(argument: modeSwitchables);
+        ArgumentNullException.ThrowIfNull(argument: memory);
+        ArgumentNullException.ThrowIfNull(argument: key1);
         ArgumentNullException.ThrowIfNull(argument: busMasters);
 
         ICpu? busMaster = null;
@@ -46,6 +62,10 @@ public sealed class Machine {
 
         m_busMaster = busMaster;
         m_componentClock = componentClock;
+        m_key1 = key1;
+        m_memory = memory;
+        m_modelState = modelState;
+        m_modeSwitchables = [.. modeSwitchables];
         m_snapshotables = [.. snapshotables];
     }
 
@@ -58,6 +78,49 @@ public sealed class Machine {
     /// <summary>Gets whether a bus master (CPU) drives this machine.</summary>
     public bool HasBusMaster =>
         (m_busMaster is not null);
+    /// <summary>Gets the console model the machine is CURRENTLY emulating — the boot model until
+    /// <see cref="SwitchModel"/> retargets it.</summary>
+    public ConsoleModel Model =>
+        m_modelState.Model;
+
+    /// <summary>Re-pushes a model's capability gates into every switchable component (idempotent) — the fan-out a
+    /// restore uses to re-derive gates from the snapshotted model, and the render/hardware half of a live swap.</summary>
+    /// <param name="model">The model to gate for.</param>
+    public void ApplyModel(ConsoleModel model) {
+        foreach (var component in m_modeSwitchables) {
+            component.ApplyModel(model: model);
+        }
+    }
+    /// <summary>The LIVE device swap (the boot shim): retargets the running machine to <paramref name="model"/> WITHOUT
+    /// a reboot. It re-gates every color-path component, and on a Color→monochrome demote repages the switchable RAM to
+    /// its DMG-equivalent banks and drops double speed so the game's now-monochrome code addresses shared state and
+    /// times correctly (the Color banks 2–7 / VRAM bank 1 survive un-paged, cartridge-move style). Finally it applies
+    /// the per-ROM <paramref name="pokes"/> — the small set of cached hardware-detection bytes that flip a GB-compatible
+    /// game onto the target model's own code path, so it re-renders natively. Progress in shared RAM is untouched. Call
+    /// only between frames (the machine idle at an instruction boundary), never mid-step.</summary>
+    /// <param name="model">The model to switch to.</param>
+    /// <param name="pokes">The per-ROM detection-flag pokes for the target model (empty falls back to a bare capability
+    /// flip — the game keeps its old code path, so the host should present a re-interpretation rather than expect
+    /// native art).</param>
+    public void SwitchModel(ConsoleModel model, ReadOnlySpan<ModePoke> pokes) {
+        var demotesToMonochrome = (m_modelState.Model.SupportsColor() && !model.SupportsColor());
+
+        m_modelState.Set(model: model);
+        ApplyModel(model: model);
+
+        if (demotesToMonochrome) {
+            // Keep the game's shared state addressable and its timing sane after the color hardware seals off: repage to
+            // the DMG-equivalent banks and force normal speed (KEY1 flag + the component clock's own derived copy, which
+            // this unit re-syncs exactly as a snapshot restore does).
+            m_memory.ForceDmgBanks();
+            m_key1.ForceNormalSpeed();
+            m_componentClock.IsDoubleSpeed = false;
+        }
+
+        foreach (var poke in pokes) {
+            m_memory.PokeCpuByte(address: poke.Address, value: poke.Value);
+        }
+    }
 
     /// <summary>Advances the machine by exactly one CPU T-cycle (one dot at normal speed), ticking every component in
     /// domain-aware lockstep. This is the finest step for a component-driven machine; a machine with a bus master is
@@ -138,6 +201,12 @@ public sealed class Machine {
                 message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted."
             );
         }
+
+        // The model is snapshot state (ModelState loaded above), but each component caches its capability gate in a fast
+        // field that is NOT in its own bytes; re-derive them all from the restored model so a restored live-swapped
+        // machine resumes as the model it was running, not the model it booted from. Idempotent, and it also re-syncs
+        // the component-clock speed no differently than the CPU's own KEY1 re-derive.
+        ApplyModel(model: m_modelState.Model);
 
         // The pacing accumulator is not emulated state; reanchor it to the restored instant so a run after a rewind does
         // not lose or duplicate a budget.

@@ -1,6 +1,7 @@
 # The Ideal GamingBrick — GB / GBC / GBA build plan
 
-Status: **planning complete, ready to build** · Date: 2026-07-02 · Scope now: **GB/GBC** (GBA deferred, seam kept ready)
+Status: **planning complete, ready to build** · Date: 2026-07-02 · Scope now: **GB/GBC** (the `Agb`
+costume of the SM83 core landed early via the four-quad demo — see §8; the ARM7TDMI-native epic stays deferred)
 
 This is the plan to evolve `experimental/Puck.HumbleGamingBrick` (the graduated LIVE
 core) into the "ideal" deterministic Game Boy / Game Boy Color machine, using the
@@ -100,11 +101,15 @@ split). Prove it against blargg `mem_timing`(+`-2`) + mooneye `boot_sclk_align`/
 cached TIMA mask + gambatte DIV-write serial-event re-phasing.
 *Accept:* gambatte `serial`(46)+`tima`+mooneye timer green as evidence; timer/serial promoted to Contract.
 
-**M3 — Devirtualize the tick path (perf).** Replace the interface `Tick()` fan-out with sealed
-field-cached components (BT `MachineCore` pattern); add idle-span fast-forward. Establish the
-first real fps measurement (none exists for any live engine on disk).
-*Accept:* zero per-tick virtual dispatch/alloc in the hot loop (profiled); snapshot fault-on-drift
-still clean; material fps gain recorded.
+**M3 — Devirtualize the tick path (perf). ✅ Devirtualization LANDED (2026-07-03), measured
+1.6×** — `ComponentClock` holds every component as a typed sealed field (per-tick fan-out is
+direct calls; the cartridge RTC facet is the one interface slot, null-skipped), constructor
+verifies declared domains against slots, Contract §3.5 order pinned in code. Guards held:
+identical Gold frame hashes (all three costumes), identical battery pass set. Post numbers:
+~552 fps throughput / 532 machine-frames/s trio-lockstep (from 341/332); full curve in
+[machine-fleet-plan.md](machine-fleet-plan.md). The sampling profile predicted only ~1.2× —
+dispatch-share is a floor, not a ceiling, because devirtualization unlocks inlining.
+*Still open from this milestone:* idle-span fast-forward (fleet plan lever 4).
 
 **M4 — Snapshot completeness (mid-frame).** Port docboy's full PPU parcel set; serialize every
 live latch (incl. `haltBug`); mid-frame save/restore byte-identical.
@@ -164,15 +169,22 @@ project is library-only today, so no entry point exists yet.
 Repo targets `net10.0`; apply the `dotnet10-performance` skill on every hot path. Non-negotiables in
 the per-tick loop: no virtual dispatch, no DI resolution, no delegate/`Func<>` indirection, no
 allocation, no float in gameplay state. Devirtualize via sealed field-cached components; use
-`delegate*<>` dispatch tables where a table is warranted; measure (no fps figure exists for any live
-engine yet — M3 establishes the first).
+`delegate*<>` dispatch tables where a table is warranted; measure with the `--bench` instrument
+([machine-fleet-plan.md](machine-fleet-plan.md) — ~346 machine-frames/s single-threaded, profile
+attribution recorded there).
 
-## 8. Deferred — GBA carry-forward (future epic)
+## 8. GBA carry-forward — Agb costume LANDED (2026-07-02), deltas tracked
 
-GBA-running-a-GB-game is a **mode of the SM83 core, not the ARM7TDMI**. When taken up: extend
-`ConsoleModel` to `{Dmg, Cgb, Agb}`; route a DMG/CGB cart on GBA through the **same** shared SM83 +
-shared-counter serial/timer + docboy PPU, gating only AGB deltas (KEY0 CPU-mode latch, initial
-B=0x01, AGB OBJ quirk, AGB palette/color-correction). Keep the ARM7TDMI (`Puck.AdvancedGamingBrick`)
-as a **separate** GBA-native core, cart-type-selected, sharing the one master clock + link layer.
-**Design constraint now:** keep `ConsoleModel` and the M5 link layer `Agb`-ready so this is a
-drop-in, not a rewrite.
+GBA-running-a-GB-game is a **mode of the SM83 core, not the ARM7TDMI** — and the four-quad demo
+pulled the first slice forward. **Landed:** `ConsoleModel` = `{Dmg, Cgb, Agb}`; every Color gate
+reads `SupportsColor()` (a capability question, not a model equality); the Agb boot handoff applies
+the AGB boot ROM's extra `inc b` (B one higher, F = the increment's flags — the register cartridges
+probe to detect Advance hardware). Gated by the Tier-A `agb-costume` POST stage (Agb deterministic
++ pixel-identical to Cgb on a non-detecting ROM); Pokémon Gold renders bit-identically on Cgb and
+Agb (fb-hash match at frame 600).
+
+**Still tracked, not yet modeled:** KEY0 CPU-mode latch; AGB OBJ quirk; AGB palette/color-correction
+(presentation-only, never state); the AGB post-boot DIV seed (canonicalized to the CGB prediction
+until measured — INFORMATIVE, per §3). Keep the ARM7TDMI (`Puck.AdvancedGamingBrick`) as a
+**separate** GBA-native core, cart-type-selected, sharing the one master clock + link layer; the M5
+link layer must stay `Agb`-ready.

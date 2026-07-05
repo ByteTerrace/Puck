@@ -565,7 +565,7 @@ public sealed partial class Arm7Tdmi {
         }
 
         // LDM has a trailing internal cycle (n S + 1N + 1I); STM does NOT — its trailing N is the next opcode
-        // fetch, already accounted for by m_nextFetchNonSequential below. Verified against the ARES bus trace.
+        // fetch, already accounted for by m_nextFetchNonSequential below. Verified against the hardware bus trace.
         if (load) {
             cpu.m_bus.Idle(cycles: 1);
         }
@@ -598,7 +598,7 @@ public sealed partial class Arm7Tdmi {
         var rm         = (int)(opcode & 0xFu);
 
         // Capture the multiplier before the destination write: when rd == rs the early-termination count must use
-        // the original value, not the product (ares reads r(s) before storing).
+        // the original value, not the product (hardware reads Rs before storing).
         var multiplier = cpu.m_gpr[rs];
         var result = cpu.m_gpr[rm] * multiplier;
 
@@ -625,7 +625,7 @@ public sealed partial class Arm7Tdmi {
         var rm         = (int)(opcode & 0xFu);
 
         // Capture the multiplier before the destination writes: when rs == rdLow/rdHigh the early-termination
-        // count must use the original value, not the product (ares reads r(s) before storing).
+        // count must use the original value, not the product (hardware reads Rs before storing).
         var multiplier = cpu.m_gpr[rs];
 
         ulong result;

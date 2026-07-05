@@ -12,4 +12,17 @@ public interface IInputBindings {
     /// <param name="source">The provider-neutral input source id (an <c>InputSources</c> control).</param>
     /// <returns>The command bindings for <paramref name="slot"/> and <paramref name="source"/>, or <see langword="null"/>.</returns>
     IReadOnlyList<CommandBinding>? Resolve(int slot, string source);
+
+    /// <summary>
+    /// Returns the bindings a slot maps a signal to. The default delegates to <see cref="Resolve(int, string)"/>;
+    /// a stateful implementation (such as <see cref="PagedInputBindings"/>) overrides this to see the signal's
+    /// phase and value in the router's deterministic capture order — how a modifier press can change what the
+    /// signals after it resolve to.
+    /// </summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <param name="signal">The captured signal being resolved.</param>
+    /// <returns>The command bindings for <paramref name="slot"/> and the signal's source, or <see langword="null"/>.</returns>
+    IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+        return Resolve(slot: slot, source: signal.Source);
+    }
 }

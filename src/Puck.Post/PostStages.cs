@@ -4,8 +4,10 @@ namespace Puck.Post;
 /// <c>--tier</c> and <c>--filter</c> options select a subset. Stages are added here as each milestone lands.</summary>
 internal static class PostStages {
     /// <summary>Creates the ordered stage list.</summary>
+    /// <param name="fuzzSeed">An override for <see cref="FuzzStage"/>'s fixed deterministic seed list (the
+    /// <c>--fuzz-seed</c> CLI seam), or <see langword="null"/> to keep its default sample.</param>
     /// <returns>The stages, in run order.</returns>
-    public static IReadOnlyList<IPostStage> Create() {
+    public static IReadOnlyList<IPostStage> Create(int? fuzzSeed = null) {
         return [
             // Tier A — CPU pre-flight. The self-tests run first: a determinism gate cannot catch a
             // wrong-but-deterministic operation, so correctness is proven before reproducibility.
@@ -13,8 +15,10 @@ internal static class PostStages {
             new WorldCoord3Stage(),
             new DeterminismStage(),
             new CliDeterminismStage(),
+            new BindingPageStage(),
             new GenlockStage(),
             new RunDocumentStage(),
+            new VictoryGateStage(),
 
             // Tier B — same-device GPU smoke on the offscreen Vulkan host.
             new ComputeStage(),
@@ -24,7 +28,7 @@ internal static class PostStages {
             new CaptureStage(),
 
             // Tier B — the compute SDF world pipeline (M3): the full beam → cull-args → views (indirect) → composite
-            // chain through the reusable PostWorldRenderer harness.
+            // chain through the shared SdfWorldEngine (Puck.SdfVm) in its submit-and-wait harness mode.
             new SplitCoverageStage(),
             new DynamicTransformStage(),
 
@@ -34,12 +38,18 @@ internal static class PostStages {
             new ReverseShareStage(),
             new IndirectStage(),
             new WorldStage(),
+            new WorldMenagerieStage(),
+            new WorldWallpaperStage(),
+            new WorldWarpStage(),
             new WorldChildStage(),
+            new WorldScreenStage(),
+            new WorldInstancedStage(),
+            new WorldSwarmStage(),
             new CameraShareStage(),
 
             // Tier C — fuzz + ray tracing (M5): the differential fuzzer's fixed deterministic seed sample, then the
             // hardware ray-query/DXR parity check (skip-with-note when either device lacks inline ray tracing).
-            new FuzzStage(),
+            (fuzzSeed is int seed ? new FuzzStage(seeds: [seed]) : new FuzzStage()),
             new RtStage(),
 
             // Tier D — performance + live-subsystem checks. The GPU-ms budget runs in-process on the healthy Vulkan

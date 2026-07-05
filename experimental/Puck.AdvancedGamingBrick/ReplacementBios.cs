@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick;
 /// in its place. The image is copied on construction so the source buffer may be reused or discarded.
 /// </summary>
 public sealed class ReplacementBios : IBios {
-    /// <summary>The exact size of the Game Boy Advance BIOS, in bytes.</summary>
+    /// <summary>The exact size of the Advanced GamingBrick BIOS, in bytes.</summary>
     public const int ImageSize = 16 * 1024;
 
     private readonly ReadOnlyMemory<byte> m_image;

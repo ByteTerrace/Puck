@@ -1,3 +1,5 @@
+using Puck.Capture;
+
 namespace Puck.Post;
 
 /// <summary>
@@ -180,49 +182,116 @@ internal sealed record ParityThresholdSet {
 }
 
 /// <summary>
-/// The calibrated PASS thresholds the parity stages apply — constant VALUES copied from the demo's
-/// <c>ParityThresholds.cs</c> (calibrated against the measured RTX 4070 baseline), never code-shared: the POST is a
-/// from-scratch reimplementation and the demo gate is its standing cross-check.
+/// The calibrated PASS thresholds the parity stages apply — VALUES kept in sync with the demo's
+/// <c>ParityThresholds.cs</c> (calibrated against the measured RTX 4070 baseline): the demo gate is the POST's
+/// standing cross-check, so the same comparison must pass or fail identically in both.
+/// <para><b>POSTURE (user decision 2026-07-03): RELAXED by default.</b> Pixel-perfect cross-backend agreement is a
+/// LONG-TERM ideal, not a day-to-day gate: the fine-grained signatures (±1-LSB exactness, unit-delta mass,
+/// isolation) re-roll with every shader-codegen change and kept blocking short-term work. The default posture keeps
+/// only the guards a REAL divergence cannot dodge — a missing/relocated/recolored region explodes the mean, a wrong
+/// layout explodes the spread — and shrugs at every known FP-noise class. <c>PUCK_PARITY_STRICT=1</c> opts back into
+/// the strict calibrations below (each set's doc records its calibration evidence) for dedicated parity-hunting
+/// sessions chasing the ideal.</para>
 /// </summary>
 internal static class ParityThresholds {
-    /// <summary>The strict thresholds for continuous-shading views, where the only cross-backend (or
-    /// dynamic-vs-baked) residual is ±1-LSB quantization noise.</summary>
-    public static readonly ParityThresholdSet Continuous = new() {
+    // Declaration order matters: the posture fields must initialize before the public sets below read them.
+    private static readonly bool s_strict = string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_PARITY_STRICT"), "1", StringComparison.Ordinal);
+
+    // The one relaxed envelope (KEEP IN SYNC with the demo's copy): mean is the load-bearing guard — worst measured
+    // benign noise is ~0.06 (all-±1 at ~6% spread), a real region divergence lands in the multiple-of-1.0 range.
+    private static readonly ParityThresholdSet s_relaxed = new() {
+        MaxChannelDelta = 255, // disabled: boundary flips and amplified tails are legitimately large.
+        MaxMeanAbsError = 0.35, // ~5x over the worst measured benign mean; a real region bug blows far past it.
+        MaxPercentDiffering = 20.0, // generous: FP noise redistributes freely; a wrong LAYOUT still trips this.
+        MinIsolatedFraction = 0.0, // disabled: benign noise clusters along gradients.
+        MinUnitDeltaFraction = 0.0, // disabled: the delta-mass signature is a strict-posture concern.
+    };
+
+    static ParityThresholds() {
+        if (s_strict) {
+            Console.Error.WriteLine(value: "[parity] STRICT posture (PUCK_PARITY_STRICT=1): the long-term pixel-perfect calibrations are enforced.");
+        }
+    }
+
+    /// <summary>STRICT: continuous-shading views, where the only cross-backend (or dynamic-vs-baked) residual is
+    /// ±1-LSB quantization noise.</summary>
+    public static readonly ParityThresholdSet Continuous = (s_strict ? new ParityThresholdSet {
         MaxChannelDelta = 1, // ±1-LSB noise; above 1 is a real divergence.
         MaxMeanAbsError = 0.05, // ±1 on a fraction of pixels keeps this far below 0.05.
         MaxPercentDiffering = 0.5, // ~4x over the measured 0.13%.
         MinIsolatedFraction = 0.90, // benign noise is ~99% isolated; a bug clumps.
         MinUnitDeltaFraction = 0.99, // benign noise is entirely ±1.
-    };
+    } : s_relaxed);
 
     /// <summary>The thresholds for the full compute SDF world composite: the same continuous-shading flavour as
     /// <see cref="Continuous"/>, but the richer scene puts measurably more pixels in the 1/255 transition bands, so
     /// only the spread cap is relaxed; the max-delta, isolation, unit-delta, and mean guards stay strict.</summary>
-    public static readonly ParityThresholdSet WorldComposite = new() {
+    public static readonly ParityThresholdSet WorldComposite = (s_strict ? new ParityThresholdSet {
         MaxChannelDelta = 1, // ±1-LSB noise; above 1 is a real divergence.
         MaxMeanAbsError = 0.05, // ±1 on <1% of pixels keeps this far below 0.05.
         MaxPercentDiffering = 2.0, // ~3.5x over the measured 0.57% split baseline; benign noise scales with scene richness.
         MinIsolatedFraction = 0.85, // measured 93-96% isolated; a clustered bug collapses well below this.
         MinUnitDeltaFraction = 0.99, // benign noise is entirely ±1.
-    };
+    } : s_relaxed);
+
+    /// <summary>The thresholds for continuous world views whose benign residual is EXACTLY ±1 LSB but whose spread
+    /// legitimately moves with shader codegen: every time the VM's interpreter grows an opcode, DXC's SPIR-V and DXIL
+    /// codegen re-make different contraction/scheduling choices, and the ±1 rounding noise REDISTRIBUTES (measured on
+    /// the rt stage when the wallpaper fold landed 2026-07-03: 0.01% → 6.2% of pixels differing, still every delta
+    /// exactly ±1, visible as gradient-band dither). Chasing the spread per codegen roll is whack-a-mole; the
+    /// signature that cannot be a real bug is "EVERY delta is exactly ±1" — so the magnitude guards stay absolute
+    /// (max delta 1, unit-delta 0.99) and the structure guards widen to what all-±1 noise can occupy. The mean guard
+    /// scales with spread for ±1 noise (mean ≈ spread × 1/255-ish per channel), hence its looser cap.</summary>
+    public static readonly ParityThresholdSet WorldLsbExact = (s_strict ? new ParityThresholdSet {
+        MaxChannelDelta = 1, // absolute: any ≥2 delta is a real divergence.
+        MaxMeanAbsError = 0.12, // all-±1 noise at ~10% spread lands here; a real bug (multi-LSB) blows past it.
+        MaxPercentDiffering = 10.0, // codegen rolls redistribute the ±1 noise; magnitude, not spread, is the guard.
+        MinIsolatedFraction = 0.0, // disabled: ±1 dither legitimately follows gradient bands.
+        MinUnitDeltaFraction = 0.99, // absolute: benign residual is entirely ±1.
+    } : s_relaxed);
+
+    /// <summary>The thresholds for continuous world views over HIGH-CONTRAST palettes (emissive/specular materials),
+    /// where a benign ±1-ULP field difference at a material boundary can flip the WINNING MATERIAL of an isolated
+    /// pixel — a legitimately multi-LSB delta (measured on the menagerie when the wallpaper fold's codegen roll
+    /// landed 2026-07-03: a handful of isolated Δ126 pixels where the glowing cream pair meets its neighbors; the
+    /// same phenomenon the Discrete set has always absorbed for the material-id debug view). The max-delta guard is
+    /// disabled for exactly that signature; everything else stays showcase-strict — a real bug clumps (isolation),
+    /// spreads (percent), shifts the mass off ±1 (unit-delta), or lifts the mean.</summary>
+    public static readonly ParityThresholdSet WorldHighContrast = (s_strict ? new ParityThresholdSet {
+        MaxChannelDelta = 255, // disabled: an isolated boundary-winner flip is a legitimately large delta.
+        MaxMeanAbsError = 0.05, // a real bug spreads, lifting the mean well past this.
+        MaxPercentDiffering = 2.0, // showcase-strict spread.
+        MinIsolatedFraction = 0.85, // flips are isolated; a clustered bug collapses this.
+        MinUnitDeltaFraction = 0.99, // the delta MASS stays exactly ±1; flips are the <1% tail.
+    } : s_relaxed);
 
     /// <summary>The thresholds for cross-backend DIFFERENTIAL FUZZING of the SDF world. Fuzz-generated scenes span
     /// the whole input space, so the benign ±1-LSB codegen residual is legitimately MORE clustered and widespread
     /// than the hand-tuned showcase: it follows the large smooth ground-plane gradients and the cone-march banding
     /// (thin contiguous ±1 bands), which collapses the isolated-fraction and lifts the spread far below what those
-    /// showcase-calibrated guards expect. So the fuzz oracle leans on the DEFINITIVE benign signature instead —
-    /// every difference is exactly ±1 LSB (<see cref="ParityThresholdSet.MaxChannelDelta"/> = 1 and
-    /// <see cref="ParityThresholdSet.MinUnitDeltaFraction"/> = 0.99 stay strict) — and disables the
-    /// gradient-structure-dependent isolation guard while widening the spread cap. A real divergence (a wrong
-    /// shape/blend/material renders a region with multi-LSB deltas) trips the max-delta and unit-delta guards
-    /// regardless of how the benign noise happens to cluster.</summary>
-    public static readonly ParityThresholdSet WorldFuzz = new() {
-        MaxChannelDelta = 1, // the key guard: any ≥2 delta is a real divergence (benign codegen is exactly ±1).
-        MaxMeanAbsError = 0.05, // ±1 on a minority of pixels stays far below this; a real bug lifts the mean.
+    /// showcase-calibrated guards expect — so the isolation guard is disabled and the spread cap widened.
+    /// <para>The 7-shape generator (capsule/cylinder/ellipsoid joined 2026-07-03) additionally produces LARGE CURVED
+    /// GRAZING surfaces (e.g. seed 42: a capsule under a non-uniform Scale filling a third of the frame edge-on),
+    /// where the march itself amplifies sub-ULP field differences: a step-termination flip near the surface shifts
+    /// the traveled distance, and the 6-tap normal's catastrophic cancellation turns that into an ISOLATED few-LSB
+    /// shading delta (measured: maxΔ5 on 0.02% of pixels, 100% isolated, 98.85% still exactly ±1). "Every delta
+    /// exactly ±1" was therefore an empirical property of the old 4-shape scene distribution, not of the backends.
+    /// The recalibrated signature: the mass of deltas stays ±1 (<see cref="ParityThresholdSet.MinUnitDeltaFraction"/>
+    /// = 0.95 — the load-bearing subtle-bug guard: a shape whose field diverges by even 2–3 LSB across its screen
+    /// area collapses it), and a real region-level divergence still trips the mean/spread guards regardless of
+    /// magnitude. The max-delta guard is DISABLED outright: once the subtraction-like blends joined the generator
+    /// (2026-07-03), the carve boundaries produce the same benign ISOLATED material-winner flips the high-contrast
+    /// showcase scenes show (a ±1-ULP field difference at a discrete ownership decision; measured seed 1: maxΔ165 on
+    /// isolated pixels, 94% isolated, delta mass still ±1) — magnitude no longer separates benign from real; the
+    /// MASS does. KEEP IN SYNC with the demo's <c>ParityThresholds.WorldFuzz</c> (the same seed must pass or fail
+    /// identically in both gates).</para></summary>
+    public static readonly ParityThresholdSet WorldFuzz = (s_strict ? new ParityThresholdSet {
+        MaxChannelDelta = 255, // disabled: isolated boundary-winner flips are legitimately large; the unit-delta mass is the guard.
+        MaxMeanAbsError = 0.05, // few-LSB deltas on a tiny minority of pixels stay far below this; a real bug lifts the mean.
         MaxPercentDiffering = 8.0, // wide: gradient/banding-heavy fuzz scenes put many pixels in ±1 transition bands.
         MinIsolatedFraction = 0.0, // disabled: benign ±1 noise follows gradient bands and is legitimately clustered.
-        MinUnitDeltaFraction = 0.99, // the co-guard: benign codegen noise is entirely ±1, so a real bug drops this.
-    };
+        MinUnitDeltaFraction = 0.95, // THE guard: benign deltas are OVERWHELMINGLY ±1; a real divergence shifts the mass off it.
+    } : s_relaxed);
 }
 
 /// <summary>Shared parity plumbing for the cross-backend stages: the amplified diff heatmap and a one-line
@@ -256,7 +325,7 @@ internal static class ParityCheck {
             diff[offset + 3] = byte.MaxValue;
         }
 
-        PngImage.Write(height: height, path: path, rgba: diff, width: width);
+        PngEncoder.Write(height: height, path: path, rgba: diff, width: width);
     }
 
     /// <summary>Formats the one-line metrics digest the parity stages put in their outcome detail.</summary>
@@ -266,5 +335,37 @@ internal static class ParityCheck {
         ArgumentNullException.ThrowIfNull(metrics);
 
         return $"diff {metrics.PercentDiffering:0.##}% ({metrics.DifferingPixels}px) | maxΔ{metrics.MaxChannelDelta} | isolated {(metrics.IsolatedFraction * 100.0):0}% | unitΔ {metrics.UnitDeltaFraction:0.##}";
+    }
+
+    /// <summary>Evaluates the flat ≡ instanced contract the instancing stages assert PER BACKEND: Vulkan
+    /// BIT-IDENTICAL (the mask gate is an exact culling decision over a fixed SPIR-V compile, so any divergence at
+    /// all is a real masking bug), Direct3D 12 within <see cref="ParityThresholds.WorldLsbExact"/> (the documented
+    /// benign DXIL codegen redistribution — see the stages' own docs for the measured signature). On failure it
+    /// writes the Vulkan flat-vs-instanced diff heatmap — the diagnosis of WHERE the masked walk diverged from the
+    /// flat walk, not just the bool — beside the stage's main diff artifact and returns the failure outcome.</summary>
+    /// <param name="stageName">The stage name, prefixing the on-fail Vulkan diff artifact.</param>
+    /// <param name="artifactsDirectory">The battery artifacts directory.</param>
+    /// <param name="diffPath">The stage's main diff artifact path (the failure outcome's artifact).</param>
+    /// <param name="vulkanFlatPixels">The Vulkan flat render.</param>
+    /// <param name="vulkanInstancedPixels">The Vulkan instanced render.</param>
+    /// <param name="directXFlatPixels">The Direct3D 12 flat render.</param>
+    /// <param name="directXInstancedPixels">The Direct3D 12 instanced render.</param>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <returns>The failure outcome, or <see langword="null"/> when the contract holds.</returns>
+    public static PostStageOutcome? EvaluateFlatInstancedContract(string stageName, string artifactsDirectory, string diffPath, byte[] vulkanFlatPixels, byte[] vulkanInstancedPixels, byte[] directXFlatPixels, byte[] directXInstancedPixels, int width, int height) {
+        var vulkanIdentical = vulkanFlatPixels.AsSpan().SequenceEqual(other: vulkanInstancedPixels);
+        var directXMetrics = ParityMetrics.Compute(reference: directXFlatPixels, comparand: directXInstancedPixels, width: width, height: height);
+        var directXFailures = ParityThresholds.WorldLsbExact.Evaluate(metrics: directXMetrics);
+
+        if (vulkanIdentical && (directXFailures.Count == 0)) {
+            return null;
+        }
+
+        var vulkanMetrics = ParityMetrics.Compute(reference: vulkanFlatPixels, comparand: vulkanInstancedPixels, width: width, height: height);
+
+        WriteDiffImage(comparand: vulkanInstancedPixels, height: height, path: Path.Combine(artifactsDirectory, $"{stageName}-vulkan-flat-diff.png"), reference: vulkanFlatPixels, width: width);
+
+        return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"instanced != flat: Vulkan bit-identical={vulkanIdentical} ({Describe(metrics: vulkanMetrics)}); Direct3D 12 {Describe(metrics: directXMetrics)}{(directXFailures.Count == 0 ? "" : $" — {string.Join(separator: "; ", values: directXFailures)}")}");
     }
 }

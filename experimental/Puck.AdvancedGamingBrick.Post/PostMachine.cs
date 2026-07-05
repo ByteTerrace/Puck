@@ -5,13 +5,13 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// <summary>
 /// Shared helper for the POST stages: builds a fully-composed, isolated Game Boy Advance machine (its own dependency
 /// scope, so two machines never share a component) that direct-boots to the cartridge entry point, and advances it a
-/// whole number of frames. One frame is <see cref="GameBoyAdvanceMachine.CyclesPerFrame"/> master cycles (228 scanlines
+/// whole number of frames. One frame is <see cref="AdvancedGamingBrickMachine.CyclesPerFrame"/> master cycles (228 scanlines
 /// &#215; 1232 dots) at the 16.777216&#160;MHz system clock. The instance owns its <see cref="ServiceProvider"/> and must
 /// be disposed.
 /// </summary>
 internal sealed class PostMachine : IDisposable {
     /// <summary>The number of master clock cycles in one video frame.</summary>
-    public const int CyclesPerFrame = GameBoyAdvanceMachine.CyclesPerFrame;
+    public const int CyclesPerFrame = AdvancedGamingBrickMachine.CyclesPerFrame;
 
     /// <summary>The GBA system clock in Hz (16.777216&#160;MHz).</summary>
     public const double SystemClockHz = 16_777_216.0;
@@ -22,14 +22,14 @@ internal sealed class PostMachine : IDisposable {
     private readonly ServiceProvider m_provider;
     private readonly IServiceScope m_scope;
 
-    private PostMachine(ServiceProvider provider, IServiceScope scope, GameBoyAdvanceMachine machine) {
+    private PostMachine(ServiceProvider provider, IServiceScope scope, AdvancedGamingBrickMachine machine) {
         m_provider = provider;
         m_scope = scope;
         Machine = machine;
     }
 
     /// <summary>The composed machine. The caller drives it; the instance owns its lifetime.</summary>
-    public GameBoyAdvanceMachine Machine { get; }
+    public AdvancedGamingBrickMachine Machine { get; }
 
     /// <summary>Builds an isolated, direct-booted machine for a BIOS image and cartridge ROM, with the standard
     /// component set.</summary>
@@ -39,13 +39,13 @@ internal sealed class PostMachine : IDisposable {
     public static PostMachine Build(ReadOnlyMemory<byte> bios, byte[] rom) {
         var services = new ServiceCollection();
 
-        _ = services.AddGameBoyAdvance();
+        _ = services.AddAdvancedGamingBrick();
         _ = services.AddReplacementBios(image: bios);
-        _ = services.AddScoped<GbaCartridge>(implementationFactory: _ => new GbaCartridge(rom: rom));
+        _ = services.AddScoped<AgbCartridge>(implementationFactory: _ => new AgbCartridge(rom: rom));
 
         var provider = services.BuildServiceProvider();
         var scope = provider.CreateScope();
-        var machine = scope.ServiceProvider.GetRequiredService<GameBoyAdvanceMachine>();
+        var machine = scope.ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
 
         machine.DirectBoot();
 

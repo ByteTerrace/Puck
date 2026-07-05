@@ -1,3 +1,5 @@
+> **Historical record.** This describes the deleted monolith's debug-visualization subsystem (`WorldDebugViewMode`, `world-debug.glsl`, the stats SSBO, the JSONL log) — **none of it exists in the split projects** (verified 2026-07-02: no `Puck_DEBUG_VIZ` anywhere in `src/`). The one surviving artifact of the pattern is the RT cull-parity debug host `src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world-rt-debug.rq.comp.hlsl`. Rebuilding a debug-viz layer for the split engine is open work; this doc is the design reference for it.
+
 # World debug visualization & validation log
 
 In-engine math validation for the compute world pass: toggleable visualizations, a

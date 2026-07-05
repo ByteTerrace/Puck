@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- Emit CsWin32's generated interop to obj/generated (obj is gitignored) so the
+             `named-args` format pass can resolve calls into the generated Win32 types. -->
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />

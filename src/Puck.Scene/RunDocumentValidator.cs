@@ -10,6 +10,9 @@ namespace Puck.Scene;
 /// </summary>
 public static class RunDocumentValidator {
     private static readonly FloatRange s_albedoChannel = new(Maximum: 1f, Minimum: 0f);
+    private static readonly FloatRange s_emissive = new(Maximum: 8f, Minimum: 0f);
+    private static readonly FloatRange s_shininess = new(Maximum: 256f, Minimum: 1f);
+    private static readonly FloatRange s_specular = new(Maximum: 1f, Minimum: 0f);
 
     /// <summary>Validates a document, throwing if it is not buildable.</summary>
     /// <param name="document">The deserialized document.</param>
@@ -48,15 +51,15 @@ public static class RunDocumentValidator {
             errors.Add(path: "graph", message: "graph, validation, and fuzzing are mutually exclusive — a run has exactly one root intent");
         }
 
-        // Only some run shapes CONSUME the scene + viewports: the compute/ray-query world graphs and the data-driven
-        // 'world' validation gate. The showcase graph renders its own built-in scene, the self-contained gates
-        // (parity/export/compute/reverse) use none, and a fuzzing run generates its own — so a scene is not required for
-        // those (but is still validated if present).
-        var consumesScene = (document.Graph is WorldNode or RtNode)
+        // Only some run shapes CONSUME the scene + viewports: the compute world graph and the data-driven 'world'
+        // validation gate. Overworld builds its own dynamic scene, the self-contained gates use none, and a fuzzing
+        // run generates its own — so a scene is not required for those (but is still validated if present).
+        var consumesScene = (document.Graph is WorldNode)
             || ((document.Validation is ValidationDocument sceneGate) && string.Equals(sceneGate.Gate, "world", StringComparison.OrdinalIgnoreCase));
 
         ValidateScene(bounds: effectiveBounds, errors: errors, required: consumesScene, scene: (document.Scene ?? new SceneDocument()));
         ValidateViewports(errors: errors, required: consumesScene, viewports: (document.Viewports ?? []));
+        ValidateScreenSources(consumed: (document.Graph is WorldNode), errors: errors, screenSources: document.ScreenSources, viewports: (document.Viewports ?? []));
 
         if (document.Graph is not null) {
             document.Graph.Validate(errors: errors, path: "graph", viewportCount: (document.Viewports?.Count ?? 0));
@@ -64,7 +67,7 @@ public static class RunDocumentValidator {
 
         document.Validation?.Validate(errors: errors, path: "validation", viewportCount: (document.Viewports?.Count ?? 0));
         document.Fuzzing?.Validate(errors: errors, path: "fuzzing");
-        ValidateHostGraphConsistency(errors: errors, graph: document.Graph, host: document.Host);
+        document.Input?.Validate(errors: errors, path: "input");
 
         // A validation/fuzzing gate renders OFFSCREEN and LUID-matches a Direct3D 12 device from a Vulkan host, so a
         // directx host backend is meaningless here; reject it rather than silently overriding it to Vulkan.
@@ -73,25 +76,6 @@ public static class RunDocumentValidator {
         }
 
         return errors;
-    }
-
-    // Cross-section check: a Direct3D 12 host renders the world either same-device (no produce) or — with
-    // produce:"vulkan" — via a bespoke Vulkan producer whose content the D3D12 host imports zero-copy (the reverse
-    // cross-backend live path). That combination IS valid for the world graph. It is rejected only for the SHOWCASE,
-    // which has no reverse cross-backend path (a D3D12 showcase host yields a blank window). The rt node has no
-    // produce (it is rejected outright by RtNode.Validate), so it is exempt here.
-    private static void ValidateHostGraphConsistency(NodeDocument? graph, HostDocument? host, ValidationErrors errors) {
-        if ((host?.Backend is not string backend) || !string.Equals(backend, "directx", StringComparison.OrdinalIgnoreCase)) {
-            return;
-        }
-
-        if ((graph is ShowcaseNode) && (graph.Produce is string produce) && string.Equals(produce, "vulkan", StringComparison.OrdinalIgnoreCase)) {
-            errors.Add(path: "graph.produce", message: "produce:\"vulkan\" is incompatible with host.backend:\"directx\" on a showcase (there is no reverse cross-backend showcase); omit produce, set host.backend:\"vulkan\", or use the 'world' graph for the reverse cross-backend live path");
-        }
-
-        if (graph is CameraNode) {
-            errors.Add(path: "host.backend", message: "host.backend:\"directx\" is incompatible with the 'camera' node; it produces on a bespoke Direct3D 12 device that only a Vulkan host can import zero-copy — omit host.backend or set it to \"vulkan\"");
-        }
     }
 
     // Unknown top-level members were captured into the root's [JsonExtensionData] rather than rejected (so a strict
@@ -106,7 +90,7 @@ public static class RunDocumentValidator {
 
         foreach (var key in extensions.Keys) {
             if ((key.Length != 0) && (key[0] != '$') && (key[0] != '_')) {
-                errors.Add(path: key, message: $"unknown top-level member '{key}'; top-level keys are case-sensitive camelCase (expected one of: version, host, scene, viewports, graph, validation, fuzzing)");
+                errors.Add(path: key, message: $"unknown top-level member '{key}'; top-level keys are case-sensitive camelCase (expected one of: version, host, scene, viewports, screenSources, graph, validation, fuzzing)");
             }
         }
     }
@@ -137,6 +121,13 @@ public static class RunDocumentValidator {
 
             var albedo = material.Albedo;
             var path = $"scene.materials[{index}].albedo";
+
+            errors.RequireRange(path: $"scene.materials[{index}].emissive", name: "emissive", range: s_emissive, value: material.Emissive);
+            errors.RequireRange(path: $"scene.materials[{index}].specular", name: "specular", range: s_specular, value: material.Specular);
+
+            if (material.Shininess is float shininess) {
+                errors.RequireRange(path: $"scene.materials[{index}].shininess", name: "shininess", range: s_shininess, value: shininess);
+            }
 
             if (!JsonVector.IsValid(components: albedo, length: 3)) {
                 errors.RequireVector(path: path, components: albedo, length: 3);
@@ -175,13 +166,43 @@ public static class RunDocumentValidator {
             errors.Add(path: "scene.objects", message: $"places {primitiveCount} non-plane primitives; the limit is {bounds.MaxPrimitives}");
         }
     }
+    private static void ValidateScreenSources(IReadOnlyList<ScreenSourceDocument>? screenSources, IReadOnlyList<Viewport> viewports, bool consumed, ValidationErrors errors) {
+        if (screenSources is null) {
+            return;
+        }
+
+        // The doctrine: the validator rejects data the selected root intent will not consume — a table that would
+        // survive validation only to be silently ignored is an authoring mistake, reported at its source.
+        if (!consumed && (screenSources.Count > 0)) {
+            errors.Add(path: "screenSources", message: "screenSources is only consumed by the world graph; this run's root intent would silently ignore it");
+        }
+
+        var seenIndices = new HashSet<int>();
+
+        for (var index = 0; (index < screenSources.Count); index++) {
+            var entry = screenSources[index];
+            var path = $"screenSources[{index}]";
+
+            if (entry is null) {
+                errors.Add(path: path, message: "a screen-source entry cannot be null");
+
+                continue;
+            }
+
+            if (!seenIndices.Add(item: entry.ScreenIndex)) {
+                errors.Add(path: $"{path}.screenIndex", message: $"screen index {entry.ScreenIndex} is fed by more than one entry");
+            }
+
+            entry.Validate(errors: errors, path: path, viewports: viewports);
+        }
+    }
     private static void ValidateViewports(IReadOnlyList<Viewport> viewports, bool required, ValidationErrors errors) {
         if (required && (viewports.Count == 0)) {
             errors.Add(path: "viewports", message: "at least one viewport is required");
         }
 
-        if (viewports.Count > 4) {
-            errors.Add(path: "viewports", message: $"the compositor supports at most 4 viewports; found {viewports.Count}");
+        if (viewports.Count > 5) {
+            errors.Add(path: "viewports", message: $"the compositor supports at most 5 viewports; found {viewports.Count}");
         }
 
         for (var index = 0; (index < viewports.Count); index++) {

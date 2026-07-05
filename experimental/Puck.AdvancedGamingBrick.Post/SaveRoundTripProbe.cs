@@ -25,7 +25,7 @@ internal static class SaveRoundTripProbe {
             }
         }
 
-        var source = new GbaCartridge(rom: rom);
+        var source = new AgbCartridge(rom: rom);
 
         Check(condition: source.Backup == CartridgeBackup.Sram, what: "detects SRAM backup");
         Check(condition: source.HasSave, what: "HasSave");
@@ -42,7 +42,7 @@ internal static class SaveRoundTripProbe {
         Check(condition: exported.Length == (32 * 1024), what: "exported save is 32 KiB");
         Check(condition: (exported[0x0000] == 0x12) && (exported[0x0001] == 0x34) && (exported[0x0100] == 0xAB), what: "exported bytes match writes");
 
-        var reloaded = new GbaCartridge(rom: rom);
+        var reloaded = new AgbCartridge(rom: rom);
 
         Check(condition: reloaded.LoadSave(data: exported), what: "LoadSave accepts a matching-size save");
         Check(condition: !reloaded.SaveDirty, what: "freshly loaded cartridge is clean");

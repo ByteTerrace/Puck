@@ -1,7 +1,7 @@
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// The SM83's arithmetic and logic, with the exact flag behaviour the Game Boy programs depend on. Every operation
+/// The SM83's arithmetic and logic, with the exact flag behaviour GamingBrick programs depend on. Every operation
 /// here is integer-only and side-effect-free apart from the accumulator and the flags register, so the results are
 /// deterministic.
 /// </summary>

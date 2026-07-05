@@ -5,6 +5,7 @@ using Puck.Input;
 using Puck.Launcher;
 using Puck.Platform.Windows.Gamepad;
 using Puck.Platform.Windows.Hid;
+using Puck.Storage.DependencyInjection;
 
 namespace Puck.Demo;
 
@@ -17,7 +18,7 @@ internal static class GamepadDemoRegistration {
     /// lifetime.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
-    /// <param name="registerGlobalSource">Whether to register the global gamepad command source. The live MiniAction
+    /// <param name="registerGlobalSource">Whether to register the global gamepad command source. The live Overworld
     /// mode sets this <see langword="false"/> so it can be the SOLE per-frame gamepad drainer (per-device routing) —
     /// otherwise the global source's destructive drain would consume each controller's edges before the game sees them.
     /// The hardware manager + hotplug service are always registered.</param>
@@ -25,8 +26,40 @@ internal static class GamepadDemoRegistration {
     public static IServiceCollection AddDemoGamepad(this IServiceCollection services, bool registerGlobalSource = true) {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Per-controller cursor state: command handlers write it, the cursor overlay node reads it.
-        services.AddSingleton<CursorStore>();
+        // Binding-bar state: the overworld's deterministic input path publishes it, the binding-bar overlay node
+        // reads it.
+        services.AddSingleton<BindingBar.BindingBarStore>();
+        // The local player's binding-page profile: persisted JSON (seeded from the built-in default on first
+        // run) compiled into the paged resolver the deterministic input path folds signals through.
+        PuckStorageServiceRegistration.AddCore(services: services);
+        services.AddSingleton<BindingProfileStore>();
+        services.AddSingleton(implementationFactory: static sp => {
+            var store = sp.GetRequiredService<BindingProfileStore>();
+            var @default = BindingProfileDocuments.BuildDefault();
+
+            try {
+                var document = store.LoadOrCreateAsync(@default: @default).AsTask().GetAwaiter().GetResult();
+
+                // A stored document from an older vocabulary is reseeded in place (Compile would reject it anyway):
+                // the default changed under it, and a permanent fall-back-with-warning would leave the on-disk file
+                // lying about what the buttons do.
+                if (!string.Equals(a: document.Version, b: @default.Version, comparisonType: StringComparison.Ordinal)) {
+                    Console.Error.WriteLine(value: $"[bindings] stored profile is {document.Version}; reseeding as {@default.Version} (customizations reset) at {store.FilePath}.");
+                    _ = store.SaveAsync(document: @default).AsTask().GetAwaiter().GetResult();
+                    document = @default;
+                }
+
+                Console.Error.WriteLine(value: $"[bindings] profile loaded ({document.Pages.Count} pages); edit {store.FilePath} to customize.");
+
+                return new PagedInputBindings(profile: BindingProfile.Compile(document: document));
+            } catch (Exception exception) {
+                // A malformed or stale stored document must never take input down — fall back to the built-in
+                // default and tell the player which file to fix (or delete, to re-seed).
+                Console.Error.WriteLine(value: $"[bindings] stored profile rejected ({exception.Message}); using the built-in default. Fix or delete {store.FilePath} to re-seed.");
+
+                return new PagedInputBindings(profile: BindingProfile.Compile(document: @default));
+            }
+        });
         services.AddSingleton(implementationFactory: static sp => new GamepadManager(
             // The Windows HID transport and the Windows Xbox (XInput + GameInput) backend live in Puck.Platform;
             // a Linux build would inject hidraw / evdev implementations of the same abstractions instead.
@@ -50,11 +83,10 @@ internal static class GamepadDemoRegistration {
                     [InputSources.Gamepad.LeftShoulder] = [new(Command: "gamepad-trigger-schedule")],
                     [InputSources.Gamepad.Touchpad] = [new(Command: "gamepad-touchpad")],
                     [InputSources.Gamepad.Mute] = [new(Command: "gamepad-mute")],
-                    [InputSources.Gamepad.Touchpad0] = [new(Command: "gamepad-touch0"), new(Command: "cursor-touch")],
+                    [InputSources.Gamepad.Touchpad0] = [new(Command: "gamepad-touch0")],
                     [InputSources.Gamepad.Touchpad1] = [new(Command: "gamepad-touch1")],
-                    [InputSources.Gamepad.LeftStick] = [new(Command: "gamepad-move"), new(Command: "cursor-nudge-stick")],
+                    [InputSources.Gamepad.LeftStick] = [new(Command: "gamepad-move")],
                     [InputSources.Gamepad.Gyro] = [new(Command: "gamepad-gyro")],
-                    [InputSources.Gamepad.Accelerometer] = [new(Command: "cursor-tilt")],
                     [InputSources.Gamepad.Orientation] = [new(Command: "gamepad-orientation")],
                 },
                 diagnostics: static message => Console.Error.WriteLine(value: message),

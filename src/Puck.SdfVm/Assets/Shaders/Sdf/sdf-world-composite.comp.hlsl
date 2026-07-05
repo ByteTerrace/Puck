@@ -8,14 +8,14 @@ struct CompositeParams2 {
     uint2 imageExtent;     // output image size in pixels
     uint viewportCount;
     uint tileGridPacked;   // (tileGrid.y << 16) | tileGrid.x — the cull buffer's per-viewport stride, for flattening
-    float4 rects[4];       // per viewport: xy = normalized origin, zw = normalized size (of the output image)
+    float4 rects[5];       // per viewport: xy = normalized origin, zw = normalized size (of the output image)
 };
 [[vk::push_constant]] ConstantBuffer<CompositeParams2> params;
 
 [[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> Output : register(u0);
 // The per-view source textures (binding 1, an array): SDF views from Stage 1, or child surfaces, indexed by viewport.
 // The format is declared so the read is a formatted OpImageRead (no shaderStorageImageReadWithoutFormat dependency).
-[[vk::binding(1, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[4] : register(u1);
+[[vk::binding(1, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u1);
 // The beam cull buffer (binding 3, read-only): for an EMPTY SDF tile (the GPU cull skipped its Stage-1 dispatch, so
 // its source pixel is stale) the compositor writes a flat constant instead of the source. KEEP the three helpers below
 // IN SYNC with sdf-world.hlsli (this kernel has its own push-constant layout, so it cannot include that header).

@@ -28,6 +28,11 @@ public interface ICpu {
     /// <summary>Gets or sets the 16-bit program counter (PC).</summary>
     ushort ProgramCounter { get; set; }
 
+    /// <summary>Gets whether the processor is stalled in HALT (or STOP), burning cycles until an interrupt wakes it.
+    /// Read-only observability (the halt-share measurement rides this); the state itself is machine state and lives in
+    /// the snapshot.</summary>
+    bool IsHalted { get; }
+
     /// <summary>Executes one instruction — or services a pending interrupt, or burns one machine cycle while halted —
     /// advancing the master clock by the cycles it consumes.</summary>
     void StepInstruction();

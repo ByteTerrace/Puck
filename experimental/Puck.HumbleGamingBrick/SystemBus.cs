@@ -7,7 +7,7 @@ namespace Puck.HumbleGamingBrick;
 /// has claimed yet; everything else routes to the cartridge, the internal RAM, or the interrupt controller. As real
 /// components come online they take over their register ranges from the fallback page.
 /// </summary>
-public sealed class SystemBus : ISystemBus, ISnapshotable {
+public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     // The boot overlay's read windows: every model maps the first 256 bytes; Color additionally maps 0x200-0x8FF,
     // leaving the cartridge header visible through the 0x100-0x1FF hole.
     private const ushort BootRomLowEnd = 0x00FF;
@@ -28,7 +28,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable {
     private readonly IOamDma m_oamDma;
     private readonly IPpu m_ppu;
     private readonly ISerial m_serial;
-    private readonly bool m_supportsColor;
+    // Mutable so a LIVE device swap re-gates the Color I/O page: with this false, every color register write (palette
+    // RAM, KEY1, HDMA, VRAM/WRAM bank selects, PCM ports) is already dropped by the existing `if (m_supportsColor)`
+    // guards and reads return 0xFF — sealing off Color hardware after a demote with no per-register change.
+    private bool m_supportsColor;
     private readonly ITimer m_timer;
 
     // The FF50 latch: the boot ROM overlay is readable until the first nonzero write, which unmaps it for the life of
@@ -77,7 +80,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable {
         m_oamDma = oamDma;
         m_ppu = ppu;
         m_serial = serial;
-        m_supportsColor = (configuration.Model == ConsoleModel.Cgb);
+        m_supportsColor = configuration.Model.SupportsColor();
         m_timer = timer;
 
         Array.Fill(array: m_ioRegisters, value: (byte)0xFF);
@@ -208,6 +211,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable {
             m_interrupts.Enabled = (InterruptKind)value;
         }
     }
+    /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) =>
+        m_supportsColor = model.SupportsColor();
+
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteBytes(value: m_ioRegisters);

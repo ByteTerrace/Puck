@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Numerics;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
+using Puck.Demo.Overworld;
 using Puck.Hosting;
 using Puck.Input;
 using Puck.Input.Output;
@@ -16,7 +17,6 @@ namespace Puck.Demo;
 internal sealed class DemoCommandModule(
     IClipboardService clipboard,
     DemoConsole console,
-    CursorStore cursors,
     GamepadManager gamepads,
     IInputClock inputClock,
     IRenderNode rootNode
@@ -26,14 +26,10 @@ internal sealed class DemoCommandModule(
     // Continuous axes fire every frame while active; log only every Nth so the console stays readable.
     private const int AxisLogInterval = 15;
 
-    // Per-frame relative cursor speeds for the stick/tilt nudge paths (the axis commands fire each frame).
-    private const float CursorStickSpeed = 0.012f;
-    private const float CursorTiltSpeed = 0.03f;
-    // Below this gravity-lean magnitude (g) the pad is treated as level, so a resting controller doesn't drift.
-    private const float CursorTiltDeadzone = 0.08f;
-
     // The active producer when it can take a debug view mode (null under --validate or a blank root).
     private readonly IDebugViewTarget? m_debugViewTarget = (rootNode as IDebugViewTarget);
+    // The creator-mode host (the live overworld root); null for any other run, so the 'creator' verb reports unavailable.
+    private readonly ICreatorModeHost? m_creatorHost = (rootNode as ICreatorModeHost);
     private int m_gyroLogTick;
     private int m_moveLogTick;
     private int m_orientationLogTick;
@@ -45,6 +41,21 @@ internal sealed class DemoCommandModule(
         foreach (var command in GetConsoleCommands()) { yield return command; }
         foreach (var command in GetControllerCommands()) { yield return command; }
         foreach (var command in GetDebugViewCommands()) { yield return command; }
+
+        yield return CommandDefinition.Verb(
+            description: "Toggles CREATOR mode: the in-engine SDF authoring surface. Cycle the primitive with the bumpers, slide it with the left stick (triggers raise/lower), place with South, undo with East, exit with North.",
+            handler: _ => {
+                if (m_creatorHost is null) {
+                    return new CommandResult("[creator: unavailable — the overworld is not the active root]");
+                }
+
+                var active = m_creatorHost.ToggleCreatorMode();
+
+                return new CommandResult($"[creator {(active ? "on" : "off")}]");
+            },
+            name: "creator",
+            valueKind: CommandValueKind.Digital
+        );
     }
 
     private IEnumerable<CommandDefinition> GetConsoleCommands() {
@@ -70,6 +81,9 @@ internal sealed class DemoCommandModule(
                 } else {
                     registry.ActivateMap(map: TextMap);
                 }
+
+                // Mirror the open/closed state to the on-screen console panel.
+                console.SetVisible(visible: !active);
 
                 return new CommandResult($"[console {(active ? "closed" : "open")}]");
             },
@@ -126,6 +140,7 @@ internal sealed class DemoCommandModule(
 
                 if (registry.IsMapActive(map: TextMap)) {
                     registry.DeactivateMap(map: TextMap);
+                    console.SetVisible(visible: false);
 
                     return new CommandResult("[console closed]");
                 }
@@ -370,87 +385,43 @@ internal sealed class DemoCommandModule(
             valueKind: CommandValueKind.Axis3D
         );
         yield return CommandDefinition.Verb(
-            description: "Feeds the fused controller orientation to its on-screen gauge (and logs euler degrees, throttled).",
+            description: "Logs the fused controller orientation as euler degrees (throttled).",
             handler: context => {
-                var orientation = context.Value.AsOrientation;
-
-                if (gamepads.TryGetPlayerIndex(deviceId: context.DeviceId, out var playerIndex)) {
-                    cursors.SetOrientation(color: CursorColor(playerIndex: playerIndex), deviceId: context.DeviceId, orientation: orientation);
-                }
-
                 if (0 != (m_orientationLogTick++ % AxisLogInterval)) {
                     return CommandResult.None;
                 }
 
-                var (pitch, yaw, roll) = ToEulerDegrees(orientation: orientation);
+                var (pitch, yaw, roll) = ToEulerDegrees(orientation: context.Value.AsOrientation);
 
                 return new CommandResult($"[orientation pitch={pitch:F0} yaw={yaw:F0} roll={roll:F0}]");
             },
             name: "gamepad-orientation",
             valueKind: CommandValueKind.Orientation
         );
-        yield return CommandDefinition.Verb(
-            description: "Places this controller's cursor at the absolute touchpad position (color matched to its LED).",
-            handler: context => {
-                if (gamepads.TryGetPlayerIndex(deviceId: context.DeviceId, out var playerIndex)) {
-                    cursors.SetAbsolute(
-                        color: CursorColor(playerIndex: playerIndex),
-                        deviceId: context.DeviceId,
-                        position: context.Value.AsAxis2D
-                    );
-                }
-
-                return CommandResult.None;
-            },
-            name: "cursor-touch",
-            valueKind: CommandValueKind.Axis2D
-        );
-        yield return CommandDefinition.Verb(
-            description: "Nudges this controller's cursor with the left stick (relative).",
-            handler: context => {
-                if (gamepads.TryGetPlayerIndex(deviceId: context.DeviceId, out var playerIndex)) {
-                    // Stick Y is up-positive; screen Y grows down, so negate it.
-                    var stick = context.Value.AsAxis2D;
-
-                    cursors.ApplyNudge(
-                        color: CursorColor(playerIndex: playerIndex),
-                        delta: (new Vector2(x: stick.X, y: -stick.Y) * CursorStickSpeed),
-                        deviceId: context.DeviceId
-                    );
-                }
-
-                return CommandResult.None;
-            },
-            name: "cursor-nudge-stick",
-            valueKind: CommandValueKind.Axis2D
-        );
-        yield return CommandDefinition.Verb(
-            description: "Tilts this controller's cursor with the accelerometer (marble-maze: lean the pad to drift, level to rest).",
-            handler: context => {
-                if (gamepads.TryGetPlayerIndex(deviceId: context.DeviceId, out var playerIndex)) {
-                    // At rest the accelerometer reads gravity. Held flat (screen up) the horizontal-plane components
-                    // are ~0; tilting the pad shifts them. Map that lean to a marble-maze drift: right-edge-down →
-                    // right, far-edge-down → up. Both axes are negated to match the sensor's sign on hardware.
-                    var accel = context.Value.AsAxis3D;
-                    var lean = new Vector2(x: accel.X, y: accel.Z);
-
-                    if (lean.Length() >= CursorTiltDeadzone) {
-                        cursors.ApplyNudge(
-                            color: CursorColor(playerIndex: playerIndex),
-                            delta: (new Vector2(x: -lean.X, y: -lean.Y) * CursorTiltSpeed),
-                            deviceId: context.DeviceId
-                        );
-                    }
-                }
-
-                return CommandResult.None;
-            },
-            name: "cursor-tilt",
-            valueKind: CommandValueKind.Axis3D
-        );
-
     }
     private IEnumerable<CommandDefinition> GetDebugViewCommands() {
+        CommandResult SetDebugViewMode(int mode) {
+            if (m_debugViewTarget is null) {
+                return new CommandResult("[debug.view: no SDF producer active]");
+            }
+
+            m_debugViewTarget.DebugMode = mode;
+
+            return new CommandResult($"[debug.view: {DebugViewModes.Name(mode: mode)}]");
+        }
+
+        for (var mode = 0; (mode < DebugViewModes.Count); mode++) {
+            var selectedMode = mode;
+            var selectedName = DebugViewModes.Name(mode: selectedMode);
+
+            yield return CommandDefinition.Verb(
+                description: $"Sets the SDF debug view mode to {selectedName}.",
+                handler: _ => SetDebugViewMode(mode: selectedMode),
+                name: DebugViewModes.Command(mode: selectedMode),
+                valueKind: CommandValueKind.Digital
+            );
+        }
+
         var viewModeArgument = new Argument<string>(name: "mode") {
             Description = $"One of: {string.Join(separator: ", ", values: DebugViewModes.Names)}.",
         };
@@ -458,19 +429,13 @@ internal sealed class DemoCommandModule(
         yield return new CommandDefinition(
             Description: "Sets the SDF debug view mode (off, depth, normals, raydir, material-id, iteration-count).",
             Handler: context => {
-                if (m_debugViewTarget is null) {
-                    return new CommandResult("[debug.view: no SDF producer active]");
-                }
-
                 var name = (context.Parse?.GetValue(argument: viewModeArgument) ?? "off");
 
                 if (!DebugViewModes.TryParse(name: name, mode: out var mode)) {
                     return new CommandResult($"[debug.view: unknown mode '{name}']");
                 }
 
-                m_debugViewTarget.DebugMode = mode;
-
-                return new CommandResult($"[debug.view: {DebugViewModes.Name(mode: mode)}]");
+                return SetDebugViewMode(mode: mode);
             },
             Name: "debug.view",
             TextCommand: new Command(name: "debug.view", description: "Sets the SDF debug view mode.") {
@@ -509,15 +474,5 @@ internal sealed class DemoCommandModule(
         var roll = MathF.Atan2(y: (2f * ((orientation.W * orientation.Z) + (orientation.X * orientation.Y))), x: (1f - (2f * ((orientation.X * orientation.X) + (orientation.Z * orientation.Z)))));
 
         return ((pitch * ToDegrees), (yaw * ToDegrees), (roll * ToDegrees));
-    }
-    // The player's indicator hue at full value, so the cursor reads clearly on screen while staying matched to
-    // the (dimmer) light-bar color from the same palette.
-    private static Vector3 CursorColor(int playerIndex) {
-        var color = GamepadPlayerColors.ForPlayer(playerIndex: playerIndex);
-        var max = Math.Max(val1: color.Red, val2: Math.Max(val1: color.Green, val2: color.Blue));
-
-        return (0 == max)
-            ? Vector3.One
-            : (new Vector3(x: color.Red, y: color.Green, z: color.Blue) / max);
     }
 }

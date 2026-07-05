@@ -1,0 +1,53 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "A DOCUMENT-AUTHORED diegetic screen: the scene declares a sampled screenSlab (screenIndex 0 with its explicit world-space frame), and the top-level screenSources table feeds it from the gaming-brick viewport at slot 1 — the machine's NATIVE (unresampled) framebuffer, exactly the overworld stands' screen seam, now data. The left pane orbits the panel; the right pane is the same machine's ordinary resampled viewport. Remove the screenSources entry and the panel falls back to the flat/procedural screen material.",
+    "scene": {
+        "materials": [
+            { "albedo": [0.35, 0.40, 0.45] },
+            { "albedo": [0.08, 0.08, 0.10] }
+        ],
+        "objects": [
+            { "shape": "plane", "normal": [0.0, 1.0, 0.0], "offset": 1.0, "material": 0 },
+            {
+                "shape": "box",
+                "ops": [{ "op": "translate", "offset": [0.0, 1.2, -0.22] }],
+                "halfExtents": [0.9, 0.82, 0.2],
+                "round": 0.02,
+                "material": 1
+            },
+            {
+                "shape": "screenSlab",
+                "ops": [{ "op": "translate", "offset": [0.0, 1.2, 0.0] }],
+                "halfExtents": [0.82, 0.74, 0.08],
+                "round": 0.0,
+                "screenIndex": 0,
+                "worldOrigin": [0.0, 1.2, 0.0],
+                "worldRight": [1.0, 0.0, 0.0],
+                "worldUp": [0.0, 1.0, 0.0]
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.25,
+                "azimuth": 0.0,
+                "fieldOfView": 55.0,
+                "height": 1.5,
+                "radius": 4.2,
+                "target": [0.0, 1.0, 0.0]
+            },
+            "region": [0.0, 0.0, 0.5, 1.0]
+        },
+        {
+            "source": { "$type": "gaming-brick", "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
+            "region": [0.5, 0.0, 0.5, 1.0]
+        }
+    ],
+    "screenSources": [
+        { "screenIndex": 0, "source": { "$type": "viewport", "slot": 1 } }
+    ],
+    "graph": { "$type": "world" }
+}

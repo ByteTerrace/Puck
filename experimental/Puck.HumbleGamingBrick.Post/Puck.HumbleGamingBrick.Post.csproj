@@ -4,6 +4,7 @@
         <RootNamespace>Puck.HumbleGamingBrick.Post</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="..\..\src\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
     </ItemGroup>
 </Project>

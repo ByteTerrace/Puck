@@ -3,7 +3,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 // A flat little-endian memory implementing the GBA bus seam, for isolating the CPU on hand-assembled vectors
 // (the GBA analogue of the DMG/CGB FlatRamBus). Timing is irrelevant to instruction-logic tests, so the
 // access type and idle hooks only accumulate a cycle tally; correctness is what these vectors probe.
-internal sealed class FlatTestBus : IGbaBus {
+internal sealed class FlatTestBus : IAgbBus {
     private readonly byte[] m_memory;
     private readonly uint m_mask;
 

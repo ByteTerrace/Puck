@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
 
@@ -28,6 +29,10 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent {
     private const int ModeRtcCommand = 0x0B;
     private const int ModeRtcRead = 0x0C;
     private const int ModeStatus = 0x0D;
+    // The persistent-clock footer: u32 minutes + u32 days (the two counters the nibble protocol exposes), then the
+    // 8-byte interop timestamp — the same shape as the MBC3 footer, sized to the HuC3's smaller clock. HuC3 save
+    // files have no cross-emulator standard footer, so this is OUR convention (documented by the layout alone).
+    private const int PersistentClockFooterByteCount = 16;
     private const int RamBankSize = 0x2000;
     private const int RomBankSize = 0x4000;
 
@@ -60,6 +65,35 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent {
     /// <inheritdoc/>
     protected override bool RamAccessible =>
         (Header.HasRam && (m_mode == ModeRam));
+
+    /// <inheritdoc/>
+    public override int PersistentClockByteCount =>
+        PersistentClockFooterByteCount;
+
+    /// <inheritdoc/>
+    public override byte[] ExportPersistentClock(long unixTimestampSeconds) {
+        var footer = new byte[PersistentClockFooterByteCount];
+        var span = footer.AsSpan();
+
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[0..], value: (uint)m_minutes);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[4..], value: (uint)m_days);
+        BinaryPrimitives.WriteInt64LittleEndian(destination: span[8..], value: unixTimestampSeconds);
+
+        return footer;
+    }
+    /// <inheritdoc/>
+    public override void ImportPersistentClock(ReadOnlySpan<byte> source) {
+        if (source.Length < PersistentClockFooterByteCount) {
+            return;
+        }
+
+        // Masked to the three/four nibbles the write protocol itself can produce; the trailing timestamp is
+        // deliberately ignored (the deterministic clock resumes, never advancing from wall time), and the
+        // sub-minute prescaler restarts.
+        m_minutes = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0xFFF);
+        m_days = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0xFFF);
+        m_dotAccumulator = 0;
+    }
 
     /// <inheritdoc/>
     public void Tick() {

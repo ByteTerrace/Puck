@@ -38,6 +38,9 @@ public interface IKey1 {
     void BeginSwitch();
     /// <summary>Aborts the stall early — a pending interrupt woke the CPU — releasing the block windows.</summary>
     void CancelSwitch();
+    /// <summary>Forces the machine back to normal speed and tears down every in-flight switch/block window — the live
+    /// device-swap demote to monochrome hardware (which has no KEY1). The caller re-syncs the component clock.</summary>
+    void ForceNormalSpeed();
     /// <summary>Parks the machine in stop mode.</summary>
     void EnterStop();
     /// <summary>Wakes the machine from stop mode (a button was pressed).</summary>

@@ -23,6 +23,6 @@ Puck is written from scratch, but very little of it was invented here. This file
 
 - **.NET** (Microsoft) — the runtime and scripting.
 - **APNG** — Mozilla's animated extension to the PNG specification (W3C/ISO).
-- **glslc / shaderc** (Google) and the **Vulkan SDK** (LunarG) — shader compilation and the validation layers.
+- **DXC** (the DirectX Shader Compiler, Microsoft) — single-source HLSL compiled to both SPIR-V and DXIL — and the **Vulkan SDK** (LunarG) — tooling and the validation layers.
 - **mimalloc** ([Microsoft](https://github.com/microsoft/mimalloc)) — the default unmanaged allocator behind `IAllocator`.
 - **CsWin32** (Microsoft) — the source-generated Win32 interop used by the platform layer (HID, windowing).

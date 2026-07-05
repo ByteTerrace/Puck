@@ -14,8 +14,8 @@ public static class MachineFactory {
     /// components.</summary>
     /// <param name="configuration">The per-machine configuration.</param>
     /// <param name="compose">A callback that registers the machine's components into its container; each component is
-    /// typically registered once and exposed as both <see cref="Interfaces.IClockedComponent"/> and
-    /// <see cref="ISnapshotable"/>.</param>
+    /// typically registered once by its concrete type (which the <see cref="Timing.ComponentClock"/> resolves for the
+    /// per-tick fan-out) and forwarded to <see cref="ISnapshotable"/>.</param>
     /// <returns>The assembled, isolated machine instance. The caller owns it and must dispose it.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="configuration"/> or <paramref name="compose"/> is
     /// <see langword="null"/>.</exception>
@@ -25,7 +25,7 @@ public static class MachineFactory {
 
         var services = new ServiceCollection();
 
-        _ = services.AddGameBoyColor();
+        _ = services.AddHumbleGamingBrick();
 
         compose(obj: services);
 

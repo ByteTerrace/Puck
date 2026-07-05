@@ -27,9 +27,21 @@ public static class TimingServiceRegistration {
         services.TryAddScoped(implementationFactory: static provider => new MasterClock(
             resolution: provider.GetRequiredService<TickResolution>()
         ));
+        // The component set is fixed at composition time, so the clock resolves each timed component by its concrete
+        // type and holds it as a typed field — the per-T-cycle fan-out is direct sealed calls (ideal plan §7). A test
+        // substitutes a component by pre-registering its own instance for the same concrete type.
         services.TryAddScoped(implementationFactory: static provider => new ComponentClock(
             clock: provider.GetRequiredService<MasterClock>(),
-            components: provider.GetServices<IClockedComponent>()
+            timer: provider.GetRequiredService<TimerComponent>(),
+            key1: provider.GetRequiredService<Key1Component>(),
+            serial: provider.GetRequiredService<SerialComponent>(),
+            apu: provider.GetRequiredService<ApuComponent>(),
+            apuGeneratorClock: provider.GetRequiredService<ApuGeneratorClock>(),
+            audioOutput: provider.GetRequiredService<AudioOutputComponent>(),
+            cartridge: provider.GetRequiredService<ICartridge>(),
+            oamDma: provider.GetRequiredService<OamDmaController>(),
+            ppu: provider.GetRequiredService<Ppu>(),
+            hdma: provider.GetRequiredService<HdmaController>()
         ));
 
         return services;

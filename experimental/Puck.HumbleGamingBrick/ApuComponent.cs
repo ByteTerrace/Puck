@@ -15,15 +15,15 @@ namespace Puck.HumbleGamingBrick;
 /// Powering the unit off through NR52 clears the register file and silences every channel; wave RAM stays accessible.
 /// All state is plain fields captured in a fixed order, so the APU snapshots and forks like every other component.
 /// </summary>
-public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
+public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IModeSwitchable {
     private const int ChannelCount = 4;
     private const int DoubleSpeedDivApuBit = 13;
     private const byte LengthDataMask = 0x3F;
     private const byte LengthEnableBit = 0x40;
     private const byte MasterPower = 0x80;
     private const int MaxFrequency = 2047;
-    // NR43 clock-shift codes 14 and 15 gate the LFSR's clock line entirely (ares + pandocs agree; the SameBoy lineage
-    // omits the gate): the noise timer freezes rather than counting toward a step that hardware never delivers.
+    // NR43 clock-shift codes 14 and 15 gate the LFSR's clock line entirely (the hardware-accurate references agree; a
+    // naive implementation omits the gate): the noise timer freezes rather than counting toward a step that hardware never delivers.
     private const int NoiseShiftGateCode = 14;
     private const int NormalDivApuBit = 12;
     private const byte Nr52Readable = 0x70;
@@ -36,16 +36,16 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
     private const byte WaveDacEnable = 0x80;
     // How many dots after a wave fetch the CPU's monochrome wave-RAM access window stays open (Color access always
     // succeeds); the same window is the retrigger-corruption "fetch busy" predicate (see Trigger). Swept as 1/2/3
-    // against blargg dmg_sound on the DMG machine: 2 is the unique value passing BOTH 09 "wave read while on" and
-    // 10 "wave trigger while on" (1 starves the read window, 3 widens the corruption window one slot too far).
+    // against the hardware-accurate wave-RAM verdicts on the DMG machine: 2 is the unique value passing BOTH the
+    // "wave read while on" and "wave trigger while on" cases (1 starves the read window, 3 widens the corruption window one slot too far).
     private const int WaveFetchWindowDots = 2;
     private const int WaveRamSize = 16;
     // Dots between a trigger and the wave channel's FIRST sample fetch, added on top of the freshly loaded period.
-    // The cross-lineage disagreement (SameBoy +6 vs ares +4) was swept as 0/2/4/6/8/10 against blargg cgb_sound 09
-    // "wave read while on" + 12 "wave" and the gambatte sound family's ch3_*_ff30 hardware verdicts: 8 is the UNIQUE
-    // value that passes 09 (every other value shifts the read-phase table by one slot), and 12 passes at any value.
-    // In our countdown convention (a reload of N fires N dots later) 8 IS the SameBoy lineage's +6 (its countdown
-    // fires one 2-dot APU step after reaching zero); the ares lineage's +4 loses outright.
+    // The cross-reference disagreement (+6 vs +4) was swept as 0/2/4/6/8/10 against the hardware-accurate colour-brick
+    // "wave read while on" + "wave" cases and the wave-channel ff30 hardware verdicts: 8 is the UNIQUE
+    // value that passes "wave read while on" (every other value shifts the read-phase table by one slot), and "wave" passes at any value.
+    // In our countdown convention (a reload of N fires N dots later) 8 IS the +6 convention (its countdown
+    // fires one 2-dot APU step after reaching zero); the +4 convention loses outright.
     private const int WaveTriggerFetchDelayDots = 8;
 
     // NR10 sweep, NR11 duty/length, NR12 envelope, NR13 frequency low, NR14 trigger/control.
@@ -103,7 +103,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
     // Whether the machine is Color hardware (the machine model, not the cartridge's compatibility mode): Color silicon
     // buffers the wave-RAM port, so CPU access while the channel plays always succeeds; monochrome access must hit the
     // window right after a fetch.
-    private readonly bool m_isColor;
+    // Mutable so a LIVE device swap re-gates the warm-path color/mono APU rules (wave-RAM access window, powered-off
+    // length writes, power-off length clearing, retrigger corruption). The boot-beep frame-sequencer phase and wave-RAM
+    // power-on pattern stay construction-only.
+    private bool m_isColor;
     private readonly IKey1 m_key1;
     private readonly int[] m_lengthCounter = new int[ChannelCount];
     private readonly bool[] m_lengthEnabled = new bool[ChannelCount];
@@ -147,7 +150,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
         ArgumentNullException.ThrowIfNull(argument: key1);
         ArgumentNullException.ThrowIfNull(argument: configuration);
 
-        m_isColor = (configuration.Model == ConsoleModel.Cgb);
+        m_isColor = configuration.Model.SupportsColor();
         m_key1 = key1;
         m_timer = timer;
 
@@ -170,16 +173,16 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
             m_squarePosition[0] = 2;
             m_squareTimer[0] = 2041;
             // The boot ROM leaves the frame sequencer mid-cycle, not at step zero: one DIV-APU event has elapsed on Color
-            // (eighteen on monochrome, whose step counter is that modulo eight). The whole blargg sound suite aligns itself
+            // (eighteen on monochrome, whose step counter is that modulo eight). The hardware-accurate sound tests align themselves
             // to this phase through length-counter syncs, so the seed is load-bearing.
-            m_frameSequencerStep = (configuration.Model == ConsoleModel.Cgb) ? 1 : 2;
+            m_frameSequencerStep = (configuration.Model.SupportsColor() ? 1 : 2);
         }
 
         m_lastDivApuBit = DivApuBit();
 
         // The alternating wave-RAM pattern is the Color hardware's power-on characteristic (the boot ROM never writes
         // wave RAM), so it is seeded on both paths.
-        if (configuration.Model == ConsoleModel.Cgb) {
+        if (configuration.Model.SupportsColor()) {
             for (var offset = 0; (offset < WaveRamSize); offset += 2) {
                 m_waveRam[offset + 1] = 0xFF;
             }
@@ -306,8 +309,8 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
         var offset = (address - MemoryMap.AudioStart);
 
         // While powered off, Color ignores every write; monochrome hardware still lets the length-load registers (NRx1)
-        // write their length counters — only the length, not the duty or anything else. This is what blargg dmg_sound
-        // 08 "len ctr during power" checks.
+        // write their length counters — only the length, not the duty or anything else. This is what the hardware-accurate
+        // "length counter during power" case checks.
         if (!m_powered) {
             if (!m_isColor) {
                 WriteLengthCounterWhilePoweredOff(offset: offset, value: value);
@@ -328,6 +331,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
 
         return (byte)((m_channelEnabled[2] ? WaveOutput() : 0) | ((m_channelEnabled[3] ? NoiseOutput() : 0) << 4));
     }
+    /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) =>
+        m_isColor = model.SupportsColor();
+
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteBoolean(value: m_powered);
@@ -613,7 +620,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable {
             case 2:
                 // Retriggering the playing channel while its fetch is busy corrupts the head of wave RAM on monochrome
                 // hardware (the CPU's trigger and the fetch collide on the RAM port); Color hardware buffers the port
-                // and is immune. Predicate A/B (blargg dmg_sound 10 "wave trigger while on"): the ares lineage's
+                // and is immune. Predicate A/B (the hardware-accurate "wave trigger while on" case): the
                 // fetch-busy flag — inside the window a fetch opens, i.e. (m_waveFetchHold > 0) — PASSES; the
                 // fetch-imminent countdown alternatives (m_waveTimer == 2, == 1, <= 2) each fire one slot late and
                 // FAIL the test's wave-RAM table CRC.

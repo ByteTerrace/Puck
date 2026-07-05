@@ -24,6 +24,12 @@
       "puck.cameras": {
         "type": "Project"
       },
+      "puck.capture": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
       "puck.commands": {
         "type": "Project",
         "dependencies": {

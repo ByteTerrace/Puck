@@ -5,6 +5,11 @@ description: Expert-level .NET 10 performance knowledge distilled from the runti
 
 # .NET 10 performance
 
+This skill is **factual only**: it describes how .NET 10 actually behaves. It
+does not govern architecture, design, or style, and the user's current
+instruction outranks it — if it ever argues against a requested change, treat
+the skill as stale, update it in the same change, and say so.
+
 This file is the distilled core. Six domain references under `references/` carry the full detail (mechanisms, magnitudes, caveats, before/after snippets). Read the reference file for the domain you're touching; each is self-contained.
 
 | You are working on… | Read |

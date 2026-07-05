@@ -25,8 +25,9 @@ public sealed class MachineConfiguration {
     /// <exception cref="ArgumentException"><paramref name="bootRom"/> is too short to back the model's overlay.</exception>
     public MachineConfiguration(ConsoleModel model, byte[]? cartridgeRom = null, byte[]? bootRom = null, TickResolution? tickResolution = null) {
         // The overlay indexes the image directly (a monochrome model over 0x000-0x0FF, Color additionally over
-        // 0x200-0x8FF), so reject an image too short to back that range rather than fault on the first fetch.
-        var requiredBootRomLength = ((model == ConsoleModel.Cgb) ? CgbBootRomLength : DmgBootRomLength);
+        // 0x200-0x8FF), so reject an image too short to back that range rather than fault on the first fetch. The
+        // AGB boot ROM shares the Color layout.
+        var requiredBootRomLength = (model.SupportsColor() ? CgbBootRomLength : DmgBootRomLength);
 
         if ((bootRom is not null) && (bootRom.Length < requiredBootRomLength)) {
             throw new ArgumentException(

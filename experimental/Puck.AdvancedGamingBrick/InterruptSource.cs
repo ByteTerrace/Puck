@@ -1,6 +1,6 @@
 namespace Puck.AdvancedGamingBrick;
 
-/// <summary>Specifies a Game Boy Advance interrupt source, encoded as its bit position within the IE and IF
+/// <summary>Specifies an Advanced GamingBrick interrupt source, encoded as its bit position within the IE and IF
 /// registers.</summary>
 public enum InterruptSource {
     /// <summary>The PPU entered the vertical blanking period.</summary>

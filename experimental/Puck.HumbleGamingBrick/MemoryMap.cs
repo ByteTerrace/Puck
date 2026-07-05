@@ -1,7 +1,7 @@
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// The fixed addresses and region bounds of the Game Boy Color's 16-bit address space. Centralizing them keeps the
+/// The fixed addresses and region bounds of the colour brick's 16-bit address space. Centralizing them keeps the
 /// bus's decode and every component's register handling reading one set of names rather than scattered magic numbers.
 /// All values are inclusive bounds unless a name says otherwise.
 /// </summary>

@@ -7,7 +7,7 @@ namespace Puck.HumbleGamingBrick;
 /// The Color VRAM DMA unit, a CPU-domain clocked component that is now timed: a transfer freezes the CPU (the CPU idles
 /// while <see cref="IsCpuStalled"/> holds) and moves one byte every two dots — so a sixteen-byte block costs eight
 /// machine cycles at normal speed and sixteen at double speed, plus a short start-up and wind-down, matching the
-/// hardware stall the gambatte dma family measures. It reads its source on its own bus path (holding the cartridge slot
+/// hardware stall measured by the hardware-accurate DMA timing tests. It reads its source on its own bus path (holding the cartridge slot
 /// and internal RAM directly, never the system bus, so no dependency cycle forms) and writes into the currently
 /// selected VRAM bank; a source inside VRAM is invalid and reads open bus. A write to HDMA5 with bit 7 clear runs a
 /// general-purpose transfer; with bit 7 set it starts an HBlank transfer that moves one block each time the PPU enters

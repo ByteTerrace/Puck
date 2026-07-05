@@ -13,7 +13,7 @@ namespace Puck.HumbleGamingBrick;
 /// and the instruction decode live in the sibling partials.
 /// </para>
 /// </summary>
-public sealed partial class Sm83 : ICpu, ISnapshotable {
+public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     private const byte FlagCarry = 0x10;
     private const byte FlagHalfCarry = 0x20;
     private const byte FlagSubtract = 0x40;
@@ -25,7 +25,9 @@ public sealed partial class Sm83 : ICpu, ISnapshotable {
     private readonly IInterruptController m_interrupts;
     private readonly IJoypad m_joypad;
     private readonly IKey1 m_key1;
-    private readonly bool m_supportsColor;
+    // Mutable so a LIVE device swap re-gates the only live model read (ExecuteStop: color arms a KEY1 speed switch,
+    // monochrome halts). The boot register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays construction-only.
+    private bool m_supportsColor;
 
     private byte m_a;
     private byte m_b;
@@ -72,7 +74,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable {
         m_interrupts = interrupts;
         m_joypad = joypad;
         m_key1 = key1;
-        m_supportsColor = (configuration.Model == ConsoleModel.Cgb);
+        m_supportsColor = configuration.Model.SupportsColor();
 
         // With a boot ROM the CPU powers on cold — every register zero and PC at 0x0000, the overlay's reset vector —
         // and the boot program itself produces the handoff state. Without one, the documented handoff is seeded.
@@ -131,6 +133,9 @@ public sealed partial class Sm83 : ICpu, ISnapshotable {
         get => m_programCounter;
         set => m_programCounter = value;
     }
+    /// <inheritdoc/>
+    public bool IsHalted =>
+        m_halted;
 
     private ushort Af {
         get => (ushort)((m_a << 8) | m_f);
@@ -247,6 +252,10 @@ public sealed partial class Sm83 : ICpu, ISnapshotable {
         AdvanceInterruptEnable();
     }
     /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) =>
+        m_supportsColor = model.SupportsColor();
+
+    /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteByte(value: m_a);
         writer.WriteByte(value: m_f);
@@ -290,9 +299,11 @@ public sealed partial class Sm83 : ICpu, ISnapshotable {
     // The boot ROM's documented register handoff, which differs per model. The CGB leaves A = 0x11, the value ROMs test
     // to detect Color hardware; the flags follow the standard post-boot values. A monochrome cartridge on Color hardware
     // takes the boot ROM's compatibility path, which leaves the title checksum in B (first-party titles only), 0x08 in E,
-    // and HL pointing where the palette/logo work ended — 0x991A for the copy-logo checksums, 0x007C otherwise.
+    // and HL pointing where the palette/logo work ended — 0x991A for the copy-logo checksums, 0x007C otherwise. The AGB
+    // boot ROM hands off the CGB state after one extra `inc b` — the single register difference cartridges probe to
+    // detect Advance hardware — so B is one higher and F carries the increment's flags.
     private void SeedPostBootState(ConsoleModel model, CartridgeHeader header) {
-        if ((model == ConsoleModel.Cgb) && !header.SupportsColor) {
+        if (model.SupportsColor() && !header.SupportsColor) {
             var checksum = header.IsFirstPartyGame ? header.TitleChecksum : (byte)0x00;
             var copyLogo = ((checksum == 0x43) || (checksum == 0x58));
 
@@ -305,7 +316,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable {
             m_h = copyLogo ? (byte)0x99 : (byte)0x00;
             m_l = copyLogo ? (byte)0x1A : (byte)0x7C;
         }
-        else if (model == ConsoleModel.Cgb) {
+        else if (model.SupportsColor()) {
             m_a = 0x11;
             m_f = 0x80;
             m_b = 0x00;
@@ -324,6 +335,15 @@ public sealed partial class Sm83 : ICpu, ISnapshotable {
             m_e = 0xD8;
             m_h = 0x01;
             m_l = 0x4D;
+        }
+
+        // The AGB's extra `inc b`: zero and half-carry reflect the increment, subtract clears, carry is untouched
+        // (both CGB handoff paths leave it clear).
+        if (model == ConsoleModel.Agb) {
+            var incremented = (byte)(m_b + 1);
+
+            m_f = (byte)(((incremented == 0x00) ? 0x80 : 0x00) | (((m_b & 0x0F) == 0x0F) ? 0x20 : 0x00));
+            m_b = incremented;
         }
 
         m_stackPointer = 0xFFFE;

@@ -32,9 +32,55 @@ public abstract class CartridgeBase : ICartridge {
 
     /// <inheritdoc/>
     public CartridgeHeader Header { get; }
+    /// <inheritdoc/>
+    public int ExternalRamByteCount => m_ram.Length;
+    /// <inheritdoc/>
+    public bool ExternalRamDirty { get; private set; }
 
     /// <summary>Gets whether the external RAM window currently responds (RAM exists and the mapper has enabled it).</summary>
     protected abstract bool RamAccessible { get; }
+
+    /// <inheritdoc/>
+    public byte[] ExportExternalRam() {
+        return [.. m_ram];
+    }
+    /// <inheritdoc/>
+    public void ReadExternalRam(int offset, Span<byte> destination) {
+        // Side-effect-free by construction: a straight copy out of the private RAM array by absolute offset, with no
+        // dirty-flag touch and no bank-select read — the host win-condition poll must never perturb the game. Missing
+        // bytes (out of range, or no RAM at all) stay zero, so a too-small cartridge simply never matches a gate.
+        destination.Clear();
+
+        if (offset < 0) {
+            return;
+        }
+
+        var available = (m_ram.Length - offset);
+
+        if (available <= 0) {
+            return;
+        }
+
+        m_ram.AsSpan(start: offset, length: Math.Min(available, destination.Length)).CopyTo(destination: destination);
+    }
+    /// <inheritdoc/>
+    public void ImportExternalRam(ReadOnlySpan<byte> source) {
+        source[..Math.Min(source.Length, m_ram.Length)].CopyTo(destination: m_ram);
+        ExternalRamDirty = false;
+    }
+    /// <inheritdoc/>
+    public void MarkExternalRamClean() {
+        ExternalRamDirty = false;
+    }
+    /// <inheritdoc/>
+    public virtual int PersistentClockByteCount => 0;
+    /// <inheritdoc/>
+    public virtual byte[] ExportPersistentClock(long unixTimestampSeconds) {
+        return [];
+    }
+    /// <inheritdoc/>
+    public virtual void ImportPersistentClock(ReadOnlySpan<byte> source) {
+    }
 
     /// <inheritdoc/>
     public byte ReadRom(ushort address) =>
@@ -59,6 +105,9 @@ public abstract class CartridgeBase : ICartridge {
 
         if ((uint)offset < (uint)m_ram.Length) {
             m_ram[offset] = value;
+            // Every mapper's RAM store funnels through here (m_ram is private), so this is the ONE dirty site the
+            // host's battery-save flush watches.
+            ExternalRamDirty = true;
         }
     }
     /// <inheritdoc/>
@@ -72,6 +121,21 @@ public abstract class CartridgeBase : ICartridge {
     public void LoadState(StateReader reader) {
         reader.ReadBytes(destination: m_ram);
         LoadRegisters(reader: reader);
+    }
+
+    /// <summary>Deposits a block straight into save RAM at an absolute byte offset, bypassing the address decode and the
+    /// dirty flag. This is the seam a sensor mapper (the Pocket Camera) uses to write its freshly captured image into
+    /// bank&#160;0: that image is <b>regenerated hardware output</b>, not a player-authored store, so it must NOT trip the
+    /// battery-save flush — <see cref="WriteRam"/> stays the one dirty site. A snapshot still captures the deposited
+    /// bytes because the whole RAM array is serialized. An out-of-range span is dropped whole.</summary>
+    /// <param name="offset">The absolute byte offset into save RAM (independent of the current bank selection).</param>
+    /// <param name="source">The bytes to deposit.</param>
+    protected void DepositExternalRam(int offset, ReadOnlySpan<byte> source) {
+        if ((offset < 0) || ((long)offset + source.Length > m_ram.Length)) {
+            return;
+        }
+
+        source.CopyTo(destination: m_ram.AsSpan(start: offset));
     }
 
     /// <summary>Computes the wrap mask for a bank select whose decoded chip mirrors on a power-of-two bank count: the

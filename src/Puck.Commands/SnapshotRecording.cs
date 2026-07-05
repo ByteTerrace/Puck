@@ -12,7 +12,7 @@ namespace Puck.Commands;
 /// load); lanes are serialized by value-kind (only the components a kind uses); and <see cref="CommandEntry.Device"/>
 /// — a local-only annotation — is deliberately excluded, since it is never part of the cross-machine identity.
 /// </summary>
-/// <remarks>This lives in <c>Puck.Demo</c> for now; it is the seed of a future <c>Puck.Replay</c> project.</remarks>
+/// <remarks>This is the seed of a future <c>Puck.Replay</c> project.</remarks>
 public sealed class SnapshotRecording {
     private const uint Magic = 0x504B_5253u; // "PKRS"
     private const uint Version = 1u;

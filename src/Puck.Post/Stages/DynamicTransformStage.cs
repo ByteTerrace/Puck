@@ -1,3 +1,4 @@
+using Puck.Capture;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Cameras;
@@ -8,7 +9,7 @@ namespace Puck.Post;
 
 /// <summary>
 /// Tier-B stage B7. The per-frame entity-transform channel (<c>SdfOp.TransformDynamic</c>): one program containing a
-/// dynamic-slot sphere is uploaded ONCE through <see cref="PostWorldRenderer"/>, then two frames are rendered against
+/// dynamic-slot sphere is uploaded ONCE through <see cref="Puck.SdfVm.SdfWorldEngine"/>, then two frames are rendered against
 /// it with different <see cref="SdfFrame.DynamicTransforms"/> — T0 at the resting position, T1 moved +1.5 world units
 /// in X — so the entity moves purely by rewriting the small per-frame transform buffer. The stage asserts (a) the
 /// entity visibly moved (a meaningful fraction of pixels differs between T0 and T1) and (b) each dynamic frame matches
@@ -47,13 +48,13 @@ internal sealed class DynamicTransformStage : IPostStage {
 
         // ONE renderer for all dynamic frames — the program is uploaded once at construction and never re-written,
         // which is exactly the seam under test: only the 32-byte transform slot changes between frames.
-        using var dynamicRenderer = new PostWorldRenderer(bytecodeExtension: ".spv", device: device, dynamicTransformCapacity: 1, gpu: gpu, height: OutputHeight, program: dynamicProgram, width: OutputWidth);
+        using var dynamicRenderer = new SdfWorldEngine(device: device, gpu: gpu, height: OutputHeight, kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"), options: new SdfWorldEngineOptions(DynamicTransformCapacity: 1, Program: dynamicProgram), width: OutputWidth);
 
         var dynamicResting = dynamicRenderer.RenderFrame(frame: BuildFrame(program: dynamicProgram, transforms: [new DynamicTransform(Position: RestingPosition, Orientation: Quaternion.Identity)]));
         var dynamicMoved = dynamicRenderer.RenderFrame(frame: BuildFrame(program: dynamicProgram, transforms: [new DynamicTransform(Position: MovedPosition, Orientation: Quaternion.Identity)]));
 
-        using var bakedRestingRenderer = new PostWorldRenderer(bytecodeExtension: ".spv", device: device, dynamicTransformCapacity: 1, gpu: gpu, height: OutputHeight, program: bakedRestingProgram, width: OutputWidth);
-        using var bakedMovedRenderer = new PostWorldRenderer(bytecodeExtension: ".spv", device: device, dynamicTransformCapacity: 1, gpu: gpu, height: OutputHeight, program: bakedMovedProgram, width: OutputWidth);
+        using var bakedRestingRenderer = new SdfWorldEngine(device: device, gpu: gpu, height: OutputHeight, kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"), options: new SdfWorldEngineOptions(DynamicTransformCapacity: 1, Program: bakedRestingProgram), width: OutputWidth);
+        using var bakedMovedRenderer = new SdfWorldEngine(device: device, gpu: gpu, height: OutputHeight, kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"), options: new SdfWorldEngineOptions(DynamicTransformCapacity: 1, Program: bakedMovedProgram), width: OutputWidth);
 
         var bakedResting = bakedRestingRenderer.RenderFrame(frame: BuildFrame(program: bakedRestingProgram, transforms: []));
         var bakedMoved = bakedMovedRenderer.RenderFrame(frame: BuildFrame(program: bakedMovedProgram, transforms: []));
@@ -62,10 +63,10 @@ internal sealed class DynamicTransformStage : IPostStage {
 
         var artifactPath = Path.Combine(context.ArtifactsDirectory, "dynamic-transform-moved-dynamic.png");
 
-        PngImage.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-resting-dynamic.png"), rgba: dynamicResting, width: (int)OutputWidth);
-        PngImage.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-resting-baked.png"), rgba: bakedResting, width: (int)OutputWidth);
-        PngImage.Write(height: (int)OutputHeight, path: artifactPath, rgba: dynamicMoved, width: (int)OutputWidth);
-        PngImage.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-moved-baked.png"), rgba: bakedMoved, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-resting-dynamic.png"), rgba: dynamicResting, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-resting-baked.png"), rgba: bakedResting, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: artifactPath, rgba: dynamicMoved, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-moved-baked.png"), rgba: bakedMoved, width: (int)OutputWidth);
 
         var totalPixels = (int)(OutputWidth * OutputHeight);
 
@@ -98,12 +99,12 @@ internal sealed class DynamicTransformStage : IPostStage {
         var dynamicRotated = dynamicRenderer.RenderFrame(frame: BuildFrame(program: dynamicProgram, transforms: [new DynamicTransform(Position: RestingPosition, Orientation: rotation)]));
         var bakedRotatedProgram = BuildScene(bakedPosition: RestingPosition, bakedOrientation: rotation);
 
-        using var bakedRotatedRenderer = new PostWorldRenderer(bytecodeExtension: ".spv", device: device, dynamicTransformCapacity: 1, gpu: gpu, height: OutputHeight, program: bakedRotatedProgram, width: OutputWidth);
+        using var bakedRotatedRenderer = new SdfWorldEngine(device: device, gpu: gpu, height: OutputHeight, kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"), options: new SdfWorldEngineOptions(DynamicTransformCapacity: 1, Program: bakedRotatedProgram), width: OutputWidth);
 
         var bakedRotated = bakedRotatedRenderer.RenderFrame(frame: BuildFrame(program: bakedRotatedProgram, transforms: []));
 
-        PngImage.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-rotated-dynamic.png"), rgba: dynamicRotated, width: (int)OutputWidth);
-        PngImage.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-rotated-baked.png"), rgba: bakedRotated, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-rotated-dynamic.png"), rgba: dynamicRotated, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-rotated-baked.png"), rgba: bakedRotated, width: (int)OutputWidth);
 
         var rotatedFailures = ParityThresholds.Continuous.Evaluate(metrics: ParityMetrics.Compute(reference: bakedRotated, comparand: dynamicRotated, width: (int)OutputWidth, height: (int)OutputHeight));
 

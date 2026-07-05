@@ -82,7 +82,7 @@ wiring both would let the first consume the other's button edges. The compositio
 
 | Seam | Path | Role |
 |---|---|---|
-| **`GamepadCaptureSource`** | → `InputRouter` → per-tick `CommandSnapshot` | The deterministic, timestamped, recordable path — the engine's input spine, and the direction of travel. Drives the MiniAction prototype today. |
+| **`GamepadCaptureSource`** | → `InputRouter` → per-tick `CommandSnapshot` | The deterministic, timestamped, recordable path — the engine's input spine, and the direction of travel. Drives the overworld demo today. |
 | **`GamepadInputSource`** | → `BindingCommandSource` → `CommandRegistry` | The original focus-gated command path. The default for every mode not on the router (console, cursor UI). |
 
 ### The platform seam (so `Puck.Input` has no Windows code)
@@ -321,6 +321,30 @@ typed text, or a pointer delta/position, each carrying a `CommandPhase`) and nam
   releases are missed. X11 auto-repeat (a release+press pair at the same timestamp) is de-duped in
   `XcbNativeWindow`.
 
+## Binding pages (modifier-chord profiles)
+
+The engine-side page mechanism lives in `Puck.Commands` (not here): a `BindingProfileDocument` (JSON) declares
+**modifiers** — any input source, e.g. `gamepad.leftTrigger`, made digital by press/release hysteresis
+thresholds — and **pages** selected by the *ordered* held-modifier chord (`["left","right"]` and
+`["right","left"]` are distinct pages; the empty chord is the movement/contextual baseline). `BindingProfile.Compile`
+validates the document into a `CompiledBindingProfile`; `PagedInputBindings` (a stateful `IInputBindings`)
+resolves each signal against the active page **inside `InputRouter`'s pre-snapshot fold**, so recorded
+`CommandSnapshot`s are already page-resolved and replay needs no changes. A press latches its binding list so its
+release completes as the same command even if the modifier lifted in between (no stuck held entries). Puck.Post's
+`BindingPageStage` (Tier A) proves hysteresis, press-order chords, chord remainders, the release latch, and
+bit-for-bit session determinism — the check moved off the demo's `--validate-bindings` flag when Puck.Demo was
+purified down to the overworld prototype.
+
+The demo side (`Puck.Demo`): `BindingProfileDocuments.BuildDefault()` is the WoW-addon layout as data
+(triggers → 5 pages; South = jump / West = interact / left shoulder = target on the no-modifier page), persisted
+via `Puck.Storage` to `%LocalAppData%\Puck\Demo\<id>\bindings\gamepad.json` (edit + relaunch, or a future editor
+calls `PagedInputBindings.Reload`). The on-screen **binding bar** (`Puck.Demo/BindingBar/`) renders the cluster as
+a fullscreen SDF overlay confined to the overworld's room view (`OverworldRenderNode`, the default no-flags run):
+`BindingBarLayout` is the addon's modulo math in normalized units,
+`BindingGlyphResolver` picks PlayStation 5 shapes / Xbox / Switch letters per connected family
+(`GamepadManager.TryGetType`), and per-slot data rides a storage buffer into
+`binding-bar-overlay.frag.hlsl` (procedural glyphs now; icon ids ≥ 1024 are the reserved texture-atlas seam).
+
 ## Status — done & deferred
 
 Everything in [Device support](#device-support) works over USB, and the DualSense also works over Bluetooth. The
@@ -375,8 +399,8 @@ correlation, errors). The demo's gamepad bindings:
 | Orientation | `gamepad-orientation` | drives the per-controller pitch/yaw/roll needle gauge |
 
 The cursor overlay (colored per-controller cursors + the orientation gauges) renders on the **Vulkan
-same-device producer** — run with `--produce vulkan` to see it. It is a demo-owned overlay pass, so no
-cursor/gauge concept leaks into the reusable SDF engine.
+same-device producer**. It is a demo-owned overlay pass, so no cursor/gauge concept leaks into the
+reusable SDF engine.
 
 ## File map
 

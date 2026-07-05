@@ -15,6 +15,15 @@
         "resolved": "10.0.9",
         "contentHash": "g41l/30G3K4B/d/L8kjux0+30e27c8D0FVQ/PFCpbekgfDpj9mnDhieP67EqXWvl1EWNeZh2rpR4F5B/jcDOHA=="
       },
+      "puck.abstractions": {
+        "type": "Project"
+      },
+      "puck.capture": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
       "puck.humblegamingbrick": {
         "type": "Project",
         "dependencies": {

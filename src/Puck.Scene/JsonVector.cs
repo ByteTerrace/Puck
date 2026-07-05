@@ -9,6 +9,14 @@ namespace Puck.Scene;
 /// already-validated arrays. The duplicated guards are a defensive backstop, not the primary gate.
 /// </summary>
 internal static class JsonVector {
+    public static Vector2 ToVector2(IReadOnlyList<float> components) {
+        Require(components: components, length: 2);
+
+        return new Vector2(
+            x: components[0],
+            y: components[1]
+        );
+    }
     public static Vector3 ToVector3(IReadOnlyList<float> components) {
         Require(components: components, length: 3);
 

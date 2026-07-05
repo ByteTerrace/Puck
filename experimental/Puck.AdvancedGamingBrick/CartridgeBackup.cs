@@ -1,6 +1,6 @@
 namespace Puck.AdvancedGamingBrick;
 
-/// <summary>Specifies the non-volatile save backup a Game Boy Advance cartridge carries, detected from the
+/// <summary>Specifies the non-volatile save backup an Advanced GamingBrick cartridge carries, detected from the
 /// identifier string the developer libraries embed in the ROM.</summary>
 public enum CartridgeBackup {
     /// <summary>No detectable save backup.</summary>

@@ -1,7 +1,7 @@
 {
     "$schema": "../../schema/run.schema.json",
     "version": "puck.run.v1",
-    "_comment": "A data-driven cross-backend validation run: the 'world' gate renders THIS document's scene on both Vulkan and Direct3D 12 at a fixed delta-zero frame and diffs them tolerance-aware. Run `Puck.Demo --run docs/examples/validate-world.json` — exit 0 = pass, 1 = pixel-diff fail, 2 = infra fail. Reproduces `--validate-world` but over an arbitrary JSON scene. The graph section is omitted (the gate is the root node).",
+    "_comment": "Parse/validation corpus for a data-driven cross-backend validation scene (Puck.Post's `run-document` stage exercises it). The demo builds only `overworld` graphs since the 2026-07-03 purification, so this document is no longer demo-runnable; the live cross-backend world-parity proof is Puck.Post's `world` stage.",
     "scene": {
         "materials": [
             { "albedo": [0.46, 0.48, 0.54] },

@@ -10,7 +10,12 @@ internal static class PostStages {
             // Tier A — core self-tests (self-contained synthetic ROM; run anywhere).
             new DeterminismStage(),
             new SnapshotRoundTripStage(),
+            new BatterySaveStage(),
+            new VictoryRegionStage(),
             new ForkDeterminismStage(),
+            new AgbCostumeStage(),
+            new TrioLockstepStage(),
+            new CameraCaptureStage(),
             new ThroughputStage(),
             // Tier B — reference-ROM correctness (blargg via the $A000 result block; skip when the corpus is absent).
             new BlarggStage(group: "cpu-instrs", subPath: "cpu_instrs/individual", model: ConsoleModel.Dmg),

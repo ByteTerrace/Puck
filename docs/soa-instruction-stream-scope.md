@@ -1,3 +1,5 @@
+> **Historical record.** This documents a completed optimization of the avatar-era `avatar-vm.glsl` (deleted). The current SDF VM is `src/Puck.SdfVm` (HLSL via DXC). The design lessons stand; the paths do not.
+
 # SoA split of the SDF instruction stream — design record
 
 **Status: BUILT, MEASURED, LANDED on `features/licensing`** (originally scoped + prototyped in

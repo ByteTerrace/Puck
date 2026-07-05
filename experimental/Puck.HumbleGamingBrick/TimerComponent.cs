@@ -53,7 +53,9 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         m_key1 = key1;
 
         if (configuration.BootRom is null) {
-            m_counter = ((configuration.Model == ConsoleModel.Cgb) ? CgbBootDivPrediction.Compute(header: header) : DmgPostBootDivCounter);
+            // The AGB seed is canonicalized to the CGB prediction until measured on hardware (the ideal-machine plan
+            // tracks per-profile post-boot DIV seeds as INFORMATIVE, resolved by measurement — never copied blind).
+            m_counter = (configuration.Model.SupportsColor() ? CgbBootDivPrediction.Compute(header: header) : DmgPostBootDivCounter);
         }
     }
 

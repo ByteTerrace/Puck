@@ -9,9 +9,9 @@ namespace Puck.HumbleGamingBrick;
 /// restores the partially drawn image exactly — serialized as the raw little-endian pixel bytes.
 /// </summary>
 public sealed class Framebuffer : IFramebuffer, ISnapshotable {
-    /// <summary>The Game Boy screen width in pixels.</summary>
+    /// <summary>The GamingBrick screen width in pixels.</summary>
     public const int ScreenWidth = 160;
-    /// <summary>The Game Boy screen height in pixels.</summary>
+    /// <summary>The GamingBrick screen height in pixels.</summary>
     public const int ScreenHeight = 144;
 
     private readonly uint[] m_pixels;

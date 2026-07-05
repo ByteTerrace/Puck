@@ -13,4 +13,11 @@ public sealed record LayeredInputBindings(IInputBindings Primary, IInputBindings
     public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) {
         return (Primary.Resolve(slot: slot, source: source) ?? Fallback.Resolve(slot: slot, source: source));
     }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+        // Forward the signal-aware overload so a stateful primary (a paged profile) sees every signal, not just
+        // the ones it resolves.
+        return (Primary.Resolve(slot: slot, signal: signal) ?? Fallback.Resolve(slot: slot, signal: signal));
+    }
 }

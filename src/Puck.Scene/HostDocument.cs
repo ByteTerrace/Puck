@@ -7,16 +7,16 @@ namespace Puck.Scene;
 /// the launcher (exit-after, render rate), the neutral presentation preferences (present mode, surface format), the
 /// host backend (which graphics API hosts the window), and the backend feature toggles surfaced from environment
 /// variables (ray query, GPU timing). Every field is OPTIONAL — an omitted field falls back to the demo's default, so
-/// a document with no host section reproduces the historic <c>--world</c> defaults (Vulkan host, 960x600, vsync).
+/// a document with no host section reproduces the <c>--world</c> defaults (Vulkan host, 1280x800, vsync).
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record HostDocument {
     /// <summary>The graphics backend that HOSTS the window: <c>"vulkan"</c> (default) or <c>"directx"</c>. On an OS
     /// without Direct3D 12 a <c>"directx"</c> request degrades to a Vulkan host (logged, not silent).</summary>
     public string? Backend { get; init; }
-    /// <summary>The window size as <c>[width, height]</c> in pixels; defaults to <c>[960, 600]</c>. The world/rt render
-    /// resolution (and the camera aspect ratio) follow this size; the <c>showcase</c> graph and a <c>validation</c>
-    /// gate render at a fixed resolution and ignore it.</summary>
+    /// <summary>The window CLIENT size as <c>[width, height]</c> in pixels; defaults to <c>[1280, 800]</c>. The
+    /// world/overworld render resolution (and the camera aspect ratio) follow this size; a <c>validation</c> gate
+    /// renders at a fixed resolution and ignores it.</summary>
     public IReadOnlyList<int>? Size { get; init; }
     /// <summary>The swapchain present mode: <c>"vsync"</c> (default), <c>"mailbox"</c>, <c>"immediate"</c>, or <c>"adaptive"</c> (VRR).</summary>
     public string? PresentMode { get; init; }

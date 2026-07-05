@@ -11,9 +11,9 @@ namespace Puck.HumbleGamingBrick;
 /// This stateless adapter divides the CPU-domain tick stream down to one <see cref="ApuComponent.TickGenerators"/>
 /// call per whole dot, deriving the phase from the master clock so no state needs snapshotting: at normal speed every
 /// CPU T-cycle is a whole dot; at double speed the CPU takes two half-dot steps per dot and the generator edge sits on
-/// the MID-dot step (the one that leaves the clock off the whole-dot grid) — the gambatte <c>ch3_*_ds_1/_ds_2</c>
+/// the MID-dot step (the one that leaves the clock off the whole-dot grid) — the hardware-accurate double-speed wave
 /// read pairs bracket the wave fetch exactly there, and the whole-dot-boundary alternative leaves every
-/// <c>*_ds_2</c> read one sample behind hardware. It stays in the CPU domain (rather than the LCD domain) so the
+/// double-speed read one sample behind hardware. It stays in the CPU domain (rather than the LCD domain) so the
 /// generators advance between the APU's own frame-sequencer tick and the audio output stage's sampling tick, exactly
 /// as they did when the APU was a single component. All mutable state lives (and snapshots) in the APU, so this
 /// component is not <see cref="ISnapshotable"/>.

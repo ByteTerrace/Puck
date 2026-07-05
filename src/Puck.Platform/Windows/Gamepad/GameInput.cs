@@ -109,7 +109,7 @@ public interface IGameInputReading {
     [PreserveSig] uint GetTouchCount();
     [PreserveSig] uint GetTouchState(uint stateArrayCount, nint stateArray);
     [return: MarshalAs(UnmanagedType.U1)][PreserveSig] bool GetMotionState(nint state);
-    [return: MarshalAs(UnmanagedType.U1)][PreserveSig] bool GetArcadeStickState(nint state);
+    [return: MarshalAs(UnmanagedType.U1)][PreserveSig] bool GetOverworldStickState(nint state);
     [return: MarshalAs(UnmanagedType.U1)][PreserveSig] bool GetFlightStickState(nint state);
     [return: MarshalAs(UnmanagedType.U1)][PreserveSig] bool GetGamepadState(out GameInputGamepadState state);
 }

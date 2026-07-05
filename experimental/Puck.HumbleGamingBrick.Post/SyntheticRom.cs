@@ -32,13 +32,19 @@ internal static class SyntheticRom {
     ];
 
     /// <summary>Creates the synthetic ROM image.</summary>
-    /// <returns>A 32&#160;KiB ROM-only cartridge image whose entry point runs a deterministic WRAM-fill loop.</returns>
-    public static byte[] Create() {
+    /// <param name="cartridgeType">The header cartridge-type byte (<c>0x0147</c>); the default <c>0x00</c> is
+    /// ROM-only. The battery-save stage passes <c>0x13</c> (MBC3+RAM+BATTERY).</param>
+    /// <param name="ramSize">The header RAM-size byte (<c>0x0149</c>); the default <c>0x00</c> is no RAM.</param>
+    /// <returns>A 32&#160;KiB cartridge image whose entry point runs a deterministic WRAM-fill loop.</returns>
+    public static byte[] Create(byte cartridgeType = 0x00, byte ramSize = 0x00) {
         // A zero-filled image already carries a valid ROM-only header (type 0x00, ROM-size 0x00 = 32 KiB, no RAM, a
-        // monochrome color flag), so only the program bytes need to be written.
+        // monochrome color flag), so only the program bytes — and any non-default header bytes — need to be written.
         var rom = new byte[RomSize];
 
         Program.CopyTo(array: rom, index: EntryPoint);
+
+        rom[0x0147] = cartridgeType;
+        rom[0x0149] = ramSize;
 
         return rom;
     }

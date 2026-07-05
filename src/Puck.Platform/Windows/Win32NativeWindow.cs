@@ -344,16 +344,31 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         );
     }
     private nint CreateWindow(NativeWindowOptions options) {
+        // options.Width/Height are the CLIENT (render/swapchain) size — everything downstream sizes to them: the
+        // compositor renders at this resolution and the swapchain follows the client rect. CreateWindowEx takes the
+        // OUTER size (title bar + borders included), so without this adjustment a 1280x800 request yielded a
+        // ~1264x761 client area and the presented image lost its bottom edge (the overworld's bottom pane row).
+        var outer = new Rectangle {
+            Bottom = checked((int)options.Height),
+            Left = 0,
+            Right = checked((int)options.Width),
+            Top = 0,
+        };
+
+        if (!User32.AdjustWindowRectEx(rectangle: ref outer, style: WsOverlappedWindow, hasMenu: false, extendedStyle: 0)) {
+            throw new InvalidOperationException(message: $"AdjustWindowRectEx failed with Win32 error {Marshal.GetLastWin32Error()}.");
+        }
+
         var windowHandle = User32.CreateWindowEx(
             className: WindowClassName,
             extendedStyle: 0,
-            height: checked((int)options.Height),
+            height: (outer.Bottom - outer.Top),
             instanceHandle: InstanceHandleField,
             menuHandle: 0,
             parameter: GCHandle.ToIntPtr(value: m_selfHandle),
             parentHandle: 0,
             style: WsOverlappedWindow,
-            width: checked((int)options.Width),
+            width: (outer.Right - outer.Left),
             windowName: options.Title,
             x: CwUseDefault,
             y: CwUseDefault

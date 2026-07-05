@@ -6,13 +6,14 @@ namespace Puck.Scene;
 /// The validation section: instead of presenting a live render, the run installs one cross-backend validation GATE and
 /// propagates its exit code (0 pass, 1 gate-fail, 2 infra-fail). The <c>world</c> gate is data-driven — it renders THIS
 /// document's scene + viewports on both Vulkan and Direct3D 12 at a fixed delta-zero frame and diffs them tolerance-aware
-/// (overridable via <see cref="Thresholds"/>). The other gates (parity/export/compute/reverse) are self-contained smoke
-/// tests selected by name. When a validation section is present the composition <c>graph</c> is ignored (the gate IS the
-/// root node). To differential-fuzz a GENERATED scene instead, use the <c>fuzzing</c> section.
+/// (overridable via <see cref="Thresholds"/>). The other gates (the <c>parity</c> SDF debug-mode sweep and the
+/// <c>overworld</c>/<c>determinism</c> CPU self-checks) are self-contained smoke tests selected by name. When a
+/// validation section is present the composition <c>graph</c> is ignored (the gate IS the root node). To
+/// differential-fuzz a GENERATED scene instead, use the <c>fuzzing</c> section.
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ValidationDocument {
-    /// <summary>The validation gate to run: <c>"parity"</c>, <c>"world"</c>, <c>"export"</c>, <c>"compute"</c>, <c>"reverse"</c>, <c>"indirect"</c>, <c>"resample"</c>, <c>"viewports"</c>, <c>"pixelate"</c>, or <c>"capture"</c>.</summary>
+    /// <summary>The validation gate to run: <c>"parity"</c>, <c>"world"</c>, <c>"overworld"</c>, or <c>"determinism"</c>.</summary>
     public string Gate { get; init; } = "";
     /// <summary>Optional PASS-threshold overrides (the <c>world</c> gate only).</summary>
     public ParityThresholdsDocument? Thresholds { get; init; }
@@ -24,8 +25,10 @@ public sealed record ValidationDocument {
     /// gate only; requires a four-viewport split layout). Diffs the per-viewport child-surface seam across backends.</summary>
     public bool Child { get; init; }
 
-    /// <summary>The recognized validation gate names.</summary>
-    public static IReadOnlyList<string> Gates { get; } = ["parity", "world", "export", "compute", "reverse", "indirect", "resample", "viewports", "pixelate", "capture"];
+    /// <summary>The recognized validation gate names — exactly the set the demo's gate map can build. (The retired
+    /// engine gates whose coverage moved to Puck.Post — export/compute/reverse/indirect/resample/viewports/pixelate/
+    /// capture — were removed from this list when their nodes were.)</summary>
+    public static IReadOnlyList<string> Gates { get; } = ["parity", "world", "overworld", "determinism"];
 
     internal void Validate(string path, int viewportCount, ValidationErrors errors) {
         var isWorld = string.Equals(Gate, "world", StringComparison.OrdinalIgnoreCase);

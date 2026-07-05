@@ -2,7 +2,7 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
 /// The wave PSG channel: it plays four-bit samples from wave RAM at a programmable rate, scaled by a coarse
-/// volume, gated by a length counter. The Game Boy Advance carries <em>two</em> banks of 32 samples (64 total):
+/// volume, gated by a length counter. The Advanced GamingBrick carries <em>two</em> banks of 32 samples (64 total):
 /// NR30 bit 5 selects single-bank (32-sample) or double-bank (64-sample) playback, and bit 6 selects which bank
 /// plays first. The CPU's wave-RAM window (0x90–0x9F) addresses the bank that is <em>not</em> currently selected
 /// for playback, so a game can prepare the next bank while one plays. A sample lasts (2048 − frequency) × 8

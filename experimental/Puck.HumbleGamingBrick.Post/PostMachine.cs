@@ -17,7 +17,7 @@ internal static class PostMachine {
     public static MachineInstance Build(ConsoleModel model, byte[] rom) =>
         MachineFactory.Create(
             configuration: new MachineConfiguration(model: model, cartridgeRom: rom),
-            compose: static services => services.AddGameBoyColorComponents()
+            compose: static services => services.AddHumbleGamingBrickComponents()
         );
 
     /// <summary>Advances a machine by a whole number of frames.</summary>

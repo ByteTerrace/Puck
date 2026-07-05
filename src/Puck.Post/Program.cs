@@ -11,17 +11,22 @@ using Puck.Platform;
 using Puck.Post;
 using Puck.Vulkan.Presentation;
 
-// The POST has no rich CLI surface — the battery is a fixed, ordered list in code. Only four knobs, parsed by hand to
-// avoid pulling in a command-line library: where artifacts land, an optional tier/name subset for iterating, and the
-// internal --probe mode the Tier-D stages relaunch this executable in (a live multi-frame run instead of the battery).
+// The POST has no rich CLI surface — the battery is a fixed, ordered list in code. Knobs are parsed by hand to avoid
+// pulling in a command-line library: where artifacts land, an optional tier/name/stage subset for iterating, an
+// override for the fuzz stage's fixed deterministic seed, and the internal --probe mode the Tier-D stages relaunch
+// this executable in (a live multi-frame run instead of the battery).
 var artifactsDirectory = ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "post");
 var tierFilter = ArgValue(args: args, name: "--tier");
 var nameFilter = ArgValue(args: args, name: "--filter");
+var stageFilter = ArgValue(args: args, name: "--stage");
+var fuzzSeedValue = ArgValue(args: args, name: "--fuzz-seed");
+var fuzzSeed = ((fuzzSeedValue is null) ? ((int?)null) : int.Parse(s: fuzzSeedValue));
 var probeMode = ArgValue(args: args, name: "--probe");
 
-var stages = PostStages.Create()
+var stages = PostStages.Create(fuzzSeed: fuzzSeed)
     .Where(predicate: stage => TierMatches(stage: stage, tierFilter: tierFilter))
     .Where(predicate: stage => NameMatches(stage: stage, nameFilter: nameFilter))
+    .Where(predicate: stage => StageMatches(stage: stage, stageFilter: stageFilter))
     .ToArray();
 
 // The POST always hosts offscreen on Vulkan and runs the battery on the first frame, then exits — so the window the
@@ -112,4 +117,8 @@ static bool TierMatches(IPostStage stage, string? tierFilter) {
 
 static bool NameMatches(IPostStage stage, string? nameFilter) {
     return (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(value: nameFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
+}
+
+static bool StageMatches(IPostStage stage, string? stageFilter) {
+    return (string.IsNullOrEmpty(value: stageFilter) || string.Equals(a: stage.Name, b: stageFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
 }

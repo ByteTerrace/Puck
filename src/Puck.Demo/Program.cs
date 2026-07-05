@@ -22,52 +22,19 @@ var captureOption = new Option<string?>(name: "--capture") {
     DefaultValueFactory = static _ => null,
     Description = "Optional PNG path; captures the first rendered frame by reading the actual render target back from the GPU (no desktop scrape) and writing it there.",
 };
-var produceOption = new Option<string>(name: "--produce") {
-    DefaultValueFactory = static _ => "directx",
-    Description = "Which backend renders the SDF showcase (Vulkan hosts either way): directx (default, zero-copy cross-backend) or vulkan (same-device).",
+var validateOverworldOption = new Option<bool>(name: "--validate-overworld") {
+    Description = "Runs the overworld determinism + replay self-check (pure CPU: a scripted input run — roster churn + console boots — twice must produce identical per-tick state hashes, and a record->replay must reproduce them bit-for-bit) and exits (0 pass, 1 divergence, 2 infra-fail).",
 };
-var validateOption = new Option<bool>(name: "--validate") {
-    Description = "Runs the cross-backend parity gate: renders both backends offscreen, diffs them tolerance-aware, writes artifacts/parity/, and exits with 0 (pass), 1 (gate-fail), or 2 (infra-fail). Forces a Vulkan host.",
+var overworldOption = new Option<bool>(name: "--overworld") {
+    Description = "Renders the OVERWORLD — the demo, and the default with no flags at all: a controller-driven player in a room with three console stands (the showcase cartridge on the DMG/CGB/AGB costumes of the one machine). Walk with the left stick, jump with South, and press North at a stand to boot it — each boot lights its pane and the screen walks its staged split. Vulkan host.",
 };
-var validateMiniActionOption = new Option<bool>(name: "--validate-mini-action") {
-    Description = "Runs the MiniAction determinism + replay self-check (pure CPU: a scripted input run twice must produce identical per-tick state hashes, and a record->replay must reproduce them bit-for-bit) and exits (0 pass, 1 divergence, 2 infra-fail).",
+var romOption = new Option<string?>(name: "--rom") {
+    DefaultValueFactory = static _ => null,
+    Description = "Path to a cartridge ROM (.gb/.gbc): boot straight INTO the game — the IMMERSED overworld. Each connecting controller (up to 4) seats its player at their own machine running this cartridge; with --rom-exit, any player reaching the condition breaks the fourth wall and reveals the room, everyone standing at their stands with the games continuing on the in-world screens.",
 };
-var validateDeterminismOption = new Option<bool>(name: "--validate-determinism") {
-    Description = "Runs the engine determinism + replay self-check (pure CPU): verifies the fixed-point sim is correct, then records a per-tick CommandSnapshot stream, round-trips it through the neutral binary format, and replays it — asserting identical per-tick state hashes and that every command value kind survives the round-trip. Exits (0 pass, 1 divergence, 2 infra-fail).",
-};
-var miniActionOption = new Option<bool>(name: "--mini-action") {
-    Description = "Renders the live MiniAction prototype: a controller-driven player box running around a room on a Vulkan host. Move with the left stick, jump with the South (A / Cross / B) button.",
-};
-var worldOption = new Option<bool>(name: "--world") {
-    Description = "Renders the generic SDF compute compositor (the SDF VM run in a compute kernel over a data scene + data camera) instead of the SDF showcase. Forces a Vulkan host.",
-};
-var worldSplitOption = new Option<bool>(name: "--world-split") {
-    Description = "Like --world, but a 2x2 split-screen of four independent data-driven cameras on the same scene, filled in a single compute dispatch. Forces a Vulkan host.",
-};
-var worldChildOption = new Option<bool>(name: "--world-child") {
-    Description = "Like --world-split, but the bottom-right viewport shows a hosted child node's animated surface instead of an SDF camera (the per-viewport child-surface seam). Forces a Vulkan host.",
-};
-var worldRtOption = new Option<bool>(name: "--world-rt") {
-    Description = "Renders the Vulkan-only ray-query world: a per-frame TLAS over a unit-AABB instance, ray-traced by an inline RayQuery compute kernel. Always Vulkan-hosted (ray-query has no Direct3D 12 equivalent); falls back to a blank surface on an adapter without ray-query support.",
-};
-var validateWorldOption = new Option<bool>(name: "--validate-world") {
-    Description = "Cross-backend parity gate: renders the compute SDF world on both Vulkan (host device) and Direct3D 12 (bespoke LUID-matched device) at a fixed frame, captures each, and exits (0 pass, 2 infra-fail). Forces a Vulkan host.",
-};
-var validateWorldChildOption = new Option<bool>(name: "--validate-world-child") {
-    Description = "Like --validate-world, but the bottom-right viewport is a hosted child node; captures both backends to artifacts/parity-world-child-*.png for the per-viewport child-surface seam. Forces a Vulkan host.",
-};
-var cameraOption = new Option<bool>(name: "--camera") {
-    Description = "Live camera content source: a bespoke Direct3D 12 device (a stand-in for a hardware camera's decode device) produces an animated feed into a shared image each frame, which the Vulkan host imports zero-copy and presents. The running skeleton the real camera fills later. Forces a Vulkan host.",
-};
-var validateCameraLiveOption = new Option<bool>(name: "--validate-camera-live") {
-    Description = "Live-camera hardware bring-up gate: opens the real default webcam through Media Foundation, polls until a frame arrives, and writes artifacts/camera-live.png (so RGB32 orientation/content can be verified). Lenient about the environment (no device/privacy-blocked yields skip); exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
-};
-var validateCameraGpuOption = new Option<bool>(name: "--validate-camera-gpu") {
-    Description = "GPU-resident zero-copy camera gate (the M3 tier): opens the real webcam with a Media Foundation D3D manager so DXVA converts frames to ARGB32 on-GPU, copies them into D3D12-allocated simultaneous-access shared targets on a D3D11 decode device, then Vulkan-imports the latest target and reads it back — no frame ever visits host memory — writing artifacts/camera-gpu.png. Exits 0 (pass/skip) or 2 (infra-fail). Forces a Vulkan host.",
-};
-var fuzzSeedOption = new Option<int>(name: "--fuzz-seed") {
-    DefaultValueFactory = static _ => -1,
-    Description = "With --validate-world, renders a fuzz-generated SDF scene program (deterministic from this seed, identical on both backends) instead of the showcase — one cross-backend differential-fuzzing iteration. A negative value (default) disables fuzzing.",
+var romExitOption = new Option<string?>(name: "--rom-exit") {
+    DefaultValueFactory = static _ => null,
+    Description = "Fourth-wall condition for --rom, as <0xADDR><op><value> over work RAM (0xC000-0xDFFF), e.g. \"0xDA22>=1\" = a representative cartridge's save flag going nonzero.",
 };
 var runOption = new Option<string?>(name: "--run") {
     DefaultValueFactory = static _ => null,
@@ -77,9 +44,13 @@ var emitSchemaOption = new Option<string?>(name: "--emit-schema") {
     DefaultValueFactory = static _ => null,
     Description = "Headless utility: write the run-document JSON Schema to the given path and exit (no window).",
 };
-var checkRunOption = new Option<string?>(name: "--check-run") {
+var forgeOption = new Option<string?>(name: "--forge") {
     DefaultValueFactory = static _ => null,
-    Description = "Headless utility: assert a run document's scene program is bit-identical to the built-in showcase scene and exit (0 match, 1 mismatch, 2 load error; no window).",
+    Description = "Headless tool: FORGE a Humble GamingBrick ROM from SDF-authored art — render a mini overworld scene, crush it to GBC tiles + CGB palettes, and write a real .gbc (plus a preview PNG) to the given path, then exit. Boot the result with --rom.",
+};
+var forgeCameraOption = new Option<string?>(name: "--forge-camera") {
+    DefaultValueFactory = static _ => null,
+    Description = "Headless tool: forge a POCKET CAMERA .gbc (a real ROM that drives the authentic M64282FP protocol — program registers, trigger, poll busy, blit the captured image) and self-verify it against the deterministic gradient sensor, writing an <out>.emulated.png. Boot it with --rom to run the webcam viewfinder.",
 };
 var presentModeOption = new Option<string>(name: "--present-mode") {
     DefaultValueFactory = static _ => "vsync",
@@ -90,34 +61,24 @@ var surfaceFormatOption = new Option<string>(name: "--surface-format") {
     Description = "The back-buffer surface format (both backends honor it): r8g8b8a8 (default) or b8g8r8a8.",
 };
 var launchCommand = new RootCommand(description: "Puck Demo") {
+    overworldOption,
     backendOption,
     captureOption,
-    checkRunOption,
     emitSchemaOption,
     exitAfterSecondsOption,
-    fuzzSeedOption,
+    forgeOption,
+    forgeCameraOption,
     presentModeOption,
-    produceOption,
+    romExitOption,
+    romOption,
     runOption,
     surfaceFormatOption,
-    validateOption,
-    validateMiniActionOption,
-    validateDeterminismOption,
-    miniActionOption,
-    validateCameraLiveOption,
-    validateCameraGpuOption,
-    cameraOption,
-    validateWorldOption,
-    validateWorldChildOption,
-    worldOption,
-    worldSplitOption,
-    worldChildOption,
-    worldRtOption,
+    validateOverworldOption,
 };
 var parseResult = launchCommand.Parse(args);
-// Fail loudly on an unrecognized/invalid option rather than silently falling through to the default showcase (a
+// Fail loudly on an unrecognized/invalid option rather than silently falling through to the default world render (a
 // removed --validate-* flag, a typo, or a bad value). Otherwise a stale script or CI job that still passes a retired
-// gate flag would get a 30-second showcase window and a misleading exit 0. Headless utilities are checked next.
+// gate flag would get a 30-second live window and a misleading exit 0. Headless utilities are checked next.
 if (!DemoRootNode.ReportParseErrors(parseResult: parseResult)) {
     return 1;
 }
@@ -126,16 +87,22 @@ var emitSchemaPath = parseResult.GetValue(emitSchemaOption);
 if (emitSchemaPath is not null) {
     return DemoRootNode.EmitSchema(path: emitSchemaPath);
 }
-var checkRunPath = parseResult.GetValue(checkRunOption);
-if (checkRunPath is not null) {
-    return DemoRootNode.CheckRunDocument(runPath: checkRunPath);
+// The ROM forge needs the GPU (it renders SDF scenes), so — unlike the schema emitter — it cannot early-return before a
+// host exists; it builds its own trimmed Vulkan host and forges on the first frame. Still a tool mode: emit and exit.
+var forgePath = parseResult.GetValue(forgeOption);
+if (forgePath is not null) {
+    return await Puck.Demo.Forge.RomForge.RunAsync(outputPath: forgePath, args: args);
+}
+// The Pocket Camera forge: a real cartridge that drives the authentic M64282FP protocol. No GPU needed — the pixels
+// come from the sensor at run time — so it builds, self-verifies against the gradient sensor, and exits.
+var forgeCameraPath = parseResult.GetValue(forgeCameraOption);
+if (forgeCameraPath is not null) {
+    return await Puck.Demo.Forge.RomForge.RunCameraAsync(outputPath: forgeCameraPath);
 }
 var backend = parseResult.GetValue(backendOption) ?? "vulkan";
 var capturePath = parseResult.GetValue(captureOption);
 var exitAfterSeconds = parseResult.GetValue(exitAfterSecondsOption);
-var fuzzSeed = parseResult.GetValue(fuzzSeedOption);
 var presentMode = parseResult.GetValue(presentModeOption) ?? "vsync";
-var produceBackend = parseResult.GetValue(produceOption) ?? "directx";
 var runPath = parseResult.GetValue(runOption);
 var surfaceFormat = parseResult.GetValue(surfaceFormatOption) ?? "r8g8b8a8";
 
@@ -147,23 +114,12 @@ var runDocument = (runPath is not null)
     : DemoRunDocuments.Synthesize(flags: new DemoFlags {
         Backend = backend,
         ExitAfterSeconds = exitAfterSeconds,
-        FuzzSeed = fuzzSeed,
         PresentMode = presentMode,
-        Produce = produceBackend,
         SurfaceFormat = surfaceFormat,
-        Validate = parseResult.GetValue(validateOption),
-        ValidateMiniAction = parseResult.GetValue(validateMiniActionOption),
-        ValidateDeterminism = parseResult.GetValue(validateDeterminismOption),
-        MiniAction = parseResult.GetValue(miniActionOption),
-        Camera = parseResult.GetValue(cameraOption),
-        ValidateCameraLive = parseResult.GetValue(validateCameraLiveOption),
-        ValidateCameraGpu = parseResult.GetValue(validateCameraGpuOption),
-        ValidateWorld = parseResult.GetValue(validateWorldOption),
-        ValidateWorldChild = parseResult.GetValue(validateWorldChildOption),
-        World = parseResult.GetValue(worldOption),
-        WorldChild = parseResult.GetValue(worldChildOption),
-        WorldRt = parseResult.GetValue(worldRtOption),
-        WorldSplit = parseResult.GetValue(worldSplitOption),
+        ValidateOverworld = parseResult.GetValue(validateOverworldOption),
+        Overworld = parseResult.GetValue(overworldOption),
+        RomPath = parseResult.GetValue(romOption),
+        RomExit = parseResult.GetValue(romExitOption),
     });
 
 // A failed --run load is already reported by LoadRunDocument; a synthesized document is always valid.
@@ -171,18 +127,18 @@ if (runDocument is null) {
     return 2;
 }
 
-// A fuzzing seedRange must go through the process-isolated `tools fuzz` loop; --run runs ONE seed in-process.
-if (DemoRootNode.RequiresExternalFuzzLoop(document: runDocument, fuzzSeed: fuzzSeed)) {
-    return 2;
-}
-
-// A validation OR fuzzing run installs a cross-backend gate that renders OFFSCREEN on Vulkan (it LUID-matches a
-// Direct3D 12 device from the Vulkan host), so it forces a Vulkan host regardless of the host section.
-var isOffscreenRun = (runDocument.Validation is not null) || (runDocument.Fuzzing is not null);
+// A validation run installs a gate that renders OFFSCREEN on Vulkan, so it forces a Vulkan host regardless of the
+// host section.
+var isOffscreenRun = (runDocument.Validation is not null);
 var hostSettings = HostSettings.FromDocument(flagBackend: backend, flagExitAfterSeconds: exitAfterSeconds, flagPresentMode: presentMode, flagSurfaceFormat: surfaceFormat, host: runDocument.Host);
 // The window host follows the document's resolved backend, gated by the graph's Direct3D 12 requirement (DXR for rt)
 // so it never diverges from the node's device; an offscreen gate forces Vulkan.
 var startWithDirectX = (!isOffscreenRun && hostSettings.ResolveHostsOnDirectX(directXAvailable: DemoRootNode.HostDirectXAvailable(document: runDocument)));
+// Pre-flight the graph against the RESOLVED host: a deferred/retired affordance (cross-backend produce, graph.child,
+// an un-hosted viewport source) exits here with an attributed error, never a mid-host crash.
+if (DemoRootNode.ReportGraphUnsupported(document: runDocument, hostsOnDirectX: startWithDirectX)) {
+    return 2;
+}
 var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
 // Window size, launcher cadence, neutral presentation prefs, and the env-var feature toggles, all from the resolved
@@ -216,9 +172,11 @@ if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
             : throw new PlatformNotSupportedException())));
 }
 services.AddBackendSwitcher(preferredBackend: (startWithDirectX ? "directx" : "vulkan"));
-var parityResult = DemoRootNode.RegisterRunDocument(capturePath: capturePath, document: runDocument, fuzzSeed: fuzzSeed, height: hostSettings.Height, hostsOnDirectX: startWithDirectX, services: services, width: hostSettings.Width);
+var parityResult = DemoRootNode.RegisterRunDocument(capturePath: capturePath, document: runDocument, height: hostSettings.Height, hostsOnDirectX: startWithDirectX, services: services, width: hostSettings.Width);
 services.AddSingleton<ICommandModule, DemoCommandModule>();
 services.AddSingleton<ICommandObserver, DemoCommandObserver>();
+// The on-screen developer console's state store: DemoConsole publishes to it, the overworld's console overlay renders it.
+services.AddSingleton<Puck.Demo.DevConsole.ConsoleTextStore>();
 services.AddSingleton<DemoConsole>();
 services.AddSingleton(implementationFactory: static _ => new BindingCommandSource(
     bindings: new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase) {
@@ -234,12 +192,14 @@ services.AddSingleton(implementationFactory: static _ => new BindingCommandSourc
 ));
 // Controller input: the manager owns device acquisition, the source feeds the command registry (focus-gated
 // like keyboard input), and the hosted service governs device lifetime.
-// The live MiniAction node is the SOLE per-frame gamepad drainer (it routes each controller to its own player), so
-// suppress the global gamepad command source for it — otherwise that source's destructive drain consumes the
-// per-device edges first. Every other mode keeps the global source.
-services.AddDemoGamepad(registerGlobalSource: runDocument.Graph is not Puck.Scene.MiniActionNode);
+// Single-drainer discipline: the manager's per-frame drain is destructive per device, so exactly ONE consumer may
+// drain. The live Overworld root drains per-device itself, and a document with gaming-brick / overworld viewport
+// panes drains through the shared pad-routing service — suppress the global gamepad command source for both.
+// Every other mode keeps the global source.
+services.AddDemoGamepad(registerGlobalSource: ((runDocument.Graph is not Puck.Scene.OverworldNode) && !GamingBrickPadRegistration.UsesPadService(document: runDocument)));
+services.AddBrickPadRouting(document: runDocument);
 await builder.Build().RunAsync();
 
-// A validation/fuzzing gate fills parityResult before requesting exit; propagate it as the process exit code. A live
+// A validation gate fills parityResult before requesting exit; propagate it as the process exit code. A live
 // render installs no gate, so it always reports success.
 return isOffscreenRun ? parityResult.ExitCode : 0;

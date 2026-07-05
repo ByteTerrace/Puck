@@ -1,0 +1,15 @@
+{
+    "version": "puck.run.v1",
+    "host": {
+        "presentMode": "vsync"
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld",
+        "consoles": [
+            { "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
+            { "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
+            { "model": "agb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" }
+        ]
+    }
+}

@@ -44,6 +44,30 @@ public sealed class SystemMemory : ISnapshotable {
         set => m_workRamBank = Math.Max(val1: 1, val2: (value & 0x07));
     }
 
+    /// <summary>Repages the switchable RAM windows to their DMG-equivalent banks (VRAM bank 0, work RAM bank 1) — the
+    /// live-swap fixup when a running Color game is demoted to monochrome. 0xD000–0xDFFF at work RAM bank 1 is the SAME
+    /// slab a real DMG's fixed second work-RAM half occupies, so the shared game state a GB-compatible cartridge keeps
+    /// there stays addressable to its now-monochrome code. The banked bytes themselves are NOT cleared or moved — the
+    /// Color banks 2–7 and VRAM bank 1 simply stop being paged in (cartridge-move semantics), so a later promotion back
+    /// to Color finds them intact.</summary>
+    public void ForceDmgBanks() {
+        m_videoRamBank = 0;
+        m_workRamBank = 1;
+    }
+    /// <summary>Writes one byte at a CPU-space address, but ONLY into work RAM (0xC000–0xFDFF, echo folded) or high RAM
+    /// (0xFF80–0xFFFE) — the live device swap's flag-poke seam. Any other address (ROM, I/O, VRAM, OAM) is ignored, so a
+    /// mode recipe can never reach outside the game's own scratch state.</summary>
+    /// <param name="address">The CPU-space address.</param>
+    /// <param name="value">The byte to store.</param>
+    public void PokeCpuByte(ushort address, byte value) {
+        if ((address >= MemoryMap.HighRamStart) && (address <= MemoryMap.HighRamEnd)) {
+            WriteHighRam(address: address, value: value);
+        }
+        else if ((address >= MemoryMap.WorkRamBank0Start) && (address <= MemoryMap.EchoRamEnd)) {
+            WriteWorkRam(address: address, value: value);
+        }
+    }
+
     /// <summary>Reads a byte of video RAM at an absolute address in the VRAM region, honoring the selected bank.</summary>
     /// <param name="address">An address in <c>[0x8000, 0x9FFF]</c>.</param>
     /// <returns>The byte at that address in the current VRAM bank.</returns>

@@ -1,0 +1,59 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "scene": {
+        "materials": [
+            { "albedo": [0.45, 0.50, 0.55] },
+            { "albedo": [0.90, 0.35, 0.45] },
+            { "albedo": [0.30, 0.60, 0.90] },
+            { "albedo": [0.90, 0.75, 0.25] }
+        ],
+        "objects": [
+            {
+                "shape": "plane",
+                "normal": [0.0, 1.0, 0.0],
+                "offset": 1.0,
+                "material": 0
+            },
+            {
+                "shape": "roundCone",
+                "ops": [
+                    { "op": "translate", "offset": [-2.2, -1.0, 0.6] },
+                    { "op": "wallpaperFold", "group": "P4G", "cell": [1.1, 1.1], "limit": [2, 2], "materialStride": 1 },
+                    { "op": "translate", "offset": [0.06, -0.02, 0.1] }
+                ],
+                "lowerRadius": 0.2,
+                "upperRadius": 0.1,
+                "height": 0.45,
+                "material": 1
+            },
+            {
+                "shape": "roundCone",
+                "ops": [
+                    { "op": "translate", "offset": [1.9, -1.0, -0.2] },
+                    { "op": "wallpaperFold", "group": "P6M", "cell": [1.2, 1.2], "limit": [2, 2], "materialStride": 1, "lodDistance": 40.0 },
+                    { "op": "translate", "offset": [0.05, 0.0, 0.12] }
+                ],
+                "lowerRadius": 0.2,
+                "upperRadius": 0.1,
+                "height": 0.45,
+                "material": 1
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.3,
+                "azimuth": 0.0,
+                "fieldOfView": 60.0,
+                "height": 2.4,
+                "radius": 6.0,
+                "target": [0.0, -0.6, 0.0]
+            },
+            "region": [0.0, 0.0, 1.0, 1.0]
+        }
+    ],
+    "graph": { "$type": "world", "produce": "vulkan" }
+}

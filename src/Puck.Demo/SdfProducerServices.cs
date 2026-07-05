@@ -2,9 +2,8 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Demo;
 
 /// <summary>
-/// The backend's GPU services that drive an <see cref="SdfProducerNode"/>. The showcase fills this with one
-/// backend's factories — Direct3D 12 (for the zero-copy cross-backend path) or Vulkan (same-device) — so the
-/// neutral producer renders identically on either.
+/// The neutral GPU services bundle a same-device SDF-shaped producer renders through — currently the overworld's
+/// binding-bar overlay, built via <see cref="SdfParityProducers.BuildVulkanServices"/>.
 /// </summary>
 public sealed record SdfProducerServices {
     /// <summary>The command recorder the compositor drives.</summary>

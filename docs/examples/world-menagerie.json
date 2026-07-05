@@ -1,0 +1,57 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "scene": {
+        "materials": [
+            { "albedo": [0.50, 0.55, 0.60] },
+            { "albedo": [0.90, 0.40, 0.30], "emissive": 1.2 },
+            { "albedo": [0.50, 0.30, 0.85], "specular": 0.6, "shininess": 64 },
+            { "albedo": [0.45, 0.80, 0.25] }
+        ],
+        "objects": [
+            {
+                "shape": "plane",
+                "normal": [0.0, 1.0, 0.0],
+                "offset": 1.0,
+                "material": 0
+            },
+            {
+                "shape": "capsule",
+                "ops": [{ "op": "translate", "offset": [-1.6, -0.6, 0.2] }],
+                "endpoint": [0.6, 1.1, -0.3],
+                "radius": 0.3,
+                "material": 1
+            },
+            {
+                "shape": "cylinder",
+                "ops": [{ "op": "translate", "offset": [0.1, -0.2, 0.5] }],
+                "radius": 0.6,
+                "halfHeight": 0.8,
+                "material": 2
+            },
+            {
+                "shape": "ellipsoid",
+                "ops": [{ "op": "translate", "offset": [1.8, -0.5, -0.4] }],
+                "radii": [0.9, 0.4, 0.65],
+                "material": 3,
+                "blend": "SmoothUnion",
+                "smooth": 0.3
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.4,
+                "azimuth": 0.0,
+                "fieldOfView": 60.0,
+                "height": 1.6,
+                "radius": 5.2,
+                "target": [0.0, -0.2, 0.0]
+            },
+            "region": [0.0, 0.0, 1.0, 1.0]
+        }
+    ],
+    "graph": { "$type": "world", "produce": "vulkan" }
+}

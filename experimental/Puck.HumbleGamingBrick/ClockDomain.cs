@@ -1,7 +1,7 @@
 namespace Puck.HumbleGamingBrick.Timing;
 
 /// <summary>
-/// Identifies which of the console's two clocks a component is wired to. On a Game Boy Color the CPU clock can be
+/// Identifies which of the console's two clocks a component is wired to. On the colour brick the CPU clock can be
 /// switched to twice the LCD/audio clock, so a single master-timeline duration corresponds to a different number of
 /// each domain's cycles. Tagging a component with its domain lets the timing core scale its sub-cycle advances without
 /// the component needing to know the current speed mode.

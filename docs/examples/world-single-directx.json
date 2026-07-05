@@ -1,7 +1,7 @@
 {
     "$schema": "../../schema/run.schema.json",
     "version": "puck.run.v1",
-    "_comment": "Same scene as world-single.json, but the host section requests a Direct3D 12-hosted window (DXR/D3D12 compute) — reproducing `Puck.Demo --world --backend directx`. On an OS without Direct3D 12 the host degrades to Vulkan (logged). Omitted host fields fall back to the demo defaults / CLI flags.",
+    "_comment": "Same scene as world-single.json, but the host section requests a Direct3D 12-hosted window: the world renders on the HOST device through the shared render builder (DXIL kernels), so this document runs live on Windows. Omitted host fields fall back to the demo defaults / CLI flags.",
     "host": {
         "backend": "directx",
         "size": [960, 600],

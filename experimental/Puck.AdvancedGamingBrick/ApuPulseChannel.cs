@@ -3,8 +3,8 @@ namespace Puck.AdvancedGamingBrick;
 /// <summary>
 /// A square-wave PSG channel: an 8-step duty waveform gated by a volume envelope and an optional length
 /// counter, with channel 1 additionally carrying a frequency sweep. The frequency timer is counted in master
-/// clock cycles — a duty step lasts (2048 − frequency) × 16 of them, four times the Game Boy period because
-/// the Advance's master clock is four times faster.
+/// clock cycles — a duty step lasts (2048 − frequency) × 16 of them, four times the Humble GamingBrick period
+/// because the Advanced GamingBrick's master clock is four times faster.
 /// </summary>
 public sealed class ApuPulseChannel {
     private static readonly byte[] s_dutyPatterns = { 0b00000001, 0b00000011, 0b00001111, 0b11111100 };
