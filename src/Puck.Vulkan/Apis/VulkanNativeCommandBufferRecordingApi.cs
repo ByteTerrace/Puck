@@ -253,7 +253,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void BindComputeDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint[] descriptorSetHandles) {
+    public void BindComputeDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles) {
         var bindDescriptorSets = GetPointers(deviceHandle: deviceHandle).CmdBindDescriptorSets;
 
         fixed (nint* descriptorSetHandlesPointer = descriptorSetHandles) {

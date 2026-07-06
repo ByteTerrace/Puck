@@ -1,19 +1,18 @@
 # Machine-fleet performance briefing — the pre-plan
 
-Status: **executed** (2026-07-03) — the plan this briefing called for now
-exists with the ▢ blanks filled by measurement:
-[machine-fleet-plan.md](machine-fleet-plan.md) (the `--bench` instrument,
-the scaling/latency numbers, the M3 verdict, the levers in measured order).
-This doc remains the workload-class and vision-posture record the plan
-serves; §1 is still the place new workload classes land.
+Status: the plan this briefing calls for exists, with the ▢ blanks filled by
+measurement: [machine-fleet-plan.md](machine-fleet-plan.md) (the `--bench`
+instrument, the scaling/latency numbers, the M3 verdict, the levers in
+measured order). This doc is the workload-class and vision-posture record the
+plan serves; §1 is the place new workload classes land.
 
-Update (2026-07-04): per-player machine CONTROL is live in the overworld —
+Per-player machine CONTROL is live in the overworld —
 proximity takeover (a player claims a booted machine off the shared
 timeline and drives it alone; host-side input routing, never sim state),
-and the buff/debuff reboots now travel the persisted battery save
+and the buff/debuff reboots travel the persisted battery save
 (cartridge-move semantics, RTC footer included). Details:
 [overworld-demo-plan.md](overworld-demo-plan.md) status block. The first realtime
-snapshot-migration promote/demote form has since landed too: the Bricks page
+snapshot-migration promote/demote form is in place too: the Bricks page
 can live-change a running Humble machine's `ConsoleModel` through
 snapshot/restore without resetting its timeline cursor. The broader gameplay
 rules for promotion/demotion remain §1 design work.
@@ -32,7 +31,7 @@ day one, not speculative — is **many machines running simultaneously**, in
 shifting combinations of:
 
 - **Lockstep fleets** — one shared input timeline, N cursors (the overworld's
-  `OverworldBrickTimeline` pattern, already shipped). Same-costume machines are
+  `OverworldBrickTimeline` pattern). Same-costume machines are
   bit-identical by construction.
 - **Independent fleets** — per-machine input streams; nothing shared but the
   clock.
@@ -64,9 +63,10 @@ shifting combinations of:
   device asks the host to "insert" a cartridge (host-side mechanic — e.g.
   watch a mount point/drive letter and boot a nested machine from the file
   found there), an exit branch tells the host which door the player took.
-  Natural carriers: the host posing as a link-cable peer (the M5
-  `ISerialEndpoint` layer), or a host-watched cartridge-RAM mailbox. Seam
-  class to reserve, not design.
+  Natural carriers: the host posing as a link-cable peer (the serial-link
+  seam is landed — `SerialLinkSession` in Puck.HumbleGamingBrick — though a
+  host-as-peer endpoint is not), or a host-watched cartridge-RAM mailbox.
+  Seam class to reserve, not design.
 - **Link cable as GAMEPLAY** — trading between players/machines is a
   designed mechanic, which makes the ideal plan's M5 (two-machine link +
   cross-generation bit-lock) a gameplay dependency, not only the rule-3
@@ -79,7 +79,7 @@ shifting combinations of:
   deterministic world; real-human exchange is a later arc (reserve the
   exchange/network seam, design nothing).
 
-Postures settled by the vision session (2026-07-03):
+Settled postures:
 
 - **Scale is hundreds+** — machines as particles — reached via tiered
   fidelity, never brute force. **Both fleet shapes are core**: the plan must
@@ -115,23 +115,23 @@ Tone check for the plan: gameplay direction is deliberately surprising
 
 | Fact | Value | Source |
 |---|---|---|
-| Emulator throughput, single-threaded | 332 machine-frames/s pre-M3 → **532 post-M3** (superseded by the full curves in [machine-fleet-plan.md](machine-fleet-plan.md)) | Humble Post `trio-lockstep` stage, RTX 4070 dev box |
-| Per-machine-frame CPU cost | ≈3 ms pre-M3 → **≈1.8 ms post-M3** (sized the overworld catch-up cap of 4 segments/frame) | overworld-demo-plan.md; machine-fleet-plan.md |
+| Emulator throughput, single-threaded | **532 machine-frames/s** with M3 devirtualization (full curves in [machine-fleet-plan.md](machine-fleet-plan.md)) | Humble Post `trio-lockstep` stage, RTX 4070 dev box |
+| Per-machine-frame CPU cost | **≈1.8 ms** with M3 devirtualization (sizes the overworld catch-up cap of 4 segments/frame) | overworld-demo-plan.md; machine-fleet-plan.md |
 | Hero-world GPU render | ≈0.9 ms/frame — the GPU is nowhere near the bottleneck | Post D1 `gpu-budget` |
 | Brick present path | one CPU repack of the 160×144 framebuffer (≈92 KB) + one upload per machine-frame — the only CPU copy | `GamingBrickChildNode.UploadFramebuffer` |
-| Fleet stepping today | task-per-machine PARALLEL (prepare serial on the render thread, execute fanned out; landed 2026-07-03) | `WorldProducerNode.StepBricks` + `GamingBrickChildNode.PrepareStep`/`ExecuteStep` |
+| Fleet stepping | task-per-machine PARALLEL (prepare serial on the render thread, execute fanned out) | `WorldProducerNode.StepBricks` + `GamingBrickChildNode.PrepareStep`/`ExecuteStep` |
 
-**Never measured (the plan's first blanks):** ▢ where the 3 ms actually goes
-(decode vs bus vs PPU vs clock fan-out); ▢ `MachineFactory.Create` cost (a
-full DI container per machine — matters for spawn-on-stumble); ▢
-`Snapshot()`/`Restore()`/`Fork()` latency and allocation profile (the
-promote-demote budget — now also the ghost-echo/snapshot-economy budget); ▢
-per-machine working set; ▢ the machines-vs-throughput scaling curve, in BOTH
-fleet shapes (independent streams vs one shared choir stream — the delta
-exposes memory-bandwidth falloff at high N); ▢ burst catch-up rate (uncapped
-max machine-frames/s, one machine and K in parallel — the simulate-on-demand
-dormancy budget); ▢ the mailbox-check cycle (restore → run K frames → read
-cart RAM → snapshot).
+**The axes the bench measures (▢ = blanks the plan fills):** ▢ where the
+per-frame cost actually goes (decode vs bus vs PPU vs clock fan-out); ▢
+`MachineFactory.Create` cost (a full DI container per machine — matters for
+spawn-on-stumble); ▢ `Snapshot()`/`Restore()`/`Fork()` latency and
+allocation profile (the promote-demote budget, also the
+ghost-echo/snapshot-economy budget); ▢ per-machine working set; ▢ the
+machines-vs-throughput scaling curve, in BOTH fleet shapes (independent
+streams vs one shared choir stream — the delta exposes memory-bandwidth
+falloff at high N); ▢ burst catch-up rate (uncapped max machine-frames/s,
+one machine and K in parallel — the simulate-on-demand dormancy budget); ▢
+the mailbox-check cycle (restore → run K frames → read cart RAM → snapshot).
 
 ## 3. Standing constraints (contract — the plan must not break these)
 

@@ -21,14 +21,12 @@ internal static class GamingBrickModeRecipes {
         byte ColorValue
     );
 
-    // Keyed by cartridge-header title PREFIX (Header.Title is the printable ASCII of 0x134–0x142).
-    private static readonly (string TitlePrefix, ModeFlag[] Flags)[] Recipes = [
-        // A representative Gen-II colour-compatible cartridge: its colour-detection flag hCGB lives at HRAM 0xFFE8 — 0x01 when the game detected a Color
-        // console, 0x00 for a monochrome one. That one flag gates the entire render path (palettes, tile attributes,
-        // sprite priority), so flipping it is enough; the game rebuilds its palette shadow buffer on the next redraw.
-        ("POKEMON_GLD", [new ModeFlag(Address: 0xFFE8, MonochromeValue: 0x00, ColorValue: 0x01)]),
-        ("POKEMON_SLV", [new ModeFlag(Address: 0xFFE8, MonochromeValue: 0x00, ColorValue: 0x01)]),
-    ];
+    // Keyed by cartridge-header title PREFIX (Header.Title is the printable ASCII of 0x134–0x142). Empty by default:
+    // the demo's forged custom cartridges run single-mode, so there is no cached hardware-detection byte to shim and a
+    // live swap is presentation-only (the framebuffer desaturates). Author an entry here — keyed by a forged
+    // cartridge's title prefix — if a custom cartridge ever caches a colour-detection flag (say, one gated on a HRAM
+    // byte) and ships an authored other-mode render path to switch onto.
+    private static readonly (string TitlePrefix, ModeFlag[] Flags)[] Recipes = [];
 
     /// <summary>Returns the flag pokes that flip <paramref name="title"/> onto <paramref name="target"/>'s code path, or
     /// an empty array when no recipe is known (the caller then does a presentation-only swap).</summary>

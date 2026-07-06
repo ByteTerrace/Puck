@@ -110,8 +110,8 @@ internal sealed class ConsoleOverlayNode : IRenderNode {
         m_width = width;
 
         // The grid fills the top-left of the frame without overrunning it — cols across, up to ~55% of the height.
-        m_cols = Math.Clamp(value: (((int)width - (2 * Margin)) / font.CellWidth), max: 120, min: 8);
-        m_rows = Math.Clamp(value: ((int)(height * 0.55f) / font.CellHeight), max: 40, min: 4);
+        m_cols = Math.Clamp(value: (((int)width - (2 * Margin)) / font.CellWidth), min: 8, max: 120);
+        m_rows = Math.Clamp(value: ((int)(height * 0.55f) / font.CellHeight), min: 4, max: 40);
 
         // The storage buffer is the font atlas (packed coverage) followed by the cols*rows character grid.
         m_textOffsetUints = font.PackedCoverage.Count;

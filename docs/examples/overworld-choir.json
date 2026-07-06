@@ -1,5 +1,7 @@
 {
+    "$schema": "../../schema/run.schema.json",
     "version": "puck.run.v1",
+    "_comment": "Identical-machine CHOIR: two cgb costumes running the same forged cartridge converge to bit-identical state and PARK behind one stepped machine (ContentEquals-verified); the agb costume runs alongside. Forge the cartridge first — e.g. `Puck.Demo --forge-volley volley.gbc`.",
     "host": {
         "presentMode": "vsync"
     },
@@ -7,9 +9,9 @@
     "graph": {
         "$type": "overworld",
         "consoles": [
-            { "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
-            { "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
-            { "model": "agb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" }
+            { "model": "cgb", "romPath": "volley.gbc" },
+            { "model": "cgb", "romPath": "volley.gbc" },
+            { "model": "agb", "romPath": "volley.gbc" }
         ]
     }
 }

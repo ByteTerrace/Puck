@@ -82,7 +82,7 @@ internal static class GraphBuilder {
         foreach (var (slot, source) in ViewportBuilder.ChildSources(viewports: viewports)) {
             switch (source) {
                 case GamingBrickSource brick when (brick.RomPath is null):
-                    return $"viewport[{slot}]: a world document's gaming-brick source requires a romPath (the cartridge shelf is an overworld affordance).";
+                    return $"viewport[{slot}]: a world document's gaming-brick source requires a romPath (choosing a cart at the cabinet is an overworld affordance).";
                 case GamingBrickSource brick when !File.Exists(path: brick.RomPath):
                     return $"viewport[{slot}]: romPath '{brick.RomPath}' does not exist.";
                 case GamingBrickSource:

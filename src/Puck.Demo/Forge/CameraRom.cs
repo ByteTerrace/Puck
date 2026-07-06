@@ -172,8 +172,8 @@ internal static class CameraRom {
         // Poll the busy bit until the shoot completes — the authentic exposure-dependent wait.
         emitter.MarkLabel(label: wait);
         emitter.LoadAFromAddress(address: CameraShootRegister);
-        emitter.AndImmediate(value: 0x01);
-        emitter.JumpRelativeIfNotZero(label: wait);
+        emitter.ArithmeticImmediate(op: AluOp.And, value: 0x01);
+        emitter.JumpRelative(condition: Condition.NotZero, label: wait);
 
         // Expose the image RAM: deselect the camera block (bank 0), enable the RAM window.
         emitter.XorA();
@@ -209,44 +209,44 @@ internal static class CameraRom {
     private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort) {
         var loop = emitter.NewLabel();
 
-        emitter.LoadHlImmediate(value: sourceAddress);
-        emitter.LoadBImmediate(value: 8);
+        emitter.LoadImmediate(pair: Reg16.Hl, value: sourceAddress);
+        emitter.LoadImmediate(destination: Reg8.B, value: 8);
         emitter.MarkLabel(label: loop);
         emitter.LoadAFromHlIncrement();
         emitter.StoreAToHighPage(port: dataPort);
-        emitter.DecrementB();
-        emitter.JumpRelativeIfNotZero(label: loop);
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
 
     private static void EmitBlockCopy(Sm83Emitter emitter, ushort source, ushort destination, ushort count) {
         var loop = emitter.NewLabel();
 
-        emitter.LoadHlImmediate(value: source);
-        emitter.LoadDeImmediate(value: destination);
-        emitter.LoadBcImmediate(value: count);
+        emitter.LoadImmediate(pair: Reg16.Hl, value: source);
+        emitter.LoadImmediate(pair: Reg16.De, value: destination);
+        emitter.LoadImmediate(pair: Reg16.Bc, value: count);
         emitter.MarkLabel(label: loop);
         emitter.LoadAFromHlIncrement();
         emitter.StoreAToDe();
-        emitter.IncrementDe();
-        emitter.DecrementBc();
-        emitter.LoadAFromB();
-        emitter.OrC();
-        emitter.JumpRelativeIfNotZero(label: loop);
+        emitter.Increment(pair: Reg16.De);
+        emitter.Decrement(pair: Reg16.Bc);
+        emitter.Load(destination: Reg8.A, source: Reg8.B);
+        emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
+        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
 
     private static void EmitBlockFill(Sm83Emitter emitter, ushort destination, ushort count) {
         var loop = emitter.NewLabel();
 
-        emitter.LoadDeImmediate(value: destination);
-        emitter.LoadBcImmediate(value: count);
+        emitter.LoadImmediate(pair: Reg16.De, value: destination);
+        emitter.LoadImmediate(pair: Reg16.Bc, value: count);
         emitter.MarkLabel(label: loop);
         emitter.XorA();
         emitter.StoreAToDe();
-        emitter.IncrementDe();
-        emitter.DecrementBc();
-        emitter.LoadAFromB();
-        emitter.OrC();
-        emitter.JumpRelativeIfNotZero(label: loop);
+        emitter.Increment(pair: Reg16.De);
+        emitter.Decrement(pair: Reg16.Bc);
+        emitter.Load(destination: Reg8.A, source: Reg8.B);
+        emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
+        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
 
     // CGB BG palette 0: four greys, white -> black, as RGB555 little-endian pairs.

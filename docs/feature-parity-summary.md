@@ -39,7 +39,7 @@ to do.
 
 ## Absent on both (a shared ceiling, not a portability gap)
 
-Neither backend wires these yet — so they're not a Vulkan-vs-DX difference:
+Neither backend wires these — so they're not a Vulkan-vs-DX difference:
 
 - Indirect dispatch / draw
 - Async compute / multi-queue / timeline semaphores

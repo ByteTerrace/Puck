@@ -30,7 +30,7 @@ pressure on the code — surface it, don't fork the skill.
 
 **Why the Bricks exist at all:** they are the engine-hosting thesis's chosen
 test tenants (deterministic + self-verifying ⇒ any integration glitch is
-attributable to the host). See `docs/capability-catalog.md` §9.
+attributable to the host). See `docs/capability-catalog.md` §10.
 
 ## Contract facts (hardware truth — verified, load-bearing)
 
@@ -53,6 +53,24 @@ attributable to the host). See `docs/capability-catalog.md` §9.
   GBA core has **no snapshot layer yet** — its determinism gate compares two
   independently built machines (registers + framebuffer); adding save-state
   reinstates snapshot/fork gates.
+- **GB PPU mid-mode-3 frontier (root-caused; do not re-derive, do not tweak
+  constants).** CPU/timer/bus/interrupts are cycle-accurate (blargg 49/49,
+  mooneye ~95%); the remaining failures concentrate in mealybug `m3_*` and
+  gbmicrotest `hblank_int_scx*`. Root cause: the per-dot BG fetcher
+  (`Ppu.Fetcher.cs`) and the closed-form mode-3 length (`m_mode0StartDot`)
+  are **two different clocks** — and that decoupling is hardware-faithful
+  (polled-STAT mode-0 timing, what mooneye measures, is a separate clock from
+  the pixel pipeline). What exists: the fetcher runs its own clock
+  (`m_bgFetchActive`), a 12-dot warmup puts the first pixel on the faithful
+  dot, and a sub-dot BGP latch (`m_bgpRender`) cut `m3_bgp_change` pixel
+  error −92% with zero regression. **Nudging `DrawingDots`/`ScxPenalty`/the
+  warmup to chase mealybug REGRESSES the passing mooneye suites** — the
+  error is sub-dot and structural. The remaining real fix (deferred frontier
+  work): let mode 0 EMERGE from "the fetcher emitted pixel 160" — fold the
+  SCX fine-scroll discard and sprite fetch stalls into the fetcher, replacing
+  `ScxPenalty`/`ObjectPenalty` and the line-end sprite overlay. Each mealybug
+  test probes a different register's sub-dot signature; pixel-exact needs
+  all of them.
 
 ## Oracle discipline
 
@@ -82,8 +100,11 @@ dotnet run --project experimental/Puck.AdvancedGamingBrick.Post -c Release
 
 Tier A needs no assets; Tier B skips cleanly without the corpus (env:
 `PUCK_GB_TESTROMS`; `PUCK_GBA_BIOS`/`_TESTROMS`/`_MGBA_SUITE`/`_AGS`/`_GAMES`);
-Tier C is reserved for cross-machine link determinism — filling it is the
-rule-#3 milestone, not an emulator nicety. The GBA Post exe doubles as the
+Tier C is the cross-machine link battery — its first stage (`serial-link`,
+Humble, self-contained) proves a dmg↔cgb link-cable byte exchange through
+`SerialLinkSession`, replay-identical across runs; the full rule-#3
+cross-generation bit-lock (GB↔GBA, golden replay on a real link game) is
+still open. The GBA Post exe doubles as the
 diagnostics toolbox (`--lockstep`, `--trace-cycles`, `--statetrace`,
 `--iodump`, `--render-hash`, `--gen-rom`, …) — see its README.
 

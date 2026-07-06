@@ -50,7 +50,7 @@ internal static class BindingProfileDocuments {
                         // The overworld deliberately interacts on NORTH (East is the GB joypad B, so booting a
                         // stand never leaks into a running game) — the profile follows; remap in the JSON if desired.
                         new BindingPageEntryDefinition(Command: "overworld.interact", Icon: "action.interact", Label: "Interact", Source: InputSources.Gamepad.ButtonNorth),
-                        // West is CONTEXTUAL in console mode: held = the Mario hold-to-run; pressed at an unbooted
+                        // West is CONTEXTUAL in console mode: held = the hold-to-run; pressed at an unbooted
                         // stand = activate (boot) it. West is not a GB joypad line, so holding it never leaks
                         // into a running game either.
                         new BindingPageEntryDefinition(Command: DemoActionCommandModule.ContextCommand, Icon: "action.run", Label: "Run / Activate", Source: InputSources.Gamepad.ButtonWest),
@@ -88,6 +88,7 @@ internal static class BindingProfileDocuments {
                         new BindingPageEntryDefinition(Command: DemoActionCommandModule.BrickStateHashCommand, Icon: "action.6", Label: "State hash", Source: InputSources.Gamepad.ButtonSouth),
                         new BindingPageEntryDefinition(Command: DemoActionCommandModule.BrickFleetStatusCommand, Icon: "action.7", Label: "Fleet status", Source: InputSources.Gamepad.ButtonEast),
                         new BindingPageEntryDefinition(Command: DemoActionCommandModule.BrickCaptureCommand, Icon: "action.8", Label: "Capture", Source: InputSources.Gamepad.RightShoulder),
+                        new BindingPageEntryDefinition(Command: DemoActionCommandModule.BrickLinkToggleCommand, Icon: "action.9", Label: "Link", Source: InputSources.Gamepad.DpadRight),
                     ],
                     Id: "debug-bricks",
                     Label: "Debug: Bricks"

@@ -1,6 +1,6 @@
 namespace Puck.SdfVm;
 
-// Values must match Shaders/Sdf/sdf-vm.hlsli (SDF_BLEND_*); numbering ported from the legacy avatar ISA.
+// Values must match Shaders/Sdf/sdf-vm.hlsli (SDF_BLEND_*).
 public enum SdfBlendOp : uint {
     Union = 0,
     SmoothUnion = 1, // blend radius = instruction Data1.x

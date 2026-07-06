@@ -1,142 +1,188 @@
 # The overworld — Puck.Demo's plan of record
 
-Status: **shipped and verified** (2026-07-02) · **purified** (2026-07-03) ·
-**multiplayer, persistent saves, direct ROM boot** (2026-07-04 — status
-block below) · this doc = what exists, how to drive it, and the settled
-next steps.
-`Puck.Demo` is now ONLY the game prototype: the purification deleted every
-legacy mode and demo-resident engine gate (`--world*`, `--validate`,
-`--validate-world*`, `--validate-determinism`, `--validate-bindings`,
-`--fuzz-seed` and their ~28 backing files) — that coverage lives in the
-`Puck.Post` battery, where it already had mirrored stages. The demo is a
+> **The Demo is GREENFIELD — a playground.** Everything in this plan describes a
+> prototype that is expected to churn and be rewritten. Demo changes are NOT
+> engine changes: verify them by RUNNING the demo
+> (`dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 2`
+> is the headless smoke; `0` or less runs until the window is closed),
+> never by gating them. Do NOT promote a demo feature into Post — a stage, gate,
+> hash, or `*DeterminismNode` hook — unless the user explicitly asks; that
+> calcification is exactly what the user does not want. The "Gate: …" notes
+> below record what happens to exist today, not a requirement that demo features
+> be gated. Doctrine:
+> [agent-guide.md](agent-guide.md#anti-calcification-doctrine) rule 5.
+
+This doc = what exists, how to drive it, and the settled next steps.
+`Puck.Demo` is ONLY the game prototype: it carries no legacy mode or
+demo-resident engine gate (`--world*`, `--validate`, `--validate-world*`,
+`--validate-determinism`, `--validate-bindings`, `--fuzz-seed`) — that coverage
+lives in the `Puck.Post` battery as mirrored stages. The demo is a
 **game, not a test suite** — the one gate it keeps is its own
 (`--validate-overworld`, which `Puck.Post` cannot host because the battery must
 not reference the composition root).
 
-## Status (2026-07-04): console mode goes multiplayer; saves persist; ROMs boot direct
+## Status
 
-Landed this date, all green (`--validate-overworld` + the Post battery + the
-Humble battery):
+The overworld's core capabilities — verified by `--validate-overworld`, the
+Post battery, and the Humble battery — are:
 
 - **The IMMERSED boot (the fourth wall).** `--rom <path> [--rom-exit
   "0xDA22>=1"]` (or `OverworldNode { immersed: true }`) opens INSIDE the game —
-  the world compositor grew a fifth viewport slot so the room plus FOUR
+  the world compositor has a fifth viewport slot so the room plus FOUR
   console panes coexist; each connecting pad auto-seats its player at (boots
   + takes over) its own stand, panes tiling 1→2→3→4; when any machine's exit
   condition holds, the panes ease away and the ROOM is revealed — every
   active player standing at their machine, the games continuing on the
-  diegetic screens, nothing reset. Seating/ownership stays host-side
+  diegetic screens, nothing reset. Seating/ownership is host-side
   routing; the determinism hash is untouched.
 - **Multiplayer console mode.** Connected pads beyond the first join as
   world players (pad index = slot, up to 4); each ACTIVE player has their
-  OWN binding bar in the overlay (`BarCount` grew) and dispatches debug
-  verbs at their own nearest console; pad-count drops evict with leaver
-  hygiene. Next-step 3 below is DONE.
+  OWN binding bar in the overlay (`BarCount` scales with players) and
+  dispatches debug verbs at their own nearest console; pad-count drops evict
+  with leaver hygiene.
 - **Proximity takeover.** Any player's interact at a machine — unbooted:
   boots (and claims) it; booted + unowned: takes it over (their pad alone
   drives that brick; the brick leaves the shared timeline; a choir
   dissolves). The dedicated **Left bumper = Leave** disengages a seated
   player back to free room movement, releasing the brick to the timeline at
   the head — a bumper is not a GB joypad line, so disengage never collides
-  with the machine the player is driving (interact no longer doubles as
+  with the machine the player is driving (interact does not double as
   release). Ownership is HOST-SIDE input routing, never hashed sim state —
-  the overworld determinism hash is unchanged (0x47DA634C1658D2CE).
+  the overworld determinism hash is unaffected (0x47DA634C1658D2CE).
 - **Battery saves persist**: `<romPath>.sav` = SRAM + clock footer (MBC3:
   the standard 48-byte RTC layout; HuC3: a 16-byte own-convention block —
   no cross-emulator standard exists for it). Resume is deterministic — the
   footer's wall timestamp is foreign-emulator interop only, ignored on
-  load. `runAs` remains a BOOT-TIME cartridge-move policy (the save travels,
+  load. `runAs` is a BOOT-TIME cartridge-move policy (the save travels,
   the machine reboots), while the Bricks page's live DMG/CGB/AGB mode verbs
   snapshot-migrate the running machine without resetting it. The Bricks debug
-  page also grew a **"Clear save"** verb (North), which deliberately still
-  deletes the save and reboots fresh. Gate: the Humble battery's
+  page also has a **"Clear save"** verb (North), which deliberately deletes
+  the save and reboots fresh. Gate: the Humble battery's
   `battery-save` stage.
 - **`--rom <path>` boots straight into a cartridge** — a fullscreen
   one-machine `world` document synthesized by `DemoRunDocuments` — and
   gaming-brick viewport sources carry data-driven FOURTH-WALL `exit`
   conditions (work-RAM address 0xC000–0xDFFF as an `"0x…"` string + op +
   value + label; the host polls after each stepped frame; first hold →
-  clean shutdown). Example:
-  [examples/pokemon-gold.json](examples/pokemon-gold.json) (starter
-  selection = `wPartyCount` 0xDA22 ≥ 1).
-- **The default binding profile is purely overworld + debug**: the placeholder
-  "Actions I/II" pages and the `demo.action`/`demo.target`/`demo.interact`
-  vocabulary were DELETED; the pages are Movement + Debug: Engine (RT→LT)
-  + Debug: Bricks (LT→RT). Engine = actual SDF debug view modes; the LAST
-  controller page holds all GamingBrick/fleet/capture controls.
+  clean shutdown). The condition targets a work-RAM flag the running
+  cartridge sets — e.g. a save-progress byte going nonzero.
+- **Victory conditions (`BrickVictoryCondition`).** A gaming-brick source may
+  carry an optional 128-bit `victory` gate. After each stepped frame the host
+  reads the top 16 bytes of the cartridge's highest SRAM address (bank `0x0F` of
+  a 128 KiB MBC5 cart, read bank-independently via `ICartridge.ReadExternalRam`).
+  `solo` wins a cabinet alone when its region reaches the gate constant; `meta`
+  wins the room when the XOR of a group's cabinets reaches the target (shares
+  authored so no single cabinet wins alone). Both break the fourth wall like
+  `exit`. Gate math (order-independent bit-fill, subset-proof XOR) and the
+  region read (highest-address, bank-independence) are covered today by the
+  `victory-gate` / `victory-region` Post stages; see
+  [examples/overworld-victory.json](examples/overworld-victory.json).
+- **The default binding profile is purely overworld + debug**: the pages are
+  Movement + Debug: Engine (RT→LT) + Debug: Bricks (LT→RT). Engine = actual
+  SDF debug view modes; the LAST controller page holds all
+  GamingBrick/fleet/capture controls.
 - The three prototype-arc workstreams below (diegetic screens, the shelf,
-  animated controls) landed 2026-07-03 — labeled inline, kept as the design
-  record. The screen-source seam is now document DATA too (scene
+  animated controls) are in place — labeled inline, kept as the design
+  record. The screen-source seam is document DATA too (scene
   `screenSlab` + top-level `screenSources`, pinned by the Post
   `world-screen` stage — see
   [sdf-world-render-centralization-plan.md](sdf-world-render-centralization-plan.md)).
 
-## Status (2026-07-05): creator mode + the first on-screen dev console
+### Creator mode + the on-screen dev console
 
-Landed this date (user-confirmed working end-to-end), all host-side
-PRESENTATION — the deterministic sim/hash never sees any of it:
+Both are host-side PRESENTATION — the deterministic sim/hash never sees any of
+it:
 
-- **Creator mode — the in-engine SDF authoring surface.** Open the backtick
-  console, type `creator` (a `DemoCommandModule` verb → `ICreatorModeHost` on
-  the overworld root), and the mode takes over player slot 0: the left stick
-  slides a bright ghost shape across the floor (triggers raise/lower), the
-  bumpers cycle the primitive (sphere/box/torus/cylinder/capsule/ellipsoid),
-  South places it, East undoes, North exits. Shapes are a reserved pool of
-  dynamic-transform instances in `OverworldFrameSource` (1 ghost + 24 placed,
-  present from frame 0, hidden below the floor when unused) so the engine's
-  once-sized program buffers reserve their capacity up front — a cycle/place
-  is a byte-length-constant program rebuild (every primitive is one SDF
-  instruction of identical word size, the same discipline as the boot
-  rebuild), a MOVE is just a per-frame transform. The overlay swaps to a
-  creator binding bar (`BindingBarAdapter.PublishCreator` + five new procedural
-  icons) while the mode is up.
-- **The first on-screen developer console.** `src/Puck.Demo/DevConsole/`: a
+- **Creator mode — the in-engine SDF editor.** Open the backtick console, type
+  `creator` (a `DemoCommandModule` verb → `ICreatorModeHost` on the overworld
+  root), and the mode takes over player slot 0 with the rich editor
+  (`src/Puck.Demo/Creator/`): up to **64** placed shapes over a 16-slot
+  material palette, authored inside the ±4-unit `WorkbenchRegion`, driven by
+  four verb pages **Back cycles** — **SCULPT** (bumpers cycle the primitive,
+  South places, East undoes, West resets, North exits), **SELECT** (bumpers
+  cycle the selection, South duplicates, East deletes, West links into a
+  composition group, North deselects), **STYLE** (bumpers material, South/East
+  blend op, d-pad vertical smooth radius, West bake-style toggle), **ANIMATE**
+  (bumpers step the frame-snapshot timeline — frame 0 = the rest pose — South
+  records, East deletes the frame, West plays/stops, North rests). The global
+  layer never changes: sticks/triggers always move/rotate/raise the TARGET
+  (the selected shape, else the ghost), d-pad vertical scales, right-stick
+  click is CAMERA MODE (orbit/zoom/pan), left-stick click toggles shape↔group
+  scope. Verbs act on the selection; each shape carries its own blend op +
+  smooth radius. Emission (`CreatorSceneRenderer`): ungrouped shapes are
+  per-shape dynamic instances (plain Union by construction); a GROUP is ONE
+  static instance bounded by the whole workbench region — the instance-cull
+  contract made structural (never smooth-blend across a maskable instance
+  boundary). Capacity rides the frame source's worst-case PROBE envelope
+  (every screen lit, the creator pool in its largest form) — any new optional
+  emission must join the probe. The overlay swaps to a creator binding bar
+  (`BindingBarAdapter.PublishCreator` — the bumper/face icons remap to the
+  active verb page) while the mode is up.
+- **The workpiece camera + the live bake preview.** The engaged view is
+  `ScreenDirector.CreatorCameraSource`: OBJECT intent orbits the workbench;
+  SPRITE intent locks HEAD-ON from +Z against the matte backdrop —
+  what-you-see-is-what-bakes. Beside the workbench stands the preview EASEL
+  (a post + `ScreenSlab` borrowing screen-surface slot **index 3**; cabinet
+  3's diegetic screen degrades to its lit flat material while the mode is up),
+  whose panel shows the LIVE bake: `BakePreviewService` polls
+  `CreatorScene.Revision` (12-produced-frame debounce, no wall clock),
+  rasterizes one view per frame on the render thread, quantizes on a worker
+  through the real `BakePipeline`, and publishes the brick-target image the
+  slab samples (`ICreatorBakePreview` is the editor→bake seam; the easel
+  reads as a powered-off panel until the first bake lands).
+- **Creations are data.** The scene round-trips as a **`puck.creation.v1`**
+  document under `./creations/<name>.creation.json` — name/intent/bakeStyle
+  knobs, palette, groups, and the animation timeline frames all persist
+  (legacy `.avatar.json` imports transparently), and `--forge-avatar-from`
+  bakes a creation's timeline frames into an avatar cartridge's walk poses.
+  The console-assist verbs (`CreatorCommandModule`) cover every edit exactly:
+  `creator.list/new/save/load/select/name/material/palette/op/smooth/move/
+  rot/scale/group/ungroup/intent/style/frame/play/stop/anim/baketarget/
+  bakeoverlay`. Headless proof hooks: `PUCK_OVERWORLD_CREATOR=1` opens
+  straight into the mode; `PUCK_CREATOR_LOAD=<name-or-path>` loads a creation
+  first.
+- **The on-screen developer console.** `src/Puck.Demo/DevConsole/`: a
   GDI-rasterized monospace glyph atlas (`ConsoleGlyphFont`, Windows-only via
   System.Drawing.Common, degrades to the terminal console elsewhere) whose
   coverage AND the per-frame character grid both ride ONE storage buffer, so
-  the `ConsoleOverlayNode` keeps the proven single-sampler + one-storage-buffer
-  shape of the binding-bar overlay (no second texture). `DemoConsole` now
+  the `ConsoleOverlayNode` keeps the single-sampler + one-storage-buffer
+  shape of the binding-bar overlay (no second texture). `DemoConsole`
   publishes its input line + output history to a `ConsoleTextStore` the overlay
   renders; the backtick console open/close drives its visibility.
   `PUCK_CONSOLE_OPEN=1` starts it open with seeded lines (a headless font check).
-- **Deferred (user-chosen "converge later"):** authoring the action bar +
-  console THROUGH the SDF VM (a screen-space/ortho path, eventually an MSDF
-  glyph op mining Puck.Text) so one renderer owns all UI, retiring the separate
-  overlay shaders.
+- **Deferred (converge later):** authoring the action bar + console THROUGH
+  the SDF VM (a screen-space/ortho path, eventually an MSDF glyph op mining
+  Puck.Text) so one renderer owns all UI, retiring the separate overlay
+  shaders.
 
-## Status (2026-07-05): the OVERWORLD rename + a native-panel camera rework
+### Native-panel camera framing
 
-- **The arcade is now THE OVERWORLD.** A full rename (`Puck.Demo.Arcade`→
-  `.Overworld`, every `Overworld*` type, `$type: "overworld"`, `--overworld` /
-  `--validate-overworld`, `PUCK_OVERWORLD_*`, `overworld.*` commands, these docs).
-  `--validate-overworld` passes (determinism + replay + planet-scale). The
-  emulator-side GB/GBA→GamingBrick rename is a separate concurrent effort.
 - **Square Trinitron CRT.** The diegetic screen shader (`sdf-world.hlsli` CRT
-  constants) went FLAT and SQUARE — no pincushion curvature, near-square corners,
+  constants) is FLAT and SQUARE — no pincushion curvature, near-square corners,
   a thin crisp bezel, no vignette, no glint, only a hint of scanline — so a game
   on a screen reads almost exactly like a real GB/GBA panel scaled up.
-- **Native screen-fill framing.** A fully-close pane camera now sits head-on at
+- **Native screen-fill framing.** A fully-close pane camera sits head-on at
   exactly the distance that makes the flat screen fill the viewport HEIGHT (the
   vertical FoV × the screen's half-height), pillar-boxed on wide panes — the
   "you're playing it on a big screen" look, for the immersed start AND the
   engaged secondary slices.
-- **Reveal as a zoom-out.** The fourth-wall reveal now eases the room camera OUT
+- **Reveal as a zoom-out.** The fourth-wall reveal eases the room camera OUT
   of the triggering machine's native-screen framing into a fixed, centered
   isometric-ish overview of the whole room (`ScreenDirector.BeginReveal`), so it
   reads as "pull back from the game you were inside to the whole room, everyone
   standing at their machines."
 - **Engage → split.** After the reveal the room is the big PRIMARY slice across
   the top; each ENGAGED player (standing at a cabinet, controls routed to the
-  brick — the existing takeover; Left bumper disengages to roam) gets a
+  brick — the takeover; Left bumper disengages to roam) gets a
   native-filled SECONDARY slice in the bottom strip. Nobody engaged = the room
   fullscreen. The layout eases smoothly as players engage/disengage.
 
 Still open (unchanged direction): the live-camera child render node re-host
 and cross-backend `graph.produce` (the sdf-world-render plan's phase 5), the
 camera-as-GB-camera peripheral seam (next-step 1), and power-off/unboot
-(next-step 4 — the takeover RELEASE is not a power-off; the layout never walks
-backward yet). Realtime promote/demote mode migration (next-step 2) has its
-first shipped form: the Bricks page changes a running machine's `ConsoleModel`
+(next-step 4 — the takeover RELEASE is not a power-off; the layout does not
+walk backward yet). Realtime promote/demote mode migration (next-step 2) has
+its first form: the Bricks page changes a running machine's `ConsoleModel`
 through Humble snapshot/restore, preserving emulated state and the timeline
 cursor.
 
@@ -144,7 +190,7 @@ cursor.
 
 `Puck.Demo` with no flags opens the OVERWORLD: a controller-driven player in a
 16×16 room with **three bootable console stands** along the far wall — the
-showcase cartridge (Pokémon Gold) loaded into the `dmg`, `cgb`, and `agb`
+showcase cartridge (a forged custom game) loaded into the `dmg`, `cgb`, and `agb`
 costumes of the ONE GamingBrick SM83 machine. Booting a stand in-world:
 
 1. is **simulation state** — an interact press-edge near a stand sets a bit in
@@ -165,8 +211,7 @@ costumes of the ONE GamingBrick SM83 machine. Booting a stand in-world:
 
 The room player's movement mirrors into every booted brick (directions + A on
 jump) — walking the room walks the games; the carry-forward thesis on one
-screen. "MiniAction" is a retired name: that game was the foundation and is
-now simply the demo (`src/Puck.Demo/Overworld/`).
+screen. The overworld game lives in `src/Puck.Demo/Overworld/`.
 
 ## Lockstep: the shared input timeline
 
@@ -180,11 +225,10 @@ consumed stream, **same-costume machines end bit-identical no matter how far
 apart their stands booted** — proven by a staggered-boot capture (CGB booted
 at tick 480, AGB at 1500: panes pixel-identical after catch-up).
 
-**The DMG pane still drifts IN-GAME and that is CORRECT** (settled
-2026-07-02, re-verified here): Gold's mono code path spends different frame
-counts on scenes than the color path, so identical inputs land on different
-game states. Bit-lock is promised only where the cartridge code path is
-identical (Cgb ↔ Agb). Do not "fix" the DMG drift.
+**The DMG pane drifts IN-GAME and that is CORRECT**: a dual-mode cartridge's mono code path
+spends different frame counts on scenes than the color path, so identical
+inputs land on different game states. Bit-lock is promised only where the
+cartridge code path is identical (Cgb ↔ Agb). Do not "fix" the DMG drift.
 
 ### Fairness debuffs: `"speed": "dmg"` and `"runAs": "dmg"`
 
@@ -196,12 +240,11 @@ wall-clock pacing. A gaming-brick source's `speed` field selects the policy:
 DMG rate regardless of KEY1, so every machine in the run consumes identical
 cycle counts per engine tick (the budget becomes a function of config, never
 of emulated state). Under fairness a double-speed section runs at half
-wall-rate instead of gaining ground. Gold never enables KEY1, so today's
-showcase behaves identically under either policy; the mode exists for
-Crystal-class cartridges and the promote/demote arc below.
-Example: [examples/overworld-fair.json](examples/overworld-fair.json).
+wall-rate instead of gaining ground. A cartridge that never enables KEY1
+behaves identically under either policy; the mode exists for double-speed
+cartridges and the promote/demote arc below.
 
-The FULL debuff (the Mario-Kart lightning bolt) is `"runAs": "dmg"`: the
+The FULL debuff (the great equalizer) is `"runAs": "dmg"`: the
 costume (`model`, the stand's identity + accent) stays what it is, but the
 machine BOOTS as the runAs capability — a Color stand seeds the DMG boot
 handoff, so a dual-mode cartridge takes its **monochrome code path**. Every
@@ -211,7 +254,6 @@ demoted-agb, pixel-exact (capture-proven across staggered boots —
 `artifacts/overworld/mono-60.png`; even the authentic DMG drift vanishes because
 everyone IS a DMG while debuffed). Any supported model is accepted, so a
 promotion is just as expressible.
-Example: [examples/overworld-mono.json](examples/overworld-mono.json).
 
 **Document-model gotcha (load-bearing):** a polymorphic-derived record
 deserialized through the run-document parse path does NOT run property
@@ -241,7 +283,7 @@ active page). The default profile:
   leaves it unbound · **South** = jump · **North** = interact/boot (North,
   not East — East is the GB joypad's B, so a boot press never leaks into a
   running game) · **West** = CONTEXTUAL: held away from stands it is the
-  Mario hold-to-run (tuning `SprintMultiplier`, default 1.6×); pressed at
+  hold-to-run (tuning `SprintMultiplier`, default 1.6×); pressed at
   an unbooted stand it activates (boots) it — the bar's icon swaps to
   interact while in range. West is not a GB joypad line either.
 - **Left bumper** = **Leave**: a player seated at / driving a console
@@ -249,9 +291,17 @@ active page). The default profile:
   timeline at the head). A bumper is not a GB joypad line, so the way out
   never collides with the machine being driven. Held off while immersed and
   not yet revealed (no room to walk into until the fourth wall breaks).
-- The single-modifier "Actions I/II" placeholder pages were DELETED
-  (2026-07-04) along with their `demo.*` command vocabulary — LT/RT now
-  participate only in the two debug chords below.
+- **Right bumper** = **Cycle**: advance the nearest cabinet's selected cart
+  TYPE (at a booted cabinet the swap is live). Seven types cycle — 0
+  world-lens / 1 camera / 2 showcase / 3 the player's forged avatar /
+  **4 Volley / 5 Brickfall / 6 Chroma** (the three genuine hand-authored SM83
+  arcade carts); North inserts the selection into an empty cabinet and ejects
+  a running one. The sim tracks only the type index — the ROM bytes are
+  host-side in the render node's cart table. Brickfall is battery-backed: its
+  high-score SRAM persists at `%LOCALAPPDATA%\Puck\Demo\brickfall.sav`
+  (`BrickfallRom.PrepareDefaultSavePath`), and it SDF-bakes its title screen
+  on the live GPU (the hand-authored banner is the no-GPU fallback).
+- LT/RT participate only in the two debug chords below.
 - **Hold RT then LT** = **Debug: Engine** — actual SDF debug view modes:
   d-pad up = depth, right = ray direction, down = iteration count, left =
   material id, West = normals, North = final/off.
@@ -264,10 +314,10 @@ active page). The default profile:
   `IModeSwitchable` seam), and on a Color→mono demote repages the switchable
   RAM to its DMG-equivalent banks (SVBK=1/VBK=0, the Color banks survive
   un-paged, cartridge-move style) and drops double speed. Then it POKES the
-  game's cached hardware-detection flag (the "boot shim" — Pokémon Gold's
-  `hCGB` at HRAM 0xFFE8, found by the differential-boot finder) so the running
+  game's cached hardware-detection flag (the "boot shim" — a dual-mode cartridge's
+  cached colour-detection byte, e.g. HRAM 0xFFE8, found by the differential-boot finder) so the running
   game re-detects and re-renders in the new mode's OWN authored art — its
-  shared-RAM progress untouched. Empirically proven on Gold: CGB→DMG→CGB drops
+  shared-RAM progress untouched. Validated on a real dual-mode cartridge: CGB→DMG→CGB drops
   to exactly the four DMG shades and returns to color, reversibly, and the
   swapped model survives Snapshot/Fork. A ROM with no recipe degrades to a
   presentation-only re-interpretation (the framebuffer desaturates). A swap TO
@@ -275,19 +325,20 @@ active page). The default profile:
   North CLEARS the persisted battery save (delete + reboot, by
   design); South logs the world state hash, East logs fleet status, Right
   Shoulder captures the next frame to `artifacts/overworld/`.
-- Console mode is MULTIPLAYER (2026-07-04): extra pads join as world
-  players (pad index = slot, up to 4), each with their own binding bar
-  and their own debug-verb targeting; interact at a booted stand is the
-  proximity-takeover claim, Left bumper is the disengage (status block above).
-- Live: `dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 0`
-  (the default auto-exit is 30 s). Explicit document:
+- Console mode is MULTIPLAYER: extra pads join as world players (pad index =
+  slot, up to 4), each with their own binding bar and their own debug-verb
+  targeting; interact at a booted stand is the proximity-takeover claim, Left
+  bumper is the disengage (Status above).
+- Live: `dotnet run --project src/Puck.Demo -c Release` (the default auto-exit
+  is 30 s; `--exit-after-seconds 0` or less runs until the window is closed;
+  the headless smoke is `--exit-after-seconds 2`). Explicit document:
   [examples/overworld.json](examples/overworld.json); graph shape
-  `{"$type": "overworld", "consoles": [{model, romPath?} × ≤3], "library": [{title, romPath} × ≤8]?}`
-  (a console omitting `romPath` starts EMPTY and is fed from the shelf —
-  [examples/overworld-shelf.json](examples/overworld-shelf.json)).
+  `{"$type": "overworld", "consoles": [{model, romPath?} × ≤4], "library": [{title, romPath} × ≤8]?}`
+  (a console omitting `romPath` starts EMPTY until a cart is inserted at the
+  cabinet).
 - The synthesized default degrades to the **bare room** (with a stderr note)
   when the showcase ROM path is absent on the machine; an explicit `--run`
-  document stays strict. The bare room (`"consoles": []`) is the old
+  document stays strict. The bare room (`"consoles": []`) is the plain
   multi-controller mode — 4-player pools, controller join/leave, roster-churn
   replay all live there.
 
@@ -311,79 +362,81 @@ active page). The default profile:
 including console boots in the hash stream); everything else is the
 `Puck.Post` battery — engine determinism, paged bindings, fixed-point and
 world-coordinate self-tests, cross-backend world parity, and the differential
-fuzzer are all Post stages now. Headless layout captures:
-`PUCK_OVERWORLD_DEBUG_BOOT=240,480,720` + `PUCK_CAPTURE_FRAME` + `--capture`
-(env details in [agent-guide.md](agent-guide.md#environment-variables)).
+fuzzer are all Post stages now. Headless deterministic captures:
+`PUCK_OVERWORLD_DEBUG_BOOT=240,480,720` + `PUCK_OVERWORLD_CAPTURE_FRAME=N`
+(the capture waits N produced frames so the machines have booted + drawn) +
+`--capture <png>`, plus `PUCK_CREATOR_LOAD` for creator scenes (env details in
+[agent-guide.md](agent-guide.md#environment-variables)).
 
-## The prototype arc (LANDED 2026-07-03 — kept as the design record)
+## The prototype arc (the design record)
 
-The purified demo bends toward one loop: **walk the room, take a game off
+The demo bends toward one loop: **walk the room, take a game off
 the shelf, carry it to a brick, insert it, play it on the device's own
-screen.** Three workstreams, each independently shippable — **all three
-landed 2026-07-03** (the "What the demo is" section above describes the
-shipped behavior; the designs below are the record):
+screen.** Three workstreams, each independently shippable — all three are in
+place (the "What the demo is" section above describes the behavior; the designs
+below are the record):
 
-1. **Diegetic screens — bricks render in-world.** *(LANDED — the shading
-   half shipped as designed; the document-data seam followed 2026-07-04:
-   scene `screenSlab` + top-level `screenSources`, pinned by the Post
-   `world-screen` stage. CRT GLOW + FACE also landed 2026-07-04: each booted
-   screen now renders a CRT glass face — barrel curvature, rounded dark bezel,
-   native-line scanlines, vignette, fresnel glint, bloom knee — in
+1. **Diegetic screens — bricks render in-world.** *(In place — the shading
+   half plus the document-data seam: scene `screenSlab` + top-level
+   `screenSources`, pinned by the Post `world-screen` stage. CRT GLOW + FACE:
+   each booted screen renders a CRT glass face — barrel curvature, rounded dark
+   bezel, native-line scanlines, vignette, fresnel glint, bloom knee — in
    `sampleScreenSurface`, AND emits colored light into the room, its per-frame
    framebuffer average summed with the sun in the world shade loop via the
    binding-11 `sdfScreenLights` buffer (`SetScreenLight` +
    `SdfFrame.AmbientScale/SunScale` dimming for mood). Additive; the shade
-   funnel is now `float3` radiance. Deferred: CRT/ambient params as document
-   data, and screen-light shadows.)* The room is already
+   funnel is `float3` radiance. Deferred: CRT/ambient params as document
+   data, and screen-light shadows.)* The room is
    SDF-VM-rendered end to end (`OverworldFrameSource.BuildProgram` →
-   `SdfEngineNode` → `SdfWorldEngine`), and every stand already carries a
+   `SdfEngineNode` → `SdfWorldEngine`), and every stand carries a
    `ScreenSlab` shape with the reserved screen material
-   (`SdfProgramBuilder.ScreenMaterialId`). What's missing is the shading
-   half: today emulator framebuffers are composited as 2D panes by Stage 2;
-   nothing samples them inside the world render. The settled design: extend
+   (`SdfProgramBuilder.ScreenMaterialId`). The shading design: extend
    **Stage 1's shading** (not the distance field — the SDF geometry never
    needs the texture) so a `ScreenSlab` hit maps its hit point through the
    slab's local frame to a UV and samples the brick's child storage image,
-   which `SdfWorldEngine` already binds per frame for Stage 2
-   (`SetChildSource`/`BindSources` — the plumbing exists, it just isn't
-   visible to the views kernel). Unbooted slabs keep the dark screen
-   material. The 2D pane easing (`ScreenDirector`) SURVIVES this as the
+   which `SdfWorldEngine` binds per frame for Stage 2
+   (`SetChildSource`/`BindSources`). Unbooted slabs keep the dark screen
+   material. The 2D pane easing (`ScreenDirector`) coexists as the
    zoom/focus view — diegetic screens are how the room looks; panes are how
    you play seriously. Verification: a `Puck.Post` Tier-B/C stage that
    renders a world with a synthetic child image on a screen slab and asserts
    sampled pixels (the `WorldChildStage` pattern, one step further in).
-2. **The cartridge shelf — a game library as world data.** *(LANDED —
-   `library` + shelf shipped;
-   [examples/overworld-shelf.json](examples/overworld-shelf.json).)* `OverworldNode`
-   grows a `library` (cartridge entries: id, title, `romPath`, and later the
+2. **The cartridge library — games as world data.** *(The `library` document
+   field remains, but the physical shelf/carry mechanic described below was
+   RETIRED — folded into cabinet cart types: seven today, cycled at the
+   cabinet with the Right bumper (roster + Brickfall's battery save in
+   "Controls & running" above; types 4–6 are the hand-authored
+   Volley/Brickfall/Chroma arcade carts); the `ShelfSlot` geometry is now
+   optional static furniture, with no carried cartridges.)* `OverworldNode`
+   carries a `library` (cartridge entries: id, title, `romPath`, and later the
    `peripheral` field) and a shelf along a wall (`OverworldRoom` slots, same
-   keep-out treatment as stands). The sim loop extends the existing interact
+   keep-out treatment as stands). The sim loop extends the interact
    seam (`OverworldWorld.TryBootNearest` generalizes to nearest-interactable:
    shelf slot vs. stand): pick up (near shelf, hands empty) → carry (the
    cartridge rides the player's dynamic-transform slot, visible in-world) →
    insert (near stand, hands full; stand's cartridge becomes sim state) →
-   boot as today. Carried-item and per-stand inserted-cartridge ids fold
-   into `StateHash` so the whole loop replays bit-for-bit. Machines can no
-   longer all assemble eagerly at startup — assembly moves to insert time
+   boot. Carried-item and per-stand inserted-cartridge ids fold
+   into `StateHash` so the whole loop replays bit-for-bit. Machines do not
+   all assemble eagerly at startup — assembly happens at insert time
    (ROM load stays fail-fast at DOCUMENT load: the library validates every
    `romPath` up front).
-3. **Animated controls — buttons and sticks that move.** *(LANDED — each
+3. **Animated controls — buttons and sticks that move.** *(In place — each
    stand's control cluster rides per-stand dynamic-transform slots, driven
    by the joypad state the machine consumes.)* Each brick's
-   buttons/d-pad/stick become small SDF shapes on `TransformDynamic` slots
-   (32 bytes each, already per-frame data) driven by the same joypad state
+   buttons/d-pad/stick are small SDF shapes on `TransformDynamic` slots
+   (32 bytes each, per-frame data) driven by the same joypad state
    the machine consumes — the mirror made visible. Pure content + a handful
    of dynamic slots; no engine work.
 
 ### Performance reality check
 
-The prototype content exposed the world renderer's scaling wall: 206 ms/frame
+The prototype content exposes the world renderer's scaling wall: 206 ms/frame
 at 1280×800 for ~45 SDF instructions + ~24 dynamic slots, 96% in the
-per-pixel views kernel. Investigation found the diagnosis: the original
+per-pixel views kernel. The diagnosis: the original
 avatars VM had per-object **instancing** (instance table, per-tile bitmasks,
 march chord clamp per instance) — a ray evaluates only objects overlapping
 its tile, not the full VM. The port kept the outer shell (tile prepass) but
-dropped the load-bearing mechanism. Both fixes LANDED 2026-07-03: (1) exact
+dropped the load-bearing mechanism. Two fixes address it: (1) exact
 Union bounding-sphere skip + host-baked bounds table (206 ms → 71 ms); (2)
 the instancing layer (`BeginInstance`/`BeginInstanceDynamic`/`EndInstance` on
 the builder, 1024-instance ceiling with a derived ceil(count/32)-word per-tile
@@ -395,7 +448,7 @@ proving instanced ≡ flat pixels (bit-identical on Vulkan) on a 76-instance,
 stand incl. its control cluster, per shelf slot, per player, per cartridge).
 ⚠️ All numbers above are from the SURFACE (Iris Xe — the box that exposed
 the wall); the dev-box (RTX 4070) acceptance run against the ≤10 ms views
-target is PENDING (details: machine-fleet-plan lever 0). On the Surface the
+target is OPEN (details: machine-fleet-plan lever 0). On the Surface the
 remaining playability lever is internal render scale, not more culling. This
 instancing substrate is what the fleet arc scales on.
 
@@ -419,12 +472,12 @@ instancing substrate is what the fleet arc scales on.
    ([ideal-gaming-brick-plan.md](ideal-gaming-brick-plan.md) — cart
    completeness). **The custom ROM that reads the sensor is deliberately not
    designed yet.**
-2. **Device promote/demote (the "system power-up").** *(FIRST FORM LANDED
-  2026-07-04 — the Bricks debug page's DMG/CGB/AGB mode verbs now snapshot
+2. **Device promote/demote (the "system power-up").** *(First form in place —
+  the Bricks debug page's DMG/CGB/AGB mode verbs snapshot
   the running Humble machine, rebuild it under the requested `ConsoleModel`,
   restore the snapshot, and keep the timeline cursor/cycle remainder in
   place. This is live state migration, not reboot-as.)* The long-term arc
-  remains larger: a player's device upgrades or downgrades in REALTIME —
+  is larger: a player's device upgrades or downgrades in REALTIME —
   mushroom-style — moving their running game between costumes as a game
   mechanic. The pieces it builds on are in place: one shared core
   parameterized by `ConsoleModel`, the Humble machine's full mid-frame
@@ -436,23 +489,21 @@ instancing substrate is what the fleet arc scales on.
   things), and recursive machine-feeds-machine composition. This is what the
   fleet performance work must serve:
    [machine-fleet-briefing.md](machine-fleet-briefing.md).
-3. **Multi-controller console mode.** *(DONE 2026-07-04 — see the status
-   block: pads beyond the first join as world players with their own
-   binding bars; the proximity takeover went further than this step asked,
-   giving any player exclusive control of a booted brick.)* Console mode
-   was single-player when this was written; letting extra pads join the
-   room while bricks stay routed was the pad-service extension.
-4. **Power-off / re-boot.** Booting is one-way this revision; unbooting and
+3. **Multi-controller console mode.** *(Done — see the Status: pads beyond
+   the first join as world players with their own binding bars; the proximity
+   takeover goes further than this step asked, giving any player exclusive
+   control of a booted brick.)* The pad-service extension lets extra pads
+   join the room while bricks stay routed.
+4. **Power-off / re-boot.** Booting is one-way; unbooting and
    re-transitioning the layout downward is the inverse walk of the same
-   staged keyframes. (A re-boot would also need a timeline-cursor reset
+   staged keyframes. (A re-boot also needs a timeline-cursor reset
    policy: rejoin at the head, or replay from the epoch again — the
-   takeover RELEASE (2026-07-04) settled the head-rejoin precedent for a
+   takeover RELEASE settles the head-rejoin precedent for a
    machine returning to the shared timeline, but power-off itself is still
    open.)
 5. The pre-overworld deferred list (record/replay CLI, network intent source)
    carries over unchanged from the foundation game's design. Jumbotron
-   diegetic screens graduated into prototype-arc item 1 above.
+   diegetic screens graduate into prototype-arc item 1 above.
 
-Provenance: the four-quad showcase (commit f846073) was the static precursor;
-its quad layout is now the overworld's end state. The `mini-action` graph kind,
-viewport source, and box child node were deleted with this revision.
+Provenance: the four-quad showcase (commit f846073) is the static precursor;
+its quad layout is the overworld's end state.

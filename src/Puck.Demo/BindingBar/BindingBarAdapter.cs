@@ -98,17 +98,24 @@ internal sealed class BindingBarAdapter {
         ));
     }
 
-    /// <summary>Publishes the CREATOR-mode bar: the physical buttons remapped to the in-engine SDF authoring verbs
-    /// (bumpers cycle the primitive, South places, East undoes, North exits, the left stick moves), plus a
-    /// seven-segment readout of the selected primitive's number. A self-contained frame — creator input bypasses the
-    /// binding profile, so this does not join against any page.</summary>
+    /// <summary>Publishes the CREATOR-mode bar for the controller's active, CHORD-SELECTED verb page (see
+    /// <c>Puck.Demo.Creator.CreatorController</c>'s remarks): bare/[LT]/[RT]/[LT,RT]/[RT,LT] select SCULPT/SELECT/
+    /// STYLE/ANIMATE/RIG. North always exits; left/right stick click always toggle scope/camera. The bumpers, face
+    /// buttons, and (on STYLE/RIG) the d-pad remap per page. The modifier pips are FULLY DETERMINED by the page (with
+    /// exactly two modifiers, every held-combination maps to one page), so this needs no separate held-state input —
+    /// a self-contained frame, since creator input bypasses the binding profile entirely.</summary>
     /// <param name="heldButtons">The creating pad's live button mask (drives the pressed highlights).</param>
-    /// <param name="shapeIndex">The selected primitive's 0-based index (rendered as the numeral readout).</param>
-    public void PublishCreator(GamepadButtons heldButtons, int shapeIndex) {
+    /// <param name="page">The controller's active verb page (the <c>Puck.Demo.Creator.CreatorPage</c> value).</param>
+    public void PublishCreator(GamepadButtons heldButtons, int page = 0) {
         // Layout indices into BindingBarLayout.SlotButtons (the WoW cluster order).
+        const int DpadUpSlot = 0;
+        const int DpadRightSlot = 1;
+        const int DpadDownSlot = 2;
+        const int DpadLeftSlot = 3;
         const int LeftShoulderSlot = 4;
         const int LeftStickSlot = 5;
         const int NorthSlot = 6;
+        const int WestSlot = 7;
         const int SouthSlot = 8;
         const int EastSlot = 9;
         const int RightShoulderSlot = 10;
@@ -128,6 +135,7 @@ internal sealed class BindingBarAdapter {
             );
         }
 
+        // A lit slot showing a bound-action ICON plus its button badge (bumpers/faces/d-pad verbs).
         BindingSlotView Verb(int slot, BindingIconId icon, GamepadButtons button) => new(
             Alpha: 1f,
             Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
@@ -135,39 +143,201 @@ internal sealed class BindingBarAdapter {
             Pressed: (0 != (heldButtons & button)),
             Visible: true
         );
+        // A lit slot showing ONLY its button badge (the sticks read as "move"/"rotate"; the d-pad arrows as axes).
+        BindingSlotView Badge(int slot, GamepadButtons button) => new(
+            Alpha: 1f,
+            Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
+            Icon: BindingIconId.None,
+            Pressed: (0 != (heldButtons & button)),
+            Visible: true
+        );
 
-        slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.LeftShoulder);
-        slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.RightShoulder);
-        slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonSouth);
-        slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
+        // North is the GLOBAL exit on every page (checked once, outside the switch).
         slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorExit, button: GamepadButtons.ButtonNorth);
 
-        // The left stick moves the ghost (its badge alone reads as "move" — no action icon).
-        slots[LeftStickSlot] = new BindingSlotView(
-            Alpha: 1f,
-            Glyph: BindingGlyphResolver.Resolve(button: GamepadButtons.LeftStickPress, family: family),
-            Icon: BindingIconId.None,
-            Pressed: false,
-            Visible: true
-        );
+        // The page-dependent slots: bumpers + South/East/West always; STYLE and RIG additionally repurpose the
+        // whole d-pad (their cases set DpadUp/Down/Left/Right themselves — every other page leaves the d-pad at
+        // its GLOBAL raise-lower/roll badges, set below the switch).
+        switch (page) {
+            case 1: // SELECT [LT]
+                slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.LeftShoulder);
+                slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.RightShoulder);
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorDuplicate, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.CreatorLink, button: GamepadButtons.ButtonWest);
+                break;
+            case 2: // STYLE [RT] — d-pad: up = bake style (press), left/right = twist sweep, down = onion sweep.
+                slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorMaterial, button: GamepadButtons.LeftShoulder);
+                slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.CreatorMaterial, button: GamepadButtons.RightShoulder);
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorOpCycle, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorOpCycle, button: GamepadButtons.ButtonEast);
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.Number1, button: GamepadButtons.ButtonWest);
+                slots[DpadUpSlot] = Verb(slot: DpadUpSlot, icon: BindingIconId.CreatorStyle, button: GamepadButtons.DpadUp);
+                slots[DpadLeftSlot] = Verb(slot: DpadLeftSlot, icon: BindingIconId.Number2, button: GamepadButtons.DpadLeft);
+                slots[DpadRightSlot] = Verb(slot: DpadRightSlot, icon: BindingIconId.Number2, button: GamepadButtons.DpadRight);
+                slots[DpadDownSlot] = Verb(slot: DpadDownSlot, icon: BindingIconId.Number3, button: GamepadButtons.DpadDown);
+                break;
+            case 3: // ANIMATE [LT,RT]
+                slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.LeftShoulder);
+                slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.RightShoulder);
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorRecord, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.CreatorPlay, button: GamepadButtons.ButtonWest);
+                break;
+            case 4: // RIG [RT,LT] — d-pad nudges the cursor chain's pole (planar, like Move).
+                slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.LeftShoulder);
+                slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.RightShoulder);
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.CreatorOpCycle, button: GamepadButtons.ButtonWest);
+                slots[DpadUpSlot] = Badge(slot: DpadUpSlot, button: GamepadButtons.DpadUp);
+                slots[DpadDownSlot] = Badge(slot: DpadDownSlot, button: GamepadButtons.DpadDown);
+                slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);
+                slots[DpadRightSlot] = Badge(slot: DpadRightSlot, button: GamepadButtons.DpadRight);
+                break;
+            default: // SCULPT (bare)
+                slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.LeftShoulder);
+                slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.RightShoulder);
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
+                // West REDOES (East undoes) — the reticle reads as "step forward" opposite East's "step back".
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.Target, button: GamepadButtons.ButtonWest);
+                break;
+        }
 
-        // The selected-primitive readout: a seven-segment numeral, no button badge (a display, not a control).
-        slots[RightStickSlot] = new BindingSlotView(
-            Alpha: 1f,
-            Glyph: BindingGlyphId.None,
-            Icon: (BindingIconId)(((int)BindingIconId.Number1) + Math.Clamp(value: shapeIndex, max: 11, min: 0)),
-            Pressed: false,
-            Visible: true
-        );
+        // The GLOBALS: left stick moves the target (its click toggles shape↔group scope), right stick rotates (its
+        // click toggles camera mode); the d-pad's default vertical axis raises/lowers and horizontal axis rolls —
+        // STYLE and RIG already overrode their four d-pad slots above, so this only fills the ones still unset.
+        slots[LeftStickSlot] = Badge(slot: LeftStickSlot, button: GamepadButtons.LeftStickPress);
+        slots[RightStickSlot] = Badge(slot: RightStickSlot, button: GamepadButtons.RightStickPress);
+
+        if (page is not (2 or 4)) {
+            slots[DpadUpSlot] = Badge(slot: DpadUpSlot, button: GamepadButtons.DpadUp);
+            slots[DpadDownSlot] = Badge(slot: DpadDownSlot, button: GamepadButtons.DpadDown);
+            slots[DpadRightSlot] = Badge(slot: DpadRightSlot, button: GamepadButtons.DpadRight);
+            slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);
+        }
+
+        // The modifier pips: fully determined by the page (LT/RT held-set — with only two modifiers every
+        // combination maps to exactly one page; the pip row cannot distinguish [LT,RT] from [RT,LT] by design, the
+        // active page's id/label does).
+        var leftHeld = (page is 1 or 3 or 4);
+        var rightHeld = (page is 2 or 3 or 4);
 
         m_store.Publish(frame: new BindingBarFrame(
-            ActivePageId: "creator",
+            ActivePageId: (page switch { 1 => "creator-select", 2 => "creator-style", 3 => "creator-anim", 4 => "creator-rig", _ => "creator" }),
             BarCount: 1,
             Family: family,
-            // The trigger pips hint the raise/lower controls between the clusters.
             Modifiers: new BindingModifierSlotView[] {
-                new(Glyph: BindingGlyphId.TriggerLeft, Held: false),
-                new(Glyph: BindingGlyphId.TriggerRight, Held: false),
+                new(Glyph: BindingGlyphId.TriggerLeft, Held: leftHeld),
+                new(Glyph: BindingGlyphId.TriggerRight, Held: rightHeld),
+            },
+            Slots: slots
+        ));
+    }
+
+    /// <summary>Publishes the WORLD-SCULPT bar for the sculptor's chord-selected page (see
+    /// <c>Puck.Demo.World.WorldSculptController</c>'s remarks): bare/[LT]/[RT]/[LT,RT]/[RT,LT] select STAMP/SELECT/
+    /// TERRAIN/OVERRIDES/BOUNDS. The same pip derivation as <see cref="PublishCreator"/> — with two modifiers, every
+    /// held-combination maps to one page.</summary>
+    /// <param name="heldButtons">The creating pad's live button mask (pressed highlights).</param>
+    /// <param name="page">The controller's active page (the <c>WorldSculptController.Page</c> value).</param>
+    public void PublishWorld(GamepadButtons heldButtons, int page = 0) {
+        const int DpadUpSlot = 0;
+        const int DpadRightSlot = 1;
+        const int DpadDownSlot = 2;
+        const int DpadLeftSlot = 3;
+        const int LeftShoulderSlot = 4;
+        const int LeftStickSlot = 5;
+        const int NorthSlot = 6;
+        const int WestSlot = 7;
+        const int SouthSlot = 8;
+        const int EastSlot = 9;
+        const int RightShoulderSlot = 10;
+        const int RightStickSlot = 11;
+
+        var family = ResolveFamily();
+        var slots = new BindingSlotView[BindingBarLayout.SlotButtons.Length];
+
+        for (var index = 0; (index < slots.Length); index++) {
+            slots[index] = new BindingSlotView(
+                Alpha: 0.3f,
+                Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
+                Icon: BindingIconId.None,
+                Pressed: false,
+                Visible: true
+            );
+        }
+
+        BindingSlotView Verb(int slot, BindingIconId icon, GamepadButtons button) => new(
+            Alpha: 1f,
+            Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
+            Icon: icon,
+            Pressed: (0 != (heldButtons & button)),
+            Visible: true
+        );
+        BindingSlotView Badge(int slot, GamepadButtons button) => new(
+            Alpha: 1f,
+            Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
+            Icon: BindingIconId.None,
+            Pressed: (0 != (heldButtons & button)),
+            Visible: true
+        );
+
+        // The page-dependent slots, mirroring WorldSculptController's own remarks table.
+        switch (page) {
+            case 1: // SELECT [LT] — cycle/delete/deselect, drag via the sticks; LB rebinds, RB toggles cabinet role.
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.ButtonSouth);
+                slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.ButtonNorth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.Target, button: GamepadButtons.ButtonWest);
+                slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorLink, button: GamepadButtons.LeftShoulder);
+                slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.CreatorStyle, button: GamepadButtons.RightShoulder);
+                break;
+            case 2: // TERRAIN/LIGHTS [RT] — slab/plaza/light adds, remove-nearest; sticks resize, d-pad tunes.
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonEast);
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.Number1, button: GamepadButtons.ButtonWest);
+                slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonNorth);
+                break;
+            case 3: // WALK OVERRIDES [LT,RT] — paint blocker/walkable, remove nearest.
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.Target, button: GamepadButtons.ButtonEast);
+                slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonNorth);
+                break;
+            case 4: // BOUNDS/SAVE/REPEAT [RT,LT] — save/verify, clear repeat, mirror cycle; sticks grow the lot.
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorRecord, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorPlay, button: GamepadButtons.ButtonEast);
+                slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonWest);
+                slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorOpCycle, button: GamepadButtons.ButtonNorth);
+                slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);
+                slots[DpadRightSlot] = Badge(slot: DpadRightSlot, button: GamepadButtons.DpadRight);
+                break;
+            default: // STAMP (bare) — place/clear the ghost, undo/redo; d-pad = repeat count/spacing.
+                slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonSouth);
+                slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
+                slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.ButtonNorth);
+                slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.LeftShoulder);
+                slots[DpadUpSlot] = Badge(slot: DpadUpSlot, button: GamepadButtons.DpadUp);
+                slots[DpadDownSlot] = Badge(slot: DpadDownSlot, button: GamepadButtons.DpadDown);
+                slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);
+                slots[DpadRightSlot] = Badge(slot: DpadRightSlot, button: GamepadButtons.DpadRight);
+                break;
+        }
+
+        slots[LeftStickSlot] = Badge(slot: LeftStickSlot, button: GamepadButtons.LeftStickPress);
+        slots[RightStickSlot] = Badge(slot: RightStickSlot, button: GamepadButtons.RightStickPress);
+
+        var leftHeld = (page is 1 or 3 or 4);
+        var rightHeld = (page is 2 or 3 or 4);
+
+        m_store.Publish(frame: new BindingBarFrame(
+            ActivePageId: (page switch { 1 => "world-select", 2 => "world-terrain", 3 => "world-overrides", 4 => "world-bounds", _ => "world-stamp" }),
+            BarCount: 1,
+            Family: family,
+            Modifiers: new BindingModifierSlotView[] {
+                new(Glyph: BindingGlyphId.TriggerLeft, Held: leftHeld),
+                new(Glyph: BindingGlyphId.TriggerRight, Held: rightHeld),
             },
             Slots: slots
         ));

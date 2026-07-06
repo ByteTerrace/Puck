@@ -197,6 +197,29 @@ internal static class HgbImage {
         return bytes;
     }
 
+    /// <summary>Decodes one 16-byte 2bpp tile back into its 64 row-major indices — the exact inverse of
+    /// <see cref="EncodeTile2bpp"/> (per row a low byte then a high byte, bit 7 = leftmost pixel).</summary>
+    public static byte[] DecodeTile2bpp(ReadOnlySpan<byte> tileBytes) {
+        if (tileBytes.Length != 16) {
+            throw new ArgumentException(message: "A 2bpp tile is 16 bytes.", paramName: nameof(tileBytes));
+        }
+
+        var indices = new byte[64];
+
+        for (var row = 0; (row < 8); row++) {
+            var low = tileBytes[row * 2];
+            var high = tileBytes[(row * 2) + 1];
+
+            for (var column = 0; (column < 8); column++) {
+                var bit = (7 - column);
+
+                indices[(row * 8) + column] = (byte)(((low >> bit) & 0x01) | (((high >> bit) & 0x01) << 1));
+            }
+        }
+
+        return indices;
+    }
+
     /// <summary>Slices a WxH index image (multiples of 8) into 8×8 tiles, deduplicates identical tiles, and returns the
     /// unique tiles' concatenated 2bpp bytes plus a row-major tilemap of tile ids. Hard 4-colour quantization is what
     /// makes the dedup collapse a photographic render down to a handful of tiles that fit the VRAM budget.</summary>

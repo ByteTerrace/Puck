@@ -16,9 +16,9 @@ public static class VulkanComputeServiceRegistration {
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddVulkanComputeApis(this IServiceCollection services) {
-        // The Vulkan-only ray-query / acceleration-structure API (no neutral seam — D3D12 has no DXR). Previously
-        // dead code; registered here so the world-acceleration builder and the ray-query (--world-rt) path can
-        // resolve it. Harmless when unused — it self-resolves device entry points lazily on first call.
+        // The Vulkan-only ray-query / acceleration-structure API (no neutral seam — D3D12 has no DXR). Registered
+        // here so the world-acceleration builder and the ray-query (--world-rt) path can resolve it. Harmless when
+        // unused — it self-resolves device entry points lazily on first call.
         services.TryAddSingleton<IVulkanAccelerationStructureApi>(static _ => new VulkanNativeAccelerationStructureApi());
         services.TryAddSingleton<IVulkanWorldAccelerationApi>(static sp => new VulkanWorldAccelerationApi(
             accelerationStructureApi: sp.GetRequiredService<IVulkanAccelerationStructureApi>()

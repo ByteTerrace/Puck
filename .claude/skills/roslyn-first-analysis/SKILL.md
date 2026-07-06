@@ -23,7 +23,7 @@ class name.
 
 | Question shape | Tool |
 |---|---|
-| Where is a file / a literal string / a config value? Orientation in unfamiliar code? Non-C# assets (HLSL, JSON, MSBuild)? | Grep/Glob — correct and fastest. No shame here. |
+| Where is a file / a literal string / a config value? Orientation in unfamiliar code? Non-C# assets (HLSL, JSON, MSBuild)? | Grep/Glob — correct and fastest. |
 | "Did my rename/refactor break anything?" | `dotnet build` — the compiler is the cheapest full-semantic oracle, and this repo compiles warnings like IDE0005 as errors. Don't grep for stragglers; build. |
 | Structure queries within files: list declarations, members, attributes, base lists; comment/trivia-aware scans | **Syntax-level Roslyn** — parse + walk, no MSBuild, ~2 s over all of `src/`. Template: [templates/syntax-query.cs](templates/syntax-query.cs) |
 | Cross-project semantics: find all references, implementers, dead-code candidates, safe-rename impact | **Semantic Roslyn** via `MSBuildWorkspace` + `SymbolFinder`. Template: [templates/find-references.cs](templates/find-references.cs) |

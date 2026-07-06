@@ -3,8 +3,9 @@ using Puck.HumbleGamingBrick.Post;
 // Puck.HumbleGamingBrick.Post — the Game Boy / Game Boy Color machine's power-on self-test and the primary way the
 // machine is validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check failed),
 // or 2 (a stage could not run). There is no rich CLI: three hand-parsed knobs — where artifacts land, and an optional
-// tier/name subset for iterating. Tier A runs anywhere on a synthetic ROM; Tier B (later) needs the reference corpus,
-// found via the PUCK_GB_TESTROMS environment variable and skipped when absent.
+// tier/name subset for iterating. Tier A runs anywhere on a synthetic ROM; Tier B needs the reference corpus, found via
+// the PUCK_GB_TESTROMS environment variable and skipped when absent; Tier C (the cross-machine serial link) is
+// self-contained like Tier A and runs anywhere.
 
 if (Diagnostics.TryRun(args: args, exitCode: out var diagnosticExitCode)) {
     return diagnosticExitCode;

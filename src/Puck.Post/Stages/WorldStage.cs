@@ -1,4 +1,3 @@
-using Puck.Capture;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,8 +10,8 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage C5. Cross-backend SDF world parity, hero view — the POST's central "one engine, two APIs" check,
-/// ported from the demo's <c>WorldParityNode</c> (the worked reference). The SAME deterministic scene — a ground
+/// Tier-C stage C5. Cross-backend SDF world parity, hero view — the POST's central "one engine, two APIs" check.
+/// The SAME deterministic scene — a ground
 /// plane and several primitives with distinct materials and blend variety (smooth-union, plain union, subtraction) —
 /// renders through the identical <see cref="Puck.SdfVm.SdfWorldEngine"/> twice: once on the Vulkan host device
 /// (SPIR-V kernels) and once on the shared LUID-matched Tier-C Direct3D 12 device (DXIL kernels). Because the engine
@@ -129,58 +128,67 @@ internal sealed class WorldStage : IPostStage {
         }
     }
 
+    /// <summary>Renders one frame of a program through <see cref="SdfWorldEngine"/> on a single backend's device and
+    /// returns the RGBA readback — the inner render the cross-backend world-parity stages share. The only per-backend
+    /// difference is the device, its neutral compute services, and the kernel bytecode extension.</summary>
+    /// <param name="device">The backend device to render on.</param>
+    /// <param name="gpu">That device's neutral compute services.</param>
+    /// <param name="bytecodeExtension">The kernel bytecode extension (<c>.spv</c> for Vulkan, <c>.dxil</c> for Direct3D 12).</param>
+    /// <param name="frame">The frame to render (its <see cref="SdfFrame.Program"/> is the scene).</param>
+    /// <param name="width">The render width in pixels.</param>
+    /// <param name="height">The render height in pixels.</param>
+    /// <returns>The rendered RGBA pixels.</returns>
+    internal static byte[] RenderWorldFrame(IGpuDeviceContext device, IGpuComputeServices gpu, string bytecodeExtension, SdfFrame frame, uint width, uint height) {
+        using var renderer = new SdfWorldEngine(
+            device: device,
+            gpu: gpu,
+            height: height,
+            kernels: SdfWorldKernels.Load(bytecodeExtension: bytecodeExtension),
+            options: new SdfWorldEngineOptions(Program: frame.Program),
+            width: width
+        );
+
+        return renderer.RenderFrame(frame: frame);
+    }
+
+    /// <summary>The cross-backend scene-parity dance the simple world stages share: render <paramref name="program"/>
+    /// on the Vulkan host (SPIR-V) and on the shared Tier-C Direct3D 12 device (DXIL) through the identical
+    /// <see cref="SdfWorldEngine"/> and the shared hero frame, then diff the two readbacks against
+    /// <paramref name="thresholds"/> (writing <c>&lt;prefix&gt;-vulkan/-directx/-diff.png</c>). Each caller supplies only
+    /// its scene, threshold set, artifact prefix, and pass label.</summary>
+    /// <param name="context">The run context.</param>
+    /// <param name="prefix">The artifact filename prefix (e.g. <c>world-warp</c>).</param>
+    /// <param name="program">The scene to render on both backends.</param>
+    /// <param name="thresholds">The calibrated PASS thresholds for this scene.</param>
+    /// <param name="passLabel">The pass-detail prefix; the parity digest is appended.</param>
+    /// <param name="width">The render width in pixels.</param>
+    /// <param name="height">The render height in pixels.</param>
+    /// <returns>The stage outcome.</returns>
     [SupportedOSPlatform("windows10.0.10240")]
-    private static PostStageOutcome RunCore(PostContext context) {
-        var program = BuildHeroScene();
-        var frame = BuildHeroFrame(program: program, width: WorldWidth, height: WorldHeight);
+    internal static PostStageOutcome RunSceneParity(PostContext context, string prefix, SdfProgram program, ParityThresholdSet thresholds, string passLabel, uint width = WorldWidth, uint height = WorldHeight) {
+        var frame = BuildHeroFrame(program: program, width: width, height: height);
 
         // Vulkan reference: the host device + the host's neutral compute services, SPIR-V kernels.
-        byte[] vulkanPixels;
-
-        using (var vulkanRenderer = new SdfWorldEngine(
-            device: context.RequireGpuDevice(),
-            gpu: context.Resolve<IGpuComputeServices>(),
-            height: WorldHeight,
-            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
-            options: new SdfWorldEngineOptions(Program: program),
-            width: WorldWidth
-        )) {
-            vulkanPixels = vulkanRenderer.RenderFrame(frame: frame);
-        }
+        var vulkanPixels = RenderWorldFrame(device: context.RequireGpuDevice(), gpu: context.Resolve<IGpuComputeServices>(), bytecodeExtension: ".spv", frame: frame, width: width, height: height);
 
         // Direct3D 12 comparand: the SHARED Tier-C device (LUID-matched to the Vulkan host) + its neutral compute
         // services, DXIL kernels — the identical engine, only the backend differs.
         var directX = context.RequireDirectXDevice();
-        var directXPixels = RenderDirectXDiagnosed(directX: directX, render: () => {
-            using var directXRenderer = new SdfWorldEngine(
-                device: directX.DeviceContext,
-                gpu: directX.Services.GetRequiredService<IGpuComputeServices>(),
-                height: WorldHeight,
-                kernels: SdfWorldKernels.Load(bytecodeExtension: ".dxil"),
-                options: new SdfWorldEngineOptions(Program: program),
-                width: WorldWidth
-            );
+        var directXPixels = RenderDirectXDiagnosed(directX: directX, render: () => RenderWorldFrame(device: directX.DeviceContext, gpu: directX.Services.GetRequiredService<IGpuComputeServices>(), bytecodeExtension: ".dxil", frame: frame, width: width, height: height));
 
-            return directXRenderer.RenderFrame(frame: frame);
-        });
+        return ParityCheck.WriteEvaluateReport(artifactsDirectory: context.ArtifactsDirectory, prefix: prefix, referencePixels: vulkanPixels, comparandPixels: directXPixels, width: (int)width, height: (int)height, thresholds: thresholds, passLabel: passLabel);
+    }
 
-        _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-diff.png");
-
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
-        ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
-
-        // Vulkan is the reference; Direct3D 12 is the comparand. The world composite has a richer benign-noise
-        // baseline than the flat debug views, so it judges against its own calibrated set.
-        var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
-        var failures = ParityThresholds.WorldComposite.Evaluate(metrics: metrics);
-
-        if (failures.Count != 0) {
-            return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
-        }
-
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} hero view | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldComposite thresholds | {ParityCheck.Describe(metrics: metrics)}");
+    [SupportedOSPlatform("windows10.0.10240")]
+    private static PostStageOutcome RunCore(PostContext context) {
+        // The world composite has a richer benign-noise baseline than the flat debug views, so it judges against its
+        // own calibrated set (WorldComposite).
+        return RunSceneParity(
+            context: context,
+            prefix: "world",
+            program: BuildHeroScene(),
+            thresholds: ParityThresholds.WorldComposite,
+            passLabel: $"{WorldWidth}x{WorldHeight} hero view | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldComposite thresholds"
+        );
     }
 }

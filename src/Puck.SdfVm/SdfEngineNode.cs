@@ -6,6 +6,15 @@ using Puck.Hosting;
 
 namespace Puck.SdfVm;
 
+/// <summary>One screen surface's world-space sampling frame for one frame — the polled counterpart of
+/// <see cref="SdfWorldEngine.SetScreenSurface"/>'s parameters, bundled so a transform provider returns one value.</summary>
+/// <param name="Origin">The front face's world-space center this frame.</param>
+/// <param name="Right">The world-space axis the UV's U increases along this frame (need not be pre-normalized).</param>
+/// <param name="Up">The world-space axis the UV's V increases against this frame (need not be pre-normalized).</param>
+/// <param name="HalfWidth">The half-extent along <paramref name="Right"/> this frame.</param>
+/// <param name="HalfHeight">The half-extent along <paramref name="Up"/> this frame.</param>
+public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 Right, Vector3 Up, float HalfWidth, float HalfHeight);
+
 /// <summary>
 /// The SDF engine as a host-model <see cref="IRenderNode"/>: a generic multi-viewport SDF world compositor driven by
 /// COMPUTE, fully BACKEND-NEUTRAL (it depends only on the neutral <c>IGpuCompute*</c> seam, so the identical node runs
@@ -20,10 +29,13 @@ namespace Puck.SdfVm;
 /// The viewport count follows <see cref="SdfFrame.Views"/>; nothing about the scene, cameras, or layout is baked in.
 /// </para>
 /// <para>
-/// DIEGETIC SCREENS ride a separate, SHADING-ONLY seam: a program may declare up to 4 static screen surfaces (see
+/// DIEGETIC SCREENS ride a separate, SHADING-ONLY seam: a program may declare up to 8 static screen surfaces (see
 /// <see cref="SdfProgramBuilder"/>'s screen-surface <c>ScreenSlab</c> overload), and this node polls the
 /// <c>screenSources</c> constructor argument each frame to bind (or unbind) each one's sampled image — unlike a
-/// child, this never adds or replaces a viewport; it only changes how one shape's LIT face shades.
+/// child, this never adds or replaces a viewport; it only changes how one shape's LIT face shades. A screen's
+/// world-space sampling FRAME is normally set once at program build; a screen riding a dynamic transform instead
+/// supplies a <c>screenSurfaceTransforms</c> provider, polled every frame right after <c>screenLights</c>, so its
+/// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
 /// </summary>
 public sealed class SdfEngineNode : IRenderNode {
@@ -32,6 +44,7 @@ public sealed class SdfEngineNode : IRenderNode {
     private static readonly IReadOnlyDictionary<int, IRenderNode> EmptyChildren = new Dictionary<int, IRenderNode>();
     private static readonly IReadOnlyDictionary<int, Func<nint>> EmptyScreenSources = new Dictionary<int, Func<nint>>();
     private static readonly IReadOnlyDictionary<int, Func<Vector3>> EmptyScreenLights = new Dictionary<int, Func<Vector3>>();
+    private static readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new Dictionary<int, Func<SdfScreenSurfaceTransform?>>();
 
     private readonly string? m_capturePath;
     private readonly IReadOnlyDictionary<int, IRenderNode> m_children;
@@ -48,6 +61,7 @@ public sealed class SdfEngineNode : IRenderNode {
     private readonly int m_programWordCapacity;
     private readonly IReadOnlyDictionary<int, Func<nint>> m_screenSources;
     private readonly IReadOnlyDictionary<int, Func<Vector3>> m_screenLights;
+    private readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly IServiceProvider m_serviceProvider;
     private readonly uint m_width;
     private bool m_captured;
@@ -82,11 +96,18 @@ public sealed class SdfEngineNode : IRenderNode {
     /// slot's produced <see cref="Surface.ImageViewHandle"/>) or over ANY other GPU image a host owns directly, e.g.
     /// an emulator's NATIVE framebuffer image, unresampled (not one of this node's <paramref name="children"/>, whose
     /// surfaces are pane-extent-resampled — the screen seam samples the source itself, so no separate resample is
-    /// needed or wanted). A provider returning 0 leaves the slot unbound this frame, which falls back to exactly
-    /// today's flat/procedural screen material. See <see cref="SdfWorldEngine.SetScreenSource"/>.</param>
+    /// needed or wanted). A provider returning 0 leaves the slot unbound this frame, which falls back to the
+    /// flat/procedural screen material. See <see cref="SdfWorldEngine.SetScreenSource"/>.</param>
     /// <param name="screenLights">An optional map, parallel to <paramref name="screenSources"/>, from a screen index to
     /// a provider of the colored light that screen emits into the room this frame (typically its framebuffer's average
     /// color). Polled right after <paramref name="screenSources"/>; see <see cref="SdfWorldEngine.SetScreenLight"/>.</param>
+    /// <param name="screenSurfaceTransforms">An optional map, parallel to <paramref name="screenSources"/>, from a
+    /// screen index to a provider of that screen's world-space sampling frame THIS FRAME — for a screen slab riding a
+    /// dynamic transform (e.g. a walking robot's CRT face), whose sampling frame must move with the geometry every
+    /// frame or it goes stale. A provider returning <see langword="null"/> leaves the program-declared (or
+    /// previously set) frame untouched this frame — a screen on static geometry simply omits its entry, or a provider
+    /// may return null on frames where nothing moved to skip the write. Polled right after <paramref name="screenLights"/>;
+    /// see <see cref="SdfWorldEngine.SetScreenSurface"/>.</param>
     /// <param name="dynamicTransformCapacity">An optional FLOOR on the engine's dynamic-transform slot capacity. The
     /// engine always provisions at least the first frame's transform count; a host whose moving-entity population
     /// grows over the run (hundreds of animated instances appearing later) passes its peak here so the buffer is
@@ -99,7 +120,7 @@ public sealed class SdfEngineNode : IRenderNode {
     /// the hot-swap counterpart of <paramref name="programWordCapacity"/> for instanced programs.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, string? capturePath = null, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<int, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0) {
+    public SdfEngineNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, string? capturePath = null, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<int, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -121,6 +142,7 @@ public sealed class SdfEngineNode : IRenderNode {
         m_kernels = kernels;
         m_screenSources = (screenSources ?? EmptyScreenSources);
         m_screenLights = (screenLights ?? EmptyScreenLights);
+        m_screenSurfaceTransforms = (screenSurfaceTransforms ?? EmptyScreenSurfaceTransforms);
         m_serviceProvider = serviceProvider;
         m_width = width;
     }
@@ -190,6 +212,14 @@ public sealed class SdfEngineNode : IRenderNode {
         // Screen LIGHTS: the colored glow each screen emits into the room (parallel to the source poll above).
         foreach (var (screenIndex, provider) in m_screenLights) {
             m_engine!.SetScreenLight(screenIndex: screenIndex, color: provider());
+        }
+
+        // Screen surface TRANSFORMS: a screen riding a dynamic entity re-poses its sampling frame every frame its
+        // geometry moved (parallel to the polls above); a null result leaves the table untouched this frame.
+        foreach (var (screenIndex, provider) in m_screenSurfaceTransforms) {
+            if (provider() is { } transform) {
+                m_engine!.SetScreenSurface(screenIndex: screenIndex, origin: transform.Origin, right: transform.Right, up: transform.Up, halfWidth: transform.HalfWidth, halfHeight: transform.HalfHeight);
+            }
         }
 
         if (frame.ProgramChanged) {

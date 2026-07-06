@@ -1,21 +1,23 @@
 # SDF world render centralization plan
 
-## Status (2026-07-04): phases 1–4 LANDED
+## Status
+
+Phases 1–4 are in place; phase 5 is the remaining open work.
 
 - **Phase 1**: `SdfWorldRenderSpec` + `SdfWorldRenderBuilder` live in
-  `src/Puck.Demo`. Two amendments over the original sketch: (a) the spec
+  `src/Puck.Demo`. Two refinements beyond the original sketch: (a) the spec
   carries a CAPACITY ENVELOPE (`ProgramWordCapacity`/`InstanceCapacity`, plus
-  the existing dynamic-transform floor) that flows into
+  the dynamic-transform floor) that flows into
   `SdfWorldEngineOptions` — a hot-swapping frame source declares its largest
   program up front instead of relying on program shapes staying identical
   (`UploadProgram` rejects an over-envelope program loudly); (b) ALL
   backend-specific choices (bytecode extension, child `directX` flags,
   decorator availability) derive from one spec field, `HostsOnDirectX`.
 - **Phase 2**: `OverworldRenderNode` builds a spec and delegates; simulation
-  concerns stayed put. `--validate-overworld` reproduces the pre-extraction
+  concerns stay put. `--validate-overworld` reproduces the extraction-time
   state hash bit-for-bit.
-- **Phase 3**: `WorldNode` runs again through the shared builder
-  (`GraphBuilder.CreateWorldRootNode`) on the HOST backend. Deferred/retired
+- **Phase 3**: `WorldNode` runs through the shared builder
+  (`GraphBuilder.CreateWorldRootNode`) on the HOST backend. Deferred
   affordances (cross-backend `produce`, the `child` boolean, `live-camera`
   viewport sources) are pre-flighted BEFORE the window host is built and
   rejected with attributed errors (exit 2) — `GraphBuilder.UnsupportedReason`
@@ -25,14 +27,13 @@
   `worldUp` frame, and the top-level `screenSources` table maps each screen
   index to a provider (`{ "$type": "viewport", "slot": n }` = the
   gaming-brick child's NATIVE framebuffer). `docs/examples/world-screen.json`
-  is the live proof; the Post `world-screen` stage additionally asserts the
+  is the proof; the Post `world-screen` stage additionally asserts the
   quaternion-authored `ScreenSlab` overload is pixel-identical to the
   equivalent explicit frame.
-- **Phase 5 (remaining open work)**: the live-camera child render node (the
-  capture stack survives in `Puck.Platform`; its `IRenderNode` was deleted
-  with the monolith), cross-backend `graph.produce` re-host, and hoisting the
-  stale-bytecode guard + DXC compile pattern into a shared `.targets` for the
-  other shader-shipping projects.
+- **Phase 5 (open)**: the live-camera child render node (the capture stack
+  lives in `Puck.Platform`; it has no `IRenderNode` yet), cross-backend
+  `graph.produce` re-host, and hoisting the stale-bytecode guard + DXC compile
+  pattern into a shared `.targets` for the other shader-shipping projects.
 
 ## Goal
 
@@ -60,8 +61,8 @@ surface.
 - Start the shared render builder in `Puck.Demo`, because it needs to compose
   Demo-owned child render nodes such as `GamingBrickChildNode` and live camera
   nodes. Move lower only when dependencies are genuinely generic.
-- Re-enable same-device `WorldNode` rendering first. Bring cross-backend
-  `graph.produce` back later as an explicit producer/export feature.
+- Same-device `WorldNode` rendering comes first. Cross-backend
+  `graph.produce` follows later as an explicit producer/export feature.
 - Prefer viewport-source data and screen-source tables over more booleans like
   `WorldNode.Child`.
 
@@ -122,9 +123,9 @@ Vulkan until the overlay path is backend-neutral, or have the builder explicitly
 skip or replace the overlay when hosting on Direct3D 12. Do not silently bind
 Vulkan bytecode on a Direct3D 12 host.
 
-## Phase 3: Re-enable WorldNode through the same renderer
+## Phase 3: WorldNode through the same renderer
 
-Add `WorldNode` handling back to `GraphBuilder.Build`, routed through the shared
+`WorldNode` handling in `GraphBuilder.Build` routes through the shared
 render builder.
 
 Initial `WorldNode` support should use:
@@ -155,10 +156,10 @@ or:
 }
 ```
 
-When re-enabling `WorldNode`, first render it on the host backend only, matching
-overworld. Defer cross-backend `graph.produce` until the shared same-device render
-host is stable; cross-backend production has extra LUID matching, device sharing,
-export, and device-loss concerns.
+`WorldNode` renders on the host backend only, matching overworld. Cross-backend
+`graph.produce` is deferred until the shared same-device render host is stable;
+cross-backend production has extra LUID matching, device sharing, export, and
+device-loss concerns.
 
 ## Phase 4: Make overworld render learnings data-addressable
 
@@ -201,9 +202,9 @@ static scene objects.
 
 ## Phase 5: Clean stale model and docs after behavior exists
 
-After `WorldNode` is runnable again:
+Once `WorldNode` runs through the shared renderer:
 
-- Update docs and comments that currently say Demo builds only `overworld` graphs.
+- Update docs and comments that say Demo builds only `overworld` graphs.
 - Keep historical notes only where they explain retired validation flags or Post
   ownership.
 - Leave the `WorldNode` name alone unless the implementation makes the mismatch
@@ -233,7 +234,7 @@ After `WorldNode` is runnable again:
 - `src/Puck.Demo/BindingBar/BindingBarOverlayNode.cs` and
   `src/Puck.Demo/SdfParityProducers.cs` - overworld-specific overlay/render
   decoration; keep optional and backend-aware.
-- `docs/examples/world-*.json` and `docs/examples/four-quad.json` - corpus to
+- `docs/examples/world-*.json` - corpus to
   migrate from parse-only back toward runnable `WorldNode` examples.
 
 ## Verification
@@ -261,13 +262,13 @@ and run the full battery before claiming backend safety:
 dotnet run --project src/Puck.Post -c Release
 ```
 
-After re-enabling `WorldNode` in Demo, run at least:
+To exercise `WorldNode` in Demo, run at least:
 
 ```powershell
 dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/world-single.json --exit-after-seconds 1
 dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/world-split.json --exit-after-seconds 1
 dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/world-menagerie.json --exit-after-seconds 1
-dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/four-quad.json --exit-after-seconds 1
+dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/world-wallpaper.json --exit-after-seconds 1
 ```
 
 If adding document screen-source semantics, add or extend a Post stage that
@@ -281,16 +282,16 @@ dotnet run --project src/Puck.Demo -c Release -- --emit-schema schema/run.schema
 dotnet run --project src/Puck.Post -c Release -- --stage run-document
 ```
 
-## Decisions (resolved with the 2026-07-04 landing)
+## Decisions
 
 - Binding-bar overlay backend support: the builder applies a spec's decorator
   ONLY on a Vulkan host and skips it with an explicit stderr notice on
   Direct3D 12 — never a silent Vulkan-bytecode bind. Revisit when the
   overlay's service bundle is backend-neutral.
 - Live camera child node location: `src/Puck.Demo` (it composes platform
-  camera services and backend resample bytecode). The node itself is still
-  the open piece — until it exists, a `live-camera` viewport source is
-  rejected at pre-flight with an attributed error.
+  camera services and backend resample bytecode). The node itself is the open
+  piece — until it exists, a `live-camera` viewport source is rejected at
+  pre-flight with an attributed error.
 - Screen slab authoring: the document model carries the EXPLICIT
   `worldOrigin`/`worldRight`/`worldUp` frame. The transform-derived
   convenience exists as the builder-side quaternion `ScreenSlab` overload,

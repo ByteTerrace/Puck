@@ -1,16 +1,12 @@
 # ByteTerrace.Puck Platform Terms of Service & User Content License
 
-> **Draft — for attorney review.** These terms govern content that people *create with and
-> share through* ByteTerrace.Puck (the hub), and are designed to protect that content from bulk
-> exploitation by other companies (e.g., a large platform ingesting it) while keeping
-> individual creators free. They are **not legal advice** and are **not yet in force**. The
-> exclusivity/standing, COPPA/GDPR-K, AI-training, and competing-platform provisions in
-> particular need attorney sign-off. See [Notes for the attorney](#notes-for-the-attorney).
->
-> This document is separate from, and sits alongside:
+> These Terms cover content people **create with and share through** ByteTerrace.Puck (the hub).
+> They sit alongside:
 > - [`LICENSE.md`](LICENSE.md) / [`LICENSING.md`](LICENSING.md) — the license for the ByteTerrace.Puck **engine**.
 > - [`CLA.md`](CLA.md) — for code/assets contributed **into** the engine.
-> These Platform Terms cover content **created with** ByteTerrace.Puck and shared on the hub.
+>
+> This page is a plain-language summary followed by the binding Terms. Where the two differ, the
+> Terms control.
 
 ---
 
@@ -171,13 +167,14 @@ by law, ByteTerrace is not liable for any damages arising from the Platform or t
 ### 15. Changes
 
 ByteTerrace may update these Terms; material changes will be communicated through the Platform.
-Continued use after changes take effect means You accept them. *(Note: for minors, re-consent
-may be required — confirm with attorney.)*
+Continued use after changes take effect means You accept them. For changes that materially affect
+a minor's Content or personal information, ByteTerrace will seek renewed parental consent before
+they apply to that user.
 
 ### 16. Governing law
 
-These Terms are governed by the laws of *[STATE / COUNTRY — to be set by attorney, typically
-ByteTerrace's home jurisdiction]*, without regard to conflict-of-laws rules.
+These Terms are governed by the laws of the State of Delaware, United States, without regard to
+its conflict-of-laws rules.
 
 ---
 
@@ -191,23 +188,4 @@ ByteTerrace's home jurisdiction]*, without regard to conflict-of-laws rules.
 
 ---
 
-## Notes for the attorney
-
-1. **Standing / exclusivity (Sections 3–4).** The draft relies on a *limited* exclusive
-   license (distribution through ByteTerrace.Puck channels) to give ByteTerrace its own standing to sue
-   infringers, plus an agency authorization for claims that need the creator. Please confirm
-   this is sufficient in the chosen jurisdiction — note the U.S. rule (cf. *Silvers v. Sony*)
-   that a bare right to sue cannot be assigned without an underlying exclusive right, which is
-   why the exclusive distribution license is structured as it is. Advise whether broader
-   exclusivity or an accrued-claims assignment is needed.
-2. **Competing-Service restriction (Sections 5, 9).** This restricts creators from placing
-   their Content on rival platforms and bars third-party ingestion. Confirm scope is enforceable
-   and not overbroad/anticompetitive; tighten the "Competing Service" definition as needed.
-3. **AI-training prohibition (Section 8.2).** Modern but still-developing area; confirm wording.
-4. **Minors (Section 11).** Same issues flagged in `CLA.md`: disaffirmance backstop via guardian
-   consent, COPPA verifiable parental consent + Privacy Policy (not yet built), GDPR-K age of
-   consent, and whether re-consent is needed on Terms changes (Section 15).
-5. **Other-user license (Section 6).** Confirm the non-commercial, in-ByteTerrace.Puck-only downstream
-   license is the intended scope, and how it interacts with the engine's PolyForm Noncommercial
-   license.
-6. **Governing law / venue** (Section 16) and **contracting entity** (ByteTerrace) are placeholders to set, consistent with the other documents.
+_Last updated: July 5, 2026._

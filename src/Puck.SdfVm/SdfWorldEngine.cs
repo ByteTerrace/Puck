@@ -71,24 +71,24 @@ public sealed class SdfWorldEngine : IDisposable {
     private const uint DynamicTransformBindingIndex = 9; // sdf-vm.hlsli's [[vk::binding(9, 0)]] / register(t2) (world path)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 2); // 32-byte rigid transform: float4 position + float4 orientation quaternion (KEEP IN SYNC with sdf-vm.hlsli sdfDynamicTransforms)
     private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
-    private const uint InstanceMaskBindingIndex = 7; // sdf-beam.comp (u1) / sdf-world-views.comp (t9): per-tile instance mask, written by the beam prepass, read by Stage 1; the per-tile word count is the LIVE uploaded program's InstanceMaskWordCount (pushed per frame, capped at the construction width the buffer was sized for)
+    private const uint InstanceMaskBindingIndex = 7; // sdf-beam.comp (u1) / sdf-world-views.comp (t13): per-tile instance mask, written by the beam prepass, read by Stage 1; the per-tile word count is the LIVE uploaded program's InstanceMaskWordCount (pushed per frame, capped at the construction width the buffer was sized for)
     /// <summary>The kernels' source array length (<c>sources[5]</c>) — the most viewports one engine composites.</summary>
     public const int MaxViewports = 5;
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
     private const int PushConstantByteLength = ((sizeof(uint) * 4) * 2); // 32-byte CompositeParams (16-byte rounded); word 6 = screenMask, word 7 = instanceMaskWordCount
     /// <summary>The kernels' screen-source count — the most screen surfaces one program may declare (matches
-    /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>). FOUR SEPARATE combined-image-sampler bindings (not one
+    /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>). EIGHT SEPARATE combined-image-sampler bindings (not one
     /// array binding): DXC's <c>vk::combinedImageSampler</c> only fuses a SCALAR Texture2D+SamplerState pair, so a
     /// true single Vulkan combined-image-sampler array isn't expressible in the shared HLSL — see
     /// <see cref="ScreenSourceBindingIndices"/>.</summary>
-    public const int MaxScreenSurfaces = 4;
-    // sdf-world-views.comp (Stage 1 ONLY): screenSource0..3, registers t5..t8 — one binding per screen index (KEEP IN
-    // SYNC with sdf-world.hlsli's screenSource0..3 declarations).
-    private static readonly uint[] ScreenSourceBindingIndices = [12, 13, 14, 15];
+    public const int MaxScreenSurfaces = 8;
+    // sdf-world-views.comp (Stage 1 ONLY): screenSource0..7, registers t5..t12 — one binding per screen index (KEEP IN
+    // SYNC with sdf-world.hlsli's screenSource0..7 declarations).
+    private static readonly uint[] ScreenSourceBindingIndices = [12, 13, 14, 15, 16, 17, 18, 19];
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli)
     private const uint ScreenSurfaceBindingIndex = 10; // sdf-world-views.comp (Stage 1 ONLY): screenSurfaces, register t4
-    private const uint ScreenLightBindingIndex = 11; // sdf-world-views.comp (Stage 1 ONLY): sdfScreenLights, register t10 — the LAST SRV (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 1)); // 80-byte: float4 rgb+intensity per screen (0..3) + float4 environment (ambientScale, sunScale, pad, pad)
+    private const uint ScreenLightBindingIndex = 11; // sdf-world-views.comp (Stage 1 ONLY): sdfScreenLights, register t14 — the LAST SRV (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
+    private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 1)); // 144-byte: float4 rgb+intensity per screen (0..7) + float4 environment (ambientScale, sunScale, pad, pad)
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const uint TileBindingIndex = 3; // matches sdf-world.hlsli's [[vk::binding(3, 0)]]
     private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
@@ -137,6 +137,12 @@ public sealed class SdfWorldEngine : IDisposable {
     private readonly IGpuStorageImage m_screenSourceFiller;
     private readonly nint[] m_screenSourceViews = new nint[MaxScreenSurfaces];
     private readonly IGpuStorageBuffer m_screenSurfaceBuffer;
+    // The host-side mirror of the screen-surface table: UploadProgram seeds it from the program's declared surfaces;
+    // SetScreenSurface patches one entry's slice for a per-frame transform (a screen riding a dynamic entity, e.g. a
+    // walking robot's face); PrepareFrame re-uploads the whole thing every frame, exactly like the viewport/dynamic-
+    // transform/screen-light scratch buffers below — Write<T> always copies from the buffer's start, so there is no
+    // partial-range GPU write to ride instead.
+    private readonly byte[] m_screenSurfaceScratch = new byte[(MaxScreenSurfaces * ScreenSurfaceByteLength)];
     private readonly IGpuStorageBuffer m_screenLightBuffer;
     private readonly byte[] m_screenLightScratch = new byte[ScreenLightByteLength];
     private readonly Vector3[] m_screenLightColors = new Vector3[MaxScreenSurfaces];
@@ -310,12 +316,14 @@ public sealed class SdfWorldEngine : IDisposable {
 
         // Stage 1 (per-view SDF): program (1) + viewports (2) + dynamic entity transforms (9) + cull buffer read (3) +
         // the source array (4) + the GPU-computed bbox origin (8) + the per-tile instance mask read (7) + the
-        // screen-surface table (10) + FOUR separate screen-source SampledImage bindings LAST (12..15 — DXC cannot
+        // screen-surface table (10) + EIGHT separate screen-source SampledImage bindings LAST (12..19 — DXC cannot
         // fuse an ARRAY texture into one Vulkan combined-image-sampler, so each screen index gets its own binding;
-        // the pipeline factory still bakes in exactly ONE static nearest sampler on Direct3D 12, since all four
+        // the pipeline factory still bakes in exactly ONE static nearest sampler on Direct3D 12, since all eight
         // share that one filter). dynamicTransforms is listed BEFORE cullBounds so the SRV registers resolve program
-        // t0, viewport t1, dynamicTransforms t2, cullBounds t3, screenSurfaces t4, screenSources t5..t8, then
-        // instanceMasks t9 (matching the HLSL).
+        // t0, viewport t1, dynamicTransforms t2, cullBounds t3, screenSurfaces t4, screenSources t5..t12, then
+        // instanceMasks t13, screenLights t14 (matching the HLSL) — Direct3D 12 assigns t#/s# registers from THIS
+        // array's order (DirectXGpuComputePipelineFactory), so the HLSL's explicit register(tN) annotations must
+        // mirror this exact sequence; a reorder here without the matching HLSL edit desyncs the root signature.
         GpuComputeBinding[] viewsBindings = [
             new GpuComputeBinding(Binding: ProgramBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
             new GpuComputeBinding(Binding: ViewportBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
@@ -328,8 +336,12 @@ public sealed class SdfWorldEngine : IDisposable {
             new GpuComputeBinding(Binding: ScreenSourceBindingIndices[1], Kind: GpuComputeBindingKind.SampledImage),
             new GpuComputeBinding(Binding: ScreenSourceBindingIndices[2], Kind: GpuComputeBindingKind.SampledImage),
             new GpuComputeBinding(Binding: ScreenSourceBindingIndices[3], Kind: GpuComputeBindingKind.SampledImage),
+            new GpuComputeBinding(Binding: ScreenSourceBindingIndices[4], Kind: GpuComputeBindingKind.SampledImage),
+            new GpuComputeBinding(Binding: ScreenSourceBindingIndices[5], Kind: GpuComputeBindingKind.SampledImage),
+            new GpuComputeBinding(Binding: ScreenSourceBindingIndices[6], Kind: GpuComputeBindingKind.SampledImage),
+            new GpuComputeBinding(Binding: ScreenSourceBindingIndices[7], Kind: GpuComputeBindingKind.SampledImage),
             new GpuComputeBinding(Binding: InstanceMaskBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
-            // Appended LAST so its SRV resolves to register t10 (after instanceMasks t9): the per-frame screen-light buffer.
+            // Appended LAST so its SRV resolves to register t14 (after instanceMasks t13): the per-frame screen-light buffer.
             new GpuComputeBinding(Binding: ScreenLightBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
         ];
 
@@ -461,7 +473,12 @@ public sealed class SdfWorldEngine : IDisposable {
         }
 
         m_programBuffer.Write<uint>(data: program.Words);
-        m_screenSurfaceBuffer.Write<uint>(data: program.ScreenSurfaceWords);
+        // Seed the host-side mirror from the program's declared surfaces (the "program uploaded once" baseline);
+        // PrepareFrame re-uploads it every frame, so any SetScreenSurface call made before the next produced frame
+        // patches this same mirror before it goes out — a re-upload never resurrects the program's original frame
+        // over a live SetScreenSurface write made in between.
+        MemoryMarshal.Cast<uint, byte>(span: program.ScreenSurfaceWords).CopyTo(destination: m_screenSurfaceScratch);
+        m_screenSurfaceBuffer.Write<byte>(data: m_screenSurfaceScratch);
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
     }
@@ -485,12 +502,12 @@ public sealed class SdfWorldEngine : IDisposable {
     /// same-device storage-image view (General layout, shader-readable), typically a hosted child's or an emulator's
     /// NATIVE framebuffer image (not a pane-resampled one: Stage 1 samples it directly, so any fit/scale is the
     /// sampling itself). The next frame binds it into the screen-source array (deduplicated — rebinding the same view
-    /// is free). Passing 0 clears the slot: a screen surface with no source bound falls back to exactly today's
+    /// is free). Passing 0 clears the slot: a screen surface with no source bound falls back to the
     /// flat/procedural screen material.</summary>
-    /// <param name="screenIndex">The screen source slot (0..3, matching a program's declared
+    /// <param name="screenIndex">The screen source slot (0..7, matching a program's declared
     /// <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
     /// <param name="imageViewHandle">The source's same-device storage-image view, or 0 to unbind.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..3</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..7</c>.</exception>
     public void SetScreenSource(int screenIndex, nint imageViewHandle) {
         if (
             (screenIndex < 0) ||
@@ -504,14 +521,50 @@ public sealed class SdfWorldEngine : IDisposable {
             ? (m_screenSourceMask | (1u << screenIndex))
             : (m_screenSourceMask & ~(1u << screenIndex));
     }
+    /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the NEXT produced
+    /// frame — the per-frame counterpart of the screen-surface table <see cref="UploadProgram"/> otherwise writes only
+    /// once, at program upload. A screen slab riding a dynamic transform (e.g. a walking robot's CRT face) must call
+    /// this every frame its geometry moves, or its sampling frame goes stale relative to the geometry the dynamic
+    /// transform already moved (a mismatched frame sizes/rotates/positions the sampled image wrong without affecting
+    /// the geometry at all — see <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>'s
+    /// frame contract). Pure host-side buffer state: the shader's <c>screenSurfaces[screenIndex]</c> read
+    /// (<c>sdf-world.hlsli</c>) already resolves at shading time with no HLSL change required for this seam — only the
+    /// host-side table this call patches needed to become writable per frame.</summary>
+    /// <param name="screenIndex">The screen slot (0..7, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
+    /// <param name="origin">The front face's world-space center this frame.</param>
+    /// <param name="right">The unit world-space axis the UV's U increases along this frame (need not be pre-normalized —
+    /// normalized here, matching <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>'s contract).</param>
+    /// <param name="up">The unit world-space axis the UV's V increases against this frame (V = 0 at the top; normalized here).</param>
+    /// <param name="halfWidth">The half-extent along <paramref name="right"/> this frame.</param>
+    /// <param name="halfHeight">The half-extent along <paramref name="up"/> this frame.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..7</c>.</exception>
+    public void SetScreenSurface(int screenIndex, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight) {
+        if (
+            (screenIndex < 0) ||
+            (screenIndex >= MaxScreenSurfaces)
+        ) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(screenIndex), message: $"A screen index must be 0..{MaxScreenSurfaces - 1}.");
+        }
+
+        var unitRight = Vector3.Normalize(value: right);
+        var unitUp = Vector3.Normalize(value: up);
+        var floats = MemoryMarshal.Cast<byte, float>(span: m_screenSurfaceScratch.AsSpan());
+        // 3 float4 per entry (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad) — KEEP IN SYNC with SdfProgram's
+        // ScreenSurfaceWords packing and sdf-world.hlsli's ScreenSurfaceData.
+        var b = (screenIndex * 12);
+
+        floats[b + 0] = unitRight.X; floats[b + 1] = unitRight.Y; floats[b + 2] = unitRight.Z; floats[b + 3] = halfWidth;
+        floats[b + 4] = unitUp.X; floats[b + 5] = unitUp.Y; floats[b + 6] = unitUp.Z; floats[b + 7] = halfHeight;
+        floats[b + 8] = origin.X; floats[b + 9] = origin.Y; floats[b + 10] = origin.Z; floats[b + 11] = 0f;
+    }
     /// <summary>Supplies the colored light a declared screen surface at <paramref name="screenIndex"/> emits into the
     /// room this frame — typically the average color of its framebuffer, so the room glows the game's dominant hue. The
     /// light's position/orientation/extent come from the program's screen-surface table (a screen is an area emitter);
     /// only its color is per-frame. Contributes nothing while the screen is unbound (the shader gates on the same
     /// screen mask <see cref="SetScreenSource"/> maintains) or while the color is zero (a dark screen).</summary>
-    /// <param name="screenIndex">The screen slot (0..3, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
+    /// <param name="screenIndex">The screen slot (0..7, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
     /// <param name="color">The emitted light color (linear RGB, typically 0..1).</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..3</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..7</c>.</exception>
     public void SetScreenLight(int screenIndex, Vector3 color) {
         if (
             (screenIndex < 0) ||
@@ -692,6 +745,10 @@ public sealed class SdfWorldEngine : IDisposable {
         m_viewportBuffer.Write<byte>(data: m_viewportScratch);
         PackDynamicTransforms(frame: frame);
         m_dynamicTransformBuffer.Write<byte>(data: m_dynamicTransformScratch);
+        // The screen-surface table: UploadProgram seeds the host mirror once; any SetScreenSurface call since the
+        // last frame patched it in place — re-uploaded here every frame (like the buffers above) so a screen riding
+        // a dynamic transform never renders one frame stale relative to its geometry.
+        m_screenSurfaceBuffer.Write<byte>(data: m_screenSurfaceScratch);
         PackScreenLights(frame: frame);
         m_screenLightBuffer.Write<byte>(data: m_screenLightScratch);
 
@@ -806,9 +863,10 @@ public sealed class SdfWorldEngine : IDisposable {
         }
     }
 
-    // Pack the per-frame screen-light buffer: entries 0..3 = each screen's emitted color (the framebuffer average set
-    // via SetScreenLight) with the room-glow intensity gain in w, entry 4 = the environment (ambient/sun dimming from
-    // the frame). KEEP IN SYNC with sdf-world.hlsli's sdfScreenLights layout.
+    // Pack the per-frame screen-light buffer: entries 0..(MaxScreenSurfaces-1) = each screen's emitted color (the
+    // framebuffer average set via SetScreenLight) with the room-glow intensity gain in w, the last entry = the
+    // environment (ambient/sun dimming from the frame). KEEP IN SYNC with sdf-world.hlsli's sdfScreenLights layout
+    // (SdfScreenLightEnv must equal MaxScreenSurfaces there).
     private void PackScreenLights(SdfFrame frame) {
         var floats = MemoryMarshal.Cast<byte, float>(span: m_screenLightScratch.AsSpan());
 

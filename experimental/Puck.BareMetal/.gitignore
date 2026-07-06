@@ -1,2 +1,4 @@
 # Local QEMU boot scratch (firmware copies, staged ESP, serial logs).
 .qemu/
+# Staged Steam Deck boot layout (stage-deck.ps1 output; copy to a FAT32 USB stick).
+.deck/

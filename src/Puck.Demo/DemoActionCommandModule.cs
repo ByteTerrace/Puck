@@ -9,7 +9,7 @@ namespace Puck.Demo;
 /// snapshot path.
 /// </summary>
 internal sealed class DemoActionCommandModule : ICommandModule {
-    /// <summary>The contextual run/activate command (West on the no-modifier page): held = the Mario hold-to-run;
+    /// <summary>The contextual run/activate command (West on the no-modifier page): held = the hold-to-run;
     /// pressed near an unbooted overworld stand = activate (boot) it. The overworld's console mode interprets the
     /// context; elsewhere the handler just logs.</summary>
     public const string ContextCommand = "overworld.context";
@@ -30,6 +30,10 @@ internal sealed class DemoActionCommandModule : ICommandModule {
     public const string BrickFleetStatusCommand = "brick.fleetStatus";
     /// <summary>Debug (Bricks page): capture the next produced frame to a PNG under the artifacts directory.</summary>
     public const string BrickCaptureCommand = "brick.capture";
+    /// <summary>Debug (Bricks page): the serial link cable. Press near a booted console to mark it as the pending link
+    /// end; press near a DIFFERENT booted console to connect the two as a linked pair (they then step in lockstep and
+    /// exchange serial bytes); press near a LINKED console to unlink it; press near the pending console again to cancel.</summary>
+    public const string BrickLinkToggleCommand = "brick.linkToggle";
 
     /// <summary>The debug/context verbs above, for interning: outside the overworld's console mode (which dispatches
     /// them directly) each handler just logs, proving the press resolved on the right page.</summary>
@@ -43,6 +47,7 @@ internal sealed class DemoActionCommandModule : ICommandModule {
         BrickStateHashCommand,
         BrickFleetStatusCommand,
         BrickCaptureCommand,
+        BrickLinkToggleCommand,
     ];
 
     /// <inheritdoc/>

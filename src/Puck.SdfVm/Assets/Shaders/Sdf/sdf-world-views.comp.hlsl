@@ -7,7 +7,7 @@
 // kernel that opts into the screen-source sampling seam (sdf-world.hlsli) — the beam prepass and Stage 2 never bind
 // the screen table/sources, so they keep their existing descriptor sets byte-for-byte — and is the ONLY kernel that
 // opts into the READ side of the per-tile instance mask (SDF_INSTANCE_MASKS: sdf-vm.hlsli's sdfInstanceMasks at
-// binding 7, register t9 — the first SRV slot free of the program/viewport/dynamicTransforms/cullBounds/
+// binding 7, register t13 — the first SRV slot free of the program/viewport/dynamicTransforms/cullBounds/
 // screenSurfaces/screenSources run above; the beam prepass binds the same buffer as its own RW u1 to WRITE it).
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_INSTANCE_MASKS
@@ -24,8 +24,8 @@
 // The surviving-tile bbox group origin from the cull-args pass (sdf-cull-args.comp): the dispatch is origin-anchored,
 // so this offsets each invocation onto the bbox's pixels. The all-empty margins outside the bbox are never dispatched.
 // register(t3): the SRVs are program t0, viewport t1, dynamicTransforms t2, then this. The screen-surface table
-// (binding 10, t4) and screen sources (binding 12..15, t5..t8, with the static nearest sampler at s0) are declared by
-// sdf-world.hlsli under SDF_SCREEN_SOURCES.
+// (binding 10, t4) and screen sources (binding 12..19, t5..t12, with the static nearest sampler at s0..s7) are
+// declared by sdf-world.hlsli under SDF_SCREEN_SOURCES.
 [[vk::binding(8, 0)]] StructuredBuffer<uint> cullBounds : register(t3);
 
 [numthreads(8, 8, 1)]

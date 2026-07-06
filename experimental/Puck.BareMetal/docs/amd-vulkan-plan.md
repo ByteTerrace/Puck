@@ -1,5 +1,9 @@
 # amdgpu + RADV on Puck.BareMetal — GPU-accelerated Vulkan (Steam Deck target)
 
+> **Continuing this work (esp. on a new machine)? Start with
+> [`deck-bringup-handoff.md`](deck-bringup-handoff.md)** — it has the live stage-(e) state, the
+> hardware facts, the debug trail, how to get logs off the Deck, and the machine-local rebuild steps.
+
 Goal: run **real GPU-accelerated Vulkan** on the bare-metal fake-Linux host, by hosting the open
 AMD GPU driver stack and testing on a **Steam Deck**. This is the renderer half of "run the engine
 bare-metal." Standing rule (as with puck / lwIP / mbedTLS): **vendor the professional resources,
@@ -24,6 +28,21 @@ firmware verbatim); we author *the host substrate the driver assumes Linux alrea
 **Target:** Steam Deck **LCD (Van Gogh, PCI `1002:163F`)** as the canonical bring-up unit — most
 prior art/firmware maturity. **OLED (Sephiroth)** is a near-identical second pass (same `gfx1033`,
 8 CU; deltas are display/memory-clock, outside the 3D engine).
+
+> **Reality check (2026-07-03): the in-hand unit is an OLED** — the first Deck boot of the stage-(b)
+> probe reported `1002:1435` rev `0xae` at 04:00.0, which is **Sephiroth** ("AMD Custom GPU 0932",
+> per the PCI ID registry). Same gfx10.3.1/PSP v11.5 IP set, so the vendored headers/firmware and
+> all register math apply unchanged; Sephiroth is simply now the canonical bring-up unit and LCD the
+> second pass. The same boot also proved the full ring-3 RADV+ACO stack on Deck silicon (synthetic
+> device): `COMPUTE PIPELINE COMPILED (ACO -> RDNA2 ISA)` on the panel — and Deck firmware
+> publishes **no IVRS** (no IOMMU in the way -> direct DMA; a.4-ii is moot on-target) and hides
+> x2APIC (fence polling unaffected). The second boot's raw config dump showed firmware **does**
+> assign the register BAR (BAR5 `0x80500000`, 32-bit non-prefetch) — the first boot's "no register
+> BAR" was a probe bug (BAR decode ran in a for-loop *increment*, i.e. after the body: the first
+> entry was sized undecoded and BAR5 landed past `barCount`). Probe v3 decodes-then-sizes; the
+> bridge-window assignment path is kept as a fallback only. Deck BAR map (Sephiroth): BAR0 pf
+> 256 MiB @ `0xF8_E000_0000` (FB aperture, GOP fb inside), BAR2 pf 2 MiB @ `0xF8_F000_0000`
+> (doorbells), BAR4 io 256 B @ `0x1000`, BAR5 mem 512 KiB @ `0x8050_0000` (registers).
 
 ## Feasibility verdict
 
@@ -67,14 +86,41 @@ poll fences before wiring IH.
 | **a** | **Kernel substrate**: ECAM ✓ · 64-bit/high-BAR map · PAT UC/WC · LAPIC+MSI-X+EOI · contiguous DMA + GTT · IOMMU domain · `/dev/dri/renderD128` ioctl + fd-mmap · missing musl syscalls | unit-prove each vs QEMU devices | **QEMU** |
 | **b** | Enumerate APU GPU + map MMIO + read `GRBM_STATUS`/`RCC_CONFIG_MEMSIZE` | sane non-FF values | DECK |
 | **c** | GMC/GPUVM (+ optional IH) | R/W a BO via GPU VA; no page-fault status | DECK |
-| **d** | PSP fw-load + GFX/SDMA microcode (MP0 TOC/TMR) | `CP_STAT` ready — **risk peak** | DECK |
-| **e** | Ring/IB submit + fence | fence seqno in BO — **first silicon executes** | DECK |
+| **d** | PSP fw-load + GFX/SDMA microcode (MP0 TOC/TMR) | `CP_STAT` ready — **risk peak** ✅ **DONE on Deck 2026-07-03** | DECK |
+| **e** | Ring/IB submit + fence | fence seqno in BO — **ring test PASSES on real Deck hardware** (CP fetches + executes PM4, register and memory writes land, `CACHE_POLICY=BYPASS` fix confirmed); IB+`RELEASE_MEM` fence not yet signalled — two open mysteries (a deterministic mid-CSB stall, an intermittent GART-block eraser) tracked in [`deck-bringup-handoff.md`](deck-bringup-handoff.md) | DECK |
 | **f** | The amdgpu ioctls RADV needs (INFO/GEM/CS/syncobj) | ioctl test client drives a dispatch | DECK (shape testable QEMU) |
 | **g** | RADV `vkEnumeratePhysicalDevices` sees the Deck GPU | reports `gfx1033` w/ correct CU/heaps | DECK |
 | **h** | **Offscreen triangle + readback + checksum** | pixel checksum matches reference | DECK |
 
 Substrate (a) is the long pole and is 100% QEMU-parallelizable now. (b) is the cheap day-one Deck
 observable; (d) is the risk peak; (e) is "it lives"; (h) is the deliverable.
+
+- [x] **(c)+(d) SUCCEEDED ON THE DECK (2026-07-03, first stage-(c)/(d) boot)**. GART built with
+  `VM_L2_FAULT=0` (stage c PASS); the PSP firmware-load chain authenticated the GFX/SDMA/RLC
+  microcode and autoloaded the RLC from a cold boot — proven by control flow: reaching the post-load
+  un-halt requires `PuckGpuPspLoad` to have returned success, which is gated on
+  `RLC_RLCS_BOOTLOAD_STATUS` bit31 + `CP_STAT==0` (the spec's stage-(d)-done condition), and every
+  prior cold boot showed `RLC_BOOTLOAD=0` so our load is what set it. **The PSP risk peak is cleared
+  under Puck's kernel on real Van Gogh/Sephiroth silicon.** Post-fix nit: the first boot logged a
+  spurious "TIMEOUT CP_STAT after un-halt" — an over-strict recheck; a just-un-halted CP with no ring
+  correctly reads busy (`CP_STAT=0x80000000`), which is a stage-(e) observable, not a (d) failure.
+  Fixed: the un-halt now reports CP_STAT without gating, and a `g_gpuBringUpNote` latch restates the
+  outcome on the parked health screen (`PSP LOAD OK` vs `RLC warm` vs a failure).
+- [~] **(c)+(d) implementation notes** — `puck-efi.c`:
+  `PuckEfiPreloadGpuFw` loads the 9 `vangogh_*.bin` from ESP `\amdgpu\` into a kernel table
+  (`g_gpuFw[]`); `PuckGpuGartBringUp` (stage c) maps a 32 MiB UC window at carveout+64 MiB (holds
+  TMR + PSP ring/cmd/fence + the GART page table, table-in-VRAM so the non-snooping walker reads
+  DRAM), builds a single-level VMID0 GART (256 MiB @ GPU-VA 0, PTE `pa|VALID|SYSTEM|SNOOPED|EXE|
+  R|W`, MTYPE_UC), programs GFXHUB PT-root/aperture/L1-TLB/L2/CONTEXT0 (MMHUB + FB_LOCATION
+  untouched), HDP-flush + ENG17 invalidate, then asserts `GCVM_L2_PROTECTION_FAULT_STATUS==0`;
+  `PuckGpuPspLoad` (stage d) creates the PSP KM ring, LOAD_TOC → SETUP_TMR → LOAD_IP_FW (sdma, ce,
+  pfp, me, mec, mec2, RLC v2.1 sublists cntl/gpm/srm, RLC_G) → AUTOLOAD_RLC, polls
+  `RLC_RLCS_BOOTLOAD_STATUS` bit31 + `CP_STAT==0`, then un-halts the CP (`CP_ME_CNTL=0`). Every
+  register offset header-verified; every poll TSC-deadlined (print-status + return on timeout — no
+  hang, no reset, no wbinvd, panel always survives). QEMU: 9 preload lines + clean skip + vktest
+  intact. Success line on the Deck: `[gpu] (d) MICROCODE LIVE: RLC bootloaded, CP un-halted`.
+  UNVERIFIED (each fail-safe, logged): RLC sublist fw-type ids 15/16/17, mec2→CP_MEC, SETUP_TMR
+  virt_phy_addr bit, exact L2_CNTL values, +64 MiB window placement.
 
 ### Progress
 - [x] **(a.1) PCIe ECAM** — ACPI RSDP captured pre-ExitBootServices → XSDT → MCFG → ECAM base;
@@ -150,6 +196,30 @@ observable; (d) is the risk peak; (e) is "it lives"; (h) is the deliverable.
   likely RDRAND-seeded layout nondeterminism exposing a latent pointer bug; re-running clears it.
   What it does NOT yet do: real GPUVM / GFX-ring submission / fences — those are the on-Deck port
   (b)–(h); device creation + shader compilation need none of them.
+
+- [x] **(assets) Van Gogh firmware + register headers vendored** — `amdgpu/firmware/` (9 blobs,
+  1.72 MB, linux-firmware 20251125, LICENSE.amdgpu; **no `vangogh_sos.bin` exists upstream** — APU
+  sOS lives in system BIOS, consistent with the warm-PSP strategy) + `amdgpu/include/` (19 MIT
+  headers, kernel v6.15: vangogh_ip_offset, gc_10_3_0, mp_11_0, nbio_7_2_0, osssys_5_0_0,
+  mmhub_2_3_0, athub_2_1_0, hdp_5_0_0, uapi drm). Verified IP versions: GC 10.3.1 / PSP 11.5.0 /
+  SDMA 5.2.1 (regs live in GC space — no separate headers) / NBIO 7.2.0. See `amdgpu/README.md`.
+- [x] **(b) COMPLETE — real register contact on the Deck (2026-07-03, third boot)**. Health readings
+  (Sephiroth, register BAR5 `0x80500000` mapped UC): `GRBM_STATUS=0x3028` (healthy idle),
+  `CP_STAT=0`, `CP_ME_CNTL=0x15000000`/`CP_MEC_CNTL=0x50000000` (CPs halted — GOP never starts
+  them), **`RLC_BOOTLOAD=0` (RLC not boot-loaded: stage (d) does the full autoload, confirmed)**,
+  `FB_LOC 0xf400..0xf43f` + `FB_OFFSET=0x440` (1 GiB carveout at DRAM `0x4_4000_0000`, GMC posted),
+  `VM_L2_FAULT=0`, **`PSP_C2P_81=0xfe345` (warm sOS alive)**, `SMU_C2P_90=1` (SMU responsive),
+  `carveout=1024 MiB`. The health dump re-prints from the `exit_group` syscall path so it lands on
+  the parked final screen (the boot log scrolls past one Deck panel). Probe details below.
+- [~] **(b) probe implementation notes** — `PuckGpuProbe()`
+  (puck-efi.c, called from EfiEntry after ECAM): scans config space for an AMD display-class
+  function, decodes + sizes all six BARs (console-quiet window: the panel scans out of the FB BAR),
+  maps the smallest non-prefetch memory BAR (the 512 KiB register aperture) UC, and dumps the
+  health set — GRBM_STATUS/2, CP_STAT, CP_ME/MEC_CNTL, RLC_GPM_STAT, GCMC_VM_FB_LOCATION_BASE/TOP,
+  MP0 C2PMSG_33/35/58/59/64/81 (PSP residue), RCC_CONFIG_MEMSIZE (carveout MiB). SOC15 dword
+  addresses derived from the vendored headers. QEMU: clean "no AMD display device" + full vktest
+  battery intact. `samples/EfiLinux/stage-deck.ps1` stages a boot USB (EFI\BOOT\BOOTX64.EFI +
+  radv\*.so).
 
 ## Dev loop
 

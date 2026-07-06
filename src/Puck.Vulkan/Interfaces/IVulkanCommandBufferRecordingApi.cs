@@ -92,7 +92,7 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="pipelineLayoutHandle">The native <c>VkPipelineLayout</c> handle compatible with the descriptor sets.</param>
     /// <param name="descriptorSetHandles">The native <c>VkDescriptorSet</c> handles to bind, in order from set 0.</param>
-    void BindComputeDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint[] descriptorSetHandles);
+    void BindComputeDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles);
     /// <summary>Records a compute dispatch.</summary>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>

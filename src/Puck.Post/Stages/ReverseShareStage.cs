@@ -10,8 +10,8 @@ using Puck.Vulkan.Messages;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage C3. The REVERSE cross-API direction, ported from the demo's <c>CrossShareReverseNode</c> (the worked
-/// reference): <em>Vulkan produces into a Direct3D 12-owned resource</em>. Because a D3D12 shared handle is the only
+/// Tier-C stage C3. The REVERSE cross-API direction: <em>Vulkan produces into a Direct3D 12-owned resource</em>.
+/// Because a D3D12 shared handle is the only
 /// NT handle both backends can open (Vulkan's OPAQUE_WIN32 export is Vulkan-only), the resource is always D3D12-owned
 /// and the consumer-vs-producer roles are independent of who owns it. The shared Tier-C Direct3D 12 device creates a
 /// shared storage image (LUID-matched to the Vulkan host), hands it off in the cross-API COMMON state, Vulkan imports

@@ -1,14 +1,11 @@
-using Puck.Capture;
 using System.Numerics;
 using System.Runtime.Versioning;
-using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage. Cross-backend parity for the WARP ops (twist/bend/elongate), the FIELD ops (onion/dilate), and the
+/// Tier-C stage. Cross-backend parity for the WARP ops (twist/bend/elongate), the FIELD op (onion), and the
 /// three newer blends (xor, smooth-intersection, smooth-subtraction): a twisted box column, a bent capsule arch, an
 /// elongated sphere (the capsule-by-elongation classic), an onioned sphere cut open by a subtraction box (showing the
 /// shell), an xor'd sphere pair (hollow where they overlap), and a smooth-subtraction carve. The warps put sin/cos
@@ -86,53 +83,14 @@ internal sealed class WorldWarpStage : IPostStage {
 
     [SupportedOSPlatform("windows10.0.10240")]
     private static PostStageOutcome RunCore(PostContext context) {
-        var program = BuildWarpScene();
-        var frame = WorldStage.BuildHeroFrame(program: program, width: WorldWidth, height: WorldHeight);
-
-        // Vulkan reference: the host device + the host's neutral compute services, SPIR-V kernels.
-        byte[] vulkanPixels;
-
-        using (var vulkanRenderer = new SdfWorldEngine(
-            device: context.RequireGpuDevice(),
-            gpu: context.Resolve<IGpuComputeServices>(),
-            height: WorldHeight,
-            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
-            options: new SdfWorldEngineOptions(Program: program),
-            width: WorldWidth
-        )) {
-            vulkanPixels = vulkanRenderer.RenderFrame(frame: frame);
-        }
-
-        // Direct3D 12 comparand: the SHARED Tier-C device + its neutral compute services, DXIL kernels.
-        var directX = context.RequireDirectXDevice();
-        var directXPixels = WorldStage.RenderDirectXDiagnosed(directX: directX, render: () => {
-            using var directXRenderer = new SdfWorldEngine(
-                device: directX.DeviceContext,
-                gpu: directX.Services.GetRequiredService<IGpuComputeServices>(),
-                height: WorldHeight,
-                kernels: SdfWorldKernels.Load(bytecodeExtension: ".dxil"),
-                options: new SdfWorldEngineOptions(Program: program),
-                width: WorldWidth
-            );
-
-            return directXRenderer.RenderFrame(frame: frame);
-        });
-
-        _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-warp-diff.png");
-
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-warp-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-warp-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
-        ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
-
-        var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
-        var failures = ParityThresholds.WorldLsbExact.Evaluate(metrics: metrics);
-
-        if (failures.Count != 0) {
-            return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
-        }
-
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} twist/bend/elongate warps + onion/dilate field ops + xor/smooth blends | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldLsbExact thresholds | {ParityCheck.Describe(metrics: metrics)}");
+        // The warps put sin/cos into the differential path and are not isometries, so the diff judges under
+        // WorldLsbExact — the every-delta-exactly-±1 signature that survives codegen redistribution.
+        return WorldStage.RunSceneParity(
+            context: context,
+            prefix: "world-warp",
+            program: BuildWarpScene(),
+            thresholds: ParityThresholds.WorldLsbExact,
+            passLabel: $"{WorldWidth}x{WorldHeight} twist/bend/elongate warps + onion field ops + xor/smooth blends | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldLsbExact thresholds"
+        );
     }
 }

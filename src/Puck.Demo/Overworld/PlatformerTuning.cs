@@ -13,7 +13,7 @@ namespace Puck.Demo.Overworld;
 public sealed record PlatformerTuning {
     /// <summary>Top horizontal run speed (units/second).</summary>
     public FixedQ4816 RunSpeed { get; init; } = FixedQ4816.FromDouble(value: 8d);
-    /// <summary>The Mario hold-to-run: while the intent's run button is held, the horizontal speed target is
+    /// <summary>The hold-to-run: while the intent's run button is held, the horizontal speed target is
     /// <see cref="RunSpeed"/> times this. 1 disables sprinting.</summary>
     public FixedQ4816 SprintMultiplier { get; init; } = FixedQ4816.FromDouble(value: 1.6d);
     /// <summary>Horizontal acceleration toward the target while grounded (units/second²). High = HK-instant.</summary>

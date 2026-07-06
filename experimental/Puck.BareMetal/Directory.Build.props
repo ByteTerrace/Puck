@@ -6,7 +6,8 @@
         This file exists to STOP MSBuild's upward Directory.Build.props discovery at this folder,
         so the freestanding companion does not inherit the engine's build context from the repo
         root. Puck.BareMetal ships under the repository's license (see LICENSE and NOTICE.md);
-        vendored third-party components keep their own permissive licenses (NOTICE.md).
+        vendored third-party components keep their own licenses — non-copyleft, mostly permissive,
+        plus AMD's redistributable proprietary firmware blob (NOTICE.md).
 
         Settings here are intentionally minimal and suited to the freestanding (no-BCL,
         not-nullable-annotated) source compiled against Puck.Runtime.

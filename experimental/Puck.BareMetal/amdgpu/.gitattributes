@@ -1,0 +1,3 @@
+# AMD firmware blobs are PSP-signed: any byte change (incl. CRLF/LF conversion) makes the PSP reject
+# them. Force binary handling so checkout on any machine yields byte-exact files.
+*.bin binary

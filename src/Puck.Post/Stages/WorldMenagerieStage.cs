@@ -1,8 +1,5 @@
-using Puck.Capture;
 using System.Numerics;
 using System.Runtime.Versioning;
-using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 
 namespace Puck.Post;
@@ -75,55 +72,14 @@ internal sealed class WorldMenagerieStage : IPostStage {
 
     [SupportedOSPlatform("windows10.0.10240")]
     private static PostStageOutcome RunCore(PostContext context) {
-        var program = BuildMenagerieScene();
-        var frame = WorldStage.BuildHeroFrame(program: program, width: WorldWidth, height: WorldHeight);
-
-        // Vulkan reference: the host device + the host's neutral compute services, SPIR-V kernels.
-        byte[] vulkanPixels;
-
-        using (var vulkanRenderer = new SdfWorldEngine(
-            device: context.RequireGpuDevice(),
-            gpu: context.Resolve<IGpuComputeServices>(),
-            height: WorldHeight,
-            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
-            options: new SdfWorldEngineOptions(Program: program),
-            width: WorldWidth
-        )) {
-            vulkanPixels = vulkanRenderer.RenderFrame(frame: frame);
-        }
-
-        // Direct3D 12 comparand: the SHARED Tier-C device + its neutral compute services, DXIL kernels.
-        var directX = context.RequireDirectXDevice();
-        var directXPixels = WorldStage.RenderDirectXDiagnosed(directX: directX, render: () => {
-            using var directXRenderer = new SdfWorldEngine(
-                device: directX.DeviceContext,
-                gpu: directX.Services.GetRequiredService<IGpuComputeServices>(),
-                height: WorldHeight,
-                kernels: SdfWorldKernels.Load(bytecodeExtension: ".dxil"),
-                options: new SdfWorldEngineOptions(Program: program),
-                width: WorldWidth
-            );
-
-            return directXRenderer.RenderFrame(frame: frame);
-        });
-
-        _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-menagerie-diff.png");
-
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-menagerie-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-menagerie-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
-        ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
-
         // WorldHighContrast, not WorldComposite: the emissive pair's brightness step makes benign boundary-winner
         // flips (isolated, multi-LSB) part of this scene's signature — see the threshold set's doc.
-        var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
-        var failures = ParityThresholds.WorldHighContrast.Evaluate(metrics: metrics);
-
-        if (failures.Count != 0) {
-            return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
-        }
-
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} capsule/cylinder/ellipsoid menagerie + emissive/specular materials | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldHighContrast thresholds | {ParityCheck.Describe(metrics: metrics)}");
+        return WorldStage.RunSceneParity(
+            context: context,
+            prefix: "world-menagerie",
+            program: BuildMenagerieScene(),
+            thresholds: ParityThresholds.WorldHighContrast,
+            passLabel: $"{WorldWidth}x{WorldHeight} capsule/cylinder/ellipsoid menagerie + emissive/specular materials | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldHighContrast thresholds"
+        );
     }
 }

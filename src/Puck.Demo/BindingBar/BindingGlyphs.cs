@@ -69,6 +69,22 @@ internal enum BindingIconId : ushort {
     CreatorDelete = 23,
     /// <summary>Exit creator mode (a leftward return arrow).</summary>
     CreatorExit = 24,
+    /// <summary>Duplicate the selected shape (two offset squares).</summary>
+    CreatorDuplicate = 25,
+    /// <summary>Link two selected shapes into a composition group (two interlocked rings).</summary>
+    CreatorLink = 26,
+    /// <summary>Cycle the target's material (a paint drop).</summary>
+    CreatorMaterial = 27,
+    /// <summary>Cycle the target's blend op (a two-circle boolean venn).</summary>
+    CreatorOpCycle = 28,
+    /// <summary>Toggle the bake style knob (a half-filled circle).</summary>
+    CreatorStyle = 29,
+    /// <summary>Clear the selection (a slashed circle).</summary>
+    CreatorDeselect = 30,
+    /// <summary>Record the current pose into the timeline frame (a filled dot).</summary>
+    CreatorRecord = 31,
+    /// <summary>Play/stop the frame loop (a play triangle).</summary>
+    CreatorPlay = 32,
 
     /// <summary>Ids at or above this select a texture-atlas tile instead of a procedural function.</summary>
     AtlasBase = 1024,

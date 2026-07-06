@@ -1,9 +1,7 @@
 # ByteTerrace.Puck Community Guidelines
 
-> **Draft — for review.** These are the community/content rules referenced by
-> [`PLATFORM-TERMS.md`](PLATFORM-TERMS.md) Section 10. They are written for a creative space that
-> includes children. Have your attorney confirm them alongside the Platform Terms and Privacy
-> Policy, and adapt the reporting/enforcement mechanics to what the hub actually supports.
+> These are the community and content rules referenced by
+> [`PLATFORM-TERMS.md`](PLATFORM-TERMS.md) Section 10, and they are part of those Terms.
 
 ByteTerrace.Puck is meant to be a friendly, creative place where people — including kids and students —
 build and share avatars, stages, and worlds. These rules keep it that way. They apply to
@@ -40,13 +38,13 @@ Because young people use ByteTerrace.Puck, we take safety seriously and have **z
 - **Sharing someone's private information** (doxxing).
 
 Suspected child-safety violations are escalated immediately and, where required by law, reported
-to the appropriate authorities (e.g., NCMEC in the US). *(Placeholder — confirm reporting
-obligations and process with your attorney.)*
+to the appropriate authorities, including the National Center for Missing & Exploited Children
+(NCMEC) in the United States.
 
 ## Reporting and enforcement
 
-- **Report** anything that breaks these rules: *(placeholder — add the in-hub report button / a
-  contact such as administrator@byteterrace.com).*
+- **Report** anything that breaks these rules using the in-hub report control, or by emailing
+  **administrator@byteterrace.com**.
 - We may **remove content, issue warnings, or suspend or ban accounts** for violations, at our
   discretion, as described in [Platform Terms](PLATFORM-TERMS.md) Section 12.
 - Serious violations (especially child-safety ones) can result in an immediate, permanent ban and

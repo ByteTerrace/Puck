@@ -21,8 +21,8 @@ work here without re-learning hard-won lessons*.
   treating existing code as precedent. Backend bindings are stable; parts of
   the `Puck.Abstractions` GPU seam have a queued rename/reshape backlog; the
   Commands legacy-vs-snapshot duality is an open decision.
-- The old monolith is gone: `src/Puck` / `src/Puck.Avatars` were deleted;
-  they exist only in git history. Never resurrect references to them.
+- All functionality lives in the split `Puck.*` projects; there is no
+  `src/Puck` / `src/Puck.Avatars` monolith. Never add references to those paths.
 
 ## How to verify anything
 
@@ -60,24 +60,24 @@ present cadence, device-lost, backend hot-switch — D3/D4 relaunch the exe as
   resolver).
 - Suspect a backend divergence → the differential fuzzer: Post `--filter fuzz`
   (or `--stage fuzz --fuzz-seed N` for one seed), or a run document with a
-  `fuzzing` section ([examples/fuzz-sweep.json](examples/fuzz-sweep.json)).
+  `fuzzing` section.
   The standing bar: backends bit-equivalent modulo ±1 LSB.
-- Live hardware peripherals (a real webcam) are proven by running the four-quad
-  document ([examples/four-quad.json](examples/four-quad.json)) — its camera
-  pane opens the default device on the GPU zero-copy tier; the share path
-  itself is Post C6.
+- Live hardware peripherals (a real webcam) are proven by cycling an overworld
+  cabinet to the camera cart type — it opens the default device on the GPU
+  zero-copy tier; the share path itself is Post C6.
 - The overworld (the default `Puck.Demo` run — see
-  [overworld-demo-plan.md](overworld-demo-plan.md); since 2026-07-04 the demo's
-  other faces are `--run <document>`, which runs `world` documents live
-  through the shared renderer on the host backend, and `--rom <path>`, which
-  synthesizes a fullscreen one-machine world document) keeps exactly one
-  demo-resident gate, `--validate-overworld` (pure-CPU determinism + replay
-  self-check), because
-  Puck.Post cannot reference the demo. Everything else that used to be a demo
-  `--validate-*` flag — engine determinism/replay, the paged binding-profile
-  resolver, cross-backend world parity — now lives in the Puck.Post battery
-  above. The overworld's staged boot layouts are captured headlessly with
-  `PUCK_OVERWORLD_DEBUG_BOOT` + `PUCK_CAPTURE_FRAME` (env table below). Whole-app
+  [overworld-demo-plan.md](overworld-demo-plan.md); the demo's other faces are
+  `--run <document>`, which runs `world` documents live through the shared
+  renderer on the host backend, and `--rom <path>`, which synthesizes a
+  fullscreen one-machine world document) is GREENFIELD — verify demo work by
+  RUNNING it, not by a gate. It keeps exactly one OPTIONAL demo-resident
+  self-check, `--validate-overworld` (pure-CPU determinism + replay), which you
+  may run by hand (Puck.Post can't reference the demo). Only genuine ENGINE
+  contracts — determinism/replay, the paged binding-profile resolver, and
+  cross-backend world parity — live in the Puck.Post battery above; a demo
+  feature is not promoted there unless the user explicitly asks (see the
+  anti-calcification doctrine, rule 5). The overworld's staged boot layouts are captured headlessly with
+  `PUCK_OVERWORLD_DEBUG_BOOT` + `PUCK_OVERWORLD_CAPTURE_FRAME` (env table below). Whole-app
   capture PNGs are only MARGINALLY stable across runs (tick allocation sits
   near a wall-clock boundary) — the pixel proof style is pane-vs-pane bit-lock
   WITHIN one capture, never cross-run file equality.
@@ -88,8 +88,12 @@ present cadence, device-lost, backend hot-switch — D3/D4 relaunch the exe as
   `--trace-cycles`, `--iodump`, …) live in the same Post exe — see its
   [README](../experimental/Puck.AdvancedGamingBrick.Post/README.md).
 
-**Don't hand-roll a new `--validate-*` flag in the demo.** That pattern was
-deliberately retired into Puck.Post stages (2026-07); add a stage instead.
+**The Demo is greenfield — don't gate it.** A change under `src/Puck.Demo/`
+(overworld, cabinets, forge ROMs, creator mode, presentation, layout) is
+verified by RUNNING the demo, not by a gate: don't add a `--validate-*` flag,
+and don't add a Post stage for a demo feature unless the user explicitly asks.
+Post is for the shared engine contract; promoting a demo-born feature into it is
+the user's call, not yours. See the anti-calcification doctrine (rule 5) below.
 
 ## Analyzing C# code: compiler and Roslyn before grep
 
@@ -128,15 +132,22 @@ Batteries skip-with-note when they're absent.
 | `PUCK_GENLOCK=0` | Disable the genlock phase-align control law (document: `host.genlock`) |
 | `PUCK_PRESENT_TIMING` | Log measured present intervals |
 | `PUCK_D3D12_DEBUG` | Opt-in D3D12 GPU validation layer — **see gotcha below** |
-| `PUCK_PARITY_STRICT=1` | Opt into the STRICT pixel-perfect parity calibrations (the long-term ideal). The default posture is RELAXED (user decision 2026-07-03): cross-backend gates keep only the mean/spread guards a real divergence cannot dodge and shrug at FP-noise classes (±1 redistribution, boundary-winner flips), which re-roll with every shader-codegen change. Both `ParityThresholds` copies (Demo + Post) honor it |
-| `PUCK_CAPTURE_FRAME=N` | Delay the one-shot `--capture` to the Nth produced frame (grab a post-transition frame). Frames accrue ≈25–40/s of wall time on an overworld run (startup + emulators) — keep N ≲ 200 and give `--exit-after-seconds` headroom |
+| `PUCK_PARITY_STRICT=1` | Opt into the STRICT pixel-perfect parity calibrations (the long-term ideal). The default posture is RELAXED: cross-backend gates keep only the mean/spread guards a real divergence cannot dodge and shrug at FP-noise classes (±1 redistribution, boundary-winner flips), which re-roll with every shader-codegen change. Both `ParityThresholds` copies (Demo + Post) honor it |
+| `PUCK_CAPTURE_FRAME=N` | Delay the one-shot `--capture` to the Nth produced frame on a `world`-document run (the engine node's capture; overworld runs use their own variable below) |
+| `PUCK_OVERWORLD_CAPTURE_FRAME=N` | Overworld runs: delay the one-shot `--capture` to the Nth produced frame — the plain `--capture` grabs frame 0 (black, pre-boot). Frames accrue ≈25–40/s of wall time (startup + emulators) — keep N ≲ 200 and give `--exit-after-seconds` headroom. **The deterministic-screenshot recipe**: this + `--capture <png>` (+ `PUCK_CREATOR_LOAD` for creator scenes) |
 | `PUCK_OVERWORLD_DEBUG_BOOT=t0,t1,t2` | Boot overworld console 0,1,2… at those sim ticks (240 ticks/s) — walks every layout stage headlessly for captures |
 | `PUCK_OVERWORLD_DEBUG_PLAYERS=N` | Bare-room overworld only: spawn N scripted players that walk apart (split-screen capture without controllers) |
 | `PUCK_OVERWORLD_CELL=N` | Place the overworld room at a far world cell (planet-scale coordinate demo) |
+| `PUCK_OVERWORLD_CREATOR=1` | Enter creator mode at startup (headless authoring screenshots). **The 3D-capture recipe**: the demo BOOTS SEATED INSIDE A BRICK GAME, so a naive `--capture` photographs the fullscreen brick pane — set this on EVERY capture run that wants the SDF room; companions and the workbench subject both render in that view |
+| `PUCK_CREATOR_LOAD=<name-or-path>` | Load a saved creation (a `./creations/*.creation.json` name or a file path) and enter creator mode at startup — the headless proof hook for creator scenes |
+| `PUCK_COMPANION_LOAD=<names>` | Spawn comma-separated saved creations as wandering room companions at boot (resolves CAS refs, then `./creations/`) — the headless companion-capture hook |
+| `PUCK_WORLD_ROUNDTRIP=1` | Boot-time bit-for-bit proof for the world sculptor: save the live world (through the walk-grid bake), reload from disk, byte-compare — prints `[world-roundtrip] MATCH/MISMATCH` to stderr. Never a gate |
+| `PUCK_LINK_CABLE_PROBE=1` | Fake a linked cabinet pair (0,1) so the diegetic link cable renders headlessly — presentation-debug only |
+| `PUCK_FLAGSHIPS_REGENERATE=1` | Turn `--forge-flagships` into the content-UPDATE mode: rewrite `docs/examples/creations/*.creation.json` from the recipes (the add-a-field ritual for creation-schema evolutions). Default mode stays the loud byte-identical assertion |
 
 ## Hardware gotchas (hard-won; verify before "fixing")
 
-These were all diagnosed on real hardware. If a symptom pattern-matches one of
+Each of these is a real-hardware finding. If a symptom pattern-matches one of
 these, the listed conclusion is settled — don't re-litigate it.
 
 - **D3D12 debug layer breaks device creation** on this Win11 26200 / RTX 4070
@@ -152,7 +163,7 @@ these, the listed conclusion is settled — don't re-litigate it.
   wedges and `vkCreateInstance` fails forever until a new process. A TDR
   (Win+Ctrl+Shift+B) is absorbed fine. Don't chase "recovery" past that line.
 - **Camera zero-copy is DXVA→ARGB32**, D3D12 simultaneous-access targets
-  written via RTV (not UAV). The NV12/ycbcr path was tried and killed.
+  written via RTV (not UAV). The NV12/ycbcr path does not work here.
 - **Steam Deck bare metal**: no serial — GOP is the only console; the
   framebuffer must be mapped **write-combining** and the global `wbinvd`
   removed (AMD DCN doesn't snoop CPU cache). Deck reports no-x2APIC and
@@ -167,10 +178,9 @@ these, the listed conclusion is settled — don't re-litigate it.
 
 ## Anti-calcification doctrine
 
-This project once had extensive skills and unit tests. They were nuked
-deliberately: they pinned internal structure, and agents defended the
-artifacts against demanded refactors. These rules exist so that never
-happens again.
+Extensive skills and unit tests that pin internal structure lead agents to
+defend the artifacts against demanded refactors. These rules exist to keep
+that from happening.
 
 1. **Precedence.** The user's current instruction outranks everything
    written: this guide, CLAUDE.md, skills, gates, code comments, and
@@ -178,8 +188,9 @@ happens again.
    the user is demanding, the artifact is stale by definition — **update it
    in the same change**. Never soften, defer, or revert the demanded change
    to keep an artifact green or self-consistent.
-2. **Gates assert contracts, not shapes.** Validation lives in the POST
-   batteries, and a stage may assert only *observable outcomes*: pixel/frame
+2. **Gates assert contracts, not shapes.** Engine validation lives in the POST
+   batteries (the greenfield Demo is exempt — rule 5), and a stage may assert
+   only *observable outcomes*: pixel/frame
    hashes, cross-backend parity, determinism/replay identity, exit codes,
    measured budgets. No mocks of internal interfaces, no call-sequence
    assertions, no tests that break when a type is renamed but behavior is
@@ -192,24 +203,46 @@ happens again.
    Every skill must state what it does *not* govern and include the
    precedence clause from rule 1. If a skill ever makes you resist a
    requested change, that is the signal it has gone stale: say so and fix
-   the skill. The roster (`.claude/skills/`) is five project skills:
+   the skill. The roster (`.claude/skills/`) is six project skills:
    `verifying-puck-changes` (which gate proves what),
    `gaming-bricks` (the emulators' settled contract facts),
    `roslyn-first-analysis` (semantic C# analysis over grep),
    `sdf-world` (the SDF VM + world renderer + render-assembly contract
-   pairs; added 2026-07-04), and
-   `run-document` (the document doctrine + the add-a-field ritual; added
-   2026-07-04) — plus the general `dotnet10-performance` fact pack.
+   pairs),
+   `run-document` (the document doctrine + the add-a-field ritual), and
+   `rom-forge` (the forge's settled facts: the SM83 game framework, the
+   SDF→brick bake pipeline, Brickfall) — plus the
+   general `dotnet10-performance` fact pack.
 4. **Stability tiers gate friction, not change.** The
    [tiers in project-map.md](project-map.md#stability) tell you how much
    evidence a reshape deserves — *stable* means "bring a reason," never
    "refuse." Nothing in this repo is change-proof.
+5. **The Demo is greenfield — never gate it, never promote it.** `Puck.Demo`
+   (the overworld + everything under `src/Puck.Demo/`) is the playground:
+   expected to churn and be rewritten, never settled precedent. Demo changes
+   are NOT engine changes — verify them by RUNNING the demo
+   (`dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 2`;
+   0 or less runs until the window is closed),
+   not with Post, a `--validate-*` flag, a hash, or a `*DeterminismNode` hook.
+   **Never move a demo-born feature into Post on your own initiative** — a Post
+   stage/gate for a demo feature is the user's explicit call. Post (rule 2)
+   gates the shared engine contract only — the cross-backend render path, the
+   SDF VM ISA, the run-document schema, the deterministic numerics/backends;
+   when a demo change also touches one of those, gate only that engine part.
+   This rule exists because demo work kept getting gated and demo features kept
+   landing in Post unasked — the exact calcification these rules forbid.
 
 ## Conventions
 
 - **Comments/docs describe the code as it is**, not the change history.
 - **Derive, don't hardcode** (descriptor counts, pool sizes, strides come from
   the data that defines them).
+- **Coupling ceilings are guardrails** — CA1506/CA1502 run as errors and
+  actively guard `OverworldRenderNode`, `EnsureResources`, `Program`'s Main,
+  and the command modules' `GetCommands`. Compose new demo subsystems INSIDE
+  `OverworldFrameSource` behind primitive-typed forwarder members, extract
+  helpers, and split registration iterators into sub-iterators — never raise
+  the limits.
 - **.NET 10 everywhere**; consult the `dotnet10-performance` skill
   (`.claude/skills/`) before micro-optimizing or asserting "X is slow".
 - **Merges**: feature branches land on `main` as a single squash commit with a
@@ -218,23 +251,25 @@ happens again.
 - **Determinism is a feature**: no wall-clock, RNG, or floats in gameplay
   state; input becomes per-tick `CommandSnapshot`s; fixed-point math comes
   from `Puck.Maths`. If your change can break replay, Post A3 (engine
-  determinism/replay) is your gate — that check moved off the demo's
-  `--validate-determinism` flag when it was retired into Puck.Post.
+  determinism/replay) is your gate.
 
-## Docs taxonomy — living vs. historical
+## Docs taxonomy — everything in docs/ is LIVING
 
-`docs/` mixes living references with completed design records. The index at
-[docs/README.md](README.md) classifies every file; the short version:
+`docs/` carries only living references and active plans — trust every file
+there; the index at [docs/README.md](README.md) lists them. Completed
+design/investigation write-ups are NOT kept in the tree: they live in git
+history only, with their durable knowledge distilled into a living home first
+(the skills carry the settled contract facts — e.g. the GB PPU mid-mode-3
+root cause lives in `gaming-bricks`). When a living doc stops being true,
+fix it or retire it the same way — distill, then delete.
 
-- **Living**: capability-catalog, project-map, agent-guide (this file),
-  feature-parity-summary/table, platform-display-kinds,
-  `examples/`, plus the per-project READMEs (`Puck.Input`, `Puck.BareMetal`,
+- **Living references**: capability-catalog, project-map, agent-guide (this
+  file), feature-parity-summary/table, platform-display-kinds, `examples/`,
+  plus the per-project READMEs (`Puck.Input`, `Puck.Demo`,
+  `Puck.Demo/Forge/Framework`, `Puck.Demo/Forge/Bake`, `Puck.BareMetal`,
   `AdvancedGamingBrick.Post`, …).
-- **Historical records** (accurate when written, paths may be stale):
-  avatar-vm, debug-visualization (the design reference for a future
-  split-engine debug layer), soa-instruction-stream-scope,
-  gb-cycle-accuracy-scorecard, gb-ppu-accuracy-findings.
 - **Active plans**: overworld-demo-plan (the demo's plan of record),
-  sdf-world-render-centralization-plan (phases 1–4 landed; status block up
-  top), machine-fleet-plan + machine-fleet-briefing (fleet performance),
+  game-studio-plan (the in-engine studio's road ahead),
+  sdf-world-render-centralization-plan (status block up top),
+  machine-fleet-plan + machine-fleet-briefing (fleet performance),
   ideal-gaming-brick-plan (the GB/GBC/GBA north star).

@@ -44,14 +44,9 @@ var emitSchemaOption = new Option<string?>(name: "--emit-schema") {
     DefaultValueFactory = static _ => null,
     Description = "Headless utility: write the run-document JSON Schema to the given path and exit (no window).",
 };
-var forgeOption = new Option<string?>(name: "--forge") {
-    DefaultValueFactory = static _ => null,
-    Description = "Headless tool: FORGE a Humble GamingBrick ROM from SDF-authored art — render a mini overworld scene, crush it to GBC tiles + CGB palettes, and write a real .gbc (plus a preview PNG) to the given path, then exit. Boot the result with --rom.",
-};
-var forgeCameraOption = new Option<string?>(name: "--forge-camera") {
-    DefaultValueFactory = static _ => null,
-    Description = "Headless tool: forge a POCKET CAMERA .gbc (a real ROM that drives the authentic M64282FP protocol — program registers, trigger, poll busy, blit the captured image) and self-verify it against the deterministic gradient sensor, writing an <out>.emulated.png. Boot it with --rom to run the webcam viewfinder.",
-};
+// The forge tool-mode options + dispatch live in Puck.Demo.Forge.ForgeCliSeams — Main is at its class-coupling
+// and maintainability ceilings, so the forge surface pays one property reference per option here and one await
+// below, nothing more.
 var presentModeOption = new Option<string>(name: "--present-mode") {
     DefaultValueFactory = static _ => "vsync",
     Description = "The swapchain present mode (both backends honor it): vsync (default), mailbox, immediate, or adaptive (VRR).",
@@ -66,8 +61,22 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     captureOption,
     emitSchemaOption,
     exitAfterSecondsOption,
-    forgeOption,
-    forgeCameraOption,
+    Puck.Demo.Forge.ForgeCliSeams.ForgeOption,
+    Puck.Demo.Forge.ForgeCliSeams.AvatarOption,
+    Puck.Demo.Forge.ForgeCliSeams.AvatarFromOption,
+    Puck.Demo.Forge.ForgeCliSeams.AvatarMovementModeOption,
+    Puck.Demo.Forge.ForgeCliSeams.FlagshipsOption,
+    Puck.Demo.Forge.ForgeCliSeams.BakeOption,
+    Puck.Demo.Forge.ForgeCliSeams.BakeCalibrationOption,
+    Puck.Demo.Forge.ForgeCliSeams.BakeStressOption,
+    Puck.Demo.Forge.ForgeCliSeams.CameraOption,
+    Puck.Demo.Forge.ForgeCliSeams.VolleyOption,
+    Puck.Demo.Forge.ForgeCliSeams.BrickfallOption,
+    Puck.Demo.Forge.ForgeCliSeams.ChromaOption,
+    Puck.Demo.Forge.ForgeCliSeams.SolitaireOption,
+    Puck.Demo.Forge.ForgeCliSeams.PokerOption,
+    Puck.Demo.Forge.ForgeCliSeams.TuneOption,
+    Puck.Demo.Forge.ForgeCliSeams.TuneFromOption,
     presentModeOption,
     romExitOption,
     romOption,
@@ -87,17 +96,11 @@ var emitSchemaPath = parseResult.GetValue(emitSchemaOption);
 if (emitSchemaPath is not null) {
     return DemoRootNode.EmitSchema(path: emitSchemaPath);
 }
-// The ROM forge needs the GPU (it renders SDF scenes), so — unlike the schema emitter — it cannot early-return before a
-// host exists; it builds its own trimmed Vulkan host and forges on the first frame. Still a tool mode: emit and exit.
-var forgePath = parseResult.GetValue(forgeOption);
-if (forgePath is not null) {
-    return await Puck.Demo.Forge.RomForge.RunAsync(outputPath: forgePath, args: args);
-}
-// The Pocket Camera forge: a real cartridge that drives the authentic M64282FP protocol. No GPU needed — the pixels
-// come from the sensor at run time — so it builds, self-verifies against the gradient sensor, and exits.
-var forgeCameraPath = parseResult.GetValue(forgeCameraOption);
-if (forgeCameraPath is not null) {
-    return await Puck.Demo.Forge.RomForge.RunCameraAsync(outputPath: forgeCameraPath);
+// Every forge tool mode (SDF art, camera, the framework games, tunes, bakes, avatars, flagships) dispatches
+// through ForgeCliSeams — one nullable call, with the whole option surface and RomForge coupling housed there
+// (Main is at its class-coupling and maintainability ceilings).
+if (await Puck.Demo.Forge.ForgeCliSeams.TryRunAsync(args: args, parseResult: parseResult) is { } forgeSeamExit) {
+    return forgeSeamExit;
 }
 var backend = parseResult.GetValue(backendOption) ?? "vulkan";
 var capturePath = parseResult.GetValue(captureOption);
@@ -174,6 +177,10 @@ if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
 services.AddBackendSwitcher(preferredBackend: (startWithDirectX ? "directx" : "vulkan"));
 var parityResult = DemoRootNode.RegisterRunDocument(capturePath: capturePath, document: runDocument, height: hostSettings.Height, hostsOnDirectX: startWithDirectX, services: services, width: hostSettings.Width);
 services.AddSingleton<ICommandModule, DemoCommandModule>();
+services.AddSingleton<ICommandModule, Puck.Demo.Creator.CreatorCommandModule>();
+services.AddSingleton<ICommandModule, Puck.Demo.Tracker.TrackerCommandModule>();
+services.AddSingleton<ICommandModule, Puck.Demo.World.WorldCommandModule>();
+services.AddSingleton<ICommandModule, Puck.Demo.Creator.CompanionCommandModule>();
 services.AddSingleton<ICommandObserver, DemoCommandObserver>();
 // The on-screen developer console's state store: DemoConsole publishes to it, the overworld's console overlay renders it.
 services.AddSingleton<Puck.Demo.DevConsole.ConsoleTextStore>();

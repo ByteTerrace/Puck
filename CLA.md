@@ -1,11 +1,7 @@
 # ByteTerrace.Puck Contributor License Agreement
 
-> **Draft — for attorney review.** This document follows common industry practice for a
-> dual-licensed project that accepts contributions from students and from players who may
-> be minors. It is **not legal advice** and is **not yet in force**. The minor-consent,
-> COPPA/GDPR-K, governing-law, and enforceability provisions in particular must be reviewed
-> and finalized by ByteTerrace's attorney before this CLA is used. See
-> [Notes for the attorney](#notes-for-the-attorney) at the end.
+> This page is a plain-language summary followed by the binding agreement. Where the two differ,
+> the Agreement controls.
 
 ---
 
@@ -129,8 +125,7 @@ This Section is a required condition of any Contribution.
    from 13 to 16), a Parent or Guardian must be the party who agrees to this Agreement and
    provides consent. ByteTerrace will limit the personal information it collects in connection
    with the Contribution to what is necessary to administer this Agreement, and will handle it
-   in accordance with the ByteTerrace.Puck [Privacy Policy](PRIVACY.md) (whose verifiable-parental-consent
-   mechanism is still being built out — see its attorney notes).
+   in accordance with the ByteTerrace.Puck [Privacy Policy](PRIVACY.md).
 
 4. **Verification.** ByteTerrace may decline or remove any Contribution if it cannot reasonably
    confirm the required age and consent, and may request reasonable verification of a Parent or
@@ -147,9 +142,8 @@ You agree to notify ByteTerrace if any representation in this Agreement becomes 
 
 ### 9. Miscellaneous
 
-- **Governing law.** This Agreement is governed by the laws of *[STATE / COUNTRY — to be set
-  by attorney, typically ByteTerrace's home jurisdiction]*, without regard to conflict-of-laws
-  rules.
+- **Governing law.** This Agreement is governed by the laws of the State of Delaware, United
+  States, without regard to its conflict-of-laws rules.
 - **Entire agreement; severability.** This Agreement is the entire agreement about its subject
   matter. If any provision is unenforceable, the rest remains in effect, and the unenforceable
   provision is limited to the minimum extent necessary.
@@ -159,12 +153,12 @@ You agree to notify ByteTerrace if any representation in this Agreement becomes 
 
 ## How to agree
 
-*(Operational — to be wired up after attorney sign-off.)*
+Agreement is recorded before a first contribution is merged or accepted:
 
-- **Code / asset contributions (GitHub):** a CLA bot (e.g., **CLA Assistant**) records
-  agreement on each pull request. The pull-request author confirms the statements below. For a
-  Minor, the bot must collect a Parent or Guardian's separate confirmation (e.g., via a
-  guardian email confirmation step) before the contribution is mergeable.
+- **Code / asset contributions (GitHub):** a CLA bot (**CLA Assistant**) records agreement on
+  each pull request. The pull-request author confirms the statements below. For a Minor, the bot
+  collects a Parent or Guardian's separate confirmation (via a guardian email confirmation step)
+  before the contribution is mergeable.
 - **In-app / in-game content:** agreement (and, for Minors, verifiable parental consent) should
   be captured at the point of submission or at account setup, with these CLA terms incorporated
   by reference.
@@ -183,30 +177,3 @@ You agree to notify ByteTerrace if any representation in this Agreement becomes 
 > I make the grants and representations in it as set out in Section 6.
 
 > Parent / Guardian name: ____________________  Relationship: __________  Date: __________
-
----
-
-## Notes for the attorney
-
-These are the points this draft deliberately flags for your review:
-
-1. **Minor disaffirmance.** A minor can generally disaffirm a contract during minority and for
-   a reasonable time after reaching majority, which threatens the durability of the license for
-   a commercially-distributed product. The draft relies on a **Parent/Guardian grant and
-   non-disaffirmance covenant** (Section 6.2) as the backstop. Please confirm this is sufficient
-   in the chosen jurisdiction, or advise whether to additionally require ratification at
-   majority, or to bar contributions from minors entirely.
-2. **COPPA (US, under 13).** Collecting a child's name/email is regulated personal information.
-   The draft routes under-13 consent through a Parent/Guardian and minimizes data (Section 6.3),
-   but a **Privacy Policy and a verifiable-parental-consent mechanism** are still required and
-   are not yet built. This is especially relevant if children submit content **in-game**.
-3. **GDPR-K / age of digital consent (EU, 13–16 by country).** Same consent issue for EU
-   contributors; the draft references it but the operational flow needs definition.
-4. **License vs. assignment.** The draft uses a broad **license with an explicit right to
-   relicense/sublicense under any terms** (Section 2), modeled on the Apache ICLA plus the
-   relicensing grant that dual-licensed projects need. Confirm this is broad enough for the
-   paid commercial tier, or advise if you prefer full copyright assignment.
-5. **Two contribution channels.** "Contribution" is defined to cover both GitHub PRs **and
-   in-app/in-game user-generated content** (avatars, stages, etc.). Confirm you want UGC inside
-   the CLA's scope, or whether in-game UGC should have its own terms incorporated at submission.
-6. **Governing law / venue** (Section 9) and the **contracting entity** (ByteTerrace) are placeholders to set.

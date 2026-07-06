@@ -267,7 +267,7 @@ public sealed record WallpaperFoldOp : TransformOp {
         }
 
         // Quarter-turns about the cell corners (P4*) and the equilateral hex lattice (P3 and up) are only isometries
-        // on SQUARE cells — the ported host rule; the lattice shape is not a free parameter for those groups.
+        // on SQUARE cells; the lattice shape is not a free parameter for those groups.
         if (
             Enum.IsDefined(value: Group) &&
             (Group >= SdfWallpaperGroup.P4) &&

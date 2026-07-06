@@ -7,10 +7,9 @@ namespace Puck.Post;
 /// runtime, asserts the active backend actually changed, RE-TARGETS its content (releases the Vulkan resources —
 /// safe, because a deactivated backend's device survives its presenter — and rebuilds the same fill on the presenter's
 /// Direct3D 12 device), keeps presenting real frames there, and proves the post-switch content by a Direct3D 12-side
-/// readback. This is the full seam the POST originally found broken (2026-07-01: the swap crashed after any real
-/// present, because the Vulkan presenter's Deactivate destroyed the device under the node's resources — fixed
-/// 2026-07-02 by keeping the device alive for the renderer singleton's own disposal). Requires the second presenter,
-/// so non-Windows skips.
+/// readback. This exercises the full backend-switch seam and guards the invariant that a live switch survives any
+/// real present: the Vulkan presenter's Deactivate must NOT destroy the device under the node's resources — the
+/// device stays alive for the renderer singleton's own disposal. Requires the second presenter, so non-Windows skips.
 /// </summary>
 internal sealed class HotSwitchStage : IPostStage {
     /// <inheritdoc/>

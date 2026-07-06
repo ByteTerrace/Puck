@@ -35,9 +35,11 @@
 // format [<root=src>] [-WhatIf] [-Verify]
 //        [-Only attr-order,member-spacing,member-order,null-pattern,paren-clarity,logical-lines,
 //               arg-lines,ternary-lines,init-order,trailing-comma,decl-spacing,literal-var,named-args]
-//   Source rewriters for conventions .editorconfig cannot express. The bare command runs the
-//   semantics-preserving normalizers (attr-order, member-spacing, member-order, null-pattern,
-//   paren-clarity, init-order, trailing-comma, decl-spacing, literal-var, named-args); the
+//   Source rewriters for conventions .editorconfig cannot express. Phase 0 always runs
+//   `dotnet format whitespace` per project first (the .editorconfig baseline this layers onto),
+//   then the bare command runs the semantics-preserving normalizers (attr-order, member-spacing,
+//   member-order, null-pattern, paren-clarity, init-order, trailing-comma, decl-spacing, literal-var,
+//   named-args); the
 //   vertical line-wrappers (arg-lines, logical-lines, ternary-lines) stay opt-in via -Only. -WhatIf reports
 //   drift and exits 1 instead of rewriting. -Verify audits without writing: it also fails if a
 //   pass would introduce syntax errors, or if a rewrite is not a fixed point (running the pipeline
@@ -2970,16 +2972,54 @@ namespace Puck.Tools
             var whatIf = scanner.Has("WhatIf");
             var verify = scanner.Has("Verify");
 
-            var result = 0;
+            // Phase 0: `dotnet format whitespace` establishes the .editorconfig baseline (spacing,
+            // alignment, newlines) the custom passes then layer bespoke conventions onto. Disjoint
+            // concerns — the result is a fixed point of both — so running it first is safe.
+            var result = DotnetFormatPhase.Run(root, whatIf || verify);
             var syntacticPasses = Passes.Where(pass => selected.Contains(pass.Name)).ToList();
             if (syntacticPasses.Count > 0)
             {
-                result = SourceRewrite.Run("format", root, whatIf, verify, syntacticPasses);
+                result = Math.Max(result, SourceRewrite.Run("format", root, whatIf, verify, syntacticPasses));
             }
 
             if (selected.Contains(NamedArgsPassName))
             {
                 result = Math.Max(result, NamedArgsPhase.Run(root, whatIf, verify));
+            }
+
+            return result;
+        }
+    }
+
+    // Phase 0 of `format`: `dotnet format whitespace` applies the .editorconfig whitespace baseline
+    // the custom passes build on. Run per owning project — experimental/* live out of the solution,
+    // so one solution-wide invocation would miss them — with --no-restore (the project must already
+    // be restored/built, same as named-args). In verify mode dotnet format's "changes needed"
+    // (nonzero) maps to a drift/gate failure (1); a genuine tool error in write mode maps to infra (2).
+    internal static class DotnetFormatPhase
+    {
+        public static int Run(string rootArgument, bool verifyOnly)
+        {
+            if (!SourceFiles.TryEnumerate(rootArgument, out var scanRoot, out _))
+            {
+                return 2;
+            }
+
+            var projects = Directory.EnumerateFiles(scanRoot, "*.csproj", SearchOption.AllDirectories)
+                .Where(static path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                .OrderBy(static path => path, StringComparer.Ordinal);
+            var result = 0;
+            foreach (var project in projects)
+            {
+                Console.Error.WriteLine($"dotnet format whitespace: {Path.GetRelativePath(EngineRun.RepositoryRoot, project).Replace('\\', '/')}");
+                var code = verifyOnly
+                    ? ToolProcess.RunStreamed(null, "dotnet", "format", "whitespace", project, "--no-restore", "--verify-no-changes")
+                    : ToolProcess.RunStreamed(null, "dotnet", "format", "whitespace", project, "--no-restore");
+                if (code != 0)
+                {
+                    result = Math.Max(result, verifyOnly ? 1 : 2);
+                }
             }
 
             return result;

@@ -74,7 +74,7 @@ public sealed record OverworldNode : NodeDocument {
 
     /// <summary>The bootable consoles, in stand order (left to right along the far wall). Each entry reuses the
     /// gaming-brick source shape (console costume + fit + an OPTIONAL pre-inserted ROM path); a console with a ROM
-    /// path assembles its machine at build time (today's behavior), while a console with a null ROM path starts as an
+    /// path assembles its machine at build time, while a console with a null ROM path starts as an
     /// EMPTY stand — its machine assembles once the player inserts a cartridge from <see cref="Library"/>. Empty (the
     /// default) is the bare room. A later revision grows an entry with a peripheral field (e.g. the PC camera as a
     /// GB-camera cartridge feed).</summary>
@@ -125,9 +125,9 @@ public sealed record OverworldNode : NodeDocument {
             }
         }
 
-        // NOTE: the shelf/carry model was retired — an empty stand is fed by the cabinet's cart-cycle (Right bumper
-        // among the built-in cart types: world-lens, camera, showcase) or by a built-in immersed cart, NOT by a
-        // carried library cartridge. So an empty stand is no longer "dead weight" and needs no library.
+        // NOTE: an empty stand is fed by the cabinet's cart-cycle (Right bumper among the built-in cart types:
+        // world-lens, camera, showcase) or by a built-in immersed cart, NOT by a carried library cartridge. An empty
+        // stand needs no library entry.
 
         if ((Immersed == true) && (consoles.Count == 0)) {
             errors.Add(path: $"{path}.immersed", message: "an immersed start needs at least one console to seat the first player at");

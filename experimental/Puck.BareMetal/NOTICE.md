@@ -30,6 +30,31 @@ combined whole and the ByteTerrace-authored glue are under the Puck license.
 - **Use:** the IPv4 / NO_SYS TCP/IP stack. Our port (`lwipopts.h`, `arch/cc.h`, the netif driver)
   lives in `compat/native/` (ours).
 
+## AMD register headers (amdgpu)
+
+- **Path:** [`amdgpu/include/`](amdgpu/include/) — from the Linux kernel, tag `v6.15`
+  (`drivers/gpu/drm/amd/include/` and `include/uapi/drm/`),
+  <https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/>
+- **License:** MIT — each header carries the full MIT permission text verbatim (AMD copyright
+  for the `asic_reg`/ip-offset headers; X11/MIT for the DRM UAPI headers). Verified per-file
+  at vendoring time.
+- **Use:** register offsets/masks and IP base tables for the Van Gogh (Steam Deck LCD) GPU
+  bring-up, plus the `amdgpu_drm.h`/`drm.h` UAPI contract the DRM shim implements. Vendored
+  **verbatim**, upstream directory layout preserved. The kernel's GPL `.c` driver logic is
+  **not** vendored — reference-only, clean-roomed per
+  [`amdgpu/README.md`](amdgpu/README.md).
+
+## AMD GPU firmware (Van Gogh)
+
+- **Path:** [`amdgpu/firmware/`](amdgpu/firmware/) — from linux-firmware, tag `20251125`,
+  <https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/>
+- **License:** proprietary, redistributable in unmodified binary form — see
+  [`amdgpu/firmware/LICENSE.amdgpu`](amdgpu/firmware/LICENSE.amdgpu) (carried alongside the
+  binaries, as it requires)
+- **Use:** the signed microcode (`vangogh_{pfp,me,ce,mec,mec2,rlc,toc,asd,sdma}.bin`) the PSP
+  loads during GPU bring-up on real hardware. Unmodified; per-file SHA256 manifest in
+  [`amdgpu/firmware/README.md`](amdgpu/firmware/README.md).
+
 ## Built (not vendored) at the bare-metal target
 
 The bare-metal Vulkan path runs an unmodified Mesa **RADV** ICD and **musl** dynamic linker, built

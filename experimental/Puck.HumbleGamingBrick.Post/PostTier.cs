@@ -9,6 +9,8 @@ internal enum PostTier {
     /// <summary>Reference-ROM behavioural checks (blargg / mooneye / screenshot diff). Need the external test corpus;
     /// they skip (never fail) when it is absent.</summary>
     B,
-    /// <summary>Cross-generation determinism — two-machine link-lock and replay-through-churn. The rule-3 gate.</summary>
+    /// <summary>Cross-machine link determinism — two linked machines exchanging over the serial cable, deterministically
+    /// and replay-identically (the serial-link stage; self-contained, runs anywhere). Grows toward the ideal plan's
+    /// rule-3 cross-generation bit-lock once the GBA side has a link peer.</summary>
     C,
 }

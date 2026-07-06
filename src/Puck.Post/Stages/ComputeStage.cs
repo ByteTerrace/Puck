@@ -24,9 +24,8 @@ internal sealed class ComputeStage : IPostStage {
         var allocator = services.DescriptorAllocator;
         var recorder = services.ComputeRecorder;
         var deviceHandle = device.DeviceHandle;
-        var spirvPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Shaders", "Compute", "gradient.comp.spv");
 
-        using var shaderModule = services.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: File.ReadAllBytes(path: spirvPath));
+        using var shaderModule = services.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: PostShaders.Read(folder: "Compute", file: "gradient.comp.spv"));
         using var image = services.StorageImageFactory.Create(deviceContext: device, format: GpuPixelFormat.R8G8B8A8Unorm, height: RenderSize, width: RenderSize);
 
         GpuComputeBinding[] bindings = [new GpuComputeBinding(Binding: 0, Kind: GpuComputeBindingKind.StorageImage)];

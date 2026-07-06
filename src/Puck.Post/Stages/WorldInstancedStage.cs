@@ -8,7 +8,7 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage. Per-object instancing/culling (the tile-mask beam prepass ported from the old avatar VM):
+/// Tier-C stage. Per-object instancing/culling (the tile-mask beam prepass):
 /// builds the SAME scene twice — FLAT (every shape in the WORLD set, zero instances — the linear fast path) and
 /// INSTANCED (every non-ground object wrapped in <see cref="SdfProgramBuilder.BeginInstance"/>/
 /// <see cref="SdfProgramBuilder.EndInstance"/>, one instance per object; the instruction streams are IDENTICAL, the

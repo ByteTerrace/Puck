@@ -1,5 +1,7 @@
 {
+    "$schema": "../../schema/run.schema.json",
     "version": "puck.run.v1",
+    "_comment": "The overworld showcase: one forged custom cartridge on the dmg/cgb/agb costumes of the one machine. Forge it first — e.g. `Puck.Demo --forge-volley volley.gbc` (or any --forge-* output) — then `Puck.Demo --run docs/examples/overworld.json`. Parse-validation does not check the romPath; the run path does.",
     "host": {
         "presentMode": "vsync"
     },
@@ -7,9 +9,9 @@
     "graph": {
         "$type": "overworld",
         "consoles": [
-            { "model": "dmg", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
-            { "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
-            { "model": "agb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" }
+            { "model": "dmg", "romPath": "volley.gbc" },
+            { "model": "cgb", "romPath": "volley.gbc" },
+            { "model": "agb", "romPath": "volley.gbc" }
         ]
     }
 }

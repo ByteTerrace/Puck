@@ -45,9 +45,9 @@
 // The per-tile instance mask sdf-beam.comp wrote (world render path, Stage 1 ONLY): a flat uint buffer,
 // params.instanceMaskWordCount (the host-pushed live program width) elements per (viewport, tile) entry, same
 // (viewport, tile) indexing as the cull buffer.
-// register(t9): the first SRV slot free of Stage 1's program/viewport/dynamicTransforms/cullBounds/screenSurfaces/
-// screenSources run (t0..t8). KEEP IN SYNC with SdfWorldEngine's InstanceMaskBindingIndex.
-[[vk::binding(7, 0)]] StructuredBuffer<uint> sdfInstanceMasks : register(t9);
+// register(t13): the first SRV slot free of Stage 1's program/viewport/dynamicTransforms/cullBounds/screenSurfaces/
+// screenSources run (t0..t12). KEEP IN SYNC with SdfWorldEngine's InstanceMaskBindingIndex.
+[[vk::binding(7, 0)]] StructuredBuffer<uint> sdfInstanceMasks : register(t13);
 #endif
 
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
@@ -186,7 +186,7 @@ uint sdfInstanceCountClamped() {
 // Material sentinel range: a SCREEN_SLAB shades as a "screen" rather than a table albedo. The plain sentinel
 // (SdfProgramBuilder.ScreenSlab with no screen index) shades the procedural test-card. SDF_SCREEN_MATERIAL + 1 +
 // screenIndex (SdfProgramBuilder's screen-surface overload) additionally identifies WHICH declared screen surface —
-// and so which screen source slot (0..3) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
+// and so which screen source slot (0..7) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
 // Every material id in this range is screen shading; test with >= SDF_SCREEN_MATERIAL, never ==.
 #define SDF_SCREEN_MATERIAL 65535
 

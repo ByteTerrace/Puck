@@ -28,8 +28,8 @@ namespace Puck.Post;
 /// <para><c>hot-switch</c>: presents on the preferred Vulkan backend, toggles the <see cref="BackendSwitcher"/> to
 /// the registered Direct3D 12 presenter mid-run, and keeps presenting REAL content on the new backend — the node
 /// polls <see cref="BackendSwitcher.ActiveBackendName"/> each frame and RE-TARGETS on change: it releases its Vulkan
-/// resources (safe: a deactivated backend's device now deliberately survives its presenter — the 2026-07-02 fix for
-/// the switch-after-live-presents crash the POST discovered) and rebuilds the same fill on the presenter's Direct3D
+/// resources (safe: a deactivated backend's device deliberately survives its presenter, so releasing resources
+/// after live presents does not tear the device out from under them) and rebuilds the same fill on the presenter's Direct3D
 /// 12 device with a self-composed neutral service bundle, handing back D3D12 surfaces the active blit can consume.
 /// Success additionally reads the post-switch image back on the Direct3D 12 device and asserts non-flat content.</para>
 /// </summary>

@@ -138,7 +138,7 @@ public sealed record BrickExitCondition {
 
 /// <summary>
 /// One cartridge on the overworld's shelf — a game the player can carry to a stand and insert, distinct from a stand's
-/// PRE-INSERTED <see cref="GamingBrickSource.RomPath"/> (today's boot-ready default). Pure data: a title for the
+/// PRE-INSERTED <see cref="GamingBrickSource.RomPath"/> (the boot-ready default). Pure data: a title for the
 /// presentation layer plus the ROM image path, validated and loaded eagerly with every other cartridge at document
 /// load (fail-fast stays at load time; only MACHINE assembly moves to insert time).
 /// </summary>

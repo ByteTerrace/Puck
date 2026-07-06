@@ -25,8 +25,10 @@ change either side only with its partner in the same change:
 | `PushConstantByteLength` = 32 B, words 0..7 | `CompositeParams` (8 uints: extent, tileGrid, viewportCount, childMask, screenMask, instanceMaskWordCount) | Stage 0/1 push |
 | `DynamicTransformByteLength` = 32 B/slot | `sdfDynamicTransforms` (2×float4: position, quaternion) | dynamic transforms |
 | `SdfProgramBuilder.MaxInstances` = 1024 | `SDF_MAX_INSTANCES` | instance cap |
-| `SdfProgramBuilder.MaxScreenSurfaces` = 4; material sentinel `ScreenMaterialId + 1 + screenIndex` | 4 combined-image-sampler bindings; screen shading decode | diegetic screens |
-| `SdfWorldEngine` screen-light buffer (binding 11, `ScreenLightByteLength` = 5×float4: screens 0..3 `rgb+intensity`, entry 4 env `ambientScale,sunScale`) via `SetScreenLight` + `SdfFrame.AmbientScale/SunScale` | `sdfScreenLights` (`register(t10)`, the LAST views SRV) + `SdfScreenLightEnv` decode; the `renderView` light loop | per-frame screen glow + room dimming |
+| `SdfProgramBuilder.MaxScreenSurfaces` = 8 (raised from 4, Arc 3); material sentinel `ScreenMaterialId + 1 + screenIndex` | 8 combined-image-sampler bindings (`screenSource0..7` at bindings 12-19; `sdfInstanceMasks`/`sdfScreenLights` moved to t13/t14) | diegetic screens |
+| `SdfWorldEngine.SetScreenSurface(index, origin, right, up, halfW, halfH)` — the surface table re-uploads EVERY frame from a host mirror (no longer only at `UploadProgram`), so a MOVING screen slab (a walking creature's face) samples correctly; `SdfEngineNode` polls per-index transform providers via `ISdfFrameSource.ScreenSurfaceTransforms` (default-implemented) | `screenSurfaces` StructuredBuffer read per pixel — NO kernel change was needed | moving screens |
+| `SdfWorldEngine` screen-light buffer via `SetScreenLight` + `SdfFrame.AmbientScale/SunScale` (entries now cover screens 0..7 + env) | `sdfScreenLights` (t14, the LAST views SRV) + `SdfScreenLightEnv` decode; the `renderView` light loop | per-frame screen glow + room dimming |
+| Diegetic CAMERAS (Puck.Demo): `CameraEye` (posed marker; world/placement/shape anchors) → `CameraFeedEngine` (pool ≤4 offscreen 160×144 engines; a feed NEVER samples a screen wired to itself — binds 0; cross-feed TV-in-TV chains are legal one-frame-lag) → `ScreenWire` data (`brick:N`/`feed:N`/`named:NAME`/`none`) via `world.camera`/`world.wire` | each feed = one full world render pass/frame — budget honestly | placeable, wirable cameras |
 | `sdfMaterialShade` takes accumulated `float3` radiance (not a scalar) | `sdfMaterialShade(..., float3 diffuse, ...)` — ALL three callers (`sdf-world.hlsli`, `sdf-view.frag`, `sdf-world-rt-debug`) | shade funnel (colored lights) |
 | `DebugViewModes.Names` (Puck.Demo, order IS the wire value, 6 entries) | `DebugViewModeCount`/`DebugViewModeNormals` + the `viewMode` switch (sdf-world.hlsli `renderView`) | debug views — adding a mode touches BOTH plus the switch |
 | bound-analysis modes | `SDF_BOUND_*` skip in `map()` | bounds gate |
@@ -38,7 +40,9 @@ change either side only with its partner in the same change:
   any of them (loud `ArgumentException`). A hot-swapping frame source declares
   its envelope up front: `SdfWorldEngineOptions.ProgramWordCapacity` /
   `InstanceCapacity` / `DynamicTransformCapacity` (floors, maxed with the
-  initial program) — mirrored as `SdfEngineNode` ctor params.
+  initial program) — mirrored as `SdfEngineNode` ctor params and as
+  `SdfWorldRenderSpec.ProgramWordCapacity`/`InstanceCapacity` in the render
+  assembly (the overworld feeds them from its probe — see below).
 - **`UploadProgram` is the single owner of per-program state** (buffers, live
   mask width, required dynamic capacity); the constructor calls it. Never
   duplicate its assignments elsewhere.
@@ -48,17 +52,23 @@ change either side only with its partner in the same change:
   slot silently rendering at identity is a bug, not a default.
 - **`RenderFrame` vs `SubmitFrame`**: submit-and-wait (harnesses/readback) vs
   fire-and-forget (the live node; host pacing orders frames). Never blur them.
-- **Two content seams, don't conflate**: a CHILD occupies a viewport slot
-  (childMask; beam/Stage 1 skip it; compositor copies its surface); a SCREEN
-  SOURCE is program-declared `ScreenSlab` shading — its lit face samples the
-  bound image through a CRT glass treatment (barrel curve + rounded bezel +
-  scanlines + vignette + fresnel glint + bloom, in `sampleScreenSurface`), and
-  each bound screen ALSO emits colored light into the room: its per-frame
-  framebuffer average (via `SetScreenLight` → the binding-11 `sdfScreenLights`
-  buffer), summed with the sun in the `renderView` shade loop (up to 4 screen
-  lights), with a per-frame `AmbientScale`/`SunScale` dimming the room for the
-  overworld mood. Screen providers are polled AFTER children produce; the light
-  providers (`SdfEngineNode` `screenLights`) are polled right after.
+- **Two content seams, don't conflate:**
+  - A **child** occupies a viewport slot (childMask; beam/Stage 1 skip it; the
+    compositor copies its surface).
+  - A **screen source** is program-declared `ScreenSlab` shading: its lit face
+    samples the bound image through a CRT glass treatment (barrel curve, rounded
+    bezel, scanlines, vignette, fresnel glint, bloom — `sampleScreenSurface`),
+    and each bound screen also emits colored light into the room — its per-frame
+    framebuffer average (`SetScreenLight` → the binding-11 `sdfScreenLights`
+    buffer) summed with the sun in the `renderView` shade loop (≤4 screen
+    lights), with `AmbientScale`/`SunScale` dimming the room for the overworld
+    mood.
+  - Polling order: screen providers AFTER children produce; light providers
+    (`SdfEngineNode.screenLights`) right after.
+  - `SetScreenSource(i, 0)` (a provider returning 0) UNBINDS the slot: the
+    face falls back to the flat/procedural screen material — the animated
+    test-card, a striped no-signal look, NOT black. A screen going black is a
+    different bug (dead image, zeroed screen light), not a cleared source.
 - Dynamic-slot bound: `SdfProgram.MaxDynamicTransformSlot` = int.MaxValue−1
   (`slot+1` must fit); the float-lane decode compares in DOUBLE because
   `(float)int.MaxValue` rounds up to 2³¹.
@@ -75,6 +85,24 @@ deferred/retired rejections (cross-backend `produce`, the retired `child`
 bool, `live-camera` pending its child node) — pre-flighted in `Program`
 BEFORE the window host builds, so rejection is an attributed stderr line and
 exit 2, never a mid-host crash.
+
+**The capacity probe (the envelope pattern, live in the overworld).**
+`OverworldFrameSource` builds ONE worst-case probe program — every diegetic
+screen lit, the creator pool in its largest emission form (including its
+reserved per-shape modifier ops) — measures it (the probe is never rendered),
+and feeds the result through `SdfWorldRenderSpec.ProgramWordCapacity` /
+`InstanceCapacity`, so live rebuilds vary freely BELOW the frozen envelope.
+Any NEW optional emission MUST also be added to the probe (`BuildProgram`'s
+`probeWorstCase` path), or a live rebuild can outgrow the buffers and
+`UploadProgram` throws loudly.
+
+**The screen-slot borrow (index 3).** Creator mode's preview easel borrows
+screen-surface slot 3 (`CreatorSceneRenderer.PreviewScreenIndex`) while the
+mode is up: the frame source suppresses that cabinet's `ScreenSlab` (it
+degrades to its lit flat material for the session, relights on exit) and the
+render node muxes the slot's provider to the bake preview — BOTH gate on the
+same flag in the same rebuild, so the surface table and the sources can never
+disagree. Copy that shape for any future slot sharing: one flag, one rebuild.
 
 ## Shader build mechanics
 

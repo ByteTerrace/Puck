@@ -1,8 +1,5 @@
-using Puck.Capture;
 using System.Numerics;
 using System.Runtime.Versioning;
-using Microsoft.Extensions.DependencyInjection;
-using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 
 namespace Puck.Post;
@@ -77,53 +74,12 @@ internal sealed class WorldWallpaperStage : IPostStage {
 
     [SupportedOSPlatform("windows10.0.10240")]
     private static PostStageOutcome RunCore(PostContext context) {
-        var program = BuildWallpaperScene();
-        var frame = WorldStage.BuildHeroFrame(program: program, width: WorldWidth, height: WorldHeight);
-
-        // Vulkan reference: the host device + the host's neutral compute services, SPIR-V kernels.
-        byte[] vulkanPixels;
-
-        using (var vulkanRenderer = new SdfWorldEngine(
-            device: context.RequireGpuDevice(),
-            gpu: context.Resolve<IGpuComputeServices>(),
-            height: WorldHeight,
-            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
-            options: new SdfWorldEngineOptions(Program: program),
-            width: WorldWidth
-        )) {
-            vulkanPixels = vulkanRenderer.RenderFrame(frame: frame);
-        }
-
-        // Direct3D 12 comparand: the SHARED Tier-C device + its neutral compute services, DXIL kernels.
-        var directX = context.RequireDirectXDevice();
-        var directXPixels = WorldStage.RenderDirectXDiagnosed(directX: directX, render: () => {
-            using var directXRenderer = new SdfWorldEngine(
-                device: directX.DeviceContext,
-                gpu: directX.Services.GetRequiredService<IGpuComputeServices>(),
-                height: WorldHeight,
-                kernels: SdfWorldKernels.Load(bytecodeExtension: ".dxil"),
-                options: new SdfWorldEngineOptions(Program: program),
-                width: WorldWidth
-            );
-
-            return directXRenderer.RenderFrame(frame: frame);
-        });
-
-        _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-wallpaper-diff.png");
-
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-wallpaper-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-wallpaper-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
-        ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
-
-        var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
-        var failures = ParityThresholds.WorldComposite.Evaluate(metrics: metrics);
-
-        if (failures.Count != 0) {
-            return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
-        }
-
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} P4G square + P6M hex wallpaper lattices with parity-stride recoloring | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldComposite thresholds | {ParityCheck.Describe(metrics: metrics)}");
+        return WorldStage.RunSceneParity(
+            context: context,
+            prefix: "world-wallpaper",
+            program: BuildWallpaperScene(),
+            thresholds: ParityThresholds.WorldComposite,
+            passLabel: $"{WorldWidth}x{WorldHeight} P4G square + P6M hex wallpaper lattices with parity-stride recoloring | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldComposite thresholds"
+        );
     }
 }

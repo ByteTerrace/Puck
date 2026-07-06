@@ -13,9 +13,8 @@ public sealed record BindingProfileDocument(
     IReadOnlyList<BindingModifierDefinition> Modifiers,
     IReadOnlyList<BindingPageDefinition> Pages
 ) {
-    /// <summary>The schema version this engine build authors and accepts. v7: the command vocabulary was renamed
-    /// arcade.* → overworld.* — a stored v6 profile must reseed, or its Left-bumper would still bind the old
-    /// <c>arcade.leave</c> (which no longer matches), silently breaking disengage. v6: the movement page gained the
-    /// Left-bumper disengage that returns a seated player to free room movement.</summary>
+    /// <summary>The schema version this engine build authors and accepts. A stored profile whose version differs must
+    /// reseed: an older binding like <c>arcade.leave</c> does not match the current <c>overworld.*</c> command
+    /// vocabulary, so its Left-bumper disengage would silently break.</summary>
     public const string CurrentVersion = "puck.bindings.v7";
 }

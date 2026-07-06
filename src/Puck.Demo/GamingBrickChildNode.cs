@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Demo.Audio;
 using Puck.Demo.Camera;
 using Puck.Demo.Forge;
 using Puck.Hosting;
@@ -78,7 +79,7 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
     private int m_bridgeFramesRemaining;
     // The machine and its cached services first come into existence at AssignCartridge (insert time) for a stand that
     // starts EMPTY (no pre-inserted ROM) — null until then — and are replaced wholesale only by ClearSaveData's
-    // save-wiping reboot. A shelf-inserted brick's pane still renders every frame (the dark/unassigned screen) via
+    // save-wiping reboot. A runtime-inserted brick's pane still renders every frame (the dark/unassigned screen) via
     // UploadFramebuffer's synthetic blank buffer, so the GPU-resource lifecycle never depends on assignment.
     private IFramebuffer? m_framebuffer;
     private readonly IServiceProvider m_gpuServices;
@@ -98,6 +99,10 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
     private const int SaveFlushIntervalFrames = 300;
 
     private nint m_boundSourceView;
+    // The speaker path (Windows; null elsewhere or with no device): one OS output stream per booted machine, drained
+    // after each stepped frame. Output-only by construction — the sink is the emulator's determinism-excluded ring.
+    private CabinetAudioOutput? m_audioOutput;
+    private IAudioSink? m_audioSink;
     private WebcamCameraSensor? m_cameraSensor;
     // The world↔machine membrane: a per-frame host feed installed for a "world" peripheral cartridge (the world-lens
     // cart). Fed a slice of the deterministic room state (WorldLensSource) captured on the render thread and applied
@@ -123,6 +128,13 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
     private string? m_savePath;
     private SystemMemory? m_systemMemory;
     private GamingBrickChildNode? m_mirror;
+    // The serial link cable — host wiring like the mirror above, never sim state: a linked pair shares ONE
+    // SerialLinkSession and advances TOGETHER through ExecuteLinkedStep on the PRIMARY end, so the pair is one step
+    // unit (the invariant the parallel fleet-stepping split needs: a linked pair may never step on two threads).
+    // Both ends hold the same session; only the primary drives it.
+    private GamingBrickChildNode? m_linkPartner;
+    private bool m_linkPrimary;
+    private SerialLinkSession? m_linkSession;
     private GamingBrickPadService? m_padService;
     private bool m_padServiceResolved;
     private int m_pendingSegmentCount;
@@ -152,9 +164,9 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
     private uint m_width;
 
     /// <summary>Initializes a new instance of the <see cref="GamingBrickChildNode"/> class. ROM LOADING stays eager and
-    /// fail-fast at document load regardless — the caller reads every ROM (pre-inserted and shelf) up front into a
+    /// fail-fast at document load regardless — the caller reads every ROM (pre-inserted and library) up front into a
     /// shared table and passes this stand's slice as <paramref name="cartridgeRom"/>. MACHINE ASSEMBLY, however, only
-    /// happens here when <paramref name="cartridgeRom"/> is non-null (today's pre-inserted behavior, unchanged); a null
+    /// happens here when <paramref name="cartridgeRom"/> is non-null (the pre-inserted behavior); a null
     /// ROM leaves the stand UNASSIGNED — no machine, a synthetic dark pane — until <see cref="AssignCartridge"/> runs
     /// at insert time.</summary>
     /// <param name="gpuServices">The world's neutral GPU compute services (the child produces on the world's device).</param>
@@ -248,11 +260,11 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
     /// yet had a cartridge inserted (<see cref="AssignCartridge"/>).</summary>
     public bool IsAssigned => (m_machine is not null);
 
-    /// <summary>Assembles this stand's machine from a just-inserted cartridge — the shelf-insert half of machine
+    /// <summary>Assembles this stand's machine from a just-inserted cartridge — the runtime-insert half of machine
     /// assembly (the pre-inserted half is the constructor). A no-op safeguard against double-assignment: once
     /// assigned, a stand's machine is replaced only by the save-wiping reboot (<see cref="ClearSaveData"/>); the
     /// promote/demote knob (<see cref="ChangeModel"/>) never rebuilds it. Mirrors the constructor's assembly exactly,
-    /// so a shelf-inserted machine is indistinguishable from a pre-inserted one from this call onward.</summary>
+    /// so a runtime-inserted machine is indistinguishable from a pre-inserted one from this call onward.</summary>
     /// <param name="cartridgeRom">The inserted cartridge's ROM image (already loaded in the shared table).</param>
     /// <param name="savePath">The inserted cartridge's battery-save path (see the constructor's
     /// <c>savePath</c>), or <see langword="null"/> for an in-memory-only save.</param>
@@ -299,13 +311,19 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
     }
 
     // Flushes the save, disposes the machine + camera sensor, and clears every cached service — shared by eject and the
-    // swap path. Leaves the node UNASSIGNED (a dark pane) until AssembleMachine runs again.
+    // swap path. Leaves the node UNASSIGNED (a dark pane) until AssembleMachine runs again. The link cable severs
+    // FIRST: the session holds the dying machine's serial port, and the partner must not keep a peer reference into a
+    // disposed container (unplugging the cable is what ejecting a linked cartridge means).
     private void TeardownMachine() {
         if (m_machine is null) {
             return;
         }
 
+        Unlink(node: this);
         FlushSaveData(force: true);
+        m_audioOutput?.Dispose();
+        m_audioOutput = null;
+        m_audioSink = null;
         m_cameraSensor?.Dispose();
         m_cameraSensor = null;
         m_peripheralFeed = null; // the sensor-page feed caches the disposed machine's memory — the next assemble rebinds it
@@ -319,7 +337,7 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
         m_cartridgeRom = null;
     }
 
-    // Shared by the constructor (pre-inserted) and AssignCartridge (shelf-inserted): assembles the machine, caches its
+    // Shared by the constructor (pre-inserted) and AssignCartridge (runtime-inserted): assembles the machine, caches its
     // services, and repacks the framebuffer once so the pane has real (if dark, pre-boot) pixels immediately.
     private void AssembleMachine(byte[] cartridgeRom, ConsoleModel model) {
         m_cartridgeRom = cartridgeRom;
@@ -367,6 +385,13 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
         m_joypad = machine.GetRequiredService<IJoypad>();
         m_key1 = machine.GetRequiredService<IKey1>();
         m_systemMemory = ((m_exitCondition is not null) ? machine.GetRequiredService<SystemMemory>() : null);
+
+        // Real speakers for a booted machine: open this cabinet's output stream and turn the machine's sink on. The
+        // sink stays OFF (rate zero, no ring, no per-cycle resample work) when no stream opened — a silent host pays
+        // nothing. Host configuration, never emulated state (the IAudioSink contract).
+        m_audioOutput = CabinetAudioOutput.TryOpen();
+        m_audioSink = ((m_audioOutput is not null) ? machine.GetRequiredService<IAudioSink>() : null);
+        m_audioSink?.Configure(sampleRate: CabinetAudioOutput.SampleRate);
     }
 
     // Binds the PC webcam to a freshly assembled Pocket Camera cartridge as its M64282FP image source — the cartridge-
@@ -622,6 +647,8 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
             }
         }
 
+        PumpAudio(stepped: stepped);
+
         if (m_outputInitialized && !stepped && !extentChanged && !m_forceRepresent && (m_bridgeFramesRemaining == 0)) {
             return CurrentSurface();
         }
@@ -690,30 +717,51 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
             return;
         }
 
-        // World→machine membrane: project this frame's captured world slice into the machine's sensor page BEFORE it
-        // steps, so a world-lens cartridge reads a live view of the room it sits in each VBlank. Touches only THIS
-        // machine's WRAM, so it is safe on the parallel fleet-stepping worker thread; the slice itself was sampled on
-        // the render thread (PrepareInputs). The position updates once per engine frame — one write per frame is exact.
-        if ((m_peripheralFeed is { } feed) && (m_machine is { } machine)) {
-            feed.BeforeStep(world: in m_pendingWorldState, machine: machine);
+        // A linked cabinet never advances its machine ALONE — the pair steps together through the primary's
+        // ExecuteLinkedStep (one budget, one deterministic interleave). Reaching here linked means the parent skipped
+        // the pair pre-pass; doing nothing is the safe answer (the pane re-presents, the cable stays coherent).
+        if (m_linkPartner is not null) {
+            return;
         }
+
+        ApplyWorldFeed();
 
         for (var index = 0; (index < count); index++) {
             joypad.SetButtons(pressed: m_segmentBuffer[index].Buttons);
             RunTicks(ticks: m_segmentBuffer[index].Ticks);
         }
 
-        // Machine→world (the return half): publish the game-driven sprite tile the ROM wrote this frame, so the host can
-        // follow it with the driving player's presentation avatar. Under world authority it just mirrors the sensor
-        // position the host wrote; under game authority it is the joypad-integrated position.
-        if ((m_peripheralFeed is { } readback) && (m_machine is { } stepped)) {
-            WorldLensGameTile = readback.ReadGameTile(machine: stepped);
-        }
+        PublishWorldReadback();
 
         // The LAST segment's buttons are this frame's held state at the moment the machine stopped — the same value
         // a real cartridge's D-pad/buttons would show if you froze the frame. A shorter final segment (the common
         // case: one segment per already-converged frame) still lands on the frame's true held buttons.
-        m_ownButtons = m_segmentBuffer[count - 1].Buttons;
+        FinishStep(buttons: m_segmentBuffer[count - 1].Buttons);
+    }
+
+    // World→machine membrane: project this frame's captured world slice into the machine's sensor page BEFORE it
+    // steps, so a world-lens cartridge reads a live view of the room it sits in each VBlank. Touches only THIS
+    // machine's WRAM, so it is safe on the parallel fleet-stepping worker thread; the slice itself was sampled on
+    // the render thread (PrepareInputs). The position updates once per engine frame — one write per frame is exact.
+    private void ApplyWorldFeed() {
+        if ((m_peripheralFeed is { } feed) && (m_machine is { } machine)) {
+            feed.BeforeStep(world: in m_pendingWorldState, machine: machine);
+        }
+    }
+
+    // Machine→world (the return half): publish the game-driven sprite tile the ROM wrote this frame, so the host can
+    // follow it with the driving player's presentation avatar. Under world authority it just mirrors the sensor
+    // position the host wrote; under game authority it is the joypad-integrated position.
+    private void PublishWorldReadback() {
+        if ((m_peripheralFeed is { } readback) && (m_machine is { } stepped)) {
+            WorldLensGameTile = readback.ReadGameTile(machine: stepped);
+        }
+    }
+
+    // The stepped-frame epilogue shared by the solo and linked execute paths: record the frame's held buttons, repack
+    // the staged framebuffer bytes, and raise the staged/executed flags ProduceFrame consumes.
+    private void FinishStep(JoypadButtons buttons) {
+        m_ownButtons = buttons;
 
         RepackFramebuffer();
 
@@ -735,6 +783,12 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
         // choir grouping key already requires an identical ROM+model, so both are-or-aren't assigned together in
         // practice, but the guard keeps this call total rather than throwing on a not-yet-inserted stand.
         if ((m_machine is null) || (leader.m_machine is null)) {
+            return false;
+        }
+
+        // A linked machine's serial state genuinely diverges (cable bits are inputs its twin never sees) — it can
+        // neither park nor lead a choir.
+        if ((m_linkPartner is not null) || (leader.m_linkPartner is not null)) {
             return false;
         }
 
@@ -762,6 +816,110 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
         RepackFramebuffer();
 
         m_rgbaFresh = true;
+    }
+
+    /// <summary>Gets whether this cabinet's machine is connected to another cabinet's over the serial link cable.</summary>
+    internal bool IsLinked => (m_linkPartner is not null);
+
+    /// <summary>Gets whether this cabinet is the PRIMARY end of its link — the end whose <see cref="ExecuteLinkedStep"/>
+    /// advances the pair. Always <see langword="false"/> when unlinked.</summary>
+    internal bool IsLinkPrimary => m_linkPrimary;
+
+    /// <summary>Gets the linked partner cabinet, or <see langword="null"/> when unlinked.</summary>
+    internal GamingBrickChildNode? LinkPartner => m_linkPartner;
+
+    /// <summary>Gets the linked partner's brick ordinal (for status display), or <c>-1</c> when unlinked.</summary>
+    internal int LinkPartnerOrdinal => (m_linkPartner?.m_brickOrdinal ?? -1);
+
+    /// <summary>Connects two cabinets' machines with the serial link cable (a shared <see cref="SerialLinkSession"/>).
+    /// <paramref name="first"/> becomes the PRIMARY end: the pair thereafter advances only through its
+    /// <see cref="ExecuteLinkedStep"/>, one shared wall-time budget per frame, in the session's deterministic
+    /// instruction interleave. Refuses (returns <see langword="false"/>) when the two are the same cabinet, either has
+    /// no machine, either is already linked, or either is parked in a choir — a linked machine steps for itself.</summary>
+    /// <param name="first">The primary end.</param>
+    /// <param name="second">The secondary end.</param>
+    /// <returns>Whether the cable connected.</returns>
+    internal static bool TryLink(GamingBrickChildNode first, GamingBrickChildNode second) {
+        if (ReferenceEquals(objA: first, objB: second)
+            || (first.m_machine is not { } firstMachine) || (second.m_machine is not { } secondMachine)
+            || (first.m_linkPartner is not null) || (second.m_linkPartner is not null)
+            || (first.m_mirror is not null) || (second.m_mirror is not null)) {
+            return false;
+        }
+
+        var session = new SerialLinkSession(first: firstMachine, second: secondMachine);
+
+        first.m_linkPartner = second;
+        first.m_linkPrimary = true;
+        first.m_linkSession = session;
+        second.m_linkPartner = first;
+        second.m_linkPrimary = false;
+        second.m_linkSession = session;
+
+        return true;
+    }
+
+    /// <summary>Unplugs a cabinet's link cable: the shared session is disposed (both serial ports lose their peer) and
+    /// both cabinets resume stepping independently, phase-aligned — the frozen end inherits the live end's tick→cycle
+    /// remainder, the same hand-off <see cref="Unpark"/> performs. A no-op for an unlinked cabinet.</summary>
+    /// <param name="node">Either end of the pair.</param>
+    internal static void Unlink(GamingBrickChildNode node) {
+        if (node.m_linkPartner is not { } partner) {
+            return;
+        }
+
+        var primary = (node.m_linkPrimary ? node : partner);
+        var secondary = (node.m_linkPrimary ? partner : node);
+
+        primary.m_linkSession?.Dispose();
+
+        // While linked, only the primary's accumulator converted ticks to cycles; hand it to the secondary so both
+        // resume on the same phase.
+        secondary.m_cycleRemainder = primary.m_cycleRemainder;
+
+        node.m_linkPartner = null;
+        node.m_linkPrimary = false;
+        node.m_linkSession = null;
+        partner.m_linkPartner = null;
+        partner.m_linkPrimary = false;
+        partner.m_linkSession = null;
+    }
+
+    /// <summary>The linked-pair execute: advances BOTH machines of a link pair together through the shared
+    /// <see cref="SerialLinkSession"/> — called on the PRIMARY end after <see cref="PrepareStep"/> ran on both
+    /// cabinets, in place of the two independent <see cref="ExecuteStep"/> calls. Both sides must have staged exactly
+    /// this frame's ONE segment (the link precondition keeps both at the shared timeline's head, or pad-sampled);
+    /// anything else — an unpowered side, a paused stream — skips the frame for BOTH, share-fate, deterministically.
+    /// One shared wall-time budget (the primary's segment, converted through the primary's accumulator and speed
+    /// policy) advances the pair; the session's interleave keeps every exchanged serial bit replay-identical.</summary>
+    /// <param name="partner">The secondary end (must be this cabinet's <see cref="LinkPartner"/>).</param>
+    internal void ExecuteLinkedStep(GamingBrickChildNode partner) {
+        if ((m_linkSession is not { } session) || !m_linkPrimary || !ReferenceEquals(objA: m_linkPartner, objB: partner)) {
+            return;
+        }
+
+        var mineCount = m_pendingSegmentCount;
+        var theirsCount = partner.m_pendingSegmentCount;
+
+        m_pendingSegmentCount = 0;
+        partner.m_pendingSegmentCount = 0;
+
+        if ((mineCount != 1) || (theirsCount != 1) || (m_joypad is not { } joypad) || (partner.m_joypad is not { } partnerJoypad)) {
+            return;
+        }
+
+        ApplyWorldFeed();
+        partner.ApplyWorldFeed();
+
+        joypad.SetButtons(pressed: m_segmentBuffer[0].Buttons);
+        partnerJoypad.SetButtons(pressed: partner.m_segmentBuffer[0].Buttons);
+
+        session.Run(tCycles: TakeCycleBudget(ticks: m_segmentBuffer[0].Ticks));
+
+        PublishWorldReadback();
+        partner.PublishWorldReadback();
+        FinishStep(buttons: m_segmentBuffer[0].Buttons);
+        partner.FinishStep(buttons: partner.m_segmentBuffer[0].Buttons);
     }
 
     /// <summary>The realtime half of the FAIRNESS knob (debug buff/debuff): toggles the DMG speed pin, so from the
@@ -839,6 +997,7 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
             return;
         }
 
+        Unlink(node: this); // a reboot is a power cycle — the cable unplugs before the machine goes away
         m_mirror = null;
         m_machine?.Dispose();
 
@@ -890,10 +1049,12 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
 
         m_disposed = true;
 
-        // The power-off flush: the battery save persists whatever the last frames wrote before the machine goes away.
+        // Unplug the link cable before the machine goes away (the partner must not keep a peer into a disposed
+        // container), then the power-off flush persists whatever the last frames wrote.
+        Unlink(node: this);
         FlushSaveData(force: true);
 
-        m_deviceContext.TryWaitIdle();
+        m_deviceContext?.TryWaitIdle();
         m_upload?.Dispose();
         m_commandPool?.Dispose();
         m_resamplePipeline?.Dispose();
@@ -910,8 +1071,17 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
 
         m_outputImage?.Dispose();
         m_resampleShaderModule?.Dispose();
+        m_audioOutput?.Dispose();
         m_cameraSensor?.Dispose();
         m_machine?.Dispose();
+    }
+
+    // The speaker drain: after a stepped frame, move whatever the machine's mixer buffered out to the OS stream. A
+    // pure READ of the sink's host-facing ring — output-only, so host audio can never perturb the simulation.
+    private void PumpAudio(bool stepped) {
+        if (stepped && (m_audioOutput is { } audioOutput) && (m_audioSink is { } audioSink)) {
+            audioOutput.Pump(sink: audioSink);
+        }
     }
 
     // Advance the machine by a tick budget converted to CPU T-cycles through an exact integer rational (remainder
@@ -927,11 +1097,19 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
             return;
         }
 
+        machine.Machine.Run(tCycles: TakeCycleBudget(ticks: ticks));
+    }
+
+    // The tick→cycle conversion RunTicks and the linked-pair step share: consume a tick budget against this brick's
+    // exact integer accumulator (remainder carried, zero drift) and return the machine cycle budget it buys under the
+    // current speed policy. Callable only with a machine assigned (m_key1 is cached beside it).
+    private ulong TakeCycleBudget(ulong ticks) {
         var cyclesPerSecond = ((!m_dmgSpeed && m_key1!.IsDoubleSpeed) ? (2UL * MachineCyclesPerSecond) : MachineCyclesPerSecond);
         var scaled = ((ticks * cyclesPerSecond) + m_cycleRemainder);
 
         m_cycleRemainder = (scaled % EngineTicks.PerSecond);
-        machine.Machine.Run(tCycles: (scaled / EngineTicks.PerSecond));
+
+        return (scaled / EngineTicks.PerSecond);
     }
 
     // An explicit InputSource (tests, scripted runs) wins; otherwise the shared pad-routing service answers for this
@@ -1027,13 +1205,24 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
         m_averageColor = new Vector3((sumRed * scale), (sumGreen * scale), (sumBlue * scale));
     }
 
+    // Rec.709 luma weights, scaled to sum to 256 so the reconstruction is a single >> 8 (no float, no divide).
+    private const int LumaRedWeight = 54;
+    private const int LumaGreenWeight = 183;
+    private const int LumaBlueWeight = 19;
+    private const int LumaShift = 8;
+
+    // Quarter cuts across the 0..255 luma range, brightest bucket first (white, light, dark, black).
+    private const int LumaWhiteCutoff = 192;
+    private const int LumaLightCutoff = 128;
+    private const int LumaDarkCutoff = 64;
+
     // Map a native pixel to the brick's four-shade ramp (the same [white, light, dark, black] the DMG PPU emits),
     // by Rec.709 luma quantized to four buckets — a demoted Color stand reads as the SAME grayscale a real brick
     // would show, so the costume swap looks like the hardware it names.
     private static uint DmgPresentationShade(byte red, byte green, byte blue) {
-        var luma = (((red * 54) + (green * 183) + (blue * 19)) >> 8);
+        var luma = (((red * LumaRedWeight) + (green * LumaGreenWeight) + (blue * LumaBlueWeight)) >> LumaShift);
 
-        return DmgPresentationShades[(luma >= 192) ? 0 : ((luma >= 128) ? 1 : ((luma >= 64) ? 2 : 3))];
+        return DmgPresentationShades[(luma >= LumaWhiteCutoff) ? 0 : ((luma >= LumaLightCutoff) ? 1 : ((luma >= LumaDarkCutoff) ? 2 : 3))];
     }
 
     // Upload the staged RGBA bytes and (re)bind the sampled source view. A parked choir follower uploads its LEADER's

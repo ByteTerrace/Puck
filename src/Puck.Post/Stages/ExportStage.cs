@@ -10,7 +10,7 @@ namespace Puck.Post;
 
 /// <summary>
 /// Tier-C stage C2. The same-adapter export/import round trip — the producer and consumer primitives every zero-copy
-/// share rides — on BOTH backends, ported from the demo's <c>ExportRoundTripNode</c> (the worked reference):
+/// share rides — on BOTH backends:
 /// <list type="bullet">
 ///   <item>Vulkan: create an exportable image, retrieve its opaque Win32 handle, re-import it on the same device.</item>
 ///   <item>Direct3D 12 (the shared LUID-matched Tier-C device): create an exportable shared render target, retrieve

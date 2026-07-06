@@ -40,6 +40,15 @@ if (Test-Path $radvSrc) {
     New-Item -ItemType Directory -Force -Path $radvDst | Out-Null
     Get-ChildItem "$radvSrc\*.so*" | ForEach-Object { Copy-Item $_.FullName $radvDst -Force }
 }
+
+# GPU microcode at \amdgpu\ -- exercises the kernel's firmware-preload path under QEMU (the GPU
+# bring-up itself no-ops there: no AMD GPU is found by the probe).
+$fwSrc = Join-Path $PSScriptRoot "..\..\amdgpu\firmware"
+if (Test-Path $fwSrc) {
+    $fwDst = Join-Path $work "esp\amdgpu"
+    New-Item -ItemType Directory -Force -Path $fwDst | Out-Null
+    Get-ChildItem "$fwSrc\vangogh_*.bin" | ForEach-Object { Copy-Item $_.FullName $fwDst -Force }
+}
 if (-not (Test-Path "$work\code.fd")) { Copy-Item "$QemuDir\share\edk2-x86_64-code.fd" "$work\code.fd" -Force }
 # PXE mode flips the boot order via NIC bootindex; a vars store that remembers "disk first" from a
 # prior run would override it, so re-seed a clean vars.fd from the firmware default each PXE boot.

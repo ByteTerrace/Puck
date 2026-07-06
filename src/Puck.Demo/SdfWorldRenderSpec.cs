@@ -48,4 +48,7 @@ internal sealed record SdfWorldRenderSpec(
     /// <summary>Screen-LIGHT color providers, parallel to <see cref="ScreenSources"/>: the colored glow each screen
     /// emits into the room (its framebuffer average), keyed by screen index.</summary>
     public IReadOnlyDictionary<int, Func<Vector3>>? ScreenLights { get; init; }
+    // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
+    // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
+    // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.
 }

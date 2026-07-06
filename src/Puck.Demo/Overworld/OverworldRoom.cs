@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Demo.World;
 
 namespace Puck.Demo.Overworld;
 
@@ -96,6 +97,74 @@ public sealed record OverworldRoom {
         }
 
         return room;
+    }
+
+    /// <summary>Layers a loaded <see cref="WorldDocument"/>'s authoring overrides onto an already-built
+    /// <paramref name="baseRoom"/> (the console/shelf layout the run document's config already resolved via
+    /// <see cref="WithConsolesAndShelf"/>): the document's bounds/floor height replace the defaults when authored, and
+    /// any placement with role <c>cabinet:&lt;n&gt;</c> re-homes console stand <c>n</c>'s center to the placement's XZ
+    /// position (parsed, clamped to the base room's console count; an unparsable or out-of-range index is ignored, and
+    /// every unnamed index keeps its base-room stand untouched). <paramref name="document"/> being
+    /// <see langword="null"/> — the no-world-loaded case — returns <paramref name="baseRoom"/> UNCHANGED, so the
+    /// default code-built room stays byte-identical whether or not this method is ever called.</summary>
+    /// <param name="baseRoom">The room already built for the run's console/shelf counts.</param>
+    /// <param name="document">The loaded world document, or <see langword="null"/> for no world.</param>
+    /// <returns>The room with the document's overrides applied (or <paramref name="baseRoom"/> itself, unchanged, when
+    /// <paramref name="document"/> is <see langword="null"/>).</returns>
+    public static OverworldRoom FromWorld(OverworldRoom baseRoom, WorldDocument? document) {
+        ArgumentNullException.ThrowIfNull(argument: baseRoom);
+
+        if (document is null) {
+            return baseRoom;
+        }
+
+        var room = baseRoom;
+
+        if (document.Bounds is { } bounds) {
+            room = (room with {
+                BoundsMax = new Vector2(bounds.MaxX, bounds.MaxZ),
+                BoundsMin = new Vector2(bounds.MinX, bounds.MinZ),
+                FloorY = bounds.FloorY,
+            });
+        }
+
+        if (document.Placements is { Count: > 0 } placements) {
+            var stands = room.Consoles.ToArray();
+            var changed = false;
+
+            foreach (var placement in placements) {
+                if (!TryParseCabinetRole(role: placement.Role, index: out var cabinetIndex)) {
+                    continue;
+                }
+
+                if ((cabinetIndex < 0) || (cabinetIndex >= stands.Length)) {
+                    continue; // out of range for this room's console count — ignored, not clamped into a collision.
+                }
+
+                stands[cabinetIndex] = stands[cabinetIndex] with { Center = new Vector2(placement.Position.X, placement.Position.Z) };
+                changed = true;
+            }
+
+            if (changed) {
+                room = (room with { Consoles = stands });
+            }
+        }
+
+        return room;
+    }
+
+    // Parses a placement's Role string as "cabinet:<n>" (case-sensitive prefix, matching the document doctrine's
+    // literal wire tags). Any other shape (null, decoration, malformed suffix) is not a cabinet anchor.
+    private static bool TryParseCabinetRole(string? role, out int index) {
+        const string Prefix = "cabinet:";
+
+        if ((role is not null) && role.StartsWith(value: Prefix, comparisonType: StringComparison.Ordinal)) {
+            return int.TryParse(s: role.AsSpan(start: Prefix.Length), result: out index);
+        }
+
+        index = -1;
+
+        return false;
     }
 }
 

@@ -234,7 +234,7 @@ internal sealed class GamingBrickPadService(IServiceProvider serviceProvider, Ga
 
             // The room player (slot 0) drives every unowned brick — "walk the room walks the games". Its COMMAND-
             // derived joypad (published by the overworld) IS the mirror; only a non-overworld document (no publish) falls
-            // back to the old raw movement mirror + first-pad buttons.
+            // back to the raw movement mirror + first-pad buttons.
             if (m_playerJoypads.TryGetValue(key: 0, value: out var published)) {
                 return published;
             }

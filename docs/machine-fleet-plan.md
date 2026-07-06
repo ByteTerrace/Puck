@@ -1,11 +1,11 @@
 # Machine-fleet performance plan — measured
 
-Status: **plan of record** (2026-07-03), the successor the briefing
-([machine-fleet-briefing.md](machine-fleet-briefing.md)) called for. Every
-number below was measured on the dev box (the RTX 4070 machine, 16 logical
+Status: **plan of record**, the successor to the briefing
+([machine-fleet-briefing.md](machine-fleet-briefing.md)). Every
+number below is measured on the dev box (the RTX 4070 machine, 16 logical
 processors, .NET 10 Release) with the `--bench` instrument; nothing is
 estimated. The vision conclusions the workloads serve are recorded in the
-briefing §1 (postures settled 2026-07-03).
+briefing §1.
 
 ## 1. The instrument
 
@@ -24,15 +24,14 @@ the mailbox-check cycle, and per-machine footprint; report lands at
 cell carries a same-stream machine pair that must end byte-identical, and
 the multi-threaded cell must end byte-identical to the single-threaded one
 — a run that breaks determinism exits 1. Default ROM is the Tier-A
-synthetic; the numbers below are from Pokémon Gold (real instruction mix,
-`Cgb`), with the synthetic run bracketed where it differs.
+synthetic; the numbers below are from a real commercial GBC cartridge (real
+instruction mix, `Cgb`), with the synthetic run bracketed where it differs.
 
-## 2. Measured facts (dev box, 2026-07-03, post-M3)
+## 2. Measured facts (dev box)
 
 Fleet scaling, machine-frames/s (Gold; synthetic within ±4%). These are the
-POST-M3 numbers — the devirtualization landed the same day and bought
-**1.6×** across the board (pre-M3 provenance: ~346 1T / ~2 650 MT plateau /
-trio-lockstep 332):
+numbers with M3 devirtualization in place, which buys **1.6×** across the
+board over a non-devirtualized tick fan-out:
 
 | N | independent 1T | independent MT | choir 1T | choir MT |
 |---|---|---|---|---|
@@ -53,7 +52,7 @@ trio-lockstep 332):
   realtime**, and the bench proves serial-vs-parallel bit-exactness every
   run (machines share nothing; only the timeline needs a concurrency
   story).
-- Per-operation (Gold, post-M3):
+- Per-operation (Gold):
 
   | Op | Latency | Allocation |
   |---|---|---|
@@ -78,41 +77,40 @@ trio-lockstep 332):
 
 ## 3. Verdicts
 
-- **M3 (devirtualize the tick fan-out): LANDED 2026-07-03, measured
-  1.6×** — far past the ~1.2× the sampling attribution predicted. The
-  lesson is recorded here deliberately: eliminating interface dispatch
-  also let the JIT INLINE the component `Tick()` bodies into the fan-out,
-  and a sampling profile cannot see inlining headroom — treat
-  dispatch-share as a floor on the win, not a ceiling. `ComponentClock`
-  now holds every component as a typed sealed field (the cartridge's
-  RTC facet is the one remaining interface slot, null-skipped for untimed
-  mappers), the constructor verifies each declared `ClockDomain` against
-  its hard-coded slot, and Contract §3.5 order (timer before serial) is
-  pinned in code. Guards held: identical Gold frame hashes on all three
-  costumes, identical battery pass set, bench determinism guards green.
-  M3's second half — idle-span fast-forward — is lever 4, still open.
-  The CPU core's own ~65% remains a separate, future
+- **M3 (devirtualize the tick fan-out): measured 1.6×** — far past the
+  ~1.2× a sampling attribution predicts. The lesson is recorded here
+  deliberately: eliminating interface dispatch also lets the JIT INLINE
+  the component `Tick()` bodies into the fan-out, and a sampling profile
+  cannot see inlining headroom — treat dispatch-share as a floor on the
+  win, not a ceiling. `ComponentClock` holds every component as a typed
+  sealed field (the cartridge's RTC facet is the one interface slot,
+  null-skipped for untimed mappers), the constructor verifies each
+  declared `ClockDomain` against its hard-coded slot, and Contract §3.5
+  order (timer before serial) is pinned in code. Guards: identical Gold
+  frame hashes on all three costumes, identical battery pass set, bench
+  determinism guards green. M3's second half — idle-span fast-forward —
+  is lever 4, open. The CPU core's own ~65% is a separate
   whole-loop-flattening question.
 - **The fleet target** (briefing §5 step 3, both shapes per the settled
   posture): **64 realtime-stepped machines** (any mix of choir cursors and
-  independents) **with ≥25% frame headroom** on the dev box — already met
-  in the bench (75 at realtime = 64 + 17% before lever 1 even reaches the
-  engine; the remaining headroom comes from landing it there) — plus
+  independents) **with ≥25% frame headroom** on the dev box — met
+  in the bench (75 at realtime = 64 + 17% from the parallel-stepping lever;
+  the remaining headroom comes from its engine-side integration) — plus
   **hundreds+ resident** via dormancy at ~zero step cost, and **choir
   spectacle of arbitrary width** via lever 2 (step one, present many).
 
 ## 4. Levers, in measured-payoff order
 
-0. **Instancing: per-object bounds skip + per-tile instance masks: LANDED
-   2026-07-03.** ⚠️ Unlike the rest of this doc, lever 0's numbers were
+0. **Instancing: per-object bounds skip + per-tile instance masks.**
+   ⚠️ Unlike the rest of this doc, lever 0's numbers are
    measured on the SURFACE (Surface Laptop 5, i7-1255U, Iris Xe iGPU, 12
-   logical processors) — the machine that exposed the wall — NOT the RTX 4070
+   logical processors) — the machine that exposes the wall — NOT the RTX 4070
    dev box; expect roughly an order of magnitude more headroom there
    (unverified). The prototype content (shelf + cartridges + animated
-   controls, ~45 SDF instructions, ~24 dynamic) exposed the world renderer's
+   controls, ~45 SDF instructions, ~24 dynamic) exposes the world renderer's
    per-pixel views scaling wall: 206 ms/frame at 1280×800, 96% in kernel. The
-   original avatars VM (8 avatars × ~60 instructions ≈ 500 total) had the
-   load-bearing mechanism dropped in the port: **per-object instancing** — an
+   avatars VM (8 avatars × ~60 instructions ≈ 500 total) carries the
+   load-bearing mechanism: **per-object instancing** — an
    instance table (instruction range + posed bounding sphere), per-tile
    instance bitmasks from the beam prepass, per-frame re-posed bounds, and
    per-instance march chord clamp. A ray evaluates only ~60 instructions of
@@ -134,10 +132,10 @@ trio-lockstep 332):
    This is the scaling substrate for the fleet arc: "hundreds of machines" =
    hundreds of instances; diegetic world-lens machines, cartridges, and players
    are all instances. Per-tile instance masks are the win, not per-instruction
-   bounds alone. The new `world-instanced` Post stage proves instanced ≡ flat
+   bounds alone. The `world-instanced` Post stage proves instanced ≡ flat
    pixels (bit-identical on Vulkan).
 
-1. **Fleet stepping task-per-machine: LANDED 2026-07-03.** The
+1. **Fleet stepping task-per-machine.** The
    engine-side split (`GamingBrickChildNode.PrepareStep`/`ExecuteStep`
    driven by `WorldProducerNode.StepBricks`) enforces the
    **timeline-access rule**: PREPARE runs serially on the render thread
@@ -146,20 +144,19 @@ trio-lockstep 332):
    out one task per machine, and all GPU work stays serial behind the
    `Parallel.For` barrier so submit order is unchanged. Stepping
    eligibility mirrors the produce loop exactly (a pane steps on the
-   frame its view exists). Guards held: `--validate-overworld`, the engine
+   frame its view exists). Guards: `--validate-overworld`, the engine
    determinism/replay gate (Puck.Post Tier A), the full engine Post
-   battery green, and
-   in-capture bit-lock
+   battery green, and in-capture bit-lock
    (cgb ≡ agb, 0 pixel diffs at frame 150 across staggered boots
-   240/480/720). A one-run byte-identical capture against the
-   pre-change binary proved the split semantically exact.
+   240/480/720). A byte-identical capture against a serial-stepping binary
+   proves the split semantically exact.
    **Capture lesson (recorded deliberately):** whole-app PNG captures
    are only *marginally* stable across runs — the tick-per-frame
    allocation sits near a wall-clock boundary, so cross-run/cross-build
    PNG equality is NOT a valid determinism guard; the repo's own proof
    style (pane-vs-pane bit-lock WITHIN one capture) and the fixed-tick
    validators are the honest gates.
-2. **Choir amortization: LANDED 2026-07-03.** Identical-machine consoles
+2. **Choir amortization.** Identical-machine consoles
    (key = ROM + boot model (`runAs` wins over costume) + speed policy —
    never presentation) group behind the first as leader; once a follower
    and its leader are both at the shared timeline's head,
@@ -173,7 +170,7 @@ trio-lockstep 332):
    AND parked mirror ≡ the independently-stepped agb machine, both at
    0/144 000 pixel diffs — the amortization is observationally invisible.
    The heterogeneous default overworld forms no choirs (key respects machine
-   identity). Divergence events later = unpark: `Restore(leader
+   identity). A divergence event = unpark: `Restore(leader
    snapshot)` (30 µs) and resume stepping — the parked cursor already
    tracks the head.
 3. **The dormancy protocol** (simulate-on-demand, settled): the park
@@ -184,7 +181,7 @@ trio-lockstep 332):
    dormant span; 16 concurrent replays sustain 4.5× realtime each). The
    attention-keyed consumer (power-off/re-boot, world mailboxes) is the
    overworld plan's next-step territory and lands with its gameplay.
-4. **Idle fast-forward: MEASURED AND CLOSED** (2026-07-03, `--halt-share`
+4. **Idle fast-forward: MEASURED AND CLOSED** (`--halt-share`
    in the Humble Post exe). Gold halts **26.6–30.0%** of machine time —
    but a halted cycle's remaining cost is dominated by un-skippable PPU
    dot-drawing and APU generation (the CPU decode that dominates running
@@ -201,7 +198,7 @@ trio-lockstep 332):
    payload (the `StateWriter` path). Only matters for high-frequency
    rewind/ghost mechanics (>100 snapshots/s); pick up when a mechanic
    demands it, then guard with `snapshot-round-trip` + `fork-determinism`.
-7. **M3 devirtualization**: LANDED (verdict above) — measured 1.6×.
+7. **M3 devirtualization**: measured 1.6× (verdict above).
 8. **Instancing instance-decoder**: Decode per-tile 64-bit masks to instance
    IDs in the march prepass; the beam prepass already builds them. The
    on-the-fly decode adds noise to beam-sample cost; pre-decoded storage (one
@@ -214,10 +211,12 @@ trio-lockstep 332):
   `peripheral` seam lands, add a bench axis that writes a synthetic sensor
   page per machine-frame before stepping; until then the cost model is
   "one more per-frame copy of ≤ a framebuffer".
-- **Link-pair co-stepping** (short-term interactions): M5-gated; a linked
-  pair steps as one serialized unit at cycle granularity, so plan
-  capacity as pairs ≈ machines/2. The bench gains a pair mode when
-  `ISerialEndpoint` exists.
+- **Link-pair co-stepping** (short-term interactions): LANDED as
+  `SerialLinkSession` — a linked pair steps as one serialized unit in a
+  deterministic instruction-granularity interleave (one work item in any
+  parallel fleet pass), so plan capacity as pairs ≈ machines/2, exactly as
+  modeled. Gated by the Humble battery's Tier C `serial-link` stage. The
+  bench's dedicated pair mode is still open.
 - **Realtime promote/demote**: the COST is already paid — migration =
   `Snapshot` + `Restore` ≈ 300 µs, invisible inside one frame. What
   remains open is the cross-costume migration RULES

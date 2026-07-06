@@ -1,6 +1,0 @@
-{
-    "$schema": "../../schema/run.schema.json",
-    "version": "puck.run.v1",
-    "_comment": "Corpus entry for the fuzzing document section (parse/validation coverage via Puck.Post's run-document stage). Live single-seed fuzzing is `Puck.Post --stage fuzz --fuzz-seed 42`; a seed-range sweep is `tools fuzz`. The demo's document-driven fuzz path was deleted in the 2026-07-03 purification.",
-    "fuzzing": { "seed": 42, "bounds": { "maxPrimitives": 8 } }
-}

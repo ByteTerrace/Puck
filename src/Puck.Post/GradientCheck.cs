@@ -3,8 +3,8 @@ namespace Puck.Post;
 /// <summary>
 /// CPU oracle for the local <c>gradient.comp</c> kernel (<c>Output[x,y] = float4(x/width, y/height, 0.5, 1.0)</c>).
 /// Every pixel must equal that exact output within 1 LSB — the only slack is the float→UNORM8 round-mode noise — so a
-/// kernel that corrupts the interior while leaving the corners monotonic (which the old first-vs-last-red endpoint
-/// check waved through) is now caught. Shared by B1 (compute, same-device) and C3 (reverse-share, cross-API written
+/// kernel that corrupts the interior while leaving the corners monotonic (which a first-vs-last-red endpoint
+/// check waves through) is caught. Shared by B1 (compute, same-device) and C3 (reverse-share, cross-API written
 /// into a foreign-owned image), so the two stages assert the identical pattern.
 /// </summary>
 internal static class GradientCheck {

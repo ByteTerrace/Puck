@@ -1,0 +1,45 @@
+{
+  "schema": "puck.audio.v1",
+  "name": "SUNNY LOOP",
+  "tempo": 8,
+  "patterns": [
+    [
+      { "note": "C4" },
+      { "note": "---" },
+      { "note": "E4" },
+      { "note": "---" },
+      { "note": "G4" },
+      { "note": "---" },
+      { "note": "C5" },
+      { "note": "---" },
+      { "note": "G4" },
+      { "note": "---" },
+      { "note": "E4" },
+      { "note": "---" },
+      { "note": "C4" },
+      { "note": "---" },
+      { "note": "OFF" },
+      { "note": "---" }
+    ],
+    [
+      { "note": "F4" },
+      { "note": "---" },
+      { "note": "A4" },
+      { "note": "---" },
+      { "note": "G4" },
+      { "note": "---" },
+      { "note": "E4" },
+      { "note": "---" },
+      { "note": "D4" },
+      { "note": "---" },
+      { "note": "G4", "duty": 1 },
+      { "note": "---" },
+      { "note": "C5", "envelope": 163 },
+      { "note": "---" },
+      { "note": "OFF" },
+      { "note": "---" }
+    ]
+  ],
+  "order": [0, 0, 1, 0],
+  "effects": {}
+}

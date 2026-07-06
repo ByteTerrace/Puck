@@ -41,8 +41,8 @@ compiles everywhere.
 
 ## Verification
 
-- **Windows:** `dotnet run tools/Tools.cs -- validate` — the Win32 path is unchanged, so the
-  determinism gate is unaffected; this also confirms the cross-platform code compiles under
+- **Windows:** `dotnet run tools/Tools.cs -- validate` — runs the Win32 path through the
+  determinism gate and confirms the cross-platform code compiles under
   warnings-as-errors. The Linux/Switch paths are not exercised on Windows.
 - **Linux / Steam Deck:** run with `NativeWindowOptions.DisplayKind = Xcb`, then `Wayland`,
   through the `WindowProbeRunner` smoke loop (show → poll → first-paint autoclose). The

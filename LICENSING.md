@@ -59,25 +59,10 @@ built on the engine). In that case it needs a commercial license like anyone els
 - **Public, government-funded institutions** receive our deepest commercial discount.
 - **Private institutions** are handled on standard commercial terms.
 
-> Defining exactly which institutions qualify as "public" (charter schools, public
-> universities with large private endowments, non-U.S. public bodies, etc.) is a pricing
-> policy, not a clause in the public license. The eligibility wording lives in the
-> commercial agreement and price sheet, where it is enforceable as an ordinary contract.
-> **Have an IP attorney finalize that definition before publishing prices.**
-
----
-
-## Optional: a free tier for indie / small companies
-
-If we want to let small commercial users in for free too (a common goodwill move that
-drives adoption), we can add the
-**[PolyForm Small Business License 1.0.0](https://polyformproject.org/licenses/small-business/1.0.0)**
-as an *additional* grant on top of the noncommercial license. It makes commercial use
-free for any company with **fewer than 100 people and under ~$1M (2019, CPI-adjusted)
-revenue** in the prior tax year. Bigger companies still need a paid license.
-
-This is **not enabled yet** — it is listed here as a ready-to-flip option. Enabling it is
-a one-line addition to `LICENSE.md` plus a note here.
+> Which institutions qualify as "public" (charter schools, public universities with large private
+> endowments, non-U.S. public bodies, and the like) is a pricing question, not a clause in the
+> public license. The precise eligibility criteria live in the commercial agreement and price
+> sheet, where they are enforceable as an ordinary contract.
 
 ---
 
@@ -104,38 +89,49 @@ commercial terms* — without it, we could not legally offer contributed code or
 under the paid commercial license.
 
 Because contributors may be children, the CLA requires a **parent or legal guardian** to
-agree on a minor's behalf (and addresses COPPA / GDPR-K). See [CLA.md](CLA.md). It is a
-draft pending attorney review and is not yet wired into the contribution flow.
+agree on a minor's behalf (and addresses COPPA / GDPR-K). See [CLA.md](CLA.md).
 
 ---
 
 ## Third-party components
 
-ByteTerrace.Puck builds on third-party software under permissive licenses (MIT, SIL OFL) and on
-published algorithms credited to their authors. None of it is copyleft, which is what makes
-this dual-license model legally possible. See
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
+ByteTerrace.Puck builds on third-party software under **non-copyleft** licenses and on published
+algorithms credited to their authors. The core engine's redistributed dependencies are under
+MIT (mimalloc, the .NET runtime) and the SIL Open Font License 1.1 (the Cascadia / Caskaydia
+glyphs). The experimental bare-metal target (`experimental/Puck.BareMetal/`) additionally vendors
+components under Apache-2.0 (mbedTLS), BSD (lwIP), and MIT (AMD register headers, RADV, musl),
+plus AMD's **proprietary-but-redistributable** GPU firmware — a signed binary blob that is *not*
+open source, but is licensed for unmodified binary redistribution (with pass-along, no-reverse-
+engineering, and U.S. export-control conditions).
+
+None of it is **copyleft** — which is what makes this dual-license model legally possible: no
+dependency forces the engine's own source open or blocks offering it under paid commercial terms.
+The redistributable firmware carries its own conditions rather than copyleft ones, satisfied by
+shipping its license alongside the binary. Full inventory:
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md), the bare-metal subtree's
+[`NOTICE.md`](experimental/Puck.BareMetal/NOTICE.md), and [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
+
+> **Note:** the AMD firmware is subject to U.S. export regulations (EAR / ITAR), and mbedTLS
+> contains cryptography; anyone redistributing the bare-metal binaries internationally is
+> responsible for export compliance.
+
+## Trademarks
+
+The license covers the **code**; it does not grant any rights in the **names** "Puck" or
+"ByteTerrace," which are **registered trademarks** of ByteTerrace (Puck®, ByteTerrace®). PolyForm Noncommercial's *No Other Rights*
+clause already means the license conveys no trademark rights — so using the software under it does
+**not** grant permission to use the marks. The trademark usage terms live in
+[`TRADEMARKS.md`](TRADEMARKS.md), which draws the line between permitted truthful references
+("built on Puck") and uses that need permission (naming a product/fork "Puck," using the logos,
+implying endorsement).
 
 ---
 
-## Placeholders to finalize
+## Related documents
 
-Resolved:
+- [`LICENSE.md`](LICENSE.md) — the PolyForm Noncommercial 1.0.0 license text.
+- [`TRADEMARKS.md`](TRADEMARKS.md) — trademark usage policy for the Puck® and ByteTerrace® marks.
+- [`CLA.md`](CLA.md) — the Contributor License Agreement (required before a first contribution).
+- [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) — third-party components and their licenses.
 
-- **Copyright holder / licensor** — ByteTerrace. Confirm with
-  your attorney which is the contracting party of record; whichever it is must own — or
-  have a CLA covering — 100% of the code.
-- **Licensing contact** — administrator@byteterrace.com.
-- **Repository URL** — set in the `Required Notice:` line of `LICENSE.md`.
-
-Still open (for your attorney):
-
-- **Public-institution discount definition** — the eligibility wording for the public-vs-
-  private school discount, to live in the commercial agreement / price sheet.
-- **CLA finalization** — [CLA.md](CLA.md) is a draft; the minor-consent, COPPA/GDPR-K, and
-  governing-law provisions need attorney sign-off before it is wired into the contribution
-  flow.
-
-> **Not legal advice.** This structure follows common industry practice, but you are about
-> to monetize. Have your IP attorney review `LICENSE.md`, this document, the commercial
-> agreement, and `CLA.md` before you publish prices or accept contributions.
+_Last updated: July 5, 2026._

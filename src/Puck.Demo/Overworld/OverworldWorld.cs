@@ -5,6 +5,28 @@ using Puck.SdfVm;
 namespace Puck.Demo.Overworld;
 
 /// <summary>
+/// The movement direction lock a loaded world can impose — sim CONFIG (like the collision surfaces), applied on a
+/// tick boundary and NEVER folded into <see cref="OverworldWorld.StateHash"/>. When locked, each occupied slot's
+/// intent move vector is quantized onto the mode's direction set before the body steps: the direction with the
+/// maximum raw dot product wins (ties break to the FIRST direction in the mode's documented enumeration order), and
+/// the quantized move is that unit direction scaled by the projection of the intent onto it — analog magnitude is
+/// preserved along the locked axis, no square roots anywhere. <see cref="Free"/> is today's untouched analog path.
+/// </summary>
+public enum MovementLock {
+    /// <summary>No lock — the intent's analog move passes through untouched (the wire default).</summary>
+    Free,
+    /// <summary>Four cardinal directions. Enumeration (tie-break) order: +X, −X, +Y, −Y.</summary>
+    Four,
+    /// <summary>Four cardinals plus four diagonals. Enumeration (tie-break) order: +X, −X, +Y, −Y, then
+    /// (+,+), (+,−), (−,+), (−,−) — a cardinal beats a diagonal on an exact tie.</summary>
+    Eight,
+    /// <summary>Six pointy-top hex directions (matching the hex walk grid): pure E/W plus four 60° diagonals, no
+    /// vertical neighbor. Enumeration (tie-break) order: +X, −X, then (+½,+v), (+½,−v), (−½,+v), (−½,−v)
+    /// where v = √3⁄2 — pure E/W beats a diagonal on an exact tie.</summary>
+    Hex,
+}
+
+/// <summary>
 /// The authoritative, DETERMINISTIC simulation state: a fixed array of player slots (a free-list, so a player's slot —
 /// its dynamic-transform slot — stays stable while active and recycles when it leaves), a seeded PRNG, and the tick
 /// counter. <see cref="Advance"/> is a pure function of the previous state plus the per-slot intents for one tick, so
@@ -23,10 +45,43 @@ public sealed class OverworldWorld {
     /// growing past it is a later phase.</summary>
     public const int MaxPlayers = 4;
 
-    /// <summary>The number of cartridge TYPES a cabinet can hold (custom / camera / showcase), cycled at the cabinet.</summary>
-    public const int CartTypeCount = 3;
+    /// <summary>The number of cartridge TYPES a cabinet can hold (world-lens / camera / showcase / AVATAR / VOLLEY / BRICKFALL
+    /// / CHROMA / SOLITAIRE / POKER), cycled at the cabinet. Type 3 is the player's own forged avatar overworld — the
+    /// in-engine create→commit→play loop; types 4–8 are the five five-star framework games (genuine SM83 ROMs). Purely a
+    /// count; the sim never learns what bytes a type maps to (that is host-side, in the render node's ROM table).</summary>
+    public const int CartTypeCount = 9;
 
-    private readonly FixedRoom m_collision;
+    // The movement direction sets, as compile-time raw Q48.16 unit components — each irrational rounded ONCE, here,
+    // and documented as a settled contract fact: One = 65536 (1.0, exact), Half = 32768 (0.5, exact),
+    // InvSqrt2 = 46341 (1/√2 = 0.7071067811… × 2^16 = 46340.95… → 46341), HexVertical = 56756
+    // (√3/2 = 0.8660254038… × 2^16 = 56755.84… → 56756).
+    private const long DirectionOneRaw = 65536L;
+    private const long DirectionHalfRaw = 32768L;
+    private const long DirectionInvSqrt2Raw = 46341L;
+    private const long DirectionHexVerticalRaw = 56756L;
+
+    // The per-mode direction sets, in their DOCUMENTED enumeration order (see MovementLock) — the order IS the
+    // deterministic tie-break: the selection loop keeps the first-seen maximum.
+    private static readonly (long X, long Y)[] FourDirections = [
+        (DirectionOneRaw, 0L), (-DirectionOneRaw, 0L), (0L, DirectionOneRaw), (0L, -DirectionOneRaw),
+    ];
+    private static readonly (long X, long Y)[] EightDirections = [
+        (DirectionOneRaw, 0L), (-DirectionOneRaw, 0L), (0L, DirectionOneRaw), (0L, -DirectionOneRaw),
+        (DirectionInvSqrt2Raw, DirectionInvSqrt2Raw), (DirectionInvSqrt2Raw, -DirectionInvSqrt2Raw),
+        (-DirectionInvSqrt2Raw, DirectionInvSqrt2Raw), (-DirectionInvSqrt2Raw, -DirectionInvSqrt2Raw),
+    ];
+    private static readonly (long X, long Y)[] HexDirections = [
+        (DirectionOneRaw, 0L), (-DirectionOneRaw, 0L),
+        (DirectionHalfRaw, DirectionHexVerticalRaw), (DirectionHalfRaw, -DirectionHexVerticalRaw),
+        (-DirectionHalfRaw, DirectionHexVerticalRaw), (-DirectionHalfRaw, -DirectionHexVerticalRaw),
+    ];
+
+    // Mutable (not readonly): LoadWorld replaces the whole collision surface wholesale, on a tick boundary, when a
+    // world document loads — the ONE legal authoring→sim seam (see LoadWorld's remarks).
+    private FixedRoom m_collision;
+    // The movement direction lock — sim CONFIG like m_collision (tick-boundary application, never hashed). Free by
+    // default, so every pre-existing run takes today's exact analog path.
+    private MovementLock m_movementLock;
     private readonly PlatformerTuning m_tuning;
     private readonly FixedQ4816 m_dt;
     private readonly PlayerSlot?[] m_slots = new PlayerSlot?[MaxPlayers];
@@ -235,8 +290,8 @@ public sealed class OverworldWorld {
         return Boot(consoleIndex: consoleIndex);
     }
 
-    /// <summary>Ejects a cabinet: removes its cart and un-boots it (the presentation eases its pane closed). Two-way —
-    /// unlike the old one-way boot, a cabinet returns to empty. Idempotent on an already-empty cabinet.</summary>
+    /// <summary>Ejects a cabinet: removes its cart and un-boots it (the presentation eases its pane closed). Two-way:
+    /// a cabinet returns to empty. Idempotent on an already-empty cabinet.</summary>
     /// <param name="consoleIndex">The cabinet to eject.</param>
     /// <returns><see langword="true"/> when the cabinet transitioned to empty on this call.</returns>
     public bool Eject(int consoleIndex) {
@@ -351,6 +406,12 @@ public sealed class OverworldWorld {
 
             var intent = ((slot < intentsBySlot.Count) ? intentsBySlot[slot] : PlayerIntent.None);
 
+            // The movement lock quantizes the intent's move vector BEFORE the body steps — Free skips the branch
+            // entirely, so an unlocked world is today's exact code path (and today's exact hashes).
+            if (m_movementLock != MovementLock.Free) {
+                intent = (intent with { Move = QuantizeMove(mode: m_movementLock, move: intent.Move) });
+            }
+
             // Interact + cycle fire BEFORE the step (against the pre-move position — the position the player saw when
             // they pressed), in slot order, so simultaneous presses resolve deterministically.
             if (intent.InteractPressed) {
@@ -365,6 +426,105 @@ public sealed class OverworldWorld {
         }
 
         m_tick++;
+    }
+
+    /// <summary>Loads a sculpted world's collision surfaces into the running simulation — the ONE legal
+    /// authoring→sim seam. Applied on a TICK BOUNDARY (the caller invokes this between calls to <see cref="Advance"/>,
+    /// never mid-step): replaces the whole collision surface wholesale (a fresh <see cref="FixedRoom"/>, built from
+    /// <paramref name="room"/> plus the optional baked <paramref name="walkGrid"/>) and then deterministically clamps
+    /// every OCCUPIED player's position into the new bounds, per axis, in ascending SLOT order (so two players
+    /// clamping simultaneously resolve identically regardless of call order elsewhere). Everything else — the tick
+    /// counter, the PRNG, the boot/cart state, free slots — is left untouched: a world load changes where the walls
+    /// are, never what's running on the cabinets or how many ticks have elapsed. <see cref="StateHash"/> is therefore
+    /// unaffected except through the legitimately-changed body positions it already folds in.</summary>
+    /// <param name="room">The new authored room (bounds, floor, consoles/shelf) to resolve collision from.</param>
+    /// <param name="walkGrid">The optional baked walk grid to attach (<see langword="null"/> = walls-only, exactly
+    /// like a room with no world loaded).</param>
+    /// <param name="movementLock">The world's movement direction lock (default <see cref="MovementLock.Free"/>,
+    /// matching the wire's null default — a world that declares no lock RESETS any previous world's lock rather than
+    /// inheriting it). The host parses the document string via <see cref="ParseMovementLock"/> and passes the enum;
+    /// <see cref="SetMovementLock"/> toggles it standalone on the same tick-boundary terms.</param>
+    public void LoadWorld(OverworldRoom room, FixedWalkGrid? walkGrid, MovementLock movementLock = MovementLock.Free) {
+        ArgumentNullException.ThrowIfNull(argument: room);
+
+        m_collision = FixedRoom.From(room: room, walkGrid: walkGrid);
+        m_movementLock = movementLock;
+
+        for (var slot = 0; (slot < MaxPlayers); slot++) {
+            if (m_slots[slot] is not { } player) {
+                continue;
+            }
+
+            var local = player.Body.Position.Local;
+            var clampedLocal = new FixedVector3(
+                X: FixedQ4816.Clamp(value: local.X, minimum: m_collision.MinX, maximum: m_collision.MaxX),
+                Y: m_collision.FloorTop,
+                Z: FixedQ4816.Clamp(value: local.Z, minimum: m_collision.MinZ, maximum: m_collision.MaxZ)
+            );
+
+            player.Body.Position = (player.Body.Position with { Local = clampedLocal }).Normalize();
+        }
+    }
+
+    /// <summary>Sets the movement direction lock — sim CONFIG applied on a TICK BOUNDARY (between calls to
+    /// <see cref="Advance"/>, never mid-step), exactly like <see cref="LoadWorld"/>'s collision swap. Like the
+    /// collision surfaces, the lock is NEVER folded into <see cref="StateHash"/>: two runs whose intents happen to
+    /// already lie on the locked directions hash identically whether or not the lock is set.</summary>
+    /// <param name="mode">The lock to apply from the next tick onward.</param>
+    public void SetMovementLock(MovementLock mode) {
+        m_movementLock = mode;
+    }
+
+    /// <summary>Parses a world document's <c>movementLock</c> wire string (<c>free</c>/<c>four</c>/<c>eight</c>/
+    /// <c>hex</c>, case-insensitive) into the sim's enum — the wire→typed seam, mirroring
+    /// <see cref="World.WalkOverrideInput.FromDocument"/>'s kind-string resolution. Null or any unrecognized value is
+    /// <see cref="MovementLock.Free"/> (the document's own null default).</summary>
+    /// <param name="value">The wire string, or <see langword="null"/>.</param>
+    /// <returns>The parsed lock.</returns>
+    public static MovementLock ParseMovementLock(string? value) {
+        if (string.Equals(a: value, b: "four", comparisonType: StringComparison.OrdinalIgnoreCase)) { return MovementLock.Four; }
+        if (string.Equals(a: value, b: "eight", comparisonType: StringComparison.OrdinalIgnoreCase)) { return MovementLock.Eight; }
+        if (string.Equals(a: value, b: "hex", comparisonType: StringComparison.OrdinalIgnoreCase)) { return MovementLock.Hex; }
+
+        return MovementLock.Free;
+    }
+
+    // Quantizes an intent's move vector onto a lock mode's direction set: the direction with the MAXIMUM dot product
+    // wins — computed on raw longs (raws are ≤ 2^17, so a product is ≤ 2^34 and the two-term sum fits a long with
+    // room to spare; no FixedQ4816 multiply, whose rounding would blur an exact compare) — with ties breaking to the
+    // FIRST direction in the mode's documented enumeration order (the loops ascend and the compare is strict). The
+    // result is unit × dot(move, unit) in rounded fixed-point: the projection onto the chosen axis, so analog
+    // magnitude is preserved along it. Zero intent stays zero (no quantization of nothing). The float round-trip out
+    // is EXACT: every component raw is far below 2^24, so float→fixed→float→fixed recovers identical bits in Step.
+    private static Vector2 QuantizeMove(MovementLock mode, Vector2 move) {
+        // The same float→fixed conversion Step itself applies — quantize in the sim's own number space.
+        var moveX = FixedQ4816.FromDouble(value: move.X);
+        var moveY = FixedQ4816.FromDouble(value: move.Y);
+
+        if ((moveX.Value == 0L) && (moveY.Value == 0L)) {
+            return move;
+        }
+
+        var directions = ((mode == MovementLock.Four) ? FourDirections : ((mode == MovementLock.Eight) ? EightDirections : HexDirections));
+        var bestDot = long.MinValue;
+        var bestIndex = 0;
+
+        for (var index = 0; (index < directions.Length); index++) {
+            var dot = ((moveX.Value * directions[index].X) + (moveY.Value * directions[index].Y));
+
+            if (dot > bestDot) {
+                bestDot = dot;
+                bestIndex = index;
+            }
+        }
+
+        var unitX = FixedQ4816.FromRawBits(value: directions[bestIndex].X);
+        var unitY = FixedQ4816.FromRawBits(value: directions[bestIndex].Y);
+        var projection = ((moveX * unitX) + (moveY * unitY));
+        var quantizedX = (unitX * projection);
+        var quantizedY = (unitY * projection);
+
+        return new Vector2(x: ((float)(double)quantizedX), y: ((float)(double)quantizedY));
     }
 
     // The contextual cabinet interact (the press edge): the nearest cabinet in range TOGGLES — a running cabinet

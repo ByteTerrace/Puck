@@ -32,5 +32,7 @@ internal static class PostStages {
             new MooneyeStage(group: "bits", relativeDirectory: "bits", recurse: true),
             new MooneyeStage(group: "instr", relativeDirectory: "instr", recurse: true),
             new MooneyeStage(group: "misc", relativeDirectory: "", recurse: false),
+            // Tier C — cross-machine link determinism (self-contained synthetic ROMs; run anywhere).
+            new SerialLinkStage(),
         ];
 }

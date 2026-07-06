@@ -4,7 +4,7 @@ namespace Puck.Post;
 
 /// <summary>
 /// Tolerance-aware difference metrics between two RGBA images of equal extent — the quantitative core the parity
-/// stages share, metric shapes ported from the demo's <c>ParityMetrics</c> (the worked reference). Pure and GPU-free.
+/// stages share. Pure and GPU-free.
 /// Per pixel the difference is <c>d = max(|ΔR|, |ΔG|, |ΔB|)</c> (alpha is ignored — every kernel writes opaque).
 /// The "smart" signal is <see cref="IsolatedFraction"/>: benign cross-backend divergence is driver-level FP codegen —
 /// a sprinkle of isolated ±1-LSB quantization flips — while a real bug spreads into contiguous regions, so its
@@ -133,8 +133,7 @@ internal sealed record ParityMetrics {
 /// <summary>
 /// A conjunctive set of PASS thresholds for one parity comparison. Every active threshold must hold;
 /// <see cref="Evaluate"/> returns the ones that tripped (empty = pass). A threshold is disabled by a sentinel:
-/// <see cref="MaxChannelDelta"/> at 255 or <see cref="MinUnitDeltaFraction"/> at 0 never trips. Shape ported from
-/// the demo's <c>ParityThresholdSet</c>.
+/// <see cref="MaxChannelDelta"/> at 255 or <see cref="MinUnitDeltaFraction"/> at 0 never trips.
 /// </summary>
 internal sealed record ParityThresholdSet {
     /// <summary>Gets the largest allowed single-channel delta (255 disables the check).</summary>
@@ -185,7 +184,7 @@ internal sealed record ParityThresholdSet {
 /// The calibrated PASS thresholds the parity stages apply — VALUES kept in sync with the demo's
 /// <c>ParityThresholds.cs</c> (calibrated against the measured RTX 4070 baseline): the demo gate is the POST's
 /// standing cross-check, so the same comparison must pass or fail identically in both.
-/// <para><b>POSTURE (user decision 2026-07-03): RELAXED by default.</b> Pixel-perfect cross-backend agreement is a
+/// <para><b>POSTURE: RELAXED by default.</b> Pixel-perfect cross-backend agreement is a
 /// LONG-TERM ideal, not a day-to-day gate: the fine-grained signatures (±1-LSB exactness, unit-delta mass,
 /// isolation) re-roll with every shader-codegen change and kept blocking short-term work. The default posture keeps
 /// only the guards a REAL divergence cannot dodge — a missing/relocated/recolored region explodes the mean, a wrong
@@ -237,7 +236,7 @@ internal static class ParityThresholds {
     /// <summary>The thresholds for continuous world views whose benign residual is EXACTLY ±1 LSB but whose spread
     /// legitimately moves with shader codegen: every time the VM's interpreter grows an opcode, DXC's SPIR-V and DXIL
     /// codegen re-make different contraction/scheduling choices, and the ±1 rounding noise REDISTRIBUTES (measured on
-    /// the rt stage when the wallpaper fold landed 2026-07-03: 0.01% → 6.2% of pixels differing, still every delta
+    /// the rt stage: the wallpaper fold makes ~6.2% of pixels differ (up from 0.01%), still every delta
     /// exactly ±1, visible as gradient-band dither). Chasing the spread per codegen roll is whack-a-mole; the
     /// signature that cannot be a real bug is "EVERY delta is exactly ±1" — so the magnitude guards stay absolute
     /// (max delta 1, unit-delta 0.99) and the structure guards widen to what all-±1 noise can occupy. The mean guard
@@ -252,8 +251,8 @@ internal static class ParityThresholds {
 
     /// <summary>The thresholds for continuous world views over HIGH-CONTRAST palettes (emissive/specular materials),
     /// where a benign ±1-ULP field difference at a material boundary can flip the WINNING MATERIAL of an isolated
-    /// pixel — a legitimately multi-LSB delta (measured on the menagerie when the wallpaper fold's codegen roll
-    /// landed 2026-07-03: a handful of isolated Δ126 pixels where the glowing cream pair meets its neighbors; the
+    /// pixel — a legitimately multi-LSB delta (measured on the menagerie under the wallpaper fold's codegen roll:
+    /// a handful of isolated Δ126 pixels where the glowing cream pair meets its neighbors; the
     /// same phenomenon the Discrete set has always absorbed for the material-id debug view). The max-delta guard is
     /// disabled for exactly that signature; everything else stays showcase-strict — a real bug clumps (isolation),
     /// spreads (percent), shifts the mass off ±1 (unit-delta), or lifts the mean.</summary>
@@ -270,17 +269,17 @@ internal static class ParityThresholds {
     /// than the hand-tuned showcase: it follows the large smooth ground-plane gradients and the cone-march banding
     /// (thin contiguous ±1 bands), which collapses the isolated-fraction and lifts the spread far below what those
     /// showcase-calibrated guards expect — so the isolation guard is disabled and the spread cap widened.
-    /// <para>The 7-shape generator (capsule/cylinder/ellipsoid joined 2026-07-03) additionally produces LARGE CURVED
+    /// <para>The 7-shape generator (capsule/cylinder/ellipsoid included) additionally produces LARGE CURVED
     /// GRAZING surfaces (e.g. seed 42: a capsule under a non-uniform Scale filling a third of the frame edge-on),
     /// where the march itself amplifies sub-ULP field differences: a step-termination flip near the surface shifts
     /// the traveled distance, and the 6-tap normal's catastrophic cancellation turns that into an ISOLATED few-LSB
     /// shading delta (measured: maxΔ5 on 0.02% of pixels, 100% isolated, 98.85% still exactly ±1). "Every delta
-    /// exactly ±1" was therefore an empirical property of the old 4-shape scene distribution, not of the backends.
+    /// exactly ±1" is therefore an empirical property of a 4-shape scene distribution, not of the backends.
     /// The recalibrated signature: the mass of deltas stays ±1 (<see cref="ParityThresholdSet.MinUnitDeltaFraction"/>
     /// = 0.95 — the load-bearing subtle-bug guard: a shape whose field diverges by even 2–3 LSB across its screen
     /// area collapses it), and a real region-level divergence still trips the mean/spread guards regardless of
-    /// magnitude. The max-delta guard is DISABLED outright: once the subtraction-like blends joined the generator
-    /// (2026-07-03), the carve boundaries produce the same benign ISOLATED material-winner flips the high-contrast
+    /// magnitude. The max-delta guard is DISABLED outright: with the subtraction-like blends in the generator,
+    /// the carve boundaries produce the same benign ISOLATED material-winner flips the high-contrast
     /// showcase scenes show (a ±1-ULP field difference at a discrete ownership decision; measured seed 1: maxΔ165 on
     /// isolated pixels, 94% isolated, delta mass still ±1) — magnitude no longer separates benign from real; the
     /// MASS does. KEEP IN SYNC with the demo's <c>ParityThresholds.WorldFuzz</c> (the same seed must pass or fail
@@ -298,7 +297,7 @@ internal static class ParityThresholds {
 /// metrics digest for stage details.</summary>
 internal static class ParityCheck {
     /// <summary>Writes a grayscale max-channel-delta heatmap, amplified so divergences glow without a 1-LSB image
-    /// looking alarming: <c>value = min(255, d * 64)</c>. Shape ported from the demo's diff writer.</summary>
+    /// looking alarming: <c>value = min(255, d * 64)</c>.</summary>
     /// <param name="path">The output PNG path.</param>
     /// <param name="reference">The reference image's RGBA pixels.</param>
     /// <param name="comparand">The comparand image's RGBA pixels.</param>
@@ -335,6 +334,39 @@ internal static class ParityCheck {
         ArgumentNullException.ThrowIfNull(metrics);
 
         return $"diff {metrics.PercentDiffering:0.##}% ({metrics.DifferingPixels}px) | maxΔ{metrics.MaxChannelDelta} | isolated {(metrics.IsolatedFraction * 100.0):0}% | unitΔ {metrics.UnitDeltaFraction:0.##}";
+    }
+
+    /// <summary>The shared tail of the cross-backend world-parity stages: writes the reference/comparand renders and
+    /// the amplified diff heatmap (<c>&lt;prefix&gt;-vulkan/-directx/-diff.png</c>), computes the parity metrics, and
+    /// evaluates them against <paramref name="thresholds"/>. On a trip it returns a <see cref="PostVerdict.Fail"/> with
+    /// the metrics digest and the tripped thresholds; otherwise a <see cref="PostVerdict.Pass"/> whose detail is
+    /// <paramref name="passLabel"/> followed by the digest. The diff heatmap is the outcome's artifact either way.</summary>
+    /// <param name="artifactsDirectory">The battery artifacts directory (created if absent).</param>
+    /// <param name="prefix">The artifact filename prefix (e.g. <c>world-warp</c>).</param>
+    /// <param name="referencePixels">The reference render (Vulkan/SPIR-V).</param>
+    /// <param name="comparandPixels">The comparand render (Direct3D 12/DXIL).</param>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <param name="thresholds">The calibrated PASS thresholds for this comparison.</param>
+    /// <param name="passLabel">The pass-detail prefix; the parity digest is appended after a <c>|</c>.</param>
+    /// <returns>The stage outcome.</returns>
+    public static PostStageOutcome WriteEvaluateReport(string artifactsDirectory, string prefix, byte[] referencePixels, byte[] comparandPixels, int width, int height, ParityThresholdSet thresholds, string passLabel) {
+        _ = Directory.CreateDirectory(path: artifactsDirectory);
+
+        var diffPath = Path.Combine(artifactsDirectory, $"{prefix}-diff.png");
+
+        PngEncoder.Write(height: height, path: Path.Combine(artifactsDirectory, $"{prefix}-vulkan.png"), rgba: referencePixels, width: width);
+        PngEncoder.Write(height: height, path: Path.Combine(artifactsDirectory, $"{prefix}-directx.png"), rgba: comparandPixels, width: width);
+        WriteDiffImage(comparand: comparandPixels, height: height, path: diffPath, reference: referencePixels, width: width);
+
+        var metrics = ParityMetrics.Compute(reference: referencePixels, comparand: comparandPixels, width: width, height: height);
+        var failures = thresholds.Evaluate(metrics: metrics);
+
+        if (failures.Count != 0) {
+            return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
+        }
+
+        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{passLabel} | {Describe(metrics: metrics)}");
     }
 
     /// <summary>Evaluates the flat ≡ instanced contract the instancing stages assert PER BACKEND: Vulkan

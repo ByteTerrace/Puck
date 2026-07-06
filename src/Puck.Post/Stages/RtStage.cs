@@ -1,4 +1,3 @@
-using Puck.Capture;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +11,7 @@ namespace Puck.Post;
 /// Tier-C stage C8. Hardware ray-tracing world parity — the POST's cross-backend check of the inline ray-query path,
 /// built from the demo's retired <c>RtWorldProducerNode</c> (provenance; the demo has no RT parity gate — its
 /// <c>--world-rt</c> is a live producer — so this stage IS the first cross-backend diff of the path). The shared hero
-/// scene is decomposed into a TLAS of unit-AABB instances (one per finite primitive, via the ported
+/// scene is decomposed into a TLAS of unit-AABB instances (one per finite primitive, via
 /// <see cref="RtWorldInstances"/>), and the one SM 6.5 ray-query kernel (<c>sdf-world-rt-debug.rq.comp</c>) renders it
 /// on both backends — Vulkan ray-query on the host device (SPIR-V) and DXR 1.1 on the shared LUID-matched Tier-C
 /// Direct3D 12 device (DXIL). The kernel RAY-TRACES the cull (TLAS entry + analytic floor crossing set the march
@@ -94,25 +93,18 @@ internal sealed class RtStage : IPostStage {
             gpu: directX.Services.GetRequiredService<IGpuComputeServices>()
         ));
 
-        _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "rt-diff.png");
-
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "rt-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "rt-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
-        ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
-
-        // Vulkan is the reference; Direct3D 12 is the comparand. The RT kernel compiles the WHOLE VM interpreter, so
-        // its ±1 residual redistributes on every codegen roll (see WorldLsbExact's doc) — the guard is that every
-        // delta is exactly ±1, not where the noise happens to land.
-        var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
-        var failures = ParityThresholds.WorldLsbExact.Evaluate(metrics: metrics);
-
-        if (failures.Count != 0) {
-            return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
-        }
-
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} ray-query hero view | Vulkan (ray-query) vs Direct3D 12 (DXR 1.1) within WorldLsbExact thresholds | {ParityCheck.Describe(metrics: metrics)}");
+        // The RT kernel compiles the WHOLE VM interpreter, so its ±1 residual redistributes on every codegen roll
+        // (see WorldLsbExact's doc) — the guard is that every delta is exactly ±1, not where the noise lands.
+        return ParityCheck.WriteEvaluateReport(
+            artifactsDirectory: context.ArtifactsDirectory,
+            prefix: "rt",
+            referencePixels: vulkanPixels,
+            comparandPixels: directXPixels,
+            width: (int)WorldWidth,
+            height: (int)WorldHeight,
+            thresholds: ParityThresholds.WorldLsbExact,
+            passLabel: $"{WorldWidth}x{WorldHeight} ray-query hero view | Vulkan (ray-query) vs Direct3D 12 (DXR 1.1) within WorldLsbExact thresholds"
+        );
     }
 
     // The full ray-query render on ONE backend — the reference's EnsureResources + PackCamera + Render, collapsed to

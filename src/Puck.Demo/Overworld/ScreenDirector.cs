@@ -77,6 +77,16 @@ public sealed class ScreenDirector {
     private readonly int[] m_lastPanes = new int[ViewCount - 1];
     private ScreenDirectorMode m_mode;
     private ScreenDirectorMode m_lastMode;
+    // CREATOR VIEW: an override the host raises while the player edits their avatar. It eases the ROOM to fullscreen and
+    // hides every game pane REGARDLESS of the underlying mode (so creator works even from an immersed game filling the
+    // screen) — the "step out to the workbench" view. The underlying mode is untouched, so lowering it restores the game.
+    private bool m_creatorView;
+    private bool m_lastCreatorView;
+    // The eased workpiece camera (creator view) — initialized from the live chase framing on entry so the mode
+    // change reads as a camera move, never a cut.
+    private bool m_creatorCameraInitialized;
+    private Vector3 m_creatorEye;
+    private Vector3 m_creatorTarget;
     private bool m_initialized;
     private int m_lastPaneCount = -1;
     private float m_transition = 1f;
@@ -103,6 +113,14 @@ public sealed class ScreenDirector {
         m_lastMode = initialMode;
     }
 
+    /// <summary>Raises/lowers the CREATOR VIEW: while set, the room eases to fullscreen and all game panes hide, so a
+    /// player can edit their avatar even when a game was filling the screen. Presentation-only; the underlying
+    /// <see cref="ScreenDirectorMode"/> is preserved and restored when cleared.</summary>
+    public bool CreatorView {
+        get => m_creatorView;
+        set => m_creatorView = value;
+    }
+
     /// <summary>Gets or sets an optional per-console visibility read for the IMMERSED tiling: a booted console's pane
     /// participates only while this answers <see langword="true"/> (the overworld passes its host-side ownership map, so
     /// a pad eviction's release eases that pane out while the machine stays booted). Null admits every booted pane.
@@ -120,6 +138,12 @@ public sealed class ScreenDirector {
     /// room framing, 1 right up on the screen (the brick fills the pane). Null (or a null result) leaves the pane on
     /// the room camera. The closeness eases both ways; presentation-only, never fed back into the simulation.</summary>
     public Func<int, (Vector3 ScreenPoint, float Closeness, float ScreenHalfHeight)?>? PaneCameraSource { get; set; }
+
+    /// <summary>Gets or sets the WORKPIECE camera driver for creator mode: while <see cref="CreatorView"/> is up and
+    /// this yields a frame, the room view leaves the player-chase framing for an authoring camera — an ORBIT about
+    /// the target (yaw/pitch/distance) for object intent, or a locked HEAD-ON framing (what-you-see-is-what-bakes)
+    /// for sprite intent. Eased both ways; null (or a null result) keeps the chase framing. Presentation-only.</summary>
+    public Func<(Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)?>? CreatorCameraSource { get; set; }
 
     /// <summary>Switches the layout mode. The next <see cref="Compose"/> eases every rect from its live place into the
     /// new mode's keyframes through the same transition machinery a boot uses — the REVEAL is the panes collapsing in
@@ -206,6 +230,7 @@ public sealed class ScreenDirector {
             }
 
             m_lastMode = m_mode;
+            m_lastCreatorView = m_creatorView;
             m_lastPaneCount = m_panes.Count;
 
             for (var pane = 0; (pane < m_panes.Count); pane++) {
@@ -232,6 +257,11 @@ public sealed class ScreenDirector {
     private void BuildPaneList(IReadOnlyList<int> bootOrder) {
         m_panes.Clear();
 
+        // Creator view hides every game pane — the workbench is room-only.
+        if (m_creatorView) {
+            return;
+        }
+
         foreach (var consoleIndex in bootOrder) {
             if ((consoleIndex < 0) || ((1 + consoleIndex) >= ViewCount)) {
                 continue;
@@ -254,7 +284,7 @@ public sealed class ScreenDirector {
     // Whether the effective layout inputs moved since the last retarget — the mode, or the pane list's length OR
     // membership (an ownership release changes membership without changing the boot count).
     private bool LayoutChanged() {
-        if ((m_mode != m_lastMode) || (m_panes.Count != m_lastPaneCount)) {
+        if ((m_mode != m_lastMode) || (m_creatorView != m_lastCreatorView) || (m_panes.Count != m_lastPaneCount)) {
             return true;
         }
 
@@ -275,6 +305,13 @@ public sealed class ScreenDirector {
         }
 
         var count = m_panes.Count;
+
+        // Creator view: the room fills the whole frame (panes were cleared in BuildPaneList, so they stay Hidden).
+        if (m_creatorView) {
+            m_target[0] = new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f);
+
+            return;
+        }
 
         m_target[0] = m_mode switch {
             ScreenDirectorMode.Immersed => Hidden,
@@ -423,6 +460,37 @@ public sealed class ScreenDirector {
         var target = (m_smoothCentroid + TargetLift);
         var eye = (m_smoothCentroid + new Vector3(0f, (6.5f + m_smoothSpread), (11f + (m_smoothSpread * 1.5f))));
 
+        // The CREATOR workpiece camera: while the creator view is up, the room view leaves the chase framing for the
+        // authoring camera — eased from wherever the room camera was, so entering the mode reads as a move, not a cut.
+        if (m_creatorView && (CreatorCameraSource?.Invoke() is { } workpiece)) {
+            var desiredTarget = workpiece.Target;
+            // Object intent orbits the target; sprite intent locks HEAD-ON (+Z looking toward -Z, zero pitch) so the
+            // authored silhouette is exactly what the bake will rasterize.
+            var desiredEye = (workpiece.Sprite
+                ? (desiredTarget + new Vector3(0f, 0f, workpiece.Distance))
+                : (desiredTarget + (new Vector3(
+                    (MathF.Sin(x: workpiece.Yaw) * MathF.Cos(x: workpiece.Pitch)),
+                    MathF.Sin(x: workpiece.Pitch),
+                    (MathF.Cos(x: workpiece.Yaw) * MathF.Cos(x: workpiece.Pitch))
+                ) * workpiece.Distance)));
+
+            if (!m_creatorCameraInitialized) {
+                // Enter by easing FROM the live chase framing.
+                m_creatorEye = eye;
+                m_creatorTarget = target;
+                m_creatorCameraInitialized = true;
+            }
+
+            var creatorSmoothing = MathF.Min(1f, (SmoothRate * deltaSeconds));
+
+            m_creatorEye += ((desiredEye - m_creatorEye) * creatorSmoothing);
+            m_creatorTarget += ((desiredTarget - m_creatorTarget) * creatorSmoothing);
+
+            return (m_creatorEye, m_creatorTarget);
+        }
+
+        m_creatorCameraInitialized = false;
+
         return (eye, target);
     }
 
@@ -450,11 +518,11 @@ public sealed class ScreenDirector {
     /// <summary>The room-light multiplier for this frame (the frame source scales its ambient + sun by it): the room is
     /// UNLIT (0) while immersed so the letterbox margins around a filled screen render BLACK, and eases up to fully lit
     /// (1) as the reveal pulls the camera out into the room. Standard mode is always lit. Presentation-only.</summary>
-    public float RoomLightFactor => m_mode switch {
+    public float RoomLightFactor => (m_creatorView ? 1f : m_mode switch {
         ScreenDirectorMode.Immersed => 0f,
         ScreenDirectorMode.Revealed => (m_revealActive ? SmoothStep(t: m_revealBlend) : 1f),
         _ => 1f,
-    };
+    });
 
     // A pane's camera: eased from the wide room framing toward "right up on" its cabinet's diegetic screen. Closeness 0
     // = the room camera (so a not-yet-broken-out pane matches the room); 1 = head-on and close, the screen filling the

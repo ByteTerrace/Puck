@@ -1,7 +1,6 @@
 namespace Puck.SdfVm;
 
-// Values must match Assets/Shaders/Sdf/sdf-vm.hlsli (SDF_WPG_*); IUC order, ported from the old monolith's
-// AvatarSdfWallpaperGroup so authored content re-ports value-for-value.
+// Values must match Assets/Shaders/Sdf/sdf-vm.hlsli (SDF_WPG_*); IUC order.
 /// <summary>The 17 wallpaper symmetry groups, in IUC order. P1–P4G tile a square/rectangular lattice; P3 and up tile
 /// the equilateral hexagonal lattice (the cell must be square — the pitch is the cell's x extent).</summary>
 public enum SdfWallpaperGroup : uint {
@@ -42,7 +41,7 @@ public enum SdfWallpaperGroup : uint {
 }
 
 /// <summary>The plane a <see cref="SdfOp.WallpaperFold"/> folds, named by the two axes it acts on (the third axis is
-/// untouched). Values match the old monolith's axis decode.</summary>
+/// untouched). Values must match the axis decode in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
 public enum SdfWallpaperPlane : uint {
     /// <summary>Fold X and Z (tile the ground).</summary>
     XZ = 0,

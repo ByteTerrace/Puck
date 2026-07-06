@@ -9,8 +9,18 @@ namespace Puck.HumbleGamingBrick;
 /// the Color fast rate (SC bit 1) — shifting one bit out every second falling edge, so resetting DIV perturbs (and can
 /// speed up) a running transfer exactly as on hardware, and double speed doubles the rate for free. With no peer
 /// attached each incoming bit is a one, so a completed transfer leaves SB at <c>0xFF</c>; the transfer bit (SC bit 7)
-/// clears itself and the serial interrupt fires when the eighth bit shifts. An external-clock transfer has no peer to
-/// clock it, so it stays pending. Stop mode freezes the port. All state is plain fields captured in a fixed order.
+/// clears itself and the serial interrupt fires when the eighth bit shifts. An external-clock transfer waits for a
+/// peer's clock edges — with no cable attached it stays pending forever. Stop mode freezes the port. All state is
+/// plain fields captured in a fixed order.
+/// <para>
+/// The link cable: <see cref="SerialLinkSession"/> wires two ports as peers. The internally-clocked port then drives
+/// the exchange — each time its shifter advances it pushes its outgoing bit into the peer and pulls the peer's
+/// outgoing bit in, synchronously, inside its own tick. The peer's shifter is clocked by those edges (an armed
+/// external-clock transfer counts its eight bits and completes with the serial interrupt exactly like a master
+/// transfer; an idle port still shifts but raises nothing). The peer reference is host wiring, not emulated state — it
+/// is never serialized, and both ports' transfer progress lives in their own snapshotted fields — but the synchronous
+/// exchange means a linked pair MUST be advanced on one thread in a deterministic interleave, which the session owns.
+/// </para>
 /// </summary>
 public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable {
     private const byte ClockSelect = 0x01;
@@ -31,6 +41,8 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable 
     private byte m_data;
     private int m_edgeToggle;
     private bool m_lastDivBit;
+    // The link peer (host wiring, never serialized — see the class remarks); null is the no-cable default.
+    private SerialComponent? m_peer;
 
     /// <summary>Creates the serial port wired to the interrupt controller it raises the serial line on, the timer whose
     /// DIV counter clocks its shifter, and the stop unit that freezes it.</summary>
@@ -55,8 +67,12 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable 
     /// <summary>An optional observer invoked with the byte an internal-clock transfer sends, at the instant the transfer
     /// starts. It is a host-side observation seam — conformance harnesses use it to read a ROM's serial output — and is
     /// not emulated state: it is never serialized, so setting it cannot perturb determinism, and it is <see
-    /// langword="null"/> in a normal run. A future bidirectional link peer will subsume it.</summary>
+    /// langword="null"/> in a normal run. It observes alongside the link peer, never instead of it.</summary>
     public Action<byte>? ByteTransmitted { get; set; }
+
+    /// <summary>Gets whether a link peer is attached (see <see cref="SerialLinkSession"/>).</summary>
+    public bool IsLinked =>
+        (m_peer is not null);
 
     /// <inheritdoc/>
     public void Tick() {
@@ -81,8 +97,12 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable 
 
         m_edgeToggle = 0;
 
-        // Shift one bit out; with no peer the incoming bit is a one.
-        m_data = (byte)((m_data << 1) | 0x01);
+        // Shift one bit out, clocking the linked peer's shifter with the same edge (the simultaneous exchange a real
+        // cable performs); with no peer the incoming bit is a one.
+        var outgoing = ((m_data & 0x80) != 0);
+        var incoming = (m_peer?.ShiftFromPeerClock(incoming: outgoing) ?? true);
+
+        m_data = (byte)((m_data << 1) | (incoming ? 0x01 : 0x00));
 
         if (--m_bitsRemaining == 0) {
             m_control &= unchecked((byte)~TransferActive);
@@ -103,15 +123,20 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable 
 
         m_control = (byte)(value & MeaningfulMask);
 
-        // A write that starts a transfer on the internal clock begins shifting from a fresh edge phase; an external-
-        // clock transfer waits for a peer that never comes. Rewriting SC mid-transfer restarts the progress.
-        if ((m_control & (TransferActive | ClockSelect)) == (TransferActive | ClockSelect)) {
+        // A write that starts a transfer arms the eight-bit counter. On the internal clock the shifter begins from a
+        // fresh edge phase and this port drives the exchange; on the external clock the transfer waits for a linked
+        // peer's edges (with no cable attached it stays pending forever). Rewriting SC mid-transfer restarts the
+        // progress either way.
+        if ((m_control & TransferActive) == TransferActive) {
             m_bitsRemaining = 8;
             m_edgeToggle = 0;
 
-            // Surface the byte being sent for a host observer (e.g. a serial-text test-output reader). This is the value
-            // latched in SB at the start of the transfer; the shift below overwrites it with incoming ones.
-            ByteTransmitted?.Invoke(obj: m_data);
+            // Surface the byte an internal-clock transfer sends for a host observer (e.g. a serial-text test-output
+            // reader). This is the value latched in SB at the start of the transfer; the shifting overwrites it with
+            // the incoming bits.
+            if ((m_control & ClockSelect) == ClockSelect) {
+                ByteTransmitted?.Invoke(obj: m_data);
+            }
         }
     }
     /// <inheritdoc/>
@@ -129,6 +154,56 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable 
         m_bitsRemaining = reader.ReadInt32();
         m_edgeToggle = reader.ReadInt32();
         m_lastDivBit = reader.ReadBoolean();
+    }
+
+    // Wires two ports as link peers. Internal (not public) on purpose: SerialLinkSession is the one blessed connect
+    // seam, because a connected pair must also be STEPPED as a pair — the session owns both halves.
+    internal static void Connect(SerialComponent first, SerialComponent second) {
+        if (ReferenceEquals(objA: first, objB: second)) {
+            throw new ArgumentException(message: "A serial port cannot be linked to itself.", paramName: nameof(second));
+        }
+
+        if ((first.m_peer is not null) || (second.m_peer is not null)) {
+            throw new InvalidOperationException(message: "A serial port is already linked; disconnect its session first.");
+        }
+
+        first.m_peer = second;
+        second.m_peer = first;
+    }
+    // Severs a port's link, clearing both ends; a no-op for an unlinked port.
+    internal static void Disconnect(SerialComponent port) {
+        if (port.m_peer is { } peer) {
+            peer.m_peer = null;
+            port.m_peer = null;
+        }
+    }
+
+    // One serial clock edge arriving over the cable from the peer's internal clock: exchange one bit. Returns this
+    // port's outgoing bit (its shifter's MSB) and shifts the incoming bit in, mirroring the simultaneous exchange of
+    // the hardware shift registers. An armed external-clock transfer counts the edge and completes (SC bit 7 clears,
+    // the serial interrupt fires) on the eighth; an idle port still shifts but raises nothing. A stopped port is
+    // frozen (the line reads idle-high, nothing shifts), and a port driving its OWN internal clock ignores the peer's
+    // edges — two masters on one cable each keep their own transfer consistent, deterministically.
+    private bool ShiftFromPeerClock(bool incoming) {
+        if (m_key1.IsStopped) {
+            return true;
+        }
+
+        if ((m_control & (TransferActive | ClockSelect)) == (TransferActive | ClockSelect)) {
+            return ((m_data & 0x80) != 0);
+        }
+
+        var outgoing = ((m_data & 0x80) != 0);
+
+        m_data = (byte)((m_data << 1) | (incoming ? 0x01 : 0x00));
+
+        if (((m_control & TransferActive) == TransferActive) && (m_bitsRemaining > 0) && (--m_bitsRemaining == 0)) {
+            m_control &= unchecked((byte)~TransferActive);
+
+            m_interrupts.Request(kind: InterruptKind.Serial);
+        }
+
+        return outgoing;
     }
 
     // The DIV bit driving the shifter: the Color fast clock (SC bit 1) selects a bit 32x faster than the normal rate.

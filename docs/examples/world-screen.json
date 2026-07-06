@@ -42,7 +42,7 @@
             "region": [0.0, 0.0, 0.5, 1.0]
         },
         {
-            "source": { "$type": "gaming-brick", "model": "cgb", "romPath": "D:/Source/ByteTerrace/Silo/ROMS/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc" },
+            "source": { "$type": "gaming-brick", "model": "cgb", "romPath": "volley.gbc" },
             "region": [0.5, 0.0, 0.5, 1.0]
         }
     ],

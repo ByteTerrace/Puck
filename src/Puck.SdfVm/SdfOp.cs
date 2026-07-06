@@ -17,8 +17,8 @@ public enum SdfOp : uint {
     BendX = 5,
     /// <summary>Bends the XY plane by <c>rate * y</c> radians (Data0.x = rate).</summary>
     BendY = 6,
-    /// <summary>Bends the YZ plane by <c>rate * y</c> radians (Data0.x = rate). LEGACY QUIRK ported as-is: like
-    /// <see cref="BendY"/> it keys on the local Y coordinate (not Z), so old creature content re-ports faithfully.</summary>
+    /// <summary>Bends the YZ plane by <c>rate * y</c> radians (Data0.x = rate). QUIRK, kept deliberately: like
+    /// <see cref="BendY"/> it keys on the local Y coordinate (not Z).</summary>
     BendZ = 7,
     /// <summary>Elongates the shape that follows by clamping the point into a box (Data0.xyz = extents): the shape's
     /// cross-section is swept over <c>±extents</c> — the classic capsule-from-sphere operator.</summary>

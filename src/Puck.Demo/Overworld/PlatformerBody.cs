@@ -19,11 +19,17 @@ namespace Puck.Demo.Overworld;
 /// <param name="Shelf">The shelf slots as fixed-point obstacles + pick-up targets, in library-index order.</param>
 /// <param name="ShelfInteractRange">The per-axis XZ distance from a shelf slot's center within which interact picks up
 /// its cartridge.</param>
-public readonly record struct FixedRoom(FixedQ4816 FloorTop, FixedQ4816 MinX, FixedQ4816 MaxX, FixedQ4816 MinZ, FixedQ4816 MaxZ, FixedConsole[] Consoles, FixedQ4816 InteractRange, FixedConsole[] Shelf, FixedQ4816 ShelfInteractRange) {
+/// <param name="WalkGrid">The optional baked walk grid (<see langword="null"/> = no world loaded, or a world with no
+/// baked grid): when present, <see cref="PlatformerBody.Step"/> additionally clamps the body's center out of any
+/// blocked cell, per axis, after the wall/obstacle clamps. A <see langword="null"/> grid is EXACTLY today's code
+/// path — the walk-grid clamp is skipped entirely, not merely a no-op query.</param>
+public readonly record struct FixedRoom(FixedQ4816 FloorTop, FixedQ4816 MinX, FixedQ4816 MaxX, FixedQ4816 MinZ, FixedQ4816 MaxZ, FixedConsole[] Consoles, FixedQ4816 InteractRange, FixedConsole[] Shelf, FixedQ4816 ShelfInteractRange, FixedWalkGrid? WalkGrid = null) {
     /// <summary>Resolves the fixed-point collision planes from an authored room (half-extents folded in).</summary>
     /// <param name="room">The authored room to resolve.</param>
+    /// <param name="walkGrid">The optional baked walk grid to attach (default <see langword="null"/> — the walls are
+    /// the sole authority, today's exact behavior).</param>
     /// <returns>The fixed-point collision surfaces.</returns>
-    public static FixedRoom From(OverworldRoom room) {
+    public static FixedRoom From(OverworldRoom room, FixedWalkGrid? walkGrid = null) {
         ArgumentNullException.ThrowIfNull(argument: room);
 
         var halfX = FixedQ4816.FromDouble(value: room.PlayerHalfExtents.X);
@@ -31,7 +37,7 @@ public readonly record struct FixedRoom(FixedQ4816 FloorTop, FixedQ4816 MinX, Fi
         var halfZ = FixedQ4816.FromDouble(value: room.PlayerHalfExtents.Z);
         // The perimeter wall boxes are CENTERED on the bounds, so a wall's inner face sits one wall-half-thickness inside
         // the bound. Fold BOTH that thickness AND the player half-extent into the center clamp, so the body's face rests
-        // flush against the inner face (bound ∓ wall) instead of sinking to the wall centerline (the old bug).
+        // flush against the inner face (bound ∓ wall) instead of sinking to the wall centerline.
         var wall = FixedQ4816.FromDouble(value: room.WallThickness);
 
         // Each console stand (and, identically, each shelf slot) becomes a full-height keep-out box: its faces expanded
@@ -49,7 +55,8 @@ public readonly record struct FixedRoom(FixedQ4816 FloorTop, FixedQ4816 MinX, Fi
             MinX: (FixedQ4816.FromDouble(value: room.BoundsMin.X) + wall + halfX),
             MinZ: (FixedQ4816.FromDouble(value: room.BoundsMin.Y) + wall + halfZ),
             Shelf: shelf,
-            ShelfInteractRange: FixedQ4816.FromDouble(value: room.ShelfInteractRange)
+            ShelfInteractRange: FixedQ4816.FromDouble(value: room.ShelfInteractRange),
+            WalkGrid: walkGrid
         );
     }
 
@@ -231,6 +238,32 @@ public sealed class PlatformerBody {
 
         foreach (var slot in room.Shelf) {
             ResolveAgainstObstacle(obstacle: slot, nextLocal: ref nextLocal, velocity: ref Velocity);
+        }
+
+        // The baked walk grid (optional — a NULL grid skips this block entirely, so a room with no world loaded takes
+        // EXACTLY today's code path). Per-axis clamp, same shape and same order as the wall clamp above: attempt the X
+        // move first — if the destination body-center cell is blocked, hold X at its pre-move coordinate (provably
+        // safe by induction from this same clamp last tick; re-deriving a boundary from the current cell is
+        // directionally ambiguous ON the boundary and would creep through blockers) and zero the inward velocity
+        // component; then the same for Z (Z's blocked check uses the already-resolved X, matching
+        // the wall clamp's own per-axis sequencing so a body sliding along a blocked edge behaves identically to
+        // sliding along a wall or console).
+        if (room.WalkGrid is { } grid) {
+            var clampedX = grid.ClampAxisX(current: Position.Local.X, candidate: nextLocal.X, otherAxis: Position.Local.Z);
+
+            if (clampedX != nextLocal.X) {
+                Velocity = (Velocity with { X = FixedQ4816.Zero });
+            }
+
+            nextLocal = (nextLocal with { X = clampedX });
+
+            var clampedZ = grid.ClampAxisZ(current: Position.Local.Z, candidate: nextLocal.Z, otherAxis: nextLocal.X);
+
+            if (clampedZ != nextLocal.Z) {
+                Velocity = (Velocity with { Z = FixedQ4816.Zero });
+            }
+
+            nextLocal = (nextLocal with { Z = clampedZ });
         }
 
         // Re-anchor (carry the offset into the cell index if it ever leaves the centred range). The room planes are

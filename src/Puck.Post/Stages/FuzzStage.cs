@@ -66,9 +66,9 @@ internal sealed class FuzzStage : IPostStage {
         return RunCore(context: context);
     }
 
-    // Luma standard deviation of an RGBA frame — a cheap "is there signal" proxy, ported from the demo gate's
-    // content-sanity check: identical-degenerate (flat/black) output passes the cross-backend diff, so a low value
-    // marks the seed low-signal rather than counting it as meaningful coverage.
+    // Luma standard deviation of an RGBA frame — a cheap "is there signal" proxy: identical-degenerate (flat/black)
+    // output passes the cross-backend diff, so a low value marks the seed low-signal rather than counting it as
+    // meaningful coverage.
     private static double FrameCoverage(byte[] rgba) {
         if (rgba.Length < 4) {
             return 0.0;

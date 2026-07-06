@@ -132,10 +132,9 @@ internal static class DemoRootNode {
     }
 
     // Maps a validation gate name to its node. 'overworld' is the CPU determinism self-check over the actual Overworld
-    // sim — the one gate with no Puck.Post equivalent, kept in the demo on purpose. (The cross-backend engine gates
-    // whose coverage now lives in Puck.Post's POST battery — parity/export/compute/reverse-share/indirect/resample/
-    // viewports/pixelate/capture/camera/genlock/cli-determinism/world/fuzz — were retired from the demo; the POST is
-    // their single home.)
+    // sim — the one gate with no Puck.Post equivalent, kept in the demo on purpose. (The cross-backend engine gates —
+    // parity/export/compute/reverse-share/indirect/resample/viewports/pixelate/capture/camera/genlock/cli-determinism/
+    // world/fuzz — are Puck.Post POST stages; the POST is their single home.)
     private static IRenderNode CreateValidationNode(ValidationDocument validation, ParityResult result) {
         return validation.Gate.ToLowerInvariant() switch {
             "overworld" => new Overworld.OverworldDeterminismNode(result: result),

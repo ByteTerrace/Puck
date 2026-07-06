@@ -1,0 +1,33 @@
+namespace Puck.Demo.Forge;
+
+/// <summary>
+/// The Brickfall cartridge's public face — the five-star re-forge of the original hand-authored ROM, rebuilt on the
+/// SM83 game framework (<see cref="Framework.GameFramework"/>): title/attract/high-score/play/pause/game-over/entry
+/// states, hardware-sprite piece rendering, battery-backed high scores, and input-entropy PRNG seeding. The
+/// <see cref="Build"/>/<see cref="Verify"/> pair keeps the original call sites (the forge CLI and the overworld's
+/// cart-type table) unchanged.
+/// </summary>
+internal static class BrickfallRom {
+    /// <summary>Assembles the Brickfall <c>.gbc</c> (a genuine 32 KiB MBC1 + RAM + BATTERY Color image).</summary>
+    /// <param name="title">The cartridge header title.</param>
+    /// <returns>The ROM image.</returns>
+    public static byte[] Build(string title = "BRICKFALL") => BrickfallGame.Build(title: title);
+
+    /// <summary>Resolves (and creates the directory for) the cartridge's default battery-save path, following the
+    /// demo's local-state convention (the bindings profile store's <c>%LOCALAPPDATA%\Puck\Demo</c>).</summary>
+    /// <returns>The save-file path.</returns>
+    public static string PrepareDefaultSavePath() {
+        var directory = Path.Combine(Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData), "Puck", "Demo");
+
+        _ = Directory.CreateDirectory(path: directory);
+
+        return Path.Combine(directory, "brickfall.sav");
+    }
+
+    /// <summary>Boots the ROM on real Humble machines and asserts the game's observable behaviour — boot→title,
+    /// attract, seed entropy and replay determinism, the ported gameplay battery, pause, scoring, the game-over →
+    /// initials → high-score flow, SRAM persistence with an independent checksum, and corruption recovery. Throws on
+    /// any violation (the forge's "verify by running" gate).</summary>
+    /// <param name="rom">The ROM image to verify.</param>
+    public static void Verify(byte[] rom) => BrickfallVerify.Run(rom: rom);
+}

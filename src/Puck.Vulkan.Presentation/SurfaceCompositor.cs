@@ -418,7 +418,7 @@ public sealed class SurfaceCompositor : IDisposable {
 
         // If the device resources were already released for device loss (ReleaseForDeviceLoss nulled m_resourceDevice),
         // there is nothing left to drain or dispose — and after an UNRECOVERABLE loss the renderer has no device at all,
-        // so the old m_renderer.Device fallback would throw. Early-out in that case.
+        // so falling back to m_renderer.Device would throw. Early-out in that case.
         if (m_resourceDevice is null) {
             return;
         }

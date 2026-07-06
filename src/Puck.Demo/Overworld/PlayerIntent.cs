@@ -14,7 +14,7 @@ namespace Puck.Demo.Overworld;
 /// <param name="JumpReleased">Whether jump transitioned to released on this tick (the edge that cuts a rising jump).</param>
 /// <param name="InteractPressed">Whether interact transitioned to pressed on this tick (the edge that boots the console
 /// stand the player is standing at, if any).</param>
-/// <param name="RunHeld">Whether the run button is held this tick — the Mario hold-to-accelerate: the horizontal
+/// <param name="RunHeld">Whether the run button is held this tick — the hold-to-accelerate: the horizontal
 /// speed target scales by the tuning's sprint multiplier while held. Defaults false, so every existing intent
 /// stream (and its recorded hash) is unchanged.</param>
 /// <param name="CyclePressed">Whether the cycle button transitioned to pressed on this tick — advances the selected

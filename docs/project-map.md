@@ -6,10 +6,10 @@ the architecture honest. Companion docs: [capability-catalog.md](capability-cata
 
 ## Ground rules
 
-1. **The old monolith is gone.** `src/Puck` and `src/Puck.Avatars` were
-   inspiration-only and are deleted from the tree (git history has them).
-   Never reintroduce references to those paths; all real functionality
-   lives in the split `Puck.*` projects below.
+1. **No monolith.** `src/Puck` and `src/Puck.Avatars` are inspiration-only
+   and live in git history, not the tree. Never reintroduce references to
+   those paths; all real functionality lives in the split `Puck.*` projects
+   below.
 2. **Backends are leaves, not roots.** Nothing outside a backend pair may
    reference Vulkan or DirectX types; everything flows through the neutral
    seams in `Puck.Abstractions`.
@@ -31,8 +31,8 @@ things should not be treated as load-bearing precedent.
   (Bindings → Apis → Factories → Interop, mirrored across both). Zero open
   TODO markers; the parity table classifies every remaining backend delta as
   *by design*; hardened by Post Tiers B–D plus the 64-seed differential
-  fuzzer. Recent hardware campaigns (device-lost, VRR, zero-copy) landed
-  fixes *within* this architecture without reshaping it.
+  fuzzer. The hardware campaigns (device-lost, VRR, zero-copy) fit *within*
+  this architecture without reshaping it.
 - `Puck.Maths`, `Puck.Assets` — small, contract-heavy, consumer-proven.
 
 **Mostly settled** — architecture fixed; remaining work is additive:
@@ -41,11 +41,11 @@ things should not be treated as load-bearing precedent.
   hardware-proven across three controller families. What remains (Switch/Xbox
   Bluetooth handshakes, Linux hidraw transport, per-device calibration) adds
   transports and data, not architecture.
-- `Puck.Abstractions` — namespaces and enum vocabularies shipped and settled
+- `Puck.Abstractions` — namespaces and enum vocabularies are settled
   (project split rejected — do not relitigate), **but** a deliberate deferred
   backlog will still rename/reshape parts of the GPU seam (e.g. barrier-enum
   renames, a graphics-pipeline descriptor, `IGpuRenderTarget` is
-  Vulkan-shaped today). Backend *implementations* are stable; some seam
+  Vulkan-shaped). Backend *implementations* are stable; some seam
   *names* are not frozen yet.
 - `Puck.Commands` — the deterministic snapshot path (`InputRouter`,
   `CommandSnapshot`, recording) is the settled direction, and it coexists
@@ -57,10 +57,14 @@ things should not be treated as load-bearing precedent.
 
 **Fluid** — expect churn; don't calcify:
 
-- `Puck.Demo` (the game prototype is actively evolving), `Puck.Scene` document surface
-  (additive-by-design via `Extensions`), the viewport/content-source typing
-  (capture sources not yet in the document), and everything under
-  `experimental/`.
+- **`Puck.Demo` is GREENFIELD — the playground.** It is expected to churn and be
+  rewritten; treat nothing in it as settled precedent. Demo changes are NOT
+  engine changes: verify them by RUNNING the demo, never by gating them, and
+  never promote a demo feature into Post unless the user explicitly asks
+  ([agent-guide.md](agent-guide.md#anti-calcification-doctrine) rule 5).
+- `Puck.Scene` document surface (additive-by-design via `Extensions`), the
+  viewport/content-source typing (capture sources not yet in the document), and
+  everything under `experimental/`.
 
 ## Layering
 
@@ -140,7 +144,7 @@ Both backends are at functional parity across the showcase path — see
 
 | Project | Purpose |
 |---|---|
-| `Puck.Demo` | The game prototype / overworld composition root — Puck.Demo IS the overworld now, not a grab-bag of showcase flags: a controller-driven player in a room with three bootable console stands; each boot lights a GamingBrick pane and the screen layout walks its staged split (fullscreen → side-by-side → big-top/two-bottom → 2×2 quad). Still the only composition root: parses CLI flags (or loads a `--run` document), synthesizes/loads a run document, resolves the node graph against real GPU services, wires platform windowing + presenters. The demo builds BOTH graph kinds through one shared render assembly (`SdfWorldRenderBuilder`, 2026-07-04): `overworld` (the game) and `world` (the document's scene + viewports run LIVE on the host backend — `--run docs/examples/world-*.json`; `--rom <path>` synthesizes a fullscreen one-machine `world` document). Retired/deferred `world` affordances (cross-backend `produce`, the legacy `child` boolean, `live-camera` sources) are pre-flighted rejections with attributed errors, exit 2. The demo is a game, not a test suite — verification lives in Puck.Post; the demo keeps exactly one self-gate, `--validate-overworld`, because Puck.Post cannot reference the demo. Cross-backend parity gates and world producers no longer live here. |
+| `Puck.Demo` | The game prototype / overworld composition root — Puck.Demo IS the overworld: a controller-driven player in a room with three bootable console stands; each boot lights a GamingBrick pane and the screen layout walks its staged split (fullscreen → side-by-side → big-top/two-bottom → 2×2 quad). The only composition root: parses CLI flags (or loads a `--run` document), synthesizes/loads a run document, resolves the node graph against real GPU services, wires platform windowing + presenters. The demo builds BOTH graph kinds through one shared render assembly (`SdfWorldRenderBuilder`): `overworld` (the game) and `world` (the document's scene + viewports run LIVE on the host backend — `--run docs/examples/world-*.json`; `--rom <path>` synthesizes a fullscreen one-machine `world` document). Deferred `world` affordances (cross-backend `produce`, the `child` boolean, `live-camera` sources) are pre-flighted rejections with attributed errors, exit 2. The demo is a game, not a test suite — verification lives in Puck.Post; the demo keeps exactly one self-gate, `--validate-overworld`, because Puck.Post cannot reference the demo. |
 | `Puck.Post` | The engine's power-on self-test: 32 fail-isolated stages across Tier A (CPU pre-flight) / B (same-device GPU) / C (cross-backend) / D (live subsystems). The canonical "is the engine healthy" answer — see [agent-guide.md](agent-guide.md). |
 
 ## `experimental/` projects
@@ -159,7 +163,6 @@ Both backends are at functional parity across the showcase path — see
 | `docs/examples/` | Annotated `puck.run.v1` example documents (all validated by the Post `run-document` stage). |
 | `tools/` | Formatting/validation tooling and checked-in baselines. |
 
-The old monolithic `src/Puck` and `src/Puck.Avatars` projects (rule 1) have
-been **deleted from the tree** — they survive only in git history. Docs that
-reference their paths (e.g. [avatar-vm.md](avatar-vm.md)) are historical
-records.
+The monolithic `src/Puck` and `src/Puck.Avatars` projects (rule 1) live only
+in git history, not the tree — as do the completed design records that
+referenced their paths (see the retirement policy in [README.md](README.md)).

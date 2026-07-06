@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
+
 namespace Puck.Post;
 
 /// <summary>
@@ -83,7 +84,7 @@ internal sealed class WorldChildStage : IPostStage {
     // The full hosted-pane chain on ONE backend: world → left pane (the world renderer's own output image, read in
     // place), sdf-child → right pane, viewport-composite → the compared output. All three passes ride the SAME
     // neutral services (and thus the same layout-tracking recorder) the world renderer used.
-    private static byte[] RenderComposite(IGpuComputeServices gpu, IGpuDeviceContext device, string bytecodeExtension, Puck.SdfVm.SdfProgram program) {
+    private static byte[] RenderComposite(IGpuComputeServices gpu, IGpuDeviceContext device, string bytecodeExtension, SdfProgram program) {
         var deviceHandle = device.DeviceHandle;
 
         // The world half: render the shared hero scene at pane size; the output image rests ShaderReadOnly after.

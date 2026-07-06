@@ -38,7 +38,7 @@ uint worldInstanceMaskBase(uint tileIndex) {
 #ifdef SDF_SCREEN_SOURCES
 // A declared ScreenSlab instance's world-space front-face frame (see Puck.SdfVm.SdfScreenSurface) — Stage 1 ONLY
 // (binding 10/11 are not part of the beam prepass or Stage 2's descriptor sets). Indexed DIRECTLY by screen index
-// (0..3, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
+// (0..7, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
 // surface with no search; an unfilled slot's entry is never read (no material id can address it: the host packs an
 // entry only when SdfProgramBuilder registers that screen index).
 struct ScreenSurfaceData {
@@ -47,17 +47,18 @@ struct ScreenSurfaceData {
     float4 origin;  // xyz = world-space front-face center, w = unused (pad)
 };
 [[vk::binding(10, 0)]] StructuredBuffer<ScreenSurfaceData> screenSurfaces : register(t4);
-// The screen source images (nearest-filtered, so emulator/child pixels stay crisp) — one per screen index (0..3), FOUR
-// separate combined-image-sampler bindings (12..15; DXC's vk::combinedImageSampler does not support an ARRAY texture,
+// The screen source images (nearest-filtered, so emulator/child pixels stay crisp) — one per screen index (0..7), EIGHT
+// separate combined-image-sampler bindings (12..19; DXC's vk::combinedImageSampler does not support an ARRAY texture,
 // only a scalar one, so a true single Vulkan combined-image-sampler array isn't expressible in this HLSL — see the
 // C# side for the derived binding indices). Each Texture2D+SamplerState pair shares one binding (fusing into ONE
-// Vulkan combined-image-sampler descriptor) and needs its OWN sampler register (s0..s3) — DXC rejects two distinct
-// sampler declarations aliased onto one register — so Direct3D 12 bakes in FOUR static samplers, one per
+// Vulkan combined-image-sampler descriptor) and needs its OWN sampler register (s0..s7) — DXC rejects two distinct
+// sampler declarations aliased onto one register — so Direct3D 12 bakes in EIGHT static samplers, one per
 // SampledImage binding, ALL with the identical requested filter (NEAREST): logically one shared sampler, materialized
-// as four registers because the shading language has no array-of-combined-image-sampler here. Direct3D 12 sees four
-// SRVs (t5..t8). Slots with no source bound this frame (params.screenMask bit clear) duplicate a valid filler view;
-// the shader never samples an unbound slot (screenSourceBound gates it), so the filler's content never reaches the
-// image.
+// as eight registers because the shading language has no array-of-combined-image-sampler here. Direct3D 12 assigns
+// t#/s# registers in the C# binding-array order (DirectXGpuComputePipelineFactory), so these register(tN)/register(sN)
+// annotations must mirror SdfWorldEngine's viewsBindings order exactly — currently t5..t12 / s0..s7. Slots with no
+// source bound this frame (params.screenMask bit clear) duplicate a valid filler view; the shader never samples an
+// unbound slot (screenSourceBound gates it), so the filler's content never reaches the image.
 [[vk::combinedImageSampler]] [[vk::binding(12, 0)]] Texture2D<float4> screenSource0 : register(t5);
 [[vk::combinedImageSampler]] [[vk::binding(12, 0)]] SamplerState screenSampler0 : register(s0);
 [[vk::combinedImageSampler]] [[vk::binding(13, 0)]] Texture2D<float4> screenSource1 : register(t6);
@@ -66,13 +67,21 @@ struct ScreenSurfaceData {
 [[vk::combinedImageSampler]] [[vk::binding(14, 0)]] SamplerState screenSampler2 : register(s2);
 [[vk::combinedImageSampler]] [[vk::binding(15, 0)]] Texture2D<float4> screenSource3 : register(t8);
 [[vk::combinedImageSampler]] [[vk::binding(15, 0)]] SamplerState screenSampler3 : register(s3);
-// Per-frame screen LIGHT records (binding 11, register t10 — the LAST SRV in the views set): entries 0..3 carry each
-// screen's emitted light (rgb = the framebuffer's average color this frame, a = intensity gain), entry 4 is the
+[[vk::combinedImageSampler]] [[vk::binding(16, 0)]] Texture2D<float4> screenSource4 : register(t9);
+[[vk::combinedImageSampler]] [[vk::binding(16, 0)]] SamplerState screenSampler4 : register(s4);
+[[vk::combinedImageSampler]] [[vk::binding(17, 0)]] Texture2D<float4> screenSource5 : register(t10);
+[[vk::combinedImageSampler]] [[vk::binding(17, 0)]] SamplerState screenSampler5 : register(s5);
+[[vk::combinedImageSampler]] [[vk::binding(18, 0)]] Texture2D<float4> screenSource6 : register(t11);
+[[vk::combinedImageSampler]] [[vk::binding(18, 0)]] SamplerState screenSampler6 : register(s6);
+[[vk::combinedImageSampler]] [[vk::binding(19, 0)]] Texture2D<float4> screenSource7 : register(t12);
+[[vk::combinedImageSampler]] [[vk::binding(19, 0)]] SamplerState screenSampler7 : register(s7);
+// Per-frame screen LIGHT records (binding 11, register t14 — the LAST SRV in the views set): entries 0..7 carry each
+// screen's emitted light (rgb = the framebuffer's average color this frame, a = intensity gain), entry 8 is the
 // ENVIRONMENT (x = ambient scale, y = sun scale — dim the room so the glow dominates; zw pad). A light's geometry
 // (position/orientation/extent) is the SAME screenSurfaces[i] entry above — a screen is an area emitter, so it needs
 // only its color here. KEEP IN SYNC with SdfWorldEngine's screen-light buffer packing.
-[[vk::binding(11, 0)]] StructuredBuffer<float4> sdfScreenLights : register(t10);
-static const uint SdfScreenLightEnv = 4u;
+[[vk::binding(11, 0)]] StructuredBuffer<float4> sdfScreenLights : register(t14);
+static const uint SdfScreenLightEnv = 8u;
 
 // CRT glass-face constants — a FLAT SQUARE tube (the legendary Trinitron look): NO pincushion bulge, near-square
 // corners, a thin crisp dark bezel, subtle native-line scanlines, and a soft bright-pixel bloom knee. No corner
@@ -85,6 +94,8 @@ static const float CrtCornerRadius = 0.004; // near-square corners (was 0.045 ro
 static const float CrtBezelSoft = 0.008;  // a crisp bezel edge
 static const float CrtScanAmplitude = 0.06; // subtle scanlines — a hint of CRT, not a filter
 static const float CrtScanLines = 144.0;
+static const float CrtApertureGrille = 0.05; // TUNABLE: aperture-grille strength — barely there (0 = off, purely additive)
+static const float CrtGrilleColumns = 160.0; // vertical RGB phosphor-stripe triads across the screen width
 static const float CrtVignette = 0.0;     // flat, even brightness (was 0.35)
 static const float CrtBloomGain = 0.5;
 static const float CrtBloomThreshold = 0.6;
@@ -96,13 +107,17 @@ bool screenSourceBound(uint screenIndex) {
     return (0u != (params.screenMask & (1u << screenIndex)));
 }
 float4 sampleScreenSource(uint screenIndex, float2 uv) {
-    // Every screenSamplerN carries the SAME filter (NEAREST) — the four-way split is purely to give DXC one sampler
+    // Every screenSamplerN carries the SAME filter (NEAREST) — the eight-way split is purely to give DXC one sampler
     // symbol per register; there is exactly one LOGICAL sampler behavior on either backend.
     switch (screenIndex) {
         case 0:  return screenSource0.SampleLevel(screenSampler0, uv, 0);
         case 1:  return screenSource1.SampleLevel(screenSampler1, uv, 0);
         case 2:  return screenSource2.SampleLevel(screenSampler2, uv, 0);
-        default: return screenSource3.SampleLevel(screenSampler3, uv, 0);
+        case 3:  return screenSource3.SampleLevel(screenSampler3, uv, 0);
+        case 4:  return screenSource4.SampleLevel(screenSampler4, uv, 0);
+        case 5:  return screenSource5.SampleLevel(screenSampler5, uv, 0);
+        case 6:  return screenSource6.SampleLevel(screenSampler6, uv, 0);
+        default: return screenSource7.SampleLevel(screenSampler7, uv, 0);
     }
 }
 // For a screen-instance material id (> SDF_SCREEN_MATERIAL, from SdfProgramBuilder's screen-surface ScreenSlab
@@ -141,6 +156,12 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, out
     float bezel = (1.0 - smoothstep(0.0, CrtBezelSoft, outside));
 
     float3 sampled = sampleScreenSource(screenIndex, saturate(curved)).rgb;
+
+    // Aperture grille — faint vertical RGB phosphor stripes (the Trinitron signature): three cosines 120 deg apart, so
+    // each channel peaks in its own column third. Continuous (cos), so a cross-backend UV delta never flips a hard
+    // edge; the period rides the screen-local UV, so the stripe stays on the image. CrtApertureGrille = 0 is a no-op.
+    float3 grille = (0.5 + (0.5 * cos(((curved.x * CrtGrilleColumns) * 6.2831853) - float3(0.0, 2.0943951, 4.1887902))));
+    sampled *= (1.0 - (CrtApertureGrille * (1.0 - grille)));
 
     // Native-line scanlines (soft cosine) + radial vignette.
     float scanline = (1.0 - (CrtScanAmplitude * (0.5 - (0.5 * cos(((curved.y * CrtScanLines) * 6.2831853))))));
@@ -385,7 +406,8 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
             // Every BOUND diegetic screen is a colored area light: its position/orientation come from the
             // screen-surface table, its color from the per-frame framebuffer average. The dot(screenNormal, -L) gate
             // is the "light through the glass" cue — a screen only lights what sits in front of its face.
-            for (uint lightIndex = 0u; (lightIndex < 4u); lightIndex++) {
+            // SdfScreenLightEnv doubles as the screen-slot COUNT (the environment entry sits right after 0..count-1).
+            for (uint lightIndex = 0u; (lightIndex < SdfScreenLightEnv); lightIndex++) {
                 if (!screenSourceBound(lightIndex)) {
                     continue;
                 }

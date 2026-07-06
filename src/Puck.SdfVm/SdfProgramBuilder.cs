@@ -12,7 +12,7 @@ public sealed class SdfProgramBuilder {
     /// <summary>The most screen surfaces one program may declare (matches <see cref="SdfWorldEngine.MaxScreenSurfaces"/>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract SEPARATE from the
     /// viewport capacity <see cref="SdfWorldEngine.MaxViewports"/>).</summary>
-    public const int MaxScreenSurfaces = 4;
+    public const int MaxScreenSurfaces = 8;
 
     private readonly List<SdfInstanceRange> m_instances = [];
     private readonly List<SdfInstruction> m_instructions = [];
@@ -515,10 +515,10 @@ public sealed class SdfProgramBuilder {
     /// <param name="worldOrigin">The front face's world-space center.</param>
     /// <param name="worldRight">The unit world-space axis the UV's U increases along (the slab's local +X, in world space).</param>
     /// <param name="worldUp">The unit world-space axis the UV's V increases against — V = 0 at the top (the slab's local +Y, in world space).</param>
-    /// <param name="screenIndex">The screen source slot (0..3) this surface samples.</param>
+    /// <param name="screenIndex">The screen source slot (0..7) this surface samples.</param>
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius (meaningful only for a smooth <paramref name="blend"/>).</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..3</c>, or this
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..7</c>, or this
     /// program has already declared <see cref="MaxScreenSurfaces"/> screen surfaces.</exception>
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, int screenIndex, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         if (
@@ -561,7 +561,7 @@ public sealed class SdfProgramBuilder {
     /// <param name="round">The corner-rounding radius.</param>
     /// <param name="worldOrigin">The front face's world-space center.</param>
     /// <param name="worldOrientation">The static slab orientation in world space.</param>
-    /// <param name="screenIndex">The screen source slot (0..3) this surface samples.</param>
+    /// <param name="screenIndex">The screen source slot (0..7) this surface samples.</param>
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius.</param>
     /// <returns>This builder.</returns>

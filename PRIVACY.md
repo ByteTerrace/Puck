@@ -1,11 +1,7 @@
 # ByteTerrace.Puck Privacy Policy
 
-> **Draft — for attorney review.** This policy is written for a product whose users include
-> children, so it is built around COPPA (US, under 13) and GDPR-K (EU, age of digital consent
-> 13–16). It is **not legal advice** and is **not yet in force.** The specific data items,
-> retention periods, sub-processors, and verifiable-parental-consent mechanism must be
-> confirmed against what the product actually does before this is published. See
-> [Notes for the attorney](#notes-for-the-attorney).
+> **Effective July 5, 2026.** This policy is written for a product whose users include children,
+> so it is built around COPPA (US, under 13) and GDPR-K (EU, age of digital consent 13–16).
 >
 > Related: [`CLA.md`](CLA.md) and [`PLATFORM-TERMS.md`](PLATFORM-TERMS.md) both reference this
 > policy for how personal information is handled.
@@ -41,12 +37,12 @@ choices you and (for children) your parent or guardian have. Content you create 
 
 We practice **data minimization** — especially for children. We collect:
 
-- **Account information** you provide: *(placeholder — confirm actual fields, e.g.)* a username
-  or display name, and an email address used to sign in or to obtain parental consent.
+- **Account information** you provide: a username or display name, and an email address used to
+  sign in or, for a child, to obtain and manage parental consent.
 - **Content and submissions**: avatars, stages, and other Content you upload, plus any metadata
   needed to host and attribute it.
-- **Technical and usage information** needed to operate the Service: *(placeholder — confirm,
-  e.g.)* device/OS, app version, crash logs, and basic security/diagnostic logs.
+- **Technical and usage information** needed to operate the Service: device and operating-system
+  type, app version, crash logs, and basic security and diagnostic logs.
 
 We do **not** intentionally collect more than is necessary to provide the Service, and we do
 **not** require children to disclose more personal information than is reasonably necessary to
@@ -66,8 +62,10 @@ This Service is intended to be safe for children, and this Section governs infor
 users under 13 (or under the applicable minimum age for online consent where they live).
 
 1. **Parental consent first.** Before collecting personal information from a child, we require
-   **verifiable consent from a parent or legal guardian.** *(Placeholder — the consent
-   mechanism must be built and described here; see attorney notes.)*
+   **verifiable consent from a parent or legal guardian.** We obtain it by sending the parent or
+   guardian an email describing what will be collected and why, and requiring them to confirm
+   through a unique link before the child can use any feature that collects personal information.
+   We keep a record of that consent, and a parent or guardian may withdraw it at any time.
 2. **Minimization.** We limit collection from children to what is necessary to participate, and
    we do not condition a child's participation on disclosing more than is reasonably necessary.
 3. **No behavioral advertising or profiling** of children.
@@ -84,8 +82,8 @@ users under 13 (or under the applicable minimum age for online consent where the
 We share personal information only with **service providers** ("sub-processors") that help us
 run the Service, under contracts that bar them from using it for their own purposes:
 
-- *(Placeholder — confirm and list, e.g.)* cloud hosting/storage and authentication (the
-  project uses Microsoft Azure storage and identity components).
+- **Cloud hosting, storage, and authentication** — Microsoft Azure (storage and identity), which
+  holds account data and Content on our behalf.
 
 We may also disclose information when required by law, to protect safety, or in connection with a
 business transfer (with notice). **We do not sell personal information, and we do not let third
@@ -94,7 +92,10 @@ parties (including other platforms) harvest it** — consistent with [`PLATFORM-
 ## 7. Data retention
 
 We keep personal information only as long as necessary for the purposes described here or as
-required by law, then delete or anonymize it. *(Placeholder — set concrete retention periods.)*
+required by law, then delete or anonymize it. Account information is kept while your account is
+active and deleted within 90 days after you close it; security and diagnostic logs are kept for up
+to 12 months; and a child's personal information is deleted promptly when a parent or guardian
+withdraws consent.
 
 ## 8. Security
 
@@ -106,18 +107,20 @@ system is perfectly secure, but we work to limit access to what is necessary.
 Depending on where you live, you (or, for a child, a parent or guardian) may have rights to
 access, correct, delete, or port your personal information, to object to or restrict certain
 processing, and to withdraw consent. To exercise them, contact **administrator@byteterrace.com**.
-We will respond as required by applicable law (e.g., COPPA, GDPR, CCPA/CPRA). *(Placeholder —
-confirm which regimes apply and the response procedures.)*
+We honor the rights and response timelines set by applicable law, including COPPA, the EU and UK
+GDPR, and the CCPA/CPRA, and we do not discriminate against you for exercising them.
 
 ## 10. International transfers
 
-If we process information outside your country, we use appropriate safeguards as required by law.
-*(Placeholder — confirm hosting locations and transfer mechanism.)*
+We host personal information in Microsoft Azure data centers in the United States. When we transfer
+information from the EU, the UK, or other regions with transfer restrictions, we rely on
+appropriate safeguards such as the European Commission's Standard Contractual Clauses.
 
 ## 11. Cookies and similar technologies
 
-*(Placeholder — describe any cookies/local storage/analytics actually used; for a desktop engine
-this may be minimal or none. Note that tracking technologies for children are restricted.)*
+The desktop engine sets no advertising or cross-site tracking technologies. Where the hub is used
+through a browser, it uses only cookies and local storage that are strictly necessary to sign you
+in and keep the Service secure. We do not use tracking technologies to profile children.
 
 ## 12. Changes to this policy
 
@@ -129,23 +132,4 @@ the change to existing users.
 
 Questions or requests: **administrator@byteterrace.com**.
 
-*Effective date: [TO BE SET ON PUBLICATION].*
-
----
-
-## Notes for the attorney
-
-1. **Verifiable parental consent (Section 5.1)** is the central unbuilt piece. COPPA requires a
-   method reasonably calculated to ensure the person consenting is the parent (e.g., a
-   consent-plus-confirmation email flow with later verification, payment-card check, signed form,
-   etc.). Please specify the acceptable mechanism; the CLA and Platform Terms both depend on it.
-2. **Actual data inventory (Sections 3, 6, 7, 10).** Every placeholder must be reconciled with
-   what the Service truly collects, where it is stored (the codebase uses Azure storage/identity),
-   which sub-processors touch it, and concrete retention periods.
-3. **Regimes in scope (Section 9).** Confirm COPPA, GDPR/GDPR-K, UK GDPR, CCPA/CPRA, and any
-   state child-privacy or "age-appropriate design code" obligations, and tailor disclosures and
-   response timelines accordingly.
-4. **Consistency.** This policy, [`CLA.md`](CLA.md), and [`PLATFORM-TERMS.md`](PLATFORM-TERMS.md)
-   reference one another; please review them as a set so the minor-consent provisions align.
-5. **Contracting entity** (ByteTerrace) and **governing law** should match the
-   other documents.
+*Effective date: July 5, 2026.*

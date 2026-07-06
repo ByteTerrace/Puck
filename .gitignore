@@ -49,3 +49,8 @@ __blobstorage__
 *.gb
 *.gba
 *.gbc
+
+# Runtime authoring saves (the player's own documents/store — never repo content; checked-in examples live under docs/examples/)
+/creations/
+/store/
+worlds/

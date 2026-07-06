@@ -28,7 +28,8 @@ internal sealed class DemoCommandModule(
 
     // The active producer when it can take a debug view mode (null under --validate or a blank root).
     private readonly IDebugViewTarget? m_debugViewTarget = (rootNode as IDebugViewTarget);
-    // The creator-mode host (the live overworld root); null for any other run, so the 'creator' verb reports unavailable.
+    // The creator/tracker-mode host (the live overworld root; ICreatorModeHost covers BOTH modes — see its remarks);
+    // null for any other run, so the 'creator'/'tracker' verbs report unavailable.
     private readonly ICreatorModeHost? m_creatorHost = (rootNode as ICreatorModeHost);
     private int m_gyroLogTick;
     private int m_moveLogTick;
@@ -54,6 +55,34 @@ internal sealed class DemoCommandModule(
                 return new CommandResult($"[creator {(active ? "on" : "off")}]");
             },
             name: "creator",
+            valueKind: CommandValueKind.Digital
+        );
+
+        yield return CommandDefinition.Verb(
+            description: "FORGES your creator-mode creation into a playable overworld cartridge: snapshots the avatar from four facings over a walk cycle into a sprite sheet, bakes it into a forged room the sprite walks around, and writes a real .gbc (+ avatar JSON, sheet + boot previews) under ./forged-avatars. Enter creator mode and place some shapes first; boot the result with --rom.",
+            handler: _ => {
+                if (m_creatorHost is null) {
+                    return new CommandResult("[forge: unavailable — the overworld is not the active root]");
+                }
+
+                return new CommandResult(m_creatorHost.RequestAvatarForge());
+            },
+            name: "forge",
+            valueKind: CommandValueKind.Digital
+        );
+
+        yield return CommandDefinition.Verb(
+            description: "Toggles TRACKER mode: the in-engine music tracker. D-pad up/down moves the row cursor, left/right switches pattern, bumpers/stick-clicks nudge the note by semitone/octave, South toggles hold/off, East plays/stops the preview, West saves, North exits.",
+            handler: _ => {
+                if (m_creatorHost is null) {
+                    return new CommandResult("[tracker: unavailable — the overworld is not the active root]");
+                }
+
+                var active = m_creatorHost.ToggleTrackerMode();
+
+                return new CommandResult($"[tracker {(active ? "on" : "off")}]");
+            },
+            name: "tracker",
             valueKind: CommandValueKind.Digital
         );
     }

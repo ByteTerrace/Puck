@@ -22,12 +22,15 @@ internal static class HgbCartridge {
     private const ushort MainRoutine = 0x0150; // Just past the 0x0100–0x014F header block.
 
     // Fixed in-ROM addresses the display routine reads its data from (all within bank 0, clear of the routine and of
-    // each other; tiles cap at 256 * 16 = 0x1000 bytes).
-    private const ushort BackgroundPaletteAddress = 0x0300;
-    private const ushort ObjectPaletteAddress = 0x0308;
-    private const ushort ObjectAttributeAddress = 0x0310;
+    // each other). The palette + OAM tables sit ABOVE the tilemap (0x1C00+, free ROM) rather than just past the header,
+    // so the display routine has the whole 0x0150..0x0400 window (688 bytes) — the overworld's walk/animation routine
+    // needs far more than the original 0x0150..0x0300 slot. Tiles cap at (TileMapAddress − TileDataAddress) = 0x1400
+    // bytes = 320 tiles.
     private const ushort TileDataAddress = 0x0400;
     private const ushort TileMapAddress = 0x1800;
+    private const ushort BackgroundPaletteAddress = 0x1C00;
+    private const ushort ObjectPaletteAddress = 0x1C08;
+    private const ushort ObjectAttributeAddress = 0x1C10;
 
     private const ushort VramTiles = 0x8000;
     private const ushort VramBackgroundMap = 0x9800;
@@ -51,6 +54,27 @@ internal static class HgbCartridge {
     private const byte LcdControlWorldLens = 0x97;
     private const byte PaletteAutoIncrementFromZero = 0x80;
     private const byte VBlankScanline = 144;
+
+    // The OVERWORLD routine's work-RAM state + layout — the single source of truth is OverworldProtocol (shared with
+    // the forge's self-verification). Aliased here so the routine below reads locally.
+    private const ushort OverworldPlayerX = OverworldProtocol.PlayerXAddress;
+    private const ushort OverworldPlayerY = OverworldProtocol.PlayerYAddress;
+    private const ushort OverworldFacing = OverworldProtocol.FacingAddress;
+    private const ushort OverworldAnimTimer = OverworldProtocol.AnimTimerAddress;
+    private const ushort OverworldMoving = OverworldProtocol.MovingAddress;
+    private const ushort OverworldTileScratch = OverworldProtocol.TileScratchAddress;
+    private const byte OverworldMinX = OverworldProtocol.MinX;
+    private const byte OverworldMaxX = OverworldProtocol.MaxX;
+    private const byte OverworldMinY = OverworldProtocol.MinY;
+    private const byte OverworldMaxY = OverworldProtocol.MaxY;
+    private const byte OverworldStartX = OverworldProtocol.StartX;
+    private const byte OverworldStartY = OverworldProtocol.StartY;
+    private const byte OverworldWalkSpeed = OverworldProtocol.WalkSpeed;
+    private const byte FacingDown = OverworldProtocol.FacingDown;
+    private const byte FacingUp = OverworldProtocol.FacingUp;
+    private const byte FacingLeft = OverworldProtocol.FacingLeft;
+    private const byte FacingRight = OverworldProtocol.FacingRight;
+    private const int OverworldTilesPerPose = OverworldProtocol.TilesPerPose;
 
     private static readonly byte[] BootLogo = [
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
@@ -90,6 +114,36 @@ internal static class HgbCartridge {
 
         PlaceData(rom: rom, backgroundPalette: backgroundPalette, objectPalette: objectPalette, tileData: tileData, tileMap: tileMap);
         PlaceRoutine(rom: rom, routine: BuildWorldLensRoutine(tileByteCount: tileData.Length, playerTileBase: (byte)playerTileBase, goalTileX: goalTileX, goalTileY: goalTileY));
+        Finalize(rom: rom);
+
+        return rom;
+    }
+
+    /// <summary>Builds the OVERWORLD cartridge: a forged room the player's own avatar walks around, in the classic
+    /// top-down RPG style. The d-pad moves the 16×16 metasprite (four 8×8 sprites) in pixels, sets its facing, and animates a walk
+    /// cycle while moving; the sprite tiles are the forged avatar sheet, appended after the room tiles at
+    /// <paramref name="spriteTileBase"/> — pose (facing × 3 + frame) occupies tiles <c>spriteTileBase + pose*4</c>.</summary>
+    /// <param name="title">The cartridge header title.</param>
+    /// <param name="backgroundPalette">The room's 8-byte BG palette.</param>
+    /// <param name="objectPalette">The avatar sheet's 8-byte OBJ palette (slot 0 transparent).</param>
+    /// <param name="tileData">The room BG tiles followed by all <see cref="AvatarForge.PoseCount"/> poses' tiles.</param>
+    /// <param name="tileMap">The room's 32×32 tilemap.</param>
+    /// <param name="spriteTileBase">The VRAM tile index the first pose's tiles start at (the room BG tile count).</param>
+    /// <param name="movementMode">The d-pad direction lock (default <see cref="MovementMode.FourWay"/> — today's
+    /// behaviour, byte-identical to every ROM forged before this parameter existed).</param>
+    /// <exception cref="ArgumentOutOfRangeException">The pose tiles do not fit the single-byte VRAM tile budget.</exception>
+    public static byte[] BuildOverworld(string title, byte[] backgroundPalette, byte[] objectPalette, byte[] tileData, byte[] tileMap, int spriteTileBase, MovementMode movementMode = MovementMode.FourWay) {
+        // The highest tile the routine references is spriteTileBase + (poses-1)*4 + 3; it must fit a byte.
+        var highestTile = ((spriteTileBase + ((AvatarForge.PoseCount - 1) * OverworldTilesPerPose)) + (OverworldTilesPerPose - 1));
+
+        if ((spriteTileBase < 0) || (highestTile > 255)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(spriteTileBase), message: $"The avatar sheet (base {spriteTileBase}, top tile {highestTile}) does not fit the 256-tile VRAM budget — the room forged too many tiles.");
+        }
+
+        var rom = NewRomWithHeader(title: title);
+
+        PlaceData(rom: rom, backgroundPalette: backgroundPalette, objectPalette: objectPalette, tileData: tileData, tileMap: tileMap);
+        PlaceRoutine(rom: rom, routine: BuildOverworldRoutine(tileByteCount: tileData.Length, spriteTileBase: (byte)spriteTileBase, movementMode: movementMode));
         Finalize(rom: rom);
 
         return rom;
@@ -149,8 +203,8 @@ internal static class HgbCartridge {
     }
 
     private static void PlaceRoutine(byte[] rom, byte[] routine) {
-        if ((int)MainRoutine + routine.Length > BackgroundPaletteAddress) {
-            throw new InvalidOperationException(message: $"The display routine ({routine.Length} bytes) overran the data region at 0x{BackgroundPaletteAddress:X4}.");
+        if ((int)MainRoutine + routine.Length > TileDataAddress) {
+            throw new InvalidOperationException(message: $"The display routine ({routine.Length} bytes) overran the tile-data region at 0x{TileDataAddress:X4}.");
         }
 
         routine.CopyTo(array: rom, index: MainRoutine);
@@ -257,17 +311,17 @@ internal static class HgbCartridge {
         // Once per frame: wait for active render (LY < 144), then for the VBlank edge (LY >= 144).
         emitter.MarkLabel(label: waitRender);
         emitter.LoadAFromHighPage(port: PortScanline);
-        emitter.CompareImmediate(value: VBlankScanline);
-        emitter.JumpRelativeIfNoCarry(label: waitRender); // while LY >= 144
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: VBlankScanline);
+        emitter.JumpRelative(condition: Condition.NoCarry, label: waitRender); // while LY >= 144
         emitter.MarkLabel(label: waitVBlank);
         emitter.LoadAFromHighPage(port: PortScanline);
-        emitter.CompareImmediate(value: VBlankScanline);
-        emitter.JumpRelativeIfCarry(label: waitVBlank); // while LY < 144
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: VBlankScanline);
+        emitter.JumpRelative(condition: Condition.Carry, label: waitVBlank); // while LY < 144
 
         // authority != WORLD (non-zero) -> the game drives; else mirror the world sensor position into the game tile.
         emitter.LoadAFromAddress(address: WorldLensProtocol.AuthorityAddress);
-        emitter.OrA();
-        emitter.JumpRelativeIfNotZero(label: gameAuthority);
+        emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
+        emitter.JumpRelative(condition: Condition.NotZero, label: gameAuthority);
 
         // WORLD: game tile := sensor position (mirror + reconcile, so a hand-off starts where the world left off).
         emitter.LoadAFromAddress(address: WorldLensProtocol.PlayerTileXAddress);
@@ -283,16 +337,16 @@ internal static class HgbCartridge {
         // power-of-two-minus-one). Without this the sprite steps every frame (~60 tiles/s) and the followed avatar
         // blurs across the room. On the off frames, fall straight through to placing the sprite where it already is.
         emitter.LoadAFromAddress(address: WorldLensProtocol.MoveCooldownAddress);
-        emitter.IncrementA();
+        emitter.Increment(register: Reg8.A);
         emitter.StoreAToAddress(address: WorldLensProtocol.MoveCooldownAddress);
-        emitter.AndImmediate(value: (byte)(WorldLensProtocol.MoveCooldownFrames - 1));
-        emitter.JumpRelativeIfNotZero(label: place);
+        emitter.ArithmeticImmediate(op: AluOp.And, value: (byte)(WorldLensProtocol.MoveCooldownFrames - 1));
+        emitter.JumpRelative(condition: Condition.NotZero, label: place);
 
         emitter.LoadAImmediate(value: 0x20); // select direction keys (P14 low)
         emitter.StoreAToHighPage(port: PortJoypad);
         emitter.LoadAFromHighPage(port: PortJoypad);
         emitter.LoadAFromHighPage(port: PortJoypad); // read twice to let the lines settle
-        emitter.LoadBFromA();
+        emitter.Load(destination: Reg8.B, source: Reg8.A);
 
         EmitDpadStep(emitter: emitter, bit: 0, address: WorldLensProtocol.GameTileXAddress, increment: true);  // Right -> X+
         EmitDpadStep(emitter: emitter, bit: 1, address: WorldLensProtocol.GameTileXAddress, increment: false); // Left  -> X-
@@ -307,16 +361,16 @@ internal static class HgbCartridge {
         // Place the sprite (OAM 0) from the game tile: Y = tile*8 + 16, X = tile*8 + 8.
         emitter.MarkLabel(label: place);
         emitter.LoadAFromAddress(address: WorldLensProtocol.GameTileYAddress);
-        emitter.AddAToA();
-        emitter.AddAToA();
-        emitter.AddAToA();
-        emitter.AddImmediate(value: 16);
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
+        emitter.ArithmeticImmediate(op: AluOp.Add, value: 16);
         emitter.StoreAToAddress(address: ObjectAttributeMemory + 0);
         emitter.LoadAFromAddress(address: WorldLensProtocol.GameTileXAddress);
-        emitter.AddAToA();
-        emitter.AddAToA();
-        emitter.AddAToA();
-        emitter.AddImmediate(value: 8);
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
+        emitter.ArithmeticImmediate(op: AluOp.Add, value: 8);
         emitter.StoreAToAddress(address: ObjectAttributeMemory + 1);
         emitter.LoadAImmediate(value: playerTileBase);
         emitter.StoreAToAddress(address: ObjectAttributeMemory + 2);
@@ -325,11 +379,11 @@ internal static class HgbCartridge {
 
         // Win check on the game tile: reaching the goal from EITHER authority raises the flag.
         emitter.LoadAFromAddress(address: WorldLensProtocol.GameTileXAddress);
-        emitter.CompareImmediate(value: goalTileX);
-        emitter.JumpRelativeIfNotZero(label: notWon);
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: goalTileX);
+        emitter.JumpRelative(condition: Condition.NotZero, label: notWon);
         emitter.LoadAFromAddress(address: WorldLensProtocol.GameTileYAddress);
-        emitter.CompareImmediate(value: goalTileY);
-        emitter.JumpRelativeIfNotZero(label: notWon);
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: goalTileY);
+        emitter.JumpRelative(condition: Condition.NotZero, label: notWon);
         emitter.LoadAImmediate(value: WorldLensProtocol.WinMagic);
         emitter.StoreAToAddress(address: WorldLensProtocol.WinFlagAddress);
         emitter.MarkLabel(label: notWon);
@@ -341,6 +395,286 @@ internal static class HgbCartridge {
         return emitter.ToArray(baseAddress: MainRoutine);
     }
 
+    // The OVERWORLD walker: the player's own forged avatar roams a forged room. Each frame (two-phase VBlank wait, like
+    // the world-lens) it reads the d-pad, moves the 16×16 metasprite in pixels + records the facing it last moved,
+    // clamps to the reachable window, then picks the pose — a neutral idle when still, or a two-frame walk cycle
+    // (toggled off the animation timer's bit 3, ~8 frames per step) when moving — and rewrites OAM 0..3 to the pose's
+    // four tiles. The sprite-sheet pose index is facing × 3 + frame; its tiles start at spriteTileBase + pose*4.
+    // movementMode selects the d-pad direction lock (MovementModule); FourWay emits the ORIGINAL four independent
+    // per-axis steps unchanged (the byte-identical regression bar), EightWay/Hex dispatch to their own emission.
+    private static byte[] BuildOverworldRoutine(int tileByteCount, byte spriteTileBase, MovementMode movementMode = MovementMode.FourWay) {
+        var emitter = new Sm83Emitter();
+
+        EmitSetup(emitter: emitter, tileByteCount: tileByteCount);
+
+        // Clear all 40 OAM entries (LCD is still off, so OAM is freely writable) — the routine only drives sprites 0..3,
+        // and the seeded post-boot OAM is otherwise indeterminate garbage that would flicker across the screen.
+        EmitBlockFill(emitter: emitter, destinationAddress: ObjectAttributeMemory, byteCount: 0xA0);
+
+        emitter.LoadAImmediate(value: LcdControlStatic); // LCD on, 8×8 objects
+        emitter.StoreAToHighPage(port: PortLcdControl);
+
+        // Seed the player state (WRAM is indeterminate at the seeded post-boot handoff).
+        emitter.LoadAImmediate(value: OverworldStartX);
+        emitter.StoreAToAddress(address: OverworldPlayerX);
+        emitter.LoadAImmediate(value: OverworldStartY);
+        emitter.StoreAToAddress(address: OverworldPlayerY);
+        emitter.XorA();
+        emitter.StoreAToAddress(address: OverworldFacing);
+        emitter.XorA();
+        emitter.StoreAToAddress(address: OverworldAnimTimer);
+
+        var loop = emitter.NewLabel();
+        var waitRender = emitter.NewLabel();
+        var waitVBlank = emitter.NewLabel();
+        var moving = emitter.NewLabel();
+        var stepB = emitter.NewLabel();
+        var frameDone = emitter.NewLabel();
+
+        emitter.MarkLabel(label: loop);
+
+        // Once per frame: wait for active render (LY < 144), then for the VBlank edge (LY >= 144).
+        emitter.MarkLabel(label: waitRender);
+        emitter.LoadAFromHighPage(port: PortScanline);
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: VBlankScanline);
+        emitter.JumpRelative(condition: Condition.NoCarry, label: waitRender); // while LY >= 144
+        emitter.MarkLabel(label: waitVBlank);
+        emitter.LoadAFromHighPage(port: PortScanline);
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: VBlankScanline);
+        emitter.JumpRelative(condition: Condition.Carry, label: waitVBlank); // while LY < 144
+
+        // Advance the animation timer; assume "not moving" until a held direction proves otherwise.
+        emitter.LoadAFromAddress(address: OverworldAnimTimer);
+        emitter.Increment(register: Reg8.A);
+        emitter.StoreAToAddress(address: OverworldAnimTimer);
+        emitter.XorA();
+        emitter.StoreAToAddress(address: OverworldMoving);
+
+        // Select + read the D-pad (active-low; 0 = pressed) into B.
+        emitter.LoadAImmediate(value: 0x20);
+        emitter.StoreAToHighPage(port: PortJoypad);
+        emitter.LoadAFromHighPage(port: PortJoypad);
+        emitter.LoadAFromHighPage(port: PortJoypad); // read twice to let the lines settle
+        emitter.Load(destination: Reg8.B, source: Reg8.A);
+
+        switch (movementMode) {
+            case MovementMode.EightWay:
+                EmitOverworldEightWayMovement(emitter: emitter);
+                break;
+            case MovementMode.Hex:
+                EmitOverworldHexMovement(emitter: emitter);
+                break;
+            case MovementMode.FourWay:
+            default:
+                // Unchanged since before MovementMode existed — the byte-identical regression bar.
+                EmitOverworldMoveStep(emitter: emitter, bit: 0, address: OverworldPlayerX, increment: true, facing: FacingRight);  // Right
+                EmitOverworldMoveStep(emitter: emitter, bit: 1, address: OverworldPlayerX, increment: false, facing: FacingLeft);  // Left
+                EmitOverworldMoveStep(emitter: emitter, bit: 2, address: OverworldPlayerY, increment: false, facing: FacingUp);    // Up
+                EmitOverworldMoveStep(emitter: emitter, bit: 3, address: OverworldPlayerY, increment: true, facing: FacingDown);   // Down
+                break;
+        }
+
+        EmitClampTile(emitter: emitter, address: OverworldPlayerX, minimum: OverworldMinX, maximum: OverworldMaxX);
+        EmitClampTile(emitter: emitter, address: OverworldPlayerY, minimum: OverworldMinY, maximum: OverworldMaxY);
+
+        // Pick the animation frame (0/1/2) into A: idle when still; the timer's bit 3 toggles step A/B while moving.
+        emitter.LoadAFromAddress(address: OverworldMoving);
+        emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
+        emitter.JumpRelative(condition: Condition.NotZero, label: moving);
+        emitter.XorA();                       // idle → frame 0
+        emitter.JumpRelative(label: frameDone);
+        emitter.MarkLabel(label: moving);
+        emitter.LoadAFromAddress(address: OverworldAnimTimer);
+        emitter.Load(destination: Reg8.B, source: Reg8.A);
+        emitter.TestBit(register: Reg8.B, bit: 3);           // Z = 1 when bit 3 is 0
+        emitter.JumpRelative(condition: Condition.NotZero, label: stepB); // bit 3 set → step B (frame 2)
+        emitter.LoadAImmediate(value: 1);     // bit 3 clear → step A (frame 1)
+        emitter.JumpRelative(label: frameDone);
+        emitter.MarkLabel(label: stepB);
+        emitter.LoadAImmediate(value: 2);
+        emitter.MarkLabel(label: frameDone);
+
+        // pose = facing*3 + frame; tile base = spriteTileBase + pose*4. Frame is held in C while facing is multiplied.
+        emitter.Load(destination: Reg8.C, source: Reg8.A);
+        emitter.LoadAFromAddress(address: OverworldFacing);
+        emitter.Load(destination: Reg8.B, source: Reg8.A);
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);                    // 2*facing
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.B);                    // 3*facing
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.C);                    // 3*facing + frame = pose
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);                    // 2*pose
+        emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);                    // 4*pose
+        emitter.ArithmeticImmediate(op: AluOp.Add, value: spriteTileBase);
+        emitter.StoreAToAddress(address: OverworldTileScratch);
+
+        // Rewrite the 2×2 metasprite (OAM 0..3): top-left, top-right, bottom-left, bottom-right. OAM Y = screenY + 16,
+        // X = screenX + 8; the tiles are the pose's four ordered tiles (base + 0/1/2/3).
+        EmitOverworldOamSprite(emitter: emitter, oamIndex: 0, yOffset: 16, xOffset: 8, tileDelta: 0);
+        EmitOverworldOamSprite(emitter: emitter, oamIndex: 1, yOffset: 16, xOffset: 16, tileDelta: 1);
+        EmitOverworldOamSprite(emitter: emitter, oamIndex: 2, yOffset: 24, xOffset: 8, tileDelta: 2);
+        EmitOverworldOamSprite(emitter: emitter, oamIndex: 3, yOffset: 24, xOffset: 16, tileDelta: 3);
+
+        // The body exceeds a relative jr's range, so the back-edge is an absolute jump (resolved against MainRoutine).
+        emitter.JumpAbsolute(label: loop);
+
+        return emitter.ToArray(baseAddress: MainRoutine);
+    }
+
+    // if (D-pad bit PRESSED — active-low) { move [address] by OverworldWalkSpeed pixels; facing := facing; moving := 1 }.
+    private static void EmitOverworldMoveStep(Sm83Emitter emitter, int bit, ushort address, bool increment, byte facing) {
+        var skip = emitter.NewLabel();
+
+        emitter.TestBit(register: Reg8.B, bit: bit);
+        emitter.JumpRelative(condition: Condition.NotZero, label: skip); // bit set => not pressed => skip
+
+        emitter.LoadAFromAddress(address: address);
+
+        for (var step = 0; (step < OverworldWalkSpeed); step++) {
+            if (increment) {
+                emitter.Increment(register: Reg8.A);
+            } else {
+                emitter.Decrement(register: Reg8.A);
+            }
+        }
+
+        emitter.StoreAToAddress(address: address);
+        emitter.LoadAImmediate(value: facing);
+        emitter.StoreAToAddress(address: OverworldFacing);
+        emitter.LoadAImmediate(value: 1);
+        emitter.StoreAToAddress(address: OverworldMoving);
+        emitter.MarkLabel(label: skip);
+    }
+
+    // EIGHTWAY: the same per-axis independent stepping as FourWay (so a held diagonal moves both axes at the full
+    // cardinal delta — the classic faster-diagonal artifact, authentic brick-era behaviour, not a bug), but facing is
+    // resolved SEPARATELY via MovementModule's horizontal-wins-ties rule instead of FourWay's last-bit-wins order.
+    private static void EmitOverworldEightWayMovement(Sm83Emitter emitter) {
+        MovementModule.EmitConditionalStep(emitter: emitter, bit: 0, address: OverworldPlayerX, delta: OverworldWalkSpeed, negative: false, movingAddress: OverworldMoving); // Right
+        MovementModule.EmitConditionalStep(emitter: emitter, bit: 1, address: OverworldPlayerX, delta: OverworldWalkSpeed, negative: true, movingAddress: OverworldMoving);  // Left
+        MovementModule.EmitConditionalStep(emitter: emitter, bit: 2, address: OverworldPlayerY, delta: OverworldWalkSpeed, negative: true, movingAddress: OverworldMoving);  // Up
+        MovementModule.EmitConditionalStep(emitter: emitter, bit: 3, address: OverworldPlayerY, delta: OverworldWalkSpeed, negative: false, movingAddress: OverworldMoving); // Down
+
+        MovementModule.EmitFacingResolve(emitter: emitter, facingAddress: OverworldFacing, facingRight: FacingRight, facingLeft: FacingLeft, facingUp: FacingUp, facingDown: FacingDown);
+    }
+
+    // HEX (pointy-top, matching the 3D side's hex walk grid): Left/Right are the pure west/east neighbors (full
+    // OverworldWalkSpeed on X, matching the other modes' cardinal step); Up+Left/Up+Right/Down+Left/Down+Right are the
+    // four 60° neighbors (MovementModule.HexDiagonalXStep/HexDiagonalYStep — a rational approximation of the 60° unit
+    // vectors); a lone Up or Down (no Left/Right held) has NO neighbor to move to, so it is a no-op — a pointy-top hex
+    // cell has no vertical edge. Facing follows the same horizontal-wins-ties rule as EightWay: a diagonal's
+    // (X=1, Y=2) step has |dy| > |dx|, so the four diagonals face vertical (up/down), while a pure Left/Right faces
+    // horizontal.
+    private static void EmitOverworldHexMovement(Sm83Emitter emitter) {
+        var left = emitter.NewLabel();
+        var vertOnly = emitter.NewLabel();
+        var upLeft = emitter.NewLabel();
+        var downLeft = emitter.NewLabel();
+        var plainLeft = emitter.NewLabel();
+        var upRight = emitter.NewLabel();
+        var downRight = emitter.NewLabel();
+        var plainRight = emitter.NewLabel();
+        var done = emitter.NewLabel();
+
+        emitter.TestBit(register: Reg8.B, bit: 0); // Right
+        emitter.JumpRelative(condition: Condition.Zero, label: plainRight); // 0 = pressed; Up/Down checked below first
+        emitter.TestBit(register: Reg8.B, bit: 1); // Left
+        emitter.JumpAbsolute(condition: Condition.Zero, label: left); // the right-side block below is too far for jr
+        emitter.JumpAbsolute(label: vertOnly); // neither Left nor Right held; also too far for jr
+
+        emitter.MarkLabel(label: plainRight);
+        emitter.TestBit(register: Reg8.B, bit: 2); // Up
+        emitter.JumpRelative(condition: Condition.Zero, label: upRight);
+        emitter.TestBit(register: Reg8.B, bit: 3); // Down
+        emitter.JumpRelative(condition: Condition.Zero, label: downRight);
+        EmitHexStep(emitter: emitter, xDelta: MovementModule.HexAxisStep, xNegative: false, yDelta: 0, yNegative: false, facing: FacingRight);
+        emitter.JumpAbsolute(label: done);
+
+        emitter.MarkLabel(label: upRight);
+        EmitHexStep(emitter: emitter, xDelta: MovementModule.HexDiagonalXStep, xNegative: false, yDelta: MovementModule.HexDiagonalYStep, yNegative: true, facing: FacingUp);
+        emitter.JumpAbsolute(label: done);
+
+        emitter.MarkLabel(label: downRight);
+        EmitHexStep(emitter: emitter, xDelta: MovementModule.HexDiagonalXStep, xNegative: false, yDelta: MovementModule.HexDiagonalYStep, yNegative: false, facing: FacingDown);
+        emitter.JumpAbsolute(label: done);
+
+        emitter.MarkLabel(label: left);
+        emitter.TestBit(register: Reg8.B, bit: 2); // Up
+        emitter.JumpRelative(condition: Condition.Zero, label: upLeft);
+        emitter.TestBit(register: Reg8.B, bit: 3); // Down
+        emitter.JumpRelative(condition: Condition.Zero, label: downLeft);
+        emitter.JumpRelative(label: plainLeft);
+
+        emitter.MarkLabel(label: upLeft);
+        EmitHexStep(emitter: emitter, xDelta: MovementModule.HexDiagonalXStep, xNegative: true, yDelta: MovementModule.HexDiagonalYStep, yNegative: true, facing: FacingUp);
+        emitter.JumpAbsolute(label: done);
+
+        emitter.MarkLabel(label: downLeft);
+        EmitHexStep(emitter: emitter, xDelta: MovementModule.HexDiagonalXStep, xNegative: true, yDelta: MovementModule.HexDiagonalYStep, yNegative: false, facing: FacingDown);
+        emitter.JumpAbsolute(label: done);
+
+        emitter.MarkLabel(label: plainLeft);
+        EmitHexStep(emitter: emitter, xDelta: MovementModule.HexAxisStep, xNegative: true, yDelta: 0, yNegative: false, facing: FacingLeft);
+        emitter.JumpAbsolute(label: done);
+
+        // vertOnly: neither Left nor Right held — a lone Up or Down (or nothing) never moves in the hex lock.
+        emitter.MarkLabel(label: vertOnly);
+        emitter.MarkLabel(label: done);
+    }
+
+    // Applies one resolved hex step: X += (xNegative ? -xDelta : xDelta), same for Y (skipped when its delta is 0),
+    // sets facing, and raises the moving flag. A zero delta emits no arithmetic for that axis at all.
+    private static void EmitHexStep(Sm83Emitter emitter, byte xDelta, bool xNegative, byte yDelta, bool yNegative, byte facing) {
+        EmitHexAxisStep(emitter: emitter, address: OverworldPlayerX, delta: xDelta, negative: xNegative);
+        EmitHexAxisStep(emitter: emitter, address: OverworldPlayerY, delta: yDelta, negative: yNegative);
+
+        emitter.LoadAImmediate(value: facing);
+        emitter.StoreAToAddress(address: OverworldFacing);
+        emitter.LoadAImmediate(value: 1);
+        emitter.StoreAToAddress(address: OverworldMoving);
+    }
+
+    private static void EmitHexAxisStep(Sm83Emitter emitter, ushort address, byte delta, bool negative) {
+        if (delta == 0) {
+            return;
+        }
+
+        emitter.LoadAFromAddress(address: address);
+
+        for (var step = 0; (step < delta); step++) {
+            if (negative) {
+                emitter.Decrement(register: Reg8.A);
+            } else {
+                emitter.Increment(register: Reg8.A);
+            }
+        }
+
+        emitter.StoreAToAddress(address: address);
+    }
+
+    // Writes one OAM entry of the player metasprite: Y = PlayerY + yOffset, X = PlayerX + xOffset, tile = scratch base +
+    // tileDelta, flags = 0.
+    private static void EmitOverworldOamSprite(Sm83Emitter emitter, int oamIndex, byte yOffset, byte xOffset, byte tileDelta) {
+        var entry = (ushort)(ObjectAttributeMemory + (oamIndex * 4));
+
+        emitter.LoadAFromAddress(address: OverworldPlayerY);
+        emitter.ArithmeticImmediate(op: AluOp.Add, value: yOffset);
+        emitter.StoreAToAddress(address: (ushort)(entry + 0));
+
+        emitter.LoadAFromAddress(address: OverworldPlayerX);
+        emitter.ArithmeticImmediate(op: AluOp.Add, value: xOffset);
+        emitter.StoreAToAddress(address: (ushort)(entry + 1));
+
+        emitter.LoadAFromAddress(address: OverworldTileScratch);
+
+        if (tileDelta > 0) {
+            emitter.ArithmeticImmediate(op: AluOp.Add, value: tileDelta);
+        }
+
+        emitter.StoreAToAddress(address: (ushort)(entry + 2));
+
+        emitter.XorA();
+        emitter.StoreAToAddress(address: (ushort)(entry + 3));
+    }
+
     // Clamp the byte at [address] to [minimum, maximum]: if it exceeds the max, snap to max; if below the min, snap to
     // min. `cp n` sets carry when A < n, so `cp max+1` is carry ⇔ A ≤ max, and `cp min` is carry ⇔ A < min.
     private static void EmitClampTile(Sm83Emitter emitter, ushort address, byte minimum, byte maximum) {
@@ -348,15 +682,15 @@ internal static class HgbCartridge {
         var aboveMin = emitter.NewLabel();
 
         emitter.LoadAFromAddress(address: address);
-        emitter.CompareImmediate(value: (byte)(maximum + 1));
-        emitter.JumpRelativeIfCarry(label: belowMax); // A <= max → leave it
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: (byte)(maximum + 1));
+        emitter.JumpRelative(condition: Condition.Carry, label: belowMax); // A <= max → leave it
         emitter.LoadAImmediate(value: maximum);
         emitter.StoreAToAddress(address: address);
         emitter.MarkLabel(label: belowMax);
 
         emitter.LoadAFromAddress(address: address);
-        emitter.CompareImmediate(value: minimum);
-        emitter.JumpRelativeIfNoCarry(label: aboveMin); // A >= min → leave it
+        emitter.ArithmeticImmediate(op: AluOp.Compare, value: minimum);
+        emitter.JumpRelative(condition: Condition.NoCarry, label: aboveMin); // A >= min → leave it
         emitter.LoadAImmediate(value: minimum);
         emitter.StoreAToAddress(address: address);
         emitter.MarkLabel(label: aboveMin);
@@ -366,14 +700,14 @@ internal static class HgbCartridge {
     private static void EmitDpadStep(Sm83Emitter emitter, int bit, ushort address, bool increment) {
         var skip = emitter.NewLabel();
 
-        emitter.TestBitOfB(bit: bit);
-        emitter.JumpRelativeIfNotZero(label: skip); // bit set => not pressed => skip
+        emitter.TestBit(register: Reg8.B, bit: bit);
+        emitter.JumpRelative(condition: Condition.NotZero, label: skip); // bit set => not pressed => skip
         emitter.LoadAFromAddress(address: address);
 
         if (increment) {
-            emitter.IncrementA();
+            emitter.Increment(register: Reg8.A);
         } else {
-            emitter.DecrementA();
+            emitter.Decrement(register: Reg8.A);
         }
 
         emitter.StoreAToAddress(address: address);
@@ -383,43 +717,43 @@ internal static class HgbCartridge {
     private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort) {
         var loop = emitter.NewLabel();
 
-        emitter.LoadHlImmediate(value: sourceAddress);
-        emitter.LoadBImmediate(value: 8);
+        emitter.LoadImmediate(pair: Reg16.Hl, value: sourceAddress);
+        emitter.LoadImmediate(destination: Reg8.B, value: 8);
         emitter.MarkLabel(label: loop);
         emitter.LoadAFromHlIncrement();
         emitter.StoreAToHighPage(port: dataPort);
-        emitter.DecrementB();
-        emitter.JumpRelativeIfNotZero(label: loop);
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
 
     private static void EmitBlockCopy(Sm83Emitter emitter, ushort sourceAddress, ushort destinationAddress, ushort byteCount) {
         var loop = emitter.NewLabel();
 
-        emitter.LoadHlImmediate(value: sourceAddress);
-        emitter.LoadDeImmediate(value: destinationAddress);
-        emitter.LoadBcImmediate(value: byteCount);
+        emitter.LoadImmediate(pair: Reg16.Hl, value: sourceAddress);
+        emitter.LoadImmediate(pair: Reg16.De, value: destinationAddress);
+        emitter.LoadImmediate(pair: Reg16.Bc, value: byteCount);
         emitter.MarkLabel(label: loop);
         emitter.LoadAFromHlIncrement();
         emitter.StoreAToDe();
-        emitter.IncrementDe();
-        emitter.DecrementBc();
-        emitter.LoadAFromB();
-        emitter.OrC();
-        emitter.JumpRelativeIfNotZero(label: loop);
+        emitter.Increment(pair: Reg16.De);
+        emitter.Decrement(pair: Reg16.Bc);
+        emitter.Load(destination: Reg8.A, source: Reg8.B);
+        emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
+        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
 
     private static void EmitBlockFill(Sm83Emitter emitter, ushort destinationAddress, ushort byteCount) {
         var loop = emitter.NewLabel();
 
-        emitter.LoadDeImmediate(value: destinationAddress);
-        emitter.LoadBcImmediate(value: byteCount);
+        emitter.LoadImmediate(pair: Reg16.De, value: destinationAddress);
+        emitter.LoadImmediate(pair: Reg16.Bc, value: byteCount);
         emitter.MarkLabel(label: loop);
         emitter.XorA();
         emitter.StoreAToDe();
-        emitter.IncrementDe();
-        emitter.DecrementBc();
-        emitter.LoadAFromB();
-        emitter.OrC();
-        emitter.JumpRelativeIfNotZero(label: loop);
+        emitter.Increment(pair: Reg16.De);
+        emitter.Decrement(pair: Reg16.Bc);
+        emitter.Load(destination: Reg8.A, source: Reg8.B);
+        emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
+        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
 }

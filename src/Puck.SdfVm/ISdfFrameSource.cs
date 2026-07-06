@@ -8,4 +8,12 @@ public interface ISdfFrameSource {
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> between the previous and current fixed simulation tick, for interpolating presentation state toward the variable display rate; a static source may ignore it.</param>
     /// <returns>The frame to render.</returns>
     SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha);
+
+    /// <summary>Screen-surface TRANSFORM providers keyed by the program-declared screen index (see
+    /// <see cref="SdfEngineNode"/>'s <c>screenSurfaceTransforms</c> constructor parameter): a screen riding a dynamic
+    /// entity re-poses its world-space sampling frame every frame it moved. Default null (no dynamic screen
+    /// surfaces) — a frame source that never declares one need not override this. Reading this straight off the
+    /// frame source (rather than threading it through a separate render-spec field) keeps a host node's own type
+    /// coupling from growing just to wire this seam through.</summary>
+    IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => null;
 }

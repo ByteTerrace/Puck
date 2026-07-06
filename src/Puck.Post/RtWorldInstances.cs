@@ -13,15 +13,14 @@ internal readonly record struct RtWorldInstance(Vector3 Center, Vector3 HalfExte
 
 /// <summary>
 /// Derives ray-tracing TLAS instances from an <see cref="SdfProgram"/> — one world-space AABB per FINITE primitive
-/// (the infinite ground plane is skipped). This is now the ONE implementation: it was ported from the demo's
-/// <c>RtWorldInstances</c>, and that copy retired with the demo's live <c>--world-rt</c> producer. It walks the typed
+/// (the infinite ground plane is skipped). This is the ONE implementation. It walks the typed
 /// instruction stream tracking the point translation the VM accumulates, so a primitive authored as
 /// <c>ResetPoint().Translate(c).Shape(...)</c> lands at world center <c>c</c> with a bound sized from the shape's
 /// dimensions plus its smooth-blend padding. It is deliberately CONSERVATIVE for the transforms it does not model
 /// exactly: rotation/scale fall back to an isotropic bounding-sphere extent, and any op that tiles, mirrors, or
 /// re-poses copies (repeat/symmetry/wallpaper/dynamic transforms — and every unknown FUTURE op, by default) routes
 /// the shapes after it into one whole-march-envelope catch-all instance. A loose bound only costs wasted ray-box
-/// tests; an under-bound (or the old silent skip, which dropped such geometry from the RT image entirely) would be
+/// tests; an under-bound (or a silent skip that drops such geometry from the RT image entirely) would be
 /// wrong.
 /// </summary>
 internal static class RtWorldInstances {
@@ -161,8 +160,8 @@ internal static class RtWorldInstances {
                 default: {
                         // Repeat/RepeatLimited/Symmetry* tile or mirror copies, TransformDynamic moves per frame,
                         // WallpaperFold tiles a lattice — and any FUTURE op is conservatively assumed to do the same:
-                        // a single instance cannot represent the shapes that follow. Skip-by-default replaces the old
-                        // silent ignore (an unknown op used to leave the bound WRONG rather than loose).
+                        // a single instance cannot represent the shapes that follow. Skip-by-default routes them into
+                        // the whole-march-envelope catch-all: an unknown op leaves the bound loose, never WRONG.
                         skip = true;
 
                         break;

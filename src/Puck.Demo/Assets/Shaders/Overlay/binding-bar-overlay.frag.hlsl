@@ -284,6 +284,65 @@ float4 actionIcon(uint iconId, float2 p) {
         return float4(0.95, 0.82, 0.45, strokeMask(d, GLYPH_STROKE, GLYPH_AA));
     }
 
+    if (iconId == 25u) {                                               // CreatorDuplicate: two offset squares
+        float d = abs(sdRoundedBox((p - float2(0.16, 0.16)), float2(0.34, 0.34), 0.06));
+        d = min(d, abs(sdRoundedBox((p + float2(0.16, 0.16)), float2(0.34, 0.34), 0.06)));
+
+        return float4(0.55, 0.85, 0.95, strokeMask(d, GLYPH_STROKE, GLYPH_AA));
+    }
+
+    if (iconId == 26u) {                                               // CreatorLink: two interlocked rings
+        float d = abs(length(p - float2(0.24, 0.0)) - 0.34);
+        d = min(d, abs(length(p + float2(0.24, 0.0)) - 0.34));
+
+        return float4(0.62, 0.92, 0.62, strokeMask(d, GLYPH_STROKE, GLYPH_AA));
+    }
+
+    if (iconId == 27u) {                                               // CreatorMaterial: a paint drop
+        float d = abs(length(p - float2(0.0, 0.18)) - 0.4);            // the round body...
+        d = min(d, distanceToSegment(p, float2(-0.26, -0.10), float2(0.0, -0.62)));   // ...tapering to a tip
+        d = min(d, distanceToSegment(p, float2(0.26, -0.10), float2(0.0, -0.62)));
+        d = min(d, (length(p - float2(0.12, 0.26)) - 0.08));           // the highlight dot
+
+        return float4(0.92, 0.62, 0.88, strokeMask(d, GLYPH_STROKE, GLYPH_AA));
+    }
+
+    if (iconId == 28u) {                                               // CreatorOpCycle: a two-circle boolean venn
+        float left = (length(p - float2(-0.2, 0.0)) - 0.42);
+        float right = (length(p - float2(0.2, 0.0)) - 0.42);
+        float d = min(abs(left), abs(right));
+        // Fill the overlap lens so the icon reads as an OPERATION, not just two rings.
+        float lens = max(left, right);
+
+        return float4(0.95, 0.78, 0.42, max(strokeMask(d, GLYPH_STROKE, GLYPH_AA), (0.55 * strokeMask(lens, 0.02, GLYPH_AA))));
+    }
+
+    if (iconId == 29u) {                                               // CreatorStyle: a half-filled circle
+        float ring = abs(length(p) - 0.5);
+        float fill = max((length(p) - 0.5), -p.x);                    // solid left half
+
+        return float4(0.85, 0.85, 0.55, max(strokeMask(ring, GLYPH_STROKE, GLYPH_AA), (0.7 * strokeMask(fill, 0.02, GLYPH_AA))));
+    }
+
+    if (iconId == 30u) {                                               // CreatorDeselect: a slashed circle
+        float d = abs(length(p) - 0.5);
+        d = min(d, distanceToSegment(p, float2(-0.36, 0.36), float2(0.36, -0.36)));
+
+        return float4(0.78, 0.78, 0.82, strokeMask(d, GLYPH_STROKE, GLYPH_AA));
+    }
+
+    if (iconId == 31u) {                                               // CreatorRecord: a filled dot
+        return float4(0.94, 0.38, 0.38, strokeMask((length(p) - 0.34), 0.02, GLYPH_AA));
+    }
+
+    if (iconId == 32u) {                                               // CreatorPlay: a play triangle
+        float d = distanceToSegment(p, float2(-0.34, -0.5), float2(-0.34, 0.5));
+        d = min(d, distanceToSegment(p, float2(-0.34, 0.5), float2(0.52, 0.0)));
+        d = min(d, distanceToSegment(p, float2(0.52, 0.0), float2(-0.34, -0.5)));
+
+        return float4(0.45, 0.92, 0.55, strokeMask(d, GLYPH_STROKE, GLYPH_AA));
+    }
+
     return float4(0.0, 0.0, 0.0, 0.0);
 }
 

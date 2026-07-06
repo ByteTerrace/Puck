@@ -11,8 +11,7 @@ using Puck.Vulkan.Messages;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage C9. The CAMERA zero-copy import seam with SYNTHETIC frames (no webcam), ported from the demo's
-/// <c>CameraValidationNode</c> (<c>--validate-camera</c>, the worked reference) and environment-lenient like the
+/// Tier-C stage C9. The CAMERA zero-copy import seam with SYNTHETIC frames (no webcam), environment-lenient like the
 /// capture stage: it proves the zero-copy path in the direction a live capture source uses it — a FOREIGN device
 /// produces a frame into shared GPU memory and the host render device imports it zero-copy. The shared Tier-C
 /// Direct3D 12 device stands in for a camera's decode device (e.g. Media Foundation's D3D device): it owns a shared
