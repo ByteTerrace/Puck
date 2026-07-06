@@ -793,6 +793,19 @@ internal static class RomForge {
         File.WriteAllBytes(path: outputPath, bytes: rom);
     }
 
+    /// <summary>Resolves (and creates the directory for) a cartridge's default battery-save path, following the
+    /// demo's local-state convention (the bindings profile store's <c>%LOCALAPPDATA%\Puck\Demo</c>). Shared by every
+    /// framework game facade; each passes its own <c>.sav</c> filename.</summary>
+    /// <param name="saveFileName">The save file's name (e.g. <c>"brickfall.sav"</c>).</param>
+    /// <returns>The save-file path.</returns>
+    internal static string PrepareDefaultSavePath(string saveFileName) {
+        var directory = Path.Combine(Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData), "Puck", "Demo");
+
+        _ = Directory.CreateDirectory(path: directory);
+
+        return Path.Combine(directory, saveFileName);
+    }
+
     // A 160x144 RGBA preview of what the ROM should display: the quantized background with the creature composited.
     private static void WritePreview(string outputPath, HgbImage.Rgb[] backgroundPalette, byte[] backgroundIndices, HgbImage.Rgb[] objectPalette, byte[] creatureIndices) {
         var preview = new byte[SceneForge.ScreenWidth * SceneForge.ScreenHeight * 4];
@@ -961,6 +974,33 @@ internal static class RomForge {
         machine.Machine.Run(tCycles: (70224UL * 60UL));
 
         PngEncoder.Write(height: Framebuffer.ScreenHeight, path: Path.ChangeExtension(path: outputPath, extension: ".emulated.png"), rgba: FramebufferToRgba(machine: machine), width: Framebuffer.ScreenWidth);
+    }
+
+    /// <summary>The second boot proof beside a card game's title <c>.emulated.png</c>: boots a real machine, drives
+    /// it through a caller-supplied button sequence to reach and settle a dealt table/board, and dumps the
+    /// framebuffer. Shared by <see cref="PokerRom.WritePlayProof"/> and <see cref="SolitaireRom.WritePlayProof"/>,
+    /// each of which passes its own settle timing (Poker settles 150 frames after START, Solitaire 120).</summary>
+    /// <param name="rom">The ROM image.</param>
+    /// <param name="path">Where to write the PNG.</param>
+    /// <param name="sequence">The button/frame-count steps to run, in order, before capturing the framebuffer.</param>
+    internal static void WriteCardGamePlayProof(byte[] rom, string path, params ReadOnlySpan<(JoypadButtons Buttons, int Frames)> sequence) {
+        ArgumentNullException.ThrowIfNull(rom);
+
+        using var machine = MachineFactory.Create(
+            configuration: new MachineConfiguration(model: ConsoleModel.Cgb, cartridgeRom: rom),
+            compose: static services => services.AddHumbleGamingBrickComponents()
+        );
+
+        var joypad = machine.GetRequiredService<IJoypad>();
+
+        foreach (var (buttons, frames) in sequence) {
+            for (var frame = 0; (frame < frames); frame++) {
+                joypad.SetButtons(pressed: buttons);
+                machine.Machine.Run(tCycles: 70224UL);
+            }
+        }
+
+        PngEncoder.Write(height: Framebuffer.ScreenHeight, path: path, rgba: FramebufferToRgba(machine: machine), width: Framebuffer.ScreenWidth);
     }
 
     /// <summary>Packs a machine's native ARGB framebuffer into the RGBA8 bytes the PNG encoder / strip builder expects.</summary>

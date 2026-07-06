@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using static Puck.Platform.Windows.MfInterop;
 
 namespace Puck.Platform.Windows;
 
@@ -178,37 +179,12 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
     }
 
     private IMFSourceReader OpenDefaultReader() {
-        // Enumerate video capture devices, pick the first.
-        Check(hr: MfInterop.MFCreateAttributes(ppMFAttributes: out var enumConfig, cInitialSize: 1));
+        // Enumerate video capture devices, pick the first (shared with the GPU-tier session).
+        var (mediaSource, deviceName) = MfInterop.ActivateDefaultVideoSource();
 
-        var sourceTypeKey = MfInterop.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
-        var vidcap = MfInterop.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP;
-
-        Check(hr: enumConfig.SetGUID(guidKey: ref sourceTypeKey, guidValue: ref vidcap));
-        Check(hr: MfInterop.MFEnumDeviceSources(pAttributes: enumConfig, pppSourceActivate: out var devices, pcSourceActivate: out var count));
-
-        if ((0 == count) || (0 == devices)) {
-            throw new InvalidOperationException(message: "no video capture devices were found");
-        }
-
-        var activate = (IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices));
-
-        // Release every raw device pointer the array owns (the RCW above holds its own ref) and free the array.
-        for (var index = 0; (index < count); index++) {
-            _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size)));
-        }
-
-        Marshal.FreeCoTaskMem(ptr: devices);
-
-        var nameKey = MfInterop.MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
-
-        if (activate.GetAllocatedString(guidKey: ref nameKey, ppwszValue: out var deviceName, pcchLength: out _) >= 0) {
+        if (deviceName is not null) {
             m_name = deviceName;
         }
-
-        var sourceIid = MfInterop.IID_IMFMediaSource;
-
-        Check(hr: activate.ActivateObject(riid: ref sourceIid, ppv: out var mediaSource));
 
         // A video-processing source reader so Media Foundation inserts the NV12/YUY2 -> RGB32 converter for us.
         Check(hr: MfInterop.MFCreateAttributes(ppMFAttributes: out var readerConfig, cInitialSize: 1));
@@ -331,11 +307,5 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
         var orientation = (m_defaultStride < 0) ? "bottom-up" : ((m_defaultStride > 0) ? "top-down" : "unreported(assume top-down)");
 
         Console.Out.WriteLine(value: $"[camera] first frame {m_width}x{m_height}: buffer {length} bytes (packed expects {expected}, {((length == expected) ? "no padding" : "PADDED/short")}); default stride {m_defaultStride} ({orientation}).");
-    }
-
-    private static void Check(int hr) {
-        if (hr < 0) {
-            throw new COMException(message: "a Media Foundation call failed", errorCode: hr);
-        }
     }
 }

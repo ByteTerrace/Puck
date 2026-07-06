@@ -34,11 +34,6 @@ public static class EngineTicks {
 
         return period;
     }
-    /// <summary>Indicates whether a rate divides <see cref="PerSecond"/> exactly, so its period is a whole number of ticks.</summary>
-    /// <param name="ratePerSecond">A rate in hertz.</param>
-    /// <returns><see langword="true"/> when <paramref name="ratePerSecond"/> is non-zero and divides <see cref="PerSecond"/> with no remainder; otherwise <see langword="false"/>.</returns>
-    public static bool IsExactRate(uint ratePerSecond) =>
-        ((ratePerSecond != 0U) && ((PerSecond % ratePerSecond) == 0UL));
     /// <summary>Converts a count of engine ticks to seconds.</summary>
     /// <param name="ticks">The number of engine ticks to convert.</param>
     /// <returns>The duration of <paramref name="ticks"/> ticks in seconds.</returns>

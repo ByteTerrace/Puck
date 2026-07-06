@@ -14,7 +14,6 @@ public sealed class SplitLayout {
 
     public TransitionCurve Curve { get; }
     public string Name { get; }
-    public int ViewportCount => m_regions.Length;
 
     public NormalizedRect RegionFor(int viewportIndex) {
         return m_regions[viewportIndex];

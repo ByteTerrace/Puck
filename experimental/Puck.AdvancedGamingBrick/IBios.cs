@@ -9,7 +9,4 @@ namespace Puck.AdvancedGamingBrick;
 public interface IBios {
     /// <summary>Gets the 16&#160;KiB BIOS image, mapped at the start of the address space.</summary>
     ReadOnlyMemory<byte> Image { get; }
-
-    /// <summary>Gets a value indicating whether this is a real dumped BIOS rather than the open-source replacement.</summary>
-    bool IsOfficial { get; }
 }

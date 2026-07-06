@@ -17,13 +17,7 @@ internal static class ChromaRom {
     /// <summary>Resolves (and creates the directory for) the cartridge's default battery-save path, following the
     /// demo's local-state convention (the bindings profile store's <c>%LOCALAPPDATA%\Puck\Demo</c>).</summary>
     /// <returns>The save-file path.</returns>
-    public static string PrepareDefaultSavePath() {
-        var directory = Path.Combine(Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData), "Puck", "Demo");
-
-        _ = Directory.CreateDirectory(path: directory);
-
-        return Path.Combine(directory, "chroma.sav");
-    }
+    public static string PrepareDefaultSavePath() => RomForge.PrepareDefaultSavePath(saveFileName: "chroma.sav");
 
     /// <summary>Boots the ROM on real Humble machines and asserts the game's observable behaviour — boot→title,
     /// attract, seed entropy and same-frame well replay, the ported well battery, pause, a staged clear scoring, the

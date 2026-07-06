@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using static Puck.Platform.Windows.MfInterop;
 
 namespace Puck.Platform.Windows;
 
@@ -192,36 +193,12 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     }
 
     private IMFSourceReader OpenReader(IMFDXGIDeviceManager manager) {
-        // Enumerate video capture devices, pick the first (mirrors the CPU session).
-        Check(hr: MfInterop.MFCreateAttributes(ppMFAttributes: out var enumConfig, cInitialSize: 1));
+        // Enumerate video capture devices, pick the first (shared with the CPU-tier session).
+        var (mediaSource, deviceName) = ActivateDefaultVideoSource();
 
-        var sourceTypeKey = MfInterop.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
-        var vidcap = MfInterop.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP;
-
-        Check(hr: enumConfig.SetGUID(guidKey: ref sourceTypeKey, guidValue: ref vidcap));
-        Check(hr: MfInterop.MFEnumDeviceSources(pAttributes: enumConfig, pppSourceActivate: out var devices, pcSourceActivate: out var count));
-
-        if ((0 == count) || (0 == devices)) {
-            throw new InvalidOperationException(message: "no video capture devices were found");
-        }
-
-        var activate = (IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices));
-
-        for (var index = 0; (index < count); index++) {
-            _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size)));
-        }
-
-        Marshal.FreeCoTaskMem(ptr: devices);
-
-        var nameKey = MfInterop.MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
-
-        if (activate.GetAllocatedString(guidKey: ref nameKey, ppwszValue: out var deviceName, pcchLength: out _) >= 0) {
+        if (deviceName is not null) {
             m_name = deviceName;
         }
-
-        var sourceIid = MfInterop.IID_IMFMediaSource;
-
-        Check(hr: activate.ActivateObject(riid: ref sourceIid, ppv: out var mediaSource));
 
         // The GPU-tier reader: the D3D manager makes samples GPU textures on our device; ADVANCED video processing
         // enables the DXVA VideoProcessor, which performs the NV12/YUY2 -> ARGB32 conversion (and any scaling) on-GPU.
@@ -355,12 +332,6 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
             } finally {
                 _ = Marshal.ReleaseComObject(o: sample);
             }
-        }
-    }
-
-    private static void Check(int hr) {
-        if (hr < 0) {
-            throw new COMException(message: "a Media Foundation call failed", errorCode: hr);
         }
     }
 }

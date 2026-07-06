@@ -231,29 +231,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         return barrier;
     }
-    private static D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHeapStart(ID3D12DescriptorHeap* heap) {
-        D3D12_CPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
-
-        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_CPU_DESCRIPTOR_HANDLE*, void>)vtable[GetCpuDescriptorHandleSlot])(
-            heap,
-            &handle
-        );
-
-        return handle;
-    }
-    private static D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHeapStart(ID3D12DescriptorHeap* heap) {
-        D3D12_GPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
-
-        // Same return-by-hidden-pointer ABI workaround as the CPU handle above (see DirectXConstants.GetCpuDescriptorHandleSlot).
-        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_GPU_DESCRIPTOR_HANDLE*, void>)vtable[GetGpuDescriptorHandleSlot])(
-            heap,
-            &handle
-        );
-
-        return handle;
-    }
     private static void Release(ref nint pointer) {
         if (0 != pointer) {
             _ = ((Windows.Win32.System.Com.IUnknown*)pointer)->Release();

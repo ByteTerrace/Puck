@@ -24,7 +24,4 @@ public sealed class ReplacementBios : IBios {
 
     /// <inheritdoc/>
     public ReadOnlyMemory<byte> Image => m_image;
-
-    /// <inheritdoc/>
-    public bool IsOfficial => false;
 }

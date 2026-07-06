@@ -316,26 +316,4 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         );
     }
 
-    private static D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHeapStart(ID3D12DescriptorHeap* heap) {
-        D3D12_CPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
-
-        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_CPU_DESCRIPTOR_HANDLE*, void>)vtable[GetCpuDescriptorHandleSlot])(
-            heap,
-            &handle
-        );
-
-        return handle;
-    }
-    private static D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHeapStart(ID3D12DescriptorHeap* heap) {
-        D3D12_GPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
-
-        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_GPU_DESCRIPTOR_HANDLE*, void>)vtable[GetGpuDescriptorHandleSlot])(
-            heap,
-            &handle
-        );
-
-        return handle;
-    }
 }

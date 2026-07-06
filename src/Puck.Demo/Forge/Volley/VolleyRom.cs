@@ -17,13 +17,7 @@ internal static class VolleyRom {
     /// <summary>Resolves (and creates the directory for) the cartridge's default battery-save path, following the
     /// demo's local-state convention (the bindings profile store's <c>%LOCALAPPDATA%\Puck\Demo</c>).</summary>
     /// <returns>The save-file path.</returns>
-    public static string PrepareDefaultSavePath() {
-        var directory = Path.Combine(Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData), "Puck", "Demo");
-
-        _ = Directory.CreateDirectory(path: directory);
-
-        return Path.Combine(directory, "volley.sav");
-    }
+    public static string PrepareDefaultSavePath() => RomForge.PrepareDefaultSavePath(saveFileName: "volley.sav");
 
     /// <summary>The hand-authored art + palettes the bake calibration (<c>--forge-bake-calibration</c>) measures the
     /// SDF→bake pipeline against (forwarded from <see cref="VolleyTables"/>).</summary>

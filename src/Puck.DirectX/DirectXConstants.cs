@@ -1,3 +1,6 @@
+using System.Runtime.Versioning;
+using Windows.Win32.Graphics.Direct3D12;
+
 namespace Puck.DirectX;
 
 /// <summary>
@@ -5,7 +8,7 @@ namespace Puck.DirectX;
 /// ABI values — descriptor-heap vtable slots, the SRV swizzle mask, subresource and access flags, and the
 /// copy row-pitch alignment — are declared exactly once rather than copied into each consumer.
 /// </summary>
-public static class DirectXConstants {
+public static unsafe class DirectXConstants {
     /// <summary><c>D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES</c>: transitions every subresource of a resource at once.</summary>
     public const uint AllSubresources = 0xFFFFFFFFu;
     /// <summary><c>D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING</c>: the identity RGBA component swizzle for SRVs.</summary>
@@ -34,4 +37,37 @@ public static class DirectXConstants {
     public const int GetDeviceRemovedReasonSlot = 37;
     /// <summary><c>D3D12_TEXTURE_DATA_PITCH_ALIGNMENT</c>: the required row-pitch alignment for buffer-texture copies.</summary>
     public const uint TextureRowPitchAlignment = 256;
+
+    /// <summary>Gets a descriptor heap's CPU handle for its first descriptor, via the direct vtable-slot call the
+    /// hidden-pointer x64 COM ABI requires (see <see cref="GetCpuDescriptorHandleSlot"/>).</summary>
+    /// <param name="heap">The descriptor heap.</param>
+    /// <returns>The CPU descriptor handle at the heap's start.</returns>
+    [SupportedOSPlatform("windows10.0.10240")]
+    public static D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHeapStart(ID3D12DescriptorHeap* heap) {
+        D3D12_CPU_DESCRIPTOR_HANDLE handle;
+        var vtable = *(void***)heap;
+
+        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_CPU_DESCRIPTOR_HANDLE*, void>)vtable[GetCpuDescriptorHandleSlot])(
+            heap,
+            &handle
+        );
+
+        return handle;
+    }
+    /// <summary>Gets a descriptor heap's GPU handle for its first descriptor, via the direct vtable-slot call the
+    /// hidden-pointer x64 COM ABI requires (see <see cref="GetGpuDescriptorHandleSlot"/>).</summary>
+    /// <param name="heap">The descriptor heap.</param>
+    /// <returns>The GPU descriptor handle at the heap's start.</returns>
+    [SupportedOSPlatform("windows10.0.10240")]
+    public static D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHeapStart(ID3D12DescriptorHeap* heap) {
+        D3D12_GPU_DESCRIPTOR_HANDLE handle;
+        var vtable = *(void***)heap;
+
+        ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_GPU_DESCRIPTOR_HANDLE*, void>)vtable[GetGpuDescriptorHandleSlot])(
+            heap,
+            &handle
+        );
+
+        return handle;
+    }
 }

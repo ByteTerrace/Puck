@@ -47,6 +47,55 @@ internal static class MfInterop {
 
     [DllImport("Mfplat.dll")]
     public static extern int MFCreateDXGIDeviceManager(out uint pResetToken, out IMFDXGIDeviceManager ppDeviceManager);
+
+    /// <summary>Throws if a Media Foundation HRESULT indicates failure.</summary>
+    /// <param name="hr">The HRESULT a Media Foundation call returned.</param>
+    /// <exception cref="COMException"><paramref name="hr"/> is negative.</exception>
+    public static void Check(int hr) {
+        if (hr < 0) {
+            throw new COMException(message: "a Media Foundation call failed", errorCode: hr);
+        }
+    }
+
+    /// <summary>Enumerates video capture devices, activates the first one as a media source, and reports its friendly
+    /// name. Shared by both the CPU and GPU-tier camera sessions — the enumeration/activation shape is identical; only
+    /// what each does with the resulting source (reader configuration) differs.</summary>
+    /// <returns>The activated media source (as <see cref="object"/>, the way <c>ActivateObject</c> yields it) and the
+    /// device's friendly name (or <see langword="null"/> if the driver did not report one).</returns>
+    /// <exception cref="InvalidOperationException">No video capture device was found.</exception>
+    public static (object MediaSource, string? Name) ActivateDefaultVideoSource() {
+        Check(hr: MFCreateAttributes(ppMFAttributes: out var enumConfig, cInitialSize: 1));
+
+        var sourceTypeKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
+        var vidcap = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP;
+
+        Check(hr: enumConfig.SetGUID(guidKey: ref sourceTypeKey, guidValue: ref vidcap));
+        Check(hr: MFEnumDeviceSources(pAttributes: enumConfig, pppSourceActivate: out var devices, pcSourceActivate: out var count));
+
+        if ((0 == count) || (0 == devices)) {
+            throw new InvalidOperationException(message: "no video capture devices were found");
+        }
+
+        var activate = (IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices));
+
+        // Release every raw device pointer the array owns (the RCW above holds its own ref) and free the array.
+        for (var index = 0; (index < count); index++) {
+            _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size)));
+        }
+
+        Marshal.FreeCoTaskMem(ptr: devices);
+
+        var nameKey = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
+        var name = (activate.GetAllocatedString(guidKey: ref nameKey, ppwszValue: out var deviceName, pcchLength: out _) >= 0)
+            ? deviceName
+            : null;
+
+        var sourceIid = IID_IMFMediaSource;
+
+        Check(hr: activate.ActivateObject(riid: ref sourceIid, ppv: out var mediaSource));
+
+        return (mediaSource, name);
+    }
 }
 
 /// <summary>IMFAttributes — only SetUINT32 (slot 19) and SetGUID (slot 22) are called; earlier slots are placeholders.</summary>

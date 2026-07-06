@@ -52,12 +52,6 @@ internal sealed class PostMachine : IDisposable {
         return new PostMachine(provider: provider, scope: scope, machine: machine);
     }
 
-    /// <summary>Resolves a scoped component from the machine's dependency scope.</summary>
-    /// <typeparam name="T">The service type.</typeparam>
-    /// <returns>The resolved component.</returns>
-    public T GetRequiredService<T>() where T : notnull =>
-        m_scope.ServiceProvider.GetRequiredService<T>();
-
     /// <summary>Advances the machine by a whole number of frames.</summary>
     /// <param name="frames">The number of frames to run.</param>
     public void RunFrames(int frames) {
