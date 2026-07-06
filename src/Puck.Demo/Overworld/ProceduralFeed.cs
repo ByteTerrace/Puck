@@ -2,10 +2,10 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.Demo.Overworld;
 
-/// <summary>The CRT-faced robot avatar's procedural expressions — simple pixel art, drawn in code (no external art
-/// assets, trademark-clean). Switched by <see cref="EmoteFeed.SetEmote"/>; proximity/boot events choose WHEN to
-/// switch (arrives at integration — this type is presentation-only).</summary>
-public enum RobotEmote {
+/// <summary>The procedural face-feed's expressions — simple pixel art, drawn in code (no external art assets,
+/// trademark-clean). Switched by <see cref="ProceduralFeed.SetExpression"/>; proximity/boot events choose WHEN to
+/// switch — this type is presentation-only.</summary>
+public enum FaceExpression {
     /// <summary>Two steady eyes, occasionally blinking, a flat mouth — the resting expression.</summary>
     Idle,
     /// <summary>Upward-curved eyes and a wide grinning mouth.</summary>
@@ -15,19 +15,21 @@ public enum RobotEmote {
 }
 
 /// <summary>
-/// The robot avatar's face: CPU-composed 160x144 (the native brick panel size) RGBA8 frames published through
-/// <see cref="IGpuSurfaceUpload"/> — mirrors <c>BakePreviewService.Publish</c>'s upload pattern byte-for-byte (map,
-/// blocking copy, one reusable image-view handle valid until the next upload). A small set of procedural emotes
-/// (<see cref="RobotEmote"/>) is drawn directly into the pixel buffer with simple filled shapes (circles, rounded
+/// A creation's procedural face feed: CPU-composed 160x144 (the native brick panel size) RGBA8 frames published
+/// through <see cref="IGpuSurfaceUpload"/> — mirrors <c>BakePreviewService.Publish</c>'s upload pattern byte-for-byte
+/// (map, blocking copy, one reusable image-view handle valid until the next upload). It is the DEFAULT face feed a
+/// screen-faced creation shows (published to the host's named-feed registry under
+/// <see cref="Creator.CompanionState.DefaultFaceFeed"/>): a small set of procedural expressions
+/// (<see cref="FaceExpression"/>) drawn directly into the pixel buffer with simple filled shapes (circles, rounded
 /// mouths) — no external art, nothing trademarked. Presentation-only: this type never touches simulation state, and
 /// nothing here is gated by Post (the demo is greenfield).
 /// <para>
-/// <see cref="Tick"/> advances the idle blink timer and republishes only when the emote changed OR a blink toggled
-/// the drawn frame — an unattended idle face still blinks periodically instead of staring, but a steady expression
-/// does not re-upload every frame for nothing.
+/// <see cref="Tick"/> advances the idle blink timer and republishes only when the expression changed OR a blink
+/// toggled the drawn frame — an unattended idle face still blinks periodically instead of staring, but a steady
+/// expression does not re-upload every frame for nothing.
 /// </para>
 /// </summary>
-public sealed class EmoteFeed : IDisposable {
+public sealed class ProceduralFeed : IDisposable {
     /// <summary>The face feed's fixed width — the native Game Boy panel size, matching every other diegetic screen
     /// source in the overworld.</summary>
     public const int FaceWidth = 160;
@@ -49,8 +51,8 @@ public sealed class EmoteFeed : IDisposable {
 
     private readonly byte[] m_pixels = new byte[(FaceWidth * FaceHeight * BytesPerPixel)];
     private IGpuSurfaceUpload? m_upload;
-    private RobotEmote m_emote = RobotEmote.Idle;
-    private RobotEmote? m_lastPublishedEmote;
+    private FaceExpression m_expression = FaceExpression.Idle;
+    private FaceExpression? m_lastPublishedExpression;
     private bool m_lastPublishedBlink;
     private float m_blinkClock;
     private bool m_blinking;
@@ -60,13 +62,13 @@ public sealed class EmoteFeed : IDisposable {
     public nint CurrentImageViewHandle { get; private set; }
 
     /// <summary>Switches the displayed expression. Takes effect on the next <see cref="Tick"/> (a no-op if it is
-    /// already the current emote and no blink is pending).</summary>
-    /// <param name="emote">The expression to show.</param>
-    public void SetEmote(RobotEmote emote) {
-        m_emote = emote;
+    /// already the current expression and no blink is pending).</summary>
+    /// <param name="expression">The expression to show.</param>
+    public void SetExpression(FaceExpression expression) {
+        m_expression = expression;
     }
 
-    /// <summary>Advances the blink timer and republishes the face when the emote changed or a blink toggled,
+    /// <summary>Advances the blink timer and republishes the face when the expression changed or a blink toggled,
     /// blocking only long enough to map/copy/unmap the small 160x144 buffer (matching
     /// <c>BakePreviewService.Publish</c>'s upload cost). Never throws — a resolution failure (no GPU device/services
     /// yet) simply skips this tick; the caller retries next frame.</summary>
@@ -79,11 +81,11 @@ public sealed class EmoteFeed : IDisposable {
 
         AdvanceBlink(deltaSeconds: deltaSeconds);
 
-        if ((m_emote == m_lastPublishedEmote) && (m_blinking == m_lastPublishedBlink)) {
+        if ((m_expression == m_lastPublishedExpression) && (m_blinking == m_lastPublishedBlink)) {
             return;
         }
 
-        DrawFace(emote: m_emote, blinking: (m_blinking && (m_emote == RobotEmote.Idle)));
+        DrawFace(expression: m_expression, blinking: (m_blinking && (m_expression == FaceExpression.Idle)));
 
         m_upload ??= gpu.SurfaceTransferFactory.CreateUpload(deviceContext: device);
         // The returned handle is only valid until the NEXT Upload on this object — re-stored on every publish,
@@ -95,7 +97,7 @@ public sealed class EmoteFeed : IDisposable {
             pixels: m_pixels,
             width: FaceWidth
         );
-        m_lastPublishedEmote = m_emote;
+        m_lastPublishedExpression = m_expression;
         m_lastPublishedBlink = m_blinking;
     }
 
@@ -123,24 +125,24 @@ public sealed class EmoteFeed : IDisposable {
         }
     }
 
-    // Draws directly into m_pixels: a dark background, two eyes (shape/position keyed by emote and blink), and a
-    // mouth (keyed by emote) — plain filled circles/ellipses/rects, no external art.
-    private void DrawFace(RobotEmote emote, bool blinking) {
+    // Draws directly into m_pixels: a dark background, two eyes (shape/position keyed by expression and blink), and a
+    // mouth (keyed by expression) — plain filled circles/ellipses/rects, no external art.
+    private void DrawFace(FaceExpression expression, bool blinking) {
         Fill(color: BackgroundColor);
 
         const int leftEyeX = (FaceWidth * 3 / 8);
         const int rightEyeX = (FaceWidth * 5 / 8);
         const int eyeY = (FaceHeight * 2 / 5);
 
-        switch (emote) {
-            case RobotEmote.Happy: {
+        switch (expression) {
+            case FaceExpression.Happy: {
                 DrawUpwardArcEye(centerX: leftEyeX, centerY: eyeY);
                 DrawUpwardArcEye(centerX: rightEyeX, centerY: eyeY);
                 DrawGrinMouth();
 
                 break;
             }
-            case RobotEmote.Curious: {
+            case FaceExpression.Curious: {
                 DrawRoundEye(centerX: leftEyeX, centerY: eyeY, radius: 10, blinking: false);
                 DrawRoundEye(centerX: rightEyeX, centerY: (eyeY - 4), radius: 14, blinking: false);
                 DrawRoundMouth();

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Commands;
+using static Puck.Demo.CommandArgs;
 
 namespace Puck.Demo.Creator;
 
@@ -55,7 +56,7 @@ internal static class CreatorRigCommands {
         yield return module.WithArgs(
             description: "Sets a chain's pole (bend-direction hint): creator.pole <idOrName> <x> <y> <z>.",
             handler: module.WithSceneArgs(handler: static (scene, args) => {
-                if ((args.Length < 4) || !CreatorCommandModule.TryParseFloats(args: args, count: 3, start: 1, values: out var xyz)) {
+                if ((args.Length < 4) || !TryParseFloats(args: args, count: 3, start: 1, values: out var xyz)) {
                     return "[creator.pole: usage — creator.pole <idOrName> <x> <y> <z>]";
                 }
 
@@ -79,11 +80,11 @@ internal static class CreatorRigCommands {
                     return "[creator.gait: usage — creator.gait <chainPrefix> <frames> [stride]]";
                 }
 
-                if (!int.TryParse(s: args[1], result: out var frames)) {
+                if (!TryParseInt(text: args[1], value: out var frames)) {
                     return "[creator.gait: give a frame count]";
                 }
 
-                var stride = (((args.Length > 2) && CreatorCommandModule.TryParseFloat(text: args[2], value: out var parsedStride)) ? parsedStride : 0.4f);
+                var stride = (((args.Length > 2) && TryParseFloat(text: args[2], value: out var parsedStride)) ? parsedStride : 0.4f);
                 var recorded = scene.Gait(prefix: args[0], frameCount: frames, stride: stride);
 
                 return ((recorded > 0)

@@ -20,6 +20,7 @@ public sealed class SdfProgramBuilder {
     private readonly List<SdfScreenSurface> m_screenSurfaces = [];
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
+    private bool m_openInstanceActive;
     private Vector3 m_openInstanceCenter;
     private float m_openInstanceRadius;
     private int m_openInstanceSlot;
@@ -62,9 +63,14 @@ public sealed class SdfProgramBuilder {
     /// <param name="slot">The dynamic-transform slot index (0-based) this instance's bound tracks.</param>
     /// <param name="boundOffset">The bound's pre-dynamic offset (added to the slot's per-frame position).</param>
     /// <param name="boundRadius">The instance's bounding-sphere radius (post-dynamic geometry folded in).</param>
+    /// <param name="active">Whether the instance participates in the tile-cull scan. Pass <see langword="false"/> to PARK a
+    /// reserved-pool slot that carries no live content this rebuild (the classic "hidden below the floor" placeholder):
+    /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the beam prepass skips
+    /// its per-tile sphere test with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs
+    /// almost nothing. Its mask bit is always 0 — Stage 1 never marches it.</param>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius) {
-        BeginInstanceCore(isDynamic: true, center: boundOffset, radius: boundRadius, slot: slot);
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true) {
+        BeginInstanceCore(isDynamic: true, center: boundOffset, radius: boundRadius, slot: slot, active: active);
 
         return this;
     }
@@ -98,14 +104,15 @@ public sealed class SdfProgramBuilder {
             IsDynamic: m_openInstanceIsDynamic,
             Center: m_openInstanceCenter,
             Radius: m_openInstanceRadius,
-            Slot: m_openInstanceSlot
+            Slot: m_openInstanceSlot,
+            Active: m_openInstanceActive
         ));
 
         m_openInstanceFirst = -1;
 
         return this;
     }
-    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot) {
+    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true) {
         if (isDynamic && ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))) {
             throw new ArgumentOutOfRangeException(paramName: nameof(slot), message: $"Dynamic instance slots must be in [0, {SdfProgram.MaxDynamicTransformSlot}].");
         }
@@ -116,6 +123,7 @@ public sealed class SdfProgramBuilder {
 
         m_openInstanceFirst = m_instructions.Count;
         m_openInstanceIsDynamic = isDynamic;
+        m_openInstanceActive = active;
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;

@@ -1,10 +1,10 @@
 using System.CommandLine;
-using System.Globalization;
 using System.Numerics;
 using Puck.Commands;
 using Puck.Demo.Overworld;
 using Puck.Hosting;
 using Puck.SdfVm;
+using static Puck.Demo.CommandArgs;
 
 namespace Puck.Demo.Creator;
 
@@ -120,7 +120,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
     private IEnumerable<CommandDefinition> GetStyleCommands() {
         yield return WithArgs(
             description: "Assigns the target's palette slot: creator.material <0-15>.",
-            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && int.TryParse(s: args[0], result: out var index))
+            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && TryParseInt(text: args[0], value: out var index))
                 ? $"[creator.material: palette slot {scene.SetMaterialIndex(index: index)}]"
                 : "[creator.material: give a palette slot 0-15]")),
             name: "creator.material"
@@ -129,7 +129,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             description: "Edits a palette entry: creator.palette <slot> <r> <g> <b> [emissive] [specular] [shininess] (0-1 floats; shininess is an exponent).",
             handler: WithSceneArgs(handler: static (scene, args) => {
                 if ((args.Length < 4) ||
-                    !int.TryParse(s: args[0], result: out var slot) ||
+                    !TryParseInt(text: args[0], value: out var slot) ||
                     !TryParseFloats(args: args, count: 3, start: 1, values: out var rgb)) {
                     return "[creator.palette: usage — creator.palette <slot> <r> <g> <b> [emissive] [specular] [shininess]]";
                 }
@@ -175,7 +175,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
         );
         yield return WithArgs(
             description: "Sets the bake preview's overlay: creator.bakeoverlay <0|1|2> (0 bare, 1 palette strip + warning ticks, 2 + tile grid).",
-            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && int.TryParse(s: args[0], result: out var mode))
+            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && TryParseInt(text: args[0], value: out var mode))
                 ? $"[creator.bakeoverlay: {scene.SetBakeOverlay(mode: mode)}]"
                 : $"[creator.bakeoverlay: {scene.BakeOverlay} — give 0, 1, or 2]")),
             name: "creator.bakeoverlay"
@@ -287,7 +287,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
                         : "[creator.frame: rest cannot be deleted]");
                 }
 
-                if (int.TryParse(s: args[0], result: out var index)) {
+                if (TryParseInt(text: args[0], value: out var index)) {
                     scene.SetFrame(index: index);
 
                     return $"[creator.frame: {scene.CurrentFrame} of {scene.FrameCount}]";
@@ -315,7 +315,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
         );
         yield return WithArgs(
             description: "Sets the playback hold per frame in ticks at 60/s: creator.anim <1-60> (default 8 ≈ 133 ms).",
-            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && int.TryParse(s: args[0], result: out var ticks))
+            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && TryParseInt(text: args[0], value: out var ticks))
                 ? $"[creator.anim: {scene.SetFrameTicks(ticks: ticks)} tick(s) per frame]"
                 : "[creator.anim: give a tick count 1-60]")),
             name: "creator.anim"
@@ -346,34 +346,25 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
         );
     }
 
-    // Wraps a scene-editing handler with the availability guards (the overworld root + creator mode both up).
-    internal Func<CommandContext, CommandResult> WithScene(Func<CreatorScene, string> handler) {
-        return _ => {
-            if (Scene is not { } scene) {
-                return new CommandResult("[creator: unavailable — the overworld is not the active root]");
-            }
+    // Wraps a scene-editing handler with the shared availability guard (CommandAvailability): the overworld root
+    // must be up (host gate) AND creator mode must be entered (active gate — CreatorScene.Active).
+    internal Func<CommandContext, CommandResult> WithScene(Func<CreatorScene, string> handler) =>
+        CommandAvailability.WithTarget(
+            getTarget: () => Scene,
+            handler: handler,
+            isActive: static scene => scene.Active,
+            inactiveMessage: "[creator: enter creator mode first (console: creator)]",
+            unavailableMessage: "[creator: unavailable — the overworld is not the active root]"
+        );
 
-            if (!scene.Active) {
-                return new CommandResult("[creator: enter creator mode first (console: creator)]");
-            }
-
-            return new CommandResult(handler(arg: scene));
-        };
-    }
-
-    internal Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<CreatorScene, string[], string> handler) {
-        return (_, args) => {
-            if (Scene is not { } scene) {
-                return new CommandResult("[creator: unavailable — the overworld is not the active root]");
-            }
-
-            if (!scene.Active) {
-                return new CommandResult("[creator: enter creator mode first (console: creator)]");
-            }
-
-            return new CommandResult(handler(arg1: scene, arg2: args));
-        };
-    }
+    internal Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<CreatorScene, string[], string> handler) =>
+        CommandAvailability.WithTargetArgs(
+            getTarget: () => Scene,
+            handler: handler,
+            isActive: static scene => scene.Active,
+            inactiveMessage: "[creator: enter creator mode first (console: creator)]",
+            unavailableMessage: "[creator: unavailable — the overworld is not the active root]"
+        );
 
     private static SdfBlendOp? ParseBlend(string name) {
         return name.ToLowerInvariant() switch {
@@ -386,25 +377,6 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             "xor" => SdfBlendOp.Xor,
             _ => null,
         };
-    }
-
-    internal static bool TryParseFloat(string text, out float value) =>
-        float.TryParse(s: text, result: out value, provider: CultureInfo.InvariantCulture, style: NumberStyles.Float);
-
-    internal static bool TryParseFloats(string[] args, int count, int start, out float[] values) {
-        values = new float[count];
-
-        if (args.Length < (start + count)) {
-            return false;
-        }
-
-        for (var index = 0; (index < count); index++) {
-            if (!TryParseFloat(text: args[start + index], value: out values[index])) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     internal static string Describe(Vector3 vector) =>

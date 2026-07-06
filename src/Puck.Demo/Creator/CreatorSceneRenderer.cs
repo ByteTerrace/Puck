@@ -75,7 +75,16 @@ public sealed class CreatorSceneRenderer {
     /// same change.</summary>
     /// <param name="builder">The program builder (the room content is already emitted).</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
-    public void EmitPool(SdfProgramBuilder builder, bool probeWorstCase = false) {
+    /// <param name="suppressEasel">Drop the preview easel (the post + bake-preview screen slab) — the studio review
+    /// shows the creation alone, not the authoring scaffold. Probe-overridden (the worst case always carries it).</param>
+    /// <param name="suppressAdornments">Drop EVERY creator-mode adornment — the placement GHOST, the RIG's goal
+    /// markers, and the selection highlight (the selected shape falls back to its plain palette material) — so a studio
+    /// review shows the CREATURE alone, never a floating cursor/marker photobombing the shot. The placed shapes (the
+    /// creation itself) are unaffected. Suppression is by EMISSION only (the scene state is never mutated, so a
+    /// placement's sticky ghost/selection fields stay intact for interactive use). Probe-overridden: the worst-case
+    /// probe always emits the ghost + goal markers, so the reserved buffer ceiling is unchanged and a studio program is
+    /// a strict subset.</param>
+    public void EmitPool(SdfProgramBuilder builder, bool probeWorstCase = false, bool suppressEasel = false, bool suppressAdornments = false) {
         ArgumentNullException.ThrowIfNull(builder);
 
         // The palette is added to EVERY program (constant material count across rebuilds); shapes reference entries
@@ -88,7 +97,10 @@ public sealed class CreatorSceneRenderer {
         }
 
         var ghostMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: GhostAlbedo));
-        var selectedIndex = ((m_scene.SelectedShape is { } selectedShape) ? m_scene.SelectionIndex : -1);
+        // Studio suppresses the selection HIGHLIGHT (an adornment): the material table stays constant (the entry is
+        // still added — a strict-subset program never removes a material), but no shape references it, so the selected
+        // creature shape reads in its true palette color instead of an emissive-lifted marker.
+        var selectedIndex = ((!suppressAdornments && (m_scene.SelectedShape is { } selectedShape)) ? m_scene.SelectionIndex : -1);
         var highlightSource = m_scene.Palette[((selectedIndex >= 0) ? m_scene.Shapes[selectedIndex].MaterialIndex : 0)];
         var highlightMaterial = builder.AddMaterial(material: (highlightSource with { Emissive = (highlightSource.Emissive + 0.6f) }));
         var backdropMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.24f, 0.25f, 0.28f)));
@@ -98,7 +110,7 @@ public sealed class CreatorSceneRenderer {
         // only while the mode is up (the probe always carries it); its slab borrows PreviewScreenIndex (see the
         // constant's remarks for the cabinet-3 handshake). A 0 source handle falls back to the dark flat material,
         // so the easel reads as a powered-off panel until the bake pipeline publishes its first image.
-        if (probeWorstCase || m_scene.Active) {
+        if (probeWorstCase || (m_scene.Active && !suppressEasel)) {
             var region = m_scene.Workbench;
             // Just INSIDE the +X edge: the default authoring orbit (head-on from +Z at ~6.5 units) spans roughly a
             // ±33° horizontal half-angle, so an easel past the edge sits out of frame — tucked in at edge − 0.7 it
@@ -140,32 +152,44 @@ public sealed class CreatorSceneRenderer {
         }
 
         // The ghost: one dynamic instance on the pool's first slot, previewing the primitive the next place commits.
-        _ = builder.BeginInstanceDynamic(slot: m_slotBase, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: m_scene.GhostScale));
-        EmitShape(
-            builder: builder,
-            material: ghostMaterial,
-            mirror: m_scene.GhostMirror,
-            onion: m_scene.GhostOnion,
-            probeWorstCase: probeWorstCase,
-            scale: m_scene.GhostScale,
-            slot: m_slotBase,
-            twist: m_scene.GhostTwist,
-            type: m_scene.GhostType
-        );
-        _ = builder.EndInstance();
+        // Studio suppresses it (an adornment — the placement cursor that would photobomb a review shot). The probe
+        // still emits it (probeWorstCase wins), so the reserved buffer ceiling is unchanged and studio is a subset.
+        // The ghost + goal markers are creator-mode adornments; when the mode is inactive their hidden placeholders are
+        // PARKED (Active=false) so the beam cull skips them, exactly like the unused shape slots below. The probe keeps
+        // them active (worst case), and an active session emits them live so the placement cursor/rig markers render.
+        var adornmentsActive = (probeWorstCase || m_scene.Active);
+
+        if (probeWorstCase || !suppressAdornments) {
+            _ = builder.BeginInstanceDynamic(slot: m_slotBase, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: m_scene.GhostScale), active: adornmentsActive);
+            EmitShape(
+                builder: builder,
+                material: ghostMaterial,
+                mirror: m_scene.GhostMirror,
+                onion: m_scene.GhostOnion,
+                probeWorstCase: probeWorstCase,
+                scale: m_scene.GhostScale,
+                slot: m_slotBase,
+                twist: m_scene.GhostTwist,
+                type: m_scene.GhostType
+            );
+            _ = builder.EndInstance();
+        }
 
         // THE RIG's goal markers: one small ghost-material sphere per reserved goal slot (a HUD-like handle, never
         // authored geometry). Emitted for EVERY reserved slot every rebuild (probe or not) — same "constant slot
         // count, an unused slot hides below the floor" shape as the shape pool, so the goal-marker emission is a
-        // NEW optional addition that still joins the probe's worst case (every slot present, none skipped).
+        // NEW optional addition that still joins the probe's worst case (every slot present, none skipped). Studio
+        // suppresses them too (adornments — amber markers that would photobomb a review); the probe still emits them.
         var goalMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: GoalAlbedo, Emissive: 0.4f));
 
-        for (var index = 0; (index < GoalSlotCount); index++) {
-            var slot = (m_goalSlotBase + index);
+        if (probeWorstCase || !suppressAdornments) {
+            for (var index = 0; (index < GoalSlotCount); index++) {
+                var slot = (m_goalSlotBase + index);
 
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: GoalMarkerRadius);
-            _ = builder.ResetPoint().TransformDynamic(slot: slot).Sphere(material: goalMaterial, radius: GoalMarkerRadius);
-            _ = builder.EndInstance();
+                _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: GoalMarkerRadius, active: adornmentsActive);
+                _ = builder.ResetPoint().TransformDynamic(slot: slot).Sphere(material: goalMaterial, radius: GoalMarkerRadius);
+                _ = builder.EndInstance();
+            }
         }
 
         // Pass 1 — UNGROUPED shapes and unused slots: one tight dynamic instance per slot (cheap, cullable; every
@@ -185,8 +209,12 @@ public sealed class CreatorSceneRenderer {
             var type = (placed?.Type ?? AvatarPrimitive.Sphere);
             var scale = (placed?.Scale ?? Vector3.One);
             var material = ((index == selectedIndex) ? highlightMaterial : paletteIds[(placed?.MaterialIndex ?? (index % CreatorScene.PaletteSize))]);
+            // An unused slot's hidden placeholder is PARKED (Active=false) so the beam cull skips it with one branch
+            // instead of testing 64 hidden spheres per tile every frame — the reserved slot still exists (buffers
+            // unchanged), it just costs nothing. The probe stays fully active so it still measures the true worst case.
+            var active = (probeWorstCase || (placed is not null));
 
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: scale));
+            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: scale), active: active);
             EmitShape(
                 builder: builder,
                 material: material,

@@ -1,6 +1,4 @@
-using System.Numerics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Puck.Assets;
 
 namespace Puck.Demo.World;
@@ -9,20 +7,12 @@ namespace Puck.Demo.World;
 /// Loads and saves <see cref="WorldDocument"/>s against the <c>./worlds/</c> folder, the sibling store of
 /// <see cref="Creator.CreationStore"/>/<see cref="Forge.AudioDocumentStore"/> — same discipline throughout: a
 /// blank document is built through <see cref="Normalize"/> (never a hand-built record), an unrecognized
-/// <c>schema</c> tag throws loudly, and names are sanitized identically. One shared serializer options instance —
-/// <c>IncludeFields = true</c> is LOAD-BEARING here exactly as in <see cref="Creator.CreationStore"/>: the
-/// document's <see cref="Vector3"/> members expose fields, not properties, and omitting the option silently zeroes
-/// every transform into a degenerate placement.
+/// <c>schema</c> tag throws loudly, and names are sanitized identically. Serializes through the ONE shared
+/// <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields = true</c> is LOAD-BEARING here exactly as in
+/// <see cref="Creator.CreationStore"/>: the document's <see cref="System.Numerics.Vector3"/> members expose fields,
+/// not properties, and omitting the option silently zeroes every transform into a degenerate placement.
 /// </summary>
-public static class WorldStore {
-    private static readonly JsonSerializerOptions JsonOptions = new() {
-        Converters = { new JsonStringEnumConverter() },
-        IncludeFields = true,
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
-
+public static class WorldDocumentStore {
     /// <summary>The folder world documents persist under (relative to the working directory, the sibling of
     /// <see cref="Creator.CreationStore.Folder"/>/<see cref="Forge.AudioDocumentStore.Folder"/>).</summary>
     public static string Folder => "worlds";
@@ -31,7 +21,7 @@ public static class WorldStore {
     /// <param name="document">The document.</param>
     /// <returns>The JSON text.</returns>
     public static string ToJson(WorldDocument document) =>
-        JsonSerializer.Serialize(options: JsonOptions, value: document);
+        JsonSerializer.Serialize(options: DocumentJsonOptions.Shared, value: document);
 
     /// <summary>Builds a fresh blank document (no bounds, terrain, placements, lights, or walk data) through the
     /// SAME normalize path every loaded document takes — never a hand-built record.</summary>
@@ -88,7 +78,7 @@ public static class WorldStore {
         }
 
         var json = File.ReadAllText(path: path);
-        var document = (JsonSerializer.Deserialize<WorldDocument>(json: json, options: JsonOptions)
+        var document = (JsonSerializer.Deserialize<WorldDocument>(json: json, options: DocumentJsonOptions.Shared)
             ?? throw new InvalidDataException(message: $"'{path}' deserialized to null."));
 
         if ((document.Schema is { Length: > 0 } schema) && !string.Equals(a: schema, b: WorldDocument.CurrentSchema, comparisonType: StringComparison.Ordinal)) {

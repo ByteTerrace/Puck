@@ -1,7 +1,7 @@
 # Forge/Framework — the SM83 game framework
 
 `Puck.Demo.Forge.Framework` is the runtime real forged games are made of, so a game is **logic over a
-framework**, not hand-placed bytes. Nineteen modules share one `Sm83Emitter` behind the `GameFramework` facade:
+framework**, not hand-placed bytes. Twenty-two modules share one `Sm83Emitter` behind the `GameFramework` facade:
 an interrupt-driven kernel, a battery-backed cartridge assembler, the input / shadow-OAM / background-queue /
 PRNG / save / text / state-machine / sound plumbing every cartridge needs, and the **asset linker + game
 manifest** layer that turns a game's identity — art, screens, rules, decks, scripts, sound — into declared DATA
@@ -38,6 +38,9 @@ machinery that Volley and Chroma once hand-assembled on was retired with their r
 | `SoundDriver.cs` | the `ISoundDriver` seam (boot / per-frame tick / effect-by-id / `EmitLibrary`) and the silent `NoOpSoundDriver` |
 | `ApuSoundDriver.cs` | the REAL driver: three per-frame sequencer voices (pulse-1 SFX, noise SFX, pulse-2 music loop) pumping raw APU register bytes from manifest-declared ROM streams; `Bind(linked)` resolves them after `Link` — see the sound section below |
 | `SoundTables.cs` | the curated sound catalog AS DATA (deal/flip/shuffle/win + cursor/thud/sweep/over effects, the short music loop); `DefineIn(manifest)` declares every stream as an ordinary manifest table |
+| `ApuNotePeriod.cs` | common note frequencies in millihertz (equal temperament, A4 = 440 Hz), integers so the period math `SoundTables` builds streams from is exact and byte-identical across runs |
+| `LinkModule.cs` | serial-link plumbing: stateless SB/SC helpers (start-internal-send / arm-external-receive with optional SB staging — one transfer is inherently full-duplex / bounded poll with a timeout label / read byte). No game consumes it yet — link-fed multiplayer Poker is the follow-on arc |
+| `LinkModuleVerify.cs` | the `SerialLinkSession` loopback proof for `LinkModule` |
 
 ## The linker & the manifest (how a game consumes assets)
 

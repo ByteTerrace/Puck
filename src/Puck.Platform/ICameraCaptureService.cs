@@ -24,7 +24,14 @@ public interface ICameraCaptureService {
 
     /// <summary>Tries to open the default video capture device on the GPU-resident zero-copy tier: the platform's
     /// decode device (LUID-matched to the consumer's adapter) converts frames on-GPU and copies them into shared
-    /// textures the consumer provisions after negotiation (see <see cref="ICameraSharedCaptureSession.Start"/>).</summary>
+    /// textures the consumer provisions after negotiation (see <see cref="ICameraSharedCaptureSession.Start"/>).
+    /// <para>BUILT-AHEAD, NOT YET WIRED (by design): this tier was hardware-verified during the camera epic (DXVA
+    /// ARGB32, a Logitech C920, 1080p MJPEG) but its consumer (the old per-viewport camera child node) was retired
+    /// when rendering centralized into <c>SdfWorldEngine</c>/<c>SdfEngineNode</c> — no current call site resolves
+    /// this member (confirmed via Roslyn <c>SymbolFinder</c>, not grep). It is kept for the re-host that would make
+    /// <c>LiveCameraSource</c> buildable again; do not delete on a dead-code sweep without re-checking that re-host
+    /// hasn't landed. The reachable live-camera path today is <see cref="TryOpenDefault"/>'s CPU-pixel tier, used only
+    /// by the overworld's Pocket Camera peripheral.</para></summary>
     /// <param name="adapterLuid">The consumer render device's adapter LUID; the decode device must share the adapter for the shared textures to be openable.</param>
     /// <param name="requestedWidth">The desired output width; the negotiated size is on the returned session.</param>
     /// <param name="requestedHeight">The desired output height.</param>

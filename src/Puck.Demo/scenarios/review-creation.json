@@ -1,0 +1,19 @@
+{
+  "Scenario": {
+    "Creation": "docs/examples/creations/lantern-fish.creation.json",
+    "ExitAfterSeconds": 120,
+    "SettleSeconds": 0.5,
+    "StartTime": 0.0,
+    "TimeStep": 0.0,
+    "Backdrop": "studio",
+    "Capture": {
+      "Directory": "artifacts/scenario",
+      "Prefix": "review",
+      "Orbit": {
+        "Count": 8,
+        "Distance": 6.5,
+        "Pitch": 0.45
+      }
+    }
+  }
+}

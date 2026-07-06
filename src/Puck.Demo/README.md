@@ -91,7 +91,7 @@ loads a saved creation into the scene first.
 | Path | What it is |
 |---|---|
 | `Program.cs` | The composition root: parse CLI → build/load run document → resolve host, presenters, windowing, allocator, backend switch, command modules, gamepad routing → run. |
-| `DemoRootNode.cs`, `GraphBuilder.cs`, `DemoRunDocuments.cs`, `DemoFlags.cs` | Document load/synthesis, graph pre-flight (deferred affordances become attributed exit-2 errors), and flag→document synthesis. |
+| `DemoRunRegistrar.cs`, `GraphBuilder.cs`, `DemoRunDocuments.cs` | Document load/synthesis, graph pre-flight (deferred affordances become attributed exit-2 errors), and flag→document synthesis (the CLI flags flow straight into `DemoRunDocuments.Synthesize`; there is no separate flag-bundle type). |
 | `SdfWorldRenderSpec.cs`, `SdfWorldRenderBuilder.cs` | The shared render assembly both graph kinds (`overworld`, `world`) build through — backend selection, world-render wiring. |
 | `Overworld/` | **The game.** The deterministic world (`OverworldWorld`, `OverworldRoom`), intent sources (local/scripted/router/network), the lockstep brick timeline, the screen-layout director, the frame source, the determinism node + snapshot projection. |
 | `Forge/` | **ROM forging.** SDF-art → `.gbc` (`RomForge`, `SceneForge`), the SM83 emitter, the Pocket Camera / avatar / Volley / Brickfall / Chroma cartridges, the world-lens ROM. |

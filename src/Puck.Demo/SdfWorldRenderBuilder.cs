@@ -32,6 +32,13 @@ internal static class SdfWorldRenderBuilder {
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentNullException.ThrowIfNull(spec);
 
+        // The resolved host config (registered as a singleton by HostSettings.Apply) carries the document's
+        // RayQuery/Timing toggles; a caller's own spec field wins when set, so this is a FALLBACK, not an override —
+        // most callers never set the spec fields and ride the document's resolution unchanged. Neither this nor the
+        // spec field is required: SdfEngineNode itself falls back to the PUCK_RAY_QUERY/PUCK_TIMING environment read
+        // when both are null, so the env vars keep working verbatim with no host in the loop at all.
+        var hostSettings = serviceProvider.GetService(serviceType: typeof(HostSettings)) as HostSettings;
+
         var producer = new SdfEngineNode(
             capturePath: spec.CapturePath,
             children: spec.Children,
@@ -42,12 +49,14 @@ internal static class SdfWorldRenderBuilder {
             instanceCapacity: spec.InstanceCapacity,
             kernels: SdfWorldKernels.Load(bytecodeExtension: BytecodeExtension(hostsOnDirectX: spec.HostsOnDirectX), directory: DemoShaders.SdfDirectory),
             programWordCapacity: spec.ProgramWordCapacity,
+            rayQueryEnabled: (spec.RayQuery ?? hostSettings?.RayQuery),
             screenSources: spec.ScreenSources,
             screenLights: spec.ScreenLights,
             // Read straight off the frame source (ISdfFrameSource.ScreenSurfaceTransforms, default null) rather than
             // a spec field: this is the ONE place that needs to know the seam exists at all.
             screenSurfaceTransforms: spec.FrameSource.ScreenSurfaceTransforms,
             serviceProvider: serviceProvider,
+            timingEnabled: (spec.Timing ?? hostSettings?.Timing),
             width: spec.Width
         );
         var root = (IRenderNode)producer;

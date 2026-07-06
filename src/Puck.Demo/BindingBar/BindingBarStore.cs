@@ -48,31 +48,17 @@ internal interface IBindingBarSource {
 
 /// <summary>
 /// The binding-bar state store: the input/simulation side publishes an immutable frame, the render thread
-/// snapshots it. A whole-reference swap per publish — no locks on the read path, no partially written frames.
+/// snapshots it. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/> (a whole-reference swap per
+/// publish — no locks on the read path, no partially written frames) so DI registration and constructor parameters
+/// still name a binding-bar-specific type.
 /// </summary>
 internal sealed class BindingBarStore : IBindingBarSource {
-    private volatile Holder? m_latest;
-
-    private sealed record Holder(BindingBarFrame Frame);
+    private readonly PublishBuffer<BindingBarFrame> m_buffer = new();
 
     /// <summary>Publishes a frame (the writer side).</summary>
     /// <param name="frame">The frame to publish.</param>
-    public void Publish(in BindingBarFrame frame) {
-        m_latest = new Holder(Frame: frame);
-    }
+    public void Publish(in BindingBarFrame frame) => m_buffer.Publish(frame: frame);
 
     /// <inheritdoc/>
-    public bool TrySnapshot(out BindingBarFrame frame) {
-        var latest = m_latest;
-
-        if (latest is null) {
-            frame = default;
-
-            return false;
-        }
-
-        frame = latest.Frame;
-
-        return true;
-    }
+    public bool TrySnapshot(out BindingBarFrame frame) => m_buffer.TrySnapshot(frame: out frame);
 }

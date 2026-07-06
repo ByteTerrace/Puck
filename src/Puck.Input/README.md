@@ -382,21 +382,21 @@ correlation, errors). The demo's gamepad bindings:
 
 | Source | Command | Effect |
 |---|---|---|
-| South (A/Cross/B) | `gamepad-a` | logs a press |
-| East (B/Circle/A) | `gamepad-rumble` | dual-motor rumble on the pressing pad |
-| West (X/Square/Y) | `gamepad-trigger-rumble` | impulse-trigger rumble (Xbox) or dual-motor fallback (others) |
-| North (Y/Triangle/X) | `gamepad-led` | sets the DualSense light bar cyan; `[unsupported]` elsewhere |
-| D-pad Up | `gamepad-trigger-effect` | arms DualSense adaptive-trigger resistance; pull L2/R2 to feel it |
-| D-pad Down | `gamepad-trigger-effect-off` | clears DualSense adaptive-trigger resistance |
-| Start | `gamepad-start` | logs a press |
-| Touchpad click | `gamepad-touchpad` | logs a press (DualSense) |
-| Mute button | `gamepad-mute` | logs a press (DualSense) |
-| Touchpad finger 1/2 | `gamepad-touch0` / `gamepad-touch1` | logs each finger's normalized 0..1 position |
-| Left stick | `gamepad-move` | logs the stick vector |
-| Gyro | `gamepad-gyro` | logs angular velocity (Switch / DualSense) |
+| South (A/Cross/B) | `gamepad.a` | logs a press |
+| East (B/Circle/A) | `gamepad.rumble` | dual-motor rumble on the pressing pad |
+| West (X/Square/Y) | `gamepad.trigger-rumble` | impulse-trigger rumble (Xbox) or dual-motor fallback (others) |
+| North (Y/Triangle/X) | `gamepad.led` | sets the DualSense light bar cyan; `[unsupported]` elsewhere |
+| D-pad Up | `gamepad.trigger-effect` | arms DualSense adaptive-trigger resistance; pull L2/R2 to feel it |
+| D-pad Down | `gamepad.trigger-effect-off` | clears DualSense adaptive-trigger resistance |
+| Start | `gamepad.start` | logs a press |
+| Touchpad click | `gamepad.touchpad` | logs a press (DualSense) |
+| Mute button | `gamepad.mute` | logs a press (DualSense) |
+| Touchpad finger 1/2 | `gamepad.touch0` / `gamepad.touch1` | logs each finger's normalized 0..1 position |
+| Left stick | `gamepad.move` | logs the stick vector |
+| Gyro | `gamepad.gyro` | logs angular velocity (Switch / DualSense) |
 | Touchpad finger 1 | `cursor-touch` | absolute per-controller cursor (color matched to the LED) |
 | Left stick / accel | `cursor-nudge-stick` / `cursor-tilt` | nudge the cursor (relative) / marble-maze tilt |
-| Orientation | `gamepad-orientation` | drives the per-controller pitch/yaw/roll needle gauge |
+| Orientation | `gamepad.orientation` | drives the per-controller pitch/yaw/roll needle gauge |
 
 The cursor overlay (colored per-controller cursors + the orientation gauges) renders on the **Vulkan
 same-device producer**. It is a demo-owned overlay pass, so no cursor/gauge concept leaks into the

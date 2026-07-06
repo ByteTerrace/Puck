@@ -70,7 +70,12 @@ public sealed class CompanionRenderer {
     /// rendered.</summary>
     /// <param name="builder">The program builder (the room + creator content is already emitted).</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
-    public void EmitCompanions(SdfProgramBuilder builder, bool probeWorstCase = false) {
+    /// <param name="faceSlotResolver">Resolves a screen-faced companion's ledger-granted screen-surface slot this
+    /// pass, or -1 when the <see cref="Overworld.ScreenSlotLedger"/> granted it none (or it declares no face). The
+    /// ledger is the SOLE owner of that resolved slot — the renderer reads it through here rather than off a mirror
+    /// field on <see cref="CompanionState"/>. Null (or omitted, e.g. the worst-case probe) means no face slab emits
+    /// for any real companion (the probe emits its own placeholder-index slab unconditionally instead).</param>
+    public void EmitCompanions(SdfProgramBuilder builder, bool probeWorstCase = false, Func<CompanionState, int>? faceSlotResolver = null) {
         ArgumentNullException.ThrowIfNull(builder);
 
         var companions = m_roster.Companions;
@@ -78,8 +83,11 @@ public sealed class CompanionRenderer {
         for (var companionIndex = 0; (companionIndex < CompanionState.MaxCompanions); companionIndex++) {
             var companion = ((companionIndex < companions.Count) ? companions[companionIndex] : null);
             var rootSlot = (m_slotBase + (companionIndex * SlotsPerCompanion));
+            // The ledger-granted face slot (SOLE owner: the screen-slot ledger), resolved by the host per pass — -1
+            // for an unloaded slot, a companion with no face, or one the ledger seated nowhere this pass.
+            var faceSlot = ((companion is not null) ? (faceSlotResolver?.Invoke(arg: companion) ?? -1) : -1);
 
-            EmitOneCompanion(builder: builder, companion: companion, probeWorstCase: probeWorstCase, rootSlot: rootSlot);
+            EmitOneCompanion(builder: builder, companion: companion, faceSlot: faceSlot, probeWorstCase: probeWorstCase, rootSlot: rootSlot);
         }
     }
 
@@ -143,7 +151,7 @@ public sealed class CompanionRenderer {
         }
     }
 
-    private void EmitOneCompanion(SdfProgramBuilder builder, CompanionState? companion, bool probeWorstCase, int rootSlot) {
+    private void EmitOneCompanion(SdfProgramBuilder builder, CompanionState? companion, int faceSlot, bool probeWorstCase, int rootSlot) {
         var document = companion?.Document;
         var shapes = (document?.Shapes ?? []);
         var paletteIds = EmitPalette(builder: builder, document: document);
@@ -169,8 +177,13 @@ public sealed class CompanionRenderer {
             var type = (placed?.Type ?? AvatarPrimitive.Sphere);
             var scale = (placed?.Scale ?? Vector3.One);
             var material = paletteIds[((placed?.Material ?? 0) % paletteIds.Length)];
+            // A shape slot past this companion's live shape count — and EVERY slot of an unused companion slot — is a
+            // hidden placeholder; PARK it (Active=false) so the beam cull skips it instead of testing MaxCompanions x 64
+            // hidden spheres per tile every frame. The reserved slots still exist (buffers unchanged); the probe stays
+            // fully active so it still measures the true worst case.
+            var active = (probeWorstCase || (placed is not null));
 
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: scale));
+            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: scale), active: active);
             EmitShape(
                 builder: builder,
                 material: material,
@@ -232,9 +245,9 @@ public sealed class CompanionRenderer {
         // index (never marked, or marked but not yet granted a slot) degrades to nothing here — same "no index, no
         // diegetic screen" story cabinets/the preview easel follow; the renderer never draws a flat stand-in shape
         // for a face that has nowhere to shine (the companion's own body shapes already read fine without one).
-        if (probeWorstCase || (companion is { ScreenFaced: true, ScreenIndex: >= 0 })) {
+        if (probeWorstCase || ((companion is not null) && (faceSlot >= 0))) {
             var faceMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.10f, 0.11f, 0.13f)));
-            var screenIndex = (probeWorstCase ? 0 : companion!.ScreenIndex);
+            var screenIndex = (probeWorstCase ? 0 : faceSlot);
             var faceHalfExtents = new Vector3(0.34f, 0.30f, 0.05f);
             var faceLocalOffset = new Vector3(0f, 0.2f, 0.4f);
 
@@ -280,11 +293,24 @@ public sealed class CompanionRenderer {
         return ids;
     }
 
+    // Memoized per-frame shape-id → pose indices, keyed by (document, frameCursor). PackTransforms calls
+    // CurrentFramePoses twice per loaded companion every produced frame (current + next cursor for the interpolation
+    // blend), and a cursor changes only every few frames, so without this each call rebuilt a fresh Dictionary from
+    // frame.Transforms — up to MaxCompanions × 2 dictionary allocations per frame. The index is pure derivation of an
+    // immutable document, so it is cached indefinitely (a document is replaced wholesale on reload, not mutated).
+    private readonly Dictionary<(CreationDocument, int), IReadOnlyDictionary<int, FrameTransformDocument>> m_framePoseCache = [];
+
     // Resolves the current timeline frame's per-shape poses (keyed by shape id), or null at frame cursor 0 (the rest
-    // pose — the shape's own authored Position/Rotation/Scale, no override).
-    private static IReadOnlyDictionary<int, FrameTransformDocument>? CurrentFramePoses(CreationDocument document, int frameCursor) {
+    // pose — the shape's own authored Position/Rotation/Scale, no override). Memoized per (document, frameCursor).
+    private IReadOnlyDictionary<int, FrameTransformDocument>? CurrentFramePoses(CreationDocument document, int frameCursor) {
         if ((frameCursor <= 0) || (document.Frames is not { Count: > 0 } frames) || (frameCursor > frames.Count)) {
             return null;
+        }
+
+        var key = (document, frameCursor);
+
+        if (m_framePoseCache.TryGetValue(key: key, value: out var cached)) {
+            return cached;
         }
 
         var frame = frames[frameCursor - 1];
@@ -293,6 +319,15 @@ public sealed class CompanionRenderer {
         foreach (var pose in frame.Transforms) {
             poses[pose.Id] = pose;
         }
+
+        // Bound the cache so a long session that reloads companions many times cannot pin an unbounded set of dead
+        // document keys: a live roster's working set is tiny (MaxCompanions documents × their frame counts), so a
+        // generous cap that a live set never approaches simply drops stale entries wholesale.
+        if (m_framePoseCache.Count >= (CompanionState.MaxCompanions * 256)) {
+            m_framePoseCache.Clear();
+        }
+
+        m_framePoseCache[key] = poses;
 
         return poses;
     }

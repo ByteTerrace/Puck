@@ -53,6 +53,14 @@ public sealed record CreatorChainState(
     /// <summary>The "spine" kind name (any length ≥ 2, single-pass drag solve).</summary>
     public const string KindSpine = "spine";
 
+    // Per-solve scratch, lazily sized once on first Solve() and reused every call after (BoneLengths never changes
+    // for a chain's lifetime — only Goal/Pole move via `with`, which copies these array REFERENCES, not their
+    // contents, so every live copy of a chain still shares one scratch pair). Avoids allocating a lengths copy, a
+    // stiffness array, AND a joints array on every drag-frame solve — the settled house style (field-level scratch,
+    // e.g. OverworldFrameSource's m_activePositions).
+    private float[]? m_stiffness;
+    private Vector3[]? m_spineScratch;
+
     /// <summary>Captures a chain's rest geometry from the scene's CURRENT shape transforms — call exactly once, when
     /// the chain is defined (a later reshape/re-place does not retroactively change the rest frame; redefine the
     /// chain to recapture it).</summary>
@@ -125,16 +133,32 @@ public sealed record CreatorChainState(
             return poses;
         }
 
-        var lengths = ((float[])[.. BoneLengths]);
-        var stiffness = new float[lengths.Length];
+        // Bone count is fixed for this chain's whole lifetime (BoneLengths never changes after Capture — only Goal/
+        // Pole move), so the stiffness ramp and the joints scratch buffer are computed/sized exactly ONCE and reused
+        // by every later Solve() call (a held drag re-solves every frame) instead of allocating three fresh arrays
+        // per call.
+        var boneCount = BoneLengths.Count;
 
-        // A linear stiffness ramp (root floppy, tip stiff) is the natural default for an unweighted spine — matches
-        // the whimsical tail/tentacle read the gait sweep aims for.
-        for (var index = 0; (index < stiffness.Length); index++) {
-            stiffness[index] = ((stiffness.Length > 1) ? ((index + 1f) / stiffness.Length) : 1f);
+        if ((m_stiffness is not { Length: > 0 } stiffness) || (stiffness.Length != boneCount)) {
+            stiffness = new float[boneCount];
+
+            // A linear stiffness ramp (root floppy, tip stiff) is the natural default for an unweighted spine —
+            // matches the whimsical tail/tentacle read the gait sweep aims for.
+            for (var index = 0; (index < stiffness.Length); index++) {
+                stiffness[index] = ((stiffness.Length > 1) ? ((index + 1f) / stiffness.Length) : 1f);
+            }
+
+            m_stiffness = stiffness;
         }
 
-        var joints = CreatorIk.SolveSpine(root: root, goal: Goal, lengths: lengths, stiffness: stiffness);
+        if ((m_spineScratch is not { } joints) || (joints.Length != boneCount)) {
+            joints = new Vector3[boneCount];
+            m_spineScratch = joints;
+        }
+
+        // BoneLengths is always array-backed (Capture constructs it as a float[]) — this is an internal cast, never
+        // a public-contract change, so the solve reads it as a span instead of copying it into a fresh array first.
+        CreatorIk.SolveSpine(root: root, goal: Goal, lengths: (float[])BoneLengths, stiffness: stiffness, destination: joints);
 
         poses[0] = PoseJoint(index: 0, joint: root, solvedDirection: ((joints.Length > 0) ? SafeDirection(from: root, to: joints[0], fallback: RestBoneDirection(index: 0)) : RestBoneDirection(index: 0)));
 

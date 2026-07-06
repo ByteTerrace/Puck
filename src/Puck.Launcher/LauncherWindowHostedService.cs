@@ -148,15 +148,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 var presentTimingPrimed = false;
                 var previousPresentTimestamp = 0L;
                 var presentSampleCounter = 0;
-                // Opt-in (PUCK_PRESENT_TIMING=1): periodically log the measured present interval — proof the closed loop
-                // is live and what the real display cadence is. Off by default so a shipped run isn't noisy.
-                var logPresentTiming = string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_PRESENT_TIMING"), "1", comparisonType: StringComparison.Ordinal);
+                // Opt-in (LauncherOptions.LogPresentTiming, formerly PUCK_PRESENT_TIMING=1): periodically log the
+                // measured present interval — proof the closed loop is live and what the real display cadence is. Off
+                // by default so a shipped run isn't noisy.
+                var logPresentTiming = m_options.LogPresentTiming;
                 // GENLOCK (latency phase-align): when an external frame producer (a live camera) publishes arrival
                 // timestamps, the aligner biases the render deadline toward them with a light PI filter on the phase
                 // error, so the frame that samples a fresh arrival starts (and presents) as soon after it as possible —
-                // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher; PUCK_GENLOCK=0
-                // disables it.
-                var genlock = new GenlockPhaseAligner(clock: m_externalClocks.PacerClock, logger: m_logger, logPhase: logPresentTiming);
+                // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher;
+                // LauncherOptions.GenlockEnabled (formerly PUCK_GENLOCK=0) disables it.
+                var genlock = new GenlockPhaseAligner(clock: m_externalClocks.PacerClock, enabled: m_options.GenlockEnabled, logger: m_logger, logPhase: logPresentTiming);
                 // Starts behind any possible registry state so the first loop iteration always evaluates (and, when
                 // sources registered before the loop, announces) the current election.
                 var observedElectionGeneration = -1;
@@ -172,7 +173,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // (or a backend that can't recover) surfaces the failure instead of spinning forever.
                 var deviceLossStreak = 0;
                 // Test hook: a one-shot synthetic device loss N seconds in, to exercise recovery without real GPU churn.
-                var syntheticDeviceLossAt = ResolveSyntheticDeviceLossTimestamp(startTimestamp: startTimestamp, frequency: frequency);
+                var syntheticDeviceLossAt = ResolveSyntheticDeviceLossTimestamp(seconds: m_options.SyntheticDeviceLossSeconds, startTimestamp: startTimestamp, frequency: frequency);
                 var syntheticDeviceLossFired = false;
 
                 while (
@@ -523,11 +524,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             streak = 0;
         }
     }
-    // Resolves the one-shot synthetic-device-loss injection time from PUCK_TEST_DEVICE_LOSS (seconds), or null when the
-    // test hook is off. Render/test only — never affects the sim.
-    private static long? ResolveSyntheticDeviceLossTimestamp(long startTimestamp, long frequency) {
-        return ((double.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_TEST_DEVICE_LOSS"), out var seconds) && (seconds > 0.0))
-            ? (long?)(startTimestamp + (long)(seconds * frequency))
+    // Resolves the one-shot synthetic-device-loss injection time from the configured delay (LauncherOptions.
+    // SyntheticDeviceLossSeconds, formerly PUCK_TEST_DEVICE_LOSS), or null when the test hook is off. Render/test only.
+    private static long? ResolveSyntheticDeviceLossTimestamp(double? seconds, long startTimestamp, long frequency) {
+        return (((seconds is { } value) && (value > 0.0))
+            ? (long?)(startTimestamp + (long)(value * frequency))
             : null);
     }
     // Throws a synthetic DeviceLostException once the configured time has elapsed (test hook only); flips the one-shot

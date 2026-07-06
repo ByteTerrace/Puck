@@ -94,7 +94,7 @@ internal static class FlagshipCrtRobot {
         // Onion shell (the rounded glass / scanline-inset suggestion) sitting inside the bezel. Named "face" per the
         // flagship contract (the host's screen-slab ledger finds it by name; here it also just READS as a screen).
         _ = PlaceNamed(scene: scene, name: "bezel", type: AvatarPrimitive.Box, position: new Vector3(0f, 2.16f, 0.4f), scale: new Vector3(0.72f, 0.56f, 0.12f), material: MatBezelGlow, onion: 0f);
-        _ = PlaceNamed(scene: scene, name: "face", type: AvatarPrimitive.Box, position: new Vector3(0f, 2.16f, 0.44f), scale: new Vector3(0.62f, 0.46f, 0.12f), material: MatScreenDark, onion: 0.035f);
+        var faceShapeId = PlaceNamed(scene: scene, name: "face", type: AvatarPrimitive.Box, position: new Vector3(0f, 2.16f, 0.44f), scale: new Vector3(0.62f, 0.46f, 0.12f), material: MatScreenDark, onion: 0.035f);
 
         // ---- the eyes: oversized, ON the screen — white sclera + big dark pupil + a white SHINE dot ---------------
         // The reference rule: wherever there's a face, big eyes with a bright shine dot. Sit just proud of the dark
@@ -140,7 +140,23 @@ internal static class FlagshipCrtRobot {
         RestoreChainGoal(scene: scene, chainName: "armRight", goal: armRightRest);
         RestoreChainGoal(scene: scene, chainName: "armLeft", goal: armLeftRest);
 
-        return scene.ToDocument();
+        // THE BEHAVIOR MANIFEST (WS-12): the robot WALKS (the default locomotion) and declares its CRT as a screen
+        // FACE — a screen surface (the "face" shape) showing the DEFAULT (procedural) face feed unless a host wires it
+        // otherwise. Authored as document DATA on the returned document (ToDocument does not carry the manifest), the
+        // one-line `with` this recipe's siblings anticipated. The default source is the named emote face feed — pure
+        // content string; the architecture names no robot-specific channel.
+        return scene.ToDocument() with {
+            Behavior = new CreationBehaviorDocument(
+                Faces: [
+                    new CreationFaceDocument(
+                        DefaultSource: $"named:{Creator.CompanionState.DefaultFaceFeed}",
+                        Name: "face",
+                        ShapeId: faceShapeId
+                    ),
+                ],
+                Locomotion: "walk"
+            ),
+        };
     }
 
     // Paints the deliberate color story into the palette slots the recipe uses (every other slot keeps the default

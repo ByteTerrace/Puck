@@ -33,7 +33,13 @@ public sealed class DirectXGpuSurfaceExportFactory : IGpuSurfaceExportFactory {
     /// <summary>Creates an exportable storage image whose shared handle another API family can open — with
     /// <c>ALLOW_SIMULTANEOUS_ACCESS</c>, so a Direct3D 11 device (e.g. Media Foundation's camera decode device) can
     /// open and write it while this device merely owns the allocation. Not part of the neutral interface: the caller is
-    /// Windows-specific by construction.</summary>
+    /// Windows-specific by construction.
+    /// <para>BUILT-AHEAD, NOT YET WIRED (by design): this is the Direct3D 12 side of the camera epic's GPU-resident
+    /// zero-copy tier (hardware-verified against a Logitech C920), consumed only by
+    /// <c>Win32MediaFoundationSharedCameraSession</c> — whose own opener, <c>ICameraCaptureService.TryOpenSharedDefault</c>,
+    /// has zero call sites today (its consumer was retired when rendering centralized into
+    /// <c>SdfWorldEngine</c>/<c>SdfEngineNode</c>). Kept for that re-host, not dead code; re-verify reachability via
+    /// Roslyn before removing on a dead-code sweep.</para></summary>
     /// <param name="deviceContext">The Direct3D 12 device context that allocates the texture.</param>
     /// <param name="format">The neutral <see cref="GpuPixelFormat"/>.</param>
     /// <param name="width">The image width in pixels.</param>

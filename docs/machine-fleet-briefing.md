@@ -26,7 +26,7 @@ execution order) + §7 (the perf mandate) →
 
 ## 1. Why a fleet (the workload the plan must serve)
 
-The demo's overworld (3 machines) is the SMALL case. The design target — from
+The demo's overworld (4 machines) is the SMALL case. The design target — from
 day one, not speculative — is **many machines running simultaneously**, in
 shifting combinations of:
 

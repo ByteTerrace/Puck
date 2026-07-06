@@ -308,6 +308,15 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
     [loop]
     for (uint i = first; (i < end); i++) {
         float4 bound = sdfInstanceBoundAt(instanceOffset, i);
+
+        // A PARKED instance (a reserved-pool slot carrying no live content this rebuild) packs a negative-radius
+        // sentinel host-side (SdfProgram.ParkedBoundRadius): skip its sphere-vs-cone test with this single branch —
+        // no sqrt, no dot, mask bit left 0 — so a full pool's worth of hidden slots costs one comparison each instead
+        // of the full cull. A real bound radius is always non-negative (float-safety-padded), so this never misfires.
+        if (bound.w < 0.0) {
+            continue;
+        }
+
         float3 toCenter = (bound.xyz - rayOrigin);
         float alongRay = max(dot(toCenter, centerDirection), 0.0);
         float axisDistance = length(toCenter - (centerDirection * alongRay));

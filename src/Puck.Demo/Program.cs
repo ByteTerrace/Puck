@@ -1,14 +1,6 @@
 using System.CommandLine;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Puck.Commands;
 using Puck.Demo;
-using Puck.DirectX.Presentation;
-using Puck.Input;
-using Puck.Launcher;
-using Puck.Memory;
-using Puck.Platform;
-using Puck.Vulkan.Presentation;
 
 var backendOption = new Option<string>(name: "--backend") {
     DefaultValueFactory = static _ => "vulkan",
@@ -84,17 +76,19 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     surfaceFormatOption,
     validateOverworldOption,
 };
+// The scenario options live in their seam (Program's Main is at its ceilings), added here rather than named inline.
+Puck.Demo.Configuration.ScenarioCliSeams.AddOptions(command: launchCommand);
 var parseResult = launchCommand.Parse(args);
 // Fail loudly on an unrecognized/invalid option rather than silently falling through to the default world render (a
 // removed --validate-* flag, a typo, or a bad value). Otherwise a stale script or CI job that still passes a retired
 // gate flag would get a 30-second live window and a misleading exit 0. Headless utilities are checked next.
-if (!DemoRootNode.ReportParseErrors(parseResult: parseResult)) {
+if (!DemoRunRegistrar.ReportParseErrors(parseResult: parseResult)) {
     return 1;
 }
 // Headless utilities short-circuit before any window/host is created.
 var emitSchemaPath = parseResult.GetValue(emitSchemaOption);
 if (emitSchemaPath is not null) {
-    return DemoRootNode.EmitSchema(path: emitSchemaPath);
+    return DemoRunRegistrar.EmitSchema(path: emitSchemaPath);
 }
 // Every forge tool mode (SDF art, camera, the framework games, tunes, bakes, avatars, flagships) dispatches
 // through ForgeCliSeams — one nullable call, with the whole option surface and RomForge coupling housed there
@@ -104,26 +98,42 @@ if (await Puck.Demo.Forge.ForgeCliSeams.TryRunAsync(args: args, parseResult: par
 }
 var backend = parseResult.GetValue(backendOption) ?? "vulkan";
 var capturePath = parseResult.GetValue(captureOption);
-var exitAfterSeconds = parseResult.GetValue(exitAfterSecondsOption);
 var presentMode = parseResult.GetValue(presentModeOption) ?? "vsync";
 var runPath = parseResult.GetValue(runOption);
 var surfaceFormat = parseResult.GetValue(surfaceFormatOption) ?? "r8g8b8a8";
+
+var builder = Host.CreateApplicationBuilder(args: args);
+var services = builder.Services;
+
+// Layer + bind the run's configuration in one call: it resolves the review SCENARIO (if any), layers the sources
+// (scenario/appsettings JSON < the legacy PUCK_* environment < the command-line --scenario-set overrides), binds the
+// typed options, and reports the scenario's exit-after (0 when none / not set). A negative result means a named
+// scenario could not be found — a hard, loud failure rather than a silent live window.
+var scenarioExitAfterSeconds = Puck.Demo.Configuration.ScenarioCliSeams.Configure(builder: builder, parseResult: parseResult);
+
+if (scenarioExitAfterSeconds < 0) {
+    return 1;
+}
+
+// The scenario's exit-after-seconds (when set) wins over the CLI default so a run stays alive through its last shot;
+// otherwise the CLI --exit-after-seconds stands.
+var exitAfterSeconds = ((scenarioExitAfterSeconds > 0) ? scenarioExitAfterSeconds : parseResult.GetValue(exitAfterSecondsOption));
 
 // Every run flows through ONE data-driven path: a --run document, or the legacy flags synthesized into the SAME
 // document model. The document then drives the host, the producer/gate, and the exit code — the flags are thin
 // document-building aliases, so there is no second imperative path to keep in sync.
 var runDocument = (runPath is not null)
-    ? DemoRootNode.LoadRunDocument(runPath: runPath)
-    : DemoRunDocuments.Synthesize(flags: new DemoFlags {
-        Backend = backend,
-        ExitAfterSeconds = exitAfterSeconds,
-        PresentMode = presentMode,
-        SurfaceFormat = surfaceFormat,
-        ValidateOverworld = parseResult.GetValue(validateOverworldOption),
-        Overworld = parseResult.GetValue(overworldOption),
-        RomPath = parseResult.GetValue(romOption),
-        RomExit = parseResult.GetValue(romExitOption),
-    });
+    ? DemoRunRegistrar.LoadRunDocument(runPath: runPath)
+    : DemoRunDocuments.Synthesize(
+        backend: backend,
+        exitAfterSeconds: exitAfterSeconds,
+        presentMode: presentMode,
+        surfaceFormat: surfaceFormat,
+        validateOverworld: parseResult.GetValue(validateOverworldOption),
+        overworld: parseResult.GetValue(overworldOption),
+        romPath: parseResult.GetValue(romOption),
+        romExit: parseResult.GetValue(romExitOption)
+    );
 
 // A failed --run load is already reported by LoadRunDocument; a synthesized document is always valid.
 if (runDocument is null) {
@@ -136,75 +146,20 @@ var isOffscreenRun = (runDocument.Validation is not null);
 var hostSettings = HostSettings.FromDocument(flagBackend: backend, flagExitAfterSeconds: exitAfterSeconds, flagPresentMode: presentMode, flagSurfaceFormat: surfaceFormat, host: runDocument.Host);
 // The window host follows the document's resolved backend, gated by the graph's Direct3D 12 requirement (DXR for rt)
 // so it never diverges from the node's device; an offscreen gate forces Vulkan.
-var startWithDirectX = (!isOffscreenRun && hostSettings.ResolveHostsOnDirectX(directXAvailable: DemoRootNode.HostDirectXAvailable(document: runDocument)));
+var startWithDirectX = (!isOffscreenRun && hostSettings.ResolveHostsOnDirectX(directXAvailable: DemoRunRegistrar.HostDirectXAvailable(document: runDocument)));
 // Pre-flight the graph against the RESOLVED host: a deferred/retired affordance (cross-backend produce, graph.child,
 // an un-hosted viewport source) exits here with an attributed error, never a mid-host crash.
-if (DemoRootNode.ReportGraphUnsupported(document: runDocument, hostsOnDirectX: startWithDirectX)) {
+if (DemoRunRegistrar.ReportGraphUnsupported(document: runDocument, hostsOnDirectX: startWithDirectX)) {
     return 2;
 }
-var builder = Host.CreateApplicationBuilder(args: args);
-var services = builder.Services;
-// Window size, launcher cadence, neutral presentation prefs, and the env-var feature toggles, all from the resolved
-// host config. Presentation registers before the presenters so it wins their TryAdd defaults.
-hostSettings.Apply(services: services);
-services.AddLauncherTerminal();
-// The launcher run loop is platform-agnostic; the composition root supplies the concrete native windowing (the window
-// factory + clipboard + display probe) it resolves from the container at runtime.
-services.AddPlatformWindowing();
-services.AddCameraCapture();
-// Bind the concrete unmanaged allocator here, at the composition root — the Vulkan backend depends only on the
-// IAllocator abstraction and resolves it from the container.
-services.AddPuckAllocator();
-// ORDER MATTERS: AddVulkanPresenter MUST precede AddDirectXPresenter. Both chain in the neutral compute seam
-// (AddVulkanComputeApis / AddDirectXComputeApis), which TryAdd the SAME IGpuCompute*/IGpuTiming*/IGpuComputeServices
-// types into this one container — so whichever registers FIRST wins. The Vulkan-hosted producers resolve those from
-// THIS provider and need the Vulkan device's adapters, so Vulkan must win. (The off-host Direct3D 12 nodes build their
-// own isolated collection and are unaffected.)
-services.AddVulkanPresenter();
-if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
-    services.AddDirectXPresenter();
-}
-// Contribute the concrete backends as NAMED presenters; the launcher's backend switch (AddBackendSwitcher) picks the
-// preferred one and fronts the rest behind ISurfacePresenter. The launcher never names a backend — only Demo does, here.
-services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(Name: "vulkan", Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()));
-if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
-    services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
-        Name: "directx",
-        Presenter: (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)
-            ? sp.GetRequiredService<DirectXSurfacePresenter>()
-            : throw new PlatformNotSupportedException())));
-}
-services.AddBackendSwitcher(preferredBackend: (startWithDirectX ? "directx" : "vulkan"));
-var parityResult = DemoRootNode.RegisterRunDocument(capturePath: capturePath, document: runDocument, height: hostSettings.Height, hostsOnDirectX: startWithDirectX, services: services, width: hostSettings.Width);
-services.AddSingleton<ICommandModule, DemoCommandModule>();
-services.AddSingleton<ICommandModule, Puck.Demo.Creator.CreatorCommandModule>();
-services.AddSingleton<ICommandModule, Puck.Demo.Tracker.TrackerCommandModule>();
-services.AddSingleton<ICommandModule, Puck.Demo.World.WorldCommandModule>();
-services.AddSingleton<ICommandModule, Puck.Demo.Creator.CompanionCommandModule>();
-services.AddSingleton<ICommandObserver, DemoCommandObserver>();
-// The on-screen developer console's state store: DemoConsole publishes to it, the overworld's console overlay renders it.
-services.AddSingleton<Puck.Demo.DevConsole.ConsoleTextStore>();
-services.AddSingleton<DemoConsole>();
-services.AddSingleton(implementationFactory: static _ => new BindingCommandSource(
-    bindings: new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase) {
-        [InputSources.Keyboard.Backspace] = [new(Command: "backspace")],
-        [InputSources.Keyboard.Backtick] = [new(Command: "console")],
-        [InputSources.Keyboard.Letter(letter: 'c')] = [new(Command: "copy", RequiredModifiers: InputModifiers.Control)],
-        [InputSources.Keyboard.Text] = [new(Command: "echo")],
-        [InputSources.Keyboard.Enter] = [new(Command: "enter")],
-        [InputSources.Keyboard.Escape] = [new(Command: "escape")],
-        [InputSources.Keyboard.Function(number: 4)] = [new(Command: "debug.view.cycle")],
-        [InputSources.Keyboard.Letter(letter: 'a')] = [new(Command: "select", RequiredModifiers: InputModifiers.Control)],
-    }
-));
-// Controller input: the manager owns device acquisition, the source feeds the command registry (focus-gated
-// like keyboard input), and the hosted service governs device lifetime.
-// Single-drainer discipline: the manager's per-frame drain is destructive per device, so exactly ONE consumer may
-// drain. The live Overworld root drains per-device itself, and a document with gaming-brick / overworld viewport
-// panes drains through the shared pad-routing service — suppress the global gamepad command source for both.
-// Every other mode keeps the global source.
-services.AddDemoGamepad(registerGlobalSource: ((runDocument.Graph is not Puck.Scene.OverworldNode) && !GamingBrickPadRegistration.UsesPadService(document: runDocument)));
-services.AddBrickPadRouting(document: runDocument);
+// Window size, launcher cadence, neutral presentation prefs, and the feature toggles, all from the resolved host
+// config plus the launcher's PUCK_* runtime toggles (now bound from configuration). Presentation registers before the
+// presenters so it wins their TryAdd defaults.
+// Window size, launcher cadence, neutral presentation prefs, and the launcher's PUCK_* runtime toggles (bound from
+// configuration) apply to the builder; the rest of the composition (windowing, both presenters, the run document, the
+// command / input modules) is housed in the DemoHost seam so this entry point stays under its coupling ceiling.
+hostSettings.Apply(builder: builder);
+var parityResult = DemoHost.RegisterServices(services: services, document: runDocument, capturePath: capturePath, width: hostSettings.Width, height: hostSettings.Height, startWithDirectX: startWithDirectX);
 await builder.Build().RunAsync();
 
 // A validation gate fills parityResult before requesting exit; propagate it as the process exit code. A live

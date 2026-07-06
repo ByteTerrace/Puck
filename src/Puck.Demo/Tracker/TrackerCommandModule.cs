@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Puck.Commands;
 using Puck.Demo.Forge;
+using static Puck.Demo.CommandArgs;
 
 namespace Puck.Demo.Tracker;
 
@@ -9,11 +10,21 @@ namespace Puck.Demo.Tracker;
 /// mirroring <see cref="Creator.CreatorCommandModule"/>'s shape exactly. Open the backtick console and type
 /// <c>tracker.rows</c> to see the current pattern; every other verb here gives the pad's nudges exact, named
 /// control (load/save a document by name, set a row's note directly, set the tempo, start/stop the preview).
-/// Reaches the SAME mode-state singleton the overworld node's pad takeover drives through
-/// <see cref="ForgeCommands.TrackerModeInstance"/> (an <see cref="IServiceProvider"/> lookup rather than the
-/// <c>IRenderNode</c> root cast <see cref="Creator.CreatorCommandModule"/> uses, so this module works from the
-/// console alone — the tracker has no other host-specific state to reach).
 /// </summary>
+/// <remarks>
+/// WHY THIS MODULE DOESN'T TAKE <c>IRenderNode</c> (the pattern every other stateful module uses — see
+/// <see cref="Creator.CreatorCommandModule"/>, <see cref="Creator.CompanionCommandModule"/>,
+/// <see cref="World.WorldCommandModule"/>): it's not an oversight, it's the coupling ceiling.
+/// <see cref="Overworld.OverworldRenderNode"/> is AT its analyzer coupling ceiling already (its own remarks say
+/// so — see <c>ICreatorModeHost</c>'s doc comment there), so <c>Tracker.TrackerModeState</c>/<c>TrackerScene</c>
+/// are deliberately kept OFF its surface; they live behind a lazily-built static singleton
+/// (<see cref="ForgeCommands.TrackerModeInstance"/>) reached through <see cref="IServiceProvider"/> instead. The
+/// render node DOES expose <c>ICreatorModeHost.ToggleTrackerMode</c>/<c>RequestTrackerPreview</c> (primitive-typed
+/// forwarders onto that same singleton) — proving the mechanical rename to the <c>IRenderNode</c> ctor pattern
+/// would need Tracker's OWN state (<see cref="TrackerScene"/>, its row/note/tempo surface) added to
+/// <c>ICreatorModeHost</c> too, which is exactly the one additional coupling the render node cannot absorb. So
+/// this module keeps the <see cref="IServiceProvider"/> ctor as the intentional escape, not a debt.
+/// </remarks>
 internal sealed class TrackerCommandModule(IServiceProvider services) : ICommandModule {
     private TrackerScene Scene => ForgeCommands.TrackerModeInstance(services: services).Scene;
 
@@ -77,7 +88,7 @@ internal sealed class TrackerCommandModule(IServiceProvider services) : ICommand
         yield return WithArgs(
             description: "Sets a row's note directly: tracker.note <row> <note> (a pitch like C5/G#4, or --- to hold, or OFF to cut).",
             handler: WithSceneArgs(handler: static (scene, args) => {
-                if ((args.Length < 2) || !int.TryParse(s: args[0], result: out var row)) {
+                if ((args.Length < 2) || !TryParseInt(text: args[0], value: out var row)) {
                     return "[tracker.note: usage — tracker.note <row> <note>]";
                 }
 
@@ -93,7 +104,7 @@ internal sealed class TrackerCommandModule(IServiceProvider services) : ICommand
         );
         yield return WithArgs(
             description: "Sets the tempo (frames per row): tracker.tempo <n> (1-255).",
-            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && int.TryParse(s: args[0], result: out var tempo))
+            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && TryParseInt(text: args[0], value: out var tempo))
                 ? $"[tracker.tempo: {scene.SetTempo(tempo: tempo)} frame(s)/row]"
                 : $"[tracker.tempo: {scene.Document.Tempo} frame(s)/row — give a value 1-255 to change it]")),
             name: "tracker.tempo"
@@ -146,24 +157,24 @@ internal sealed class TrackerCommandModule(IServiceProvider services) : ICommand
         );
     }
 
-    // Wraps a scene-editing handler with the availability guard (tracker mode must be entered first).
-    private Func<CommandContext, CommandResult> WithScene(Func<TrackerScene, string> handler) {
-        return _ => {
-            var scene = Scene;
+    // Wraps a scene-editing handler with the shared availability guard (CommandAvailability): Scene is never null
+    // (ForgeCommands.TrackerModeInstance builds it lazily on first touch), so only the active gate applies —
+    // tracker mode must be entered first (TrackerScene.Active), mirroring CreatorCommandModule's active-gate shape.
+    private Func<CommandContext, CommandResult> WithScene(Func<TrackerScene, string> handler) =>
+        CommandAvailability.WithTarget(
+            getTarget: () => Scene,
+            handler: handler,
+            isActive: static scene => scene.Active,
+            inactiveMessage: "[tracker: enter tracker mode first (console: tracker)]",
+            unavailableMessage: "[tracker: enter tracker mode first (console: tracker)]"
+        );
 
-            return (scene.Active
-                ? new CommandResult(handler(arg: scene))
-                : new CommandResult("[tracker: enter tracker mode first (console: tracker)]"));
-        };
-    }
-
-    private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<TrackerScene, string[], string> handler) {
-        return (_, args) => {
-            var scene = Scene;
-
-            return (scene.Active
-                ? new CommandResult(handler(arg1: scene, arg2: args))
-                : new CommandResult("[tracker: enter tracker mode first (console: tracker)]"));
-        };
-    }
+    private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<TrackerScene, string[], string> handler) =>
+        CommandAvailability.WithTargetArgs(
+            getTarget: () => Scene,
+            handler: handler,
+            isActive: static scene => scene.Active,
+            inactiveMessage: "[tracker: enter tracker mode first (console: tracker)]",
+            unavailableMessage: "[tracker: enter tracker mode first (console: tracker)]"
+        );
 }

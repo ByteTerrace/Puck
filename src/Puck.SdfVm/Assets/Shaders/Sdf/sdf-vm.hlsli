@@ -546,7 +546,20 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
 
         maskWordBits &= (maskWordBits - 1u);
 
-        uint4 instanceMeta = sdfWords[sdfInstanceEntryOffset(instanceOffset, instanceIndex) + 1u];
+        uint entryBase = sdfInstanceEntryOffset(instanceOffset, instanceIndex);
+        // A PARKED instance (a reserved-pool slot with no live content this rebuild) packs a negative-radius sentinel in
+        // its bound (SdfProgram.ParkedBoundRadius): it contributes nothing to any ray, so skip its whole segment range —
+        // this is what makes the beam prepass's own cone march (which evaluates under the SDF_INSTANCE_MASK_ALL sentinel,
+        // so it would otherwise walk every parked pool slot's segments) cost track LIVE content, not reserved capacity.
+        // Stage 1 never reaches here for a parked instance (its per-tile mask bit is always 0), so this only fires on the
+        // all-visible cone-march / full-eval paths — exactly the ones that lacked the beam's per-tile skip.
+        float parkedRadius = asfloat(sdfWords[entryBase]).w;
+
+        if (parkedRadius < 0.0) {
+            continue;
+        }
+
+        uint4 instanceMeta = sdfWords[entryBase + 1u];
 
         if (instanceMeta.z < instanceMeta.w) {
             segmentFirst = instanceMeta.z;

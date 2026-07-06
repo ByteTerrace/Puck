@@ -6,30 +6,6 @@ using Puck.SdfVm;
 
 namespace Puck.Demo.Creator;
 
-/// <summary>The robot archetype's face channel — which content the companion's screen-faced slab shows. Meaningful
-/// only for a companion the host marks as the screen-faced one (<see cref="CompanionState.ScreenFaced"/>); harmless
-/// (read but never acted on) for every other archetype.</summary>
-public enum CompanionFaceChannel {
-    /// <summary>The procedural expression feed (<see cref="Overworld.EmoteFeed"/>) — the default, and where a pinned
-    /// "emote" mode always sits.</summary>
-    Emotes,
-    /// <summary>The lantern-fish companion's lure-lens camera feed (a <see cref="Overworld.CameraFeedEngine"/> feed) —
-    /// where a pinned "lure" mode always sits, and where the auto-tune settles when no player is around to greet.</summary>
-    LureCam,
-}
-
-/// <summary>Whether <see cref="CompanionState.FaceChannel"/> is free to auto-tune (the settled hail-radius behavior)
-/// or pinned to one channel by an explicit <c>companion.face</c> verb.</summary>
-public enum CompanionFacePin {
-    /// <summary>Auto-tunes: <see cref="CompanionFaceChannel.LureCam"/> when no player is within the hail radius AND
-    /// another companion exists to film, <see cref="CompanionFaceChannel.Emotes"/> the instant a player approaches.</summary>
-    Auto,
-    /// <summary>Pinned to <see cref="CompanionFaceChannel.Emotes"/> — never auto-switches.</summary>
-    Emotes,
-    /// <summary>Pinned to <see cref="CompanionFaceChannel.LureCam"/> — never auto-switches.</summary>
-    LureCam,
-}
-
 /// <summary>
 /// One sculpted creation living in the room as a presentation-only companion — the seam the three flagship avatars
 /// (lantern-fish-with-camera-lure, CRT-faced robot, RPG humanoid) will inhabit. Owns a loaded, NORMALIZED
@@ -55,10 +31,15 @@ public sealed class CompanionState {
     private const float HoverBobAmplitude = 0.12f;
     private const float HoverBobRadiansPerSecond = 1.1f;
     private const float HoverYawRadiansPerSecond = 0.5f;
-    // The face channel's auto-tune timers: a short dwell before committing to LureCam (so a player merely passing
-    // through the hail radius's edge doesn't flicker the face) — the snap back to Emotes on approach is instant (a
-    // player arriving should never wait to be greeted).
-    private const float LureCamDwellSeconds = 1.5f;
+    // The face auto-tune's dwell timer: a short dwell before committing to the preferred REMOTE feed (so a player
+    // merely passing through the hail radius's edge doesn't flicker the face) — the snap back to the default (greeting)
+    // feed on approach is instant (a player arriving should never wait to be greeted).
+    private const float RemoteFeedDwellSeconds = 1.5f;
+    /// <summary>The default (greeting) face feed's name — the feed a screen-faced creation shows when a player is
+    /// present, and the always-present head of its face-feed list. A creation's behavior manifest may declare a
+    /// different default, but this is the fallback when none is declared. Pure content string — the architecture
+    /// names no specific feed (see [[abstractions-not-specifics]]).</summary>
+    public const string DefaultFaceFeed = "emotes";
     /// <summary>The hail radius (world units): a player within this distance of the companion counts as "present" for
     /// the face auto-tune.</summary>
     public const float HailRadius = 3.0f;
@@ -87,27 +68,40 @@ public sealed class CompanionState {
     private int m_frameCursor;
     private float m_playClock;
     private readonly bool m_isSwimmer;
-    private bool m_screenFaced;
-    private int m_screenIndex = -1;
-    private CompanionFaceChannel m_faceChannel = CompanionFaceChannel.Emotes;
-    private CompanionFacePin m_facePin = CompanionFacePin.Auto;
-    private float m_lureCamDwellClock;
+    // The ordered face-feed NAMES this companion can show (index 0 = the default/greeting feed; later entries are the
+    // "remote" feeds the auto-tune drifts to when idle — e.g. a creation's own camera feed). Derived from the behavior
+    // manifest's faces at load; always begins with the default feed so a screen-faced creation with no manifest still
+    // has one feed to show. Pure names — no feed-specific TYPE exists (see [[abstractions-not-specifics]]).
+    private readonly List<string> m_faceFeeds;
+    // The currently resolved face feed name (what the host's named-feed registry should sample this frame).
+    private string m_currentFaceFeed;
+    // The pinned face feed name (an explicit companion.face verb) — null means the channel is free to auto-tune.
+    private string? m_facePinned;
+    private float m_remoteFeedDwellClock;
 
     /// <summary>Loads a companion from a normalized <see cref="CreationDocument"/> at a spawn position, clamped to
     /// steer inside <paramref name="bounds"/>.</summary>
     /// <param name="document">The normalized document (see <see cref="ResolveDocument"/>).</param>
     /// <param name="spawnPosition">Where the companion starts (clamped into <paramref name="bounds"/>).</param>
     /// <param name="bounds">The room region the companion's wander steering stays inside.</param>
-    /// <param name="isSwimmer">Whether this companion hover-bobs (a swimmer) instead of walking — an explicit flag
-    /// set by the loading verb, defaulting to false (walk); see <see cref="IsSwimmer"/>'s remarks for the heuristic.</param>
-    public CompanionState(CreationDocument document, Vector3 spawnPosition, WorkbenchRegion bounds, bool isSwimmer = false) {
+    /// <param name="isSwimmer">Forces the swimmer (hover-bob) locomotion regardless of the document's behavior
+    /// manifest — the console <c>swim</c> token's override. Null (the default) DEFERS to the manifest: a creation whose
+    /// <see cref="CreationBehaviorDocument.Locomotion"/> is <c>swim</c> or <c>hover</c> swims, else it walks. See
+    /// <see cref="IsSwimmer"/>'s remarks.</param>
+    public CompanionState(CreationDocument document, Vector3 spawnPosition, WorkbenchRegion bounds, bool? isSwimmer = null) {
         ArgumentNullException.ThrowIfNull(document);
 
         m_document = document;
         m_bounds = bounds;
         m_position = bounds.Clamp(position: spawnPosition);
         m_hoverBaseY = m_position.Y;
-        m_isSwimmer = isSwimmer;
+        // Locomotion is a per-creation behavioral FACT (the manifest): swim/hover hover-bob, walk ambles. The explicit
+        // flag, when supplied, overrides the manifest (the console verb's assist), else the manifest decides.
+        m_isSwimmer = (isSwimmer ?? LocomotionSwims(behavior: document.Behavior));
+        // The face-feed list: the default (greeting) feed always leads; the manifest's declared faces contribute their
+        // named-feed default sources after it (deduped), so a creation that declares a camera face drifts to it when idle.
+        m_faceFeeds = BuildFaceFeeds(behavior: document.Behavior);
+        m_currentFaceFeed = m_faceFeeds[0];
         m_reach = ComputeReach(document: document);
     }
 
@@ -163,45 +157,41 @@ public sealed class CompanionState {
     /// <see cref="NextFrameCursor"/> — the interpolation factor the renderer feeds to lerp/slerp. 0 at a frame's start,
     /// approaching 1 just before it flips to the next; always 0 for a rest-only (no-frames) document.</summary>
     public float FrameBlend => (((m_document.Frames?.Count ?? 0) == 0) ? 0f : Math.Clamp(value: (m_playClock / SecondsPerFrame), max: 1f, min: 0f));
-    /// <summary>Whether this companion hover-bobs in place (a swimmer) instead of ambling on the floor plane — an
-    /// explicit per-companion flag (never inferred from geometry): the loading verb sets it from an optional "swim"
-    /// token, keeping the heuristic simple and visible at the call site rather than sniffing the creation's
-    /// name/shapes for intent.</summary>
+    /// <summary>Whether this companion hover-bobs in place (a swimmer) instead of ambling on the floor plane — driven
+    /// by the creation's behavior-manifest <see cref="CreationBehaviorDocument.Locomotion"/> (<c>swim</c>/<c>hover</c>
+    /// hover-bob, <c>walk</c> ambles), or forced by the loading verb's explicit <c>swim</c> token. Never inferred from
+    /// geometry — a per-creation behavioral FACT, either declared in the manifest or supplied at the call site.</summary>
     public bool IsSwimmer => m_isSwimmer;
-    /// <summary>Whether the host has marked this companion as the screen-faced one (the robot archetype) — set via
-    /// <see cref="SetScreenFaced"/>. When true and a screen index is assigned (see <see cref="ScreenIndex"/>), the
-    /// renderer emits the face slab.</summary>
-    public bool ScreenFaced => m_screenFaced;
-    /// <summary>The screen-surface slot the host's <see cref="Overworld.ScreenSlotLedger"/> assigned this companion's
-    /// face, or -1 when none is assigned (the renderer then degrades to the flat lit material — the same
-    /// no-index-no-diegetic-screen story cabinets follow).</summary>
-    public int ScreenIndex => m_screenIndex;
-    /// <summary>The face channel's CURRENT resolved value (what the host's screen-source mux should sample this
-    /// frame) — meaningful only when <see cref="ScreenFaced"/>.</summary>
-    public CompanionFaceChannel FaceChannel => m_faceChannel;
-    /// <summary>Whether the face channel is free to auto-tune or pinned (see <see cref="SetFacePin"/>).</summary>
-    public CompanionFacePin FacePin => m_facePin;
+    /// <summary>Whether this companion CAN show a screen face at all — a static capability derived from its behavior
+    /// manifest (it declares at least one face), NOT a per-frame slot fact. Whether a face slab actually renders this
+    /// frame is the host's business: the <see cref="Overworld.ScreenSlotLedger"/> is the SOLE owner of the resolved
+    /// screen-surface slot (there is no mirror of it here — F-STATE-2), and the companion renderer reads that slot
+    /// through the host per pass. Use this only for capability display (e.g. the <c>companion</c> status line), never
+    /// to decide whether a slab emits.</summary>
+    public bool HasFace => (m_document.Behavior?.Faces is { Count: > 0 });
+    /// <summary>The CURRENT resolved face feed NAME (what the host's named-feed registry should sample onto this
+    /// companion's face this frame) — meaningful only for a companion that <see cref="HasFace"/>. Always one of
+    /// <see cref="FaceFeeds"/>.</summary>
+    public string CurrentFaceFeed => m_currentFaceFeed;
+    /// <summary>The ordered face-feed names this companion can show (index 0 = the default/greeting feed). A screen
+    /// face wired to one of these names shows that feed; the auto-tune drifts among them.</summary>
+    public IReadOnlyList<string> FaceFeeds => m_faceFeeds;
+    /// <summary>The pinned face feed name, or null when the channel is free to auto-tune (see
+    /// <see cref="SetFaceFeed"/>).</summary>
+    public string? PinnedFaceFeed => m_facePinned;
 
-    /// <summary>Assigns (or clears, with a negative index) the companion's screen-faced role and its ledger-granted
-    /// slot. Called by the host every frame/rebuild (mirrors <see cref="Overworld.ScreenSlotLedger"/>'s per-pass
-    /// re-claim contract) — never persisted, never inferred.</summary>
-    /// <param name="screenFaced">Whether this companion is the screen-faced (robot) one.</param>
-    /// <param name="screenIndex">The granted screen-surface slot, or -1 when none was granted this pass.</param>
-    public void SetScreenFaced(bool screenFaced, int screenIndex) {
-        m_screenFaced = screenFaced;
-        m_screenIndex = (screenFaced ? screenIndex : -1);
-    }
+    /// <summary>Pins the face to a specific feed NAME, or resumes auto-tune (the <c>companion.face</c> verb). A feed
+    /// name PINS the face to it immediately (the channel snaps and never auto-switches); <c>auto</c> (a null name)
+    /// resumes the hail-radius tune-in on the NEXT <see cref="TickFace"/>. A name not in <see cref="FaceFeeds"/> is
+    /// still honored (the host registry decides what it resolves to — an unknown feed simply shows the flat fallback),
+    /// so a face can be wired to another creation's feed or a world camera by name.</summary>
+    /// <param name="feedName">The feed name to pin to, or null to resume auto-tune.</param>
+    public void SetFaceFeed(string? feedName) {
+        m_facePinned = feedName;
 
-    /// <summary>Pins or unpins the face channel (the <c>companion.face</c> verb's <c>emote</c>/<c>lure</c>/<c>auto</c>
-    /// arguments). A pin takes effect immediately (the channel snaps to the pinned value); <see cref="CompanionFacePin.Auto"/>
-    /// resumes the hail-radius tune-in on the NEXT <see cref="TickFace"/>.</summary>
-    /// <param name="pin">The desired pin state.</param>
-    public void SetFacePin(CompanionFacePin pin) {
-        m_facePin = pin;
-
-        if (pin != CompanionFacePin.Auto) {
-            m_faceChannel = ((pin == CompanionFacePin.LureCam) ? CompanionFaceChannel.LureCam : CompanionFaceChannel.Emotes);
-            m_lureCamDwellClock = 0f;
+        if (feedName is { Length: > 0 }) {
+            m_currentFaceFeed = feedName;
+            m_remoteFeedDwellClock = 0f;
         }
     }
 
@@ -283,39 +273,45 @@ public sealed class CompanionState {
         }
     }
 
-    /// <summary>Advances the face channel's auto-tune state machine on the render clock (a no-op while
-    /// <see cref="FacePin"/> is not <see cref="CompanionFacePin.Auto"/>): a player within <see cref="HailRadius"/>
-    /// snaps the channel to <see cref="CompanionFaceChannel.Emotes"/> instantly; with no player present AND another
-    /// companion to film (<paramref name="anotherCompanionPresent"/>), the channel switches to
-    /// <see cref="CompanionFaceChannel.LureCam"/> after a short dwell (so a player merely grazing the hail radius's
-    /// edge does not flicker the face); with no player and nothing to film, the channel holds at Emotes.</summary>
+    /// <summary>Advances the face-feed auto-tune state machine on the render clock (a no-op while a feed is pinned —
+    /// see <see cref="SetFaceFeed"/>): a player within <see cref="HailRadius"/> snaps the face to the DEFAULT
+    /// (greeting) feed instantly; with no player present AND the companion carries a preferred REMOTE feed (any
+    /// face-feed past the default — e.g. its own camera feed), the face tunes to that remote feed after a short dwell
+    /// (so a player merely grazing the hail radius's edge does not flicker the face); with no player and no remote feed
+    /// to drift to, the face holds at the default. Generalized past any one creature's feed: "preferred remote feed"
+    /// is the last entry in <see cref="FaceFeeds"/>, not a fish/lure-named channel.</summary>
     /// <param name="nearestPlayerDistance">The distance to the nearest active player, or null when none is active.</param>
-    /// <param name="anotherCompanionPresent">Whether another companion exists in the room (the fish filming).</param>
+    /// <param name="remoteFeedAvailable">Whether the preferred remote feed is actually live this frame (the host's
+    /// registry resolved it) — a companion never drifts to a feed that is not producing pixels.</param>
     /// <param name="deltaSeconds">Seconds advanced since the previous produced frame.</param>
-    public void TickFace(float? nearestPlayerDistance, bool anotherCompanionPresent, float deltaSeconds) {
-        if (m_facePin != CompanionFacePin.Auto) {
+    public void TickFace(float? nearestPlayerDistance, bool remoteFeedAvailable, float deltaSeconds) {
+        if (m_facePinned is { Length: > 0 }) {
             return;
         }
 
+        var defaultFeed = m_faceFeeds[0];
+        var remoteFeed = m_faceFeeds[^1];
         var playerPresent = (nearestPlayerDistance is { } distance && (distance <= HailRadius));
 
         if (playerPresent) {
-            m_faceChannel = CompanionFaceChannel.Emotes;
-            m_lureCamDwellClock = 0f;
+            m_currentFaceFeed = defaultFeed;
+            m_remoteFeedDwellClock = 0f;
 
             return;
         }
 
-        if (!anotherCompanionPresent) {
-            m_lureCamDwellClock = 0f;
+        // No remote feed to drift to (a single-feed face, or the preferred remote feed isn't live this frame): hold at
+        // the default and reset the dwell.
+        if (string.Equals(a: remoteFeed, b: defaultFeed, comparisonType: StringComparison.Ordinal) || !remoteFeedAvailable) {
+            m_remoteFeedDwellClock = 0f;
 
             return;
         }
 
-        m_lureCamDwellClock += deltaSeconds;
+        m_remoteFeedDwellClock += deltaSeconds;
 
-        if (m_lureCamDwellClock >= LureCamDwellSeconds) {
-            m_faceChannel = CompanionFaceChannel.LureCam;
+        if (m_remoteFeedDwellClock >= RemoteFeedDwellSeconds) {
+            m_currentFaceFeed = remoteFeed;
         }
     }
 
@@ -357,6 +353,53 @@ public sealed class CompanionState {
         var t = Math.Clamp(value: (maxRadians / MathF.PI), max: 1f, min: 0f);
 
         return Quaternion.Normalize(value: Quaternion.Slerp(quaternion1: current, quaternion2: target, amount: t));
+    }
+
+    // Whether the creation's behavior manifest asks it to swim/hover (hover-bob) rather than walk. A manifest-less
+    // creation (or an explicit "walk") ambles.
+    private static bool LocomotionSwims(CreationBehaviorDocument? behavior) =>
+        (behavior?.Locomotion is { } locomotion) &&
+        (string.Equals(a: locomotion, b: "swim", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(a: locomotion, b: "hover", comparisonType: StringComparison.OrdinalIgnoreCase));
+
+    // Builds the ordered face-feed name list: the default (greeting) feed always leads, then each behavior-manifest
+    // face's declared default source resolved to a feed NAME (a "named:X" source contributes X; a "feed:N"/"brick:N"
+    // source is an index-keyed wire the world's own table owns, not a companion face feed, so it is skipped here),
+    // deduped, in manifest order. A manifest-less creation gets just the default feed. The FIRST manifest face whose
+    // default source names a feed also SETS the default (greeting) feed — a creation can declare its own greeting feed
+    // — while later faces contribute the remote feeds the auto-tune drifts to.
+    private static List<string> BuildFaceFeeds(CreationBehaviorDocument? behavior) {
+        var feeds = new List<string> { DefaultFaceFeed };
+
+        foreach (var face in (behavior?.Faces ?? [])) {
+            if (FeedNameFromSource(source: face.DefaultSource) is not { Length: > 0 } feedName) {
+                continue;
+            }
+
+            // The first declared face is the greeting face — its named source becomes the default (index 0). Later
+            // faces (or a repeat) append as remote feeds, deduped.
+            if ((feeds.Count == 1) && string.Equals(a: feeds[0], b: DefaultFaceFeed, comparisonType: StringComparison.Ordinal)) {
+                feeds[0] = feedName;
+            } else if (!Enumerable.Contains(source: feeds, comparer: StringComparer.Ordinal, value: feedName)) {
+                feeds.Add(item: feedName);
+            }
+        }
+
+        return feeds;
+    }
+
+    // Resolves a wiring-grammar source token ("named:emotes", "feed:0", …) to a face-feed NAME, or null when the token
+    // is not a named-feed source (a feed/brick index is the world wiring table's business, not a companion face feed).
+    private static string? FeedNameFromSource(string? source) {
+        if (source is not { Length: > 0 }) {
+            return null;
+        }
+
+        const string namedPrefix = "named:";
+
+        return (source.StartsWith(value: namedPrefix, comparisonType: StringComparison.OrdinalIgnoreCase) && (source.Length > namedPrefix.Length))
+            ? source[namedPrefix.Length..]
+            : null;
     }
 
     private static float ComputeReach(CreationDocument document) {
@@ -460,27 +503,25 @@ public sealed class CompanionRoster {
     }
 
     /// <summary>Advances every companion's timeline + wander steering on the render clock, then resolves the face
-    /// auto-tune (which needs to know whether ANOTHER companion exists to film) — one pass, called once per produced
-    /// frame by the host.</summary>
+    /// auto-tune (which needs to know whether each companion's preferred remote feed is live) — one pass, called once
+    /// per produced frame by the host.</summary>
     /// <param name="nearestPlayerProvider">Resolves the nearest active player's render-relative position and its
     /// distance for a companion at a given position; null (or a null-returning provider) means no player is active.</param>
+    /// <param name="remoteFeedProbe">Whether a companion's preferred remote face feed (see
+    /// <see cref="CompanionState.FaceFeeds"/>) is actually producing pixels this frame — the host's named-feed registry
+    /// answers it. Null (or a null result) means no remote feed is live, so the auto-tune holds at the default face.</param>
     /// <param name="deltaSeconds">Seconds advanced since the previous produced frame.</param>
-    public void Tick(Func<Vector3, (Vector3 Position, float Distance)?>? nearestPlayerProvider, float deltaSeconds) {
+    public void Tick(Func<Vector3, (Vector3 Position, float Distance)?>? nearestPlayerProvider, Func<CompanionState, bool>? remoteFeedProbe, float deltaSeconds) {
+        // remoteFeedProbe reads the companion object itself (never another companion's position), so it never
+        // depends on the FIRST loop's per-companion TickWander having already run — both passes fold into one,
+        // halving the nearestPlayerProvider calls (it was invoked twice per companion per tick).
         for (var index = 0; (index < m_companions.Count); index++) {
             var companion = m_companions[index];
             var nearest = nearestPlayerProvider?.Invoke(arg: companion.Position);
 
             companion.TickTimeline(deltaSeconds: deltaSeconds);
             companion.TickWander(nearestPlayer: (nearest?.Position), deltaSeconds: deltaSeconds);
-        }
-
-        var anotherPresent = (m_companions.Count > 1);
-
-        for (var index = 0; (index < m_companions.Count); index++) {
-            var companion = m_companions[index];
-            var nearest = nearestPlayerProvider?.Invoke(arg: companion.Position);
-
-            companion.TickFace(anotherCompanionPresent: anotherPresent, deltaSeconds: deltaSeconds, nearestPlayerDistance: (nearest?.Distance));
+            companion.TickFace(deltaSeconds: deltaSeconds, nearestPlayerDistance: (nearest?.Distance), remoteFeedAvailable: (remoteFeedProbe?.Invoke(arg: companion) ?? false));
         }
     }
 }

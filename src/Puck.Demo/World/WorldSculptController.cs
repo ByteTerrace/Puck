@@ -556,8 +556,8 @@ internal sealed class WorldSculptController {
     }
 
     private void Verify() {
-        var live = WorldStore.ToJson(document: m_scene.ToDocument());
-        var loaded = WorldStore.Load(nameOrPath: m_scene.Name);
+        var live = WorldDocumentStore.ToJson(document: m_scene.ToDocument());
+        var loaded = WorldDocumentStore.Load(nameOrPath: m_scene.Name);
 
         if (loaded is null) {
             m_narrate("[world.verify: no saved copy to compare against — world.save first]");
@@ -565,7 +565,7 @@ internal sealed class WorldSculptController {
             return;
         }
 
-        var stored = WorldStore.ToJson(document: loaded);
+        var stored = WorldDocumentStore.ToJson(document: loaded);
 
         m_narrate(string.Equals(a: live, b: stored, comparisonType: StringComparison.Ordinal)
             ? "[world.verify: MATCH]"

@@ -15,6 +15,12 @@ namespace Puck.Platform.Windows;
 /// memory.
 /// <para>Two-phase: the constructor negotiates (device + reader + output size); <see cref="Start"/> hands over the
 /// shared targets and begins streaming.</para>
+/// <para>BUILT-AHEAD, NOT YET WIRED (by design): hardware-verified end to end (1920x1080 MJPEG on a Logitech C920)
+/// during the camera epic, but its consumer — the per-viewport camera child render node — was retired when rendering
+/// centralized into <c>SdfWorldEngine</c>/<c>SdfEngineNode</c>, and nothing constructs this class today (its only
+/// caller, <c>ICameraCaptureService.TryOpenSharedDefault</c>, has zero call sites — confirmed via Roslyn
+/// <c>SymbolFinder</c>). Kept for the re-host that would make <c>LiveCameraSource</c> buildable on the GPU tier
+/// again; do not delete on a dead-code sweep without re-checking that re-host hasn't landed.</para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCaptureSession {

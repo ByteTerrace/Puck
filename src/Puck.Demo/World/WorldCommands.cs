@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets;
+using static Puck.Demo.CommandArgs;
 
 namespace Puck.Demo.World;
 
@@ -18,7 +19,7 @@ internal static class WorldCommands {
 
     /// <summary>Lists the saved worlds under <c>./worlds/</c>.</summary>
     public static string List() {
-        var names = WorldStore.List();
+        var names = WorldDocumentStore.List();
 
         return ((names.Count > 0)
             ? $"[world.list: {string.Join(separator: ", ", values: names)}]"
@@ -32,11 +33,11 @@ internal static class WorldCommands {
     /// <param name="store">The content-addressed store to resolve against.</param>
     /// <param name="nameOrPath">The save handle or file path.</param>
     public static string Load(WorldScene scene, ContentAddressedStore store, string nameOrPath) {
-        if (WorldStore.Load(nameOrPath: nameOrPath) is not { } document) {
+        if (WorldDocumentStore.Load(nameOrPath: nameOrPath) is not { } document) {
             return $"[world.load: nothing readable at '{nameOrPath}']";
         }
 
-        var resolvedSources = WorldStore.TryResolvePlacementSources(document: document, missing: out var missing, store: store);
+        var resolvedSources = WorldDocumentStore.TryResolvePlacementSources(document: document, missing: out var missing, store: store);
 
         if (missing.Count > 0) {
             return $"[world.load: refused — {missing.Count} placement(s) reference creations missing from the store (ids: {string.Join(separator: ", ", values: missing)}); the world is not partially loadable]";
@@ -94,7 +95,7 @@ internal static class WorldCommands {
     /// current name.</summary>
     /// <param name="scene">The live scene.</param>
     public static string Verify(WorldScene scene) {
-        if (WorldStore.Load(nameOrPath: scene.Name) is not { } stored) {
+        if (WorldDocumentStore.Load(nameOrPath: scene.Name) is not { } stored) {
             return "[world.verify: no saved copy to compare against — world.save first]";
         }
 
@@ -106,8 +107,8 @@ internal static class WorldCommands {
             liveDocument = prepare(arg: liveDocument);
         }
 
-        var live = WorldStore.ToJson(document: liveDocument);
-        var storedJson = WorldStore.ToJson(document: stored);
+        var live = WorldDocumentStore.ToJson(document: liveDocument);
+        var storedJson = WorldDocumentStore.ToJson(document: stored);
 
         return (string.Equals(a: live, b: storedJson, comparisonType: StringComparison.Ordinal)
             ? "[world.verify: MATCH]"
@@ -144,10 +145,10 @@ internal static class WorldCommands {
         }
 
         if ((args.Length >= 5) &&
-            int.TryParse(s: args[1], result: out var countX) &&
-            int.TryParse(s: args[2], result: out var countZ) &&
-            float.TryParse(s: args[3], result: out var spacingX) &&
-            float.TryParse(s: args[4], result: out var spacingZ)) {
+            TryParseInt(text: args[1], value: out var countX) &&
+            TryParseInt(text: args[2], value: out var countZ) &&
+            TryParseFloat(text: args[3], value: out var spacingX) &&
+            TryParseFloat(text: args[4], value: out var spacingZ)) {
             var wasSelected = scene.SelectionIndex;
 
             SelectById(scene: scene, id: placedId.Value);
@@ -168,7 +169,7 @@ internal static class WorldCommands {
 
     /// <summary>Selects a placement by id.</summary>
     public static string Select(WorldScene scene, string[] args) {
-        if ((args.Length == 0) || !int.TryParse(s: args[0], result: out var id)) {
+        if ((args.Length == 0) || !TryParseInt(text: args[0], value: out var id)) {
             return "[world.select: give a placement id — world.list has none of these; check the last world.place/world.load narration]";
         }
 
@@ -268,7 +269,7 @@ internal static class WorldCommands {
             return "[world.repeat: cleared — a single copy]";
         }
 
-        if ((args.Length < 2) || !int.TryParse(s: args[0], result: out var countX) || !int.TryParse(s: args[1], result: out var countZ)) {
+        if ((args.Length < 2) || !TryParseInt(text: args[0], value: out var countX) || !TryParseInt(text: args[1], value: out var countZ)) {
             return "[world.repeat: usage — world.repeat <countX> <countZ> [spacingX] [spacingZ], or world.repeat clear]";
         }
 
@@ -395,9 +396,9 @@ internal static class WorldCommands {
 
         int? stride = null;
 
-        if ((args.Length >= 6) && int.TryParse(s: args[5], result: out var parsedStride)) {
+        if ((args.Length >= 6) && TryParseInt(text: args[5], value: out var parsedStride)) {
             stride = Math.Max(val1: parsedStride, val2: 0);
-        } else if ((args.Length == 4) && int.TryParse(s: args[3], result: out var soloStride)) {
+        } else if ((args.Length == 4) && TryParseInt(text: args[3], value: out var soloStride)) {
             // The [stride]-without-limits form: world.pattern <group> <cellW> <cellH> <stride>.
             stride = Math.Max(val1: soloStride, val2: 0);
         }
@@ -482,7 +483,7 @@ internal static class WorldCommands {
             return WireClear(scene: scene, history: history, args: args);
         }
 
-        if ((args.Length < 2) || !int.TryParse(s: args[1], result: out var screenIndex)) {
+        if ((args.Length < 2) || !TryParseInt(text: args[1], value: out var screenIndex)) {
             return "[world.wire: usage — world.wire <brick:N|feed:N|named:NAME|none> <screen>]";
         }
 
@@ -548,7 +549,7 @@ internal static class WorldCommands {
     }
 
     private static string CameraDelete(WorldScene scene, EditHistory<WorldScene.Snapshot>? history, string[] args) {
-        if ((args.Length < 2) || !int.TryParse(s: args[1], result: out var id)) {
+        if ((args.Length < 2) || !TryParseInt(text: args[1], value: out var id)) {
             return "[world.camera del: usage — world.camera del <id>]";
         }
 
@@ -595,7 +596,7 @@ internal static class WorldCommands {
     }
 
     private static string WireClear(WorldScene scene, EditHistory<WorldScene.Snapshot>? history, string[] args) {
-        if ((args.Length < 2) || !int.TryParse(s: args[1], result: out var screenIndex)) {
+        if ((args.Length < 2) || !TryParseInt(text: args[1], value: out var screenIndex)) {
             return "[world.wire clear: usage — world.wire clear <screen>]";
         }
 
@@ -612,7 +613,14 @@ internal static class WorldCommands {
     }
 
     // Parses a wiring source token: brick:N / feed:N / named:NAME / none. Friendly error otherwise.
-    private static bool TryParseWireSource(string text, out ScreenWireSource source, out string error) {
+    /// <summary>Parses a wiring-grammar source token (<c>brick:N</c>, <c>feed:N</c>, <c>named:NAME</c>, or
+    /// <c>none</c>) — the single source of truth the <c>world.wire</c> verb and the headless capture aid both use so
+    /// the grammar can never drift between them.</summary>
+    /// <param name="text">The source token.</param>
+    /// <param name="source">The parsed source (<see cref="ScreenWireSource.None"/> on failure).</param>
+    /// <param name="error">The parse error, or empty on success.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseWireSource(string text, out ScreenWireSource source, out string error) {
         source = ScreenWireSource.None;
         error = "";
 
@@ -633,7 +641,7 @@ internal static class WorldCommands {
 
         switch (kind) {
             case "brick": {
-                if (!int.TryParse(s: rest, result: out var brickIndex) || (brickIndex < 0)) {
+                if (!TryParseInt(text: rest, value: out var brickIndex) || (brickIndex < 0)) {
                     error = $"'{rest}' is not a console index";
 
                     return false;
@@ -644,7 +652,7 @@ internal static class WorldCommands {
                 return true;
             }
             case "feed": {
-                if (!int.TryParse(s: rest, result: out var feedIndex) || (feedIndex < 0)) {
+                if (!TryParseInt(text: rest, value: out var feedIndex) || (feedIndex < 0)) {
                     error = $"'{rest}' is not a feed index";
 
                     return false;
@@ -747,22 +755,4 @@ internal static class WorldCommands {
         return store.TryResolveRef(category: "creations", hash: out hash, name: nameOrHash);
     }
 
-    private static bool TryParseFloat(string text, out float value) =>
-        float.TryParse(s: text, result: out value, provider: System.Globalization.CultureInfo.InvariantCulture, style: System.Globalization.NumberStyles.Float);
-
-    private static bool TryParseFloats(string[] args, int count, int start, out float[] values) {
-        values = new float[count];
-
-        if (args.Length < (start + count)) {
-            return false;
-        }
-
-        for (var index = 0; (index < count); index++) {
-            if (!TryParseFloat(text: args[start + index], value: out values[index])) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }

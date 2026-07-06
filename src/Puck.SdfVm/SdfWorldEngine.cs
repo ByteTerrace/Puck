@@ -139,7 +139,7 @@ public sealed class SdfWorldEngine : IDisposable {
     private readonly IGpuStorageBuffer m_screenSurfaceBuffer;
     // The host-side mirror of the screen-surface table: UploadProgram seeds it from the program's declared surfaces;
     // SetScreenSurface patches one entry's slice for a per-frame transform (a screen riding a dynamic entity, e.g. a
-    // walking robot's face); PrepareFrame re-uploads the whole thing every frame, exactly like the viewport/dynamic-
+    // slab riding a moving rig); PrepareFrame re-uploads the whole thing every frame, exactly like the viewport/dynamic-
     // transform/screen-light scratch buffers below — Write<T> always copies from the buffer's start, so there is no
     // partial-range GPU write to ride instead.
     private readonly byte[] m_screenSurfaceScratch = new byte[(MaxScreenSurfaces * ScreenSurfaceByteLength)];
@@ -523,7 +523,7 @@ public sealed class SdfWorldEngine : IDisposable {
     }
     /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the NEXT produced
     /// frame — the per-frame counterpart of the screen-surface table <see cref="UploadProgram"/> otherwise writes only
-    /// once, at program upload. A screen slab riding a dynamic transform (e.g. a walking robot's CRT face) must call
+    /// once, at program upload. A slab riding a moving rig must call
     /// this every frame its geometry moves, or its sampling frame goes stale relative to the geometry the dynamic
     /// transform already moved (a mismatched frame sizes/rotates/positions the sampled image wrong without affecting
     /// the geometry at all — see <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>'s

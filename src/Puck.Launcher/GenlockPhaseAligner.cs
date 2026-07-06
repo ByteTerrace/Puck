@@ -29,14 +29,15 @@ public sealed class GenlockPhaseAligner {
 
     /// <summary>Initializes a new instance of the <see cref="GenlockPhaseAligner"/> class.</summary>
     /// <param name="clock">The external arrival clock producers publish into.</param>
+    /// <param name="enabled">Whether phase alignment runs at all (formerly the <c>PUCK_GENLOCK=0</c> off-switch).</param>
     /// <param name="logger">The pacer's logger (the lock announcement + opt-in phase telemetry).</param>
-    /// <param name="logPhase">Whether to periodically log the mean absolute phase error (the <c>PUCK_PRESENT_TIMING=1</c> diagnostics opt-in).</param>
-    public GenlockPhaseAligner(ExternalPresentClock clock, ILogger logger, bool logPhase) {
+    /// <param name="logPhase">Whether to periodically log the mean absolute phase error (the diagnostics opt-in).</param>
+    public GenlockPhaseAligner(ExternalPresentClock clock, bool enabled, ILogger logger, bool logPhase) {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(logger);
 
         m_clock = clock;
-        m_enabled = !string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_GENLOCK"), "0", comparisonType: StringComparison.Ordinal);
+        m_enabled = enabled;
         m_logger = logger;
         m_logPhase = logPhase;
     }

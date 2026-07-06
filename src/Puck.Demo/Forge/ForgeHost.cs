@@ -4,12 +4,8 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
-using Puck.DirectX.Presentation;
 using Puck.Hosting;
 using Puck.Launcher;
-using Puck.Memory;
-using Puck.Platform;
-using Puck.Vulkan.Presentation;
 
 namespace Puck.Demo.Forge;
 
@@ -44,18 +40,9 @@ internal static class ForgeHost {
             SurfaceFormat = SurfaceFormat.R8G8B8A8Unorm,
         });
         services.AddSingleton(implementationFactory: static _ => new BindingCommandSource(bindings: new Dictionary<string, IReadOnlyList<CommandBinding>>()));
-        services.AddLauncherTerminal();
-        services.AddPlatformWindowing();
-        services.AddCameraCapture();
-        services.AddPuckAllocator();
-        // ORDER MATTERS (same rule as the demo/POST roots): Vulkan wins the shared compute seam, so it registers first;
-        // the forge always hosts on Vulkan and loads .spv kernels.
-        services.AddVulkanPresenter();
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
-            services.AddDirectXPresenter();
-        }
-        services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(Name: "vulkan", Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()));
-        services.AddBackendSwitcher(preferredBackend: "vulkan");
+        // The shared trimmed-GPU-host block (GpuHostComposition documents the Vulkan-wins-the-compute-seam ORDER rule);
+        // the forge always hosts on Vulkan and loads .spv kernels, so DirectX is not contributed as a named backend.
+        GpuHostComposition.AddTrimmedGpuHost(services: services, preferredBackend: "vulkan", registerDirectXBackend: false);
         services.AddSingleton<IRenderNode>(implementationFactory: sp => new ForgeNode(services: sp, work: work, result: result));
 
         await builder.Build().RunAsync();

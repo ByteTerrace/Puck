@@ -6868,6 +6868,24 @@
       }
     }
   ],
-  "cameras": null,
-  "behavior": null
+  "cameras": [
+    {
+      "id": 0,
+      "shapeId": 33,
+      "position": {
+        "x": 0,
+        "y": 0.15,
+        "z": 0.05
+      },
+      "yaw": 180,
+      "pitch": -50,
+      "fov": 74,
+      "focus": 1.4,
+      "feed": "lure"
+    }
+  ],
+  "behavior": {
+    "locomotion": "swim",
+    "faces": null
+  }
 }

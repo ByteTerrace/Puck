@@ -23,9 +23,10 @@ Vulkan and Direct3D 12.
 - **Determinism as a feature.** Fixed-point math, per-tick command snapshots,
   and record/replay are engine primitives; capture runs produce identical
   per-frame pixel hashes.
-- **Self-validating.** `Puck.Post` is a 29-stage power-on self-test (CPU
-  pre-flight → GPU smoke → cross-backend parity → live subsystems); the
-  experimental emulator cores carry their own mirrored batteries.
+- **Self-validating.** `Puck.Post` is a fail-isolated power-on self-test (CPU
+  pre-flight → GPU smoke → cross-backend parity → live subsystems; run it to
+  see the current stage count in its own summary line); the experimental
+  emulator cores carry their own mirrored batteries.
 
 The full inventory — including controller input, live-camera and desktop
 content sources, VRR present timing, the Game Boy / GBA emulator cores, and

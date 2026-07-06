@@ -22,7 +22,7 @@ public enum CameraAnchorKind {
 /// <summary>
 /// A placeable camera EYE — a posed viewpoint the developer drops into the world exactly like a screen surface, indexed
 /// and wired as pure data. Not a shape that renders: a marker that, resolved against the live world each frame,
-/// produces the eye/target pose a <see cref="Overworld.CameraFeedEngine"/> feed renders the world from. The hundredth eye costs a
+/// produces the eye/target pose a <see cref="Overworld.CameraFeedPool"/> feed renders the world from. The hundredth eye costs a
 /// verb, not a redesign; a camera on a lamp post, a security wall's four angles, a mirror's reflection, a creature's
 /// lure — all are eyes with different anchors and poses.
 /// <para>

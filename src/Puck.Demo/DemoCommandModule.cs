@@ -211,25 +211,25 @@ internal sealed class DemoCommandModule(
         yield return CommandDefinition.Verb(
             description: "Logs a Switch Pro south-face button press (controller input proof).",
             handler: static _ => new CommandResult("[gamepad A]"),
-            name: "gamepad-a",
+            name: "gamepad.a",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
             description: "Logs a Switch Pro start button press.",
             handler: static _ => new CommandResult("[gamepad start]"),
-            name: "gamepad-start",
+            name: "gamepad.start",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
             description: "Logs a DualSense touchpad click (controller input proof).",
             handler: static _ => new CommandResult("[gamepad touchpad]"),
-            name: "gamepad-touchpad",
+            name: "gamepad.touchpad",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
             description: "Logs a DualSense mute-button press (controller input proof).",
             handler: static _ => new CommandResult("[gamepad mute]"),
-            name: "gamepad-mute",
+            name: "gamepad.mute",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -247,7 +247,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult(accepted ? "[rumble]" : "[rumble: rejected]");
             },
-            name: "gamepad-rumble",
+            name: "gamepad.rumble",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -277,7 +277,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult(fallback ? "[trigger-rumble: dual-motor fallback]" : "[trigger-rumble: unsupported]");
             },
-            name: "gamepad-trigger-rumble",
+            name: "gamepad.trigger-rumble",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -295,7 +295,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult(accepted ? "[led: cyan]" : "[led: rejected]");
             },
-            name: "gamepad-led",
+            name: "gamepad.led",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -315,7 +315,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult(accepted ? "[trigger-effect: resistance armed]" : "[trigger-effect: rejected]");
             },
-            name: "gamepad-trigger-effect",
+            name: "gamepad.trigger-effect",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -333,7 +333,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult(accepted ? "[trigger-effect: cleared]" : "[trigger-effect: rejected]");
             },
-            name: "gamepad-trigger-effect-off",
+            name: "gamepad.trigger-effect-off",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -354,7 +354,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult(accepted ? "[trigger-schedule: buzz in 1s]" : "[trigger-schedule: rejected]");
             },
-            name: "gamepad-trigger-schedule",
+            name: "gamepad.trigger-schedule",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -368,7 +368,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult($"[move {value.X:F2},{value.Y:F2}]");
             },
-            name: "gamepad-move",
+            name: "gamepad.move",
             valueKind: CommandValueKind.Axis2D
         );
         yield return CommandDefinition.Verb(
@@ -382,7 +382,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult($"[touch0 {value.X:F2},{value.Y:F2}]");
             },
-            name: "gamepad-touch0",
+            name: "gamepad.touch0",
             valueKind: CommandValueKind.Axis2D
         );
         yield return CommandDefinition.Verb(
@@ -396,7 +396,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult($"[touch1 {value.X:F2},{value.Y:F2}]");
             },
-            name: "gamepad-touch1",
+            name: "gamepad.touch1",
             valueKind: CommandValueKind.Axis2D
         );
         yield return CommandDefinition.Verb(
@@ -410,7 +410,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult($"[gyro {value.X:F2},{value.Y:F2},{value.Z:F2}]");
             },
-            name: "gamepad-gyro",
+            name: "gamepad.gyro",
             valueKind: CommandValueKind.Axis3D
         );
         yield return CommandDefinition.Verb(
@@ -424,7 +424,7 @@ internal sealed class DemoCommandModule(
 
                 return new CommandResult($"[orientation pitch={pitch:F0} yaw={yaw:F0} roll={roll:F0}]");
             },
-            name: "gamepad-orientation",
+            name: "gamepad.orientation",
             valueKind: CommandValueKind.Orientation
         );
     }

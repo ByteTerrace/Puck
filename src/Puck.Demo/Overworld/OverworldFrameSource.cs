@@ -1,6 +1,9 @@
 using System.Numerics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Puck.Assets;
 using Puck.Compositing;
+using Puck.Demo.Configuration;
 using Puck.Demo.Creator;
 using Puck.Demo.World;
 using Puck.HumbleGamingBrick;
@@ -50,6 +53,28 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // the whole point of the CRT room. Presentation-only per-frame scales on the world path's ambient + sun terms.
     private const float OverworldAmbientScale = 0.42f;
     private const float OverworldSunScale = 0.5f;
+    // THE STUDIO backdrop (the --scenario review harness, ScenarioBackdrop.Studio): the workpiece alone against the
+    // renderer's dark neutral sky, lit FLAT and BRIGHT so the palette reads true — the whole point of a review shot.
+    // The ambient (hemisphere) term is lifted well past its room value for even fill on every face; the sun stays near
+    // its natural weight so form still reads and the orbit's eight angles remain visibly distinct, but never dramatic.
+    // Constant, wall-clock-free scales (byte-identical every run) that DON'T ride roomLight/daylight — the room mood
+    // dampers are exactly what studio replaces.
+    private const float StudioAmbientScale = 1.7f;
+    private const float StudioSunScale = 0.6f;
+    // The studio CYCLORAMA: a large neutral mid-gray shell centered on the workbench that the orbit camera sits well
+    // inside — every ray that misses the workpiece lands on its uniform inner wall, so the backdrop reads as a
+    // deliberate flat-gray field (with the hemisphere ambient's gentle top-to-bottom falloff) at all eight angles
+    // instead of the near-black sky void. Radius is far past the ~6.5-unit orbit so the wall never crowds the subject;
+    // the mid-gray albedo separates a light-gray creature without the blowout a near-white field would cause.
+    // A neutral mid-gray floor sweep sits just below the workpiece — a half-space PLANE always renders for a camera
+    // above it (the room's own floor uses exactly this primitive), so it is robust from every orbit angle where the
+    // enclosing-shell trick fought the tile cull. The gray fills the lower frame and the pitch-down orbit keeps the
+    // subject reading against it; the dark sky remains above, giving the deliberate flat-lit studio sweep. The albedo
+    // is a true mid-gray so a light creature still separates without the blowout a near-white field would cause.
+    private static readonly Vector3 StudioBackdropAlbedo = new(0.55f, 0.56f, 0.58f);
+    // How far below the workbench floor the sweep plane sits (a hair under, so a creature resting near the floor never
+    // z-fights the sweep).
+    private const float StudioFloorDrop = 0.05f;
     // CREATOR MODE (the in-engine SDF authoring surface): the model + emission live in Puck.Demo.Creator
     // (CreatorScene/CreatorSceneRenderer); this source keeps only the slot layout and delegates. The pool's
     // dynamic-transform slots are present from frame 0 (hidden below the floor when unused), and the engine's
@@ -78,7 +103,7 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // change together. m_baseRoom keeps the code-built original (console count/layout) FromWorld layers onto.
     private OverworldRoom m_room;
     private readonly OverworldRoom m_baseRoom;
-    private readonly ScreenDirector m_director;
+    private readonly ScreenLayoutDirector m_director;
     // The last committed world document this source applied (reference identity — records are immutable).
     private WorldDocument? m_appliedWorldCommit;
     // The creating slot's rendered position this frame (the world-sculpt camera's anchor).
@@ -109,6 +134,10 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     private SdfProgram? m_program;
     // The boot mask the current program's screen materials were chosen under; a boot rebuilds the program.
     private uint m_programBootedMask;
+    // The set of OCCUPIED player slots the current program parked/unparked against (bit s = slot s has a player). An
+    // empty slot's player box is PARKED so the beam cull skips it; a join/leave flips a bit and rebuilds the program
+    // (one envelope-safe rebuild, exactly like a boot). -1 forces the first build.
+    private uint m_builtActivePlayerMask = 0xFFFFFFFFu;
     // The scene's ProgramRevision the current program was built from; an authoring edit that changes the program's
     // content moves it, and CaptureFrame rebuilds (a creator MOVE never does — it rides the dynamic transforms).
     private int m_builtProgramRevision = -1;
@@ -117,6 +146,14 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // model, its program/transform emitter, and the pad state machine that edits it. This source is the composition
     // point for the creator objects — the render node drives them through thin forwarders so its own type coupling
     // stays flat while the editor grows.
+    //
+    // W-SEAM note: BuildProgram reads these composed sub-objects (m_creator, m_worldScene, m_director) as direct
+    // fields, NOT through the ScreenSlotLedger token-claimant seam — deliberately. The claimant seam is for a
+    // subsystem OUTSIDE this source attaching screen content without editing it; these ARE this source's own owned
+    // composition, read to build its own program. Routing them through a token registry would be indirection for its
+    // own sake (a field this source owns, re-fetched by an opaque key it also owns), not decoupling. The screen SLABS
+    // these emit (the easel's preview, a world.wire'd cabinet) still arbitrate through the ledger; only their content,
+    // owned right here, is read directly.
     private readonly CreatorScene m_creator;
     private readonly CreatorSceneRenderer m_creatorRenderer;
     private readonly CreatorController m_creatorController;
@@ -126,6 +163,15 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // The owned live bake service, when installed (InstallBakePreview) — this source composes it so the render
     // node's coupling stays flat.
     private Forge.Bake.BakePreviewService? m_bakePreviewService;
+    // The scenario capture driver, when a --scenario is active (InstallScenario) — this source composes it (like the
+    // bake preview) so the render node, at its class-coupling ceiling, never names the scenario types. The node drives
+    // it through ScenarioTick each produced frame (settle-then-capture); the director holds the verbatim shot pose and
+    // returns a path when a settled shot should arm its one-shot capture (see ScenarioTick / ScenarioComplete).
+    private CaptureSequencer? m_captureSequencer;
+    // The installed scenario's backdrop (InstallScenario). Studio drops the room/cabinet/shelf content in BuildProgram
+    // and lights the scene flat + bright in CaptureFrame; false (the default, and every non-scenario run) keeps the
+    // dim arcade-room framing. Never toggled after install — a scenario's backdrop is fixed for the run.
+    private bool m_scenarioStudio;
     // The probed worst-case capacity envelope (computed once on first use — see MeasureWorstCaseEnvelope).
     private (int Words, int Instances)? m_worstCase;
     // The world sculptor's composition (scene/renderer/controller/history/store) — see the ctor's trio comment.
@@ -137,6 +183,30 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     private readonly int m_worldSlotBase;
     private int m_builtWorldRevision = -1;
     private bool m_worldSculptActive;
+
+    // The diegetic-feed director (the camera-feed pool + the procedural face feed + the named-feed registry) — this
+    // source owns and drives it (InstallFeeds composes it once the render assembly's envelope is known); null until
+    // then (a bare-room source with no feed wiring pays nothing). It is the WS-12 wiring of the landed camera primitive
+    // into the live render path.
+    private CameraFeedPool? m_feeds;
+    // The program-affecting feed state the LAST rebuild was built for: the SET of world+creation camera-feed NAMES the
+    // wiring wants live. It does not change the program's instruction stream (feeds render into offscreen slabs the
+    // program already declares), so it is NOT a rebuild trigger — this is stashed only so PlanFeeds runs once per frame.
+    private int m_builtFeedRevision = -1;
+    // A reusable owner token for the world/creation camera-feed claimants' ledger participation (one token covers ALL
+    // camera feeds this source publishes — they share the headroom band, and the render node reads their handles by
+    // name, not by which slot each landed on). Reference-stable (boxed once).
+    private readonly object m_cameraFeedClaimToken = new();
+    // The screen indices a world.wire / creation-face wired to a camera feed or named feed this frame (screen index ->
+    // feed name). Recomputed each CaptureFrame; the render node's per-slot override consults it (a wired slot samples
+    // the named-feed registry instead of its cabinet brick / flat material).
+    private readonly Dictionary<int, string> m_wiredFeedByScreen = [];
+    // Reused scratch for PlanDiegeticFeeds — cleared and refilled each frame instead of allocating fresh collections
+    // (the plan reruns every produced frame because a companion's live shape pose feeds each request, but these two
+    // CONTAINERS need not churn the GC). WiredScreenSet still returns a fresh per-request set — those are retained a
+    // frame inside each PlannedFeed, so they cannot share one scratch instance.
+    private readonly List<CameraFeedRequest> m_feedRequestScratch = new(capacity: CameraFeedPool.MaxCameraFeeds);
+    private readonly Dictionary<string, int> m_feedByNameScratch = new(comparer: StringComparer.Ordinal);
 
     // ---- The screen mux (ledger arbitration + the link cable) ---------------------------------------------------
     // The 8-slot allocator: cabinets (0-3, preferred slots) and the creator easel's borrow (slot 3, preferred) claim
@@ -159,7 +229,10 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     /// or -1 for none) — set by the render node (a lambda over its own already-coupled link bookkeeping adds NO new
     /// type coupling to it). Two single-int properties instead of one tuple-returning one so the node's own
     /// delegate signature never spells a tuple type. Paired with <see cref="LinkedConsoleBSource"/>; the diegetic
-    /// sagging cable emits only when BOTH resolve to distinct, valid console indices this frame.</summary>
+    /// sagging cable emits only when BOTH resolve to distinct, valid console indices this frame.
+    /// <para>This is a callback drill, but NOT a screen-attach one (see <see cref="ScreenSlotLedger"/>'s seam
+    /// contract): it reports which cabinets are LINKED so the cable geometry emits — it puts no content on a screen
+    /// surface — so the ledger/claimant seam is the wrong shape for it and it stays a direct <see cref="Func{T}"/>.</para></summary>
     public Func<int>? LinkedConsoleASource { get; set; }
 
     /// <summary>The link pair's other end (see <see cref="LinkedConsoleASource"/>).</summary>
@@ -174,7 +247,7 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     /// <param name="controlsSource">An optional per-console reader of the joypad buttons currently applied to that
     /// console's machine this frame (see <see cref="Demo.GamingBrickChildNode.CurrentButtons"/>) — drives the
     /// control-cluster press animation. Null keeps every cluster in its neutral pose (the bare-room path).</param>
-    public OverworldFrameSource(OverworldWorld world, OverworldRoom room, ScreenDirector director, IReadOnlyList<Vector3>? consoleAccents = null, Func<int, JoypadButtons>? controlsSource = null) {
+    public OverworldFrameSource(OverworldWorld world, OverworldRoom room, ScreenLayoutDirector director, IReadOnlyList<Vector3>? consoleAccents = null, Func<int, JoypadButtons>? controlsSource = null) {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(director);
@@ -258,13 +331,19 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
             MinY: (m_room.FloorY + 0.4f)
         );
 
-        // PUCK_COMPANION_LOAD: comma-separated creation names/hashes spawn as companions at boot (the headless
-        // capture hook, mirroring PUCK_CREATOR_LOAD).
-        if (Environment.GetEnvironmentVariable(variable: "PUCK_COMPANION_LOAD") is { Length: > 0 } companionNames) {
-            foreach (var companionName in companionNames.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))) {
+    }
+
+    // The boot-time headless capture aids, driven from the bound demo options (formerly the PUCK_COMPANION_LOAD +
+    // PUCK_WORLD_ROUNDTRIP environment reads) — invoked once from InstallScenario after the source is composed.
+    private void SpawnHeadlessAids(string? companionFace, string? companionLoad, string? companionWire, bool worldRoundtrip) {
+        // Comma-separated creation names/hashes spawn as companions at boot (the headless capture hook, mirroring the
+        // creator-load aid). Locomotion (walk/swim) is DEFERRED to each creation's behavior manifest — the loaded fish
+        // swims because its manifest says so, no explicit token needed.
+        if (!string.IsNullOrEmpty(value: companionLoad)) {
+            foreach (var companionName in companionLoad.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))) {
                 if (CompanionState.ResolveDocument(nameOrHash: companionName, store: m_worldStore) is { } companionDocument) {
                     _ = m_companions.Add(companion: new CompanionState(bounds: CompanionBounds, document: companionDocument, spawnPosition: CompanionSpawnPosition(rosterIndex: m_companions.Companions.Count)));
-                    Console.Error.WriteLine(value: $"[companion: '{companionName}' joined the room]");
+                    Console.Error.WriteLine(value: $"[companion: '{companionDocument.Name}' joined the room{(LocomotionNote(document: companionDocument))}]");
                 }
                 else {
                     Console.Error.WriteLine(value: $"[companion: '{companionName}' did not resolve — creator.save it first]");
@@ -272,14 +351,90 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
             }
         }
 
-        // PUCK_WORLD_ROUNDTRIP=1: the hands-off bit-for-bit proof, observable in an --exit-after-seconds run — save
-        // the (possibly empty) live world through the full bake, reload the bytes from disk, and byte-compare. Never
-        // a gate; a boot-time stderr verdict for eyeballs and captures.
-        if (Environment.GetEnvironmentVariable(variable: "PUCK_WORLD_ROUNDTRIP") == "1") {
+        // Headless world.wire aids (the keyboardless capture twin of the console verb): "<screen>:<source>", e.g.
+        // "0:named:lure" shows the loaded fish's lure feed on cabinet screen 0. Applied to the live world scene's
+        // wiring table (presentation only — never crosses the sim seam).
+        ApplyHeadlessWires(companionWire: companionWire);
+
+        // Headless companion.face aids (the keyboardless twin of that verb): "<index>:<feed|auto>", exercising the
+        // face-feed pin/auto path without a keyboard.
+        ApplyHeadlessFaces(companionFace: companionFace);
+
+        DoWorldRoundtrip(worldRoundtrip: worldRoundtrip);
+    }
+
+    // Applies the headless companion.face capture aids: "<index>:<feed|auto>" (1-based). "auto" resumes the tune-in;
+    // any other token pins the face to that feed name.
+    private void ApplyHeadlessFaces(string? companionFace) {
+        if (string.IsNullOrEmpty(value: companionFace)) {
+            return;
+        }
+
+        foreach (var entry in companionFace.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))) {
+            var split = entry.IndexOf(value: ':');
+
+            if ((split <= 0) || !int.TryParse(s: entry[..split], result: out var oneBased) || (oneBased < 1) || (oneBased > m_companions.Companions.Count)) {
+                Console.Error.WriteLine(value: $"[companion.face: '{entry}' is not <index>:<feed|auto> for a loaded companion]");
+
+                continue;
+            }
+
+            var token = entry[(split + 1)..];
+            var auto = string.Equals(a: token, b: "auto", comparisonType: StringComparison.OrdinalIgnoreCase);
+
+            m_companions.Companions[oneBased - 1].SetFaceFeed(feedName: (auto ? null : token));
+            Console.Error.WriteLine(value: $"[companion.face: #{oneBased} = {(auto ? "auto" : token)}]");
+        }
+    }
+
+    // Applies the headless world.wire capture aids to the live world scene (see the PUCK_COMPANION_WIRE option). Each
+    // entry is "<screen>:<source>", split on the FIRST colon only (the source itself carries a colon: named:lure).
+    private void ApplyHeadlessWires(string? companionWire) {
+        if (string.IsNullOrEmpty(value: companionWire)) {
+            return;
+        }
+
+        foreach (var entry in companionWire.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))) {
+            var split = entry.IndexOf(value: ':');
+
+            if ((split <= 0) || !int.TryParse(s: entry[..split], result: out var screenIndex)) {
+                Console.Error.WriteLine(value: $"[companion.wire: '{entry}' is not <screen>:<source> — e.g. 0:named:lure]");
+
+                continue;
+            }
+
+            if (!WorldCommands.TryParseWireSource(text: entry[(split + 1)..], out var source, error: out var error)) {
+                Console.Error.WriteLine(value: $"[companion.wire: {error}]");
+
+                continue;
+            }
+
+            if (m_worldScene.WireScreen(screenIndex: screenIndex, source: source)) {
+                Console.Error.WriteLine(value: $"[companion.wire: screen {screenIndex} ← {source}]");
+            }
+            else {
+                Console.Error.WriteLine(value: $"[companion.wire: screen {screenIndex} is out of range]");
+            }
+        }
+    }
+
+    // A one-word locomotion note for the companion-join narration (from the creation's behavior manifest).
+    private static string LocomotionNote(CreationDocument document) =>
+        (document.Behavior?.Locomotion switch {
+            "swim" => " — swimming",
+            "hover" => " — hovering",
+            _ => "",
+        });
+
+    private void DoWorldRoundtrip(bool worldRoundtrip) {
+        // The hands-off bit-for-bit proof, observable in an --exit-after-seconds run — save the (possibly empty) live
+        // world through the full bake, reload the bytes from disk, and byte-compare. Never a gate; a boot-time stderr
+        // verdict for eyeballs and captures.
+        if (worldRoundtrip) {
             var (savedPath, savedHash) = m_worldScene.Save(store: m_worldStore);
-            var reloaded = WorldStore.Load(nameOrPath: savedPath);
-            var committedJson = ((m_worldScene.CommittedDocument is { } committedDocument) ? WorldStore.ToJson(document: committedDocument) : "");
-            var reloadedJson = ((reloaded is { } reloadedDocument) ? WorldStore.ToJson(document: reloadedDocument) : null);
+            var reloaded = WorldDocumentStore.Load(nameOrPath: savedPath);
+            var committedJson = ((m_worldScene.CommittedDocument is { } committedDocument) ? WorldDocumentStore.ToJson(document: committedDocument) : "");
+            var reloadedJson = ((reloaded is { } reloadedDocument) ? WorldDocumentStore.ToJson(document: reloadedDocument) : null);
 
             Console.Error.WriteLine(value: (string.Equals(a: committedJson, b: reloadedJson, comparisonType: StringComparison.Ordinal)
                 ? $"[world-roundtrip] MATCH — save→reload byte-identical ({savedHash ?? savedPath})"
@@ -321,7 +476,10 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         // envelope the engine's buffers were sized against (MeasureWorstCaseEnvelope) — the once-sized buffers stay
         // valid by construction. A creator MOVE never rebuilds (it rides the dynamic-transform buffer).
         // Companions steer/animate on the render clock BEFORE packing (presentation only — the sim never sees them).
-        m_companions.Tick(deltaSeconds: deltaSeconds, nearestPlayerProvider: NearestActivePlayer);
+        // The companion face auto-tune's "preferred remote feed is live" probe: a companion drifts to its remote face
+        // feed only when the host's named-feed registry is actually producing that feed this frame — never fish/lure
+        // by name, just "is this companion's last face-feed name live" (see CompanionState.FaceFeeds).
+        m_companions.Tick(deltaSeconds: deltaSeconds, nearestPlayerProvider: NearestActivePlayer, remoteFeedProbe: PreferredRemoteFeedLive);
 
         // The screen mux: resolves the ledger (cabinets/easel/any registered dynamic claimants) — BEFORE the program
         // rebuild check, since a claimed headroom slot or the link cable's pair can change what BuildProgram emits.
@@ -329,18 +487,28 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         var linkedB = (LinkedConsoleBSource?.Invoke() ?? -1);
         var linkedPair = (((linkedA >= 0) && (linkedB >= 0)) ? (linkedA, linkedB) : ((int A, int B)?)null);
 
+        // Register the companion faces' screen claims + the world/creation camera-feed claim BEFORE ResolveScreenMux,
+        // so the ledger arbitrates them with the cabinets/easel in one pass; then plan the camera feeds from the
+        // resolved wiring. Presentation-only — never touches sim state.
+        RegisterCompanionFaceClaims();
         ResolveScreenMux(linkedPair: linkedPair);
+        PlanDiegeticFeeds();
 
         var bootedMask = m_world.BootedMask;
-        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair));
+        var activePlayerMask = ActivePlayerMask();
+        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair));
 
         if (programChanged) {
             m_program = BuildProgram(bootedMask: bootedMask);
             m_programBootedMask = bootedMask;
+            m_builtActivePlayerMask = activePlayerMask;
             m_builtProgramRevision = m_creator.ProgramRevision;
             m_builtWorldRevision = m_worldScene.ProgramRevision;
             m_builtCompanionCount = m_companions.Companions.Count;
             m_builtLinkedPair = linkedPair;
+            // The camera feeds share this program object; bump the feed revision only when it actually rebuilds, so the
+            // feed engine re-uploads once per real program change, not every frame (Rebuild no-ops on an unchanged rev).
+            m_builtFeedRevision++;
         }
 
         // Render-relative, alpha-interpolated player positions for the camera director (reused list — no per-frame alloc).
@@ -365,6 +533,9 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
             ? (ScreenCenterLocal(consoleIndex: paneIndex), (PaneCloseness?.Invoke(paneIndex) ?? 0f), ScreenHalfHeightLocal(consoleIndex: paneIndex))
             : ((Vector3, float, float)?)null);
 
+        // The scenario harness's per-frame pose is settled by the render node's ScenarioTick BEFORE this compose (the
+        // node owns the capture-arm + graceful-exit seams; see ScenarioTick), so the director already holds this
+        // frame's verbatim shot pose here. Nothing to advance in the source itself.
         var views = m_director.Compose(activePositions: m_activePositions, bootOrder: m_world.BootOrder, imageWidth: width, imageHeight: height, deltaSeconds: deltaSeconds);
 
         // View 0 is always the room; stash its live rect for the binding-bar overlay (this runs INSIDE the producer's
@@ -381,14 +552,18 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
             Program: m_program!, // non-null: programChanged is true whenever m_program was null, so it was just built
             ProgramChanged: programChanged,
             Views: views,
-            Time: m_time,
+            // A scenario run PINS the rendered content/animation clock to the active shot's deterministic time (never the
+            // wall-clock accumulator), so a time-animated creation renders identically regardless of the run's fps — the
+            // byte-identical proof. Every non-scenario run keeps the live render clock.
+            Time: ((m_captureSequencer is { } scenario) ? scenario.PinnedContentTime : m_time),
             WarpAmount: 0f
         ) {
-            // The sculpted world's DAYLIGHT dial rides the same presentation seam the reveal's room-light does —
-            // at dusk the authored lamps' emissive materials carry the room (world.dusk).
-            AmbientScale = (OverworldAmbientScale * roomLight * m_worldScene.Daylight),
+            // A studio scenario lights the workpiece FLAT and BRIGHT (constant scales, no roomLight/daylight damper) so
+            // the palette reads true; otherwise the sculpted world's DAYLIGHT dial rides the same presentation seam the
+            // reveal's room-light does — at dusk the authored lamps' emissive materials carry the room (world.dusk).
+            AmbientScale = (m_scenarioStudio ? StudioAmbientScale : (OverworldAmbientScale * roomLight * m_worldScene.Daylight)),
             DynamicTransforms = m_dynamicTransforms,
-            SunScale = (OverworldSunScale * roomLight * m_worldScene.Daylight),
+            SunScale = (m_scenarioStudio ? StudioSunScale : (OverworldSunScale * roomLight * m_worldScene.Daylight)),
         };
     }
 
@@ -412,7 +587,9 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
             ? linkedPair
             : null;
 
-        var borrowed = m_creator.Active;
+        // Studio review has no cabinets and no easel (BuildProgram skips both), so no borrow is submitted — the easel
+        // slab isn't emitted, so nothing samples the preview slot.
+        var borrowed = (m_creator.Active && !m_scenarioStudio);
 
         for (var index = 0; (index < m_room.Consoles.Count); index++) {
             if (borrowed && (index == CreatorSceneRenderer.PreviewScreenIndex)) {
@@ -448,6 +625,381 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     private static bool EqualLinkedPair((int A, int B)? a, (int A, int B)? b) =>
         (a.HasValue == b.HasValue) && (!a.HasValue || ((a.Value.A == b!.Value.A) && (a.Value.B == b.Value.B)));
 
+    // ---- Companion faces + the diegetic-feed director (WS-12) ------------------------------------------------------
+    // A screen-faced companion (its behavior manifest declares a face) registers a floating Ambient screen claim
+    // through the SAME generic seam a placeable diegetic camera would (RegisterScreenClaimant); the ledger grants it a
+    // headroom slot, its face slab emits there, and the render node's headroom source/light providers resolve the
+    // companion's CURRENT face feed (the auto-tune's resolved name) through the named-feed registry. Nothing here
+    // touches sim state. One reference-stable owner token per companion, held across frames while it stays loaded.
+    private readonly Dictionary<CompanionState, object> m_companionFaceTokens = [];
+    // Reused scratch for the stale-companion sweep below (cleared, not reallocated) — the sweep runs every CaptureFrame
+    // whenever any face token is held, but the list itself need not churn the GC.
+    private readonly List<CompanionState> m_staleCompanionScratch = [];
+
+    // Registers (or refreshes) each screen-faced companion's ledger claim + its named-feed source/light providers, and
+    // releases the claim of any companion that left the roster. Called every CaptureFrame BEFORE ResolveScreenMux.
+    private void RegisterCompanionFaceClaims() {
+        var live = m_companions.Companions;
+
+        // Drop tokens for companions that left the roster (del/clear) so the ledger stops seating a ghost face.
+        if (m_companionFaceTokens.Count > 0) {
+            var stale = m_staleCompanionScratch;
+
+            stale.Clear();
+
+            foreach (var tracked in m_companionFaceTokens.Keys) {
+                var stillLive = false;
+
+                for (var index = 0; (index < live.Count); index++) {
+                    if (ReferenceEquals(objA: live[index], objB: tracked)) {
+                        stillLive = true;
+
+                        break;
+                    }
+                }
+
+                if (!stillLive) {
+                    stale.Add(item: tracked);
+                }
+            }
+
+            foreach (var companion in stale) {
+                UnregisterScreenClaimant(ownerToken: m_companionFaceTokens[companion]);
+                _ = m_companionFaceTokens.Remove(key: companion);
+            }
+        }
+
+        foreach (var companion in live) {
+            if (!companion.HasFace) {
+                continue;
+            }
+
+            if (!m_companionFaceTokens.TryGetValue(key: companion, value: out var token)) {
+                token = new object();
+                m_companionFaceTokens[companion] = token;
+            }
+
+            var pinned = companion; // capture for the closures.
+
+            // A floating (preferredSlot -1) Ambient claim: it never evicts a cabinet, taking the lowest free headroom
+            // slot. Its source/light resolve the companion's CURRENTLY-tuned face feed by NAME through the registry.
+            RegisterScreenClaimant(
+                light: () => (m_feeds?.ResolveNamedFeedLight(name: pinned.CurrentFaceFeed) ?? Vector3.Zero),
+                ownerToken: token,
+                priority: ScreenSlotPriority.Ambient,
+                source: () => (m_feeds?.ResolveNamedFeedHandle(name: pinned.CurrentFaceFeed) ?? 0)
+            );
+        }
+    }
+
+    // The ledger-granted screen-surface slot a screen-faced companion holds this pass, or -1 when it declared no face
+    // or the ledger seated it nowhere. The ScreenSlotLedger is the SOLE owner of this resolved slot (F-STATE-2): the
+    // companion renderer reads it through this resolver during emission rather than off a mirror field on
+    // CompanionState. Valid only AFTER ResolveScreenMux this pass (the slots are known then) — which is exactly when
+    // BuildProgram (and so EmitCompanions) runs.
+    private int CompanionFaceSlot(CompanionState companion) =>
+        (m_companionFaceTokens.TryGetValue(key: companion, value: out var token) ? ResolvedSlotFor(ownerToken: token) : -1);
+
+    // The headroom slot the ledger granted a given owner token this pass, or -1 when it seated none.
+    private int ResolvedSlotFor(object ownerToken) {
+        foreach (var (slot, owner) in m_resolvedDynamicSlots) {
+            if (ReferenceEquals(objA: owner, objB: ownerToken)) {
+                return slot;
+            }
+        }
+
+        return -1;
+    }
+
+    // Whether a companion's PREFERRED remote face feed (the last entry in its face-feed list, e.g. its own camera feed)
+    // is producing pixels this frame — the auto-tune's "is there something to drift to" probe. Never names a specific
+    // feed: it asks the registry whether the companion's own last-listed feed name is live.
+    private bool PreferredRemoteFeedLive(CompanionState companion) {
+        if ((m_feeds is not { } feeds) || (companion.FaceFeeds.Count == 0)) {
+            return false;
+        }
+
+        return feeds.IsNamedFeedLive(name: companion.FaceFeeds[^1]);
+    }
+
+    /// <summary>Composes the diegetic-feed director over the main engine's worst-case envelope (idempotent) — the
+    /// render node calls this once at resource build so its own type coupling stays flat; this source is the feed
+    /// objects' composition point (mirrors <see cref="InstallBakePreview"/>). Without it the source runs feed-free (a
+    /// bare-room run pays nothing).</summary>
+    /// <param name="services">The application services (the GPU compute seam).</param>
+    /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the feed kernels).</param>
+    public void InstallFeeds(IServiceProvider services, bool hostsOnDirectX) {
+        ArgumentNullException.ThrowIfNull(services);
+
+        m_feeds ??= new CameraFeedPool(
+            dynamicTransformCapacity: m_dynamicTransformCount,
+            hostsOnDirectX: hostsOnDirectX,
+            instanceCapacity: WorstCaseInstanceCapacity,
+            programWordCapacity: WorstCaseProgramWordCapacity,
+            services: services
+        );
+    }
+
+    /// <summary>Renders this frame's planned camera feeds + ticks the procedural face feed (the render-thread half of
+    /// the diegetic-feed director). The render node calls this each produced frame beside its bake-preview tick (a
+    /// live GPU device); a no-op until <see cref="InstallFeeds"/> ran. Reads the PREVIOUS <c>CaptureFrame</c>'s plan —
+    /// a deliberate one-frame lag matching the diegetic-CRT read the primitive's self-reference rule expects.</summary>
+    /// <param name="context">The frame context (its host resolves the live GPU device).</param>
+    public void TickFeeds(in Puck.Hosting.FrameContext context) {
+        if ((m_feeds is not { } feeds) || (m_program is null)) {
+            return;
+        }
+
+        feeds.TickFeeds(
+            context: in context,
+            dynamicTransforms: m_dynamicTransforms,
+            faceFeedNeeded: FaceFeedNeeded(),
+            program: m_program,
+            resolveScreenSource: ResolveFeedScreenSource,
+            revision: m_builtFeedRevision,
+            time: ((m_captureSequencer is { } scenario) ? scenario.PinnedContentTime : m_time)
+        );
+    }
+
+    // Whether the default (procedural) face feed is wanted this frame: a screen-faced companion exists, or a
+    // world.wire routed named:emotes onto a screen. A plain room with no companions never uploads the face feed.
+    private bool FaceFeedNeeded() {
+        foreach (var companion in m_companions.Companions) {
+            if (companion.Document.Behavior?.Faces is { Count: > 0 }) {
+                return true;
+            }
+        }
+
+        foreach (var name in m_wiredFeedByScreen.Values) {
+            if (string.Equals(a: name, b: CompanionState.DefaultFaceFeed, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Disposes the diegetic-feed director's GPU resources (the render node's teardown path).</summary>
+    public void DisposeFeeds() {
+        m_feeds?.Dispose();
+        m_feeds = null;
+    }
+
+    /// <summary>The wired-feed image handle a <c>world.wire</c> routed onto screen <paramref name="screenIndex"/> this
+    /// frame, or 0 when nothing wired a feed there — the render node's per-slot cabinet source override consults this
+    /// so a screen wired to a camera/named feed samples the feed INSTEAD of its cabinet brick / flat material (the
+    /// fish's lure onto a cabinet screen). Primitive-typed (<see langword="nint"/>) on purpose — the node stays
+    /// coupling-flat.</summary>
+    /// <param name="screenIndex">The screen-surface slot index (a cabinet index 0-3, or a headroom slot).</param>
+    /// <returns>The wired feed's handle, or 0 for no wire (the caller keeps its default source).</returns>
+    public nint ResolveWiredFeedOverride(int screenIndex) =>
+        ((m_wiredFeedByScreen.TryGetValue(key: screenIndex, value: out var feedName) && (m_feeds is { } feeds))
+            ? feeds.ResolveNamedFeedHandle(name: feedName)
+            : 0);
+
+    // What a screen index binds INSIDE a camera feed's own render: the same wiring the room shows (a wired feed's
+    // named handle, else the cabinet/flat fallback via the base screen-source resolution). The feed engine itself
+    // enforces the self-reference rule (a screen wired to the feed being rendered binds 0), so this need not.
+    private nint ResolveFeedScreenSource(int screenIndex) {
+        if (m_wiredFeedByScreen.TryGetValue(key: screenIndex, value: out var feedName) && (m_feeds is { } feeds)) {
+            return feeds.ResolveNamedFeedHandle(name: feedName);
+        }
+
+        // A feed sees the room's OTHER diegetic screens through the same dynamic-claimant source the room uses (a
+        // booted cabinet's framebuffer lives on the render node's side, not here — a feed showing a cabinet is a
+        // future refinement; today a feed renders the world geometry + any wired feed screens, which is the proof).
+        return ResolveDynamicSource(slot: screenIndex);
+    }
+
+    // Plans the camera feeds the wiring wants live this frame: every companion creation-camera whose named feed a face
+    // references (the fish's lure feed the face auto-tunes to), plus every world-scene camera a world.wire routes onto
+    // a screen. Builds the CameraFeedRequest list (resolving each eye's live anchor pose), registers the camera-feed
+    // screen claim, records screen->feed-name wiring for the render node's per-slot override, and hands the plan to the
+    // director. Presentation-only; the plan is consumed one frame later by TickFeeds (the diegetic lag).
+    private void PlanDiegeticFeeds() {
+        m_wiredFeedByScreen.Clear();
+
+        if (m_feeds is not { } feeds) {
+            return;
+        }
+
+        // Collect distinct requested feeds by NAME (a feed named by both a face and a world.wire is one pool slot).
+        // Reused scratch — cleared, not reallocated (see the field remarks). The plan itself must rerun each frame (live
+        // companion poses), but the containers do not need to churn the GC.
+        var requests = m_feedRequestScratch;
+        var byName = m_feedByNameScratch;
+
+        requests.Clear();
+        byName.Clear();
+
+        // 1) Companion creation cameras backing a face's referenced feed name (the fish's lure lens). A companion's
+        //    creation camera rides one of the companion's OWN shapes; resolve that shape's live world pose.
+        CollectCompanionFeeds(byName: byName, requests: requests);
+
+        // 2) World-scene cameras a world.wire routed onto a screen (feed:N -> eye #N). Records the screen->feed-name
+        //    wiring so the render node's per-slot override samples the feed.
+        CollectWorldWiredFeeds(byName: byName, requests: requests);
+
+        feeds.PlanFeeds(requestedFeeds: requests);
+    }
+
+    // Companion creation cameras whose named feed a face references: the feed is requested (so it renders live), and
+    // its eye rides the anchored shape's CURRENT world pose (the shape's dynamic-transform slot the companion renderer
+    // packed this frame). The face's own auto-tune decides WHETHER to show it; the feed renders regardless of tune so
+    // the auto-tune's "is the feed live" probe has a real answer.
+    private void CollectCompanionFeeds(Dictionary<string, int> byName, List<CameraFeedRequest> requests) {
+        var companions = m_companions.Companions;
+
+        for (var companionIndex = 0; (companionIndex < companions.Count); companionIndex++) {
+            var companion = companions[companionIndex];
+            var cameras = companion.Document.Cameras;
+
+            if (cameras is not { Count: > 0 }) {
+                continue;
+            }
+
+            var shapes = (companion.Document.Shapes ?? []);
+            var rootSlot = (m_companionSlotBase + (companionIndex * CompanionRenderer.SlotsPerCompanion));
+
+            foreach (var camera in cameras) {
+                if (requests.Count >= CameraFeedPool.MaxCameraFeeds) {
+                    break;
+                }
+
+                var feedName = (camera.Feed ?? camera.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+
+                if (byName.ContainsKey(key: feedName)) {
+                    continue; // already requested (a shared name).
+                }
+
+                // The anchored shape's live pose: its index in the document's shapes is the companion renderer's
+                // shape-slot offset (rootSlot + 1 + shapeIndex — see CompanionRenderer).
+                var shapeIndex = IndexOfShape(shapes: shapes, shapeId: camera.ShapeId);
+
+                if (shapeIndex < 0) {
+                    continue; // a camera naming a missing shape (normalization should have dropped it).
+                }
+
+                var shapeSlot = (rootSlot + 1 + shapeIndex);
+                var shapeTransform = m_dynamicTransforms[shapeSlot];
+
+                byName[feedName] = requests.Count;
+                requests.Add(item: BuildCreationCameraRequest(camera: camera, feedName: feedName, shapeTransform: shapeTransform));
+            }
+        }
+    }
+
+    // World-scene cameras a world.wire routed onto a screen: for each Feed-kind wire, the eye is the world camera whose
+    // Id equals the wire's feed index; its pose is world/placement-anchored (world anchors pose directly; a placement
+    // anchor rides its stamp — resolved through the world scene). Also records Named-kind wires so a screen wired to a
+    // creation/host feed name samples it (the fish's lure onto a cabinet screen).
+    private void CollectWorldWiredFeeds(Dictionary<string, int> byName, List<CameraFeedRequest> requests) {
+        foreach (var (screenIndex, source) in m_worldScene.Wiring) {
+            switch (source.Kind) {
+                case ScreenWireKind.Named when (source.Name is { Length: > 0 } namedFeed):
+                    // A screen wired directly to a named feed (a creation camera's feed, the emote face, …). The
+                    // named feed itself is requested by whatever OWNS it (a companion camera, above); here we only
+                    // record the screen->name binding so the render node's per-slot override samples it.
+                    m_wiredFeedByScreen[screenIndex] = namedFeed;
+
+                    break;
+                case ScreenWireKind.Feed:
+                    RecordWorldCameraFeed(byName: byName, feedIndex: source.Index, requests: requests, screenIndex: screenIndex);
+
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private void RecordWorldCameraFeed(Dictionary<string, int> byName, int feedIndex, List<CameraFeedRequest> requests, int screenIndex) {
+        var feedName = $"world:{feedIndex}";
+
+        m_wiredFeedByScreen[screenIndex] = feedName;
+
+        if (byName.ContainsKey(key: feedName) || (requests.Count >= CameraFeedPool.MaxCameraFeeds)) {
+            return;
+        }
+
+        foreach (var eye in m_worldScene.Cameras) {
+            if (eye.Id != feedIndex) {
+                continue;
+            }
+
+            byName[feedName] = requests.Count;
+            requests.Add(item: new CameraFeedRequest(
+                AnchorPosition: Vector3.Zero,
+                AnchorYaw: 0f,
+                Eye: eye,
+                Name: feedName,
+                WiredScreens: WiredScreenSet(feedName: feedName)
+            ));
+
+            break;
+        }
+    }
+
+    // A creation camera → a CameraFeedRequest: the eye is a Shape-anchored eye whose stored pose is the camera's
+    // offset from the anchored shape's frame; the anchor position/yaw come from the shape's live dynamic transform
+    // (the companion renderer packed it this frame). Degrees → radians for the offset yaw/pitch.
+    private CameraFeedRequest BuildCreationCameraRequest(CreationCameraDocument camera, string feedName, DynamicTransform shapeTransform) {
+        var offsetYaw = ((camera.Yaw ?? 0f) * (MathF.PI / 180f));
+        var offsetPitch = ((camera.Pitch ?? 0f) * (MathF.PI / 180f));
+        var eye = new CameraEye(
+            Anchor: CameraAnchorKind.Shape,
+            AnchorId: camera.ShapeId,
+            FieldOfViewRadians: ((camera.Fov is { } fov) ? (float?)(fov * (MathF.PI / 180f)) : null),
+            FocusDistance: camera.Focus,
+            Id: camera.Id,
+            Pitch: offsetPitch,
+            Position: camera.Position,
+            Yaw: offsetYaw
+        );
+        // The anchored shape's live world heading (yaw about +Y) from its packed orientation.
+        var anchorYaw = YawOf(orientation: shapeTransform.Orientation);
+
+        return new CameraFeedRequest(
+            AnchorPosition: shapeTransform.Position,
+            AnchorYaw: anchorYaw,
+            Eye: eye,
+            Name: feedName,
+            WiredScreens: WiredScreenSet(feedName: feedName)
+        );
+    }
+
+    // The screen indices wired to a given feed name this frame (the self-reference set for that feed) — a screen shows
+    // this feed either through a face's tune (companion faces are dynamic-claimant slots) or a world.wire.
+    private IReadOnlySet<int> WiredScreenSet(string feedName) {
+        var set = new HashSet<int>();
+
+        foreach (var (screenIndex, name) in m_wiredFeedByScreen) {
+            if (string.Equals(a: name, b: feedName, comparisonType: StringComparison.Ordinal)) {
+                _ = set.Add(item: screenIndex);
+            }
+        }
+
+        return set;
+    }
+
+    private static int IndexOfShape(IReadOnlyList<ShapeDocument> shapes, int shapeId) {
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (shapes[index].Id == shapeId) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    // The heading (yaw about +Y) a quaternion orientation faces — the one axis a companion's upright frame turns
+    // around (matching CameraEye.Resolve's yaw-only anchor composition).
+    private static float YawOf(Quaternion orientation) {
+        var forward = Vector3.Transform(value: Vector3.UnitZ, rotation: orientation);
+
+        return MathF.Atan2(y: forward.X, x: forward.Z);
+    }
+
     // ---- The generic dynamic screen-claimant seam --------------------------------------------------------------
     // A future caller (outside this file) wires a NEW diegetic screen source through this seam alone: no ledger
     // internals, no ResolveScreenMux/BuildProgram edits. One registration per owner token holds its ledger priority/
@@ -460,11 +1012,16 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     private readonly Dictionary<object, DynamicScreenClaimRegistration> m_dynamicScreenClaimants = [];
     private readonly Dictionary<int, object> m_resolvedDynamicSlots = [];
 
-    /// <summary>Registers (or updates) a dynamic screen claimant for every future <see cref="CaptureFrame"/> pass —
-    /// the generic extension seam a future diegetic-camera/screen source wires through, without touching
-    /// <see cref="ScreenSlotLedger"/> or this source's own mux logic. Mirrors <see cref="ScreenSlotLedger.Claim"/>'s
-    /// per-pass re-claim contract, except registration here persists across passes (the caller only needs to call
-    /// this once per activation, not every frame) until <see cref="UnregisterScreenClaimant"/> withdraws it.</summary>
+    /// <summary>THE attach seam for a diegetic screen source that lives OUTSIDE this frame source — the one blessed way
+    /// to put content on a screen surface (see <see cref="ScreenSlotLedger"/> for the full seam contract: what a
+    /// claimant is, the band semantics, token identity, the per-pass re-claim convention). A caller wires a new screen
+    /// through THIS method alone — an opaque owner token, a <see cref="ScreenSlotPriority"/> band, an optional preferred
+    /// slot, and its own source/light/transform providers — without touching <see cref="ScreenSlotLedger"/> internals,
+    /// this source's mux (<c>ResolveScreenMux</c>), or the render node. Do NOT add a new raw callback drill or a direct
+    /// field poll for a screen source; ride this instead. Registration persists across passes (register once per
+    /// activation, not every frame — UNLIKE <see cref="ScreenSlotLedger.Claim"/>'s bare per-pass contract, which this
+    /// re-submits on the caller's behalf each <see cref="CaptureFrame"/>) until <see cref="UnregisterScreenClaimant"/>
+    /// withdraws it.</summary>
     /// <param name="ownerToken">An opaque, reference-stable identity for the claimant (compared by reference).</param>
     /// <param name="priority">The claim's <see cref="ScreenSlotPriority"/> band.</param>
     /// <param name="preferredSlot">A specific slot this claim wants, or -1 for a floating claim (see
@@ -832,6 +1389,47 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         ConnectBakePreview(preview: m_bakePreviewService);
     }
 
+    /// <summary>Composes the boot-time headless aids and the <c>--scenario</c> capture driver from the bound options
+    /// (formerly the <c>PUCK_COMPANION_LOAD</c> / <c>PUCK_WORLD_ROUNDTRIP</c> environment reads and the scenario
+    /// harness). The render node calls this once at resource build so its own type coupling stays flat — this source
+    /// is the composition point for the scenario objects.</summary>
+    /// <param name="services">The application services (the bound demo + scenario options).</param>
+    public void InstallScenario(IServiceProvider services) {
+        ArgumentNullException.ThrowIfNull(services);
+
+        var demoOptions = (services.GetService<IOptions<DemoOptions>>()?.Value ?? new DemoOptions());
+
+        SpawnHeadlessAids(companionFace: demoOptions.CompanionFace, companionLoad: demoOptions.CompanionLoad, companionWire: demoOptions.CompanionWire, worldRoundtrip: demoOptions.WorldRoundtrip);
+
+        if ((services.GetService<IOptions<ScenarioOptions>>()?.Value is { Active: true } scenario) && (m_captureSequencer is null)) {
+            m_captureSequencer = new CaptureSequencer(director: m_director, options: scenario, defaultTarget: m_creator.Workbench.SpawnPosition);
+            m_scenarioStudio = (scenario.Backdrop == ScenarioBackdrop.Studio);
+        }
+    }
+
+    /// <summary>Whether a <c>--scenario</c> capture plan is active on this source.</summary>
+    public bool ScenarioActive => (m_captureSequencer is not null);
+
+    /// <summary>Advances the scenario's SETTLE-THEN-CAPTURE state machine one produced frame (settle timing only —
+    /// wall-clock never reaches a rendered value) and holds this frame's verbatim shot pose. Returns the output PNG
+    /// path to arm a one-shot capture for THIS frame once the active shot has settled, or null on frames that arm
+    /// nothing. The render node calls this BEFORE the frame renders (it owns the producer's capture-arm), so the pose
+    /// this sets is the pose the capture reads back. A no-op returning null when no <c>--scenario</c> is installed.</summary>
+    /// <param name="deltaSeconds">The wall-clock delta since the previous produced frame.</param>
+    /// <returns>A path to arm a capture for this frame, or null.</returns>
+    public string? ScenarioTick(float deltaSeconds) =>
+        m_captureSequencer?.Advance(deltaSeconds: deltaSeconds);
+
+    /// <summary>Whether every scenario shot's capture has been written — the completion-driven exit condition the
+    /// render node polls to request a graceful shutdown. Never true when no scenario is installed.</summary>
+    public bool ScenarioComplete => (m_captureSequencer?.IsComplete ?? false);
+
+    /// <summary>How many scenario shots have had their capture armed so far (the safety-net accounting).</summary>
+    public int ScenarioCapturedCount => (m_captureSequencer?.CapturedCount ?? 0);
+
+    /// <summary>How many scenario shots the plan contains (the safety-net accounting).</summary>
+    public int ScenarioShotCount => (m_captureSequencer?.ShotCount ?? 0);
+
     /// <summary>Advances the live bake preview one produced frame (render thread; the frame's host resolves the
     /// live GPU device). A no-op until <see cref="InstallBakePreview"/> ran.</summary>
     /// <param name="context">The frame context.</param>
@@ -945,6 +1543,20 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // Player: half-extents length ~0.70 (PlayerHalfExtents) + round + margin.
     private const float PlayerInstanceRadius = 0.85f;
 
+    // Bit s set = player slot s is OCCUPIED this frame — the parked/unparked state BuildProgram bakes each player box
+    // against (a free slot's box is parked so the beam cull skips it). A change flips the rebuild trigger, exactly like
+    // a boot mask change.
+    private uint ActivePlayerMask() {
+        var mask = 0u;
+
+        for (var slot = 0; (slot < m_world.Slots.Count); slot++) {
+            if (m_world.Slots[slot] is not null) {
+                mask |= (1u << slot);
+            }
+        }
+
+        return mask;
+    }
     private SdfProgram BuildProgram(uint bootedMask, bool probeWorstCase = false) {
         // The render anchor IS the spawn anchor, so the room is authored directly in the spawn cell's local frame
         // (origin delta identically zero); the per-slot player boxes ride the dynamic-transform buffer, which the
@@ -958,6 +1570,12 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         var shelfMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.40f, 0.38f, 0.35f)));
         var controlMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.15f, 0.15f, 0.17f)));
 
+        // THE ROOM CONTENT — floor, perimeter walls, console stands, and the shelf brackets. A studio scenario
+        // (ScenarioBackdrop.Studio) SKIPS all of it: the workpiece is reviewed alone against the renderer's neutral
+        // sky. Skipping is probe-safe — the worst-case probe (probeWorstCase) always emits the full room, so the
+        // engine's buffers still reserve the room-framed ceiling; a studio program is a strict subset that fits. No
+        // backdrop shape is added, so the worst-case envelope needs no new member.
+        if (probeWorstCase || !m_scenarioStudio) {
         // Floor: a plane whose surface sits at world y = FloorY. In render-relative space (p = world − origin) the plane
         // equation dot(p, n) + offset must still vanish there, so offset = origin.Y − FloorY (= −FloorY when origin = 0).
         _ = builder.ResetPoint().Plane(normal: Vector3.UnitY, offset: (origin.Y - m_room.FloorY), material: floorMaterial);
@@ -1082,20 +1700,31 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         }
 
         // One player box per FIXED slot, placed by its per-frame dynamic transform (active slots at the player, free
-        // slots hidden below the floor). Built once — never rebuilt as players join or leave. One dynamic instance
-        // per slot: the bound tracks the slot's own position (boundOffset zero — the box is centered on the slot),
-        // so a free/hidden slot's instance simply culls to nothing productive rather than needing special-casing.
+        // slots hidden below the floor). One dynamic instance per slot: the bound tracks the slot's own position
+        // (boundOffset zero — the box is centered on the slot). A FREE slot's box is PARKED (Active=false) so the beam
+        // cull skips it with one branch instead of testing its hidden sphere per tile; a join/leave flips the active
+        // mask and rebuilds (ActivePlayerMask), so the reserved slot count is unchanged — the once-sized buffers stay
+        // valid. The probe keeps every slot active (worst case). Room content too — a studio review shows the workpiece
+        // alone, never a player avatar.
         for (var slot = 0; (slot < OverworldWorld.MaxPlayers); slot++) {
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: PlayerInstanceRadius);
+            var occupied = (probeWorstCase || ((slot < m_world.Slots.Count) && (m_world.Slots[slot] is not null)));
+
+            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: PlayerInstanceRadius, active: occupied);
             _ = builder.ResetPoint().TransformDynamic(slot: slot).Box(halfExtents: m_room.PlayerHalfExtents, round: 0.06f, material: playerMaterial);
             _ = builder.EndInstance();
+        }
         }
 
         // The CREATOR pool: the scene's palette + ghost + one instance per placed-shape slot, emitted by the
         // renderer (Puck.Demo.Creator.CreatorSceneRenderer). Slot/material counts are constant across rebuilds; the
         // per-slot instruction count may vary below the probed worst case (MeasureWorstCaseEnvelope), which the
         // engine's buffers were sized against.
-        m_creatorRenderer.EmitPool(builder: builder, probeWorstCase: probeWorstCase);
+        // Studio suppresses the preview EASEL (the post + bake-preview screen slab) AND every creator-mode ADORNMENT —
+        // the placement ghost, the RIG's goal markers, and the selection highlight — so a review shows the CREATURE
+        // alone, never a floating cursor/marker photobombing the shot. Probe-safe — the worst-case probe still emits
+        // all of it (probeWorstCase wins inside EmitPool), so the reserved buffer ceiling is unchanged; studio's program
+        // is a strict subset. Suppression is by emission, not scene-state mutation (sticky ghost/selection fields stay).
+        m_creatorRenderer.EmitPool(builder: builder, probeWorstCase: probeWorstCase, suppressEasel: m_scenarioStudio, suppressAdornments: m_scenarioStudio);
 
         // The WORLD SCULPTOR's authored content: terrain, lights, override ghosts, every stamped placement (each a
         // static instance), and its two dynamic slots — emitted by Puck.Demo.World.WorldSceneRenderer under the same
@@ -1103,12 +1732,21 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         m_worldRenderer.EmitWorld(builder: builder, probeWorstCase: probeWorstCase);
 
         // The COMPANION pool: presentation-only sculpted creatures (roots + shape slots reserved for the full
-        // roster regardless of how many are loaded — constant slot topology, same probe discipline).
-        m_companionRenderer.EmitCompanions(builder: builder, probeWorstCase: probeWorstCase);
+        // roster regardless of how many are loaded — constant slot topology, same probe discipline). A screen-faced
+        // companion's face slab lands on the slot the ScreenSlotLedger granted it this pass, read through
+        // CompanionFaceSlot (the ledger owns that resolved slot — F-STATE-2, no mirror on CompanionState). The probe
+        // needs no resolver (it emits its own placeholder-index face slab unconditionally).
+        m_companionRenderer.EmitCompanions(builder: builder, faceSlotResolver: CompanionFaceSlot, probeWorstCase: probeWorstCase);
 
         // THE DIEGETIC LINK CABLE (whimsy): a static instance emitted ONLY while two cabinets are linked (or under
         // the worst-case probe, which always emits it — see EmitLinkCable's remarks).
         EmitLinkCable(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
+
+        // THE STUDIO CYCLORAMA: the neutral gray backdrop shell, emitted only for a studio review (or under the probe,
+        // which always emits it so the worst-case envelope covers it — MeasureWorstCaseEnvelope's binding rule for any
+        // optional emission). One static instance; its bound intentionally spans the scene (it IS the background every
+        // missed-ray tile needs — there is nothing else large to cull against in a studio review).
+        EmitStudioBackdrop(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
 
         return builder.Build();
     }
@@ -1144,6 +1782,25 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         _ = builder.ResetPoint().Translate(offset: (topB - origin)).Capsule(endpoint: (sag - topB), radius: CableRadius, material: cableMaterial, blend: SdfBlendOp.SmoothUnion, smooth: CableSmooth);
         _ = builder.ResetPoint().Translate(offset: (sag - origin)).Sphere(radius: CableSagRadius, material: cableMaterial, blend: SdfBlendOp.SmoothUnion, smooth: CableSmooth);
         _ = builder.EndInstance();
+    }
+    // The studio cyclorama: a large neutral-gray SHELL centered on the workbench (the orbit target) that the review
+    // camera sits inside — every ray missing the workpiece lands on its uniform inner wall, so the backdrop reads as a
+    // deliberate flat gray field at all eight angles instead of the near-black sky. ONE static instance; Onion shells
+    // the sphere so the inside-out camera hits a real surface (a solid sphere is negative from within and never marches
+    // to a hit). The probe emits it unconditionally so the worst-case word/instance count always covers it —
+    // MeasureWorstCaseEnvelope's binding rule (any optional emission joins the probe in the same change).
+    private void EmitStudioBackdrop(SdfProgramBuilder builder, Vector3 origin, bool probeWorstCase) {
+        if (!probeWorstCase && !m_scenarioStudio) {
+            return;
+        }
+
+        var backdropMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: StudioBackdropAlbedo));
+        var floorY = (m_creator.Workbench.MinY - StudioFloorDrop);
+
+        // The sweep floor: an unbounded half-space plane (like the room floor), so it renders for the camera above it
+        // from every orbit angle without the enclosing-shell trick that fought the tile cull. A plane is a field
+        // primitive (no instance bound needed — the room's floor is emitted the same way).
+        _ = builder.ResetPoint().Plane(normal: Vector3.UnitY, offset: (origin.Y - floorY), material: backdropMaterial);
     }
     private static void AddWall(SdfProgramBuilder builder, Vector3 center, Vector3 halfExtents, int material) {
         _ = builder.ResetPoint().Translate(offset: center).Box(halfExtents: halfExtents, round: 0f, material: material);

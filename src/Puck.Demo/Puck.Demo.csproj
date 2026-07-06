@@ -34,6 +34,9 @@
              Puck.SdfVm's content). -->
         <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
         <Content Include="Assets\Shaders\**\*.dxil" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Ship the committed creation-review SCENARIOS next to the demo so the scenario flag resolves
+             scenarios/name.json from the output directory (see ScenarioCliSeams). -->
+        <Content Include="scenarios\**\*.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

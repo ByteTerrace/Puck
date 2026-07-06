@@ -13,7 +13,7 @@ namespace Puck.Demo;
 /// with no recipe simply gets a presentation-only swap (the framebuffer desaturates) — coherent, but not the game's
 /// authored other-mode art.
 /// </summary>
-internal static class GamingBrickModeRecipes {
+internal static class GamingBrickModeTables {
     // One cached detection byte: the value it holds when the game booted monochrome vs color.
     private readonly record struct ModeFlag(
         ushort Address,

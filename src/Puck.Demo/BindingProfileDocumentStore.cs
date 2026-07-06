@@ -10,7 +10,7 @@ namespace Puck.Demo;
 /// single source of truth from then on — edit it and relaunch, or a future in-game editor saves through
 /// <see cref="SaveAsync"/> and hot-reloads via <see cref="PagedInputBindings.Reload"/>.
 /// </summary>
-internal sealed class BindingProfileStore {
+internal sealed class BindingProfileDocumentStore {
     // The stable identity of "the local player's settings" in blob storage; the file lands at
     // <BasePath>/<LocalSettingsId>/bindings/gamepad.json.
     private static readonly Guid LocalSettingsId = new(g: "b1d5c0de-0001-4000-8000-000000000001");
@@ -20,10 +20,10 @@ internal sealed class BindingProfileStore {
     private readonly IJsonObjectBlobStore m_store;
     private readonly LocalFileObjectStorageTarget m_target;
 
-    /// <summary>Initializes a new instance of the <see cref="BindingProfileStore"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="BindingProfileDocumentStore"/> class.</summary>
     /// <param name="store">The JSON blob store to persist through.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> is <see langword="null"/>.</exception>
-    public BindingProfileStore(IJsonObjectBlobStore store) {
+    public BindingProfileDocumentStore(IJsonObjectBlobStore store) {
         ArgumentNullException.ThrowIfNull(store);
 
         m_store = store;

@@ -27,9 +27,11 @@ work here without re-learning hard-won lessons*.
 ## How to verify anything
 
 **The default answer is `Puck.Post`.** It is the engine's power-on self-test:
-32 fail-isolated stages, expected 32/32 green on a healthy machine with an
-RTX-class GPU (on iGPU-only machines like the Surface, `rt` SKIPs and
-`reverse-share` FAILs — hardware conditions, not regressions).
+fail-isolated stages across four tiers, expected all-green on a healthy
+machine with an RTX-class GPU (on iGPU-only machines like the Surface, `rt`
+SKIPs and `reverse-share` FAILs — hardware conditions, not regressions). Don't
+hardcode the stage count here — it has drifted before (25 → 32 → 33); the
+battery's own summary line (`N stage(s): N pass, ...`) is always current.
 
 ```powershell
 dotnet run --project src/Puck.Post -c Release                  # full battery
@@ -43,7 +45,7 @@ dotnet run --project src/Puck.Post -c Release -- --artifacts out/
 Exit codes: 0 all pass, 1 a check failed, 2 infrastructure failure. Tiers:
 **A** CPU pre-flight (fixed-point, WorldCoord3, determinism/replay, CLI⇒document
 synthesis, paged binding-profile resolver, genlock control law, run-document
-funnel) · **B** same-device GPU smoke (compute, resample, viewports, pixelate,
+funnel, victory-gate layout) · **B** same-device GPU smoke (compute, resample, viewports, pixelate,
 capture, world pipeline, dynamic transforms) · **C** cross-backend
 (export/import both directions, indirect args, world + world-child +
 world-screen + RT parity, instancing/swarm exactness, camera share,
@@ -63,8 +65,12 @@ present cadence, device-lost, backend hot-switch — D3/D4 relaunch the exe as
   `fuzzing` section.
   The standing bar: backends bit-equivalent modulo ±1 LSB.
 - Live hardware peripherals (a real webcam) are proven by cycling an overworld
-  cabinet to the camera cart type — it opens the default device on the GPU
-  zero-copy tier; the share path itself is Post C6.
+  cabinet to the camera cart type — it opens the default device on the
+  CPU-pixel tier (feeding the emulated Pocket Camera sensor), not the GPU
+  zero-copy tier, which is built and hardware-verified but has no live
+  consumer wired today (see the hardware gotcha below). The generic zero-copy
+  handle-import mechanism, exercised with a synthetic frame, is Post's
+  `camera-share` stage (`--filter camera-share`).
 - The overworld (the default `Puck.Demo` run — see
   [overworld-demo-plan.md](overworld-demo-plan.md); the demo's other faces are
   `--run <document>`, which runs `world` documents live through the shared
@@ -123,6 +129,36 @@ Batteries skip-with-note when they're absent.
 | jsmolka gba-tests / mGBA suite / AGS checker / commercial GBA ROMs | `PUCK_GBA_TESTROMS`, `PUCK_GBA_MGBA_SUITE`, `PUCK_GBA_AGS` (TCHK10 dump only), `PUCK_GBA_GAMES` |
 | GB/GBC test suites (blargg, mooneye) | `--roms` flag, else `PUCK_GB_TESTROMS` |
 
+## Reviewing a creation: the scenario harness (THE capture recipe)
+
+To photograph a `puck.creation.v1` creation, do NOT hand-roll env vars — use
+the scenario harness (landed 2026-07-06, `src/Puck.Demo/Configuration/` +
+`Overworld/CaptureSequencer.cs`):
+
+```
+dotnet run --project src/Puck.Demo -c Release -- \
+  --scenario review-creation \
+  --scenario-set Scenario:Creation=docs/examples/creations/lantern-fish.creation.json \
+  --scenario-set Scenario:Capture:Directory=artifacts/my-review
+```
+
+That is an 8-shot orbit turntable on a NEUTRAL STUDIO backdrop (flat gray,
+even lighting; no room, cabinets, easel, placement ghost, goal markers, or
+selection highlights — the creature alone). Per shot the harness applies the
+camera pose, settles ≥`SettleSeconds` (default 0.5 s) of wall clock AND ≥3
+produced frames, captures, and advances; the run exits by itself after the
+last shot (`[scenario] complete — N/M shots written` on stderr;
+`ExitAfterSeconds` is only a generous safety net). Wall clock never touches
+rendered content — each shot's camera pose and content time are pinned from
+the plan (`StartTime + shot·TimeStep`), so runs are byte-identical at any
+frame rate, including under GPU contention. `Scenario:Backdrop=room` gives
+in-context arcade shots; scenario JSON < `PUCK_*` env vars < `--scenario-set`
+in configuration precedence. Scenario files live in `src/Puck.Demo/scenarios/`.
+
+The env vars below remain the low-level hooks (they are a configuration
+provider now) — reach for them for room/layout/boot captures, not for
+creation review.
+
 ## Environment variables
 
 | Variable | Effect |
@@ -140,7 +176,9 @@ Batteries skip-with-note when they're absent.
 | `PUCK_OVERWORLD_CELL=N` | Place the overworld room at a far world cell (planet-scale coordinate demo) |
 | `PUCK_OVERWORLD_CREATOR=1` | Enter creator mode at startup (headless authoring screenshots). **The 3D-capture recipe**: the demo BOOTS SEATED INSIDE A BRICK GAME, so a naive `--capture` photographs the fullscreen brick pane — set this on EVERY capture run that wants the SDF room; companions and the workbench subject both render in that view |
 | `PUCK_CREATOR_LOAD=<name-or-path>` | Load a saved creation (a `./creations/*.creation.json` name or a file path) and enter creator mode at startup — the headless proof hook for creator scenes |
-| `PUCK_COMPANION_LOAD=<names>` | Spawn comma-separated saved creations as wandering room companions at boot (resolves CAS refs, then `./creations/`) — the headless companion-capture hook |
+| `PUCK_COMPANION_LOAD=<names>` | Spawn comma-separated saved creations as wandering room companions at boot (resolves CAS refs, then `./creations/`) — the headless companion-capture hook. Locomotion (walk/swim) comes from each creation's behavior manifest |
+| `PUCK_COMPANION_WIRE=<screen>:<source>` | Headless twin of the `world.wire` verb (keyboardless captures): route a feed onto a screen, e.g. `0:named:lure` shows the loaded fish's lure camera feed on cabinet screen 0. Comma-separated, repeatable |
+| `PUCK_COMPANION_FACE=<index>:<feed\|auto>` | Headless twin of the `companion.face` verb: pin a companion's face to a feed name (1-based index), e.g. `1:lure`, or `1:auto` to resume the hail-radius tune-in. Comma-separated, repeatable |
 | `PUCK_WORLD_ROUNDTRIP=1` | Boot-time bit-for-bit proof for the world sculptor: save the live world (through the walk-grid bake), reload from disk, byte-compare — prints `[world-roundtrip] MATCH/MISMATCH` to stderr. Never a gate |
 | `PUCK_LINK_CABLE_PROBE=1` | Fake a linked cabinet pair (0,1) so the diegetic link cable renders headlessly — presentation-debug only |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Turn `--forge-flagships` into the content-UPDATE mode: rewrite `docs/examples/creations/*.creation.json` from the recipes (the add-a-field ritual for creation-schema evolutions). Default mode stays the loud byte-identical assertion |
@@ -162,8 +200,21 @@ these, the listed conclusion is settled — don't re-litigate it.
 - **In-process Vulkan cannot survive full GPU removal on NVIDIA**: the ICD
   wedges and `vkCreateInstance` fails forever until a new process. A TDR
   (Win+Ctrl+Shift+B) is absorbed fine. Don't chase "recovery" past that line.
-- **Camera zero-copy is DXVA→ARGB32**, D3D12 simultaneous-access targets
-  written via RTV (not UAV). The NV12/ycbcr path does not work here.
+- **Camera zero-copy (DXVA→ARGB32, D3D12 simultaneous-access targets written
+  via RTV not UAV — the NV12/ycbcr path never worked) is built and
+  hardware-verified but has no live consumer today.** Its child render node
+  (the old per-viewport camera pane) was retired when rendering centralized
+  into `SdfWorldEngine`/`SdfEngineNode`; `LiveCameraSource` is rejected at
+  graph-build time as a result. `ICameraCaptureService.TryOpenSharedDefault`,
+  `Win32MediaFoundationSharedCameraSession`, and
+  `DirectXGpuSurfaceExportFactory.CreateSimultaneousAccessStorageImage` are
+  kept intentionally for the re-host (confirmed unreachable via Roslyn
+  `SymbolFinder`, not a dead-code deletion candidate — each carries a doc
+  comment saying so). The live camera path that runs today is the CPU-pixel
+  tier (`TryOpenDefault`), used only by the overworld's Pocket Camera
+  peripheral. The generic cross-API zero-copy mechanism the camera tier rode
+  is still real and gated (Post `camera-share`) — it carries a synthetic
+  frame, not a camera frame.
 - **Steam Deck bare metal**: no serial — GOP is the only console; the
   framebuffer must be mapped **write-combining** and the global `wbinvd`
   removed (AMD DCN doesn't snoop CPU cache). Deck reports no-x2APIC and
@@ -175,6 +226,14 @@ these, the listed conclusion is settled — don't re-litigate it.
   DXIL at build time; `dxc` must be on PATH (Vulkan SDK or Windows SDK). There
   is no GLSL and no `glslc` step anywhere in the build. The C# ISA in
   `Puck.SdfVm` and the `sdf-vm` HLSL must change **together**.
+- **Stale build artifacts fake regressions.** After heavy cherry-picking (or a
+  crashed process), a checkout's incremental build can serve STALE committed
+  shader bytecode (or a corrupted `obj` ref assembly) from `bin/` — the
+  symptom is perf/behavior that matches NO commit in history (e.g. new C#
+  emitting a sentinel an old kernel mishandles). The fast diagnostic, BEFORE
+  any bisect: build and run the same commit in a fresh `git worktree` — if
+  that is healthy, the code is innocent; `rm -rf` the dirty checkout's
+  `obj/` + `bin/` (at minimum `Puck.SdfVm` + `Puck.Demo`) and rebuild.
 
 ## Anti-calcification doctrine
 
@@ -234,6 +293,26 @@ that from happening.
 
 ## Conventions
 
+- **Where each convention is WRITTEN (the law lives next to the code — read
+  the doc comment at the site before reworking that area):**
+
+  | Concern | The written rule |
+  |---|---|
+  | Config naming (`*Options` = config-bound POCO; why `HostSettings` isn't one; env→config is the ONE direction; `*CliSeams` = the CLI-surface escape) | `src/Puck.Demo/Configuration/DemoConfiguration.cs` type doc |
+  | Command modules (ctor pattern; when a `*CommandModule`/`*Commands` split is warranted; Tracker's documented exception) | `src/Puck.Commands/ICommandModule.cs` type doc |
+  | Screen-attach seam (the token-claimant contract) | `src/Puck.Demo/Overworld/ScreenSlotLedger.cs` type doc (+ the bullet below) |
+  | GPU host composition (the ORDER-MATTERS Vulkan-wins rule) | `src/Puck.Demo/GpuHostComposition.cs` |
+  | SDF C#↔HLSL contract pairs (incl. parked instances) | the `sdf-world` skill |
+  | Document evolution (the add-a-field ritual) | the `run-document` skill |
+
+  One vocabulary, one idea per name (Arc 4): layout tiling =
+  `ScreenLayoutDirector`, capture sequencing = `CaptureSequencer`, the offscreen
+  feed pool = `CameraFeedPool`, lock-free publish buffer = `PublishBuffer<T>`,
+  JSON persistence = `*DocumentStore`, static registrar = `*Registrar`, static
+  content table = `*Tables`. Don't reintroduce a second name for one of these
+  ideas — and don't let a feature noun (a specific creature/game) become a type
+  or seam name; the primitive gets the name, the feature is its first content.
+
 - **Comments/docs describe the code as it is**, not the change history.
 - **Derive, don't hardcode** (descriptor counts, pool sizes, strides come from
   the data that defines them).
@@ -243,6 +322,22 @@ that from happening.
   `OverworldFrameSource` behind primitive-typed forwarder members, extract
   helpers, and split registration iterators into sub-iterators — never raise
   the limits.
+- **How a subsystem gets content onto the render (the screen-attach seam)** —
+  there is ONE blessed way to put content on a diegetic screen surface:
+  register a claim with the `ScreenSlotLedger` (directly, or through
+  `OverworldFrameSource.RegisterScreenClaimant` for callers outside the frame
+  source). A claimant is an opaque, reference-stable OWNER TOKEN plus a
+  `ScreenSlotPriority` band and an optional preferred slot; the ledger
+  arbitrates slots role-blind (identity lives in the token, never in the
+  ledger), and the caller supplies its own source/light/transform providers.
+  Cabinets, the creator easel, and companion faces all ride this seam.
+  **Do NOT** invent a new attach mechanism for a screen source — no raw
+  `Func<nint>`/`Func<Vector3>` callback drilled through `OverworldRenderNode`,
+  no direct `m_*` field poll in `OverworldFrameSource`. Those older drills
+  exist only for non-screen wiring (camera pose, link-pair reporting, the
+  frame source's OWN composed sub-objects); a screen source rides the ledger.
+  See `Overworld/ScreenSlotLedger.cs`'s type doc for the full contract (band
+  semantics, token identity, the per-pass re-claim convention).
 - **.NET 10 everywhere**; consult the `dotnet10-performance` skill
   (`.claude/skills/`) before micro-optimizing or asserting "X is slow".
 - **Merges**: feature branches land on `main` as a single squash commit with a
@@ -252,6 +347,67 @@ that from happening.
   state; input becomes per-tick `CommandSnapshot`s; fixed-point math comes
   from `Puck.Maths`. If your change can break replay, Post A3 (engine
   determinism/replay) is your gate.
+
+## Leading a wave of agents (the orchestration playbook)
+
+Puck's last four arcs were built by parallel worker agents led by one
+orchestrator. This is the distilled method — it works even when the lead is
+a smaller model, because the discipline, not the intelligence, carries it.
+
+**The shape of a wave.** Read-only AUDIT fan-out first (scouts produce
+reports, touch nothing) → consolidate → bring the forks to the USER as
+explicit either/or questions BEFORE rewriting anything → then implementation
+workstreams in parallel git worktrees, one agent per workstream, the lead
+integrating. Prompt the user liberally at every genuine fork; never
+self-defer scope ("do the whole ask" is standing policy — hedging and
+partial delivery are the real hazard, git is the rollback).
+
+**A worker brief must carry** (every omission here has burned a session):
+1. The exact BASE COMMIT to check out — worktrees sometimes spawn pinned to
+   a stale commit; the first instruction is always `git log --oneline -1`,
+   verify, `git checkout --detach <tip>` if wrong, confirm clean status.
+2. FILE OWNERSHIP — the explicit list of files/dirs the agent owns, and the
+   files concurrent agents own that it must NOT touch. Parallel waves stay
+   mergeable only when ownership is disjoint; when overlap is unavoidable,
+   tell the agent to keep its edits in the shared file minimal and
+   mechanical, and merge the semantic change first, the mechanical one on top.
+3. The RELEVANT SKILL(s) to load first, and the audit-report section (by
+   path) it implements — agents re-derive everything you don't hand them.
+4. Analyzer-ceiling warnings: CA1502/CA1506 run as errors and several hot
+   types sit at EXACT limits; name the repo's escapes (frame-source
+   composition, static logic classes, `*CliSeams`) — never suppression.
+5. The VERIFICATION recipe, concretely: which runs to make (this doc's env
+   table + the scenario harness), what "working" looks like, and the
+   standing rule — demo work is verified by RUNNING, engine work by the
+   Post battery. Include the capture gotcha (`PUCK_OVERWORLD_CREATOR=1` for
+   any 3D capture) in every brief that captures.
+6. Commit discipline: logical commits in the worktree, hand-written
+   messages, no `Co-Authored-By` trailers.
+
+**Judging and integrating workers.**
+- Judge a background agent by its WORKTREE (git status/log + artifact
+  mtimes), never by its transcript, which flushes lazily or never.
+- Integration = cherry-pick the worktree commits onto the mainline, oldest
+  first; after each workstream, the lead INDEPENDENTLY re-verifies (build +
+  the workstream's own run recipe) — a worker's green report is evidence,
+  not proof.
+- When a worker stalls, diagnose from its worktree diff and SEND it the repo
+  precedent it's missing (a message, not a relaunch); when a worker starts
+  doing something the user wouldn't want, a mid-flight message redirects it
+  cheaply.
+- After integration, before trusting any perf number: fresh-worktree
+  cross-check (see the stale-artifact gotcha above), and note GPU/CPU
+  contention from still-running agents — timing taken during a wave is
+  evidence of SHAPE (share-of-frame), never of absolute cost.
+
+**Standing decisions a lead must not re-litigate** (each was an explicit
+user ruling): the demo is greenfield (rule 5); parity posture is RELAXED by
+default; built-ahead scaffolding (`WindowProbe`, `LinkModuleVerify`, the
+GPU camera tier) is KEPT — deleting intentionally-future code requires the
+user's sign-off even when it's provably unreachable, and such code carries a
+"BUILT-AHEAD, NOT YET WIRED" doc comment precisely so sweeps don't re-flag
+it; volatile facts (stage counts, hashes) are never hardcoded into living
+docs — point at the live output that prints them.
 
 ## Docs taxonomy — everything in docs/ is LIVING
 

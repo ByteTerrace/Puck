@@ -59,6 +59,11 @@ public sealed class CreatorScene {
 
     private readonly WorkbenchRegion m_workbench;
     private readonly List<CreatorShapeState> m_shapes = new(capacity: Capacity);
+    // Shape id -> current index in m_shapes, kept in sync with every ADD/REMOVE/CLEAR of m_shapes (a plain in-place
+    // `m_shapes[i] = shape with {...}` never touches this — the id/position pairing doesn't change). Lookups by id
+    // (Select/ResolveShapeId/SolveChains/TryCaptureChain/ApplyPoses) are otherwise an O(Capacity) linear scan repeated
+    // every pose/playback frame — this turns them into an O(1) dictionary hit.
+    private readonly Dictionary<int, int> m_shapeIndexById = new(capacity: Capacity);
     private readonly SdfMaterial[] m_palette = DefaultPalette();
     private bool m_active;
     private int m_nextShapeId;
@@ -462,6 +467,7 @@ public sealed class CreatorScene {
             Twist: m_ghostTwist,
             Type: m_ghostType
         ));
+        RebuildShapeIndex();
         // The next placement reads as a sibling: advance the ghost's palette slot the way the classic pool swept its
         // per-slot hues, so consecutive placements stay visually distinct without any palette work by the player.
         m_ghostMaterial = ((m_ghostMaterial + 1) % PaletteSize);
@@ -562,6 +568,7 @@ public sealed class CreatorScene {
             // A duplicate of a grouped member joins the SAME group (the twin composes the same way); an ungrouped
             // twin stays ungrouped.
         });
+        RebuildShapeIndex();
         m_previousSelectionIndex = m_selectionIndex;
         m_selectionIndex = (m_shapes.Count - 1);
         MarkProgramChanged();
@@ -579,6 +586,7 @@ public sealed class CreatorScene {
         }
 
         m_shapes.RemoveAt(index: m_selectionIndex);
+        RebuildShapeIndex();
         m_selectionIndex = -1;
         m_previousSelectionIndex = -1;
         MarkProgramChanged();
@@ -820,6 +828,7 @@ public sealed class CreatorScene {
         var discarded = m_shapes.Count;
 
         m_shapes.Clear();
+        RebuildShapeIndex();
         m_selectionIndex = -1;
         m_previousSelectionIndex = -1;
         m_goalChainIndex = -1;
@@ -835,13 +844,30 @@ public sealed class CreatorScene {
     /// <param name="idOrName">The shape's id (digits) or its player-given name.</param>
     /// <returns>The selected shape, or null when nothing matched.</returns>
     public CreatorShapeState? Select(string idOrName) {
+        // A digit token resolves via the id->index map (O(1)); a name token still scans (names are an optional,
+        // rarely-used handle, and there is no name index to maintain).
+        if (int.TryParse(s: idOrName, result: out var id)) {
+            if (!m_shapeIndexById.TryGetValue(key: id, value: out var mappedIndex)) {
+                return null;
+            }
+
+            var mappedShape = m_shapes[mappedIndex];
+
+            if (!TargetIsGhost) {
+                m_previousSelectionIndex = m_selectionIndex;
+            }
+
+            m_selectionIndex = mappedIndex;
+            m_goalChainIndex = -1;
+            MarkProgramChanged();
+
+            return mappedShape;
+        }
+
         for (var index = 0; (index < m_shapes.Count); index++) {
             var shape = m_shapes[index];
-            var matches = (int.TryParse(s: idOrName, result: out var id)
-                ? (shape.Id == id)
-                : string.Equals(a: shape.Name, b: idOrName, comparisonType: StringComparison.OrdinalIgnoreCase));
 
-            if (matches) {
+            if (string.Equals(a: shape.Name, b: idOrName, comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 if (!TargetIsGhost) {
                     m_previousSelectionIndex = m_selectionIndex;
                 }
@@ -1315,20 +1341,16 @@ public sealed class CreatorScene {
         var scaleChanged = false;
 
         foreach (var pose in frame.Poses) {
-            for (var index = 0; (index < m_shapes.Count); index++) {
-                if (m_shapes[index].Id != pose.Id) {
-                    continue;
-                }
-
-                scaleChanged |= (m_shapes[index].Scale != pose.Scale);
-                m_shapes[index] = m_shapes[index] with {
-                    Position = m_workbench.Clamp(position: pose.Position),
-                    Rotation = pose.Rotation,
-                    Scale = pose.Scale,
-                };
-
-                break;
+            if (!m_shapeIndexById.TryGetValue(key: pose.Id, value: out var index)) {
+                continue;
             }
+
+            scaleChanged |= (m_shapes[index].Scale != pose.Scale);
+            m_shapes[index] = m_shapes[index] with {
+                Position = m_workbench.Clamp(position: pose.Position),
+                Rotation = pose.Rotation,
+                Scale = pose.Scale,
+            };
         }
 
         if (scaleChanged) {
@@ -1625,20 +1647,16 @@ public sealed class CreatorScene {
             for (var member = 0; (member < chain.ShapeIds.Count); member++) {
                 var shapeId = chain.ShapeIds[member];
 
-                for (var index = 0; (index < m_shapes.Count); index++) {
-                    if (m_shapes[index].Id != shapeId) {
-                        continue;
-                    }
-
-                    var (position, rotation) = poses[member];
-
-                    m_shapes[index] = m_shapes[index] with {
-                        Position = m_workbench.Clamp(position: position),
-                        Rotation = rotation,
-                    };
-
-                    break;
+                if (!m_shapeIndexById.TryGetValue(key: shapeId, value: out var index)) {
+                    continue;
                 }
+
+                var (position, rotation) = poses[member];
+
+                m_shapes[index] = m_shapes[index] with {
+                    Position = m_workbench.Clamp(position: position),
+                    Rotation = rotation,
+                };
             }
         }
 
@@ -1665,10 +1683,12 @@ public sealed class CreatorScene {
 
     // Resolves a shape by id (digits) or (case-insensitive) name to its id, or null when nothing matches.
     private int? ResolveShapeId(string idOrName) {
-        foreach (var shape in m_shapes) {
-            var matches = (int.TryParse(s: idOrName, result: out var id) ? (shape.Id == id) : string.Equals(a: shape.Name, b: idOrName, comparisonType: StringComparison.OrdinalIgnoreCase));
+        if (int.TryParse(s: idOrName, result: out var id)) {
+            return (m_shapeIndexById.ContainsKey(key: id) ? id : null);
+        }
 
-            if (matches) {
+        foreach (var shape in m_shapes) {
+            if (string.Equals(a: shape.Name, b: idOrName, comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 return shape.Id;
             }
         }
@@ -1687,21 +1707,14 @@ public sealed class CreatorScene {
         var rotations = new List<Quaternion>(capacity: shapeIds.Count);
 
         foreach (var shapeId in shapeIds) {
-            var found = false;
-
-            foreach (var shape in m_shapes) {
-                if (shape.Id == shapeId) {
-                    positions.Add(item: shape.Position);
-                    rotations.Add(item: shape.Rotation);
-                    found = true;
-
-                    break;
-                }
-            }
-
-            if (!found) {
+            if (!m_shapeIndexById.TryGetValue(key: shapeId, value: out var index)) {
                 return null;
             }
+
+            var shape = m_shapes[index];
+
+            positions.Add(item: shape.Position);
+            rotations.Add(item: shape.Rotation);
         }
 
         return CreatorChainState.Capture(id: id, kind: kind, name: name, positions: positions, rotations: rotations, shapeIds: shapeIds);
@@ -1830,6 +1843,7 @@ public sealed class CreatorScene {
             maxGroup = Math.Max(val1: maxGroup, val2: (shape.Group ?? 0));
         }
 
+        RebuildShapeIndex();
         m_nextShapeId = (maxId + 1);
         m_nextGroupId = (maxGroup + 1);
 
@@ -1927,6 +1941,17 @@ public sealed class CreatorScene {
         Revision++;
     }
 
+    // Resyncs the shape id -> index map with the current m_shapes contents — call after ANY add/remove/clear (an
+    // in-place `m_shapes[i] = shape with {...}` never needs this, since ids and positions don't move). Cheap enough
+    // to call unconditionally on every structural edit: those are rare (place/delete/undo/load), never per-frame.
+    private void RebuildShapeIndex() {
+        m_shapeIndexById.Clear();
+
+        for (var index = 0; (index < m_shapes.Count); index++) {
+            m_shapeIndexById[m_shapes[index].Id] = index;
+        }
+    }
+
     // ---- undo/redo (EditHistory<CreatorSnapshot> over the whole authored state) --------------------------------
     //
     // EditHistory<T>.Push's contract (see its own remarks) is "the snapshot AFTER the completed edit" — the pushed
@@ -2015,6 +2040,7 @@ public sealed class CreatorScene {
     private void RestoreSnapshot(CreatorSnapshot snapshot) {
         m_shapes.Clear();
         m_shapes.AddRange(collection: snapshot.Shapes);
+        RebuildShapeIndex();
 
         for (var index = 0; ((index < snapshot.Palette.Count) && (index < PaletteSize)); index++) {
             m_palette[index] = snapshot.Palette[index];

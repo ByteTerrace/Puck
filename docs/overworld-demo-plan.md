@@ -48,7 +48,9 @@ Post battery, and the Humble battery — are:
   the head — a bumper is not a GB joypad line, so disengage never collides
   with the machine the player is driving (interact does not double as
   release). Ownership is HOST-SIDE input routing, never hashed sim state —
-  the overworld determinism hash is unaffected (0x47DA634C1658D2CE).
+  the overworld determinism hash is unaffected; verify via
+  `--validate-overworld` (the printed hash is a stability signal only, not a
+  documented constant — it churns roughly every arc).
 - **Battery saves persist**: `<romPath>.sav` = SRAM + clock footer (MBC3:
   the standard 48-byte RTC layout; HuC3: a 16-byte own-convention block —
   no cross-emulator standard exists for it). Resume is deterministic — the
@@ -81,9 +83,11 @@ Post battery, and the Humble battery — are:
   Movement + Debug: Engine (RT→LT) + Debug: Bricks (LT→RT). Engine = actual
   SDF debug view modes; the LAST controller page holds all
   GamingBrick/fleet/capture controls.
-- The three prototype-arc workstreams below (diegetic screens, the shelf,
-  animated controls) are in place — labeled inline, kept as the design
-  record. The screen-source seam is document DATA too (scene
+- The three prototype-arc workstreams below (diegetic screens, the
+  cartridge library, animated controls) are in place — labeled inline, kept
+  as the design record (the cartridge-library item is itself historical: its
+  shelf/carry mechanic was retired in favor of cabinet cart types). The
+  screen-source seam is document DATA too (scene
   `screenSlab` + top-level `screenSources`, pinned by the Post
   `world-screen` stage — see
   [sdf-world-render-centralization-plan.md](sdf-world-render-centralization-plan.md)).
@@ -119,7 +123,7 @@ it:
   (`BindingBarAdapter.PublishCreator` — the bumper/face icons remap to the
   active verb page) while the mode is up.
 - **The workpiece camera + the live bake preview.** The engaged view is
-  `ScreenDirector.CreatorCameraSource`: OBJECT intent orbits the workbench;
+  `ScreenLayoutDirector.CreatorCameraSource`: OBJECT intent orbits the workbench;
   SPRITE intent locks HEAD-ON from +Z against the matte backdrop —
   what-you-see-is-what-bakes. Beside the workbench stands the preview EASEL
   (a post + `ScreenSlab` borrowing screen-surface slot **index 3**; cabinet
@@ -147,7 +151,7 @@ it:
   coverage AND the per-frame character grid both ride ONE storage buffer, so
   the `ConsoleOverlayNode` keeps the single-sampler + one-storage-buffer
   shape of the binding-bar overlay (no second texture). `DemoConsole`
-  publishes its input line + output history to a `ConsoleTextStore` the overlay
+  publishes its input line + output history to a `PublishBuffer<T>` the overlay
   renders; the backtick console open/close drives its visibility.
   `PUCK_CONSOLE_OPEN=1` starts it open with seeded lines (a headless font check).
 - **Deferred (converge later):** authoring the action bar + console THROUGH
@@ -168,7 +172,7 @@ it:
   engaged secondary slices.
 - **Reveal as a zoom-out.** The fourth-wall reveal eases the room camera OUT
   of the triggering machine's native-screen framing into a fixed, centered
-  isometric-ish overview of the whole room (`ScreenDirector.BeginReveal`), so it
+  isometric-ish overview of the whole room (`ScreenLayoutDirector.BeginReveal`), so it
   reads as "pull back from the game you were inside to the whole room, everyone
   standing at their machines."
 - **Engage → split.** After the reveal the room is the big PRIMARY slice across
@@ -189,25 +193,31 @@ cursor.
 ## What the demo is
 
 `Puck.Demo` with no flags opens the OVERWORLD: a controller-driven player in a
-16×16 room with **three bootable console stands** along the far wall — the
-showcase cartridge (a forged custom game) loaded into the `dmg`, `cgb`, and `agb`
-costumes of the ONE GamingBrick SM83 machine. Booting a stand in-world:
+room of **four bootable console cabinets** (`OverworldNode.MaxConsoles` = 4) —
+the `dmg`/`cgb`/`agb` costumes of the ONE GamingBrick SM83 machine. Cabinets
+start EMPTY: there is no shelf, no carrying, no pre-loaded showcase cartridge.
+**North** (interact) inserts the cabinet's currently-selected cart and boots
+it (a second North at a booted, unowned cabinet ejects it back to empty); the
+**Right bumper (Cycle)** rotates the nearest cabinet's SELECTED cart type
+through the roster (live-swaps it if the cabinet is already running) — nine
+types today: world-lens / camera / showcase / the player's forged avatar /
+Volley / Brickfall / Chroma / Solitaire / Poker (`OverworldWorld.CartTypeCount`
+= 9; see "Controls & running" below for the full type table and the Post/forge
+seams behind each). Booting a cabinet in-world:
 
-1. is **simulation state** — an interact press-edge near a stand sets a bit in
+1. is **simulation state** — an interact press-edge near a cabinet sets a bit in
    `OverworldWorld.BootedMask` and appends to `BootOrder`; both are folded into
-   `StateHash`, so boots replay bit-for-bit;
-2. lights the stand's screen DIEGETICALLY (program rebuild at IDENTICAL
+   `StateHash`, so boots (and cycles/ejects) replay bit-for-bit;
+2. lights the cabinet's screen DIEGETICALLY (program rebuild at IDENTICAL
    instruction and material count — the boot swaps the powered-off dark box
    for a screen-surface slab whose face samples the brick's live framebuffer
    in-world);
-3. powers the stand's `GamingBrickChildNode` (every cartridge ROM loads
-   eagerly at document load for fail-fast, but the MACHINE assembles only
-   when its stand's cartridge is known — at startup for pre-inserted
-   consoles, at insert time for shelf cartridges — and does not step a cycle
-   until booted);
+3. powers the cabinet's `GamingBrickChildNode` (the MACHINE assembles when its
+   cabinet's cartridge is known — at startup for a pre-inserted `--rom` boot,
+   at insert time otherwise — and does not step a cycle until booted);
 4. eases the screen layout through the staged keyframes (0.6 s smoothstep):
-   **fullscreen room → room|pane side-by-side → big room top over two small
-   panes → the 2×2 quad**. Pane order = boot order.
+   **fullscreen → side-by-side → big-top/two-bottom → the 2×2 quad** as more
+   cabinets boot. Pane order = boot order.
 
 The room player's movement mirrors into every booted brick (directions + A on
 jump) — walking the room walks the games; the carry-forward thesis on one
@@ -292,11 +302,12 @@ active page). The default profile:
   never collides with the machine being driven. Held off while immersed and
   not yet revealed (no room to walk into until the fourth wall breaks).
 - **Right bumper** = **Cycle**: advance the nearest cabinet's selected cart
-  TYPE (at a booted cabinet the swap is live). Seven types cycle — 0
+  TYPE (at a booted cabinet the swap is live). Nine types cycle — 0
   world-lens / 1 camera / 2 showcase / 3 the player's forged avatar /
   **4 Volley / 5 Brickfall / 6 Chroma** (the three genuine hand-authored SM83
-  arcade carts); North inserts the selection into an empty cabinet and ejects
-  a running one. The sim tracks only the type index — the ROM bytes are
+  arcade carts) / **7 Solitaire / 8 Poker** (the card games); North inserts
+  the selection into an empty cabinet and ejects a running one. The sim
+  tracks only the type index — the ROM bytes are
   host-side in the render node's cart table. Brickfall is battery-backed: its
   high-score SRAM persists at `%LOCALAPPDATA%\Puck\Demo\brickfall.sav`
   (`BrickfallRom.PrepareDefaultSavePath`), and it SDF-bakes its title screen
@@ -348,7 +359,7 @@ active page). The default profile:
 |---|---|
 | Room/stand geometry, interact range | `OverworldRoom` (authored floats) → `FixedRoom.From` (fixed-point clamps + expanded stand keep-outs) |
 | Boot rules, hashing, replay | `OverworldWorld` (`Boot`, `TryBootNearest`, `HashState`) |
-| Layout keyframes + transition feel | `ScreenDirector` (`BuildTargets`, `PaneRect`, `TransitionSeconds`) |
+| Layout keyframes + transition feel | `ScreenLayoutDirector` (`BuildTargets`, `PaneRect`, `TransitionSeconds`) |
 | Stand visuals / accents | `OverworldFrameSource.BuildProgram` (accents passed per console model) |
 | Boot switch + pane rendering | `GamingBrickChildNode.PowerSource` + fixed allocation extent (alloc once at full frame; per-frame dispatch at the live rect — animated regions must NEVER reallocate GPU images) |
 | Input routing / mirror | `GamingBrickPadService` (sole gamepad drainer) + `OverworldRenderNode.AdvanceConsoleMode` |
@@ -370,9 +381,10 @@ fuzzer are all Post stages now. Headless deterministic captures:
 
 ## The prototype arc (the design record)
 
-The demo bends toward one loop: **walk the room, take a game off
-the shelf, carry it to a brick, insert it, play it on the device's own
-screen.** Three workstreams, each independently shippable — all three are in
+The demo's loop today: **walk the room, insert/cycle a cart at a cabinet,
+play it on the device's own screen** (there is no shelf or carrying — that
+mechanic was tried and retired; item 2 below is its historical record). Three
+workstreams, each independently shippable — all three are in
 place (the "What the demo is" section above describes the behavior; the designs
 below are the record):
 
@@ -396,30 +408,32 @@ below are the record):
    slab's local frame to a UV and samples the brick's child storage image,
    which `SdfWorldEngine` binds per frame for Stage 2
    (`SetChildSource`/`BindSources`). Unbooted slabs keep the dark screen
-   material. The 2D pane easing (`ScreenDirector`) coexists as the
+   material. The 2D pane easing (`ScreenLayoutDirector`) coexists as the
    zoom/focus view — diegetic screens are how the room looks; panes are how
    you play seriously. Verification: a `Puck.Post` Tier-B/C stage that
    renders a world with a synthetic child image on a screen slab and asserts
    sampled pixels (the `WorldChildStage` pattern, one step further in).
-2. **The cartridge library — games as world data.** *(The `library` document
-   field remains, but the physical shelf/carry mechanic described below was
-   RETIRED — folded into cabinet cart types: seven today, cycled at the
-   cabinet with the Right bumper (roster + Brickfall's battery save in
-   "Controls & running" above; types 4–6 are the hand-authored
-   Volley/Brickfall/Chroma arcade carts); the `ShelfSlot` geometry is now
-   optional static furniture, with no carried cartridges.)* `OverworldNode`
-   carries a `library` (cartridge entries: id, title, `romPath`, and later the
+2. **HISTORICAL — the cartridge library / shelf-and-carry mechanic (RETIRED,
+   superseded by cabinet cart types).** *This whole item describes a
+   physical pick-up/carry/insert loop that was designed, then abandoned in
+   favor of the simpler per-cabinet Cycle button — CLAUDE.md is explicit:
+   "there is no shelf or carrying." Kept here only as design provenance, not
+   as a description of current behavior.* The cartridge roster survives as
+   the cabinet cart-type cycle instead: nine types today
+   (`OverworldWorld.CartTypeCount`), cycled at the cabinet with the Right
+   bumper (see "Controls & running" above; types 4–8 are the five
+   hand-authored SM83 games — Volley/Brickfall/Chroma/Solitaire/Poker); the
+   `ShelfSlot` geometry, where it still exists, is optional static furniture
+   with no carried cartridges. The abandoned design: `OverworldNode` would
+   carry a `library` (cartridge entries: id, title, `romPath`, and later a
    `peripheral` field) and a shelf along a wall (`OverworldRoom` slots, same
-   keep-out treatment as stands). The sim loop extends the interact
-   seam (`OverworldWorld.TryBootNearest` generalizes to nearest-interactable:
-   shelf slot vs. stand): pick up (near shelf, hands empty) → carry (the
+   keep-out treatment as cabinets); the sim loop would extend the interact
+   seam (`OverworldWorld.TryBootNearest` generalizing to nearest-interactable:
+   shelf slot vs. cabinet): pick up (near shelf, hands empty) → carry (the
    cartridge rides the player's dynamic-transform slot, visible in-world) →
-   insert (near stand, hands full; stand's cartridge becomes sim state) →
-   boot. Carried-item and per-stand inserted-cartridge ids fold
-   into `StateHash` so the whole loop replays bit-for-bit. Machines do not
-   all assemble eagerly at startup — assembly happens at insert time
-   (ROM load stays fail-fast at DOCUMENT load: the library validates every
-   `romPath` up front).
+   insert (near cabinet, hands full; cabinet's cartridge becomes sim state) →
+   boot. Carried-item and per-cabinet inserted-cartridge ids would fold
+   into `StateHash` so the whole loop replays bit-for-bit.
 3. **Animated controls — buttons and sticks that move.** *(In place — each
    stand's control cluster rides per-stand dynamic-transform slots, driven
    by the joypad state the machine consumes.)* Each brick's

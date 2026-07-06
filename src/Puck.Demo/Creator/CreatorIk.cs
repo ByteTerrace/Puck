@@ -96,9 +96,10 @@ public static class CreatorIk {
     /// <param name="lengths">Each link's bone length, root→tip order.</param>
     /// <param name="stiffness">Each link's blend weight toward the goal direction, root→tip order (same length as
     /// <paramref name="lengths"/>); values are clamped to [0, 1].</param>
-    /// <returns>The solved joint positions AFTER the root, root→tip order (length = <paramref name="lengths"/>.Length).</returns>
-    public static Vector3[] SolveSpine(Vector3 root, Vector3 goal, ReadOnlySpan<float> lengths, ReadOnlySpan<float> stiffness) {
-        var joints = new Vector3[lengths.Length];
+    /// <param name="destination">Receives the solved joint positions AFTER the root, root→tip order (length =
+    /// <paramref name="lengths"/>.Length) — CALLER-owned scratch, so a repeated solve (a held goal/pole drag) never
+    /// allocates a fresh array per call.</param>
+    public static void SolveSpine(Vector3 root, Vector3 goal, ReadOnlySpan<float> lengths, ReadOnlySpan<float> stiffness, Span<Vector3> destination) {
         var joint = root;
         var previousDirection = Vector3.UnitY;
 
@@ -110,11 +111,9 @@ public static class CreatorIk {
             var direction = ((blended.LengthSquared() > Epsilon) ? Vector3.Normalize(blended) : desiredDirection);
 
             joint += (direction * MathF.Max(lengths[index], 0f));
-            joints[index] = joint;
+            destination[index] = joint;
             previousDirection = direction;
         }
-
-        return joints;
     }
 
     /// <summary>Poses one link of a solved chain: the shortest-arc rotation from the link's REST bone direction to

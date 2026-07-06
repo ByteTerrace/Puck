@@ -8,11 +8,11 @@ namespace Puck.Demo;
 
 /// <summary>
 /// The demo's data-driven root-node registrar + headless utilities. Every run — whether from <c>--run</c> or
-/// synthesized from the legacy flags (<see cref="DemoRunDocuments.Synthesize"/>) — arrives here as a
+/// synthesized from the legacy CLI flags (<see cref="DemoRunDocuments.Synthesize"/>) — arrives here as a
 /// <see cref="PuckRunDocument"/>: <see cref="RegisterRunDocument"/> installs its validation gate or its
 /// composition-graph producer. Kept out of <c>Program</c> so the entry point stays loosely coupled.
 /// </summary>
-internal static class DemoRootNode {
+internal static class DemoRunRegistrar {
     /// <summary>Writes any CLI parse errors (an unrecognized/retired flag, a typo, or a bad option value) to stderr.
     /// Kept out of the top-level <c>Program</c> so the entry point does not couple to the parser's error types.</summary>
     /// <param name="parseResult">The command-line parse result.</param>

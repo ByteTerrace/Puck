@@ -42,6 +42,12 @@ public sealed class SdfProgram {
     /// then only fires with real margin, keeping the skipped field bit-identical to full evaluation.</summary>
     private const float BoundRadiusPadding = 0.001f;
     private const float BoundRadiusScale = 1.0001f;
+    /// <summary>The PARKED-instance sentinel radius (KEEP IN SYNC with sdf-world.hlsli's <c>collectInstanceMaskWord</c>
+    /// negative-radius skip). An <see cref="SdfInstanceRange.Active"/> = <see langword="false"/> instance packs this
+    /// instead of a real (always non-negative) radius, so the beam prepass rejects it with one <c>bound.w &lt; 0</c>
+    /// branch — no sphere-vs-cone math, mask bit left 0 — while the slot still occupies its reserved capacity. Chosen
+    /// well below any legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
+    private const float ParkedBoundRadius = -1f;
     /// <summary>The largest legal dynamic-transform slot index: the derived capacity is <c>slot + 1</c>, which must
     /// itself fit in an <see cref="int"/>.</summary>
     public const int MaxDynamicTransformSlot = (int.MaxValue - 1);
@@ -564,10 +570,15 @@ public sealed class SdfProgram {
 
             var entryBase = ((instanceOffsetVectors + 1 + (2 * instanceIndex)) * WordsPerVector);
 
+            // A PARKED instance packs the negative sentinel so the beam prepass skips its per-tile sphere test entirely
+            // (one branch, no cull math, mask bit left 0) — the slot still exists (reserved capacity preserved), it just
+            // costs nothing. A live instance packs its float-safety-padded radius as before.
+            var packedRadius = (instance.Active ? ((instance.Radius * BoundRadiusScale) + BoundRadiusPadding) : ParkedBoundRadius);
+
             WriteVector4(
                 words: m_words,
                 baseIndex: entryBase,
-                w: ((instance.Radius * BoundRadiusScale) + BoundRadiusPadding),
+                w: packedRadius,
                 x: instance.Center.X,
                 y: instance.Center.Y,
                 z: instance.Center.Z

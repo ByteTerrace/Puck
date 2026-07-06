@@ -167,7 +167,7 @@ public sealed record WalkGridDocument(
 /// <c>puck.creation.v1</c>/<c>puck.audio.v1</c>; the full document doctrine applies (every optional member
 /// nullable, normalized at load, loud throw on an unrecognized schema tag, <c>IncludeFields = true</c> —
 /// load-bearing for the <see cref="Vector3"/> members). The store/normalization half lives with the CAS
-/// workstream (<c>WorldStore</c>); these records are the frozen shapes the scene/renderer and walk-grid
+/// workstream (<c>WorldDocumentStore</c>); these records are the frozen shapes the scene/renderer and walk-grid
 /// workstreams code against.
 /// </summary>
 /// <param name="Schema">The document version tag (<c>puck.world.v1</c>).</param>

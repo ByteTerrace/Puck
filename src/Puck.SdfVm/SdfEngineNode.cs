@@ -74,11 +74,24 @@ public sealed class SdfEngineNode : IRenderNode {
     private SdfWorldEngine? m_engine;
     private IGpuComputeServices? m_gpu;
     private int m_produceFrameIndex;
+    private readonly bool? m_rayQueryEnabled;
     private ISteppableRenderNode[] m_steppableChildren = [];
+    private readonly bool? m_timingEnabled;
     private ulong m_timingFrame;
 
     private static int CaptureDelayFrames() {
         return (int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_CAPTURE_FRAME"), out var frame) && (frame > 0)) ? frame : 0;
+    }
+
+    // PUCK_RAY_QUERY permits (default, unset, or any value other than "0") or denies ("0") the ray-query path; the
+    // env read is the fallback when the constructor's rayQueryEnabled argument is null.
+    private static bool RayQueryEnabledFromEnvironment() {
+        return !string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_RAY_QUERY"), "0", StringComparison.Ordinal);
+    }
+    // PUCK_TIMING=1 opts in to GPU performance counters; the env read is the fallback when the constructor's
+    // timingEnabled argument is null.
+    private static bool TimingEnabledFromEnvironment() {
+        return string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_TIMING"), "1", StringComparison.Ordinal);
     }
 
     /// <summary>Initializes a new instance of the <see cref="SdfEngineNode"/> class.</summary>
@@ -103,7 +116,7 @@ public sealed class SdfEngineNode : IRenderNode {
     /// color). Polled right after <paramref name="screenSources"/>; see <see cref="SdfWorldEngine.SetScreenLight"/>.</param>
     /// <param name="screenSurfaceTransforms">An optional map, parallel to <paramref name="screenSources"/>, from a
     /// screen index to a provider of that screen's world-space sampling frame THIS FRAME — for a screen slab riding a
-    /// dynamic transform (e.g. a walking robot's CRT face), whose sampling frame must move with the geometry every
+    /// dynamic transform (e.g. a slab riding a moving rig), whose sampling frame must move with the geometry every
     /// frame or it goes stale. A provider returning <see langword="null"/> leaves the program-declared (or
     /// previously set) frame untouched this frame — a screen on static geometry simply omits its entry, or a provider
     /// may return null on frames where nothing moved to skip the write. Polled right after <paramref name="screenLights"/>;
@@ -118,9 +131,20 @@ public sealed class SdfEngineNode : IRenderNode {
     /// declares its envelope here instead of relying on every future program staying within the first frame's size.</param>
     /// <param name="instanceCapacity">An optional FLOOR on the instance count the per-tile mask buffer is sized for —
     /// the hot-swap counterpart of <paramref name="programWordCapacity"/> for instanced programs.</param>
+    /// <param name="timingEnabled">The <c>PUCK_TIMING</c> toggle (per-pass GPU-ms timestamps), or <see langword="null"/>
+    /// to fall back to the <c>PUCK_TIMING=1</c> environment read — so a host that resolves the toggle from its own
+    /// config (e.g. a run document's <c>host.timing</c>) can pass it straight through, while the environment variable
+    /// keeps working verbatim for anything that sets it externally instead.</param>
+    /// <param name="rayQueryEnabled">The <c>PUCK_RAY_QUERY</c> toggle (permit/deny the ray-query path), or
+    /// <see langword="null"/> to fall back to the environment/default. Exposed for parity with
+    /// <paramref name="timingEnabled"/> and read back via <see cref="RayQueryEnabled"/>; no current render path
+    /// consults it (the ray-query world's device-level feature probe is unconditional — see
+    /// <c>VulkanLogicalDeviceFactory</c> — since its own per-viewport ray-query render node was retired when
+    /// rendering centralized here), but the toggle is threaded so a future ray-query consumer does not need another
+    /// config-plumbing pass.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, string? capturePath = null, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<int, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0) {
+    public SdfEngineNode(IServiceProvider serviceProvider, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, string? capturePath = null, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<int, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, bool? timingEnabled = null, bool? rayQueryEnabled = null) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -140,15 +164,22 @@ public sealed class SdfEngineNode : IRenderNode {
         m_frameSource = frameSource;
         m_height = height;
         m_kernels = kernels;
+        m_rayQueryEnabled = rayQueryEnabled;
         m_screenSources = (screenSources ?? EmptyScreenSources);
         m_screenLights = (screenLights ?? EmptyScreenLights);
         m_screenSurfaceTransforms = (screenSurfaceTransforms ?? EmptyScreenSurfaceTransforms);
         m_serviceProvider = serviceProvider;
+        m_timingEnabled = timingEnabled;
         m_width = width;
     }
 
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
+
+    /// <summary>The resolved <c>PUCK_RAY_QUERY</c> toggle: the constructor argument when given, else the
+    /// environment/default. See the constructor's <c>rayQueryEnabled</c> parameter doc for why nothing consumes this
+    /// yet.</summary>
+    public bool RayQueryEnabled => (m_rayQueryEnabled ?? RayQueryEnabledFromEnvironment());
 
     /// <summary>The RGBA pixels read back the first time this node captured (its <c>capturePath</c> was set);
     /// empty until then. Lets a parity gate diff two backends' renders without re-reading the GPU.</summary>
@@ -353,13 +384,14 @@ public sealed class SdfEngineNode : IRenderNode {
             }
         }
 
-        // GPU performance counters: opt-in via PUCK_TIMING=1, gated on the backend having registered the timing seam
-        // (resolved granularly — timing is not part of the always-on bundle) and on the device reporting usable
-        // timestamps (the engine checks that half).
+        // GPU performance counters: opt-in via the resolved timing toggle (the constructor argument, falling back to
+        // PUCK_TIMING=1 when not supplied — see TimingEnabledFromEnvironment), gated on the backend having
+        // registered the timing seam (resolved granularly — timing is not part of the always-on bundle) and on the
+        // device reporting usable timestamps (the engine checks that half).
         IGpuTimingPoolFactory? timingFactory = null;
         IGpuTimingRecorder? timingRecorder = null;
 
-        if (string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_TIMING"), "1", StringComparison.Ordinal)) {
+        if (m_timingEnabled ?? TimingEnabledFromEnvironment()) {
             timingFactory = m_serviceProvider.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory;
             timingRecorder = m_serviceProvider.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder;
 

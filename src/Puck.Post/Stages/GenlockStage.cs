@@ -143,7 +143,7 @@ internal sealed class GenlockStage : IPostStage {
         const int WarmupArrivals = 200;
 
         var clock = new ExternalPresentClock();
-        var aligner = new GenlockPhaseAligner(clock: clock, logger: NullLogger.Instance, logPhase: false);
+        var aligner = new GenlockPhaseAligner(clock: clock, enabled: true, logger: NullLogger.Instance, logPhase: false);
         var jitter = new Random(Seed: 20260701);
         var jitterRange = (Frequency / 2000L); // ±0.5 ms of arrival jitter (decode/copy wobble)
 

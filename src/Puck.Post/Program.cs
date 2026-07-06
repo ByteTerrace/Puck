@@ -42,6 +42,10 @@ services.Configure<NativeWindowOptions>(configureOptions: static options => {
 });
 services.AddSingleton(implementationInstance: new LauncherOptions {
     ExitAfter = TimeSpan.FromSeconds(value: 30),
+    // The device-lost probe (DeviceLostStage) launches this host with PUCK_TEST_DEVICE_LOSS=<seconds> to inject one
+    // synthetic loss; the launcher now reads the delay from its options rather than the environment, so surface the
+    // probe's environment value here (this is Puck.Post's own verification contract, not the demo's).
+    SyntheticDeviceLossSeconds = ((double.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_TEST_DEVICE_LOSS"), out var deviceLossSeconds) && (deviceLossSeconds > 0.0)) ? deviceLossSeconds : null),
     TargetRenderRate = 60,
 });
 services.AddSingleton(implementationInstance: new PresentationOptions {

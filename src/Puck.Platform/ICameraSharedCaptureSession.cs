@@ -11,6 +11,10 @@ namespace Puck.Platform;
 /// <see cref="Start"/> begins streaming into them. The producer completes each copy on its own thread (a GPU flush +
 /// CPU fence at the camera's cadence) <em>before</em> publishing the slot, so a published slot is always safe to sample
 /// — the render pump never waits.</para>
+/// <para>BUILT-AHEAD, NOT YET WIRED (by design): kept for a future re-host of the per-viewport camera child node
+/// (retired when rendering centralized into <c>SdfWorldEngine</c>/<c>SdfEngineNode</c>); this interface currently has
+/// exactly one implementation and zero call sites for <see cref="ICameraCaptureService.TryOpenSharedDefault"/>, its
+/// only opener. Not dead code — see the note there before removing it in a dead-code sweep.</para>
 /// </summary>
 public interface ICameraSharedCaptureSession : IDisposable {
     /// <summary>A monotonically increasing counter of frames published into the shared targets; a consumer compares it

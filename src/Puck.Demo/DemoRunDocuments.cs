@@ -5,28 +5,36 @@ namespace Puck.Demo;
 /// <summary>
 /// The synthesizer that turns the legacy CLI flags into the SAME <see cref="PuckRunDocument"/> the <c>--run</c> path
 /// consumes. Every <c>--validate-overworld</c>/<c>--overworld</c> flag is a thin alias that builds a document, so there is
-/// no second imperative path to keep in sync.
+/// no second imperative path to keep in sync. The flags flow straight from <c>Program</c>'s parsed CLI values —
+/// there is no separate legacy flag-bundle record parallel to this synthesis.
 /// </summary>
 internal static class DemoRunDocuments {
     /// <summary>Turns the resolved CLI flags into the run document the single data-driven path consumes: the
     /// self-contained <c>--validate-overworld</c> gate, a fullscreen single-machine boot for <c>--rom &lt;path&gt;</c>,
     /// or the OVERWORLD for <c>--overworld</c> or no flags at all (the demo IS the overworld).</summary>
-    /// <param name="flags">The parsed launch flags.</param>
+    /// <param name="backend">The <c>--backend</c> the live render hosts on (<c>vulkan</c>/<c>directx</c>).</param>
+    /// <param name="exitAfterSeconds">The <c>--exit-after-seconds</c> auto-exit duration.</param>
+    /// <param name="presentMode">The <c>--present-mode</c> swapchain present mode.</param>
+    /// <param name="surfaceFormat">The <c>--surface-format</c> back-buffer format.</param>
+    /// <param name="validateOverworld">The <c>--validate-overworld</c> pure-CPU determinism + replay self-check for the
+    /// action demo.</param>
+    /// <param name="overworld">The <c>--overworld</c> live controller-driven action demo (Vulkan host).</param>
+    /// <param name="romPath">The <c>--rom</c> cartridge path: boot straight into the game — the IMMERSED overworld,
+    /// one machine per connecting player (null = not requested).</param>
+    /// <param name="romExit">The <c>--rom-exit</c> fourth-wall condition spec (<c>"&lt;0xADDR&gt;&lt;op&gt;&lt;value&gt;"</c>,
+    /// e.g. <c>"0xDA22&gt;=1"</c>); null = no instrumentation.</param>
     /// <returns>The synthesized run document (always valid).</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="flags"/> is <see langword="null"/>.</exception>
-    public static PuckRunDocument Synthesize(DemoFlags flags) {
-        ArgumentNullException.ThrowIfNull(argument: flags);
-
+    public static PuckRunDocument Synthesize(string backend, int exitAfterSeconds, string presentMode, string surfaceFormat, bool validateOverworld, bool overworld, string? romPath, string? romExit) {
         // The validation gate renders OFFSCREEN on a forced Vulkan host (host.backend:"directx" is rejected for it);
         // a live render hosts on the requested backend.
         var host = new HostDocument {
-            Backend = (flags.ValidateOverworld ? null : flags.Backend),
-            ExitAfterSeconds = flags.ExitAfterSeconds,
-            PresentMode = flags.PresentMode,
-            SurfaceFormat = flags.SurfaceFormat,
+            Backend = (validateOverworld ? null : backend),
+            ExitAfterSeconds = exitAfterSeconds,
+            PresentMode = presentMode,
+            SurfaceFormat = surfaceFormat,
         };
 
-        if (flags.ValidateOverworld) {
+        if (validateOverworld) {
             return Gate(host: host, gate: "overworld");
         }
 
@@ -36,8 +44,8 @@ internal static class DemoRunDocuments {
         // e.g. "0xDA22>=1" for a representative cartridge's save flag) the fourth wall breaks and the room is revealed — all active
         // players standing at their machines, the games continuing on the diegetic screens. Without --rom-exit the
         // run is a plain immersed multi-machine boot (exit by closing the window / exitAfterSeconds).
-        if (flags.RomPath is { } bootRomPath) {
-            var exit = ((flags.RomExit is { } spec) ? ParseExitSpec(spec: spec) : null);
+        if (romPath is { } bootRomPath) {
+            var exit = ((romExit is { } spec) ? ParseExitSpec(spec: spec) : null);
 
             return new PuckRunDocument {
                 Graph = new OverworldNode { Consoles = StandingMachines(romPath: bootRomPath, exit: exit), Immersed = true },

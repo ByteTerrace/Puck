@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Puck.Demo.Forge;
 using Puck.SdfVm;
 
@@ -173,18 +172,11 @@ public sealed record CreationDocument(
 /// <summary>
 /// Loads and saves <see cref="CreationDocument"/>s against the <c>./creations/</c> folder, plus the legacy
 /// <c>.avatar.json</c> import (an <see cref="AvatarDefinition"/> sniffed by its <c>Shapes</c> + <c>BoundRadius</c>
-/// members). One shared serializer options instance — <c>IncludeFields = true</c> is LOAD-BEARING: Vector3/Quaternion
-/// expose fields, not properties, and omitting it silently zeroes every transform into degenerate shapes.
+/// members). Serializes through the ONE shared <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields =
+/// true</c> is LOAD-BEARING: Vector3/Quaternion expose fields, not properties, and omitting it silently zeroes every
+/// transform into degenerate shapes.
 /// </summary>
 public static class CreationStore {
-    private static readonly JsonSerializerOptions JsonOptions = new() {
-        Converters = { new JsonStringEnumConverter() },
-        IncludeFields = true,
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
-
     /// <summary>The folder creations persist under (relative to the working directory, beside forged-avatars/).</summary>
     public static string Folder => "creations";
 
@@ -192,7 +184,7 @@ public static class CreationStore {
     /// <param name="document">The document.</param>
     /// <returns>The JSON text.</returns>
     public static string ToJson(CreationDocument document) =>
-        JsonSerializer.Serialize(options: JsonOptions, value: document);
+        JsonSerializer.Serialize(options: DocumentJsonOptions.Shared, value: document);
 
     /// <summary>Saves a document under <c>./creations/&lt;name&gt;.creation.json</c> (the name is sanitized to
     /// letters, digits, dashes, and underscores).</summary>
@@ -243,7 +235,7 @@ public static class CreationStore {
             return ImportAvatar(avatar: AvatarDefinition.FromJson(json: json), name: Path.GetFileNameWithoutExtension(path: path));
         }
 
-        return Normalize(document: JsonSerializer.Deserialize<CreationDocument>(json: json, options: JsonOptions));
+        return Normalize(document: JsonSerializer.Deserialize<CreationDocument>(json: json, options: DocumentJsonOptions.Shared));
     }
 
     /// <summary>Lists the save handles under <c>./creations/</c>.</summary>

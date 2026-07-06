@@ -35,7 +35,7 @@ public enum MovementLock {
 /// <para>
 /// The slot count is FIXED at <see cref="MaxPlayers"/> from the first frame: <see cref="DynamicTransforms"/> always
 /// returns that many entries (free slots ride a hidden position) and the screen director always emits its fixed
-/// <see cref="ScreenDirector.ViewCount"/> views, so the world compositor's first-frame buffer/viewport sizes never
+/// <see cref="ScreenLayoutDirector.ViewCount"/> views, so the world compositor's first-frame buffer/viewport sizes never
 /// change as players join and leave.
 /// </para>
 /// </summary>

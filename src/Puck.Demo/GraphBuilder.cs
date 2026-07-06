@@ -28,7 +28,7 @@ internal static class GraphBuilder {
         var capture = (capturePath ?? graph.Capture);
 
         return graph switch {
-            OverworldNode overworld => DemoRootNode.CreateOverworldRootNode(
+            OverworldNode overworld => DemoRunRegistrar.CreateOverworldRootNode(
                 capturePath: capture,
                 // Nullable-optional-field pattern: an omitted `consoles` arrives null despite the initializer.
                 consoles: (overworld.Consoles ?? []),

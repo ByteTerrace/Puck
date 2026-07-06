@@ -140,7 +140,7 @@ public sealed class WorldScene {
     /// <summary>The walk-override budget (the probe reserves exactly this many ghost outlines).</summary>
     public const int MaxWalkOverrides = 128;
     /// <summary>The placed-camera budget. Cameras are cheap DATA (a posed eye marker); the number that can produce a
-    /// live FEED at once is the far smaller <c>CameraFeedEngine.MaxCameraFeeds</c> (each feed is a render pass) — the
+    /// live FEED at once is the far smaller <c>CameraFeedPool.MaxCameraFeeds</c> (each feed is a render pass) — the
     /// wiring model is what decides which eyes get a feed, so a world may hold many eyes and light only a few.</summary>
     public const int MaxCameras = 64;
     /// <summary>The uniform-scale envelope a placement may be grown/shrunk to.</summary>
@@ -165,6 +165,8 @@ public sealed class WorldScene {
     private int m_nextWalkOverrideId;
     private int m_selectionIndex = -1;
     private bool m_dragging;
+    // TotalSegmentCount's memo — null means "dirty, recompute on next access" (see MarkProgramChanged).
+    private int? m_totalSegmentCount;
     // The two sim-config knobs the document carries beside the authored content: neither renders nor rebuilds
     // (no Revision/ProgramRevision impact) — they take effect at save/load, applied by the host's save hook.
     private string m_walkGridKind = "square";
@@ -211,14 +213,22 @@ public sealed class WorldScene {
     public string MovementLock => m_movementLock;
     /// <summary>The emission SEGMENT total across every placement (a repeat row splits into
     /// ceil(count/<see cref="MaxRepeatPerSegment"/>) segments per axis) — the quantity
-    /// <see cref="MaxPlacements"/> budgets, so the probe's instance reservation holds by construction.</summary>
+    /// <see cref="MaxPlacements"/> budgets, so the probe's instance reservation holds by construction. Memoized
+    /// (invalidated in <see cref="MarkProgramChanged"/>, the same edge every placement add/remove/repeat-change
+    /// already crosses) rather than rescanned every access.</summary>
     public int TotalSegmentCount {
         get {
+            if (m_totalSegmentCount is { } cached) {
+                return cached;
+            }
+
             var total = 0;
 
             foreach (var placement in m_placements) {
                 total += SegmentCountOf(repeat: placement.Repeat);
             }
+
+            m_totalSegmentCount = total;
 
             return total;
         }
@@ -1008,7 +1018,7 @@ public sealed class WorldScene {
     /// <summary>Lifts the scene into its <c>puck.world.v1</c> document. The walk grid is left null — baking it is
     /// the sim's job at ORCHESTRATOR integration (see <see cref="SaveCompleted"/>); a document saved here without
     /// one simply asks the loader to derive walls-only walkability until the next full save.</summary>
-    /// <returns>The document, ready for <see cref="WorldStore.Save"/>.</returns>
+    /// <returns>The document, ready for <see cref="WorldDocumentStore.Save"/>.</returns>
     public WorldDocument ToDocument() {
         var placements = new List<PlacementDocument>(capacity: m_placements.Count);
 
@@ -1113,11 +1123,11 @@ public sealed class WorldScene {
         );
     }
 
-    /// <summary>Replaces the scene's content from a NORMALIZED document (see <see cref="WorldStore.Load"/>):
+    /// <summary>Replaces the scene's content from a NORMALIZED document (see <see cref="WorldDocumentStore.Load"/>):
     /// placements/terrain/lights/overrides load verbatim (already normalized), ids resequence their counters, the
     /// selection clears. A placement whose source hash does not resolve in the store is DROPPED — bit-for-bit
     /// doctrine forbids a partially-resolved world; callers should check
-    /// <see cref="WorldStore.TryResolvePlacementSources"/> first and surface the missing list before calling this.
+    /// <see cref="WorldDocumentStore.TryResolvePlacementSources"/> first and surface the missing list before calling this.
     /// The emission budgets hold on load too (by construction): a placement that would exceed the SEGMENT budget or
     /// whose creation exceeds <see cref="MaxShapesPerStamp"/> is skipped, and the terrain/light/override lists
     /// truncate at their caps.</summary>
@@ -1321,7 +1331,7 @@ public sealed class WorldScene {
     /// installed), raising <see cref="SaveCompleted"/> on success — the integration point a host wires for the sim's
     /// walk-grid hot-reload.</summary>
     /// <param name="store">The content-addressed store to also land the canonical bytes in.</param>
-    /// <returns>The written path and content hash (see <see cref="WorldStore.Save"/>).</returns>
+    /// <returns>The written path and content hash (see <see cref="WorldDocumentStore.Save"/>).</returns>
     public (string Path, string? Hash) Save(ContentAddressedStore store) {
         var document = ToDocument();
 
@@ -1329,7 +1339,7 @@ public sealed class WorldScene {
             document = prepare(arg: document);
         }
 
-        var result = WorldStore.Save(document: document, name: m_name, store: store);
+        var result = WorldDocumentStore.Save(document: document, name: m_name, store: store);
 
         CommittedDocument = document;
         SaveCompleted?.Invoke(m_name, result.Hash);
@@ -1345,9 +1355,12 @@ public sealed class WorldScene {
     }
 
     // Every program-content change also counts as a plain revision (mirrors CreatorScene.MarkProgramChanged).
+    // Every placement add/remove/repeat-change (the only edits that can move TotalSegmentCount) routes through here,
+    // so invalidating the memo on this one edge is exact — never stale, never rescanned on an unrelated edit.
     private void MarkProgramChanged() {
         ProgramRevision++;
         Revision++;
+        m_totalSegmentCount = null;
     }
 
     // A change the host re-polls but the SDF program does NOT rebuild for (a camera eye, a wiring entry): bump the

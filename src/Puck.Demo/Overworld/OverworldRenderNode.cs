@@ -38,8 +38,8 @@ namespace Puck.Demo.Overworld;
 /// host; the binding-bar decorator is Vulkan-only). An IMMERSED start (the document's <see cref="OverworldNode.Immersed"/>,
 /// the <c>--rom</c> path) inverts the opening: each player spawns already standing at their own stand, is seated
 /// host-side (booted + taken over) the frame their slot activates, and the screen director opens in its
-/// <see cref="ScreenDirectorMode.Immersed"/> tiling — only the game panes, no room. The first machine whose
-/// fourth-wall exit condition fires breaks the wall: the director eases to <see cref="ScreenDirectorMode.Revealed"/>
+/// <see cref="ScreenLayoutDirectorMode.Immersed"/> tiling — only the game panes, no room. The first machine whose
+/// fourth-wall exit condition fires breaks the wall: the director eases to <see cref="ScreenLayoutDirectorMode.Revealed"/>
 /// (the room fullscreen, the games playing on diegetically on the stands' screens) and the run continues — the
 /// players keep their machines until they release with interact, exactly like any takeover.
 /// Headless hooks: <c>PUCK_OVERWORLD_DEBUG_PLAYERS</c> drives N scripted players apart;
@@ -55,10 +55,18 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     private readonly uint m_width;
     private readonly uint m_height;
     private readonly string? m_capturePath;
-    // PUCK_OVERWORLD_CAPTURE_FRAME=N grabs the frame after N produced frames (the machines have booted + drawn by then),
-    // not frame 0 — the plain --capture path grabs black because the emulators have not rendered yet. Inert (-1) unless
-    // the env is set. A headless verification aid, like PUCK_OVERWORLD_DEBUG_BOOT.
-    private readonly int m_captureFrame = DebugCaptureFrame();
+    // Demo:CaptureFrame=N (formerly PUCK_OVERWORLD_CAPTURE_FRAME) grabs the frame after N produced frames (the machines
+    // have booted + drawn by then), not frame 0 — the plain --capture path grabs black because the emulators have not
+    // rendered yet. Inert (-1) unless set. A headless verification aid, resolved in EnsureResources (the options need
+    // the container). The SCENARIO harness (m_scenarioActive) owns the capture slot instead — a settle-then-capture,
+    // completion-driven state machine on the frame source, driven per frame via ScenarioTick below.
+    private int m_captureFrame = -1;
+    // The scenario harness is settle-then-capture + completion-driven (see CaptureSequencer): this node no longer holds
+    // any shot schedule — it just drives the frame source's state machine each frame (ScenarioTick), arms the producer's
+    // one-shot capture on the path it returns, and requests a graceful shutdown once every shot is written
+    // (ScenarioComplete). m_scenarioActive is latched at resource build so the per-frame path stays cheap for the demo.
+    private bool m_scenarioActive;
+    private bool m_scenarioExitRequested;
     private int m_producedFrames;
     private bool m_captureFired;
     private readonly bool m_hostsOnDirectX;
@@ -75,7 +83,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     private OverworldWorld? m_world;
     private OverworldFrameSource? m_frameSource;
     private BindingBarAdapter? m_bindingBarAdapter;
-    private ScreenDirector? m_director;
+    private ScreenLayoutDirector? m_director;
     private IPlayerIntentSource? m_intentSource;
     private PagedInputBindings? m_pagedBindings;
     private IRenderNode? m_root;
@@ -431,15 +439,46 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // — composed inside the frame source so this node's coupling stays flat.
         m_frameSource?.TickBakePreview(context: in context);
 
+        // The diegetic camera feeds + the procedural face feed (a live GPU device here) — composed inside the frame
+        // source too, so this node names no feed type. Renders the previous frame's planned feeds (the diegetic lag).
+        m_frameSource?.TickFeeds(context: in context);
+
         // The tracker's headless "hear it" preview: one machine frame per rendered frame while playing, exactly like
         // a booted cabinet's own PumpAudio cadence — behind ForgeCommands so this node stays coupling-flat.
         Puck.Demo.Forge.ForgeCommands.TrackerStepPreview(services: m_serviceProvider);
 
-        // Delayed headless capture: once the machines have booted and drawn (PUCK_OVERWORLD_CAPTURE_FRAME frames in),
-        // request the one-shot readback — the plain --capture grabs frame 0 (black, pre-boot).
-        if ((m_captureFrame >= 0) && !m_captureFired && (m_capturePath is { } capturePath) && (++m_producedFrames >= m_captureFrame)) {
+        // One produced frame elapsed — advance the counter both the delayed capture and the scenario shot schedule
+        // gate on (the frame source's scenario driver advances its own matching per-frame counter, having already set
+        // this frame's verbatim pose before the render).
+        ++m_producedFrames;
+
+        // Delayed headless capture: once the machines have booted and drawn (Demo:CaptureFrame frames in), request the
+        // one-shot readback — the plain --capture grabs frame 0 (black, pre-boot). A scenario OWNS the capture slot (its
+        // settle-then-capture driver below), so the single delayed capture stands down when a scenario is active.
+        if ((m_captureFrame >= 0) && !m_scenarioActive && !m_captureFired && (m_capturePath is { } capturePath) && (m_producedFrames >= m_captureFrame)) {
             m_captureFired = true;
             m_producer?.RequestCapture(path: capturePath);
+        }
+
+        // The scenario harness (settle-then-capture, completion-driven): advance the frame source's per-angle state
+        // machine one produced frame (settle timing only — it never touches a rendered value; it also holds THIS frame's
+        // verbatim shot pose). When it returns a path, the active shot has settled — arm the producer's one-shot readback
+        // (written this same produced frame, since the frame source's CaptureFrame runs inside m_root.ProduceFrame
+        // below). Once every shot is written, request a GRACEFUL shutdown exactly once — the completion-driven exit; the
+        // scenario's ExitAfterSeconds is only a safety net that reports a loud short-count if it ever races ahead.
+        if (m_scenarioActive && (m_frameSource is { } scenarioSource)) {
+            if (scenarioSource.ScenarioTick(deltaSeconds: (float)context.DeltaSeconds) is { } armPath) {
+                m_producer?.RequestCapture(path: armPath);
+            }
+
+            if (scenarioSource.ScenarioComplete && !m_scenarioExitRequested) {
+                m_scenarioExitRequested = true;
+                Console.Error.WriteLine(value: $"[scenario] complete — {scenarioSource.ScenarioCapturedCount}/{scenarioSource.ScenarioShotCount} shots written; requesting graceful shutdown.");
+
+                if (context.Host.HoldsCapability<ITerminalControl>(capability: out var terminal)) {
+                    terminal.RequestExit();
+                }
+            }
         }
 
         // THE fourth-wall moment (immersed only): a machine's exit condition fired during a previous frame's produce.
@@ -448,7 +487,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // the owner of their machine until they release it with interact, exactly like any takeover.
         if (m_revealRequested && !m_revealed) {
             m_revealed = true;
-            m_director!.SetMode(mode: ScreenDirectorMode.Revealed);
+            m_director!.SetMode(mode: ScreenLayoutDirectorMode.Revealed);
             // Zoom OUT of the triggering machine's screen (the game the player was inside) toward the iso overview.
             m_director.BeginReveal(triggerPaneIndex: Math.Max(val1: 0, val2: m_revealTriggerConsole));
             // The reveal does NOT free anyone: players stay LOCKED to their machines (engaged since they seated in) —
@@ -516,7 +555,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // PUCK_OVERWORLD_CELL places the whole room at a far world cell (applied to X and Z) to demonstrate the
         // planet-scale coordinate path: the sim is cell-agnostic (identical local motion) and the floating-origin render
         // seam keeps it crisp. Default 0 = the origin cell.
-        var farCell = DebugSpawnCell();
+        ResolveWorldDebugSettings(farCell: out var farCell, worldLensCartType: out var worldLensCartType, debugBootTicks: out var debugBootTicks, debugPlayers: out var debugPlayers);
 
         // The cartridge TYPES a cabinet can hold, in cycle order: 0 = WORLD-LENS (a real ROM that reads a work-RAM sensor
         // page and mirrors the room it sits in — the world→machine membrane, fed the room player each frame; see
@@ -565,10 +604,8 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // default starts EMPTY and boots cabinet i when player i joins (seating-boot), so the number of lens panes
         // tracks the number of players — each player boots their OWN instance. startCartType 0 makes the seating-boot
         // insert the world-lens cart.
-        m_world = new OverworldWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u, spawnAtConsoles: m_immersed, spawnCellX: farCell, spawnCellZ: farCell, startLoaded: (m_immersed && !m_worldLens), startCartType: (m_worldLens ? DebugWorldLensCartType() : -1));
-        m_debugBootTicks = DebugBootTicks();
-
-        var debugPlayers = DebugPlayerCount();
+        m_world = new OverworldWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u, spawnAtConsoles: m_immersed, spawnCellX: farCell, spawnCellZ: farCell, startLoaded: (m_immersed && !m_worldLens), startCartType: (m_worldLens ? worldLensCartType : -1));
+        m_debugBootTicks = debugBootTicks;
 
         if (m_consoles.Count > 0) {
             // Console mode: ONE permanent room player from the first frame (the room is never empty), driven through
@@ -639,7 +676,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         var controlsSource = ((m_consoles.Count > 0) ? (Func<int, JoypadButtons>)ConsoleButtons : null);
         // An immersed run OPENS in the game-pane tiling (never animating there from a misleading room frame); a
         // standard run keeps the staged-boot layouts.
-        var director = new ScreenDirector(initialMode: (m_immersed ? ScreenDirectorMode.Immersed : ScreenDirectorMode.Standard));
+        var director = new ScreenLayoutDirector(initialMode: (m_immersed ? ScreenLayoutDirectorMode.Immersed : ScreenLayoutDirectorMode.Standard));
 
         if (m_immersed && !m_worldLens && (m_consoles.Count > 0)) {
             // In the --rom immersed tiling a booted console's pane shows only while it is OWNED, so a pad eviction's
@@ -664,6 +701,12 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // frame source's authoring pool. Presentation only — the simulation never learns creator mode exists.
         m_frameSource = frameSource;
 
+        // The headless capture aids + the --scenario driver compose on the frame source (this node is at its coupling
+        // ceiling, so the scenario types live there). Resolve the delayed one-shot capture frame and read the scenario
+        // shot schedule — both are needed BEFORE the render builds (the spec's CapturePath suppresses the frame-0
+        // grab when either is armed). Kept in a helper so this method never names the config-settings type.
+        InstallHeadlessCapture(frameSource: frameSource);
+
         // NOTE: the driving player's avatar deliberately STAYS at the cabinet it took over (its frozen sim body), so the
         // break-out camera frames "you at your machine, playing" — the moving sprite lives on the diegetic screen, not
         // the room floor. (The machine→world game-tile readback still exists — WorldLensGameTile — if an avatar-follow
@@ -687,9 +730,9 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 Height: m_height,
                 Width: m_width
             ) {
-                // The frame-0 capture is suppressed when a delayed capture is armed (PUCK_OVERWORLD_CAPTURE_FRAME), so only
-                // the post-boot frame is written to the path.
-                CapturePath = ((m_captureFrame >= 0) ? null : m_capturePath),
+                // The frame-0 capture is suppressed when a delayed capture (Demo:CaptureFrame) or a scenario (its
+                // settle-then-capture driver) owns the capture slot, so only the post-boot / per-shot frames are written.
+                CapturePath = (((m_captureFrame >= 0) || m_scenarioActive) ? null : m_capturePath),
                 // NO compositor children: the machines are DECOUPLED from the viewport slots (this node produces them
                 // itself in ProduceMachines, feeding their framebuffers to the DIEGETIC screens), so all five slots are
                 // SDF-backed — slot 0 the room, slots 1..4 per-cabinet cameras. That is what lets a pane be a 3D shot of
@@ -720,18 +763,45 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // The live bake preview plugs into the frame source's easel seam (the source owns the service; see
         // InstallBakePreview for why the composition lives there).
         frameSource.InstallBakePreview(services: m_serviceProvider);
+        // The diegetic-feed director (the camera-feed pool + procedural face feed + named-feed registry) composes on
+        // the frame source too — the render node stays coupling-flat; it only drives the render-thread tick below.
+        frameSource.InstallFeeds(hostsOnDirectX: m_hostsOnDirectX, services: m_serviceProvider);
         ConnectLinkCable(frameSource: frameSource);
         ApplyCreatorStartupHooks(frameSource: frameSource);
     }
 
-    // Headless authoring screenshot aids: PUCK_OVERWORLD_CREATOR=1 opens straight into creator mode, and
-    // PUCK_CREATOR_LOAD=<name-or-path> additionally loads a saved creation into the scene first (a headless proof of
-    // the composition + persistence path).
+    // The world-setup headless-aid reads (spawn cell, world-lens boot cart, scripted boot ticks, scripted player
+    // count) resolved through the config settings — kept in one helper so EnsureResources, at its class-coupling
+    // ceiling, never names the settings type. Formerly the PUCK_OVERWORLD_CELL / _CART / _DEBUG_BOOT / _DEBUG_PLAYERS
+    // environment reads.
+    private void ResolveWorldDebugSettings(out long farCell, out int worldLensCartType, out ulong[] debugBootTicks, out int debugPlayers) {
+        farCell = Puck.Demo.Configuration.DemoOptionsAccessor.SpawnCell(services: m_serviceProvider);
+        worldLensCartType = Puck.Demo.Configuration.DemoOptionsAccessor.WorldLensCartType(services: m_serviceProvider, cartTypeCount: OverworldWorld.CartTypeCount);
+        debugBootTicks = Puck.Demo.Configuration.DemoOptionsAccessor.BootTicks(services: m_serviceProvider);
+        debugPlayers = Puck.Demo.Configuration.DemoOptionsAccessor.DebugPlayerCount(services: m_serviceProvider, maxPlayers: OverworldWorld.MaxPlayers);
+    }
+
+    // Composes the scenario capture driver on the frame source and reads back its shot schedule + the delayed one-shot
+    // capture frame — kept in one helper so EnsureResources never names the scenario / settings types.
+    private void InstallHeadlessCapture(OverworldFrameSource frameSource) {
+        frameSource.InstallScenario(services: m_serviceProvider);
+        m_captureFrame = Puck.Demo.Configuration.DemoOptionsAccessor.CaptureFrame(services: m_serviceProvider);
+        // The scenario driver lives on the frame source (this node stays coupling-flat) — just latch whether one is
+        // active; the per-frame ProduceFrame path drives it through ScenarioTick / ScenarioComplete.
+        m_scenarioActive = frameSource.ScenarioActive;
+    }
+
+    // Headless authoring screenshot aids: an active --scenario (or Demo:CreatorLoad, formerly PUCK_CREATOR_LOAD) loads
+    // a saved creation into the scene and opens straight into creator mode; Demo:Creator (formerly
+    // PUCK_OVERWORLD_CREATOR=1) opens creator mode empty. A scenario's creation wins over the standalone toggle.
     private void ApplyCreatorStartupHooks(OverworldFrameSource frameSource) {
-        if (Environment.GetEnvironmentVariable(variable: "PUCK_CREATOR_LOAD") is { Length: > 0 } creationPath) {
+        var scenarioCreation = Puck.Demo.Configuration.DemoOptionsAccessor.ScenarioCreation(services: m_serviceProvider);
+        var creationPath = (scenarioCreation ?? Puck.Demo.Configuration.DemoOptionsAccessor.CreatorLoad(services: m_serviceProvider));
+
+        if (creationPath is { Length: > 0 }) {
             Console.Error.WriteLine(value: frameSource.LoadCreationFile(nameOrPath: creationPath));
             SetCreatorMode(active: true);
-        } else if (DebugStartInCreator()) {
+        } else if (Puck.Demo.Configuration.DemoOptionsAccessor.StartInCreator(services: m_serviceProvider) || frameSource.ScenarioActive) {
             SetCreatorMode(active: true);
         }
     }
@@ -925,6 +995,14 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // headroom — this node never knows or cares who (if anyone) claims them, it only asks the frame source's
     // ResolveDynamicSource seam what a claimed slot's current source is (see RegisterScreenClaimant's remarks: a
     // future caller wires a new claimant there without ever touching this method).
+    //
+    // W-SEAM decision: cabinets 0-3 deliberately DON'T route their source/light through RegisterScreenClaimant — the
+    // claimant seam is the right shape for a claimant OUTSIDE the frame source, but a cabinet's framebuffer view lives
+    // on THIS node (GamingBrickChildNode.NativeImageViewHandle), so moving it onto the claimant seam would only shove
+    // the very same Func<nint> closure through a different door (this node still owns the brick, still closes over it,
+    // and now also has to register/withdraw a claimant as cabinets boot/eject) — pure relocation, not decoupling. The
+    // cabinet already has a clean Anchored ledger CLAIM for slot arbitration; its SOURCE stays a direct provider. Only
+    // the headroom slots ride the full claimant seam, because their content genuinely comes from elsewhere.
     private IReadOnlyDictionary<int, Func<nint>>? BuildScreenSources() {
         var world = m_world!;
         var sources = new Dictionary<int, Func<nint>>(capacity: (m_bricks.Length + 5));
@@ -933,9 +1011,15 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             var brick = m_bricks[index];
             var consoleIndex = index;
 
-            sources[consoleIndex] = () => ((world.IsBooted(consoleIndex: consoleIndex) && brick.IsAssigned)
-                ? brick.NativeImageViewHandle
-                : 0);
+            // A world.wire that routed a camera/named feed onto THIS cabinet's screen wins over the booted brick — the
+            // frame source's per-slot override returns the wired feed handle (0 = nothing wired, keep the brick). This
+            // is how a creation camera's feed (the fish's lure) shows on a diegetic cabinet slab. Primitive-typed, so
+            // this node names no feed type.
+            sources[consoleIndex] = () => ((m_frameSource?.ResolveWiredFeedOverride(screenIndex: consoleIndex) is { } wired and not 0)
+                ? wired
+                : ((world.IsBooted(consoleIndex: consoleIndex) && brick.IsAssigned)
+                    ? brick.NativeImageViewHandle
+                    : 0));
         }
 
         // The preview easel's slot: while creator mode is up its slab samples the bake preview INSTEAD of the
@@ -1876,21 +1960,6 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         return buttons;
     }
 
-    private static int DebugPlayerCount() {
-        return ((int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_OVERWORLD_DEBUG_PLAYERS"), out var count))
-            ? Math.Clamp(count, 0, OverworldWorld.MaxPlayers)
-            : 0);
-    }
-    private static long DebugSpawnCell() {
-        return (long.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_OVERWORLD_CELL"), out var cell) ? cell : 0L);
-    }
-    private static int DebugCaptureFrame() {
-        return (int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_OVERWORLD_CAPTURE_FRAME"), out var frame) ? frame : -1);
-    }
-    // PUCK_OVERWORLD_CREATOR=1 enters creator mode at startup (a headless aid for screenshotting the authoring view).
-    private static bool DebugStartInCreator() {
-        return string.Equals(a: Environment.GetEnvironmentVariable(variable: "PUCK_OVERWORLD_CREATOR"), b: "1", comparisonType: StringComparison.Ordinal);
-    }
     // The diegetic link cable's live pair reader (OverworldFrameSource.LinkedPairSource): the FIRST currently-linked
     // pair among this node's own bricks (host-side ownership bookkeeping — the sim's state hash never sees it),
     // or PUCK_LINK_CABLE_PROBE=1's fake (0,1) pair for a headless capture proof when the debug Link verb (a
@@ -1921,7 +1990,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             }
         }
 
-        if (DebugLinkCableProbe() && (m_bricks.Length > 1)) {
+        if (Puck.Demo.Configuration.DemoOptionsAccessor.LinkCableProbe(services: m_serviceProvider) && (m_bricks.Length > 1)) {
             m_linkedCableA = 0;
             m_linkedCableB = 1;
         }
@@ -1936,38 +2005,6 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
         return m_linkedCableB;
     }
-    // PUCK_LINK_CABLE_PROBE=1: presentation-debug-only — fakes a linked (0,1) pair so the sagging cable can be
-    // captured headlessly when the real Link verb needs a controller. Never gates anything; never touches sim state.
-    private static bool DebugLinkCableProbe() {
-        return string.Equals(a: Environment.GetEnvironmentVariable(variable: "PUCK_LINK_CABLE_PROBE"), b: "1", comparisonType: StringComparison.Ordinal);
-    }
-    // PUCK_OVERWORLD_CART overrides the world-lens seating boot's cart type (default 0 = the world-lens membrane); e.g.
-    // set it to the AVATAR type (3) to boot straight into the player's forged avatar cabinet for a headless capture.
-    private static int DebugWorldLensCartType() {
-        return ((int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_OVERWORLD_CART"), out var type) && (type >= 0) && (type < OverworldWorld.CartTypeCount)) ? type : 0);
-    }
-    private static ulong[] DebugBootTicks() {
-        var raw = Environment.GetEnvironmentVariable(variable: "PUCK_OVERWORLD_DEBUG_BOOT");
-
-        if (string.IsNullOrWhiteSpace(value: raw)) {
-            return [];
-        }
-
-        var parts = raw.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        var ticks = new List<ulong>(capacity: parts.Length);
-
-        foreach (var part in parts) {
-            if (ulong.TryParse(s: part, result: out var tick)) {
-                ticks.Add(item: tick);
-            }
-        }
-
-        // The schedule boots console 0, 1, 2… in tick order, so it must be sorted to apply in one forward pass.
-        ticks.Sort();
-
-        return [.. ticks];
-    }
-
     // Each debug player walks toward its corner so the swarm spreads out (bare-room capture aid).
     private static PlayerIntent DebugScript(ulong tick, int slot) {
         return new PlayerIntent(
@@ -2004,6 +2041,9 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     public void Dispose() {
         // The bake preview's persistent rasterizer/upload live on the frame source; tear them down with the node.
         m_frameSource?.DisposeBakePreview();
+        // The diegetic-feed director's GPU resources (the face-feed upload + the camera-feed pool's engines) live on
+        // the frame source too — tear them down with the node so no feed engine leaks past the device.
+        m_frameSource?.DisposeFeeds();
         // The tracker preview's headless machine + host audio stream (a leak of either is a silent, unkillable
         // background process) — behind ForgeCommands so this node stays coupling-flat.
         Puck.Demo.Forge.ForgeCommands.TrackerDispose();

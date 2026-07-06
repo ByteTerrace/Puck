@@ -32,9 +32,9 @@ internal static class GamepadDemoRegistration {
         // The local player's binding-page profile: persisted JSON (seeded from the built-in default on first
         // run) compiled into the paged resolver the deterministic input path folds signals through.
         PuckStorageServiceRegistration.AddCore(services: services);
-        services.AddSingleton<BindingProfileStore>();
+        services.AddSingleton<BindingProfileDocumentStore>();
         services.AddSingleton(implementationFactory: static sp => {
-            var store = sp.GetRequiredService<BindingProfileStore>();
+            var store = sp.GetRequiredService<BindingProfileDocumentStore>();
             var @default = BindingProfileDocuments.BuildDefault();
 
             try {
@@ -73,21 +73,21 @@ internal static class GamepadDemoRegistration {
         if (registerGlobalSource) {
             services.AddSingleton<ICommandSource>(implementationFactory: static sp => new GamepadInputSource(
                 bindings: new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase) {
-                    [InputSources.Gamepad.ButtonSouth] = [new(Command: "gamepad-a")],
-                    [InputSources.Gamepad.ButtonEast] = [new(Command: "gamepad-rumble")],
-                    [InputSources.Gamepad.ButtonWest] = [new(Command: "gamepad-trigger-rumble")],
-                    [InputSources.Gamepad.ButtonNorth] = [new(Command: "gamepad-led")],
-                    [InputSources.Gamepad.Start] = [new(Command: "gamepad-start")],
-                    [InputSources.Gamepad.DpadUp] = [new(Command: "gamepad-trigger-effect")],
-                    [InputSources.Gamepad.DpadDown] = [new(Command: "gamepad-trigger-effect-off")],
-                    [InputSources.Gamepad.LeftShoulder] = [new(Command: "gamepad-trigger-schedule")],
-                    [InputSources.Gamepad.Touchpad] = [new(Command: "gamepad-touchpad")],
-                    [InputSources.Gamepad.Mute] = [new(Command: "gamepad-mute")],
-                    [InputSources.Gamepad.Touchpad0] = [new(Command: "gamepad-touch0")],
-                    [InputSources.Gamepad.Touchpad1] = [new(Command: "gamepad-touch1")],
-                    [InputSources.Gamepad.LeftStick] = [new(Command: "gamepad-move")],
-                    [InputSources.Gamepad.Gyro] = [new(Command: "gamepad-gyro")],
-                    [InputSources.Gamepad.Orientation] = [new(Command: "gamepad-orientation")],
+                    [InputSources.Gamepad.ButtonSouth] = [new(Command: "gamepad.a")],
+                    [InputSources.Gamepad.ButtonEast] = [new(Command: "gamepad.rumble")],
+                    [InputSources.Gamepad.ButtonWest] = [new(Command: "gamepad.trigger-rumble")],
+                    [InputSources.Gamepad.ButtonNorth] = [new(Command: "gamepad.led")],
+                    [InputSources.Gamepad.Start] = [new(Command: "gamepad.start")],
+                    [InputSources.Gamepad.DpadUp] = [new(Command: "gamepad.trigger-effect")],
+                    [InputSources.Gamepad.DpadDown] = [new(Command: "gamepad.trigger-effect-off")],
+                    [InputSources.Gamepad.LeftShoulder] = [new(Command: "gamepad.trigger-schedule")],
+                    [InputSources.Gamepad.Touchpad] = [new(Command: "gamepad.touchpad")],
+                    [InputSources.Gamepad.Mute] = [new(Command: "gamepad.mute")],
+                    [InputSources.Gamepad.Touchpad0] = [new(Command: "gamepad.touch0")],
+                    [InputSources.Gamepad.Touchpad1] = [new(Command: "gamepad.touch1")],
+                    [InputSources.Gamepad.LeftStick] = [new(Command: "gamepad.move")],
+                    [InputSources.Gamepad.Gyro] = [new(Command: "gamepad.gyro")],
+                    [InputSources.Gamepad.Orientation] = [new(Command: "gamepad.orientation")],
                 },
                 diagnostics: static message => Console.Error.WriteLine(value: message),
                 isActiveFor: sp.GetRequiredService<IInputFocus>().IsActiveFor,

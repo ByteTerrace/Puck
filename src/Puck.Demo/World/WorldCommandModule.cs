@@ -67,24 +67,20 @@ internal sealed class WorldCommandModule(IRenderNode rootNode) : ICommandModule 
         );
     }
 
-    // Wraps a scene-reading handler with the availability guard (the world sculptor's host must be the active root).
-    private Func<CommandContext, CommandResult> WithScene(Func<WorldScene, Puck.Assets.ContentAddressedStore, string> handler) {
-        return _ => {
-            if (Scene is not { } scene) {
-                return new CommandResult("[world: unavailable — the overworld is not the active root]");
-            }
+    // Wraps a scene-reading handler with the shared availability guard (CommandAvailability). WorldScene has no
+    // on/off mode of its own (unlike CreatorScene/TrackerScene) — the world sculptor is live for the whole run once
+    // the root resolves — so only the host gate applies; no isActive/inactiveMessage is given.
+    private Func<CommandContext, CommandResult> WithScene(Func<WorldScene, Puck.Assets.ContentAddressedStore, string> handler) =>
+        CommandAvailability.WithTarget<WorldScene>(
+            getTarget: () => Scene,
+            handler: scene => handler(arg1: scene, arg2: WorldCommands.OpenStore()),
+            unavailableMessage: "[world: unavailable — the overworld is not the active root]"
+        );
 
-            return new CommandResult(handler(arg1: scene, arg2: WorldCommands.OpenStore()));
-        };
-    }
-
-    private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<WorldScene, Puck.Assets.ContentAddressedStore, string[], string> handler) {
-        return (_, args) => {
-            if (Scene is not { } scene) {
-                return new CommandResult("[world: unavailable — the overworld is not the active root]");
-            }
-
-            return new CommandResult(handler(arg1: scene, arg2: WorldCommands.OpenStore(), arg3: args));
-        };
-    }
+    private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<WorldScene, Puck.Assets.ContentAddressedStore, string[], string> handler) =>
+        CommandAvailability.WithTargetArgs<WorldScene>(
+            getTarget: () => Scene,
+            handler: (scene, args) => handler(arg1: scene, arg2: WorldCommands.OpenStore(), arg3: args),
+            unavailableMessage: "[world: unavailable — the overworld is not the active root]"
+        );
 }

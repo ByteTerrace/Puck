@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Puck.Assets;
 
 namespace Puck.Demo.Forge;
@@ -62,19 +61,12 @@ public sealed record AudioDocument(
 }
 
 /// <summary>
-/// Loads and saves <see cref="AudioDocument"/>s as indented camel-case JSON — the same
-/// <c>IncludeFields</c>-free, enum-string, case-insensitive style as <see cref="Creator.CreationStore"/> (this
+/// Loads and saves <see cref="AudioDocument"/>s as indented camel-case JSON through the ONE shared
+/// <see cref="DocumentJsonOptions.Shared"/> instance — the same style as <see cref="Creator.CreationStore"/> (this
 /// document carries no <c>Vector3</c>/<c>Quaternion</c> fields, so <c>IncludeFields</c> is not load-bearing here, but
 /// the shared options instance keeps every document family serializing identically).
 /// </summary>
 public static class AudioDocumentStore {
-    private static readonly JsonSerializerOptions JsonOptions = new() {
-        Converters = { new JsonStringEnumConverter() },
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
-
     /// <summary>The folder tracker documents persist under (relative to the working directory, the audio-document
     /// sibling of <see cref="Creator.CreationStore.Folder"/>).</summary>
     public static string Folder => "tunes";
@@ -83,7 +75,7 @@ public static class AudioDocumentStore {
     /// <param name="document">The document.</param>
     /// <returns>The JSON text.</returns>
     public static string ToJson(AudioDocument document) =>
-        JsonSerializer.Serialize(options: JsonOptions, value: document);
+        JsonSerializer.Serialize(options: DocumentJsonOptions.Shared, value: document);
 
     /// <summary>Builds a fresh blank document (one silent pattern, default tempo) through the SAME normalize path
     /// every loaded document takes — never a hand-built record — so a brand-new working document in the tracker can
@@ -194,7 +186,7 @@ public static class AudioDocumentStore {
         }
 
         var json = File.ReadAllText(path: path);
-        var document = (JsonSerializer.Deserialize<AudioDocument>(json: json, options: JsonOptions)
+        var document = (JsonSerializer.Deserialize<AudioDocument>(json: json, options: DocumentJsonOptions.Shared)
             ?? throw new InvalidDataException(message: $"'{path}' deserialized to null."));
 
         if ((document.Schema is { Length: > 0 } schema) && !string.Equals(a: schema, b: AudioDocument.CurrentSchema, comparisonType: StringComparison.Ordinal)) {

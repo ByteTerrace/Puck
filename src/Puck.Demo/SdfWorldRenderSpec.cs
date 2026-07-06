@@ -51,4 +51,14 @@ internal sealed record SdfWorldRenderSpec(
     // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
     // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.
+
+    /// <summary>The resolved <c>PUCK_TIMING</c> toggle (per-pass GPU-ms timestamps), or <see langword="null"/> to let
+    /// <see cref="SdfEngineNode"/> fall back to the environment read. The builder passes this straight through, so a
+    /// caller that has already resolved <see cref="HostSettings.Timing"/> from the run document threads it here
+    /// instead of re-pushing it into the process environment.</summary>
+    public bool? Timing { get; init; }
+    /// <summary>The resolved <c>PUCK_RAY_QUERY</c> toggle, or <see langword="null"/> to let <see cref="SdfEngineNode"/>
+    /// fall back to the environment/default. Parallel to <see cref="Timing"/>; see
+    /// <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults it yet.</summary>
+    public bool? RayQuery { get; init; }
 }

@@ -951,7 +951,7 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
 
         // The GENUINE swap: with a recipe to flip the running game's code path, retarget the emulated hardware and poke
         // its detection flag; the game then re-renders natively in the new mode. No recipe → a bare presentation change.
-        var pokes = ((m_cartridge is { } cartridge) ? GamingBrickModeRecipes.PokesFor(title: cartridge.Header.Title, target: model) : []);
+        var pokes = ((m_cartridge is { } cartridge) ? GamingBrickModeTables.PokesFor(title: cartridge.Header.Title, target: model) : []);
         var realSwap = ((m_machine is not null) && (pokes.Length > 0));
 
         if (realSwap) {

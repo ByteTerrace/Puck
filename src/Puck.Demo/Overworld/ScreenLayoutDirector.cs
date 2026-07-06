@@ -5,9 +5,9 @@ using Puck.SdfVm;
 
 namespace Puck.Demo.Overworld;
 
-/// <summary>Which family of layout keyframes the <see cref="ScreenDirector"/>'s staged transitions walk. PURE
+/// <summary>Which family of layout keyframes the <see cref="ScreenLayoutDirector"/>'s staged transitions walk. PURE
 /// PRESENTATION — a mode switch retargets the eased rects, never the simulation.</summary>
-public enum ScreenDirectorMode {
+public enum ScreenLayoutDirectorMode {
     /// <summary>The classic overworld: the room shrinks through the staged layouts as consoles boot (fullscreen →
     /// side-by-side → big-top/two-bottom → quad quarter → top half over four quarter panes).</summary>
     Standard,
@@ -26,11 +26,11 @@ public enum ScreenDirectorMode {
 /// compositor's first-frame viewport count never changes, and hosted children keep stepping — a zero-area pane still
 /// produces at 1px): view 0 is the ROOM — a shared chase framing of the active players (an overview when the room is
 /// empty) — and views 1..4 are the console PANES, one per console index, zero-area until that console boots. The
-/// layout keyframes come from the current <see cref="ScreenDirectorMode"/>; in every mode each rect eases from its
+/// layout keyframes come from the current <see cref="ScreenLayoutDirectorMode"/>; in every mode each rect eases from its
 /// previous place (a newly-lit pane grows out of its target's center; a departing rect collapses in place), so every
 /// boot — and the fourth-wall reveal itself — is a smooth screen transition.
 /// </summary>
-public sealed class ScreenDirector {
+public sealed class ScreenLayoutDirector {
     /// <summary>The fixed per-frame view count: the room view plus one pane per console the room can seat — exactly
     /// the world compositor's viewport capacity.</summary>
     public const int ViewCount = SdfWorldEngine.MaxViewports;
@@ -75,8 +75,8 @@ public sealed class ScreenDirector {
     // compares against — both reused, no per-frame allocation.
     private readonly List<int> m_panes = new(capacity: (ViewCount - 1));
     private readonly int[] m_lastPanes = new int[ViewCount - 1];
-    private ScreenDirectorMode m_mode;
-    private ScreenDirectorMode m_lastMode;
+    private ScreenLayoutDirectorMode m_mode;
+    private ScreenLayoutDirectorMode m_lastMode;
     // CREATOR VIEW: an override the host raises while the player edits their avatar. It eases the ROOM to fullscreen and
     // hides every game pane REGARDLESS of the underlying mode (so creator works even from an immersed game filling the
     // screen) — the "step out to the workbench" view. The underlying mode is untouched, so lowering it restores the game.
@@ -105,17 +105,17 @@ public sealed class ScreenDirector {
     // The full-frame aspect (width / height) of the most recent Compose — the reveal-from framing uses it to cover.
     private float m_frameAspect = (16f / 10f);
 
-    /// <summary>Initializes a new instance of the <see cref="ScreenDirector"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ScreenLayoutDirector"/> class.</summary>
     /// <param name="initialMode">The mode the first composed layout snaps to (an IMMERSED session must open inside the
     /// machines, never animate there from a misleading fullscreen room frame).</param>
-    public ScreenDirector(ScreenDirectorMode initialMode = ScreenDirectorMode.Standard) {
+    public ScreenLayoutDirector(ScreenLayoutDirectorMode initialMode = ScreenLayoutDirectorMode.Standard) {
         m_mode = initialMode;
         m_lastMode = initialMode;
     }
 
     /// <summary>Raises/lowers the CREATOR VIEW: while set, the room eases to fullscreen and all game panes hide, so a
     /// player can edit their avatar even when a game was filling the screen. Presentation-only; the underlying
-    /// <see cref="ScreenDirectorMode"/> is preserved and restored when cleared.</summary>
+    /// <see cref="ScreenLayoutDirectorMode"/> is preserved and restored when cleared.</summary>
     public bool CreatorView {
         get => m_creatorView;
         set => m_creatorView = value;
@@ -145,17 +145,25 @@ public sealed class ScreenDirector {
     /// for sprite intent. Eased both ways; null (or a null result) keeps the chase framing. Presentation-only.</summary>
     public Func<(Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)?>? CreatorCameraSource { get; set; }
 
+    /// <summary>Gets or sets the SCENARIO camera pose — the deterministic-capture override the <c>--scenario</c>
+    /// harness supplies per shot. UNLIKE <see cref="CreatorCameraSource"/> (which the director EASES toward on the
+    /// wall-clock delta, so two runs never match bit-for-bit), this pose is applied to the room view VERBATIM — no
+    /// smoothing, no chase — so the framing is fully settled the instant it is set and the same shot renders
+    /// byte-identically every run. Null leaves the room on its normal (chase / creator / world-sculpt) camera.
+    /// Presentation-only; never fed back into the simulation.</summary>
+    public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? ScenarioCameraPose { get; set; }
+
     /// <summary>Switches the layout mode. The next <see cref="Compose"/> eases every rect from its live place into the
     /// new mode's keyframes through the same transition machinery a boot uses — the REVEAL is the panes collapsing in
     /// place while the room grows out of the screen center.</summary>
     /// <param name="mode">The mode to walk the layout toward.</param>
-    public void SetMode(ScreenDirectorMode mode) {
+    public void SetMode(ScreenLayoutDirectorMode mode) {
         m_mode = mode;
     }
 
     /// <summary>Starts the reveal zoom: the room camera eases FROM the triggering machine's native-screen framing (the
     /// player was "inside" that game) OUT to the centered iso overview over one transition. Call together with
-    /// <see cref="SetMode"/>(<see cref="ScreenDirectorMode.Revealed"/>). Presentation-only.</summary>
+    /// <see cref="SetMode"/>(<see cref="ScreenLayoutDirectorMode.Revealed"/>). Presentation-only.</summary>
     /// <param name="triggerPaneIndex">The console index whose fourth-wall condition fired (the pane to zoom out of).</param>
     public void BeginReveal(int triggerPaneIndex) {
         m_revealActive = true;
@@ -270,8 +278,8 @@ public sealed class ScreenDirector {
             // REVEALED shows a pane only for a BROKEN-OUT (driven) console — the room stays the main view, the driven
             // panes tile around it. IMMERSED filters through its ownership read. STANDARD shows every booted console.
             var include = m_mode switch {
-                ScreenDirectorMode.Revealed => (BreakoutPaneVisible?.Invoke(consoleIndex) ?? false),
-                ScreenDirectorMode.Immersed => (ImmersedPaneVisible?.Invoke(consoleIndex) ?? true),
+                ScreenLayoutDirectorMode.Revealed => (BreakoutPaneVisible?.Invoke(consoleIndex) ?? false),
+                ScreenLayoutDirectorMode.Immersed => (ImmersedPaneVisible?.Invoke(consoleIndex) ?? true),
                 _ => true,
             };
 
@@ -314,16 +322,16 @@ public sealed class ScreenDirector {
         }
 
         m_target[0] = m_mode switch {
-            ScreenDirectorMode.Immersed => Hidden,
-            ScreenDirectorMode.Revealed => RevealedRoomRect(count: count),
+            ScreenLayoutDirectorMode.Immersed => Hidden,
+            ScreenLayoutDirectorMode.Revealed => RevealedRoomRect(count: count),
             _ => StandardRoomRect(count: count),
         };
 
         for (var pane = 0; (pane < count); pane++) {
             m_target[1 + m_panes[pane]] = m_mode switch {
                 // Immersed panes cover the whole frame; a thin interior gap divides neighbours without an outer bezel.
-                ScreenDirectorMode.Immersed => WithInteriorGaps(rect: ImmersedPaneRect(count: count, pane: pane)),
-                ScreenDirectorMode.Revealed => WithInteriorGaps(rect: RevealedPaneRect(count: count, pane: pane)),
+                ScreenLayoutDirectorMode.Immersed => WithInteriorGaps(rect: ImmersedPaneRect(count: count, pane: pane)),
+                ScreenLayoutDirectorMode.Revealed => WithInteriorGaps(rect: RevealedPaneRect(count: count, pane: pane)),
                 _ => PaneRect(count: count, pane: pane),
             };
         }
@@ -403,6 +411,12 @@ public sealed class ScreenDirector {
     // spread grows), an overview when the room is empty. Slot 0 always uses it; the pane cameras blend FROM it toward
     // their cabinet screens.
     private (Vector3 Eye, Vector3 Target) RoomEyeTarget(IReadOnlyList<Vector3> activePositions, float deltaSeconds) {
+        // The scenario harness's deterministic shot pose (when set) wins outright and applies VERBATIM — no chase, no
+        // ease — so a shot renders identically every run regardless of the wall-clock frame delta.
+        if (ScenarioCameraPose is { } pose) {
+            return ScenarioEyeTarget(pose: pose);
+        }
+
         if (activePositions.Count == 0) {
             return (new Vector3(0f, 12f, 16f), Vector3.Zero);
         }
@@ -436,7 +450,7 @@ public sealed class ScreenDirector {
 
         // REVEALED: a fixed, centered isometric-ish overview so every player can roam — the room is the primary slice.
         // On the reveal itself the camera eases OUT of the triggering machine's native-screen framing into this.
-        if (m_mode == ScreenDirectorMode.Revealed) {
+        if (m_mode == ScreenLayoutDirectorMode.Revealed) {
             var isoEye = (m_smoothCentroid + IsoEyeOffset);
             var isoTarget = (m_smoothCentroid + IsoTargetOffset);
 
@@ -494,6 +508,21 @@ public sealed class ScreenDirector {
         return (eye, target);
     }
 
+    // The scenario shot's eye/target, derived VERBATIM from the pose (same orbit vs. head-on math the creator
+    // workpiece camera uses, minus the easing): object intent orbits the target by yaw/pitch/distance; sprite intent
+    // locks head-on (+Z, zero pitch) so the authored silhouette is exactly what a bake would rasterize.
+    private static (Vector3 Eye, Vector3 Target) ScenarioEyeTarget((Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite) pose) {
+        var eye = (pose.Sprite
+            ? (pose.Target + new Vector3(0f, 0f, pose.Distance))
+            : (pose.Target + (new Vector3(
+                (MathF.Sin(x: pose.Yaw) * MathF.Cos(x: pose.Pitch)),
+                MathF.Sin(x: pose.Pitch),
+                (MathF.Cos(x: pose.Yaw) * MathF.Cos(x: pose.Pitch))
+            ) * pose.Distance)));
+
+        return (eye, pose.Target);
+    }
+
     // The reveal's FROM framing: the triggering machine's native-screen camera (the shot the player was "inside").
     private (Vector3 Eye, Vector3 Target) RevealFromCamera(Vector3 fallbackEye, Vector3 fallbackTarget) {
         if (PaneCameraSource?.Invoke(m_revealPane) is { } request) {
@@ -519,8 +548,8 @@ public sealed class ScreenDirector {
     /// UNLIT (0) while immersed so the letterbox margins around a filled screen render BLACK, and eases up to fully lit
     /// (1) as the reveal pulls the camera out into the room. Standard mode is always lit. Presentation-only.</summary>
     public float RoomLightFactor => (m_creatorView ? 1f : m_mode switch {
-        ScreenDirectorMode.Immersed => 0f,
-        ScreenDirectorMode.Revealed => (m_revealActive ? SmoothStep(t: m_revealBlend) : 1f),
+        ScreenLayoutDirectorMode.Immersed => 0f,
+        ScreenLayoutDirectorMode.Revealed => (m_revealActive ? SmoothStep(t: m_revealBlend) : 1f),
         _ => 1f,
     });
 

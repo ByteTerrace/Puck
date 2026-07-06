@@ -2470,5 +2470,14 @@
     }
   ],
   "cameras": null,
-  "behavior": null
+  "behavior": {
+    "locomotion": "walk",
+    "faces": [
+      {
+        "name": "face",
+        "shapeId": 10,
+        "defaultSource": "named:emotes"
+      }
+    ]
+  }
 }

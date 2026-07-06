@@ -183,7 +183,33 @@ internal static class FlagshipLanternFish {
         ResetTimelineCursor(scene);
         RestoreChainGoal(scene, "spine", restGoal);
 
-        return scene.ToDocument();
+        // THE LURE CAMERA + BEHAVIOR MANIFEST (WS-12): the signature upgrade over the reference — the bulb carries a
+        // live camera EYE. It is authored as DATA on the returned document (the recipe's own vocabulary stops at the
+        // scene verbs; a camera/behavior manifest is document data ToDocument does not carry, so it is a `with` here,
+        // exactly as this recipe's remarks anticipated). The eye rides the lure BULB shape (so it swings with the lure
+        // through the swim cycle), tilted down and forward so its feed frames the room ahead of and below the lure —
+        // "the room as seen from the lure". Its feed is NAMED "lure" (pure content string), wirable onto any screen.
+        // The behavior manifest records the fact this creature SWIMS (so a companion loads it hover-bobbing without the
+        // console swim token). No face is declared — the fish is the camera operator, not a screen-faced creature.
+        return scene.ToDocument() with {
+            Behavior = new CreationBehaviorDocument(Faces: null, Locomotion: "swim"),
+            Cameras = [
+                new CreationCameraDocument(
+                    // The lure arcs FORWARD over the head (its bulb sits ahead of and above the face); the recording
+                    // eye looks BACK and DOWN from the bulb, so its feed frames the anglerfish's own glowing face —
+                    // the big shined eyes, the toothy maw, the photophores — against the room beyond. "The creature as
+                    // seen from its own lure": the signature diegetic-camera gag.
+                    Feed: "lure",
+                    Focus: 1.4f,
+                    Fov: 74f,
+                    Id: 0,
+                    Pitch: -50f,
+                    Position: new Vector3(0f, 0.15f, 0.05f),
+                    ShapeId: bulbId,
+                    Yaw: 180f
+                ),
+            ],
+        };
     }
 
     // ---- authoring helpers (drive the SAME verbs the pad/console would) --------------------------------------------

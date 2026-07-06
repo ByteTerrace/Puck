@@ -20,32 +20,17 @@ internal interface IConsoleTextSource {
 
 /// <summary>
 /// The developer-console state store: <see cref="DemoConsole"/> publishes an immutable frame on every edit, the
-/// render thread snapshots it. A whole-reference swap per publish — no locks on the read path, no torn frames
-/// (mirrors <c>BindingBarStore</c>).
+/// render thread snapshots it. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/> (a whole-reference
+/// swap per publish — no locks on the read path, no torn frames) so DI registration and constructor parameters still
+/// name a console-specific type.
 /// </summary>
 internal sealed class ConsoleTextStore : IConsoleTextSource {
-    private volatile Holder? m_latest;
-
-    private sealed record Holder(ConsoleTextFrame Frame);
+    private readonly PublishBuffer<ConsoleTextFrame> m_buffer = new();
 
     /// <summary>Publishes a frame (the writer side).</summary>
     /// <param name="frame">The frame to publish.</param>
-    public void Publish(in ConsoleTextFrame frame) {
-        m_latest = new Holder(Frame: frame);
-    }
+    public void Publish(in ConsoleTextFrame frame) => m_buffer.Publish(frame: frame);
 
     /// <inheritdoc/>
-    public bool TrySnapshot(out ConsoleTextFrame frame) {
-        var latest = m_latest;
-
-        if (latest is null) {
-            frame = default;
-
-            return false;
-        }
-
-        frame = latest.Frame;
-
-        return true;
-    }
+    public bool TrySnapshot(out ConsoleTextFrame frame) => m_buffer.TrySnapshot(frame: out frame);
 }

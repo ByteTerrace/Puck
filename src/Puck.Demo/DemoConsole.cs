@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Puck.Demo.Configuration;
 using Puck.Demo.DevConsole;
 
 namespace Puck.Demo;
@@ -23,15 +25,17 @@ internal sealed class DemoConsole {
 
     /// <summary>Initializes a new instance of the <see cref="DemoConsole"/> class.</summary>
     /// <param name="store">The store the on-screen console overlay reads.</param>
+    /// <param name="options">The demo options (the <c>ConsoleOpen</c> headless aid, formerly <c>PUCK_CONSOLE_OPEN</c>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> is <see langword="null"/>.</exception>
-    public DemoConsole(ConsoleTextStore store) {
+    public DemoConsole(ConsoleTextStore store, IOptions<DemoOptions> options) {
         ArgumentNullException.ThrowIfNull(argument: store);
+        ArgumentNullException.ThrowIfNull(argument: options);
 
         m_store = store;
 
-        // A headless aid (like the PUCK_OVERWORLD_* envs): start with the on-screen console open + a couple of seeded
-        // lines so its rendering can be verified without a keyboard.
-        if (!string.IsNullOrEmpty(value: Environment.GetEnvironmentVariable(variable: "PUCK_CONSOLE_OPEN"))) {
+        // A headless aid: start with the on-screen console open + a couple of seeded lines so its rendering can be
+        // verified without a keyboard (formerly PUCK_CONSOLE_OPEN, now Demo:ConsoleOpen).
+        if (options.Value.ConsoleOpen) {
             m_visible = true;
             AddHistory(message: "Puck developer console. Type 'creator' to enter creator mode.");
             AddHistory(message: "abcdefghijklmnopqrstuvwxyz 0123456789 <>[]{}()#+-*/=");

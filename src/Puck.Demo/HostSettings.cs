@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Windowing;
+using Puck.Demo.Configuration;
 using Puck.Launcher;
 using Puck.Scene;
 
@@ -39,9 +41,13 @@ internal sealed class HostSettings {
     public required bool Fullscreen { get; init; }
     /// <summary>Whether the document/flags request a Direct3D 12 host (subject to OS availability).</summary>
     public required bool HostBackendIsDirectX { get; init; }
-    /// <summary>The ray-query toggle to push to <c>PUCK_RAY_QUERY</c>, or <see langword="null"/> to leave the env/default.</summary>
+    /// <summary>The resolved <c>PUCK_RAY_QUERY</c> toggle (permit/deny the ray-query path), threaded into
+    /// <see cref="SdfWorldRenderSpec.RayQuery"/> by the render builder, or <see langword="null"/> to leave the
+    /// environment/default in place — this class never re-pushes the value into the process environment (env→config
+    /// is the one direction; see <see cref="Apply"/>).</summary>
     public required bool? RayQuery { get; init; }
-    /// <summary>The timing toggle to push to <c>PUCK_TIMING</c>, or <see langword="null"/> to leave the env/default.</summary>
+    /// <summary>The resolved <c>PUCK_TIMING</c> toggle (per-pass GPU-ms timestamps), threaded into
+    /// <see cref="SdfWorldRenderSpec.Timing"/> the same way as <see cref="RayQuery"/>.</summary>
     public required bool? Timing { get; init; }
     /// <summary>The genlock election policy (<c>"off"</c>, a rhythm source id, or <see langword="null"/> for automatic
     /// single-source election) — host pacing policy, applied as the external-clock registry's configuration.</summary>
@@ -75,11 +81,14 @@ internal sealed class HostSettings {
         };
     }
 
-    /// <summary>Applies the window, launcher, presentation, and feature-toggle settings to the service collection.</summary>
-    /// <param name="services">The service collection.</param>
-    public void Apply(IServiceCollection services) {
-        ArgumentNullException.ThrowIfNull(services);
+    /// <summary>Applies the window, launcher, presentation, and feature-toggle settings to the application builder.</summary>
+    /// <param name="builder">The application builder (its services + composed configuration; the launcher's <c>PUCK_*</c>
+    /// runtime toggles bind from the latter).</param>
+    public void Apply(IHostApplicationBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
 
+        var services = builder.Services;
+        var launcherRuntime = DemoConfiguration.ResolveLauncherRuntime(configuration: builder.Configuration);
         var height = Height;
         var width = Width;
         var fullscreen = Fullscreen;
@@ -93,6 +102,9 @@ internal sealed class HostSettings {
         });
         services.AddSingleton(implementationInstance: new LauncherOptions {
             ExitAfter = ExitAfter,
+            GenlockEnabled = launcherRuntime.GenlockEnabled,
+            LogPresentTiming = launcherRuntime.LogPresentTiming,
+            SyntheticDeviceLossSeconds = launcherRuntime.SyntheticDeviceLossSeconds,
             TargetRenderRate = RenderRate,
         });
         // The external-clock registry, configured with the document's genlock election (host pacing policy). Registered
@@ -100,15 +112,13 @@ internal sealed class HostSettings {
         services.AddSingleton(implementationInstance: new ExternalClockRegistry(electionPolicy: Genlock));
         _ = services.AddDemoPresentation(presentMode: PresentMode, surfaceFormat: SurfaceFormat);
 
-        // Surface the env-var feature toggles as document fields: set the variable the nodes already read so the
-        // existing gate logic is reused unchanged. A null field leaves the ambient environment/default in place.
-        if (RayQuery is bool rayQuery) {
-            Environment.SetEnvironmentVariable(variable: "PUCK_RAY_QUERY", value: (rayQuery ? "1" : "0"));
-        }
-
-        if (Timing is bool timing) {
-            Environment.SetEnvironmentVariable(variable: "PUCK_TIMING", value: (timing ? "1" : "0"));
-        }
+        // Register the resolved settings themselves (env→config is the ONE direction; there is no config→env
+        // re-push): the render-assembly call sites (GraphBuilder, OverworldRenderNode) resolve this singleton to
+        // read RayQuery/Timing and thread them straight into SdfWorldRenderSpec/SdfEngineNode as options, whose
+        // constructor argument falls back to the PUCK_RAY_QUERY/PUCK_TIMING environment read when null — so the
+        // env vars keep working verbatim for anyone setting them externally, without this class pushing values back
+        // into the process environment for the deep readers to pick up.
+        services.AddSingleton(implementationInstance: this);
     }
 
     /// <summary>Whether the window should host on Direct3D 12, logging (not silencing) a downgrade when a directx host

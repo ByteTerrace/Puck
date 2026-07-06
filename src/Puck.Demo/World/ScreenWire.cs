@@ -12,7 +12,7 @@ public enum ScreenWireKind {
     /// and the surface samples that machine's native framebuffer — the overworld's existing screen behavior, now one
     /// wire kind among several.</summary>
     Brick,
-    /// <summary>A camera FEED (a <see cref="Overworld.CameraFeedEngine"/> pool slot): <see cref="ScreenWireSource.Index"/>
+    /// <summary>A camera FEED (a <see cref="Overworld.CameraFeedPool"/> pool slot): <see cref="ScreenWireSource.Index"/>
     /// is the feed index, and the surface samples that feed's live offscreen render of the world from its eye.</summary>
     Feed,
     /// <summary>A NAMED host feed — a CPU-published surface the host exposes by name (the robot's emote face is just a
@@ -40,7 +40,7 @@ public readonly record struct ScreenWireSource(ScreenWireKind Kind, int Index, s
     public static ScreenWireSource Brick(int consoleIndex) => new(Kind: ScreenWireKind.Brick, Index: consoleIndex, Name: null);
 
     /// <summary>A camera-feed source for a feed index.</summary>
-    /// <param name="feedIndex">The <see cref="Overworld.CameraFeedEngine"/> pool index to sample.</param>
+    /// <param name="feedIndex">The <see cref="Overworld.CameraFeedPool"/> pool index to sample.</param>
     public static ScreenWireSource Feed(int feedIndex) => new(Kind: ScreenWireKind.Feed, Index: feedIndex, Name: null);
 
     /// <summary>A named-host-feed source.</summary>
