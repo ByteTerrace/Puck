@@ -23,6 +23,7 @@ namespace Puck.Scene;
 [JsonDerivedType(typeof(BendYOp), typeDiscriminator: "bendY")]
 [JsonDerivedType(typeof(BendZOp), typeDiscriminator: "bendZ")]
 [JsonDerivedType(typeof(ElongateOp), typeDiscriminator: "elongate")]
+[JsonDerivedType(typeof(CellJitterOp), typeDiscriminator: "cellJitter")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "op")]
 public abstract record TransformOp {
     // Applies this transform's builder verb. The point reset + every preceding op have already run.
@@ -280,6 +281,63 @@ public sealed record WallpaperFoldOp : TransformOp {
 
     // The highest cell key the group's parity coloring produces (the palette-overflow check multiplies it).
     internal int MaxCellKey => ((Group >= SdfWallpaperGroup.P3) ? 2 : 1);
+}
+
+/// <summary>Hashes the cell the point falls in and jitters/spins/re-materials its content (mirrors
+/// <see cref="SdfProgramBuilder.CellJitter"/>): the shapes that follow scatter across the lattice instead of
+/// repeating rigidly. The caller must keep <see cref="Jitter"/>/2 plus the prototype's own radius within half the
+/// smallest <see cref="Spacing"/> component, or the displaced content holes the march.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CellJitterOp : TransformOp {
+    /// <summary>The per-axis cell spacing in world units, as a 3-element <c>[x, y, z]</c> array (each clamped to
+    /// ≥ 0.001).</summary>
+    public IReadOnlyList<float> Spacing { get; init; } = [];
+    /// <summary>The peak-to-peak per-cell position displacement in world units (0 = no displacement).</summary>
+    public float Jitter { get; init; }
+    /// <summary>The hash seed — different seeds give independent jitter/tumble/variant fields.</summary>
+    public uint Seed { get; init; }
+    /// <summary>The per-cell rotation amount in [0, 1]: 0 = no rotation, 1 = up to ±π about a random axis.</summary>
+    public float Tumble { get; init; }
+    /// <summary>The number of hashed material rows (0 = geometric only): a hit in a cell adds a hashed
+    /// 0..variants-1 to its shape's material id.</summary>
+    public int MaterialVariants { get; init; }
+    /// <summary>How the per-cell position offset is distributed: <c>White</c> (independent uniform — the default),
+    /// <c>Blue</c> (R3 low-discrepancy — a de-clumped, more even scatter), or <c>Gaussian</c> (central-limit — offsets
+    /// cluster toward the cell centre).</summary>
+    public SdfNoiseFlavor Flavor { get; init; } = SdfNoiseFlavor.White;
+
+    internal override void Apply(SdfProgramBuilder builder) {
+        _ = builder.CellJitter(
+            flavor: Flavor,
+            jitter: Jitter,
+            materialVariants: MaterialVariants,
+            seed: Seed,
+            spacing: JsonVector.ToVector3(components: Spacing),
+            tumble: Tumble
+        );
+    }
+    internal override void Validate(string path, ValidationErrors errors) {
+        errors.RequireFinite(path: $"{path}.jitter", name: "jitter", value: Jitter);
+        errors.RequireFinite(path: $"{path}.tumble", name: "tumble", value: Tumble);
+
+        if ((Tumble < 0f) || (Tumble > 1f)) {
+            errors.Add(path: $"{path}.tumble", message: $"tumble {Tumble} must be in [0, 1]");
+        }
+
+        if (MaterialVariants < 0) {
+            errors.Add(path: $"{path}.materialVariants", message: "materialVariants must be non-negative (0 = geometric only)");
+        }
+
+        if (JsonVector.IsValid(components: Spacing, length: 3)) {
+            var minSpacing = MathF.Max(0.001f, MathF.Min(Spacing[0], MathF.Min(Spacing[1], Spacing[2])));
+
+            if (float.IsFinite(f: Jitter) && ((MathF.Abs(Jitter) * 0.5f) >= (0.5f * minSpacing))) {
+                errors.Add(path: $"{path}.jitter", message: $"jitter/2 must be < min(spacing)/2, or the displaced content crosses the cell boundary and holes the march; got jitter {Jitter} vs spacing [{Spacing[0]}, {Spacing[1]}, {Spacing[2]}]");
+            }
+        } else {
+            errors.RequireVector(path: $"{path}.spacing", components: Spacing, length: 3);
+        }
+    }
 }
 
 /// <summary>Mirrors the point across the YZ plane (mirrors <see cref="SdfProgramBuilder.SymmetryX"/>).</summary>

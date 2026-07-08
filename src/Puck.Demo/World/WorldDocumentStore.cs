@@ -88,6 +88,31 @@ public static class WorldDocumentStore {
         return Normalize(document: document);
     }
 
+    /// <summary>Loads a world like <see cref="Load"/>, but converts a malformed/unreadable file into a friendly
+    /// <paramref name="error"/> instead of throwing — so a corrupt save never escapes a console verb or the boot-world
+    /// path and tears the single-session host down (the pump catches only <c>DeviceLostException</c>). Returns
+    /// <see langword="false"/> only when the file existed but could not be parsed; a MISSING file returns
+    /// <see langword="true"/> with a null <paramref name="document"/> (the caller narrates "nothing readable").</summary>
+    /// <param name="nameOrPath">The save handle or an explicit file path.</param>
+    /// <param name="document">The normalized document, null when nothing readable exists at the location.</param>
+    /// <param name="error">The parse-failure message when the file was present but malformed, else null.</param>
+    /// <returns>Whether the location was readable (loaded or simply absent) rather than corrupt.</returns>
+    public static bool TryLoad(string nameOrPath, out WorldDocument? document, out string? error) {
+        error = null;
+
+        try {
+            document = Load(nameOrPath: nameOrPath);
+
+            return true;
+        }
+        catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+            document = null;
+            error = exception.Message;
+
+            return false;
+        }
+    }
+
     /// <summary>Lists the save handles under <c>./worlds/</c>.</summary>
     /// <returns>The handles, sorted ordinally.</returns>
     public static IReadOnlyList<string> List() {

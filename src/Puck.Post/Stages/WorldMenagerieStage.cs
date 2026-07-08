@@ -5,7 +5,7 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage. Cross-backend parity for the NEWER shape primitives — capsule, cylinder, and ellipsoid — which the
+/// Tier-C stage. Cross-backend parity for the NEWER shape primitives — capsule, cylinder, ellipsoid, and vesica — which the
 /// hero scene (deliberately frozen; the gpu-budget stage times it) never exercises. The SAME deterministic scene — a
 /// ground plane, a leaning capsule, an upright cylinder with a capsule SUBTRACTED through it, an eccentric ellipsoid
 /// smooth-blended into the ground, and a small sphere-cylinder smooth pair — renders through the identical
@@ -67,6 +67,11 @@ internal sealed class WorldMenagerieStage : IPostStage {
             .ResetPoint()
             .Translate(offset: new Vector3(-0.6f, 1.6f, -1.5f))
             .Capsule(endpoint: new Vector3(0.7f, 0.5f, 0f), radius: 0.2f, material: coral, blend: SdfBlendOp.SmoothUnion, smooth: 0.25f)
+            // A vesica (lens): the exact 2D-vesica-of-revolution primitive, floating so its silhouette shows both the
+            // XZ disc rim and the pointed ±Y tips — the last ISA shape to enter cross-backend parity.
+            .ResetPoint()
+            .Translate(offset: new Vector3(-1.3f, 1.4f, -0.9f))
+            .Vesica(radius: 0.85f, halfSeparation: 0.5f, material: violet)
             .Build();
     }
 
@@ -79,7 +84,7 @@ internal sealed class WorldMenagerieStage : IPostStage {
             prefix: "world-menagerie",
             program: BuildMenagerieScene(),
             thresholds: ParityThresholds.WorldHighContrast,
-            passLabel: $"{WorldWidth}x{WorldHeight} capsule/cylinder/ellipsoid menagerie + emissive/specular materials | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldHighContrast thresholds"
+            passLabel: $"{WorldWidth}x{WorldHeight} capsule/cylinder/ellipsoid/vesica menagerie + emissive/specular materials | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldHighContrast thresholds"
         );
     }
 }

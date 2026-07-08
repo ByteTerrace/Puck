@@ -9,7 +9,9 @@ namespace Puck.Demo.Overworld;
 /// PRESENTATION — a mode switch retargets the eased rects, never the simulation.</summary>
 public enum ScreenLayoutDirectorMode {
     /// <summary>The classic overworld: the room shrinks through the staged layouts as consoles boot (fullscreen →
-    /// side-by-side → big-top/two-bottom → quad quarter → top half over four quarter panes).</summary>
+    /// side-by-side → big-top/two-bottom → quad quarter → top half over four quarter panes). Effectively LEGACY: the
+    /// demo's default and <c>--rom</c> path both open in <see cref="Immersed"/>, so this mode has no current
+    /// in-session entry point.</summary>
     Standard,
     /// <summary>The fourth-wall boot: the room is ZERO-AREA and the visible panes alone tile the whole screen
     /// (fullscreen → side-by-side halves → big-top + two-bottom → 2×2 quad) — the player is INSIDE the machines.</summary>
@@ -17,6 +19,25 @@ public enum ScreenLayoutDirectorMode {
     /// <summary>The reveal: the room is fullscreen and every pane is zero-area — the games play on diegetically, on
     /// the stands' in-world screens.</summary>
     Revealed,
+}
+
+/// <summary>Which RUNG of the reveal ladder a fourth-wall break drives (the north star's rung 2 vs. rung 3). The two
+/// reveals are INDEPENDENT one-shot latches and may COEXIST in one session: the intro's exit/solo/meta-XOR win drives
+/// the <see cref="World"/> reveal (the room/town becomes visible), while a later meta-completion drives the
+/// <see cref="Editor"/> reveal (the in-session authoring UNLOCK — the workshop opens). A trigger site names its rung so
+/// the two latches never conflate.</summary>
+public enum RevealKind {
+    /// <summary>Rung 2 — the WORLD reveal. The fourth wall breaks and eases the camera OUT of the intro machines and
+    /// INTO the world the data file defines; the room becomes visible and players stand at their machines. This is the
+    /// reveal every existing trigger (a brick's exit condition, a solo 128-bit win, the room-level meta XOR, and the
+    /// bare <c>reveal</c> verb) drives today.</summary>
+    World,
+
+    /// <summary>Rung 3 — the EDITOR reveal. A diegetic moment (later: a meta-victory across the arcade games) discloses
+    /// that this world is EDITABLE. For this stage the outcome is MINIMAL — the state-machine latch + the seam only, an
+    /// in-session unlock narrated to stderr; the diegetic workbench form is a later stage. Authoring stays always-on
+    /// regardless of this latch (creator / Start / console verbs never gate on it).</summary>
+    Editor,
 }
 
 /// <summary>
@@ -145,6 +166,19 @@ public sealed class ScreenLayoutDirector {
     /// for sprite intent. Eased both ways; null (or a null result) keeps the chase framing. Presentation-only.</summary>
     public Func<(Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)?>? CreatorCameraSource { get; set; }
 
+    /// <summary>Gets or sets the REVEALED-room framing source — the loaded world's bounds, so the fourth-wall reveal
+    /// frames the WHOLE place (a sculpted town is far larger than the default room). Null (or a null result) keeps the
+    /// legacy fixed overview centred on the players — so the DEFAULT room's reveal is byte-unchanged; only a loaded
+    /// world (grown bounds) overrides it. Presentation-only.</summary>
+    public Func<RoomFraming?>? RoomFramingSource { get; set; }
+
+    /// <summary>A loaded world's reveal framing: the room CENTER (at eye-height) and its planar half-extents, so the
+    /// revealed overview can pull the iso camera back far enough to contain the whole lot.</summary>
+    /// <param name="Center">The room center at a small eye-lift above the floor.</param>
+    /// <param name="HalfWidth">Half the lot's X span.</param>
+    /// <param name="HalfDepth">Half the lot's Z span.</param>
+    public readonly record struct RoomFraming(Vector3 Center, float HalfWidth, float HalfDepth);
+
     /// <summary>Gets or sets the SCENARIO camera pose — the deterministic-capture override the <c>--scenario</c>
     /// harness supplies per shot. UNLIKE <see cref="CreatorCameraSource"/> (which the director EASES toward on the
     /// wall-clock delta, so two runs never match bit-for-bit), this pose is applied to the room view VERBATIM — no
@@ -170,6 +204,14 @@ public sealed class ScreenLayoutDirector {
         m_revealBlend = 0f;
         m_revealPane = Math.Clamp(value: triggerPaneIndex, max: (ViewCount - 2), min: 0);
     }
+
+    /// <summary>Whether the layout is fully settled — the last-composed frame's mode transition has reached its end
+    /// (<c>m_transition</c> at 1) and no reveal zoom is still easing. The scripted-console <c>settle</c> verb reads
+    /// this to hold the command stream until the screen layout / reveal transitions have quiesced, so a capture lands
+    /// on a still frame. The per-pane closeness eases are an exponential approach (they never reach a value exactly),
+    /// so they are deliberately NOT part of the quiesced test — the mode/reveal transitions are the observable
+    /// "the panes are done moving" signal. Presentation-only, like the rest of the director.</summary>
+    public bool LayoutSettled => ((m_transition >= 1f) && !m_revealActive);
 
     /// <summary>Composes the per-frame views: the room at view 0 (framing the active players, in slot order) and the
     /// console panes at views 1..4, laid out by the boot order under the current mode. Always returns
@@ -451,8 +493,7 @@ public sealed class ScreenLayoutDirector {
         // REVEALED: a fixed, centered isometric-ish overview so every player can roam — the room is the primary slice.
         // On the reveal itself the camera eases OUT of the triggering machine's native-screen framing into this.
         if (m_mode == ScreenLayoutDirectorMode.Revealed) {
-            var isoEye = (m_smoothCentroid + IsoEyeOffset);
-            var isoTarget = (m_smoothCentroid + IsoTargetOffset);
+            var (isoEye, isoTarget) = RevealOverview();
 
             if (!m_revealActive) {
                 return (isoEye, isoTarget);
@@ -521,6 +562,20 @@ public sealed class ScreenLayoutDirector {
             ) * pose.Distance)));
 
         return (eye, pose.Target);
+    }
+
+    // The revealed overview's settled eye/target. A loaded world (the town) frames its whole LOT — centred on the lot,
+    // the iso offset pulled back proportional to how much bigger the lot is than the default room (half-extent 8u) — so
+    // nothing spills off-frame. With no world loaded the framing is the legacy fixed overview around the player
+    // centroid (byte-unchanged for the default room's reveal).
+    private (Vector3 Eye, Vector3 Target) RevealOverview() {
+        if (RoomFramingSource?.Invoke() is { } framing) {
+            var scale = MathF.Max(1f, (MathF.Max(framing.HalfWidth, framing.HalfDepth) / 8f));
+
+            return ((framing.Center + (IsoEyeOffset * scale)), (framing.Center + IsoTargetOffset));
+        }
+
+        return ((m_smoothCentroid + IsoEyeOffset), (m_smoothCentroid + IsoTargetOffset));
     }
 
     // The reveal's FROM framing: the triggering machine's native-screen camera (the shot the player was "inside").

@@ -26,9 +26,9 @@ public enum SdfOp : uint {
     ShapeBlend = 9,
     Repeat = 11,
     RepeatLimited = 12,
-    SymmetryX = 13,
-    SymmetryY = 14,
-    SymmetryZ = 15,
+    // 13–15 (the axis-aligned SymmetryX/Y/Z folds) were collapsed into SymmetryPlane (id 26), which reproduces each
+    // bit-for-bit with an axis normal; the builder keeps SymmetryX()/Y()/Z() as sugar that emits it. The ids stay
+    // retired (the ISA numbering is non-sequential — never reuse them).
     /// <summary>Shells the ENTIRE field accumulated so far: <c>d = abs(d) − thickness</c> (Data0.x = thickness) turns
     /// solids into hollow skins. A FIELD op, not a point op — order objects so it follows everything it should shell.</summary>
     Onion = 16,
@@ -51,4 +51,76 @@ public enum SdfOp : uint {
     /// NOT an isometry — keep rates moderate. (The legacy ISA numbered this 4, now owned by
     /// <see cref="TransformDynamic"/>; slot 20 is its new home.)</summary>
     TwistY = 20,
+    /// <summary>Log-spherical DOMAIN WARP: tiles space into infinite self-similar "Droste" shells by folding the
+    /// RADIAL log-coordinate to the nearest shell — a translation along <c>log(radius)</c> becomes a uniform SCALING
+    /// in Cartesian space, so one authored prototype shell repeats outward/inward as scaled copies from a handful of
+    /// instructions. Data0.x = w (the log cell size = <c>ln(shellRatio)</c>, HOST-BAKED); Data0.y = twist (radians of
+    /// per-shell Z-spin — the isometric Droste spiral; 0 = concentric shells); Data0.z = 1/w (HOST-BAKED reciprocal).
+    /// NOT an isometry (space scales by ~r), so the runtime folds the r/density correction into the per-candidate
+    /// <c>distanceScale</c> (exactly like <see cref="Scale"/>) and <c>AnalyzeLipschitz</c> bakes a conservative
+    /// <c>exp(w/2)</c> step clamp so the over-relaxed march cannot tunnel through a shell boundary. Folds ONLY the
+    /// radial coordinate (theta/phi are preserved, so there is NO polar pinching); like <see cref="Repeat"/>, prototype
+    /// content should respect the shell cell (radii within a factor of <c>shellRatio</c>).</summary>
+    LogSphere = 21,
+    /// <summary>Stochastic domain-repeat fold: tiles space into cells like <see cref="Repeat"/>, then per cell applies a
+    /// hashed position DISPLACEMENT, an optional hashed ORIENTATION ("tumble"), and an optional hashed MATERIAL variant —
+    /// scattering one prototype into a jittered field from a single instruction. Both the displacement and the tumble are
+    /// ISOMETRIES (translate + rotate), so distances are preserved: the field stays 1-Lipschitz, no cull bound changes,
+    /// and <c>AnalyzeLipschitz</c> needs only ONE conservative reach line (the jitter half-amplitude). Instruction lanes:
+    /// Shape = seed (uint), Blend = <see cref="SdfNoiseFlavor"/> (how the POSITION offset is distributed — White = 0 the
+    /// byte-identical default, Blue, Gaussian; tumble and material variant are UNAFFECTED, and every flavor shares the same
+    /// offset bound so no Lipschitz change), Material = materialVariants (0 = geometric only). Data0.xyz = spacing
+    /// (world units/axis), Data0.w = jitter (peak-to-peak position displacement), Data1.xyz = 1/spacing (HOST-BAKED, like
+    /// <see cref="Repeat"/>), Data1.w = tumble in [0,1] (0 = no rotation; 1 = up to ±π about a random axis). jitter,
+    /// tumble, and materialVariants each default to an EXACT identity (amplitude 0 / count 0), so an unused-and-zeroed
+    /// instruction leaves the point byte-identical on both backends. The per-cell hash is INTEGER-ONLY (canonical PCG3D
+    /// on the two's-complement cell index xored with the seed), so it is bit-identical across DXC's SPIR-V and DXIL
+    /// targets — only the final uint→float and the tumble trig carry the usual ±1 LSB warp noise. Like <see cref="Repeat"/>,
+    /// keep the in-cell content clear of the <c>round()</c> boundary: jitter/2 + prototype radius ≤ min(spacing)/2.</summary>
+    CellJitter = 22,
+    /// <summary>Angular DOMAIN-REPEAT fold: folds the plane perpendicular to a chosen axis into <c>count</c> equal
+    /// sectors, so one authored prototype repeats ROTATIONALLY around the axis (gears, wheels, columns of a rotunda,
+    /// clock ticks, flower petals) from a single instruction — the rotational sibling of the linear <see cref="Repeat"/>
+    /// and the lattice <see cref="WallpaperFold"/>. The fold is a rotation into the base sector (and, when the mirror
+    /// flag is set, a reflection of each sector across its bisector — the kaleidoscope fold): BOTH branches are
+    /// ISOMETRIES, so distances are preserved — the field stays 1-Lipschitz (factor 1, NO step clamp, exactly like
+    /// <see cref="Repeat"/>) and no cull bound changes. Instruction lanes: Shape = <see cref="SdfPolarAxis"/> (the
+    /// rotation axis), Blend = the mirror flag (0 = plain repeat, 1 = kaleidoscope), Material = the per-sector palette
+    /// stride (the sector index 0..count-1 strides the material id of a later shape win; 0 keeps the fold purely
+    /// geometric). Data0.x = the sector angle <c>2π/count</c> (HOST-BAKED), Data0.y = <c>count/(2π)</c> = 1/angle
+    /// (HOST-BAKED), Data0.z = count, Data0.w = 1/count (HOST-BAKED); Data1 is reserved. The fold uses <c>atan2</c>/
+    /// <c>floor</c> (floats), so a point exactly on a sector seam carries the usual ±1 LSB warp noise (geometry only;
+    /// the optional per-sector material can flip at a seam exactly as <see cref="WallpaperFold"/>'s can). Like
+    /// <see cref="Repeat"/>, keep the prototype clear of the sector walls (the two radial half-planes through the axis)
+    /// — content that overspills a wall is clipped by the neighbouring sector.</summary>
+    RepeatPolar = 23,
+    /// <summary>Adds a bounded sinusoidal DISPLACEMENT to the field accumulated so far — surface relief (bumps,
+    /// corrugation, a rippled skin), the SDF-native answer to height/parallax mapping (the relief is REAL geometry, so
+    /// it shadows and self-occludes correctly). A FIELD op (like <see cref="Onion"/>/<see cref="Dilate"/>), evaluated at
+    /// the current folded point: order it after the shapes it should displace. Data0.xyz = per-axis angular frequency,
+    /// Data0.w = amplitude; the basis is the separable product <c>amp·sin(fx·x)·sin(fy·y)·sin(fz·z)</c> (deterministic
+    /// float trig — ±1 LSB like the twist/bend warps, cross-backend-parity-safe without a hashed noise table). NOT
+    /// 1-Lipschitz: the added relief's gradient reaches <c>amp·‖freq‖</c>, so the field can overestimate true distance by
+    /// up to <c>1 + amp·‖freq‖</c> — <c>AnalyzeLipschitz</c> bakes that as a conservative step clamp (reach-independent,
+    /// folded like the log-spherical product). amp = 0 is an exact identity (byte-identical).</summary>
+    Displace = 24,
+    /// <summary>Warps the sample point by a bounded, cross-coupled sinusoidal field BEFORE the shapes evaluate — organic
+    /// bulging / wobble / terrain. A POINT op (like the fold ops). Data0.xyz = per-axis angular frequency, Data0.w =
+    /// amplitude; the point moves by <c>amp·(sin(fx·y), sin(fy·z), sin(fz·x))</c> — cross-coupled (each axis driven by the
+    /// NEXT axis's coordinate) so the warp is non-separable, and deterministic float trig (±1 LSB). NOT an isometry: the
+    /// Jacobian is <c>I</c> plus a perturbation of spectral norm ≤ <c>amp·‖freq‖</c>, so the metric stretches by up to
+    /// <c>1 + amp·‖freq‖</c> — <c>AnalyzeLipschitz</c> bakes that step clamp (reach-independent) AND folds the point's max
+    /// travel (<c>amp·√3</c>) into a downstream twist/bend's reach. amp = 0 is an exact identity (byte-identical).</summary>
+    DomainWarp = 25,
+    /// <summary>Reflection fold across an ARBITRARY plane — the general-normal superset of the axis-aligned
+    /// <c>SymmetryX</c>/<c>SymmetryY</c>/<c>SymmetryZ</c> folds (which it replaced; the builder keeps them as sugar):
+    /// everything on the plane's negative side
+    /// is mirrored onto its positive side, so one authored half repeats mirror-imaged (a kaleidoscope leaf, a bilateral
+    /// body, the reflect atom of a KIFS fold). Data0.xyz = the UNIT plane normal (host-normalized), Data0.w = the plane
+    /// offset; the fold is <c>p -= 2·min(dot(p, n) + offset, 0)·n</c> — for <c>n = x̂, offset = 0</c> this is
+    /// <c>abs(p.x)</c> to the bit, so it is an exact superset of <c>SymmetryX</c>. A reflection is an ISOMETRY,
+    /// so distances are preserved: the field stays 1-Lipschitz (factor 1, NO step clamp) and no cull bound changes. Like
+    /// the axis symmetries, keep authored content on the plane's positive side (the kept half); content straddling the
+    /// plane is folded onto itself.</summary>
+    SymmetryPlane = 26,
 }

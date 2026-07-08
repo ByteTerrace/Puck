@@ -24,7 +24,7 @@ namespace Puck.Demo.Creator;
 /// <param name="Smooth">The blend radius for the smooth blend variants (0 for the hard ops).</param>
 /// <param name="GroupId">The composition group this shape belongs to (0 = ungrouped; grouped shapes emit as ONE
 /// workbench-bounded instance and blend in document order).</param>
-/// <param name="Mirror">Whether the shape's local field mirrors across its local X=0 plane (<see cref="SdfOp.SymmetryX"/>,
+/// <param name="Mirror">Whether the shape's local field mirrors across its local X=0 plane (<see cref="SdfProgramBuilder.SymmetryX"/>,
 /// a POINT op applied BEFORE the primitive). The STYLE page's West button toggles it.</param>
 /// <param name="Twist">The shape's local twist rate about Y, in radians per unit of local Y (<see cref="SdfOp.TwistY"/>,
 /// a POINT op applied before the primitive; 0 = untwisted). Clamped to ±<see cref="CreatorScene.MaxTwist"/>.</param>

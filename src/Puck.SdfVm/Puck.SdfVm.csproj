@@ -2,7 +2,7 @@
     <!--
         The signed-distance-function engine: the instruction ISA, the program representation, the fluent
         authoring builder, the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
-        view/composite/fullscreen stages), and the GPU host that runs the VM — SdfWorldEngine (the
+        world-compositor and fullscreen stages), and the GPU host that runs the VM — SdfWorldEngine (the
         device-explicit pipeline core: beam cull → per-view render → split-screen composite over a viewport
         table of cameras + regions) and SdfEngineNode (the host-model IRenderNode that renders the world into
         its own offscreen surface for a host to composite). Fully backend-neutral: only the IGpuCompute*

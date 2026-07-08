@@ -12,6 +12,181 @@
 > be gated. Doctrine:
 > [agent-guide.md](agent-guide.md#anti-calcification-doctrine) rule 5.
 
+## The unification contract (READ FIRST — the north star for this arc)
+
+`Puck.Demo` is ONE cohesive game experience, not a menu of `--flag` modes. Every
+capability is reached from inside a single running session — a diegetic act, a
+pad chord, or a console verb — with **no process restart**. The launch surface
+(flags, and the former `PUCK_*` env vars) is not how you reach a capability; it
+is at most a convenience preset that enqueues the same in-session acts at boot,
+or a headless CI/proof twin of an in-game path. A capability with no in-game
+path is a unification **TODO, not a mode**. Six rules follow, and they OUTRANK
+any older "pick a mode at launch" prose anywhere in this repo:
+
+1. **One experience, many reflections.** The default run IS the game. `--rom`,
+   `--run`, the `--forge-*` tools, the review `--scenario`, `--validate-overworld`
+   are developer/CI reflections of in-session capabilities (or pure engine
+   proofs) — never separate products. Docs name the in-game path FIRST and the
+   flag as its twin.
+
+2. **The data file, not env vars.** Durable configuration lives in the
+   `puck.run.v1` run document (the data file): which world the overworld IS and
+   reveals into, each cabinet's starting cart, immersion, the reveal target.
+   **The demo's entire `PUCK_*` environment surface has been removed** — it was
+   noise. Each former env var became a run-document field (durable) or a console
+   verb (live); see the migration table below. (Engine/launcher diagnostic
+   toggles like `PUCK_TIMING`/`PUCK_RAY_QUERY` are a separate, non-demo concern
+   and are untouched.)
+
+3. **The console is the control plane.** The on-screen console and process
+   **stdin** drive the ONE command registry; every capability has a console verb,
+   and results echo to **stdout** so a piped script drives the whole engine
+   deterministically and assertably. This is the agent-facing control + testing
+   surface — pipe a verb script into a run (`… < script`, or PowerShell
+   `Get-Content script | …`; blank and `#` lines are comments) and read the echoed
+   results. Runnable, self-documenting examples live in
+   [docs/examples/scripts/](examples/scripts/) (the smoke loop, the reveal ladder,
+   in-game authoring); `help` lists every verb. (The stdin→registry transport
+   already exists in the launcher; verb COVERAGE and the observability verbs —
+   `state`, `step`/`settle`, `capture`, `reveal`, `boot`, `link`, `player.add` —
+   are the work.) Determinism
+   is not a demo concern (Puck.Post owns the engine contract); this
+   scripted-console path is how demo changes are verified — by RUNNING, now
+   reproducibly.
+
+4. **The reveal ladder (the spine).** ONE continuous experience in three rungs,
+   no restart between them:
+   - **Rung 1 — immersed.** You boot INSIDE an intro ROM that loosely MIRRORS
+     the arcade room the data file defines; the game fills the screen.
+   - **Rung 2 — the world reveal.** On the intro's win/exit condition the fourth
+     wall breaks and eases you into the world THE DATA FILE DEFINES — you are
+     standing at the arcade machine(s), their diegetic screens glowing with the
+     games you were inside. The reveal itself LOADS/transitions into that world;
+     no env var, no bare-default-room detour.
+   - **Rung 3 — the editor reveal.** Later, a diegetic moment reveals that you
+     can edit ROMs and the overworld itself (creator / world-sculpt / tracker /
+     companions). Its DIEGETIC FORM is the **workbench** — a room-only terminal
+     prop (an SDF shape in `OverworldFrameSource.BuildProgram`, never a paned
+     cabinet — the four view slots are all spoken for) that stands DARK by
+     default and POWERS ON when the editor reveal fires (the meta-victory
+     "complete X games", or `reveal editor`): its screen panel lights with an
+     emissive CRT glow eased in over a transition, so it reads as "the workshop
+     opens." Once lit, walking up to it and pressing interact (North — the same
+     proximity+interact machinery cabinets boot on, gated on the reveal via
+     `OverworldWorld.IsPlayerNearWorkbench`) ENTERS world-sculpt — the diegetic
+     door into "you can shape this world" (world-sculpt's first pad/diegetic
+     entry; it was console-verb-only before). This is a NARRATIVE reveal for the
+     player; the same authoring stays always-reachable from frame 0 via the
+     console (`world` / `creator` / `tracker`) / Start for developers and agents
+     — only the workbench entry is gated on the reveal.
+
+5. **Headless flags are CI/proof twins.** `--forge-*` (build + self-verify a
+   cart/asset), `--emit-schema`, `--validate-overworld`, and the review
+   `--scenario` capture harness stay as headless entry points, but each names its
+   in-game reflection. `--run` / the `world` graph kind / live DirectX hosting are
+   a documented DEVELOPER/CI launch affordance (CLAUDE.md treats GPU backends as
+   engine-contract), out of scope for in-session reachability this arc.
+
+6. **In-game authoring is first-class and lossless.** The in-session
+   author→forge→hot-swap loop routes through the FULL `puck.creation.v1` document
+   (not a shapes-only export) and generalizes beyond avatars, so the forge
+   capabilities are reachable in the one session, not only at the CLI.
+   **REALIZED (the self-editing arcade arc, Stage 5).** The loop is now a
+   SUBJECT-NEUTRAL registry (`src/Puck.Demo/Forge/ForgeSubject.cs`): one
+   mechanism forges the AVATAR walker, the TUNE jukebox, and the SDF-ART SCENE
+   creature — three clients, not three copies. `forge [avatar|scene]` bakes the
+   creator's live creation into either cart; `tracker.forge` compiles the
+   tracker's live tune into a jukebox cart (GPU-FREE — the tune is never gated
+   behind device resolution, unlike the avatar/scene bakes); each hot-swaps into
+   the nearest cabinet with no restart. The commit / lazy-forge / reload paths in
+   `OverworldRenderNode` iterate the registry generically (any forged type is
+   Cycle-reachable / lazy-forged, never a cabinet boot default).
+
+**The former env → in-session migration:**
+
+**The demo's entire `PUCK_*` surface has been REMOVED** — every row below now
+reaches its capability through a console verb or a run-document field:
+
+| Removed `PUCK_*` (demo) | Reached now by |
+|---|---|
+| `PUCK_OVERWORLD_WORLD` ✅ REMOVED | run-doc `world` field on the overworld node; live `world.load <name>` |
+| `PUCK_OVERWORLD_CART` ✅ REMOVED | live `cart <i> <type>` console verb; live cabinet Cycle |
+| `PUCK_OVERWORLD_CREATOR` / `PUCK_CREATOR_LOAD` ✅ REMOVED | `creator` / `creator.load <name>` |
+| `PUCK_COMPANION_LOAD` / `_WIRE` / `_FACE` ✅ REMOVED | `companion.add` / `world.wire` / `companion.face` |
+| `PUCK_OVERWORLD_DEBUG_REVEAL` ✅ REMOVED | `reveal` |
+| `PUCK_OVERWORLD_DEBUG_BOOT` ✅ REMOVED | `boot <i>` |
+| `PUCK_OVERWORLD_DEBUG_PLAYERS` ✅ REMOVED | `player.add` / `join <n>` |
+| `PUCK_OVERWORLD_CAPTURE_FRAME` ✅ REMOVED | `capture <png>` after `step <n>` / `settle` (`--capture` now grabs frame 0) |
+| `PUCK_LINK_CABLE_PROBE` ✅ REMOVED | `link <i> <j>` |
+| `PUCK_WORLD_ROUNDTRIP` ✅ REMOVED | `world.verify` |
+| `PUCK_CONSOLE_OPEN` ✅ REMOVED | stdin needs no open panel; the `console` verb opens it live |
+| `PUCK_OVERWORLD_CELL` ✅ REMOVED | run-doc `cell` field on the overworld node |
+
+**Migration status — the unification arc's CORE is COMPLETE** (rungs 1–2, the
+console control plane, the env removal, and the lossless in-game forge all
+landed and are verified by running + the full Post battery). What is BUILT:
+
+- **Built:** the one data-driven path; always-immersed boot; the fourth-wall
+  reveal INTO the data-file world (rung 2 — the run-doc `OverworldNode.World`
+  field names the world, resolved + committed at boot); the
+  stdin→console→registry transport with stdout echo (self-documenting `#`-comment
+  scripts under [examples/scripts/](examples/scripts/)); creator / world-sculpt /
+  tracker / companion authoring; the `world.load` / `world.save` / `world.wire` /
+  `world.verify` / `companion.*` / `creator.*` (incl. `creator.place`) verbs;
+  cabinet cart-cycle + the `cart <i> <type>` verb; the driving/observability
+  verbs (`reveal`, `boot`, `player.add`, `capture`, `step`/`settle`, `link`,
+  `state`); the run-doc `world` + `cell` fields; the **lossless** in-game avatar
+  forge (byte-identical to `--forge-avatar-from`). **The demo's ENTIRE `PUCK_*`
+  surface is REMOVED** — every former env var is now a console verb or a
+  run-document field (see the migration table above).
+- **Next arc (the recursion — see "Next steps" below):** **rung 3**, the
+  diegetic editor reveal, GATED on completing X arcade games (the 128-bit
+  `meta` victory across cabinets) — the state latch + `EditorRevealed` unlock
+  (Stage 1), each framework game writing its 128-bit victory share on win
+  (Stage 2), and the DIEGETIC FORM + gated player entry (Stage 3: the
+  **workbench** — a room-only terminal prop that lights up on the reveal and,
+  once lit, is the diegetic North-interact door into world-sculpt; the dev path
+  stays ungated), and **THE RECURSION** (Stage 4: the win/reveal conditions that
+  gated the editor are themselves **re-forgeable live** — the `condition.*`
+  console verbs edit a cabinet's exit + victory gate in-session, including the
+  meta gate that unlocked the editor; see below) all landed. Still open: making
+  the games/world **editable in-game** (Phase D — the general half of the
+  in-game authoring loop); a diegetic/pad entry for tracker (world-sculpt now has
+  the workbench). An optional run-doc per-console `startCart` field is a loose
+  end (the live `cart` verb already covers the scriptable path).
+
+  **The recursion — live-editable win/reveal conditions (`condition.*`).** A
+  cabinet's exit + victory gate — `GamingBrickSource.Exit` (a WRAM
+  address/op/value poll) and `.Victory` (the 128-bit SRAM gate: solo = region ==
+  target, or meta = a group's cabinet shares XOR to target) — used to be
+  immutable, load-once run-document data frozen into the child node at boot. It is
+  now **re-forgeable live** through a `condition.*` console verb family (the same
+  `IOverworldControlHost` / `CreatorFrameSource` control-plane seam the
+  `reveal`/`link`/`cart` verbs ride): `condition.show <cabinet>` echoes the
+  cabinet's current exit + victory gate; `condition.set <cabinet> exit
+  <0xADDR><op><value>` sets/replaces the exit gate; `condition.set <cabinet>
+  victory solo target=<guid>` / `… meta target=<guid> share=<guid> [group=<g>]`
+  sets/replaces the victory gate; `condition.clear <cabinet> exit|victory`
+  removes one. The child node's condition fields are now mutable
+  (`GamingBrickChildNode.SetExitCondition`/`SetVictoryCondition`): a set
+  re-parses the address/target/share, CLEARS the fired one-shot (a re-edited
+  cabinet can win again), and for a meta victory RE-SEEDS the new share into the
+  running machine's WRAM slot (0xC0F0) so the change takes effect on the running
+  game with no reboot. The per-frame polls re-read the fields, so a swapped gate
+  applies the next frame; a victory edit REBUILDS the room-level
+  `MetaVictoryWatch` over the synced console-source records. **Re-validation
+  policy:** a live edit that leaves a meta group's shares non-XOR-consistent is
+  ACCEPTED (the group simply never fires) and WARNED to stderr, never refused —
+  the dev/authoring path is never gated, so a self-locking edit is always
+  recoverable; editing the meta gate does NOT re-lock an already-revealed editor
+  (`EditorRevealed` is a one-shot session flag). **Persistence is a SEAM only,
+  unwired this stage** (USER DECISION: no persistence for now, cloud saves
+  near-future): a re-forged condition would serialize onto the world document's
+  `cabinet:<n>` placement (`WorldDocument.cs`), the same seam a cloud save syncs
+  — but `world.save` does not yet carry conditions, and the run-document schema
+  is unchanged (conditions already exist on `GamingBrickSource`; live editing
+  changes no schema).
+
 This doc = what exists, how to drive it, and the settled next steps.
 `Puck.Demo` is ONLY the game prototype: it carries no legacy mode or
 demo-resident engine gate (`--world*`, `--validate`, `--validate-world*`,
@@ -35,6 +210,31 @@ Post battery, and the Humble battery — are:
   active player standing at their machine, the games continuing on the
   diegetic screens, nothing reset. Seating/ownership is host-side
   routing; the determinism hash is untouched.
+- **The reveal into a SCULPTED TOWN (the zoom-out).** The room the fourth-wall
+  reveal eases you out INTO can be an authored `puck.world.v1` world, not the
+  bare room — this is **rung 2** of the reveal ladder above. The world is named
+  by the RUN DOCUMENT (the data file), on the `OverworldNode.World` field —
+  `"world": "puckton"` — and is resolved + committed at boot, so the fourth-wall
+  reveal reframes the camera OUT of the intro machines and INTO the world the
+  data file defines. The former `PUCK_OVERWORLD_WORLD=<handle>` env var is
+  REMOVED; the boot-load path is unchanged (`OverworldNode.World` →
+  `OverworldFrameSource.LoadBootWorld` → the first tick-boundary
+  `ConsumePendingWorldLoad`), only its source moved from the env var to the
+  document (the live mid-session equivalent is the `world.load` console verb).
+  Win the intro cartridge and the wall breaks to reveal you standing in the
+  town. The reference town is
+  **"Puckton"** (`src/Puck.Demo/Town/`, built + materialized by `--forge-town`
+  — a cozy dusk block: an arcade with a glowing marquee behind the cabinets,
+  storefronts across the street, a fountain plaza, lamp rows, trees; the
+  flagship trio inhabit it as roaming companions). The reveal camera frames the
+  loaded world's whole lot (`ScreenLayoutDirector.RoomFramingSource`; the
+  default room's reveal is byte-unchanged). Verified by RUNNING: `--forge-town`
+  then `--run docs/examples/overworld-town.json` loads the town (the boot-world
+  narration prints on stderr), `world.verify` proves the committed walk grid ==
+  a live save's, buildings block, the street is walkable, and the `reveal`
+  console verb captures the reveal-into-the-town headlessly. A COMPACT block by
+  necessity (~±9 bounds) — far geometry falls outside the reveal overview's
+  reliable SDF render range.
 - **Multiplayer console mode.** Connected pads beyond the first join as
   world players (pad index = slot, up to 4); each ACTIVE player has their
   OWN binding bar in the overlay (`BarCount` scales with players) and
@@ -61,13 +261,15 @@ Post battery, and the Humble battery — are:
   page also has a **"Clear save"** verb (North), which deliberately deletes
   the save and reboots fresh. Gate: the Humble battery's
   `battery-save` stage.
-- **`--rom <path>` boots straight into a cartridge** — a fullscreen
-  one-machine `world` document synthesized by `DemoRunDocuments` — and
-  gaming-brick viewport sources carry data-driven FOURTH-WALL `exit`
+- **`--rom <path>` boots straight into a cartridge** — an IMMERSED overworld
+  (`OverworldNode { immersed: true }`) whose four cabinets are all pre-inserted
+  with that ROM, synthesized by `DemoRunDocuments` (a developer/CI convenience
+  for the rung-1 immersed start; the same shape is expressible in a `--run`
+  document). Gaming-brick sources carry data-driven FOURTH-WALL `exit`
   conditions (work-RAM address 0xC000–0xDFFF as an `"0x…"` string + op +
-  value + label; the host polls after each stepped frame; first hold →
-  clean shutdown). The condition targets a work-RAM flag the running
-  cartridge sets — e.g. a save-progress byte going nonzero.
+  value + label; the host polls after each stepped frame; first hold → the
+  reveal). The condition targets a work-RAM flag the running cartridge sets —
+  e.g. a save-progress byte going nonzero.
 - **Victory conditions (`BrickVictoryCondition`).** A gaming-brick source may
   carry an optional 128-bit `victory` gate. After each stepped frame the host
   reads the top 16 bytes of the cartridge's highest SRAM address (bank `0x0F` of
@@ -142,9 +344,9 @@ it:
   The console-assist verbs (`CreatorCommandModule`) cover every edit exactly:
   `creator.list/new/save/load/select/name/material/palette/op/smooth/move/
   rot/scale/group/ungroup/intent/style/frame/play/stop/anim/baketarget/
-  bakeoverlay`. Headless proof hooks: `PUCK_OVERWORLD_CREATOR=1` opens
-  straight into the mode; `PUCK_CREATOR_LOAD=<name-or-path>` loads a creation
-  first.
+  bakeoverlay`. Open the mode + load a creation live with the `creator` /
+  `creator.load <name-or-path>` console verbs (the `--scenario` review harness
+  is their headless twin — it opens creator and loads its `Scenario:Creation`).
 - **The on-screen developer console.** `src/Puck.Demo/DevConsole/`: a
   GDI-rasterized monospace glyph atlas (`ConsoleGlyphFont`, Windows-only via
   System.Drawing.Common, degrades to the terminal console elsewhere) whose
@@ -152,8 +354,8 @@ it:
   the `ConsoleOverlayNode` keeps the single-sampler + one-storage-buffer
   shape of the binding-bar overlay (no second texture). `DemoConsole`
   publishes its input line + output history to a `PublishBuffer<T>` the overlay
-  renders; the backtick console open/close drives its visibility.
-  `PUCK_CONSOLE_OPEN=1` starts it open with seeded lines (a headless font check).
+  renders; the backtick console open/close (or the `console` verb) drives its
+  visibility.
 - **Deferred (converge later):** authoring the action bar + console THROUGH
   the SDF VM (a screen-space/ortho path, eventually an MSDF glyph op mining
   Puck.Text) so one renderer owns all UI, retiring the separate overlay
@@ -199,11 +401,14 @@ start EMPTY: there is no shelf, no carrying, no pre-loaded showcase cartridge.
 **North** (interact) inserts the cabinet's currently-selected cart and boots
 it (a second North at a booted, unowned cabinet ejects it back to empty); the
 **Right bumper (Cycle)** rotates the nearest cabinet's SELECTED cart type
-through the roster (live-swaps it if the cabinet is already running) — nine
+through the roster (live-swaps it if the cabinet is already running) — eleven
 types today: world-lens / camera / showcase / the player's forged avatar /
-Volley / Brickfall / Chroma / Solitaire / Poker (`OverworldWorld.CartTypeCount`
-= 9; see "Controls & running" below for the full type table and the Post/forge
-seams behind each). Booting a cabinet in-world:
+Volley / Brickfall / Chroma / Solitaire / Poker / the forged jukebox tune / the
+forged SDF-art scene (`OverworldWorld.CartTypeCount` = 11; the last three —
+avatar (3), jukebox (9), scene (10) — are the in-session FORGED subjects, baked
+lazily so a forged type is Cycle-reachable but never a boot default; see
+"Controls & running" below for the full type table and the Post/forge seams
+behind each). Booting a cabinet in-world:
 
 1. is **simulation state** — an interact press-edge near a cabinet sets a bit in
    `OverworldWorld.BootedMask` and appends to `BootOrder`; both are folded into
@@ -302,13 +507,16 @@ active page). The default profile:
   never collides with the machine being driven. Held off while immersed and
   not yet revealed (no room to walk into until the fourth wall breaks).
 - **Right bumper** = **Cycle**: advance the nearest cabinet's selected cart
-  TYPE (at a booted cabinet the swap is live). Nine types cycle — 0
+  TYPE (at a booted cabinet the swap is live). Eleven types cycle — 0
   world-lens / 1 camera / 2 showcase / 3 the player's forged avatar /
   **4 Volley / 5 Brickfall / 6 Chroma** (the three genuine hand-authored SM83
-  arcade carts) / **7 Solitaire / 8 Poker** (the card games); North inserts
-  the selection into an empty cabinet and ejects a running one. The sim
-  tracks only the type index — the ROM bytes are
-  host-side in the render node's cart table. Brickfall is battery-backed: its
+  arcade carts) / **7 Solitaire / 8 Poker** (the card games) / **9 the forged
+  jukebox tune / 10 the forged SDF-art scene** (the two new in-session forged
+  subjects — `tracker.forge` and `forge scene`); North inserts the selection
+  into an empty cabinet and ejects a running one. Types 3, 9, 10 are the FORGED
+  subjects — baked lazily the first time a cabinet wants one (`ForgeSubject`
+  registry), Cycle-reachable but never a boot default. The sim tracks only the
+  type index — the ROM bytes are host-side in the render node's cart table. Brickfall is battery-backed: its
   high-score SRAM persists at `%LOCALAPPDATA%\Puck\Demo\brickfall.sav`
   (`BrickfallRom.PrepareDefaultSavePath`), and it SDF-bakes its title screen
   on the live GPU (the hand-authored banner is the no-GPU fallback).
@@ -361,6 +569,7 @@ active page). The default profile:
 | Boot rules, hashing, replay | `OverworldWorld` (`Boot`, `TryBootNearest`, `HashState`) |
 | Layout keyframes + transition feel | `ScreenLayoutDirector` (`BuildTargets`, `PaneRect`, `TransitionSeconds`) |
 | Stand visuals / accents | `OverworldFrameSource.BuildProgram` (accents passed per console model) |
+| The editor-reveal WORKBENCH (rung 3 diegetic form) | prop + eased glow: `OverworldFrameSource.EmitWorkbench` / `AdvanceWorkbenchGlow` (lit on `EditorRevealed`); gated entry: `OverworldWorld.IsPlayerNearWorkbench` + `OverworldRenderNode.TryEnterWorkbench` → `SetWorldSculptMode`. Room-only (never a paned cabinet); joins the capacity probe |
 | Boot switch + pane rendering | `GamingBrickChildNode.PowerSource` + fixed allocation extent (alloc once at full frame; per-frame dispatch at the live rect — animated regions must NEVER reallocate GPU images) |
 | Input routing / mirror | `GamingBrickPadService` (sole gamepad drainer) + `OverworldRenderNode.AdvanceConsoleMode` |
 | Lockstep timeline / catch-up rate | `OverworldBrickTimeline` (segments + cursors) + `GamingBrickChildNode.SegmentSource` / `MaxSegmentsPerFrame` |
@@ -373,11 +582,15 @@ active page). The default profile:
 including console boots in the hash stream); everything else is the
 `Puck.Post` battery — engine determinism, paged bindings, fixed-point and
 world-coordinate self-tests, cross-backend world parity, and the differential
-fuzzer are all Post stages now. Headless deterministic captures:
-`PUCK_OVERWORLD_DEBUG_BOOT=240,480,720` + `PUCK_OVERWORLD_CAPTURE_FRAME=N`
-(the capture waits N produced frames so the machines have booted + drawn) +
-`--capture <png>`, plus `PUCK_CREATOR_LOAD` for creator scenes (env details in
-[agent-guide.md](agent-guide.md#environment-variables)).
+fuzzer are all Post stages now.
+
+Headless deterministic captures and scripted verification are **console-driven**
+(rule 3 of the unification contract): pipe a verb script into a run over stdin
+(`cart 0 4`, `boot 0`, `step 240`, `reveal`, `capture shot.png`,
+`world.verify`, `companion.add lantern-fish`, …) and read the echoed results on
+stdout. The demo's ENTIRE `PUCK_*` env recipe was removed — every former var is
+now one of these verbs or a run-document field (see the migration table in the
+unification contract above).
 
 ## The prototype arc (the design record)
 
@@ -419,10 +632,11 @@ below are the record):
    favor of the simpler per-cabinet Cycle button — CLAUDE.md is explicit:
    "there is no shelf or carrying." Kept here only as design provenance, not
    as a description of current behavior.* The cartridge roster survives as
-   the cabinet cart-type cycle instead: nine types today
+   the cabinet cart-type cycle instead: eleven types today
    (`OverworldWorld.CartTypeCount`), cycled at the cabinet with the Right
    bumper (see "Controls & running" above; types 4–8 are the five
-   hand-authored SM83 games — Volley/Brickfall/Chroma/Solitaire/Poker); the
+   hand-authored SM83 games — Volley/Brickfall/Chroma/Solitaire/Poker; types 3,
+   9, 10 are the in-session forged avatar/jukebox/scene subjects); the
    `ShelfSlot` geometry, where it still exists, is optional static furniture
    with no carried cartridges. The abandoned design: `OverworldNode` would
    carry a `library` (cartridge entries: id, title, `romPath`, and later a
@@ -468,15 +682,15 @@ instancing substrate is what the fleet arc scales on.
 
 ## Next steps (carried arcs, unchanged direction)
 
-0. **The zoom-out arc.** The overworld room is ONE STAGE of a larger reveal:
-   sessions may open INSIDE a ROM (fullscreen, an ordinary-looking GB game)
-   with the room disclosed later — the avatar was playing a humble device
-   all along. ROMs are also world items ("insert" = a host-side mechanic,
-   e.g. a watched mount point), in-ROM pickups can promote the real device
-   (needs the machine→engine event seam), and link-cable trading is a
-   designed mechanic. Workload + seam consequences live in
-   [machine-fleet-briefing.md](machine-fleet-briefing.md) §1; none of the
-   ROMs are designed yet, deliberately.
+0. **The zoom-out arc.** *(The reveal-ladder CORE is DONE — see rule 4 "The
+   reveal ladder" above and the self-editing arcade: a session opens IMMERSED
+   inside a ROM (rung 1), the fourth wall breaks into the data-file world
+   (rung 2), and completing X arcade games unlocks the editor via the 128-bit
+   meta victory (rung 3). What REMAINS of this arc:)* ROMs as world items
+   ("insert" = a host-side mechanic, e.g. a watched mount point), in-ROM pickups
+   that promote the real device (needs the machine→engine event seam), and
+   link-cable trading. Workload + seam consequences live in
+   [machine-fleet-briefing.md](machine-fleet-briefing.md) §1.
 1. **PC camera as a GB Camera.** The camera feed reaches the emulated
    machines through a **cartridge-sensor seam** — a future `peripheral` field
    on an `OverworldNode.Consoles` entry — NOT another viewport pane (the four

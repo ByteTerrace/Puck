@@ -422,6 +422,44 @@ internal static class RomForge {
     internal static byte[] ForgeAvatarRom(IGpuDeviceContext device, IGpuComputeServices gpu, AvatarDefinition avatar, string title, MovementMode movementMode = MovementMode.FourWay) =>
         ForgeAvatarRom(avatar: avatar, bundle: out _, device: device, framePoses: null, gpu: gpu, movementMode: movementMode, roomTileCount: out _, sheet: out _, style: null, title: title);
 
+    /// <summary>Forges the overworld ROM BYTES from a full creation document, in memory — the LOSSLESS in-game hot
+    /// path. Lifts the document exactly as <c>--forge-avatar-from</c> does (<see cref="AvatarForge.FromCreation"/> for
+    /// the recentered avatar + the timeline's authored walk poses, and the document's <c>bakeStyle</c>), so an in-game
+    /// commit bakes the SAME cartridge the CLI would from the same saved creation — the animation frames and bake style
+    /// reach the ROM, not just the rest-pose geometry. The disk <see cref="ForgeAvatar"/> is this plus write + verify.</summary>
+    /// <param name="device">The GPU device (the live overworld's, or a one-shot host's).</param>
+    /// <param name="gpu">The compute services.</param>
+    /// <param name="document">The full creation document (the live scene's <c>ToDocument()</c>).</param>
+    /// <param name="title">The cartridge header title.</param>
+    /// <param name="movementMode">The forged walker's d-pad direction lock (default <see cref="MovementMode.FourWay"/>).</param>
+    /// <returns>A genuine 32 KiB overworld ROM.</returns>
+    internal static byte[] ForgeAvatarRomFromCreation(IGpuDeviceContext device, IGpuComputeServices gpu, CreationDocument document, string title, MovementMode movementMode = MovementMode.FourWay) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var avatar = AvatarForge.FromCreation(document: document, framePoses: out var framePoses);
+        var style = BakeStyles.Resolve(diagnostic: out _, name: document.BakeStyle);
+
+        return ForgeAvatarRom(avatar: avatar, bundle: out _, device: device, framePoses: framePoses, gpu: gpu, movementMode: movementMode, roomTileCount: out _, sheet: out _, style: style, title: title);
+    }
+
+    /// <summary>Forges a creation document to disk exactly as <c>--forge-avatar-from</c> does: the recentered avatar +
+    /// the timeline's authored walk poses (<see cref="AvatarForge.FromCreation"/>) baked with the document's
+    /// <c>bakeStyle</c>, then written + boot-verified (<see cref="ForgeAvatar"/>). The LOSSLESS in-game disk bake — the
+    /// <c>forge</c> verb's rich twin.</summary>
+    /// <param name="device">The GPU device (the live overworld's, or a one-shot host's).</param>
+    /// <param name="gpu">The compute services.</param>
+    /// <param name="document">The full creation document (the live scene's <c>ToDocument()</c>).</param>
+    /// <param name="outputPath">Where to write the <c>.gbc</c> (and its <c>.sheet.png</c>/<c>.bake.bin</c>/<c>.emulated.png</c>).</param>
+    /// <param name="title">The cartridge header title.</param>
+    internal static void ForgeAvatarFromCreation(IGpuDeviceContext device, IGpuComputeServices gpu, CreationDocument document, string outputPath, string title) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var avatar = AvatarForge.FromCreation(document: document, framePoses: out var framePoses);
+        var style = BakeStyles.Resolve(diagnostic: out _, name: document.BakeStyle);
+
+        ForgeAvatar(avatar: avatar, device: device, framePoses: framePoses, gpu: gpu, outputPath: outputPath, style: style, title: title);
+    }
+
     // The three committed flagship documents, in the order the report enumerates them. Each character's recipe
     // migrates from the original shared FlagshipCreations into its own per-character class as its quality
     // workstream lands (the fish first); the shared entries retire one by one.
@@ -722,7 +760,22 @@ internal static class RomForge {
     }
 
     private static void Forge(IGpuDeviceContext device, IGpuComputeServices gpu, string outputPath) {
-        var room = SceneForge.ForgeRoom(device: device, gpu: gpu);
+        var rom = ForgeSceneCart(device: device, gpu: gpu, program: BuildCreatureScene(), title: "PUCKFORGE", room: out var room, creature: out var creature);
+
+        WriteRom(outputPath: outputPath, rom: rom);
+        WritePreview(outputPath: outputPath, backgroundPalette: room.Palette, backgroundIndices: room.Indices, objectPalette: creature.Palette, creatureIndices: creature.Indices);
+        VerifyBoot(rom: rom, outputPath: outputPath);
+
+        Console.WriteLine(value: $"forge | wrote {outputPath} ({rom.Length} bytes) | {room.TileCount} BG tiles + {creature.TileCount} OBJ tiles | boot it with: --rom {outputPath}");
+    }
+
+    // The shared SDF-art SCENE cart: a forged room with an SDF program crushed to a centred 16x16 creature metasprite
+    // over it. Both the headless --forge tool (a fixed creature) and the in-session SCENE subject (the live creator
+    // document) go through here, so the two paths are one bake. The camera + budget are the creature-cart contract.
+    private static byte[] ForgeSceneCart(IGpuDeviceContext device, IGpuComputeServices gpu, SdfProgram program, string title, out SceneForge.RoomAssets room, out SceneForge.SpriteAssets creature) {
+        ArgumentNullException.ThrowIfNull(program);
+
+        room = SceneForge.ForgeRoom(device: device, gpu: gpu);
 
         var creatureCamera = CameraSnapshot.LookAt(
             position: new Vector3(0f, 0.15f, 4.4f),
@@ -731,7 +784,8 @@ internal static class RomForge {
             viewportWidth: CreatureSupersample,
             viewportHeight: CreatureSupersample
         );
-        var creature = SceneForge.ForgeSprite(device: device, gpu: gpu, program: BuildCreatureScene(), camera: creatureCamera, supersampleWidth: CreatureSupersample, supersampleHeight: CreatureSupersample, reduceFactor: CreatureReduceFactor);
+
+        creature = SceneForge.ForgeSprite(device: device, gpu: gpu, program: program, camera: creatureCamera, supersampleWidth: CreatureSupersample, supersampleHeight: CreatureSupersample, reduceFactor: CreatureReduceFactor);
 
         if ((room.TileCount + creature.TileCount) > MaxTiles) {
             throw new InvalidOperationException(message: $"The forged scene needs {room.TileCount + creature.TileCount} tiles, over the {MaxTiles}-tile VRAM budget.");
@@ -743,20 +797,32 @@ internal static class RomForge {
         room.TileData.CopyTo(array: tileData, index: 0);
         creature.TileData.CopyTo(array: tileData, index: room.TileData.Length);
 
-        var rom = HgbCartridge.Build(
-            title: "PUCKFORGE",
+        return HgbCartridge.Build(
+            title: title,
             backgroundPalette: HgbImage.EncodePalette(palette: room.Palette),
             objectPalette: HgbImage.EncodePalette(palette: creature.Palette),
             tileData: tileData,
             tileMap: room.TileMap,
             objectAttributes: BuildCreatureOam(objectTileBase: objectTileBase)
         );
+    }
 
-        WriteRom(outputPath: outputPath, rom: rom);
-        WritePreview(outputPath: outputPath, backgroundPalette: room.Palette, backgroundIndices: room.Indices, objectPalette: creature.Palette, creatureIndices: creature.Indices);
-        VerifyBoot(rom: rom, outputPath: outputPath);
+    /// <summary>Forges a creation document into an SDF-ART SCENE cart: the creation's rest pose is baked (through the
+    /// SAME <see cref="AvatarForge.FromCreation"/> lift the avatar walker uses) into a centred 16×16 creature metasprite
+    /// over the forged room — the sculpt-a-creature-and-see-it half of the in-session forge, DISTINCT from the walker
+    /// avatar cart the same document also forges. Needs the live GPU device (the SDF rasterize). The in-session
+    /// <c>forge scene</c> path calls this; it is the creature-cart twin of <see cref="ForgeAvatarRomFromCreation"/>.</summary>
+    /// <param name="device">The GPU device (the live overworld's, or a one-shot host's).</param>
+    /// <param name="gpu">The compute services.</param>
+    /// <param name="document">The full creation document (the live scene's <c>ToDocument()</c>).</param>
+    /// <param name="title">The cartridge header title.</param>
+    /// <returns>A genuine 32 KiB SDF-art scene ROM.</returns>
+    internal static byte[] ForgeSceneRomFromCreation(IGpuDeviceContext device, IGpuComputeServices gpu, CreationDocument document, string title) {
+        ArgumentNullException.ThrowIfNull(document);
 
-        Console.WriteLine(value: $"forge | wrote {outputPath} ({rom.Length} bytes) | {room.TileCount} BG tiles + {creature.TileCount} OBJ tiles | boot it with: --rom {outputPath}");
+        var avatar = AvatarForge.FromCreation(document: document, framePoses: out _);
+
+        return ForgeSceneCart(device: device, gpu: gpu, program: avatar.BuildProgram(), title: title, room: out _, creature: out _);
     }
 
     // Four 8x8 sprites forming the 16x16 metasprite, centred on the 160x144 screen.

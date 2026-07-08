@@ -36,6 +36,9 @@ internal sealed class DemoCommandModule(
     private int m_orientationLogTick;
     private int m_touch0LogTick;
     private int m_touch1LogTick;
+    // Host-side theater only (the sim and its hash never see it): how many times the magic word has been whispered this
+    // session, so `xyzzy` can answer a little differently each time.
+    private int m_xyzzyCount;
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -58,18 +61,7 @@ internal sealed class DemoCommandModule(
             valueKind: CommandValueKind.Digital
         );
 
-        yield return CommandDefinition.Verb(
-            description: "FORGES your creator-mode creation into a playable overworld cartridge: snapshots the avatar from four facings over a walk cycle into a sprite sheet, bakes it into a forged room the sprite walks around, and writes a real .gbc (+ avatar JSON, sheet + boot previews) under ./forged-avatars. Enter creator mode and place some shapes first; boot the result with --rom.",
-            handler: _ => {
-                if (m_creatorHost is null) {
-                    return new CommandResult("[forge: unavailable — the overworld is not the active root]");
-                }
-
-                return new CommandResult(m_creatorHost.RequestAvatarForge());
-            },
-            name: "forge",
-            valueKind: CommandValueKind.Digital
-        );
+        yield return ForgeCommand();
 
         yield return CommandDefinition.Verb(
             description: "Toggles TRACKER mode: the in-engine music tracker. D-pad up/down moves the row cursor, left/right switches pattern, bumpers/stick-clicks nudge the note by semitone/octave, South toggles hold/off, East plays/stops the preview, West saves, North exits.",
@@ -85,7 +77,49 @@ internal sealed class DemoCommandModule(
             name: "tracker",
             valueKind: CommandValueKind.Digital
         );
+
+        yield return MagicWordCommand();
     }
+
+    // The `forge [avatar|scene]` verb: forges the current creator creation into a cart. The optional subject word picks
+    // which cart the SAME creation forges — `avatar` (default, back-compat) writes the walker overworld .gbc to disk;
+    // `scene` forges + hot-swaps the SDF-art creature cart into the nearest cabinet in-session. Takes one optional token.
+    private CommandDefinition ForgeCommand() {
+        const string description = "FORGES your creator-mode creation into a cart: forge [avatar|scene]. avatar (default) writes a playable walker overworld .gbc (+ creation JSON, sheet + boot previews) under ./forged-avatars; scene forges the SDF-art creature cart and hot-swaps it into the nearest cabinet in-session. Enter creator mode and place some shapes first.";
+        var subject = new Argument<string[]>(name: "subject") {
+            Arity = ArgumentArity.ZeroOrMore,
+            Description = "avatar (default) or scene",
+        };
+
+        return new CommandDefinition(
+            Description: description,
+            Handler: context => new CommandResult((m_creatorHost is null)
+                ? "[forge: unavailable — the overworld is not the active root]"
+                : m_creatorHost.RequestCreatorForge(subject: ((context.Parse?.GetValue(argument: subject) is { Length: > 0 } tokens) ? tokens[0] : "avatar"))),
+            Name: "forge",
+            TextCommand: new Command(description: description, name: "forge") {
+                subject,
+            },
+            ValueKind: CommandValueKind.Digital
+        );
+    }
+
+    // xyzzy - the word of power from the elder text games. It teleports nothing (this is a deterministic machine, with
+    // no twisty little maze to lose you in) but the room keeps a little theater, and it remembers how many times you
+    // have asked. Pure host-side presentation, exactly like every other console echo - the sim and its hash never see it.
+    private CommandDefinition MagicWordCommand() => CommandDefinition.Verb(
+        description: "A word of power from the old games. Say it and see.",
+        handler: _ => new CommandResult(MagicWordResponse(count: ++m_xyzzyCount)),
+        name: "xyzzy",
+        valueKind: CommandValueKind.Digital
+    );
+
+    private static string MagicWordResponse(int count) => count switch {
+        1 => "[xyzzy] A hollow voice says, \"Fool.\" ...yet the nearest cabinet's CRT seems to warm half a shade, as if the room heard you. Nothing is teleported - this is a deterministic machine, with no twisty little maze to lose you in. It only remembers that you asked.",
+        2 => "[xyzzy] The hollow voice returns, quieter: \"Still here, then.\" A marquee somewhere flickers a knowing amber.",
+        3 => "[xyzzy] \"...you and I both know there is no secret passage,\" the voice admits, almost kindly. The cabinets hum in something like fondness.",
+        _ => "[xyzzy] The word has worn smooth from use; the hollow voice only chuckles now - a soft glitch in the bloom - and nudges you back toward your machines.",
+    };
 
     private IEnumerable<CommandDefinition> GetConsoleCommands() {
         yield return CommandDefinition.Verb(

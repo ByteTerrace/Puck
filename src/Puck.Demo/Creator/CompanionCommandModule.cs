@@ -102,19 +102,24 @@ internal sealed class CompanionCommandModule(IRenderNode rootNode) : ICommandMod
             return $"[companion.add: the room already has {CompanionState.MaxCompanions} companions — companion.del one first]";
         }
 
-        if (CompanionState.ResolveDocument(nameOrHash: args[0], store: store) is not { } document) {
-            return $"[companion.add: nothing readable at '{args[0]}']";
+        try {
+            if (CompanionState.ResolveDocument(nameOrHash: args[0], store: store) is not { } document) {
+                return $"[companion.add: nothing readable at '{args[0]}']";
+            }
+
+            // The explicit "swim" token FORCES swimming (the assist override); its absence DEFERS to the creation's
+            // behavior manifest (null) — a fish declared swim in its manifest swims without the token.
+            var swimToken = ((args.Length > 1) && string.Equals(a: args[1], b: "swim", comparisonType: StringComparison.OrdinalIgnoreCase));
+            var rosterIndex = roster.Companions.Count;
+            var companion = new CompanionState(bounds: bounds, document: document, isSwimmer: (swimToken ? true : (bool?)null), spawnPosition: host.CompanionSpawnPosition(rosterIndex: rosterIndex));
+
+            return (roster.Add(companion: companion)
+                ? $"[companion.add: '{document.Name}' joined the room ({roster.Companions.Count}/{CompanionState.MaxCompanions}){(companion.IsSwimmer ? " — swimming" : "")}]"
+                : $"[companion.add: the room already has {CompanionState.MaxCompanions} companions — companion.del one first]");
         }
-
-        // The explicit "swim" token FORCES swimming (the assist override); its absence DEFERS to the creation's
-        // behavior manifest (null) — a fish declared swim in its manifest swims without the token.
-        var swimToken = ((args.Length > 1) && string.Equals(a: args[1], b: "swim", comparisonType: StringComparison.OrdinalIgnoreCase));
-        var rosterIndex = roster.Companions.Count;
-        var companion = new CompanionState(bounds: bounds, document: document, isSwimmer: (swimToken ? true : (bool?)null), spawnPosition: host.CompanionSpawnPosition(rosterIndex: rosterIndex));
-
-        return (roster.Add(companion: companion)
-            ? $"[companion.add: '{document.Name}' joined the room ({roster.Companions.Count}/{CompanionState.MaxCompanions}){(companion.IsSwimmer ? " — swimming" : "")}]"
-            : $"[companion.add: the room already has {CompanionState.MaxCompanions} companions — companion.del one first]");
+        catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+            return $"[companion.add: '{args[0]}' is unreadable — {exception.Message}]";
+        }
     }
 
     private static string Delete(ICompanionHost host, string[] args) {

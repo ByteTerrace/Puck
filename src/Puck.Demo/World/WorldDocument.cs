@@ -55,7 +55,13 @@ public sealed record PlacementPatternDocument(
 /// <param name="YawDegrees">The stamp yaw (null = 0).</param>
 /// <param name="Scale">The uniform stamp scale (null = 1).</param>
 /// <param name="Repeat">The repeat block (null = a single copy).</param>
-/// <param name="Role">The anchor role (null = decoration; <c>cabinet:&lt;n&gt;</c> re-homes a console stand).</param>
+/// <param name="Role">The anchor role (null = decoration; <c>cabinet:&lt;n&gt;</c> re-homes a console stand).
+/// PERSISTENCE SEAM (unwired — USER DECISION: no persistence for now, cloud saves near-future): a re-forged
+/// win/reveal condition (the live <c>condition.*</c> verbs) WOULD serialize onto THIS <c>cabinet:&lt;n&gt;</c>
+/// placement — its exit + victory conditions carried alongside the role — the same serializable seam a cloud save
+/// syncs. It is deliberately NOT wired this stage: <c>world.save</c> does not yet carry conditions, so a live re-forge
+/// is session-only. The run-document schema is UNCHANGED — conditions already exist on <c>GamingBrickSource</c>; live
+/// editing changes no schema.</param>
 /// <param name="Mirror">The symmetry fold axis (<c>x</c> or <c>z</c> in the placement's local frame; null = none).
 /// A mirrored/patterned chain forgoes the whole-chain instance skip (the settled cull contract) — the per-shape
 /// skip inside the evaluated segment survives.</param>

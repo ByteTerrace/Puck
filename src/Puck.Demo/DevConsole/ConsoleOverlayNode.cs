@@ -18,6 +18,7 @@ namespace Puck.Demo.DevConsole;
 /// </summary>
 internal sealed class ConsoleOverlayNode : IRenderNode {
     private const int Margin = 14;
+    private const string PromptPrefix = "> ";
     // Header float4s: (panelX, panelY, panelW, panelH) px · (cols, rows, cellW, cellH) · (textColor.rgb, panelAlpha) ·
     // (cursorCol, cursorRow, textCellUintOffset, firstChar).
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 4);
@@ -39,6 +40,9 @@ internal sealed class ConsoleOverlayNode : IRenderNode {
     private readonly uint m_height;
     private readonly IRenderNode m_inner;
     private readonly IGpuPipelineFactory m_pipelineFactory;
+    // Reused across frames: the push-constant header is rewritten in place (all 16 floats each frame) rather than
+    // reallocated, so the draw command can hold one binding over this array for the overlay's lifetime.
+    private readonly byte[] m_pushConstantData = new byte[PushConstantByteLength];
     private readonly IGpuQueueSubmitter m_queueSubmitter;
     private readonly int m_rows;
     private readonly uint[] m_scratch;
@@ -160,10 +164,13 @@ internal sealed class ConsoleOverlayNode : IRenderNode {
 
         var cursorColumn = PackText(frame: in frame);
 
-        m_dataBuffer!.Write<uint>(data: m_scratch);
-        m_drawCommands![0] = m_drawCommands[0] with {
-            PushConstants = new GpuPushConstantBinding(data: BuildPushConstants(cursorColumn: cursorColumn), offset: 0, stageFlags: GpuShaderStage.Fragment),
-        };
+        // The draw command already holds a binding over m_pushConstantData (set in EnsureResources); rewriting the
+        // bytes in place updates what Record reads — no per-frame array, binding, or draw-command copy.
+        FillPushConstants(cursorColumn: cursorColumn);
+
+        // Only the character grid changed this frame; the static glyph atlas prefix was uploaded once in
+        // EnsureResources, so write just the grid slice at its byte offset rather than re-uploading the ~13.7KB font.
+        m_dataBuffer!.Write<uint>(data: m_scratch.AsSpan(start: m_textOffsetUints, length: (m_cols * m_rows)), destinationOffsetBytes: (ulong)(m_textOffsetUints * sizeof(uint)));
 
         var commandBufferHandle = m_compositor.Record(
             deviceContext: m_deviceContext,
@@ -198,29 +205,29 @@ internal sealed class ConsoleOverlayNode : IRenderNode {
         var firstShown = Math.Max(val1: 0, val2: (lines.Count - historyRows));
 
         for (var row = 0; ((row < historyRows) && ((firstShown + row) < lines.Count)); row++) {
-            WriteRow(row: row, text: lines[firstShown + row]);
+            WriteRow(row: row, column: 0, text: lines[firstShown + row]);
         }
 
-        // The bottom row is the live prompt.
-        var prompt = ("> " + frame.Input);
+        // The bottom row is the live prompt: the fixed prefix then the input, written straight into the grid (no concat).
+        var input = frame.Input;
 
-        WriteRow(row: (m_rows - 1), text: prompt);
+        WriteRow(row: (m_rows - 1), column: 0, text: PromptPrefix);
+        WriteRow(row: (m_rows - 1), column: PromptPrefix.Length, text: input);
 
-        return Math.Min(val1: prompt.Length, val2: (m_cols - 1));
+        return Math.Min(val1: (PromptPrefix.Length + input.Length), val2: (m_cols - 1));
     }
 
-    private void WriteRow(int row, string text) {
-        var baseIndex = (m_textOffsetUints + (row * m_cols));
-        var count = Math.Min(val1: text.Length, val2: m_cols);
+    private void WriteRow(int row, int column, string text) {
+        var baseIndex = (m_textOffsetUints + (row * m_cols) + column);
+        var count = Math.Min(val1: text.Length, val2: (m_cols - column));
 
-        for (var column = 0; (column < count); column++) {
-            m_scratch[baseIndex + column] = text[column];
+        for (var index = 0; (index < count); index++) {
+            m_scratch[baseIndex + index] = text[index];
         }
     }
 
-    private byte[] BuildPushConstants(int cursorColumn) {
-        var data = new byte[PushConstantByteLength];
-        var floats = MemoryMarshal.Cast<byte, float>(span: data.AsSpan());
+    private void FillPushConstants(int cursorColumn) {
+        var floats = MemoryMarshal.Cast<byte, float>(span: m_pushConstantData.AsSpan());
 
         floats[0] = Margin;                       // panel x (px)
         floats[1] = Margin;                       // panel y (px)
@@ -238,8 +245,6 @@ internal sealed class ConsoleOverlayNode : IRenderNode {
         floats[13] = (m_rows - 1);                // the caret rides the bottom (prompt) row
         floats[14] = m_textOffsetUints;           // where the character grid begins in the buffer
         floats[15] = ConsoleGlyphFont.FirstChar;
-
-        return data;
     }
 
     private void EnsureResources() {
@@ -280,6 +285,10 @@ internal sealed class ConsoleOverlayNode : IRenderNode {
         m_descriptorSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: m_descriptorPool);
         m_sampler = m_descriptorAllocator.CreateSampler(deviceHandle: deviceHandle);
         m_descriptorAllocator.WriteStorageBuffer(binding: m_storageBufferBinding, bufferHandle: m_dataBuffer.BufferHandle, bufferSize: (m_dataUintCount * sizeof(uint)), descriptorSetHandle: m_descriptorSet, deviceHandle: deviceHandle);
+        // The glyph atlas is static — upload it ONCE now (the front m_textOffsetUints uints of the scratch buffer).
+        // Each produced frame then rewrites only the character-grid slice after it, never re-uploading the font. A
+        // device-loss rebuild re-runs EnsureResources, so the atlas is re-seeded then too.
+        m_dataBuffer.Write<uint>(data: m_scratch.AsSpan(start: 0, length: m_textOffsetUints));
         m_pipelines = new Dictionary<AssetContentHash, IGpuPipeline> {
             [m_pipelineId] = m_pipeline,
         };
@@ -288,7 +297,7 @@ internal sealed class ConsoleOverlayNode : IRenderNode {
                 DescriptorSetHandle: m_descriptorSet,
                 DrawParameters: new GpuDrawParameters(instanceCount: 1, vertexCount: VertexCount),
                 PipelineId: m_pipelineId,
-                PushConstants: new GpuPushConstantBinding(data: new byte[PushConstantByteLength], offset: 0, stageFlags: GpuShaderStage.Fragment),
+                PushConstants: new GpuPushConstantBinding(data: m_pushConstantData, offset: 0, stageFlags: GpuShaderStage.Fragment),
                 VertexBufferHandle: m_vertexBuffer.BufferHandle
             ),
         ];

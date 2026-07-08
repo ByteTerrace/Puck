@@ -58,9 +58,25 @@ public sealed class FixedWalkGrid {
             return null;
         }
 
-        var cellCount = (document.Width * document.Height);
-        var wordCount = ((cellCount + 63) / 64);
-        var bytes = (string.IsNullOrEmpty(value: document.Cells) ? [] : Convert.FromBase64String(s: document.Cells));
+        // A walk grid is small authored data (the town's is 72x64); a Width*Height that overflows int, or a corrupt
+        // base64 cell blob, is malformed/hostile input — bound the size and swallow a decode fault, deferring to the
+        // wall clamps (a null grid) rather than allocating an absurd buffer or tearing the tick-boundary reload down.
+        var cellCount = ((long)document.Width * document.Height);
+
+        if (cellCount > (1L << 24)) {
+            return null;
+        }
+
+        var wordCount = (int)((cellCount + 63) / 64);
+
+        byte[] bytes;
+
+        try {
+            bytes = (string.IsNullOrEmpty(value: document.Cells) ? [] : Convert.FromBase64String(s: document.Cells));
+        }
+        catch (FormatException) {
+            return null;
+        }
         var cells = new ulong[wordCount];
         var copyWords = Math.Min(val1: wordCount, val2: (bytes.Length / 8));
 

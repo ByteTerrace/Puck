@@ -46,10 +46,19 @@ public sealed class OverworldWorld {
     public const int MaxPlayers = 4;
 
     /// <summary>The number of cartridge TYPES a cabinet can hold (world-lens / camera / showcase / AVATAR / VOLLEY / BRICKFALL
-    /// / CHROMA / SOLITAIRE / POKER), cycled at the cabinet. Type 3 is the player's own forged avatar overworld — the
-    /// in-engine create→commit→play loop; types 4–8 are the five five-star framework games (genuine SM83 ROMs). Purely a
-    /// count; the sim never learns what bytes a type maps to (that is host-side, in the render node's ROM table).</summary>
-    public const int CartTypeCount = 9;
+    /// / CHROMA / SOLITAIRE / POKER / JUKEBOX / SCENE), cycled at the cabinet. Types 4–8 are the five five-star framework
+    /// games (genuine SM83 ROMs). Types 3 (AVATAR walker), 9 (JUKEBOX tune) and 10 (SDF-ART SCENE creature) are the three
+    /// in-session FORGED subjects (the create/author→forge→hot-swap loop — see <see cref="Forge.ForgeSubject"/>); each is
+    /// baked LAZILY the first time a cabinet wants it, so a forged type is Cycle-reachable but never a boot default.
+    /// Purely a count; the sim never learns what bytes a type maps to (that is host-side, in the render node's ROM
+    /// table).</summary>
+    public const int CartTypeCount = 11;
+
+    /// <summary>The SHOWCASE cart type — the pre-inserted <c>--rom</c> cartridge's slot in the host ROM table. It is the
+    /// LOADED default for an immersed non-world-lens (<c>--rom</c>) boot: a plain, always-sourced ROM (never a forged
+    /// type that would need a bake before one exists), so bumping <see cref="CartTypeCount"/> can never make a lazily-
+    /// forged type a cabinet's boot default. Host-side mapping only; the sim just carries the index.</summary>
+    public const int ShowcaseCartType = 2;
 
     // The movement direction sets, as compile-time raw Q48.16 unit components — each irrational rounded ONCE, here,
     // and documented as a settled contract fact: One = 65536 (1.0, exact), Half = 32768 (0.5, exact),
@@ -155,10 +164,13 @@ public sealed class OverworldWorld {
 
         // The boot cart every cabinet defaults to. A caller-specified startCartType (the world-lens default passes 0)
         // makes it UNIFORM — every cabinet selects that cart, whether it starts loaded (--rom) or empty and boots per
-        // player (world-lens) — so a per-player seating-boot inserts the right cart. Otherwise the last type (the
-        // showcase ROM) is the loaded default, and empty cabinets stagger their selection across the cart cycle.
+        // player (world-lens) — so a per-player seating-boot inserts the right cart. Otherwise the SHOWCASE type (the
+        // pre-inserted --rom cartridge) is the loaded default, and empty cabinets stagger their selection across the
+        // cart cycle. The showcase (a plain, always-sourced ROM) is used rather than the LAST type on purpose: the last
+        // slots are now the lazily-FORGED subjects (jukebox/scene), which must never be a boot default (they need a
+        // bake before one exists) — anchoring the default to the showcase keeps that true no matter how CartTypeCount grows.
         var uniform = ((startCartType >= 0) && (startCartType < CartTypeCount));
-        var bootType = (uniform ? startCartType : (CartTypeCount - 1));
+        var bootType = (uniform ? startCartType : ShowcaseCartType);
 
         for (var console = 0; (console < consoleCount); console++) {
             // Empty by default (the overworld: you insert a cart to bring a cabinet alive). The selected type is uniform
@@ -251,6 +263,30 @@ public sealed class OverworldWorld {
     /// presentation surfaces.</summary>
     public int SelectedCartridge(int consoleIndex) =>
         (((consoleIndex >= 0) && (consoleIndex < m_consoleSelectedType.Length)) ? m_consoleSelectedType[consoleIndex] : 0);
+
+    /// <summary>Sets a cabinet's SELECTED cart type directly (0..<see cref="CartTypeCount"/>-1) — the scripted equivalent
+    /// of walking up and pressing Cycle until the wanted cart is selected (the <c>cart</c> console verb). Wraps the same
+    /// selection machinery as <see cref="ResolveCycle"/>: when the cabinet is already booted, the loaded cart live-swaps
+    /// to the new selection so the pane changes game without a restart. Out-of-range indices/types are refused.</summary>
+    /// <param name="consoleIndex">The cabinet to set.</param>
+    /// <param name="cartType">The cart type to select (0..<see cref="CartTypeCount"/>-1).</param>
+    /// <returns><see langword="true"/> when the selection was applied; <see langword="false"/> when either argument was
+    /// out of range.</returns>
+    public bool SetSelectedCartType(int consoleIndex, int cartType) {
+        if ((consoleIndex < 0) || (consoleIndex >= m_consoleSelectedType.Length) || (cartType < 0) || (cartType >= CartTypeCount)) {
+            return false;
+        }
+
+        m_consoleSelectedType[consoleIndex] = cartType;
+
+        // Live-swap a running cabinet to the new selection, exactly as ResolveCycle does when Cycle lands on a booted
+        // cabinet (host reconcile assembles the new cart bytes into the pane next frame).
+        if (IsBooted(consoleIndex: consoleIndex)) {
+            m_consoleLoadedType[consoleIndex] = cartType;
+        }
+
+        return true;
+    }
 
     /// <summary>Boots a console directly — the scripted/config path (debug capture harnesses and tests); the live path
     /// boots through a player's interact intent in <see cref="Advance"/>. Idempotent per console; out-of-range indices
@@ -590,6 +626,42 @@ public sealed class OverworldWorld {
         return ((player is null)
             ? -1
             : FindNearestObstacle(obstacles: m_collision.Consoles, range: m_collision.InteractRange, local: player.Body.Position.Local, predicate: static _ => true));
+    }
+
+    // The diegetic WORKBENCH's fixed room-local XZ center (Stage 3 of the self-editing arc). It sits against the EAST
+    // (+X) inner wall at mid-depth — clear of the console stands (far −Z wall) and the shelf brackets (west −X wall) —
+    // so a player walks up to it from the room center. Read-only host presentation: the workbench is NOT a collision
+    // obstacle and NEVER enters the state hash; the frame source renders its prop at exactly this point, and the
+    // proximity read below drives the gated authoring entry. Derived from the collision bounds so it tracks a loaded
+    // world's grown lot (like the reveal framing) rather than a magic literal.
+    private FixedQ4816 WorkbenchCenterX => (m_collision.MaxX - FixedQ4816.FromDouble(value: 1.6));
+    private FixedQ4816 WorkbenchCenterZ => FixedQ4816.Zero;
+
+    /// <summary>The workbench's room-local XZ center (the frame source renders the prop here and the reveal glow reads
+    /// it) — presentation plumbing only, never part of the state hash.</summary>
+    public (float X, float Z) WorkbenchCenterLocal => ((float)WorkbenchCenterX, (float)WorkbenchCenterZ);
+
+    /// <summary>Whether a slot's player stands within interact range of the diegetic workbench — the read-only
+    /// proximity behind the GATED editor entry (mirrors <see cref="NearestCabinetForSlot"/>'s per-axis range test, same
+    /// <c>InteractRange</c>, fixed-point only). Presentation/host routing only: the workbench is not a sim obstacle, so
+    /// this touches no hashed state. The CALLER gates on the editor unlock — a dark workbench admits no entry — so the
+    /// proximity itself is unconditional here.</summary>
+    /// <param name="slot">The player slot to measure from.</param>
+    /// <returns><see langword="true"/> when the slot is occupied and its player is within interact range of the
+    /// workbench.</returns>
+    public bool IsPlayerNearWorkbench(int slot) {
+        var player = (((slot >= 0) && (slot < MaxPlayers)) ? m_slots[slot] : null);
+
+        if (player is null) {
+            return false;
+        }
+
+        var range = m_collision.InteractRange;
+        var local = player.Body.Position.Local;
+        var dx = (local.X - WorkbenchCenterX);
+        var dz = (local.Z - WorkbenchCenterZ);
+
+        return ((dx <= range) && (dx >= -range) && (dz <= range) && (dz >= -range));
     }
 
     private static int FindNearestObstacle(FixedConsole[] obstacles, FixedQ4816 range, FixedVector3 local, Func<int, bool> predicate) {

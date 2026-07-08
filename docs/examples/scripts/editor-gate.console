@@ -1,0 +1,30 @@
+# Puck.Demo editor gate (rung 3): "complete X framework games -> the editor reveal".
+#
+# The run document docs/examples/overworld-editor-gate.json declares a META victory group of three cabinets
+# (group "workshop"), each carrying an authored 128-bit share. The three shares XOR to the group's target
+# (ffffffff-ffff-4fff-bfff-ffffffffffff) -- proven by the Post `victory-gate` stage's meta-XOR math -- and no
+# subset of two ever reaches it (no cabinet wins alone). When each cabinet runs a framework game and that game is
+# WON, its on-win hook (VictoryModule) writes the cabinet's seeded share into the top-16 SRAM win region; the room
+# XORs the three regions each frame (MetaVictoryWatch) and, the frame all three align on the target, fires the
+# EDITOR reveal -- rung 3, "[editor] the workshop is open".
+#
+# Run:  dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/overworld-editor-gate.json --exit-after-seconds 8 < docs/examples/scripts/editor-gate.console
+
+# The run opens immersed. Insert a framework game into each of the three workshop cabinets and boot them.
+# Cart types: 4 Volley, 5 Brickfall, 6 Chroma (the three hand-authored arcade carts). Each cabinet's authored
+# share is seeded into its running game at boot, independent of which of the three carts it holds.
+cart 0 4
+boot 0
+cart 1 5
+boot 1
+cart 2 6
+boot 2
+settle
+state
+
+# Playing each game to its WIN is a real gameplay act (not a scriptable console verb): drive each cabinet's brick
+# to a match end / cleared board, and the three shares converge on the group's target -> the editor reveal fires
+# automatically. For a scripted/agent run, `reveal editor` forces the SAME rung-3 seam the meta win drives, so you
+# can confirm the unlock line without a full three-game playthrough:
+reveal editor
+state

@@ -10,6 +10,13 @@ pipeline serves every consumer: the live easel preview in creator mode, the `--f
 > The bake lives under the GREENFIELD demo: verify by running the tool modes and the live preview, never by
 > adding a gate. Diagnostics and calibration are REPORTS — findings to read, not failure exits.
 
+> **In-game reflection** (the [unification contract](../../../../docs/overworld-demo-plan.md#the-unification-contract-read-first--the-north-star-for-this-arc)):
+> the bake is reached in-session today through the live easel preview in creator mode
+> (`creator.baketarget`/`creator.bakeoverlay`/`creator.style`) and the `forge` verb's
+> author→forge→hot-swap loop. The headless `--forge-bake*` / `--forge-avatar` tool modes
+> are the CI/proof twins of that same pipeline — they prove byte-identical output, not
+> gate the only path to it.
+
 ## Architecture — the Rasterize / RunCpu split
 
 `BakePipeline` is two halves, split on purpose:

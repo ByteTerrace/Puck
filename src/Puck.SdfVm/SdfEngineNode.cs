@@ -41,13 +41,15 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 public sealed class SdfEngineNode : IRenderNode {
     private const ulong TimingReportInterval = 60; // print the digest roughly once per second at 60 fps
 
-    private static readonly IReadOnlyDictionary<int, IRenderNode> EmptyChildren = new Dictionary<int, IRenderNode>();
-    private static readonly IReadOnlyDictionary<int, Func<nint>> EmptyScreenSources = new Dictionary<int, Func<nint>>();
-    private static readonly IReadOnlyDictionary<int, Func<Vector3>> EmptyScreenLights = new Dictionary<int, Func<Vector3>>();
-    private static readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new Dictionary<int, Func<SdfScreenSurfaceTransform?>>();
+    // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
+    // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
+    private static readonly Dictionary<int, IRenderNode> EmptyChildren = new();
+    private static readonly Dictionary<int, Func<nint>> EmptyScreenSources = new();
+    private static readonly Dictionary<int, Func<Vector3>> EmptyScreenLights = new();
+    private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
 
     private readonly string? m_capturePath;
-    private readonly IReadOnlyDictionary<int, IRenderNode> m_children;
+    private readonly Dictionary<int, IRenderNode> m_children;
     private readonly Func<IGpuDeviceContext, IGpuStorageImage>? m_createStorageImage;
     private readonly int m_dynamicTransformCapacity;
     private readonly NodeDescriptor m_descriptor = new(
@@ -59,9 +61,9 @@ public sealed class SdfEngineNode : IRenderNode {
     private readonly int m_instanceCapacity;
     private readonly SdfWorldKernels m_kernels;
     private readonly int m_programWordCapacity;
-    private readonly IReadOnlyDictionary<int, Func<nint>> m_screenSources;
-    private readonly IReadOnlyDictionary<int, Func<Vector3>> m_screenLights;
-    private readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
+    private readonly Dictionary<int, Func<nint>> m_screenSources;
+    private readonly Dictionary<int, Func<Vector3>> m_screenLights;
+    private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly IServiceProvider m_serviceProvider;
     private readonly uint m_width;
     private bool m_captured;
@@ -156,7 +158,11 @@ public sealed class SdfEngineNode : IRenderNode {
         }
 
         m_capturePath = capturePath;
-        m_children = (children ?? EmptyChildren);
+        // Copy each caller map into a concrete Dictionary<,> (its struct enumerator is what the per-frame foreach binds
+        // — see the Empty* fields) rather than storing the read-only interface; the maps are built once and never
+        // mutated after construction, and every per-frame loop over them writes independent per-slot state, so the copy
+        // is observably identical. A null map shares the empty singleton.
+        m_children = (children is null ? EmptyChildren : new Dictionary<int, IRenderNode>(collection: children));
         m_createStorageImage = createStorageImage;
         m_dynamicTransformCapacity = dynamicTransformCapacity;
         m_instanceCapacity = instanceCapacity;
@@ -165,9 +171,9 @@ public sealed class SdfEngineNode : IRenderNode {
         m_height = height;
         m_kernels = kernels;
         m_rayQueryEnabled = rayQueryEnabled;
-        m_screenSources = (screenSources ?? EmptyScreenSources);
-        m_screenLights = (screenLights ?? EmptyScreenLights);
-        m_screenSurfaceTransforms = (screenSurfaceTransforms ?? EmptyScreenSurfaceTransforms);
+        m_screenSources = (screenSources is null ? EmptyScreenSources : new Dictionary<int, Func<nint>>(collection: screenSources));
+        m_screenLights = (screenLights is null ? EmptyScreenLights : new Dictionary<int, Func<Vector3>>(collection: screenLights));
+        m_screenSurfaceTransforms = (screenSurfaceTransforms is null ? EmptyScreenSurfaceTransforms : new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(collection: screenSurfaceTransforms));
         m_serviceProvider = serviceProvider;
         m_timingEnabled = timingEnabled;
         m_width = width;

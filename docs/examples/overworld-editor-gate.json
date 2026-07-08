@@ -1,0 +1,39 @@
+{
+    "version": "puck.run.v1",
+    "graph": {
+        "$type": "overworld",
+        "immersed": true,
+        "consoles": [
+            {
+                "model": "cgb",
+                "victory": {
+                    "mode": "meta",
+                    "target": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+                    "share": "a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1",
+                    "group": "workshop",
+                    "label": "workshop cabinet A"
+                }
+            },
+            {
+                "model": "cgb",
+                "victory": {
+                    "mode": "meta",
+                    "target": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+                    "share": "b2b2b2b2-b2b2-4b2b-9b2b-b2b2b2b2b2b2",
+                    "group": "workshop",
+                    "label": "workshop cabinet B"
+                }
+            },
+            {
+                "model": "cgb",
+                "victory": {
+                    "mode": "meta",
+                    "target": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+                    "share": "ecececec-ecec-4ece-aece-ecececececec",
+                    "group": "workshop",
+                    "label": "workshop cabinet C"
+                }
+            }
+        ]
+    }
+}

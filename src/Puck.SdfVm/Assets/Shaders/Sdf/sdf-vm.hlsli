@@ -78,16 +78,36 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
     return (word & ((remaining >= 32u) ? 0xFFFFFFFFu : ((1u << remaining) - 1u)));
 }
 
-// The INSTANCE directory's element offset in sdfWords — the ONE resolution of the packed offset chain (header →
-// materials → shape-bound table → segment directory → instance directory; KEEP IN SYNC with SdfProgram's offset
-// math). Every consumer that touches the directory locates it through this.
-uint sdfInstanceDirectoryOffset() {
+// The SEGMENT directory's element offset in sdfWords: header -> materials -> shape-bound table -> segment directory.
+// KEEP IN SYNC with SdfProgram's offset math.
+uint sdfSegmentDirectoryOffset() {
     uint4 header = sdfWords[0];
-    uint boundsOffset = (header.w + (2u * header.y));
-    uint segmentOffset = (boundsOffset + (2u * header.x));
-    uint segmentCount = sdfWords[segmentOffset].x;
 
+    return ((header.w + (2u * header.y)) + (2u * header.x));
+}
+// The INSTANCE directory's element offset, given a caller that ALREADY resolved the segment directory (mapCore has
+// both in hand). DXC's SPIR-V backend runs no GVN over StructuredBuffer loads, so re-deriving them costs a real
+// reload of sdfWords[0] on Vulkan.
+uint sdfInstanceDirectoryOffsetFrom(uint segmentOffset, uint segmentCount) {
     return (segmentOffset + 1u + (2u * segmentCount));
+}
+// The INSTANCE directory's element offset in sdfWords — the ONE resolution of the packed offset chain for callers that
+// hold nothing yet. Every consumer that touches the directory locates it through this or its `From` sibling.
+uint sdfInstanceDirectoryOffset() {
+    uint segmentOffset = sdfSegmentDirectoryOffset();
+
+    return sdfInstanceDirectoryOffsetFrom(segmentOffset, sdfWords[segmentOffset].x);
+}
+// The per-PROGRAM Lipschitz STEP SCALE (1/L in (0, 1]), baked HOST-SIDE into the segment-directory header's otherwise-
+// free .y lane (SdfProgram.AnalyzeLipschitz). mapCore multiplies EVERY returned distance by it, so a consumer that
+// compares that distance against a WORLD-space quantity (a penumbra ratio, a footprint threshold) rather than taking a
+// STEP with it must divide the clamp back out. == 1.0 exactly for an isometric, warp-free program (x * 1.0f == x to the
+// bit for every finite x), so those scenes stay byte-identical. The `> 0` guard keeps a pre-writer all-zero stream
+// rendering as before.
+float sdfStepScale() {
+    float stepScale = asfloat(sdfWords[sdfSegmentDirectoryOffset()].y);
+
+    return ((stepScale > 0.0) ? stepScale : 1.0);
 }
 // The element offset of instance `index`'s directory entry (i0 = bound, i1 = meta at +1) within the directory at
 // `instanceOffset` — the ONE statement of the 2-uint4-per-instance entry stride.
@@ -116,7 +136,7 @@ uint sdfInstanceCountClamped() {
 [[vk::binding(9, 0)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t2);
 #endif
 
-// --- opcodes (mirror Puck.SdfVm.SdfOp / legacy AvatarSdfInstructionOp numbering) ---
+// --- opcodes (mirror Puck.SdfVm.SdfOp) ---
 #define SDF_OP_RESET             0u
 #define SDF_OP_TRANSLATE         1u
 #define SDF_OP_ROTATE            2u
@@ -129,13 +149,27 @@ uint sdfInstanceCountClamped() {
 #define SDF_OP_SHAPE             9u
 #define SDF_OP_REPEAT          11u
 #define SDF_OP_REPEAT_LIMITED  12u
-#define SDF_OP_SYMMETRY_X      13u
-#define SDF_OP_SYMMETRY_Y      14u
-#define SDF_OP_SYMMETRY_Z      15u
+// 13–15 (SymmetryX/Y/Z) retired — collapsed into SDF_OP_SYMMETRY_PLANE (26), which reproduces each with an axis normal.
 #define SDF_OP_ONION           16u
 #define SDF_OP_DILATE          17u
 #define SDF_OP_WALLPAPER_FOLD  18u
 #define SDF_OP_TWIST_Y         20u
+#define SDF_OP_LOG_SPHERE      21u
+#define SDF_OP_CELL_JITTER     22u
+#define SDF_OP_REPEAT_POLAR    23u
+#define SDF_OP_DISPLACE        24u
+#define SDF_OP_DOMAIN_WARP     25u
+#define SDF_OP_SYMMETRY_PLANE  26u
+// SDF_OP_CELL_JITTER Blend-lane (instructionHeader.z) noise flavor: how the per-cell POSITION offset is distributed
+// (KEEP IN SYNC with Puck.SdfVm.SdfNoiseFlavor). Reshapes ONLY r0 — tumble and material variant are unaffected.
+#define SDF_NOISE_WHITE          0u
+#define SDF_NOISE_BLUE           1u
+#define SDF_NOISE_GAUSSIAN       2u
+// SDF_OP_REPEAT_POLAR Shape-lane (instructionHeader.y) rotation axis (KEEP IN SYNC with Puck.SdfVm.SdfPolarAxis): the
+// angular fold acts in the plane PERPENDICULAR to it (the axial coordinate is untouched).
+#define SDF_POLAR_AXIS_X         0u
+#define SDF_POLAR_AXIS_Y         1u
+#define SDF_POLAR_AXIS_Z         2u
 
 // --- wallpaper symmetry groups, IUC order (mirror Puck.SdfVm.SdfWallpaperGroup) ---
 #define SDF_WPG_P1    0u
@@ -156,7 +190,37 @@ uint sdfInstanceCountClamped() {
 #define SDF_WPG_P6   15u
 #define SDF_WPG_P6M  16u
 
-#define SDF_SQRT3 1.7320508
+// === Shared numeric constants ========================================================================================
+// Written at full double precision: each rounds to the SAME float32 the shorter literal did, so naming them is
+// bytecode-identical while the digits document the exact quantity.
+#define SDF_SQRT3     1.7320508075688772   // sqrt(3)
+#define SDF_SQRT_HALF 0.7071067811865476   // sqrt(1/2) — the 45-degree chamfer bevel plane's normalization
+#define SDF_PI        3.141592653589793
+#define SDF_TAU       6.283185307179586    // 2*pi
+// 2^-32, exact. Maps a full-range uint hash to a float in [0, 1] — NOTE the CLOSED upper end: (float)0xFFFFFFFFu
+// rounds UP to 2^32, so the product can be exactly 1.0. Every consumer below is written to tolerate that.
+#define SDF_INV_2POW32 (1.0 / 4294967296.0)
+
+// The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
+// beyond MaxDistance (60) so it always loses a min() against real geometry, yet small enough that `a + (b - a)`
+// still resolves; see blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
+#define SDF_FAR_DISTANCE 1.0e9
+
+// Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder) — these
+// two are the ones the shader still applies itself.
+#define SDF_SMOOTH_RADIUS_MIN  0.0001   // the smooth blends' radius floor (the CHAMFER blends clamp against 0.0)
+#define SDF_ELLIPSOID_MIN_DENOM 0.0001  // keeps the approximate ellipsoid's k1 divide finite at its center
+
+// Clamps length(p) away from 0 in the log-spherical fold so log() never sees -inf at the Droste center (the origin is
+// a measure-zero singularity, kept finite). A host-contracted literal — identical across DXC targets.
+#define SDF_LOGSPHERE_MIN_RADIUS 1.0e-4
+
+// The scene's directional sun, PRE-NORMALIZED to the exact float32 triple that DXC's DXIL backend constant-folds
+// normalize(float3(0.55, 0.85, 0.35)) into (bits 0x3F03708B / 0x3F4B224B / 0x3EA7496B). DXC's SPIR-V backend does NOT
+// fold it — it emits a runtime OpExtInst Normalize — so spelling the folded value here keeps the single most
+// load-bearing shading vector (sunDiffuse, the shadow ray, sdfMaterialShade's half-vector) the SAME BITS on both
+// backends instead of "one compile-time constant, one driver rsqrt". Every kernel that lights a surface uses it.
+static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201);
 
 // --- primitives ---
 #define SDF_SHAPE_BOX          0u
@@ -166,8 +230,22 @@ uint sdfInstanceCountClamped() {
 #define SDF_SHAPE_CYLINDER     4u
 #define SDF_SHAPE_PLANE        5u
 #define SDF_SHAPE_ELLIPSOID    6u
-#define SDF_SHAPE_ROUND_CONE   11u
-#define SDF_SHAPE_SCREEN_SLAB  14u
+#define SDF_SHAPE_VESICA       7u
+// The 2D-primitive family: an exact IQ 2D SDF lifted to 3D. KEEP IN SYNC with SdfShapeType. Shared lane layout —
+// data0.xyz = 2D params, data0.w = lift amount (revolve offset o OR extrude half-height h), data1.x = smooth,
+// data1.y = lift mode (see SDF_LIFT_*), data1.zw = per-shape host-baked constants.
+#define SDF_SHAPE_ROUNDED_RECT     8u
+#define SDF_SHAPE_REGULAR_POLYGON  9u
+#define SDF_SHAPE_STAR            10u
+#define SDF_SHAPE_ROUND_CONE      11u
+#define SDF_SHAPE_TRAPEZOID       12u
+#define SDF_SHAPE_ELLIPSE         13u
+#define SDF_SHAPE_SCREEN_SLAB     14u
+
+// Lift mode for the 2D-primitive family (data1.y). Decoded as `> 0.5` so a float lane carries it cleanly on both
+// backends. KEEP IN SYNC with Puck.SdfVm.SdfLift.
+#define SDF_LIFT_REVOLVE 0u
+#define SDF_LIFT_EXTRUDE 1u
 
 // --- bounding-sphere entry modes (mirror Puck.SdfVm.SdfProgram's PackBounds) ---
 #define SDF_BOUND_NONE    0u
@@ -175,6 +253,13 @@ uint sdfInstanceCountClamped() {
 #define SDF_BOUND_DYNAMIC 2u
 
 // --- blend operators ---
+// THE ACCUMULATOR RULE (KEEP IN SYNC with Puck.SdfVm.SdfBlendOp's summary). mapCore carries ONE running nearest-surface
+// distance across the WHOLE program; SDF_OP_RESET resets the evaluation POINT, never result.distance. So a blend never
+// sees a subtree - it sees every shape emitted before it. Union (a min) and subtraction (a max against the NEGATED
+// candidate, which only bites inside the subtrahend) are therefore LOCAL and may appear anywhere. The INTERSECTION
+// family is not: max(accumulator, candidate) returns the candidate wherever the candidate is farther, i.e. everywhere
+// outside its own shape, so it annihilates every earlier shape it does not overlap. Author an intersection pair FIRST.
+// That unbounded influence region is also why an INSTANCE carrying one cannot be culled (SdfProgram.UnmaskableBoundRadius).
 #define SDF_BLEND_UNION               0u
 #define SDF_BLEND_SMOOTH_UNION        1u
 #define SDF_BLEND_SUBTRACTION         2u
@@ -182,6 +267,14 @@ uint sdfInstanceCountClamped() {
 #define SDF_BLEND_XOR                 4u
 #define SDF_BLEND_SMOOTH_INTERSECTION 5u
 #define SDF_BLEND_SMOOTH_SUBTRACTION  6u
+// Chamfered (45° beveled) seams — the mechanical/CAD counterpart to the smooth (round) blends; bevel size = Data1.x.
+// For unit outward gradients meeting at angle φ, |∇((a + b - r)·√½)| = √2·cos(φ/2): the bevel plane's gradient reaches
+// √2 at a FLAT / near-parallel seam (two tangent surfaces, φ → 0), is exactly 1 at a perpendicular seam, and falls to 0
+// at an acute knife edge. The √2 ceiling is real and attained, so a chamfer blend carries a conservative √2 step clamp
+// via SdfProgram.AnalyzeLipschitz — the one blend family that is not 1-Lipschitz (KEEP IN SYNC with Puck.SdfVm.SdfBlendOp).
+#define SDF_BLEND_CHAMFER_UNION        7u
+#define SDF_BLEND_CHAMFER_INTERSECTION 8u
+#define SDF_BLEND_CHAMFER_SUBTRACTION  9u
 
 // Material sentinel range: a SCREEN_SLAB shades as a "screen" rather than a table albedo. The plain sentinel
 // (SdfProgramBuilder.ScreenSlab with no screen index) shades the procedural test-card. SDF_SCREEN_MATERIAL + 1 +
@@ -251,24 +344,37 @@ float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inverse
         return r;
     }
 
-    if ((group == SDF_WPG_P3) || (group == SDF_WPG_P6)) {
+    if (group == SDF_WPG_P6) {
+        // p6 is the C6 fold about the hex CENTRE — six 60-degree sectors, folded onto one. 6-fold centres at the hex
+        // centres, 3-folds at the corners, 2-folds at the edge midpoints; translation lattice = the hex lattice.
+        //
+        // It canNOT be built from P3's 3-coloring turn plus an in-cell half-turn: the turn count k(h) = (a - b) mod 3
+        // satisfies k(-h) = -k(h), so the central inversion is not a symmetry and the pattern collapses to p3 (verified
+        // by direct point-group measurement: max rotation 3, identical signature to P3). Unlike P3, whose seams sit only
+        // on hex boundaries, this fold has IN-CELL seams — the six sector walls — so content must clear them, exactly as
+        // for P3M1/P31M/P6M.
+        float sector = floor(atan2(r.y, r.x) * (3.0 / SDF_PI));   // 3/pi = 1/(pi/3), one sector per 60 degrees
+        float spin = -(sector * (SDF_PI / 3.0));
+        float spinCos = cos(spin);
+        float spinSin = sin(spin);
+
+        return float2(((spinCos * r.x) - (spinSin * r.y)), ((spinSin * r.x) + (spinCos * r.y)));
+    }
+
+    if (group == SDF_WPG_P3) {
         // Turn count = the hex lattice 3-coloring (every corner touches one hex of each color), satisfying the
         // corner-rotation cocycle: the pattern gains 3-fold centers at the corners without any in-cell rotation seam.
+        // Its translation lattice is the sqrt3 x sqrt3 supercell, not the hex cell (see the authoring note above).
         float turns = sdfFloorMod((roundedA - roundedB), 3.0);
 
-        // A 120-degree rotation, applied once or twice (GLSL mat2(-0.5, s, -s, -0.5) * r, written out).
+        // A +120-degree rotation (GLSL mat2(-0.5, s, -s, -0.5) * r with s = sqrt(3)/2, written out), applied once for
+        // turns == 1 and twice for turns == 2.
         if (turns >= 1.0) {
             r = float2(((-0.5 * r.x) - ((SDF_SQRT3 * 0.5) * r.y)), (((SDF_SQRT3 * 0.5) * r.x) - (0.5 * r.y)));
         }
 
         if (turns >= 2.0) {
             r = float2(((-0.5 * r.x) - ((SDF_SQRT3 * 0.5) * r.y)), (((SDF_SQRT3 * 0.5) * r.x) - (0.5 * r.y)));
-        }
-
-        if ((group == SDF_WPG_P6) && (r.y < 0.0)) {
-            // The in-cell half-turn composes with the corner 3-folds into p6's 6-fold centers; its seam is the
-            // single horizontal diameter of each hex.
-            r = -r;
         }
 
         return r;
@@ -316,6 +422,13 @@ float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inverse
 // P2/CMM/P4*) unless a mirror of the group protects that edge. lodSimplify (driven by the instruction's data1.z
 // distance threshold) keeps the lattice but skips the in-cell folds — same copy positions, upright copies.
 // inverseCell = 1/cell (square lattices) or the hex (1/pitch, 2/(√3·pitch)) pair, baked HOST-SIDE (data0.zw).
+//
+// AUTHORING NOTE: `cell` is the fold cell, NOT the pattern's translation period, for every group whose in-cell
+// transform is keyed on the lattice PARITY (P2/PG/CM/PMG/PGG/CMM/P4/P4M/P4G) or on the hex 3-coloring (P3/P6). Those
+// realize their point group over a sublattice: the parity groups repeat over the CENTERED/doubled cell (period
+// 2*cell, plus the (1,1) centering vector), the P3/P6 turn cocycle over the √3×√3 hex supercell. Only P1/PM/PMM and
+// the pure dihedral hex kaleidoscopes (P3M1/P31M/P6M) have period == cell. Verified by direct translation-invariance
+// test over all 17 groups.
 float2 sdfWallpaperFoldCell(float2 q, uint group, float2 cell, float2 inverseCell, float2 limit, bool lodSimplify, out float2 cellIndex) {
     if (group >= SDF_WPG_P3) {
         return sdfWallpaperFoldHexCell(q, group, cell.x, inverseCell, limit, lodSimplify, cellIndex);
@@ -350,8 +463,11 @@ float2 sdfWallpaperFoldCell(float2 q, uint group, float2 cell, float2 inverseCel
         }
 
         if ((group == SDF_WPG_P4G) && ((abs(r.x) + abs(r.y)) > (0.5 * cell.x))) {
-            // Mirror across the quadrant anti-diagonal (through the edge-midpoint 2-fold centers, off the 4-fold
-            // centers): p4g.
+            // KNOWN DEFECT: this diamond fold does NOT produce p4g. The fold commutes with the quarter-turn R90, and
+            // for a diagonal mirror m the per-cell turn count satisfies k(mq) = -k(q) mod 4, so no reflection survives:
+            // a direct point-group measurement finds 4-fold rotation and ZERO mirror classes — the same signature as
+            // SDF_WPG_P4. p4g needs its mirrors to sit at the half-cell offset the parity key destroys, so recovering it
+            // is a redesign of the turn cocycle, not a tweak here. Until then this group renders as p4.
             float signU = ((r.x >= 0.0) ? 1.0 : -1.0);
             float signV = ((r.y >= 0.0) ? 1.0 : -1.0);
             float crossSign = (signU * signV);
@@ -362,12 +478,6 @@ float2 sdfWallpaperFoldCell(float2 q, uint group, float2 cell, float2 inverseCel
         }
 
         return r;
-    }
-
-    if ((group == SDF_WPG_CMM) && (r.y < 0.0)) {
-        // Half-turn fold about the cell center keeps the 2-fold centers off the boundary mirrors (orbifold 2*22);
-        // the cmm sign pair below adds the mirrors.
-        r = -r;
     }
 
     if (group == SDF_WPG_PM) {
@@ -396,8 +506,18 @@ float2 sdfWallpaperFoldCell(float2 q, uint group, float2 cell, float2 inverseCel
     }
 
     float2 foldSign = (1.0 - (2.0 * float2(sdfFloorMod(dot(coefU, parity), 2.0), sdfFloorMod(dot(coefV, parity), 2.0))));
+    float2 folded = (r * foldSign);
 
-    return (r * foldSign);
+    if ((group == SDF_WPG_CMM) && (folded.y < 0.0)) {
+        // The half-turn about the cell centre must come AFTER the sign pair, not before it. Its image is centrally
+        // symmetric, so cells (1,0) and (0,1) coincide: the lattice becomes CENTERED and BOTH boundary mirrors survive
+        // (orbifold 2*22 = cmm). Applied BEFORE the sign pair, the diag(1,-1) flip swaps the half-planes this fold
+        // selects and one mirror class degenerates into a glide — the pattern is then pmg, a duplicate of SDF_WPG_PMG.
+        // Verified by direct point-group measurement: after = 2-fold + two mirror directions; before = 2-fold + one.
+        folded = -folded;
+    }
+
+    return folded;
 }
 
 // The cell key the parity-material stride multiplies: the hex lattice's 3-coloring for the hex groups (matching the
@@ -409,12 +529,64 @@ int sdfWallpaperCellKey(uint group, float2 cellIndex) {
         : (int)(sdfFloorMod((cellIndex.x + cellIndex.y), 2.0) + 0.5));
 }
 
+// --- integer hashes (the cross-backend-exact randomness substrate) ---------------------------------------------------
+// Every hashed DECISION in the ISA is integer-only on purpose: DXC lowers multiply/add/xor/shift bit-identically to
+// both SPIR-V and DXIL, while float codegen drifts +-1 LSB between the two. A cell index, a noise lattice, and a
+// dither pattern therefore come out the SAME on Vulkan and Direct3D.
+
+// Knuth's LCG step, the mixing core of PCG3D.
+#define SDF_PCG_MULTIPLIER 1664525u
+#define SDF_PCG_INCREMENT  1013904223u
+// Decorrelation multipliers for deriving independent hash streams from one seed (the golden-ratio and Murmur3 finalizer
+// constants). SDF_HASH_TUMBLE keys the CellJitter tumble stream apart from the position and material streams.
+#define SDF_HASH_STREAM_A 0x9E3779B9u
+#define SDF_HASH_STREAM_B 0x85EBCA6Bu
+#define SDF_HASH_TUMBLE   0x27D4EB2Fu
+
+// Canonical PCG3D integer hash (Jarzynski & Olano, "Hash Functions for GPU Rendering"): three uints in, three
+// well-mixed uints out. SDF_OP_CELL_JITTER keys this on the two's-complement cell index.
+uint3 sdfPcg3d(uint3 v) {
+    v = ((v * SDF_PCG_MULTIPLIER) + SDF_PCG_INCREMENT);
+    v.x += (v.y * v.z); v.y += (v.z * v.x); v.z += (v.x * v.y);
+    v ^= (v >> 16u);
+    v.x += (v.y * v.z); v.y += (v.z * v.x); v.z += (v.x * v.y);
+    return v;
+}
+
+// Roberts' R2 low-discrepancy lattice: alpha_i = round(2^32 / phi2^i) for the plastic number
+// phi2 = 1.32471795724474602596 (the real root of x^3 = x + 1). The uint multiply wraps mod 2^32, which IS the
+// fractional part of the additive recurrence — so the lattice is exact in fixed point.
+#define SDF_R2_ALPHA1 3242174889u
+#define SDF_R2_ALPHA2 2447445414u
+// The R3 siblings: alpha_i = round(2^32 / phi3^i) for phi3 = 1.2207440846057596 (the real root of x^4 = x + 1).
+// SDF_OP_CELL_JITTER's Blue flavor rotates these three across its axes so the offset components decorrelate.
+#define SDF_R3_ALPHA1 3518319155u
+#define SDF_R3_ALPHA2 2882110345u
+#define SDF_R3_ALPHA3 2360945575u
+
+// One R2 dither sample in [0, 1] from integer pixel coordinates. The spatial pattern is "blue-ish" low-discrepancy, so
+// adding ~1 LSB of it before an 8-bit write turns gradient BANDING (sky, distance fog) into high-frequency noise the
+// eye barely sees. Fixed-point, so both backends add the IDENTICAL pattern (a float frac(x/phi2 + y/phi2^2) would
+// +-1-LSB diverge and break cross-backend parity).
+float sdfR2Dither(uint2 pixel) {
+    uint h = ((pixel.x * SDF_R2_ALPHA1) + (pixel.y * SDF_R2_ALPHA2));
+
+    return ((float)h * SDF_INV_2POW32);
+}
+
+// === 3D primitives ===================================================================================================
+// Exact signed-distance fields unless a comment says otherwise. Derived per-shape constants (a reciprocal, a sqrt, a
+// normalization) are HOST-BAKED into the spare Data0/Data1 lanes by SdfProgramBuilder: shapes evaluate millions of
+// times per frame while programs build once, and a shared multiply keeps both DXC targets on the identical operation
+// (a varying-numerator divide contracted differently is a cross-backend fuzz-signature risk).
+
 float sdfSphere(float3 p, float radius) {
     return (length(p) - radius);
 }
-float sdfBox(float3 p, float3 halfExtents, float round) {
-    float3 q = (abs(p) - (halfExtents - round));
-    return ((length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)) - round);
+// `cornerRadius` deliberately does NOT shadow the HLSL round() intrinsic (which this file's fold ops rely on).
+float sdfBox(float3 p, float3 halfExtents, float cornerRadius) {
+    float3 q = (abs(p) - (halfExtents - cornerRadius));
+    return ((length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)) - cornerRadius);
 }
 float sdfTorus(float3 p, float major, float minor) {
     float2 q = float2((length(p.xz) - major), p.y);
@@ -423,10 +595,7 @@ float sdfTorus(float3 p, float major, float minor) {
 float sdfPlane(float3 p, float3 normal, float offset) {
     return (dot(p, normal) + offset);
 }
-// inverseLengthSquared = 1/dot(endpoint, endpoint), baked HOST-SIDE by SdfProgramBuilder.Capsule (data1.y): shapes
-// evaluate millions of times per frame while programs build once, and the shared multiply keeps the two backends'
-// codegen on the identical operation (a varying-numerator divide contracted differently was a cross-backend
-// fuzz-signature risk).
+// inverseLengthSquared = 1/dot(endpoint, endpoint), HOST-BAKED (data1.y) by SdfProgramBuilder.Capsule.
 float sdfCapsule(float3 p, float3 endpoint, float radius, float inverseLengthSquared) {
     float h = clamp((dot(p, endpoint) * inverseLengthSquared), 0.0, 1.0);
     return (length(p - (h * endpoint)) - radius);
@@ -435,17 +604,17 @@ float sdfCylinder(float3 p, float radius, float halfHeight) {
     float2 d = (float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
     return (min(max(d.x, d.y), 0.0) + length(max(d, 0.0)));
 }
-// Not an exact distance (a first-order approximation): accurate near the surface, degrades with high
-// eccentricity — keep the radii within a moderate aspect ratio. inverseRadii = 1/max(abs(radii), ε), baked
-// HOST-SIDE by SdfProgramBuilder.Ellipsoid (data1.yzw) — two vector divides saved per evaluation.
+// NOT an exact distance (a first-order approximation): accurate near the surface, degrading with eccentricity — which
+// is why it is the one primitive that earns no cull bound and instead feeds its eccentricity into the program's
+// Lipschitz step clamp (SdfProgram.AnalyzeLipschitz). Prefer the exact revolved Ellipse (2D family) when a real
+// bound matters. inverseRadii = 1/max(abs(radii), eps), HOST-BAKED (data1.yzw).
 float sdfEllipsoid(float3 p, float3 inverseRadii) {
     float3 q = (p * inverseRadii);
     float k0 = length(q);
     float k1 = length(q * inverseRadii);
-    return ((k0 * (k0 - 1.0)) / max(k1, 0.0001));
+    return ((k0 * (k0 - 1.0)) / max(k1, SDF_ELLIPSOID_MIN_DENOM));
 }
-// slope (b) and its complement (a = sqrt(1 - b²)) are baked HOST-SIDE by SdfProgramBuilder.RoundCone
-// (data0.w / data1.y) — a divide and a sqrt saved per evaluation.
+// slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
 float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
     float2 q = float2(length(p.xz), p.y);
     float k = dot(q, float2(-b, a));
@@ -460,55 +629,211 @@ float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height,
 
     return (dot(q, float2(a, b)) - lowerRadius);
 }
+// The vesica (lens): iq's 2D vesica revolved around Y. r = the two circles' radius, d = their half-separation (d < r),
+// b = sqrt(r*r - d*d) = the tip half-height, HOST-BAKED by SdfProgramBuilder.Vesica to skip the per-eval sqrt. Exact
+// and convex, so revolving the exact 2D field yields a true 3D distance (earns a cull bound, factor-1 Lipschitz). The
+// lens is pointed along +/-Y and is a disc of radius (r - d) in the XZ plane.
+float sdfVesica(float3 p, float r, float d, float b) {
+    float2 q = float2(length(p.xz), abs(p.y));
 
-// Single-return (a result variable rather than returning inside the switch) so the compiler's flow analysis
-// sees the value is always initialized — no "potentially uninitialized" warning. data1's .x lane is the ISA-wide
-// smooth-blend radius; lanes .yzw carry HOST-BAKED derived constants per shape (see SdfProgramBuilder).
+    return (((q.y - b) * d) > (q.x * b))
+        ? (length(q - float2(0.0, b)))
+        : (length(q - float2(-d, 0.0)) - r);
+}
+
+// === The 2D-primitive family: exact IQ 2D SDFs lifted to 3D solids ==================================================
+// Each primitive is an exact 2D signed-distance field (translated verbatim from iquilezles.org/articles/distfunctions2d)
+// then LIFTED to 3D one of two ways (data1.y): EXTRUDE along Z (a prism/slab; opExtrusion) or REVOLVE around Y (a lathe;
+// opRevolution). Extrusion of an exact 2D field is exact; revolution is exact when the profile clears the axis and a
+// harmless conservative underestimate near it. Both are 1-Lipschitz, so no AnalyzeLipschitz step clamp is needed and
+// each earns a real cull bound. The lifted wrappers below are what evaluateShape calls; the 2D cores are reusable.
+
+// --- lift operators (iq opExtrusion / opRevolution) ---
+// Extrude an exact 2D distance d (evaluated on the XY plane) to half-height h along Z: exact for any exact d.
+float sdfExtrude2D(float d, float pz, float h) {
+    float2 w = float2(d, (abs(pz) - h));
+    return (min(max(w.x, w.y), 0.0) + length(max(w, 0.0)));
+}
+// The meridian point for revolving around Y at radial offset o: the 2D core is evaluated at (length(p.xz) - o, p.y).
+float2 sdfRevolve2D(float3 p, float o) {
+    return float2((length(p.xz) - o), p.y);
+}
+
+// --- exact 2D cores ---
+// iq sdRoundedBox (single corner radius r): the box half-extents are b, corners rounded by r (staying within b).
+float sdfRoundBox2D(float2 p, float2 b, float r) {
+    float2 q = ((abs(p) - b) + r);
+    return ((min(max(q.x, q.y), 0.0) + length(max(q, 0.0))) - r);
+}
+// iq sdTrapezoid: isosceles trapezoid, r1 = bottom half-width, r2 = top half-width, he = half-height.
+float sdfTrapezoid2D(float2 p, float r1, float r2, float he) {
+    float2 k1 = float2(r2, he);
+    float2 k2 = float2((r2 - r1), (2.0 * he));
+    p.x = abs(p.x);
+    float2 ca = float2((p.x - min(p.x, ((p.y < 0.0) ? r1 : r2))), (abs(p.y) - he));
+    float2 cb = ((p - k1) + (k2 * clamp((dot((k1 - p), k2) / dot(k2, k2)), 0.0, 1.0)));
+    float s = (((cb.x < 0.0) && (ca.y < 0.0)) ? -1.0 : 1.0);
+    return (s * sqrt(min(dot(ca, ca), dot(cb, cb))));
+}
+// iq sdStar (n points, inner-radius control m): r = outer radius, an = pi/n (baked), ecs = (cos(pi/m), sin(pi/m))
+// (baked). ecs = (0, 1) collapses this to the exact regular n-gon (m = 2). The GLSL `mod` is FLOOR modulo — use the
+// house sdfFloorMod so a negative atan2 sector index folds correctly (HLSL fmod truncates and would mis-fold).
+float sdfStar2D(float2 p, float r, float an, float2 ecs) {
+    float2 acs = float2(cos(an), sin(an));
+    float bn = (sdfFloorMod(atan2(p.x, p.y), (2.0 * an)) - an);
+    p = (length(p) * float2(cos(bn), abs(sin(bn))));
+    p = (p - (r * acs));
+    p = (p + (ecs * clamp((-dot(p, ecs)), 0.0, ((r * acs.y) / ecs.y))));
+    return (length(p) * sign(p.x));
+}
+// iq sdEllipse: exact distance to an ellipse with semi-axes ab (the analytic depressed-cubic solve; branches on the
+// discriminant). The host guards ab.x != ab.y (l = ab.y^2 - ab.x^2 divides), so a perfect circle never reaches here.
+// The final sqrt is SATURATED: at extreme eccentricity (measured: aspect > ~100:1) rounding pushes `co` past 1, and an
+// unguarded sqrt(1 - co*co) returns NaN — which then poisons the blend min() and diverges between backends, whose
+// min(NaN, x) differ. saturate() only ever clamps the negative side (co*co >= 0 bounds the argument above by 1), so it
+// is bit-identical wherever the old code was finite. At the exact centre p == (0,0) this returns 0 rather than
+// -min(ab): sign(p.y - r.y) is 0 there. That is iq's own behaviour, a measure-zero point, and only observable through
+// a Subtraction/Onion of an ellipse exactly at its centre.
+float sdfEllipse2D(float2 p, float2 ab) {
+    p = abs(p);
+
+    if (p.x > p.y) {
+        p = p.yx;
+        ab = ab.yx;
+    }
+
+    float l = ((ab.y * ab.y) - (ab.x * ab.x));
+    float m = ((ab.x * p.x) / l);
+    float m2 = (m * m);
+    float n = ((ab.y * p.y) / l);
+    float n2 = (n * n);
+    float c = (((m2 + n2) - 1.0) / 3.0);
+    float c3 = ((c * c) * c);
+    float q = (c3 + ((m2 * n2) * 2.0));
+    float d = (c3 + (m2 * n2));
+    float g = (m + (m * n2));
+    float co;
+
+    if (d < 0.0) {
+        float h = (acos(q / c3) / 3.0);
+        float s = cos(h);
+        float t = (sin(h) * SDF_SQRT3);
+        float rx = sqrt((-c * ((s + t) + 2.0)) + m2);
+        float ry = sqrt((-c * ((s - t) + 2.0)) + m2);
+        co = ((((ry + (sign(l) * rx)) + (abs(g) / (rx * ry))) - m) / 2.0);
+    } else {
+        float h = ((2.0 * m) * (n * sqrt(d)));
+        float s = (sign(q + h) * pow(abs(q + h), (1.0 / 3.0)));
+        float u = (sign(q - h) * pow(abs(q - h), (1.0 / 3.0)));
+        float rx = ((((-s - u) - (c * 4.0)) + (2.0 * m2)));
+        float ry = ((s - u) * SDF_SQRT3);
+        float rm = sqrt(((rx * rx) + (ry * ry)));
+        co = ((((ry / sqrt(rm - rx)) + ((2.0 * g) / rm)) - m) / 2.0);
+    }
+
+    float2 r = (ab * float2(co, sqrt(saturate(1.0 - (co * co)))));
+    return (length(r - p) * sign(p.y - r.y));
+}
+
+// --- lifted wrappers (data1.y > 0.5 selects EXTRUDE; else REVOLVE) — what evaluateShape dispatches to ---
+float sdfRoundedRect(float3 p, float4 data0, float4 data1) {
+    return ((data1.y > 0.5)
+        ? sdfExtrude2D(sdfRoundBox2D(p.xy, data0.xy, data0.z), p.z, data0.w)
+        : sdfRoundBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z));
+}
+// Regular polygon AND star share this: data0 = (r, an, ecs.x, lift), data1.z = ecs.y (the polygon bakes ecs = (0, 1)).
+float sdfPolyStar(float3 p, float4 data0, float4 data1) {
+    float2 ecs = float2(data0.z, data1.z);
+
+    return ((data1.y > 0.5)
+        ? sdfExtrude2D(sdfStar2D(p.xy, data0.x, data0.y, ecs), p.z, data0.w)
+        : sdfStar2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, ecs));
+}
+float sdfTrapezoidSolid(float3 p, float4 data0, float4 data1) {
+    return ((data1.y > 0.5)
+        ? sdfExtrude2D(sdfTrapezoid2D(p.xy, data0.x, data0.y, data0.z), p.z, data0.w)
+        : sdfTrapezoid2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, data0.z));
+}
+float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
+    return ((data1.y > 0.5)
+        ? sdfExtrude2D(sdfEllipse2D(p.xy, data0.xy), p.z, data0.w)
+        : sdfEllipse2D(sdfRevolve2D(p, data0.w), data0.xy));
+}
+// === end 2D-primitive family =======================================================================================
+
+// The ONE shape dispatch. Single-return (a result variable rather than returning inside the switch) so the compiler's
+// flow analysis sees the value is always initialized. data1's .x lane is the ISA-wide smooth-blend radius; lanes .yzw
+// carry HOST-BAKED derived constants per shape (see SdfProgramBuilder). Ids that share a body FALL THROUGH: DXC inlines
+// each `case` separately, so a duplicated arm duplicates the whole primitive (the Box/ScreenSlab and Polygon/Star pairs
+// cost ~10% of this kernel's instructions when written twice).
 float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
-    float result = 1.0e9;
+    float result = SDF_FAR_DISTANCE;
 
     switch (shapeType) {
         case SDF_SHAPE_SPHERE:      result = sdfSphere(p, data0.x); break;
-        case SDF_SHAPE_BOX:         result = sdfBox(p, data0.xyz, data0.w); break;
+        // A ScreenSlab IS a box; only its material sentinel distinguishes it (see SDF_SCREEN_MATERIAL).
+        case SDF_SHAPE_BOX:
         case SDF_SHAPE_SCREEN_SLAB: result = sdfBox(p, data0.xyz, data0.w); break;
         case SDF_SHAPE_TORUS:       result = sdfTorus(p, data0.x, data0.y); break;
         // The plane normal is normalized HOST-SIDE (SdfProgramBuilder.Plane) — the biggest per-eval saving of all:
-        // the plane is in nearly every scene, and this normalize used to run for EVERY map() sample.
+        // the plane is in nearly every scene, and a per-sample normalize would run for EVERY map() sample.
         case SDF_SHAPE_PLANE:       result = sdfPlane(p, data0.xyz, data0.w); break;
         case SDF_SHAPE_ROUND_CONE:  result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;
         case SDF_SHAPE_CAPSULE:     result = sdfCapsule(p, data0.xyz, data0.w, data1.y); break;
         case SDF_SHAPE_CYLINDER:    result = sdfCylinder(p, data0.x, data0.y); break;
         case SDF_SHAPE_ELLIPSOID:   result = sdfEllipsoid(p, data1.yzw); break;
+        case SDF_SHAPE_VESICA:      result = sdfVesica(p, data0.x, data0.y, data0.z); break;
+        // The 2D-primitive family: each lifted wrapper reads its lift mode (data1.y) and lift amount (data0.w) itself.
+        // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim.
+        case SDF_SHAPE_ROUNDED_RECT:    result = sdfRoundedRect(p, data0, data1); break;
+        case SDF_SHAPE_REGULAR_POLYGON:
+        case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
+        case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
+        case SDF_SHAPE_ELLIPSE:         result = sdfEllipseSolid(p, data0, data1); break;
     }
 
     return result;
 }
 // The polynomial smooth minimum every smooth blend derives from (smoothIntersection/smoothSubtraction are its
-// negations, so all three share one seam).
+// negations, so all three share one seam). BOTH saturated endpoints return their input TO THE BIT:
+//
+//  * FAR (b at least k beyond a): h clamps to exactly 1, lerp(a, b, 0) == a and k*h*(1-h) == 0. This is what lets a
+//    masked-out smooth-blended instance (dropped past its cull bound) return the accumulator identically to evaluating
+//    it, so a smooth instance can carry a FINITE, k-inflated bound instead of an unmaskable one (SdfProgram.PackInstances).
+//    The usual lerp(b, a, h) form leaves candidate + (current - candidate) here, ~1 LSB off.
+//  * NEAR (a at least k beyond b): h clamps to exactly 0, and the `h <= 0` select returns b. Without that select the
+//    expression is a + (b - a), which is NOT b when |a| >> |b| — and `a` is SDF_FAR_DISTANCE (1e9) for the first shape
+//    evaluated in a mapCore call. blendSmoothUnion(1e9, 5, 0.2) then returns 0 rather than 5, collapsing the whole field
+//    to a surface at the march origin. Reachable whenever a segment's first shape carries SmoothUnion and every earlier
+//    segment was bound-skipped. The select costs one cndsel and makes "smooth-union with an empty accumulator" mean
+//    what it must: the shape itself.
 float blendSmoothUnion(float a, float b, float k) {
     float h = clamp((0.5 + ((0.5 * (b - a)) / k)), 0.0, 1.0);
+    float blended = ((h <= 0.0) ? b : lerp(a, b, (1.0 - h)));
 
-    return (lerp(b, a, h) - ((k * h) * (1.0 - h)));
+    return (blended - ((k * h) * (1.0 - h)));
 }
 float blendShape(float current, float candidate, uint blendOp, float smoothRadius) {
-    float result = min(current, candidate); // SDF_BLEND_UNION (the default)
+    float result = min(current, candidate);                     // SDF_BLEND_UNION (the default)
+    float smoothK = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);   // the SMOOTH arms' shared radius floor
+    // The CHAMFER arms clamp against 0.0, not SDF_SMOOTH_RADIUS_MIN: a zero bevel must be exactly a hard seam, and
+    // folding the smooth floor in would shift the bevel plane. Do not merge the two clamps.
+    float chamfer = max(smoothRadius, 0.0);
 
     switch (blendOp) {
-        case SDF_BLEND_SMOOTH_UNION: {
-            result = blendSmoothUnion(current, candidate, max(smoothRadius, 0.0001));
-            break;
-        }
-        case SDF_BLEND_SUBTRACTION:  result = max(current, -candidate); break;
-        case SDF_BLEND_INTERSECTION: result = max(current, candidate); break;
-        case SDF_BLEND_XOR:          result = max(min(current, candidate), -max(current, candidate)); break;
-        case SDF_BLEND_SMOOTH_INTERSECTION: {
-            result = -blendSmoothUnion(-current, -candidate, max(smoothRadius, 0.0001));
-            break;
-        }
-        case SDF_BLEND_SMOOTH_SUBTRACTION: {
-            result = -blendSmoothUnion(candidate, -current, max(smoothRadius, 0.0001));
-            break;
-        }
+        case SDF_BLEND_SMOOTH_UNION:        result = blendSmoothUnion(current, candidate, smoothK); break;
+        case SDF_BLEND_SUBTRACTION:         result = max(current, -candidate); break;
+        case SDF_BLEND_INTERSECTION:        result = max(current, candidate); break;
+        case SDF_BLEND_XOR:                 result = max(min(current, candidate), -max(current, candidate)); break;
+        case SDF_BLEND_SMOOTH_INTERSECTION: result = -blendSmoothUnion(-current, -candidate, smoothK); break;
+        case SDF_BLEND_SMOOTH_SUBTRACTION:  result = -blendSmoothUnion(candidate, -current, smoothK); break;
+        // Chamfered (45-degree bevel) seams (hg_sdf fOp*Chamfer): the bevel plane is (a +- r + b) * sqrt(1/2). Union
+        // bevels the near corner, intersection/subtraction the far one; SUBTRACTION is the intersection of `current`
+        // with -candidate. The bevel plane's gradient reaches sqrt(2) at a FLAT/near-parallel seam (1 at a perpendicular
+        // one, 0 at an acute one), hence the chamfer step clamp in SdfProgram.AnalyzeLipschitz.
+        case SDF_BLEND_CHAMFER_UNION:        result = min(min(current, candidate), ((current + candidate - chamfer) * SDF_SQRT_HALF)); break;
+        case SDF_BLEND_CHAMFER_INTERSECTION: result = max(max(current, candidate), ((current + candidate + chamfer) * SDF_SQRT_HALF)); break;
+        case SDF_BLEND_CHAMFER_SUBTRACTION:  result = max(max(current, -candidate), ((current - candidate + chamfer) * SDF_SQRT_HALF)); break;
     }
 
     return result;
@@ -588,8 +913,17 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
     // PackInstances / PackWorldSegments.
     uint boundsOffset = (header.w + (2u * header.y));
     uint segmentOffset = (boundsOffset + (2u * header.x));
-    uint segmentCount = sdfWords[segmentOffset].x;
-    uint instanceOffset = sdfInstanceDirectoryOffset();
+    uint4 segmentHeader = sdfWords[segmentOffset];
+    uint segmentCount = segmentHeader.x;
+    // The per-PROGRAM Lipschitz STEP SCALE (1/L; see sdfStepScale). Applied as ONE multiply on the FINAL returned
+    // distance below, it clamps sphere-tracing steps to the field's true rate of change so a non-1-Lipschitz warp
+    // (twist/bend/chamfer/displace/domain-warp) or an eccentric ellipsoid cannot overstep and hole. DISTINCT from the
+    // per-sample distanceScale below (the true DOMAIN corrections: Scale's min-axis factor and LogSphere's r/density
+    // factor) — that one is applied per candidate mid-walk; this is the field-preserving step clamp on the final min.
+    // Never merge the two.
+    float stepScale = asfloat(segmentHeader.y);
+    stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
+    uint instanceOffset = sdfInstanceDirectoryOffsetFrom(segmentOffset, segmentCount);
     uint instanceCount = sdfWords[instanceOffset].x;
     uint worldSegmentOffset = (instanceOffset + 1u + (2u * instanceCount));
     bool hasInstances = (instanceCount != 0u);
@@ -614,13 +948,18 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
     }
 
     float3 localPosition = worldPosition;
+    // distanceScale is the PER-SAMPLE, PER-CANDIDATE domain correction: SDF_OP_SCALE folds its min-axis factor in here
+    // and SDF_OP_LOG_SPHERE its r/density shell factor, composing multiplicatively. It multiplies EACH shape candidate
+    // before blending, so it participates in the min, the material winner, and the field ops. This is a SEPARATE channel
+    // from the per-program stepScale above — that one clamps only the FINAL returned distance to keep the marcher's
+    // steps 1-Lipschitz-safe and never touches a candidate mid-walk. Keep the two distinct.
     float distanceScale = 1.0;
     // The texturing half of an active wallpaper fold: the cell key times the fold's material stride, added to the
     // material id of later shape wins in the chain (never to the screen sentinel). Reset with the chain.
     int parityMaterialDelta = 0;
     SdfHit result;
 
-    result.distance = 1.0e9;
+    result.distance = SDF_FAR_DISTANCE;
     result.material = 0;
 
     // The OUTER loop walks chain segments (the stream split at ResetPoints), the inner loop interprets a segment's
@@ -711,10 +1050,45 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                     localPosition = rotatePointByInverseQuaternion(localPosition, data0);
                     break;
                 }
+                // data0.xyz = |scale|, pre-clamped away from 0; data0.w = its min axis. BOTH HOST-BAKED by
+                // SdfProgramBuilder.Scale (the abs/max/min were 8 dx.op per evaluation). The min-axis factor is the
+                // conservative correction for a NON-uniform scale: f(S^-1 p) * min(s) is 1-Lipschitz because
+                // |S^-1| <= 1/min(s), so it can only UNDERESTIMATE true distance — never overstep.
                 case SDF_OP_SCALE: {
-                    float3 scale = max(abs(data0.xyz), float3(0.0001, 0.0001, 0.0001));
-                    localPosition /= scale;
-                    distanceScale *= min(scale.x, min(scale.y, scale.z));
+                    localPosition /= data0.xyz;
+                    distanceScale *= data0.w;
+                    break;
+                }
+                // Log-spherical DOMAIN WARP: data0.x = w (= ln shellRatio, HOST-BAKED), data0.y = twist (radians/shell),
+                // data0.z = 1/w (HOST-BAKED). Fold the RADIAL log-coordinate to the NEAREST shell (round, exactly like
+                // SDF_OP_REPEAT): a translation along log(radius) becomes a uniform Cartesian SCALING, tiling space into
+                // self-similar "Droste" shells. The half-cell bound the nearest-shell round gives is what makes the
+                // exp(w/2) Lipschitz factor (SdfProgram.AnalyzeLipschitz) a sound step clamp for the over-relaxed march.
+                case SDF_OP_LOG_SPHERE: {
+                    float logRadius = log(max(length(localPosition), SDF_LOGSPHERE_MIN_RADIUS));
+                    float shell = round(logRadius * data0.z);   // nearest shell index k
+                    float shellScale = exp(shell * data0.x);    // exp(k*w) = the shell's Cartesian scale = r / rFolded
+
+                    localPosition /= shellScale;                // fold every shell onto the prototype
+
+                    // Optional Droste spiral: rotate each shell about Z by k*twist. UNCONDITIONAL (twist == 0 -> cos 0 = 1,
+                    // sin 0 = 0, an exact identity on both backends) so no divergent branch re-rolls codegen. A rotation is
+                    // an ISOMETRY: it neither touches distanceScale nor contributes to the Lipschitz factor. No atan2, so
+                    // the Z axis is a plain rotation fixed line, NOT a polar-pinch singularity.
+                    float spinAngle = (shell * data0.y);
+                    float spinCos = cos(spinAngle);
+                    float spinSin = sin(spinAngle);
+
+                    localPosition.xy = float2(
+                        ((spinCos * localPosition.x) - (spinSin * localPosition.y)),
+                        ((spinSin * localPosition.x) + (spinCos * localPosition.y)));
+
+                    // The r/density metric correction: within a shell the fold is a similarity that shrank space by
+                    // 1/shellScale, so evaluateShape(localPosition) UNDERESTIMATES true distance by 1/shellScale — multiply
+                    // the candidate back by shellScale. This rides the SAME per-candidate distanceScale channel SDF_OP_SCALE
+                    // writes (applied per candidate below), composing multiplicatively when a Scale is also on the chain.
+                    // NEVER stepScale (that clamps the FINAL distance once, and cannot per-candidate-correct a mixed chain).
+                    distanceScale *= shellScale;
                     break;
                 }
 #ifdef SDF_DYNAMIC_TRANSFORMS
@@ -735,16 +1109,160 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                     break;
                 }
                 case SDF_OP_REPEAT_LIMITED: {
-                    float3 spacing = max(data0.xyz, float3(0.001, 0.001, 0.001));
-                    localPosition -= (spacing * clamp(round(localPosition / spacing), -data1.xyz, data1.xyz));
+                    // data0.xyz = spacing, pre-clamped away from 0 exactly as SDF_OP_REPEAT's is (HOST-BAKED by
+                    // SdfProgramBuilder.RepeatLimited); data1.xyz = the per-axis cell limit. Unlike Repeat there is no
+                    // free lane for 1/spacing, so the divide stays — a per-instruction-uniform divisor lowers to one
+                    // reciprocal anyway.
+                    localPosition -= (data0.xyz * clamp(round(localPosition / data0.xyz), -data1.xyz, data1.xyz));
                     break;
                 }
-                case SDF_OP_SYMMETRY_X: { localPosition.x = abs(localPosition.x); break; }
-                case SDF_OP_SYMMETRY_Y: { localPosition.y = abs(localPosition.y); break; }
-                case SDF_OP_SYMMETRY_Z: { localPosition.z = abs(localPosition.z); break; }
-                // The warps rotate a plane pair by an angle keyed on one coordinate (GLSL mat2(c,-s,s,c) * v, written as
+                // Stochastic domain-repeat fold (KEEP IN SYNC with SdfProgramBuilder.CellJitter): tile space like
+                // SDF_OP_REPEAT, then per cell displace by a hashed offset, optionally tumble (a hashed rotation), and
+                // optionally recolor by a hashed material variant. data0.xyz = spacing (pre-clamped), data0.w = jitter
+                // (peak-to-peak displacement), data1.xyz = 1/spacing (HOST-BAKED), data1.w = tumble in [0,1].
+                // header.y = seed, header.z = SDF_NOISE_* flavor (how the POSITION offset r0 is distributed; White = 0 is
+                // the byte-identical default), header.w = materialVariants (0 = geometric only). The hash is INTEGER-ONLY (sdfPcg3d
+                // on the two's-complement cell index xored with the seed), so cell decisions are bit-identical across
+                // both DXC targets. Displacement and tumble are BOTH isometries — distanceScale is untouched, and the
+                // only Lipschitz contribution is the jitter half-amplitude (SdfProgram.AnalyzeLipschitz).
+                case SDF_OP_CELL_JITTER: {
+                    float3 cell = round(localPosition * data1.xyz);   // data1.xyz = 1/spacing (host-baked)
+                    // asuint(int3(cell)) is well-defined two's-complement for a negative rounded index on both backends.
+                    uint3 seed = uint3(instructionHeader.y, (instructionHeader.y * SDF_HASH_STREAM_A), (instructionHeader.y * SDF_HASH_STREAM_B));
+                    uint3 key = (asuint(int3(cell)) ^ seed);
+                    uint3 h0 = sdfPcg3d(key);   // still used by the material-variant apply below (every flavor)
+
+                    // The POSITION offset r0, shaped by the Blend-lane noise flavor (KEEP IN SYNC with
+                    // Puck.SdfVm.SdfNoiseFlavor). Only r0 changes. Every flavor stays in [0, 1] per axis — CLOSED at 1,
+                    // because (float)0xFFFFFFFFu rounds up to 2^32 — so (r0 - 0.5) * jitter holds within +-jitter/2 per
+                    // axis (White's bound) and the AnalyzeLipschitz reach term is unchanged for all three.
+                    uint noiseFlavor = instructionHeader.z;
+                    float3 r0;
+                    if (noiseFlavor == SDF_NOISE_BLUE) {
+                        // Roberts' R3 low-discrepancy lattice: alpha_i = round(2^32 / phi3^i) for phi3 = 1.2207440846057596
+                        // (the real root of x^4 = x + 1), as a fixed-point rank-1 lattice on the integer cell index. The uint
+                        // mul-add wraps mod 2^32 = the fractional part, so it is BIT-IDENTICAL across DXC's SPIR-V and DXIL
+                        // (a float frac would diverge). The three alphas are ROTATED across the axes so the offset components
+                        // decorrelate. "Blue-ish" low-discrepancy (de-clumped), NOT true isotropic blue noise. The seed folds
+                        // in ADDITIVELY (a lattice translation preserves low-discrepancy, unlike an xor), so the field varies
+                        // with seed AND a non-zero seed breaks the circulant's (1,1,1) main-diagonal degeneracy.
+                        uint3 uc = (asuint(int3(cell)) + seed);
+                        uint bx = ((uc.x * SDF_R3_ALPHA1) + (uc.y * SDF_R3_ALPHA2) + (uc.z * SDF_R3_ALPHA3));
+                        uint by = ((uc.x * SDF_R3_ALPHA2) + (uc.y * SDF_R3_ALPHA3) + (uc.z * SDF_R3_ALPHA1));
+                        uint bz = ((uc.x * SDF_R3_ALPHA3) + (uc.y * SDF_R3_ALPHA1) + (uc.z * SDF_R3_ALPHA2));
+                        r0 = (float3(bx, by, bz) * SDF_INV_2POW32);
+                    } else if (noiseFlavor == SDF_NOISE_GAUSSIAN) {
+                        // Central-limit: the mean of 3 decorrelated hashed uniforms per axis — a Bates(3) distribution, i.e.
+                        // bell-SHAPED and clustered toward the cell centre, not a true Gaussian (it has compact support, which
+                        // is exactly what keeps the +-jitter/2 bound). FLOAT-averaged, not uint-summed, to avoid 32-bit overflow.
+                        uint3 g1 = sdfPcg3d(key ^ SDF_HASH_STREAM_A);
+                        uint3 g2 = sdfPcg3d(key ^ SDF_HASH_STREAM_B);
+                        r0 = (((float3)h0 + (float3)g1 + (float3)g2) * (SDF_INV_2POW32 / 3.0));
+                    } else {
+                        // SDF_NOISE_WHITE (0, the default): the plain independent PCG3D uniform.
+                        r0 = ((float3)h0 * SDF_INV_2POW32);
+                    }
+
+                    localPosition -= (data0.xyz * cell);               // the SDF_OP_REPEAT fold
+                    localPosition -= ((r0 - 0.5) * data0.w);           // per-cell position jitter (data0.w peak-to-peak)
+
+                    // Tumble (an isometry): guarded by amplitude so a zeroed op stays an EXACT identity (no rotate, no
+                    // divergent codegen). The hashed axis is uniform on the sphere; the angle is |r1.z| * tumble * pi.
+                    if (data1.w > 0.0) {
+                        uint3 h1 = sdfPcg3d(key ^ SDF_HASH_TUMBLE);
+                        float3 r1 = ((float3)h1 * SDF_INV_2POW32);
+                        float zz = ((2.0 * r1.x) - 1.0);
+                        float rr = sqrt(max(0.0, (1.0 - (zz * zz))));
+                        float phi = (SDF_TAU * r1.y);
+                        float3 axis = float3((rr * cos(phi)), (rr * sin(phi)), zz);   // uniform on the unit sphere
+                        float angle = ((r1.z * data1.w) * SDF_PI);
+                        float ha = (0.5 * angle);
+                        float sa = sin(ha);
+                        float4 q = float4((axis * sa), cos(ha));       // (x,y,z,w) matches SDF_OP_ROTATE's layout
+                        localPosition = rotatePointByInverseQuaternion(localPosition, q);
+                    }
+
+                    // Per-cell material variant (same channel WallpaperFold recolors through): a hashed palette row in
+                    // 0..variants-1, added to a later shape's material by the SDF_OP_SHAPE parityMaterialDelta apply.
+                    if (instructionHeader.w != 0u) {
+                        parityMaterialDelta = (int)(h0.z % instructionHeader.w);
+                    }
+
+                    break;
+                }
+                // Angular domain-repeat fold (KEEP IN SYNC with SdfProgramBuilder.RepeatPolar): fold the plane
+                // perpendicular to the axis into `count` equal sectors so the prototype repeats ROTATIONALLY around it.
+                // data0.x = sector angle 2*pi/count (HOST-BAKED), data0.y = count/(2*pi) = 1/angle (HOST-BAKED),
+                // data0.z = count, data0.w = 1/count (HOST-BAKED). header.y = axis (SDF_POLAR_AXIS_*), header.z = mirror
+                // flag (reflect each sector across its bisector — the kaleidoscope fold), header.w = materialStride
+                // (per-sector palette stride; 0 = geometric only). A rotation into the base sector (and, when mirrored, a
+                // reflection) about the axis — BOTH isometries, so distances are preserved (factor 1, no step clamp; like
+                // SDF_OP_REPEAT the prototype must stay clear of the sector walls). atan2/floor are floats, so a
+                // sector-seam pixel carries the usual +-1 LSB warp noise (geometry only; the per-sector material can flip
+                // at a seam exactly as SDF_OP_WALLPAPER_FOLD's can). At the axis (r == 0) atan2(0,0) = 0 keeps it a no-op.
+                case SDF_OP_REPEAT_POLAR: {
+                    uint polarAxis = instructionHeader.y;
+                    // The fold plane (u,v) perpendicular to the axis; the axial coordinate is untouched.
+                    float2 pv;
+                    if (polarAxis == SDF_POLAR_AXIS_X) { pv = localPosition.yz; }
+                    else if (polarAxis == SDF_POLAR_AXIS_Z) { pv = localPosition.xy; }
+                    else { pv = localPosition.xz; }   // SDF_POLAR_AXIS_Y (default): the XZ ground plane
+
+                    float sectorAngle = data0.x;
+                    float a = (atan2(pv.y, pv.x) + (0.5 * sectorAngle));
+                    float r = length(pv);
+                    float sector = floor(a * data0.y);                         // data0.y = 1/angle
+                    a = ((a - (sectorAngle * sector)) - (0.5 * sectorAngle));  // a in [-angle/2, angle/2)
+                    if (instructionHeader.z != 0u) { a = abs(a); }             // mirror: reflect across the sector bisector
+                    pv = (float2(cos(a), sin(a)) * r);
+
+                    if (polarAxis == SDF_POLAR_AXIS_X) { localPosition.yz = pv; }
+                    else if (polarAxis == SDF_POLAR_AXIS_Z) { localPosition.xy = pv; }
+                    else { localPosition.xz = pv; }
+
+                    // Per-sector material variant (the same channel SDF_OP_WALLPAPER_FOLD / SDF_OP_CELL_JITTER recolor
+                    // through): wrap the raw sector index into [0, count) and stride the palette.
+                    if (instructionHeader.w != 0u) {
+                        float wrapped = (sector - (data0.z * floor(sector * data0.w)));   // data0.z = count, data0.w = 1/count
+                        parityMaterialDelta = ((int)wrapped * (int)instructionHeader.w);
+                    }
+
+                    break;
+                }
+                // POINT op (KEEP IN SYNC with SdfProgramBuilder.DomainWarp): perturb the sample point by a bounded,
+                // cross-coupled sinusoidal field before the shapes evaluate — organic bulge/wobble/terrain. data0.xyz =
+                // per-axis frequency, data0.w = amplitude; each axis is driven by the NEXT axis's coordinate so the warp
+                // is non-separable. Deterministic float trig (±1 LSB). The Jacobian is I plus a perturbation of spectral
+                // norm <= amp*max|freq_i| (J - I is a scaled cyclic permutation, so its norm is its largest entry), so the metric
+                // stretches by up to (1 + amp*max|freq_i|); SdfProgram.AnalyzeLipschitz bakes
+                // that step clamp and folds the point's max travel (amp*sqrt(3)) into a downstream twist/bend's reach.
+                case SDF_OP_DOMAIN_WARP: {
+                    localPosition += (data0.w * float3(
+                        sin(data0.x * localPosition.y),
+                        sin(data0.y * localPosition.z),
+                        sin(data0.z * localPosition.x)));
+                    break;
+                }
+                // Reflection fold across an ARBITRARY plane (KEEP IN SYNC with SdfProgramBuilder.SymmetryPlane): the
+                // general-normal superset of SDF_OP_SYMMETRY_X/Y/Z. data0.xyz = unit plane normal, data0.w = offset;
+                // points on the negative side (dot(p,n)+offset < 0) mirror onto the positive side. For n = (1,0,0),
+                // offset 0 this is abs(localPosition.x) to the bit. A reflection is an isometry, so distanceScale is
+                // untouched and the field stays 1-Lipschitz.
+                case SDF_OP_SYMMETRY_PLANE: {
+                    float spT = (dot(localPosition, data0.xyz) + data0.w);
+                    localPosition -= ((2.0 * min(spT, 0.0)) * data0.xyz);
+                    break;
+                }
+                // The warps rotate a plane pair by an angle keyed on ONE coordinate (GLSL mat2(c,-s,s,c) * v, written as
                 // explicit components: x' = c*x + s*y, y' = -s*x + c*y). NOT isometries — space stretches tangentially —
-                // so authored rates stay moderate (the validator bounds them).
+                // so authored rates stay moderate (the validator bounds them) and SdfProgram.AnalyzeLipschitz folds the
+                // exact Jacobian operator norm over the chain's reach into the program's step clamp.
+                //
+                // The three members are DISTINCT ops, not a symmetric family — each names the plane it rotates:
+                //   BEND_X: angle keyed on x, rotates the XY plane
+                //   BEND_Y: angle keyed on y, rotates the XY plane
+                //   BEND_Z: angle keyed on y, rotates the YZ plane
+                // TWIST_Y keys on y and rotates XZ (the axis-orthogonal plane) — the only one that twists about its axis.
                 case SDF_OP_TWIST_Y: {
                     float twistCos = cos(data0.x * localPosition.y);
                     float twistSin = sin(data0.x * localPosition.y);
@@ -773,7 +1291,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                     break;
                 }
                 case SDF_OP_BEND_Z: {
-                    // The legacy quirk, ported as-is: the angle keys on Y (like BEND_Y), the rotation acts on YZ.
                     float bendCos = cos(data0.x * localPosition.y);
                     float bendSin = sin(data0.x * localPosition.y);
 
@@ -797,6 +1314,19 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                     result.distance -= data0.x;
                     break;
                 }
+                // FIELD op (KEEP IN SYNC with SdfProgramBuilder.Displace): add a bounded sinusoidal RELIEF to the
+                // accumulated field, evaluated at the current folded point — the SDF-native height/parallax map (the
+                // relief is real geometry). data0.xyz = per-axis frequency, data0.w = amplitude. The separable
+                // sin-product basis is deterministic (float trig, ±1 LSB like the twist/bend warps), so it stays
+                // cross-backend parity-safe without a hashed noise table. Its squared gradient norm is MULTILINEAR in the three
+                // squared sines, so it maximizes at a cube vertex and reaches exactly amp*max|freq_i| (the infinity norm,
+                // not the Euclidean length): the field can overestimate by (1 + amp*max|freq_i|), which
+                // SdfProgram.AnalyzeLipschitz bakes as the step clamp.
+                case SDF_OP_DISPLACE: {
+                    float3 df = (data0.xyz * localPosition);
+                    result.distance += (data0.w * ((sin(df.x) * sin(df.y)) * sin(df.z)));
+                    break;
+                }
                 case SDF_OP_WALLPAPER_FOLD: {
                     // header lanes: y = the wallpaper group, z = the fold plane (0 = XZ, 1 = XY, 2 = YZ), w = the
                     // parity-material stride. The fold is an isometry, so distanceScale is untouched.
@@ -805,7 +1335,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                     int axisA = ((plane == 2u) ? 1 : 0);
                     int axisB = ((plane == 1u) ? 1 : 2);
                     // The symmetry LOD is PER SAMPLE (not per ray): every map() consumer — beam cone-march, pixel march,
-                    // the 6-tap normal, RT shadows — samples the identical field, so cull and march can never disagree.
+                    // the normal probe, the shadow marches — samples the identical field, so cull and march can never disagree.
                     bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
                     float2 cellIndex;
                     float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
@@ -861,18 +1391,19 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                         material += parityMaterialDelta;
                     }
 
-                    // Per-op material OWNERSHIP (the legacy avatar rules): union-like ops win when nearer, the
-                    // intersection-like when farther (the surviving surface is the farther field's), and the
-                    // subtraction-like when the CARVED surface shows (-candidate > current) — so a bowl carved from a
-                    // box wears the carving shape's interior material.
+                    // Per-op material OWNERSHIP: union-like ops win when nearer, intersection-like when farther (the
+                    // surviving surface is the farther field's), and subtraction-like when the CARVED surface shows
+                    // (-candidate > current) — so a bowl carved from a box wears the carving shape's interior material.
                     bool shapeWins = false;
 
                     switch (blendOp) {
                         case SDF_BLEND_INTERSECTION:
-                        case SDF_BLEND_SMOOTH_INTERSECTION: { shapeWins = (candidate > result.distance); break; }
+                        case SDF_BLEND_SMOOTH_INTERSECTION:
+                        case SDF_BLEND_CHAMFER_INTERSECTION: { shapeWins = (candidate > result.distance); break; }
                         case SDF_BLEND_SUBTRACTION:
-                        case SDF_BLEND_SMOOTH_SUBTRACTION:  { shapeWins = (-candidate > result.distance); break; }
-                        default:                            { shapeWins = (candidate < result.distance); break; }
+                        case SDF_BLEND_SMOOTH_SUBTRACTION:
+                        case SDF_BLEND_CHAMFER_SUBTRACTION:  { shapeWins = (-candidate > result.distance); break; }
+                        default:                             { shapeWins = (candidate < result.distance); break; }
                     }
 
                     if (shapeWins) {
@@ -886,12 +1417,26 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
         }
     }
 
+    // The Lipschitz clamp: scale the FINAL nearest-surface distance by the per-program 1/L so every marcher that funnels
+    // through mapCore (the beam cone-march, the pixel march, the RT debug marcher, the shadow marches, the normal probes)
+    // takes field-rate-safe steps. Applied ONCE here, AFTER the walk — the per-candidate blends, the material-winner
+    // compares, the Onion/Dilate/Displace field ops, and the exact-cull skip tests all ran on UNCORRECTED candidates, so
+    // the zero set, the seams, the materials, and the cull contract are all preserved; only the step LENGTH shrinks. A
+    // uniform positive scale never moves the zero crossing, and a normal probe's common factor cancels under normalize
+    // (true of both the 4-tap tetrahedron and the 6-tap central difference), so shading is unchanged. stepScale == 1.0
+    // leaves the result bit-identical.
+    //
+    // CAVEAT for consumers: the returned distance is scaled. Take a STEP with it freely, but a consumer that COMPARES it
+    // against a world-space quantity (a penumbra ratio, a footprint threshold) must divide the clamp back out — see
+    // sdfStepScale() and softShadow in sdf-world.hlsli.
+    result.distance *= stepScale;
+
     return result;
 }
 
-// The universal entry point every EXISTING consumer calls (sdf-view.frag.hlsl, sdf-world-rt-debug.rq.comp.hlsl,
-// calculateNormal, the shadow/AO marches): every instance visible, so an instanced program still renders its
-// complete picture — only the world render path's Stage 1 narrows the mask (see mapMasked).
+// The universal entry point every consumer outside the world path's Stage 1 calls (the beam cone-march,
+// sdf-world-rt-debug's marcher and its normal probe and shadow march): every instance visible, so an instanced program
+// still renders its complete picture — only Stage 1 narrows the mask (see mapMasked).
 SdfHit map(float3 worldPosition) {
     return mapCore(worldPosition, SDF_INSTANCE_MASK_ALL);
 }
@@ -927,7 +1472,7 @@ float4 sdfInstanceBoundAt(uint instanceOffset, uint index) {
 struct SdfMaterialData {
     float3 albedo;
     float emissive;  // self-illumination strength: albedo * emissive adds to the shaded color
-    float specular;  // Blinn-Phong strength in [0, 1]; 0 = matte (the v1 look)
+    float specular;  // Blinn-Phong strength in [0, 1]; 0 = matte
     float shininess; // Blinn-Phong exponent (highlight tightness)
 };
 
@@ -950,10 +1495,10 @@ SdfMaterialData sdfMaterialLoad(int material) {
 float3 sdfMaterialAlbedo(int material) {
     return sdfMaterialLoad(material).albedo;
 }
-// The shared lit-surface shading of the material model: the v1 lambert expression UNCHANGED (all-zero new fields
-// reproduce it exactly), plus a Blinn-Phong highlight and an emissive lift. `diffuse` is the caller's accumulated
-// radiance (ambient + the sun + any colored screen lights — a float3 so colored lights tint the surface);
-// `lightScale` scales the highlight by the caller's shadow/light attenuation.
+// The ONE lit-surface shade funnel: a lambert term, a Blinn-Phong highlight, and an emissive lift. An all-zero
+// specular/emissive material reduces to pure lambert exactly. `diffuse` is the caller's accumulated radiance (ambient +
+// the sun + any colored screen lights — a float3 so colored lights tint the surface); `lightScale` scales the highlight
+// by the caller's shadow/light attenuation. KEEP IN SYNC across every caller (sdf-world.hlsli, sdf-world-rt-debug).
 float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
     float3 color = (material.albedo * diffuse);
 

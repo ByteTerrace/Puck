@@ -54,12 +54,18 @@ public sealed record SdfWorldEngineOptions(
 /// <c>sdf-world-composite.comp</c> (source-agnostic region composite, also dispatched indirectly). Fully
 /// backend-neutral through the <see cref="IGpuComputeServices"/> seam.
 /// <para>
-/// TWO submission models, and they must never blur: <see cref="RenderFrame"/> is the deterministic harness path — one
-/// submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
+/// THREE submission models, and they must never blur — nor run against ONE engine instance at overlapping times, since
+/// all three re-record the single shared command buffer: <see cref="RenderFrame"/> is the deterministic harness path —
+/// one submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
 /// fire-and-forget (the HOST's frame pacing orders this frame's writes against the previous frame's reads, e.g. the
-/// launcher's BeginFrame WaitIdle), plus the export-mode queue drain when the output crosses a backend seam. Adding a
-/// wait to <see cref="SubmitFrame"/> is a frame-rate regression; removing the wait from <see cref="RenderFrame"/> is
-/// a nondeterminism bug.
+/// launcher's BeginFrame WaitIdle), plus the export-mode queue drain when the output crosses a backend seam.
+/// <see cref="SubmitFramePipelined"/> is the DEMO-PREVIEW path — a non-blocking FENCED readback (submit fire-and-forget,
+/// poll <see cref="IsFramePixelsReady"/> on a LATER produced frame, then <see cref="AcquireFramePixels"/> maps it), so
+/// the live in-editor bake preview never idles the shared present queue mid-sculpt. It stays frame-count driven
+/// (determinism is a feature even here), and a single-in-flight guard forbids interleaving it with the other two on one
+/// engine — <see cref="RenderFrame"/>, <see cref="SubmitFrame"/>, and <see cref="SubmitFramePipelined"/> each throw while
+/// a pipelined frame is outstanding. Adding a wait to <see cref="SubmitFrame"/> is a frame-rate regression; removing the
+/// wait from <see cref="RenderFrame"/> is a nondeterminism bug.
 /// </para>
 /// </summary>
 public sealed class SdfWorldEngine : IDisposable {
@@ -167,6 +173,7 @@ public sealed class SdfWorldEngine : IDisposable {
     private bool m_imageInitialized;
     private double? m_lastFrameGpuMilliseconds;
     private int m_liveInstanceMaskWordCount;
+    private bool m_pipelinedFrameInFlight;
     private IGpuSurfaceReadback? m_readback;
     private int m_requiredDynamicTransformCapacity;
     private uint m_screenSourceMask;
@@ -578,12 +585,16 @@ public sealed class SdfWorldEngine : IDisposable {
 
     /// <summary>Renders one frame — beam → cull-args → views (indirect) → composite in a single submit — against the
     /// uploaded program, WAITS for completion, and returns the composited RGBA readback. The deterministic harness
-    /// path (validation stages, headless renders).</summary>
+    /// path (validation stages, headless renders). Must not be called while a <see cref="SubmitFramePipelined"/> frame
+    /// is outstanding on this engine (it would re-record the one shared command buffer under a live fence).</summary>
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
     /// <returns>The composited output, tightly packed RGBA8, row-major.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The frame has zero views or more than the provisioned capacity.</exception>
+    /// <exception cref="InvalidOperationException">A pipelined preview frame is still in flight on this engine.</exception>
     public byte[] RenderFrame(SdfFrame frame) {
+        ThrowIfPipelinedFrameInFlight();
+
         var viewportCount = PrepareFrame(frame: frame);
 
         Record(viewportCount: viewportCount);
@@ -612,13 +623,69 @@ public sealed class SdfWorldEngine : IDisposable {
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The frame has zero views or more than the provisioned capacity.</exception>
+    /// <exception cref="InvalidOperationException">A pipelined preview frame is still in flight on this engine.</exception>
     public void SubmitFrame(SdfFrame frame) {
+        ThrowIfPipelinedFrameInFlight();
+
         var viewportCount = PrepareFrame(frame: frame);
 
         Record(viewportCount: viewportCount);
         m_gpu.QueueSubmitter.Submit(commandBufferHandles: [m_commandPool.CommandBufferHandle], deviceContext: m_deviceContext);
         m_exportableImage?.FinalizeForExport();
         m_timingFrame++;
+    }
+
+    /// <summary>Records and submits one frame FIRE-AND-FORGET, then issues a NON-BLOCKING FENCED readback of the
+    /// composited output — the demo bake-preview path. Neither the compute submit nor the readback copy waits: the
+    /// caller polls <see cref="IsFramePixelsReady"/> on a LATER produced frame and, once it is ready, collects the
+    /// pixels with <see cref="AcquireFramePixels"/>. This spreads the render + readback across produced frames so the
+    /// live in-editor preview never idles the shared present queue mid-sculpt. SINGLE-IN-FLIGHT: only one pipelined
+    /// frame may be outstanding, and this path must not be interleaved with <see cref="RenderFrame"/> or
+    /// <see cref="SubmitFrame"/> on one engine (all three re-record the single shared command buffer) — mixing them
+    /// while a fence is live corrupts the in-flight submission.</summary>
+    /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The frame has zero views or more than the provisioned capacity.</exception>
+    /// <exception cref="InvalidOperationException">A pipelined preview frame is already in flight on this engine.</exception>
+    public void SubmitFramePipelined(SdfFrame frame) {
+        ThrowIfPipelinedFrameInFlight();
+
+        var viewportCount = PrepareFrame(frame: frame);
+
+        Record(viewportCount: viewportCount);
+        // Fire-and-forget compute submit (the SAME call SubmitFrame uses), then the fenced-but-unwaited readback copy.
+        // The readback lives on this engine and tracks its own single outstanding fence; the timing path is not driven
+        // here (this path is preview-only and never constructed with a timing pool).
+        m_gpu.QueueSubmitter.Submit(commandBufferHandles: [m_commandPool.CommandBufferHandle], deviceContext: m_deviceContext);
+        m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        m_readback.SubmitRead(
+            bytesPerPixel: 4,
+            deviceContext: m_deviceContext,
+            format: Format,
+            height: m_height,
+            sourceImageHandle: m_storageImage.ImageHandle,
+            width: m_width
+        );
+        m_pipelinedFrameInFlight = true;
+    }
+
+    /// <summary>Polls, WITHOUT blocking, whether the outstanding <see cref="SubmitFramePipelined"/>'s readback has
+    /// landed. Fail-safe on a torn-down device (returns <see langword="false"/>, never throws into the render loop).</summary>
+    /// <returns>Whether the pipelined frame's pixels are ready to <see cref="AcquireFramePixels"/>.</returns>
+    public bool IsFramePixelsReady() =>
+        (m_readback?.IsReadComplete() ?? false);
+
+    /// <summary>Collects the pixels the outstanding <see cref="SubmitFramePipelined"/> produced (call only once
+    /// <see cref="IsFramePixelsReady"/> is <see langword="true"/>), and clears the single-in-flight guard so the next
+    /// pipelined (or waited) frame may be submitted. The returned memory is the readback's reusable staging view —
+    /// copy it before the next submit if it must outlive one.</summary>
+    /// <returns>The composited output pixels, tightly packed RGBA8, row-major.</returns>
+    public ReadOnlyMemory<byte> AcquireFramePixels() {
+        var pixels = m_readback!.MapPixels();
+
+        m_pipelinedFrameInFlight = false;
+
+        return pixels;
     }
 
     /// <summary>Reads the composited output back from the GPU (tightly packed RGBA8, row-major). The returned memory
@@ -1095,6 +1162,14 @@ public sealed class SdfWorldEngine : IDisposable {
     private void WriteTimingMark(nint timingPool, nint commandBuffer, uint queryIndex) {
         if (0 != timingPool) {
             m_timingRecorder!.WriteTimestamp(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, poolHandle: timingPool, queryIndex: queryIndex, stageFlags: GpuTimingStage.BottomOfPipe);
+        }
+    }
+    // The single-in-flight guard shared by all three submission paths: a pipelined frame's fence is still outstanding,
+    // so re-recording the one shared command buffer (any submit path) would corrupt the in-flight work. Drain it with
+    // AcquireFramePixels first.
+    private void ThrowIfPipelinedFrameInFlight() {
+        if (m_pipelinedFrameInFlight) {
+            throw new InvalidOperationException(message: "A pipelined preview frame is still in flight on this engine; complete it with AcquireFramePixels before submitting another frame (SubmitFramePipelined must not be interleaved with RenderFrame or SubmitFrame on one engine).");
         }
     }
     private void WriteStorageBuffer(nint set, uint binding, IGpuStorageBuffer buffer) {

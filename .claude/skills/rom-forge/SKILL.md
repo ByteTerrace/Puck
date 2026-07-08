@@ -11,6 +11,14 @@ change, it is stale; update it in the same change. The forge lives under the
 GREENFIELD demo: its verification story is the self-verify batteries below,
 never a Post stage or gate.
 
+> **Unification-contract alignment** (see "The unification contract" atop
+> docs/overworld-demo-plan.md): this file frames forging as a headless
+> `--forge-*` CLI activity, but the forge's CAPABILITY — creation → cartridge —
+> is ALSO reachable in-game via the `forge` verb / creator Start-commit; each
+> `--forge-*` below is that in-game path's CI/proof twin, not the settled
+> contract itself (the in-game forge is being made lossless + general). The
+> five games are in-game cabinet cart types 4-8.
+
 ## The map (src/Puck.Demo/Forge/)
 
 - `Framework/` — the SM83 game framework, 19 modules in

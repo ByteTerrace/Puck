@@ -1,0 +1,754 @@
+{
+  "schema": "puck.creation.v1",
+  "name": "town-arcade",
+  "intent": "Object",
+  "bakeStyle": "classic",
+  "palette": [
+    {
+      "albedo": {
+        "x": 0.28,
+        "y": 0.3,
+        "z": 0.34
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.44,
+        "y": 0.46,
+        "z": 0.5
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.06,
+        "y": 0.06,
+        "z": 0.08
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.3
+      },
+      "emissive": 1.8,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.98,
+        "y": 0.86,
+        "z": 0.48
+      },
+      "emissive": 1.5,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.98
+      },
+      "emissive": 1.7,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.26,
+        "y": 0.17,
+        "z": 0.1
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.28,
+        "y": 0.3,
+        "z": 0.34
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.5171839
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.66308224,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.8089806,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.74512255,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.5992242
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.45332584,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.39257106,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.53847086,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    }
+  ],
+  "shapes": [
+    {
+      "id": 0,
+      "name": "bodyL",
+      "type": "Box",
+      "position": {
+        "x": -0.5,
+        "y": 1.06,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.617647,
+        "y": 2.6470587,
+        "z": 2.0588236
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 1,
+      "name": "bodyR",
+      "type": "Box",
+      "position": {
+        "x": 0.5,
+        "y": 1.06,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.617647,
+        "y": 2.6470587,
+        "z": 2.0588236
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 2,
+      "name": "roof",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.98,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 3,
+        "y": 0.2352941,
+        "z": 2.1176472
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 3,
+      "name": "parapet",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 2.08,
+        "z": 0.66
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 3,
+        "y": 0.4117647,
+        "z": 0.2352941
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 4,
+      "name": "marquee",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.62,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.6470587,
+        "y": 0.6470588,
+        "z": 0.29411766
+      },
+      "material": 3,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 5,
+      "name": "marqueeSill",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.38,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.7058823,
+        "y": 0.2,
+        "z": 0.2352941
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 6,
+      "name": "entryRecess",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 0.85,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.1764706,
+        "y": 1.4705882,
+        "z": 0.29411766
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 7,
+      "name": "doorMullion",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 0.85,
+        "z": 0.78
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 1.3529412,
+        "z": 0.2
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 8,
+      "name": "threshold",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 0.42,
+        "z": 0.76
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.2941176,
+        "y": 0.2,
+        "z": 0.29411766
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 9,
+      "name": "winFrameL",
+      "type": "Box",
+      "position": {
+        "x": -0.66,
+        "y": 0.95,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.76470584,
+        "y": 0.8235294,
+        "z": 0.2352941
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 10,
+      "name": "winGlowL",
+      "type": "Box",
+      "position": {
+        "x": -0.66,
+        "y": 0.95,
+        "z": 0.78
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5588235,
+        "y": 0.61764705,
+        "z": 0.2
+      },
+      "material": 4,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 11,
+      "name": "winFrameR",
+      "type": "Box",
+      "position": {
+        "x": 0.66,
+        "y": 0.95,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.76470584,
+        "y": 0.8235294,
+        "z": 0.2352941
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 12,
+      "name": "winGlowR",
+      "type": "Box",
+      "position": {
+        "x": 0.66,
+        "y": 0.95,
+        "z": 0.78
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5588235,
+        "y": 0.61764705,
+        "z": 0.2
+      },
+      "material": 4,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 13,
+      "name": "neonStripe",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.9,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.9411764,
+        "y": 0.2,
+        "z": 0.20588236
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 14,
+      "name": "neonRailL",
+      "type": "Box",
+      "position": {
+        "x": -0.46,
+        "y": 0.95,
+        "z": 0.76
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 1.2352941,
+        "z": 0.2
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 15,
+      "name": "neonRailR",
+      "type": "Box",
+      "position": {
+        "x": 0.46,
+        "y": 0.95,
+        "z": 0.76
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 1.2352941,
+        "z": 0.2
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 16,
+      "name": "pilasterL",
+      "type": "Box",
+      "position": {
+        "x": -1.02,
+        "y": 1.06,
+        "z": 0.66
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.29411766,
+        "y": 2.6470587,
+        "z": 0.29411766
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 17,
+      "name": "pilasterR",
+      "type": "Box",
+      "position": {
+        "x": 1.02,
+        "y": 1.06,
+        "z": 0.66
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.29411766,
+        "y": 2.6470587,
+        "z": 0.29411766
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 18,
+      "name": "roofVentL",
+      "type": "Box",
+      "position": {
+        "x": -0.5,
+        "y": 2.14,
+        "z": -0.3
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5294118,
+        "y": 0.4705882,
+        "z": 0.5294118
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 19,
+      "name": "roofVentR",
+      "type": "Box",
+      "position": {
+        "x": 0.5,
+        "y": 2.14,
+        "z": -0.3
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5294118,
+        "y": 0.4705882,
+        "z": 0.5294118
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    }
+  ],
+  "frames": null,
+  "chains": null,
+  "cameras": null,
+  "behavior": null
+}

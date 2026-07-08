@@ -115,6 +115,7 @@ public static class VulkanPresenterServiceRegistration {
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
             frameReadbackApi: sp.GetRequiredService<IVulkanFrameReadbackApi>(),
+            frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>(),
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),
             storageBufferFactory: sp.GetRequiredService<IVulkanStorageBufferFactory>()

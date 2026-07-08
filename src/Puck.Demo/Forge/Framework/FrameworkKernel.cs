@@ -62,8 +62,12 @@ internal static class FrameworkKernel {
         emitter.DisableInterrupts();
         emitter.LoadStackPointer(value: FrameworkMemoryMap.StackTop);
 
-        // A clean slate: the framework page, the shadow OAM (Y = 0 hides every sprite), and the first game pages.
-        EmitBlockFill(emitter: emitter, destinationAddress: FrameworkMemoryMap.FrameCounter, byteCount: 0x0400, value: 0x00);
+        // A clean slate: the framework page, the shadow OAM (Y = 0 hides every sprite), and the first game pages — but
+        // SPLIT AROUND the 16-byte victory-share source slot (0xC0F0..0xC0FF), which the host seeds BEFORE the game
+        // boots (a per-cabinet poke). Clearing it here would wipe the seed, so the fill covers 0xC000..0xC0EF and
+        // 0xC100..0xC3FF and steps over the reserved slot. Everything else in the 0xC000..0xC3FF span is still zeroed.
+        EmitBlockFill(emitter: emitter, destinationAddress: FrameworkMemoryMap.FrameCounter, byteCount: (ushort)(FrameworkMemoryMap.VictoryShareSource - FrameworkMemoryMap.FrameCounter), value: 0x00);
+        EmitBlockFill(emitter: emitter, destinationAddress: FrameworkMemoryMap.ShadowOam, byteCount: (ushort)((FrameworkMemoryMap.FrameCounter + 0x0400) - FrameworkMemoryMap.ShadowOam), value: 0x00);
 
         // The HRAM OAM-DMA trampoline.
         EmitBlockCopy(emitter: emitter, sourceAddress: dmaTrampoline.Address, destinationAddress: FrameworkMemoryMap.DmaTrampoline, byteCount: (ushort)dmaTrampoline.Length);

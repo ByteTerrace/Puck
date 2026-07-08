@@ -60,7 +60,28 @@ multiplayer; `--rom <path>` boots straight into a cartridge; the live
 dmg↔cgb↔agb device swap, forged cartridges (SDF art, Pocket Camera,
 hand-authored SM83 games), and creator mode — a rich in-engine editor that
 sculpts, animates, and bakes `puck.creation.v1` creations into cartridges — all
-live here. Full spec, seams, and next steps:
+live here.
+
+**The unification contract (the demo's north star).** The demo is ONE cohesive
+experience, not a menu of `--flag` modes: every capability is reachable from
+inside a single running session — a diegetic act, a pad chord, or a **console
+verb** — with no restart. The **console is the control plane**, driven by the
+on-screen panel AND process **stdin** with results echoed to **stdout**, so an
+agent (or a deterministic test) scripts the whole engine over a pipe. Durable
+configuration lives in the `puck.run.v1` **data file** (which world the overworld
+is/reveals into, each cabinet's cart); the demo's `PUCK_*` env surface is being
+removed as noise — each former env var becomes a run-doc field or a console verb.
+The player's journey is a **reveal ladder**: boot immersed in an intro ROM that
+mirrors the arcade room the data file defines → win → the fourth wall breaks and
+loads you into that world, standing at the machines with their screens glowing →
+later, a diegetic reveal unlocks the editor (which stays always-on for
+devs/agents). Headless `--forge-*`/`--validate-*`/`--scenario`/`--run` are
+CI/proof or developer reflections of in-session capabilities, never separate
+products. The full contract (rules, the env→verb migration table, and what is
+built vs. TODO) is the top section of
+[docs/overworld-demo-plan.md](docs/overworld-demo-plan.md).
+
+Full spec, seams, and next steps:
 [docs/overworld-demo-plan.md](docs/overworld-demo-plan.md). The in-engine game
 studio's road ahead (the card games, audio, the UI convergence, the recursion)
 is [docs/game-studio-plan.md](docs/game-studio-plan.md). The many-machines

@@ -38,6 +38,9 @@ internal sealed class BindingBarOverlayNode : IRenderNode {
     private readonly IRenderNode m_inner;
     private readonly BindingBarLayoutOptions m_layoutOptions;
     private readonly IGpuPipelineFactory m_pipelineFactory;
+    // The push-constant payload is constant except for floats[0] (the slot count), so its backing array and binding
+    // are allocated once and the count is rewritten in place each frame rather than reallocated.
+    private readonly byte[] m_pushConstantData = new byte[PushConstantByteLength];
     private readonly IGpuQueueSubmitter m_queueSubmitter;
     private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
     private readonly Func<NormalizedRect>? m_regionSource;
@@ -57,6 +60,7 @@ internal sealed class BindingBarOverlayNode : IRenderNode {
     private IGpuPipeline? m_pipeline;
     private AssetContentHash m_pipelineId;
     private IReadOnlyDictionary<AssetContentHash, IGpuPipeline>? m_pipelines;
+    private GpuPushConstantBinding? m_pushConstants;
     private IGpuRenderTarget? m_renderTarget;
     private bool m_resourcesReady;
     private nint m_sampler;
@@ -153,9 +157,10 @@ internal sealed class BindingBarOverlayNode : IRenderNode {
         var slotCount = PackSlots(frame: in frame);
 
         m_slotBuffer!.Write<float>(data: m_slotScratch);
-        m_drawCommands![0] = m_drawCommands[0] with {
-            PushConstants = new GpuPushConstantBinding(data: BuildPushConstants(slotCount: slotCount), offset: 0, stageFlags: GpuShaderStage.Fragment),
-        };
+        // Only the slot count varies per frame; the style knobs were written once in EnsureResources. Overwrite that
+        // one float in the reusable buffer the draw command's cached binding already views — Record copies it into the
+        // command buffer synchronously (before Submit), so reusing the backing array across frames is safe.
+        MemoryMarshal.Cast<byte, float>(span: m_pushConstantData.AsSpan())[0] = slotCount;
 
         var commandBufferHandle = m_compositor.Record(
             deviceContext: m_deviceContext,
@@ -289,11 +294,11 @@ internal sealed class BindingBarOverlayNode : IRenderNode {
         m_slotScratch[offset + 7] = BitConverter.UInt32BitsToSingle(value: packedState);
     }
 
-    private byte[] BuildPushConstants(int slotCount) {
-        var data = new byte[PushConstantByteLength];
-        var floats = MemoryMarshal.Cast<byte, float>(span: data.AsSpan());
+    // Writes the constant style knobs into the reusable push-constant buffer once. floats[0] (the slot count) is the
+    // only value that varies per frame; ProduceFrame overwrites it in place, leaving these untouched.
+    private void InitializePushConstants() {
+        var floats = MemoryMarshal.Cast<byte, float>(span: m_pushConstantData.AsSpan());
 
-        floats[0] = slotCount;
         floats[1] = 0.18f;  // plate corner radius, as a fraction of the plate half-size
         floats[2] = 1f;     // global alpha (a future fade knob)
         floats[3] = 0.35f;  // pressed brightness boost
@@ -301,8 +306,6 @@ internal sealed class BindingBarOverlayNode : IRenderNode {
         floats[5] = 0.08f;  // outline width, as a fraction of the plate half-size
         floats[6] = 0.06f;  // anti-alias ramp, as a fraction of the plate half-size
         floats[7] = 0f;     // reserved
-
-        return data;
     }
 
     private void EnsureResources() {
@@ -346,12 +349,14 @@ internal sealed class BindingBarOverlayNode : IRenderNode {
         m_pipelines = new Dictionary<AssetContentHash, IGpuPipeline> {
             [m_pipelineId] = m_pipeline,
         };
+        InitializePushConstants();
+        m_pushConstants = new GpuPushConstantBinding(data: m_pushConstantData, offset: 0, stageFlags: GpuShaderStage.Fragment);
         m_drawCommands = [
             new GpuDrawCommand(
                 DescriptorSetHandle: m_descriptorSet,
                 DrawParameters: new GpuDrawParameters(instanceCount: 1, vertexCount: VertexCount),
                 PipelineId: m_pipelineId,
-                PushConstants: new GpuPushConstantBinding(data: new byte[PushConstantByteLength], offset: 0, stageFlags: GpuShaderStage.Fragment),
+                PushConstants: m_pushConstants,
                 VertexBufferHandle: m_vertexBuffer.BufferHandle
             ),
         ];

@@ -65,12 +65,12 @@ internal sealed class WorldInstancedStage : IPostStage {
     /// and the box/torus 5 (a 0.3 field bound measured maxΔ119 silhouette flips). A SUBTRACTION member only
     /// influences points INSIDE itself, so the carve keeps its tight 0.6 bound — the instance whose mask bit
     /// genuinely varies across evaluated content tiles in word 0 (the far-field rows vary words 1 and 2). A
-    /// SMOOTH-blend member is NEVER maskable bit-exactly at ANY finite margin: even where its clamp saturates,
-    /// <c>blendSmoothUnion</c> computes <c>lerp(candidate, current, 1) = candidate + (current - candidate)</c>,
-    /// which rounds differently than leaving <c>current</c> untouched — measured as ±1 ground dither exactly over
-    /// the tiles that masked the crimson sphere out — so the crimson SmoothUnion instance declares an UNMASKABLE
-    /// bound (100, past every possible tile cone). That is also honest authoring guidance: smooth-blending an
-    /// instance against WORLD-set geometry defeats its own per-tile cull.</para></summary>
+    /// SMOOTH-blend member is now maskable bit-exactly too: <c>blendSmoothUnion</c> is written far-exact
+    /// (<c>lerp(a, b, 1 - h)</c>), so once the seam saturates past the blend radius k it returns the accumulator TO
+    /// THE BIT rather than <c>candidate + (current - candidate)</c> — and <see cref="SdfProgram"/> inflates a smooth
+    /// instance's cull bound by k so every tile that masks it out sits in that saturated region. Hence the crimson
+    /// SmoothUnion sphere carries a FINITE bound (5, the union influence margin; the packer adds the k = 0.4 halo) and
+    /// still renders bit-identical to flat — what used to force an unmaskable bound.</para></summary>
     internal static SdfProgram BuildInstancedScene() {
         return BuildScene(instanced: true);
     }
@@ -101,10 +101,12 @@ internal sealed class WorldInstancedStage : IPostStage {
         // The ground plane stays in the WORLD set (unbounded — a plane can never own a finite instance bound).
         _ = builder.Plane(normal: Vector3.UnitY, offset: 0f, material: ground);
 
-        // The smooth-blended sphere: UNMASKABLE (see BuildInstancedScene's bound-sizing contract — a smooth blend is
-        // never bitwise transparent when masked out, so an instance smooth-blending against the WORLD set must stay
-        // in every tile's mask).
-        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(-1.9f, 0.9f, -0.6f), boundRadius: 100f, emit: b => _ = b
+        // The smooth-blended sphere: now CULLABLE with a finite bound. blendSmoothUnion is far-exact (returns the
+        // accumulator TO THE BIT once the seam saturates past the blend radius k), and PackInstances auto-inflates a
+        // smooth instance's bound by k (0.4 here), so a masked-out tile skips it EXACTLY — the same bit-identical
+        // instanced == flat contract a plain-union member gets. Bound 5 = the union influence margin (as the box/torus);
+        // the packer adds the k halo on top.
+        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(-1.9f, 0.9f, -0.6f), boundRadius: 5f, emit: b => _ = b
             .ResetPoint()
             .Translate(offset: new Vector3(-1.9f, 0.9f, -0.6f))
             .Sphere(radius: 0.9f, material: crimson, blend: SdfBlendOp.SmoothUnion, smooth: 0.4f));
@@ -146,6 +148,65 @@ internal sealed class WorldInstancedStage : IPostStage {
                     .Translate(offset: position)
                     .Sphere(radius: 0.18f, material: material));
             }
+        }
+
+        return builder.Build();
+    }
+
+    /// <summary>The INTERSECTION-GUARD scene: a ground plane and a box in the WORLD set, plus one sphere carrying an
+    /// <see cref="SdfBlendOp.Intersection"/> blend, declared (when <paramref name="instanced"/>) inside an instance whose
+    /// bound hugs the sphere.
+    /// <para>An intersection has GLOBAL reach — <c>mapCore</c> never resets the accumulator, only the point, so
+    /// <c>max(accumulator, candidate)</c> intersects against every shape emitted before it. No bounding sphere can cull
+    /// that: masking the instance out of a tile leaves the accumulator (ground plane ∪ box), while evaluating it leaves
+    /// their intersection with the sphere. Rendered, the bug is unmistakable — a ground plane that exists only in the
+    /// tiles where the instance happened to be culled.</para>
+    /// <para>NO FINITE BOUND IS CORRECT for an intersection member. A Union member influences the running minimum only
+    /// where it is nearest, so a generous bound covers it (hence the 5s above, for 0.9-radius spheres); an intersection
+    /// influences the running MAXIMUM wherever <c>candidate &gt; accumulator</c> — which is everywhere outside its own
+    /// shape. <see cref="SdfProgram"/> therefore OVERRIDES the authored bound with its unmaskable sentinel.</para>
+    /// <para>This scene proves that override by authoring a bound (0.15) deliberately SMALLER than the sphere it
+    /// declares (0.6), so the mask would clear across most of the frame. Note a merely-tight-but-covering bound would
+    /// NOT expose the bug: the beam prepass cone-marches the UNMASKED field, and an intersection annihilates everything
+    /// outside its own shape, so every tile the cone march leaves non-empty is a tile whose cone passes through the
+    /// shape — and therefore through any bound that contains it. The bug hides behind the cull that precedes it. With
+    /// the sentinel the render is bit-identical to flat on Vulkan; without it, ~14k bytes differ (the ground plane
+    /// reappears in exactly the tiles that culled the instance).</para>
+    /// <para>The FIELD ops (<see cref="SdfOp.Onion"/>, <see cref="SdfOp.Dilate"/>, <see cref="SdfOp.Displace"/>) are the
+    /// same hazard and are MORE visible: they mutate the running accumulator outright, so an <c>Onion</c> inside an
+    /// instance shells the ground plane. Masking the instance out of a tile un-shells it there — and unlike the
+    /// intersection, the beam prepass does NOT hide this, because the shelled ground is non-empty everywhere, so Stage 1
+    /// runs in exactly the tiles whose masked field has no onion. Creator mode emits <c>Onion</c> inside
+    /// <c>BeginInstanceDynamic</c> per placed shape, so this is live. The onion variant of this scene therefore uses an
+    /// HONEST bound: it needs no under-covering trick to expose the bug.</para></summary>
+    /// <param name="instanced">Whether to wrap the offending shape in an instance declaration.</param>
+    /// <param name="fieldOp">Use an <see cref="SdfOp.Onion"/> field op instead of an intersection blend.</param>
+    /// <returns>The scene program.</returns>
+    internal static SdfProgram BuildUnmaskableGuardScene(bool instanced, bool fieldOp) {
+        var builder = new SdfProgramBuilder();
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
+        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.6f, 0.2f), Emissive: 0.25f));
+        var sphereCenter = new Vector3(0.35f, 0.5f, 0f);
+
+        _ = builder
+            .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
+            .Translate(offset: new Vector3(0f, 0.5f, 0f))
+            .Box(halfExtents: new Vector3(0.5f, 0.5f, 0.5f), round: 0f, material: amber);
+
+        // The intersection variant authors a bound deliberately SMALLER than the sphere it declares, so the mask would
+        // clear across most of the frame (a covering bound hides the intersection bug behind the cone march — see the
+        // summary). The field-op variant needs no such trick: an HONEST bound still exposes it.
+        if (instanced) {
+            _ = builder.BeginInstance(boundCenter: sphereCenter, boundRadius: (fieldOp ? 0.7f : 0.15f));
+        }
+
+        _ = builder.ResetPoint().Translate(offset: sphereCenter);
+        _ = fieldOp
+            ? builder.Sphere(radius: 0.6f, material: amber).Onion(thickness: 0.05f)
+            : builder.Sphere(radius: 0.6f, material: amber, blend: SdfBlendOp.Intersection);
+
+        if (instanced) {
+            _ = builder.EndInstance();
         }
 
         return builder.Build();
@@ -206,7 +267,35 @@ internal sealed class WorldInstancedStage : IPostStage {
             return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
         }
 
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} {4 + (FieldColumns * FieldRows)}-instance scene (3 mask words) | instanced == flat bit-identical on Vulkan, within WorldLsbExact on Direct3D 12 | instanced cross-backend within WorldComposite thresholds | {ParityCheck.Describe(metrics: metrics)}");
+        // (c) The UNMASKABLE-COMPOSE guard. An op that READS the running accumulator has global reach, so the packer must
+        // make its instance unmaskable. Two families qualify: the intersection blends (max(accumulator, candidate)) and
+        // the FIELD ops (Onion/Dilate/Displace, which mutate the accumulator outright). Rendered on Vulkan — where the
+        // mask gate is an exact culling decision — instanced must be BIT-IDENTICAL to flat in both cases.
+        foreach (var fieldOp in new[] { false, true }) {
+            var guardFlatProgram = BuildUnmaskableGuardScene(instanced: false, fieldOp: fieldOp);
+            var guardInstancedProgram = BuildUnmaskableGuardScene(instanced: true, fieldOp: fieldOp);
+            var guardFlatPixels = RenderOnce(program: guardFlatProgram, frame: WorldStage.BuildHeroFrame(program: guardFlatProgram, width: WorldWidth, height: WorldHeight), device: vulkanDevice, gpu: vulkanGpu, bytecodeExtension: ".spv");
+            var guardInstancedPixels = RenderOnce(program: guardInstancedProgram, frame: WorldStage.BuildHeroFrame(program: guardInstancedProgram, width: WorldWidth, height: WorldHeight), device: vulkanDevice, gpu: vulkanGpu, bytecodeExtension: ".spv");
+            var guardDiffering = 0;
+
+            for (var index = 0; (index < guardFlatPixels.Length); index++) {
+                if (guardFlatPixels[index] != guardInstancedPixels[index]) {
+                    guardDiffering++;
+                }
+            }
+
+            if (guardDiffering != 0) {
+                var kind = (fieldOp ? "an Onion field op" : "an Intersection blend");
+                var guardName = (fieldOp ? "onion" : "intersection");
+                var guardPath = Path.Combine(context.ArtifactsDirectory, $"world-instanced-unmaskable-{guardName}-guard.png");
+
+                PngEncoder.Write(height: (int)WorldHeight, path: guardPath, rgba: guardInstancedPixels, width: (int)WorldWidth);
+
+                return PostStageOutcome.Fail(artifactPath: guardPath, detail: $"an instance carrying {kind} rendered {guardDiffering} bytes differently from the flat stream — it reads the running accumulator, so its influence is unbounded and its instance must be packed UNMASKABLE (SdfProgram.UnmaskableBoundRadius) rather than culled per tile");
+            }
+        }
+
+        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} {4 + (FieldColumns * FieldRows)}-instance scene (3 mask words) | instanced == flat bit-identical on Vulkan, within WorldLsbExact on Direct3D 12 | instanced cross-backend within WorldComposite thresholds | Intersection- and Onion-carrying instances are unmaskable and render flat-identical | {ParityCheck.Describe(metrics: metrics)}");
     }
 
     private static byte[] RenderOnce(SdfProgram program, SdfFrame frame, IGpuDeviceContext device, IGpuComputeServices gpu, string bytecodeExtension) {

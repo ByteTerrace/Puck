@@ -1060,6 +1060,9 @@ internal sealed class ChromaGame {
         e.StoreAToAddress(address: ChromaProtocol.GameOverTimer);
         m_fw.Sound.EmitEffect(emitter: e, effectId: SoundTables.MusicStop);
         m_fw.Sound.EmitEffect(emitter: e, effectId: SoundTables.EffectOver);
+        // The 128-bit meta-victory converge: a completed well writes this cabinet's host-seeded share into the top-16
+        // SRAM win region (the room XORs it across cabinets to drive the editor reveal).
+        m_fw.Victory.EmitStoreShare();
     }
 
     private void EmitGameOverTick(Sm83Emitter e) {

@@ -1,6 +1,8 @@
 using System.CommandLine;
 using Puck.Commands;
 using Puck.Demo.Forge;
+using Puck.Demo.Overworld;
+using Puck.Hosting;
 using static Puck.Demo.CommandArgs;
 
 namespace Puck.Demo.Tracker;
@@ -12,21 +14,26 @@ namespace Puck.Demo.Tracker;
 /// control (load/save a document by name, set a row's note directly, set the tempo, start/stop the preview).
 /// </summary>
 /// <remarks>
-/// WHY THIS MODULE DOESN'T TAKE <c>IRenderNode</c> (the pattern every other stateful module uses — see
-/// <see cref="Creator.CreatorCommandModule"/>, <see cref="Creator.CompanionCommandModule"/>,
-/// <see cref="World.WorldCommandModule"/>): it's not an oversight, it's the coupling ceiling.
+/// WHY THIS MODULE KEEPS <c>Tracker.TrackerScene</c> OFF THE RENDER NODE'S SURFACE.
 /// <see cref="Overworld.OverworldRenderNode"/> is AT its analyzer coupling ceiling already (its own remarks say
 /// so — see <c>ICreatorModeHost</c>'s doc comment there), so <c>Tracker.TrackerModeState</c>/<c>TrackerScene</c>
-/// are deliberately kept OFF its surface; they live behind a lazily-built static singleton
-/// (<see cref="ForgeCommands.TrackerModeInstance"/>) reached through <see cref="IServiceProvider"/> instead. The
-/// render node DOES expose <c>ICreatorModeHost.ToggleTrackerMode</c>/<c>RequestTrackerPreview</c> (primitive-typed
-/// forwarders onto that same singleton) — proving the mechanical rename to the <c>IRenderNode</c> ctor pattern
-/// would need Tracker's OWN state (<see cref="TrackerScene"/>, its row/note/tempo surface) added to
-/// <c>ICreatorModeHost</c> too, which is exactly the one additional coupling the render node cannot absorb. So
-/// this module keeps the <see cref="IServiceProvider"/> ctor as the intentional escape, not a debt.
+/// must never appear in its signature; they live behind a lazily-built static singleton
+/// (<see cref="ForgeCommands.TrackerModeInstance"/>) reached through <see cref="IServiceProvider"/>, and every edit
+/// verb here drives that singleton's <see cref="TrackerScene"/> directly (never through the node). The module also
+/// takes <c>IRenderNode</c> — but ONLY to reach the PRIMITIVE-typed authoring seam (<c>ICreatorModeHost</c>, the
+/// same lazy-through-the-node pattern <see cref="ConditionCommandModule"/> and <c>Creator.CreatorCommandModule</c>
+/// use) for the two arg-less string-returning forwarders <c>ToggleTrackerMode</c> / <c>RequestTrackerPreview</c> /
+/// <c>RequestTuneForge</c>. That adds NO Tracker type to the node's surface — the coupling concern is Tracker's OWN
+/// row/note/tempo state (kept behind the singleton), not the node reference itself.
 /// </remarks>
-internal sealed class TrackerCommandModule(IServiceProvider services) : ICommandModule {
+internal sealed class TrackerCommandModule(IServiceProvider services, IRenderNode rootNode) : ICommandModule {
     private TrackerScene Scene => ForgeCommands.TrackerModeInstance(services: services).Scene;
+
+    // The overworld root, cast to the primitive-typed authoring seam — the same lazy-through-the-node pattern
+    // ConditionCommandModule uses. RequestTuneForge is a PRIMITIVE (string-returning, arg-less) method on
+    // ICreatorModeHost, so taking IRenderNode here adds NO Tracker type to the node's surface (the module's remarks'
+    // concern) — it only routes the tune-forge intent to the node's forge queue. Null for a non-overworld root.
+    private readonly ICreatorModeHost? m_creatorHost = (rootNode as ICreatorModeHost);
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -51,13 +58,18 @@ internal sealed class TrackerCommandModule(IServiceProvider services) : ICommand
                     return "[tracker.load: give a name — tracker.list shows what's saved]";
                 }
 
-                if (AudioDocumentStore.LoadNamed(nameOrPath: args[0]) is not { } document) {
-                    return $"[tracker.load: nothing readable at '{args[0]}']";
+                try {
+                    if (AudioDocumentStore.LoadNamed(nameOrPath: args[0]) is not { } document) {
+                        return $"[tracker.load: nothing readable at '{args[0]}']";
+                    }
+
+                    scene.Load(document: document);
+
+                    return string.Join(separator: '\n', values: (new[] { $"[tracker.load: \"{document.Name}\" ({document.Patterns!.Count} pattern(s), tempo {document.Tempo})]" }).Concat(second: scene.RenderRows()));
                 }
-
-                scene.Load(document: document);
-
-                return string.Join(separator: '\n', values: (new[] { $"[tracker.load: \"{document.Name}\" ({document.Patterns!.Count} pattern(s), tempo {document.Tempo})]" }).Concat(second: scene.RenderRows()));
+                catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+                    return $"[tracker.load: '{args[0]}' is unreadable — {exception.Message}]";
+                }
             }),
             name: "tracker.load"
         );
@@ -131,6 +143,13 @@ internal sealed class TrackerCommandModule(IServiceProvider services) : ICommand
                 ? new CommandResult(ForgeCommands.TrackerRequestPreview(services: services, play: false))
                 : new CommandResult("[tracker: enter tracker mode first (console: tracker)]")),
             name: "tracker.stop"
+        );
+        yield return Plain(
+            description: "FORGES the working tune into a JUKEBOX cart (GPU-free) and hot-swaps it into the nearest cabinet in-session — the tune half of the subject-neutral author→forge→hot-swap loop. Enter tracker mode and author a tune first; Cycle/boot a cabinet to it to hear the loop.",
+            handler: _ => new CommandResult((m_creatorHost is null)
+                ? "[tracker.forge: unavailable — the overworld is not the active root]"
+                : m_creatorHost.RequestTuneForge()),
+            name: "tracker.forge"
         );
     }
 

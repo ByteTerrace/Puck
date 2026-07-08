@@ -44,6 +44,19 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             handler: WithScene(handler: scene => $"[creator.new: discarded {scene.Clear()} shape(s)]"),
             name: "creator.new"
         );
+        yield return Plain(
+            description: "Places the ghost's current primitive into the scene — the console/stdin equivalent of the pad's South (a no-op when the pool is full or creator is not editing). Style + move the ghost first (creator.material/op/smooth/move), then place.",
+            handler: WithScene(handler: static scene => {
+                var before = scene.PlacedCount;
+
+                scene.Place();
+
+                return ((scene.PlacedCount > before)
+                    ? $"[creator.place: placed — {scene.PlacedCount} shape(s)]"
+                    : "[creator.place: no-op (pool full, or not editing)]");
+            }),
+            name: "creator.place"
+        );
         yield return WithArgs(
             description: "Saves the creation as a puck.creation.v1 document: creator.save <name> (defaults to the creation's current name).",
             handler: WithSceneArgs(handler: (scene, args) => {
@@ -57,11 +70,20 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
         );
         yield return WithArgs(
             description: "Loads a saved creation (or an explicit file path; legacy .avatar.json imports too): creator.load <name>.",
-            handler: WithSceneArgs(handler: static (scene, args) => ((args.Length == 0)
-                ? "[creator.load: give a name — creator.list shows what's saved]"
-                : ((CreationStore.Load(nameOrPath: args[0]) is { } document)
-                    ? $"[creator.load: {scene.LoadDocument(document: document)} shape(s) from '{document.Name}' (style {document.BakeStyle}, intent {document.Intent})]"
-                    : $"[creator.load: nothing readable at '{args[0]}']"))),
+            handler: WithSceneArgs(handler: static (scene, args) => {
+                if (args.Length == 0) {
+                    return "[creator.load: give a name — creator.list shows what's saved]";
+                }
+
+                try {
+                    return ((CreationStore.Load(nameOrPath: args[0]) is { } document)
+                        ? $"[creator.load: {scene.LoadDocument(document: document)} shape(s) from '{document.Name}' (style {document.BakeStyle}, intent {document.Intent})]"
+                        : $"[creator.load: nothing readable at '{args[0]}']");
+                }
+                catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+                    return $"[creator.load: '{args[0]}' is unreadable — {exception.Message}]";
+                }
+            }),
             name: "creator.load"
         );
         yield return WithArgs(

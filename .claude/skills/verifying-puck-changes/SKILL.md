@@ -19,11 +19,14 @@ and never promote one into Post, unless the user explicitly asks.
 The demo-side canon beyond the smoke:
 
 - **Document sanity**: `-- --validate-overworld`.
-- **Deterministic screenshot**: `PUCK_OVERWORLD_CAPTURE_FRAME=N` with
-  `-- --capture <png>` grabs the frame after N produced frames (the machines
-  have booted and drawn by then). For creator-mode scenes add
-  `PUCK_CREATOR_LOAD=<name-or-path>` (loads a saved creation AND enters
-  creator mode) or `PUCK_OVERWORLD_CREATOR=1` (empty creator scene).
+- **Deterministic screenshot** (console-driven now — the demo's `PUCK_OVERWORLD_*`
+  capture env vars were removed; captures drive over stdin): pipe verbs in —
+  `printf 'step 100\ncapture shot.png\nstep 3\n' | dotnet run --project
+  src/Puck.Demo -c Release -- --exit-after-seconds 12` grabs the frame after the
+  machines have booted and drawn (use `settle` instead of `step N` to wait for
+  transitions to quiesce). For creator-mode scenes prepend `creator` (empty
+  creator scene) or `creator.load <name-or-path>` (loads a saved creation, then
+  `creator` enters the mode). Runnable examples: docs/examples/scripts/.
 - **Forge self-verify**: every forge tool boots its output on a real Humble
   machine and asserts observable behavior before writing bytes — run the ones
   your change touches: `--forge-brickfall` (the full BrickfallVerify battery),

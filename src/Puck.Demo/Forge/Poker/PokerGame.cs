@@ -2943,6 +2943,9 @@ internal sealed class PokerGame {
         e.MarkLabel(label: messageDone);
         e.LoadAImmediate(value: PokerProtocol.GameOverFrames);
         e.StoreAToAddress(address: PokerProtocol.EndTimer);
+        // The 128-bit meta-victory converge: a completed session (cleared the table or busted out) writes this
+        // cabinet's host-seeded share into the top-16 SRAM win region (the room XORs it across cabinets for the reveal).
+        m_fw.Victory.EmitStoreShare();
     }
 
     private void EmitGameOverTick(Sm83Emitter e) {

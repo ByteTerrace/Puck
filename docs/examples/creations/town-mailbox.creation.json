@@ -1,0 +1,261 @@
+{
+  "schema": "puck.creation.v1",
+  "name": "town-mailbox",
+  "intent": "Object",
+  "bakeStyle": "classic",
+  "palette": [
+    {
+      "albedo": {
+        "x": 0.2,
+        "y": 0.2,
+        "z": 0.22
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.32,
+        "y": 0.34,
+        "z": 0.38
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.72,
+        "y": 0.14,
+        "z": 0.12
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.7876941
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.7664081
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.62050974,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.4746121,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.37128553,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.5171839
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.66308224,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.8089806,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.74512255,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.5992242
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.45332584,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.39257106,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.53847086,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    }
+  ],
+  "shapes": [
+    {
+      "id": 0,
+      "name": "post",
+      "type": "Cylinder",
+      "position": {
+        "x": 0,
+        "y": 0.72,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.55,
+        "z": 0.2
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 1,
+      "name": "body",
+      "type": "Capsule",
+      "position": {
+        "x": 0,
+        "y": 1.34,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": false,
+        "x": 0,
+        "y": 0,
+        "z": 0.7071068,
+        "w": 0.7071068
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.34,
+        "z": 0.2
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 2,
+      "name": "flag",
+      "type": "Box",
+      "position": {
+        "x": 0.24,
+        "y": 1.42,
+        "z": 0.05
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    }
+  ],
+  "frames": null,
+  "chains": null,
+  "cameras": null,
+  "behavior": null
+}

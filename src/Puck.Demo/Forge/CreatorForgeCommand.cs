@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Demo.Creator;
 using Puck.Demo.Overworld;
 using Puck.Demo.Tracker;
 using Puck.Hosting;
@@ -8,9 +9,15 @@ namespace Puck.Demo.Forge;
 
 /// <summary>
 /// The in-engine entry points that pull the forge, file IO, and GPU-resolution together on behalf of the live overworld
-/// node — kept in one place so that node stays under its coupling budget. Two callers: the world-lens cabinet cart (a
-/// forged room the brick renders) and the console <c>forge</c> verb (a player's creator scene → a playable overworld
-/// cartridge).
+/// node — kept in one place so that node stays under its coupling budget. Its callers: the framework-game/world-lens
+/// cabinet carts (SDF-baked title art the brick renders) and the two in-game AVATAR forge paths — the console
+/// <c>forge</c> verb (writes <c>./forged-avatars/creator-avatar.gbc</c>) and the creator Start-commit (in-memory
+/// hot-swap of the running avatar cart). Both avatar paths are LOSSLESS: they route the live scene's FULL
+/// <c>puck.creation.v1</c> document (<see cref="Puck.Demo.Creator.CreatorScene.ToDocument"/> — the same one
+/// <c>creator.save</c> persists) through the same rich bake (<see cref="AvatarForge.FromCreation"/> + the document's
+/// bake style) the headless <c>--forge-avatar-from</c> uses, so an in-game forge and a CLI forge of the same saved
+/// creation produce a BYTE-IDENTICAL cart — the animation frames and bake style reach the ROM, not just the rest-pose
+/// geometry.
 /// </summary>
 internal static class ForgeCommands {
     /// <summary>Builds the world-lens cabinet cart, SDF-forging its room background on the live GPU when available and
@@ -113,52 +120,110 @@ internal static class ForgeCommands {
         return build();
     }
 
-    /// <summary>Forges the frame source's current creation into overworld ROM BYTES in memory (no disk, no boot check) —
-    /// the hot path the in-game create→commit→play loop uses to swap a cabinet's cart live. Returns null (narrated) if
-    /// the GPU device is unavailable or the bake throws, so a failed commit never takes the demo down.</summary>
+    // ── The subject-neutral author→forge→hot-swap registry (contract rule 6, "generalizes beyond avatars") ──
+    //
+    // ONE mechanism forges all three in-session subjects — the AVATAR walker, the TUNE jukebox, and the SDF-ART SCENE
+    // creature — each pulling its OWN live document and producing 32 KiB cart bytes. The render node reaches this only
+    // through the primitive-typed forwarders below (ForgeSubjectRom / IsForgedCartType / ForgedCartTypes), never as a
+    // typed ForgeSubject/ForgeRegistry field — it is at its analyzer coupling ceiling.
+
+    /// <summary>The AVATAR walker cart type (the in-engine create→commit→play loop; the original forged subject).</summary>
+    public const int AvatarCartType = 3;
+
+    /// <summary>The JUKEBOX (tune) cart type — the tracker's live puck.audio.v1 document compiled to a music cart (no GPU).</summary>
+    public const int JukeboxCartType = 9;
+
+    /// <summary>The SDF-ART SCENE cart type — the creator's creation baked as a centred creature sprite (needs the GPU).</summary>
+    public const int SceneCartType = 10;
+
+    // The three subjects, declared once. Each Forge pulls its own live document (the creator scene, or the tracker's
+    // working tune) and returns the cart bytes; the tune is NeedsGpu:false so its compile is NEVER gated behind device
+    // resolution (a room with no GPU can still forge + play a tune). Never mutated after construction.
+    private static readonly ForgeRegistry s_forgeRegistry = new(subjects: [
+        new ForgeSubject(CartType: AvatarCartType, Kind: "avatar", NeedsGpu: true, Forge: static context => (
+            // EMPTY creator scene → the built-in STARTER figure (the lazy-default cabinet cart before the player has
+            // committed anything of their own — byte-identical to the old ForgeDefaultAvatarRom). A NON-empty scene →
+            // LOSSLESS: the SAME rich AvatarForge.FromCreation route --forge-avatar-from uses (frames + bake style reach
+            // the ROM), so an in-game commit and a headless forge of the same saved creation are byte-identical.
+            (context.FrameSource.Creator.PlacedCount == 0)
+                ? RomForge.ForgeAvatarRom(device: context.Device!, gpu: context.Gpu!, avatar: AvatarDefinition.Default(), title: "PUCKAVTR")
+                : RomForge.ForgeAvatarRomFromCreation(device: context.Device!, gpu: context.Gpu!, document: context.FrameSource.Creator.ToDocument(), title: "PUCKAVTR"))),
+        new ForgeSubject(CartType: JukeboxCartType, Kind: "tune", NeedsGpu: false, Forge: static context =>
+            // The tracker's live working document, compiled through the GPU-FREE Tune.TuneRom.Build.
+            Tune.TuneRom.Build(document: TrackerModeInstance(services: context.Services).Scene.Document)),
+        new ForgeSubject(CartType: SceneCartType, Kind: "scene", NeedsGpu: true, Forge: static context =>
+            // The SAME creator creation as the avatar, but baked through the SDF-art/creature path (a centred sprite),
+            // not the walker — so authoring one creation forges two DISTINCT carts (walker avatar vs. creature scene).
+            RomForge.ForgeSceneRomFromCreation(device: context.Device!, gpu: context.Gpu!, document: context.FrameSource.Creator.ToDocument(), title: "PUCKSCEN")),
+    ]);
+
+    /// <summary>Whether <paramref name="cartType"/> is a FORGED (lazily-baked) subject cart — the registry-driven test the
+    /// render node's lazy-forge / reload paths iterate against, replacing the old avatar-only <c>== AvatarCartType</c>
+    /// branch. A forged type is Cycle-reachable / lazy-forged, never a cabinet boot default.</summary>
+    /// <param name="cartType">The cart type to test.</param>
+    /// <returns>Whether a subject forges this type.</returns>
+    public static bool IsForgedCartType(int cartType) => s_forgeRegistry.IsForgedType(cartType: cartType);
+
+    /// <summary>The forged (lazily-baked) subject cart types, for the node's "reload any cabinet running a forged cart"
+    /// pass. Primitive-typed (an int sequence) so the node names no ForgeSubject type.</summary>
+    public static IEnumerable<int> ForgedCartTypes => [AvatarCartType, JukeboxCartType, SceneCartType];
+
+    /// <summary>Forges the registered subject for <paramref name="cartType"/> into overworld ROM BYTES in memory — the ONE
+    /// generalized path the render node's commit / lazy-forge routes call for ANY forged subject (avatar/tune/scene),
+    /// replacing the avatar-hardcoded forge. The GPU-vs-no-GPU dispatch is EXPLICIT: a GPU-needing subject (avatar/scene)
+    /// resolves the live device first and narrates a decline when it is unavailable; a pure-CPU subject (the tune) is
+    /// invoked WITHOUT touching device resolution, so its compile is never gated behind a device the room may lack.
+    /// Returns null (narrated) on an unknown type, a missing GPU, or a bake throw, so a failed forge never takes the demo
+    /// down.</summary>
     /// <param name="context">The current frame context (its host resolves the live GPU device).</param>
-    /// <param name="services">The application services (for the compute services).</param>
-    /// <param name="frameSource">The live creator scene to export and forge.</param>
+    /// <param name="services">The application services (for the compute services + the tracker document).</param>
+    /// <param name="frameSource">The live overworld frame source (the document composition point).</param>
+    /// <param name="cartType">The forged subject's cart type.</param>
     /// <returns>The forged ROM bytes, or null on failure.</returns>
-    public static byte[]? ForgeCreatorAvatarRom(in FrameContext context, IServiceProvider services, OverworldFrameSource frameSource) {
+    public static byte[]? ForgeSubjectRom(in FrameContext context, IServiceProvider services, OverworldFrameSource frameSource, int cartType) {
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
 
-        return ForgeAvatarRom(context: in context, services: services, avatar: frameSource.ExportAvatar());
-    }
+        if (s_forgeRegistry.Find(cartType: cartType) is not { } subject) {
+            Console.Error.WriteLine(value: $"[forge] cart type {cartType} is not a forged subject.");
 
-    /// <summary>Forges the built-in starter avatar into overworld ROM BYTES in memory — the cabinet's avatar cart before
-    /// the player has committed anything of their own. Returns null (narrated) on failure.</summary>
-    /// <param name="context">The current frame context.</param>
-    /// <param name="services">The application services.</param>
-    /// <returns>The forged ROM bytes, or null on failure.</returns>
-    public static byte[]? ForgeDefaultAvatarRom(in FrameContext context, IServiceProvider services) =>
-        ForgeAvatarRom(context: in context, services: services, avatar: AvatarDefinition.Default());
+            return null;
+        }
 
-    private static byte[]? ForgeAvatarRom(in FrameContext context, IServiceProvider services, AvatarDefinition avatar) {
-        ArgumentNullException.ThrowIfNull(services);
+        IGpuDeviceContext? device = null;
+        IGpuComputeServices? gpu = null;
 
-        try {
-            if (!context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device) ||
-                (services.GetService(serviceType: typeof(IGpuComputeServices)) is not IGpuComputeServices gpu)) {
-                Console.Error.WriteLine(value: "[forge] no GPU device available; cannot forge the avatar cart.");
+        // EXPLICIT GPU dispatch: resolve the device ONLY for a GPU-needing subject — the tune's compile never waits on a
+        // device. A GPU-needing subject with no device narrates and declines rather than throwing.
+        if (subject.NeedsGpu) {
+            if (!context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out device) ||
+                (services.GetService(serviceType: typeof(IGpuComputeServices)) is not IGpuComputeServices resolved)) {
+                Console.Error.WriteLine(value: $"[forge] no GPU device available; cannot forge the {subject.Kind} cart.");
 
                 return null;
             }
 
-            return RomForge.ForgeAvatarRom(device: device, gpu: gpu, avatar: avatar, title: "PUCKAVTR");
+            gpu = resolved;
+        }
+
+        try {
+            return subject.Forge(arg: new ForgeContext(frame: in context, services: services, frameSource: frameSource, device: device, gpu: gpu));
         } catch (Exception exception) {
-            Console.Error.WriteLine(value: $"[forge] avatar cart forge failed: {exception.Message}");
+            Console.Error.WriteLine(value: $"[forge] {subject.Kind} cart forge failed: {exception.Message}");
 
             return null;
         }
     }
 
     /// <summary>Bakes the frame source's current creation into <c>./forged-avatars/creator-avatar.gbc</c> (with its
-    /// <c>.avatar.json</c>, sprite-sheet preview, and boot proof), reusing the live GPU device. Never throws — any
-    /// failure is narrated to stderr, so a bad bake can never take the demo down.</summary>
+    /// <c>.creation.json</c>, sprite-sheet preview, bake blob, and boot proof), reusing the live GPU device. LOSSLESS:
+    /// it routes the live scene's FULL <c>puck.creation.v1</c> document through the same rich bake
+    /// <c>--forge-avatar-from</c> uses (the animation frames become the walk poses and the document's bake style
+    /// applies), so the <c>forge</c> verb and a headless forge of the same saved creation produce byte-identical carts.
+    /// Never throws — any failure is narrated to stderr, so a bad bake can never take the demo down.</summary>
     /// <param name="context">The current frame context (its host resolves the live GPU device).</param>
     /// <param name="services">The application services (for the compute services).</param>
-    /// <param name="frameSource">The live creator scene to export and forge.</param>
+    /// <param name="frameSource">The live creator scene to forge.</param>
     public static void Bake(in FrameContext context, IServiceProvider services, OverworldFrameSource frameSource) {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
@@ -171,15 +236,17 @@ internal static class ForgeCommands {
                 return;
             }
 
-            var avatar = frameSource.ExportAvatar();
+            var document = frameSource.Creator.ToDocument();
             var directory = Path.Combine(path1: Environment.CurrentDirectory, path2: "forged-avatars");
             _ = Directory.CreateDirectory(path: directory);
             var romPath = Path.Combine(path1: directory, path2: "creator-avatar.gbc");
 
-            File.WriteAllText(path: Path.ChangeExtension(path: romPath, extension: ".avatar.json"), contents: avatar.ToJson());
-            RomForge.ForgeAvatar(device: device, gpu: gpu, avatar: avatar, outputPath: romPath, title: "PUCKCREATOR");
+            File.WriteAllText(path: Path.ChangeExtension(path: romPath, extension: ".creation.json"), contents: CreationStore.ToJson(document: document));
+            // Same header title the CLI --forge-avatar-from uses (RomForge.RunAvatarAsync) so the in-game forge and the
+            // headless forge of the same saved creation produce byte-identical carts — the lossless-equivalence proof.
+            RomForge.ForgeAvatarFromCreation(device: device, gpu: gpu, document: document, outputPath: romPath, title: "PUCKAVTR");
 
-            Console.Error.WriteLine(value: $"[forge] baked your creation → {romPath} (+ .avatar.json, .sheet.png, .bake.bin, .emulated.png). Boot it with: --rom {romPath}");
+            Console.Error.WriteLine(value: $"[forge] baked your creation → {romPath} (+ .creation.json, .sheet.png, .bake.bin, .emulated.png). Boot it with: --rom {romPath}");
         } catch (Exception exception) {
             Console.Error.WriteLine(value: $"[forge] failed: {exception.Message}");
         }

@@ -112,12 +112,22 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
     /// <param name="data">The data to copy into the buffer.</param>
     /// <exception cref="ArgumentOutOfRangeException">The data is larger than the buffer.</exception>
     /// <exception cref="ObjectDisposedException">The buffer has been disposed.</exception>
-    public unsafe void Write<T>(ReadOnlySpan<T> data) where T : unmanaged {
+    public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged {
+        Write(data: data, destinationOffsetBytes: 0UL);
+    }
+    /// <summary>Maps the buffer, copies the supplied data into it starting at <paramref name="destinationOffsetBytes"/>,
+    /// and unmaps it.</summary>
+    /// <typeparam name="T">The unmanaged element type of the data.</typeparam>
+    /// <param name="data">The data to copy into the buffer.</param>
+    /// <param name="destinationOffsetBytes">The byte offset into the buffer at which to begin writing.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The data plus destination offset exceeds the buffer.</exception>
+    /// <exception cref="ObjectDisposedException">The buffer has been disposed.</exception>
+    public unsafe void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged {
         var size = ((ulong)data.Length * (ulong)sizeof(T));
 
-        if (size > SizeBytes) {
+        if ((destinationOffsetBytes > SizeBytes) || (size > (SizeBytes - destinationOffsetBytes))) {
             throw new ArgumentOutOfRangeException(
-                message: "Data size exceeds storage buffer size.",
+                message: "Data size plus destination offset exceeds storage buffer size.",
                 paramName: nameof(data)
             );
         }
@@ -127,8 +137,8 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
         try {
             fixed (T* source = data) {
                 Buffer.MemoryCopy(
-                    destination: (void*)pointer,
-                    destinationSizeInBytes: SizeBytes,
+                    destination: (void*)((byte*)pointer + destinationOffsetBytes),
+                    destinationSizeInBytes: (SizeBytes - destinationOffsetBytes),
                     source: source,
                     sourceBytesToCopy: size
                 );

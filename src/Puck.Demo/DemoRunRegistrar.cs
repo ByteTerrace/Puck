@@ -169,7 +169,7 @@ internal static class DemoRunRegistrar {
     // (OverworldNode.Immersed, the --rom path) opens INSIDE the machines instead — the fourth-wall boot. The overworld
     // document resolves to a Vulkan host today; the backend still flows through so the shared render builder owns
     // the choice.
-    internal static IRenderNode CreateOverworldRootNode(IServiceProvider serviceProvider, IReadOnlyList<GamingBrickSource> consoles, IReadOnlyList<CartridgeSource> library, string? capturePath, bool hostsOnDirectX = false, bool immersed = false, uint width = HostSettings.DefaultWidth, uint height = HostSettings.DefaultHeight) {
-        return new Overworld.OverworldRenderNode(capturePath: capturePath, consoles: consoles, height: height, hostsOnDirectX: hostsOnDirectX, immersed: immersed, library: library, serviceProvider: serviceProvider, width: width);
+    internal static IRenderNode CreateOverworldRootNode(IServiceProvider serviceProvider, IReadOnlyList<GamingBrickSource> consoles, IReadOnlyList<CartridgeSource> library, string? capturePath, bool hostsOnDirectX = false, bool immersed = false, string? world = null, long? cell = null, uint width = HostSettings.DefaultWidth, uint height = HostSettings.DefaultHeight) {
+        return new Overworld.OverworldRenderNode(bootWorld: world, capturePath: capturePath, consoles: consoles, height: height, hostsOnDirectX: hostsOnDirectX, immersed: immersed, library: library, serviceProvider: serviceProvider, spawnCell: cell, width: width);
     }
 }

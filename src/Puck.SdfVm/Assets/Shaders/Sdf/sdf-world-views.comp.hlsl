@@ -2,7 +2,7 @@
 // texture (rect-sized, view-local), accelerated by the sdf-beam.comp tile cull. Stage 2 (sdf-world-composite.comp)
 // then places each source — an SDF view OR a child node's output, treated uniformly — into its screen region. The
 // dispatch is (maxRectWidth, maxRectHeight, viewportCount) over an 8x8 workgroup. KEEP shading IN SYNC with
-// sdf-view.frag.hlsl and renderView in sdf-world.hlsli.
+// renderView in sdf-world.hlsli.
 // Stage 1 marches map(), so it opts into the per-frame dynamic-entity transform buffer (sdf-vm.hlsli), is the ONLY
 // kernel that opts into the screen-source sampling seam (sdf-world.hlsli) — the beam prepass and Stage 2 never bind
 // the screen table/sources, so they keep their existing descriptor sets byte-for-byte — and is the ONLY kernel that
@@ -62,7 +62,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float marchStart = tiles[tileIndex];
     // The tile's mask BASE (not the words themselves), using the same host-pushed width the beam prepass wrote with.
     uint instanceMaskBase = worldInstanceMaskBase(tileIndex);
-    float3 color = renderView(view, localUv, marchStart, instanceMaskBase);
+    // The per-pixel world footprint scale (footprint at distance t = pixelFootprint * t): the viewport's vertical field
+    // of view (2 * tan(fov/2)) spread over its pixel height, feeding renderView's resolution-independent hit threshold.
+    // This is a pixel DIAMETER, deliberately 2x the pixel radius Keinert's termination test names — a half-pixel of
+    // conservative silhouette, in the same direction as the Lipschitz clamp's bias.
+    float pixelFootprint = ((2.0 * view.right.w) / max(float(rectDims.y), 1.0));
+    float3 color = renderView(view, localUv, marchStart, instanceMaskBase, pixelFootprint);
+
+    // Dither before the 8-bit store to break gradient banding (sky, distance fog) into blue-ish high-frequency noise:
+    // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
+    color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);
 
     sources[id.z][pixel] = float4(color, 1.0);
 }

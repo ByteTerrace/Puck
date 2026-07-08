@@ -34,9 +34,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
+    uint tileIndex = worldTileIndex(id.z, id.xy, params.tileGrid);
+
     // A child viewport shows another node's surface — there is no SDF camera to cone-march, and Stage 1 never reads
-    // this slot's cull entry, so skip it.
+    // this slot's cull entry. Stage 2 DOES read it (its `== TileEmpty` test chooses source-copy vs flat fill), and the
+    // tile buffer is device-local and never cleared, so the slot must be DEFINED here: any word that happened to hold
+    // TileEmpty's bit pattern would paint the flat background over a live child surface. sdf-cull-args skips child
+    // viewports, so this 0.0 is invisible to its surviving-tile bbox scan.
     if (isChildViewport(id.z)) {
+        tiles[tileIndex] = 0.0;
+
         return;
     }
 
@@ -45,7 +52,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
 
-    float2 regionSizePx = (view.region.zw * float2(params.imageExtent));
+    // TRUNCATED, matching Stage 1's `rectDims = (uint2)(view.region.zw * imageExtent)` exactly. Dividing by the float
+    // product instead puts the last tile's localUvMax BELOW the last pixel's uv whenever the product has a fractional
+    // part (an odd window width or height does it immediately): that pixel's ray then lies outside both the cone this
+    // kernel cleared and the cone it culled instances against, silently breaking the "provably absent" exactness
+    // mapMasked's contract rests on.
+    float2 regionSizePx = float2((uint2)(view.region.zw * float2(params.imageExtent)));
     float2 tileMinPx = (float2(id.xy) * float(WorldTileSize));
 
     // Tiles past the viewport's pixel extent hold no rays — leave them empty.
@@ -54,34 +66,35 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         (tileMinPx.x < regionSizePx.x) &&
         (tileMinPx.y < regionSizePx.y)
     );
-    uint tileIndex = worldTileIndex(id.z, id.xy, params.tileGrid);
     // The host-pushed mask width is the LIVE uploaded program's derived per-tile word count; Stage 1 uses the same base.
     uint maskWordCount = params.instanceMaskWordCount;
     uint maskBase = worldInstanceMaskBase(tileIndex);
+    TileCone cone = (TileCone)0;
 
     if (insideViewport) {
         float2 tileMaxPx = min((tileMinPx + float(WorldTileSize)), regionSizePx);
-        float2 localUvMin = (tileMinPx / regionSizePx);
-        float2 localUvMax = (tileMaxPx / regionSizePx);
-        TileCone cone = buildTileCone(view, localUvMin, localUvMax);
 
+        cone = buildTileCone(view, (tileMinPx / regionSizePx), (tileMaxPx / regionSizePx));
         result = coneMarchTile(view, cone);
+    }
 
-        // The same tile cone drives both the march-start cull and the instance cull. A tile the cone already cleared
-        // (TileEmpty) still gets an instance mask, since Stage 1 is skipped for
-        // it regardless and an all-zero mask is a safe (if moot) default.
-        // The cull loop's loop-invariant instance-directory resolve, hoisted here so each sdfInstanceBoundAt load
-        // skips the offset chain.
+    // The same tile cone drives both the march-start cull and the instance cull. A tile the cone already cleared
+    // (TileEmpty), or one outside the viewport, has provably DEAD mask words: renderView gates its entire march — and
+    // therefore every mapMasked, every normal tap, every shadow ray — behind `marchStart >= 0.0`, and neither
+    // sdf-cull-args nor Stage 2 reads the mask at all. Sky tiles are the common case, so skipping their per-instance
+    // sphere-vs-cone loop is this kernel's cheapest win. `result != TileEmpty` is an exact test: coneMarchTile returns
+    // TileEmpty or a t >= ConeNear > 0.
+    if (result != TileEmpty) {
+        // The cull loop's loop-invariant instance-directory resolve, hoisted so each sdfInstanceBoundAt load skips the
+        // offset chain.
         uint instanceCount = sdfInstanceCountClamped();
         uint instanceOffset = sdfInstanceDirectoryOffset();
 
         [loop]
         for (uint word = 0u; (word < maskWordCount); word++) {
-            instanceMasks[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord);
+            instanceMasks[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
         }
     } else {
-        // A tile outside the viewport still owns mask-buffer words; zero-fill them (Stage 1 never reads them — the
-        // all-zero mask is the uniform safe default).
         [loop]
         for (uint word = 0u; (word < maskWordCount); word++) {
             instanceMasks[maskBase + word] = 0u;

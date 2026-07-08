@@ -1,0 +1,290 @@
+{
+  "schema": "puck.creation.v1",
+  "name": "town-bench",
+  "intent": "Object",
+  "bakeStyle": "classic",
+  "palette": [
+    {
+      "albedo": {
+        "x": 0.4,
+        "y": 0.27,
+        "z": 0.16
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.16,
+        "y": 0.16,
+        "z": 0.17
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.641796,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.7876941
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.7664081
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.62050974,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.4746121,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.37128553,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.5171839
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.66308224,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.8089806,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.74512255,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.5992242
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.45332584,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.39257106,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.53847086,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    }
+  ],
+  "shapes": [
+    {
+      "id": 0,
+      "name": "seat",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 0.62,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.9,
+        "y": 0.2,
+        "z": 0.42
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 1,
+      "name": "back",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 0.95,
+        "z": -0.36
+      },
+      "rotation": {
+        "isIdentity": false,
+        "x": -0.18738131,
+        "y": 0,
+        "z": 0,
+        "w": 0.9822873
+      },
+      "scale": {
+        "x": 0.9,
+        "y": 0.32,
+        "z": 0.2
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 2,
+      "name": "legLeft",
+      "type": "Box",
+      "position": {
+        "x": -0.75,
+        "y": 0.42,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.24,
+        "z": 0.38
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 3,
+      "name": "legRight",
+      "type": "Box",
+      "position": {
+        "x": 0.75,
+        "y": 0.42,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.24,
+        "z": 0.38
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    }
+  ],
+  "frames": null,
+  "chains": null,
+  "cameras": null,
+  "behavior": null
+}

@@ -1,0 +1,46 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "scene": {
+        "materials": [
+            { "albedo": [0.45, 0.50, 0.55] },
+            { "albedo": [0.90, 0.35, 0.45] },
+            { "albedo": [0.30, 0.60, 0.90] },
+            { "albedo": [0.90, 0.75, 0.25] }
+        ],
+        "objects": [
+            {
+                "shape": "plane",
+                "normal": [0.0, 1.0, 0.0],
+                "offset": 1.0,
+                "material": 0
+            },
+            {
+                "shape": "roundCone",
+                "ops": [
+                    { "op": "translate", "offset": [0.0, -1.0, 0.0] },
+                    { "op": "cellJitter", "spacing": [1.8, 6.0, 1.8], "jitter": 0.35, "seed": 7, "tumble": 0.85, "materialVariants": 3 }
+                ],
+                "lowerRadius": 0.2,
+                "upperRadius": 0.1,
+                "height": 0.45,
+                "material": 1
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.3,
+                "azimuth": 0.0,
+                "fieldOfView": 60.0,
+                "height": 2.4,
+                "radius": 6.0,
+                "target": [0.0, -0.6, 0.0]
+            },
+            "region": [0.0, 0.0, 1.0, 1.0]
+        }
+    ],
+    "graph": { "$type": "world", "produce": "vulkan" }
+}

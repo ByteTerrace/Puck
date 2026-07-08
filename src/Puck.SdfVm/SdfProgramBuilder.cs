@@ -172,10 +172,19 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Scale(Vector3 scale) {
+        // The degenerate-scale clamp AND the resulting distance rescale are HOST-BAKED (Data0.xyz = |scale| clamped,
+        // Data0.w = its min axis): shapes evaluate millions of times per frame while programs build once, and the
+        // shader's per-evaluation abs/max/min collapse to one lane read. The min-axis factor is the conservative
+        // correction for a non-uniform scale — f(S⁻¹p)·min(s) is 1-Lipschitz, so it can only underestimate true
+        // distance, never overstep. HLSL's abs/max/min agree with MathF's bit-for-bit on every non-NaN input, and
+        // 0.0001f is the same float the shader used to clamp against (KEEP IN SYNC with SDF_OP_SCALE in
+        // Assets/Shaders/Sdf/sdf-vm.hlsli).
+        var clamped = Vector3.Max(Vector3.Abs(scale), new Vector3(0.0001f));
+
         return Transform(
             data0: new Vector4(
-                value: scale,
-                w: 0f
+                value: clamped,
+                w: MathF.Min(clamped.X, MathF.Min(clamped.Y, clamped.Z))
             ),
             op: SdfOp.Scale
         );
@@ -215,6 +224,138 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.TwistY
         );
     }
+    /// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells. A translation along
+    /// <c>log(radius)</c> becomes a uniform SCALING in Cartesian space, so the prototype shape(s) that follow repeat
+    /// outward and inward as scaled copies from a handful of instructions. Folds ONLY the radial coordinate (no polar
+    /// pinching); an optional per-shell Z-spin gives the Droste spiral at no cost. NOT an isometry — the r/density
+    /// correction rides the runtime <c>distanceScale</c> and <c>AnalyzeLipschitz</c> bakes a conservative step clamp, so
+    /// the over-relaxed march stays hole-free. Like <see cref="Repeat"/>, the prototype content should stay within one
+    /// shell cell (radii within a factor of <paramref name="shellRatio"/>) so no shell boundary overshoots.</summary>
+    /// <param name="shellRatio">The Cartesian scale factor between consecutive shells (e.g. 2 = each shell twice the
+    /// previous). Clamped to at least 1.0001 (a ratio of 1 means no shells and a divide-by-zero on the baked 1/w).</param>
+    /// <param name="twist">Radians of Z-spin added per shell (the Droste spiral). 0 = concentric, un-spun shells.</param>
+    public SdfProgramBuilder LogSphere(float shellRatio, float twist = 0f) {
+        // w = ln(ratio) and its reciprocal are HOST-BAKED (the shader avoids a per-eval log-of-constant and a divide,
+        // matching Repeat's baked-reciprocal pattern; KEEP IN SYNC with SDF_OP_LOG_SPHERE in sdf-vm.hlsli).
+        var ratio = MathF.Max(shellRatio, 1.0001f);
+        var w = MathF.Log(ratio);
+
+        return Transform(
+            data0: new Vector4(
+                w: 0f,
+                x: w,
+                y: twist,
+                z: (1f / w)
+            ),
+            op: SdfOp.LogSphere
+        );
+    }
+    /// <summary>Stochastic domain-repeat fold: tiles space into cells of <paramref name="spacing"/> like
+    /// <see cref="Repeat"/>, then per cell displaces the point by a hashed offset, optionally tumbles (a hashed
+    /// rotation), and optionally recolors by a hashed material variant — scattering the prototype that follows into a
+    /// jittered field from a single instruction. Both the displacement and the tumble are ISOMETRIES, so the field stays
+    /// distance-preserving (only the jitter half-amplitude joins <c>AnalyzeLipschitz</c>). The per-cell hash is
+    /// INTEGER-ONLY (canonical PCG3D keyed on the two's-complement cell index xored with <paramref name="seed"/>), so
+    /// cell decisions are bit-identical across both GPU backends. jitter/tumble/materialVariants each default to an EXACT
+    /// identity, so an unused op leaves the point byte-identical. Like <see cref="Repeat"/>, keep the prototype clear of
+    /// the cell boundary: the caller must ensure jitter/2 + prototype radius ≤ min(spacing)/2 (this builder validates
+    /// only the half it can see — that the displacement alone cannot cross a boundary). KEEP IN SYNC with
+    /// SDF_OP_CELL_JITTER in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
+    /// <param name="jitter">The peak-to-peak per-cell position displacement in world units (0 = no displacement).</param>
+    /// <param name="seed">The hash seed — different seeds give independent jitter/tumble/variant fields.</param>
+    /// <param name="tumble">The per-cell rotation amount in [0,1]: 0 = no rotation, 1 = up to ±π about a random axis
+    /// (clamped to [0,1]).</param>
+    /// <param name="materialVariants">The number of hashed material rows (0 = geometric only): a hit in a cell adds a
+    /// hashed 0..variants-1 to its shape's material id.</param>
+    /// <param name="flavor">How the per-cell POSITION offset is distributed (the SDF_NOISE_* Blend lane, header.z):
+    /// <see cref="SdfNoiseFlavor.White"/> (default, byte-identical to pre-flavor programs), <see cref="SdfNoiseFlavor.Blue"/>,
+    /// or <see cref="SdfNoiseFlavor.Gaussian"/>. Reshapes ONLY the displacement — tumble and material variant are
+    /// unaffected, and every flavor shares White's <c>±jitter/2</c> offset bound (no Lipschitz change). KEEP IN SYNC with
+    /// SDF_NOISE_* and the SDF_OP_CELL_JITTER flavor branch in Assets/Shaders/Sdf/sdf-vm.hlsli.</param>
+    /// <exception cref="ArgumentException"><paramref name="materialVariants"/> is negative, or half of
+    /// <paramref name="jitter"/> is not strictly less than half the smallest <paramref name="spacing"/> component (the
+    /// displaced content would cross a cell boundary and hole the march).</exception>
+    public SdfProgramBuilder CellJitter(Vector3 spacing, float jitter, uint seed = 0u, float tumble = 0f, int materialVariants = 0, SdfNoiseFlavor flavor = SdfNoiseFlavor.White) {
+        // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz), mirroring Repeat().
+        var clamped = Vector3.Max(spacing, new Vector3(0.001f));
+
+        if (materialVariants < 0) {
+            throw new ArgumentException(message: "CellJitter materialVariants must be >= 0 (0 = geometric only).", paramName: nameof(materialVariants));
+        }
+
+        // The half the builder CAN see: the displacement alone must not push content across the round() cell boundary.
+        // (The caller must also keep jitter/2 + prototype radius <= min(spacing)/2 — the prototype radius is unknown here.)
+        var minSpacing = MathF.Min(clamped.X, MathF.Min(clamped.Y, clamped.Z));
+
+        if ((MathF.Abs(jitter) * 0.5f) >= (0.5f * minSpacing)) {
+            throw new ArgumentException(message: "CellJitter jitter/2 must be < min(spacing)/2, or jittered content crosses the cell boundary and holes the march (the caller must also keep jitter/2 + prototype radius <= min(spacing)/2).", paramName: nameof(jitter));
+        }
+
+        var clampedTumble = Math.Clamp(tumble, 0f, 1f);
+
+        m_instructions.Add(item: new SdfInstruction(
+            Blend: (uint)flavor,
+            Data0: new Vector4(
+                value: clamped,
+                w: jitter
+            ),
+            Data1: new Vector4(
+                value: (Vector3.One / clamped),
+                w: clampedTumble
+            ),
+            Material: (uint)materialVariants,
+            Op: SdfOp.CellJitter,
+            Shape: seed
+        ));
+
+        return this;
+    }
+    /// <summary>Angular DOMAIN-REPEAT fold: folds the plane perpendicular to <paramref name="axis"/> into
+    /// <paramref name="count"/> equal sectors, so the prototype that follows repeats ROTATIONALLY around the axis —
+    /// gears, wheels, columns of a rotunda, clock ticks, flower petals — from a single instruction (the rotational
+    /// sibling of the linear <see cref="Repeat"/> and the lattice <see cref="WallpaperFold"/>). The fold rotates the
+    /// point into the base sector and, when <paramref name="mirror"/> is set, reflects each sector across its bisector
+    /// for kaleidoscope symmetry: BOTH are ISOMETRIES, so the field stays 1-Lipschitz (factor 1, NO step clamp — like
+    /// <see cref="Repeat"/>) and no cull bound changes. Like <see cref="Repeat"/>, keep the prototype clear of the
+    /// sector walls (the two radial half-planes through the axis) — content that overspills a wall is clipped by the
+    /// neighbouring sector. The sector angle and its reciprocals are HOST-BAKED. KEEP IN SYNC with SDF_OP_REPEAT_POLAR
+    /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="count">The number of sectors around the axis (clamped to ≥ 1; 1 = a single full-circle no-op).</param>
+    /// <param name="axis">The rotation axis — the fold acts in the plane perpendicular to it (default
+    /// <see cref="SdfPolarAxis.Y"/>, the XZ ground plane).</param>
+    /// <param name="mirror">When <see langword="true"/>, reflects each sector across its bisector so adjacent sectors
+    /// mirror — the kaleidoscope fold (still an isometry).</param>
+    /// <param name="materialStride">The per-sector palette stride: the sector index (0..count-1) times this strides the
+    /// material id of a later shape win, so each sector can select its own palette row. 0 (the default) keeps the fold
+    /// purely geometric.</param>
+    /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative.</exception>
+    public SdfProgramBuilder RepeatPolar(int count, SdfPolarAxis axis = SdfPolarAxis.Y, bool mirror = false, int materialStride = 0) {
+        if (materialStride < 0) {
+            throw new ArgumentException(message: "RepeatPolar materialStride must be >= 0 (0 = geometric only).", paramName: nameof(materialStride));
+        }
+
+        // count and the sector angle's reciprocals are HOST-BAKED (Data0.yzw): shapes evaluate millions of times per
+        // frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT_POLAR in Assets/Shaders/Sdf/sdf-vm.hlsli).
+        var sectors = Math.Max(1, count);
+        var angle = ((2f * MathF.PI) / sectors);
+
+        m_instructions.Add(item: new SdfInstruction(
+            Blend: (mirror ? 1u : 0u),
+            Data0: new Vector4(
+                w: (1f / sectors),   // 1/count — the per-sector material wrap
+                x: angle,            // 2π/count — the sector angle
+                y: (1f / angle),     // count/(2π) — 1/angle, for the sector floor-division
+                z: sectors           // count — the sector-index wrap
+            ),
+            Data1: default,
+            Material: (uint)materialStride,
+            Op: SdfOp.RepeatPolar,
+            Shape: (uint)axis
+        ));
+
+        return this;
+    }
     /// <summary>Bends space about the local X axis: the XY plane rotates by <paramref name="rate"/> · x radians.</summary>
     /// <param name="rate">Radians of rotation per unit of local X.</param>
     public SdfProgramBuilder BendX(float rate) {
@@ -241,8 +382,11 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.BendY
         );
     }
-    /// <summary>Bends the YZ plane by <paramref name="rate"/> · y radians (the legacy quirk: keyed on Y, like
-    /// <see cref="BendY"/>, so old creature content re-ports faithfully).</summary>
+    /// <summary>Rotates the YZ plane by <paramref name="rate"/> · y radians. The three bends are DISTINCT ops, not a
+    /// symmetric family: <see cref="BendX"/> keys on x and rotates XY, <see cref="BendY"/> keys on y and rotates XY, and
+    /// this one keys on y and rotates YZ. Each keys on a coordinate INSIDE the plane it rotates, which is what gives the
+    /// bends their <c>1 + rate·ρ</c> Lipschitz factor (see <c>SdfProgram.BendOperatorNorm</c>) rather than
+    /// <see cref="TwistY"/>'s smaller one.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
     public SdfProgramBuilder BendZ(float rate) {
         return Transform(
@@ -281,6 +425,43 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Onion
         );
     }
+    /// <summary>Adds a bounded sinusoidal DISPLACEMENT to the field accumulated so far — surface relief (bumps,
+    /// corrugation, a rippled skin) evaluated at the current point: the SDF-native answer to height/parallax mapping,
+    /// where the relief is REAL geometry (it shadows and self-occludes). A FIELD op (like <see cref="Onion"/>/
+    /// <see cref="Dilate"/>): order it after the shapes it should displace. The separable <c>sin·sin·sin</c> basis is
+    /// deterministic across both backends. NOT 1-Lipschitz — the relief's gradient reaches <c>amplitude·‖frequency‖</c>,
+    /// so the field can overestimate true distance by up to <c>1 + amplitude·‖frequency‖</c> and <c>AnalyzeLipschitz</c>
+    /// bakes that as a conservative step clamp; keep <c>amplitude·‖frequency‖</c> moderate (a large product clamps the
+    /// march to tiny steps). KEEP IN SYNC with SDF_OP_DISPLACE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="frequency">Per-axis angular frequency of the sinusoid (radians per world unit).</param>
+    /// <param name="amplitude">Peak displacement added to the field (world units; 0 = an exact identity).</param>
+    public SdfProgramBuilder Displace(Vector3 frequency, float amplitude) {
+        return Transform(
+            data0: new Vector4(
+                value: frequency,
+                w: amplitude
+            ),
+            op: SdfOp.Displace
+        );
+    }
+    /// <summary>Warps the sample point by a bounded, cross-coupled sinusoidal field BEFORE the shapes evaluate — organic
+    /// bulging / wobble / terrain. A POINT op (like the fold ops): order it before the shapes it should warp. Each axis
+    /// is driven by the NEXT axis's coordinate, so the warp is non-separable; the basis is deterministic across both
+    /// backends. NOT an isometry — the metric stretches by up to <c>1 + amplitude·‖frequency‖</c>, so
+    /// <c>AnalyzeLipschitz</c> bakes a conservative step clamp (and folds the point's max travel into a downstream
+    /// twist/bend's reach); keep <c>amplitude·‖frequency‖</c> moderate. KEEP IN SYNC with SDF_OP_DOMAIN_WARP in
+    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="frequency">Per-axis angular frequency of the warp (radians per world unit).</param>
+    /// <param name="amplitude">Peak point displacement (world units; 0 = an exact identity).</param>
+    public SdfProgramBuilder DomainWarp(Vector3 frequency, float amplitude) {
+        return Transform(
+            data0: new Vector4(
+                value: frequency,
+                w: amplitude
+            ),
+            op: SdfOp.DomainWarp
+        );
+    }
     /// <summary>Inflates the ENTIRE field accumulated so far by a radius (rounds and fattens everything before it) —
     /// a FIELD op: order it after everything it should inflate.</summary>
     /// <param name="radius">The inflation radius.</param>
@@ -313,9 +494,15 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder RepeatLimited(Vector3 spacing, Vector3 limit) {
+        // The degenerate-spacing clamp is HOST-BAKED, exactly as <see cref="Repeat"/> bakes it (KEEP IN SYNC with
+        // SDF_OP_REPEAT_LIMITED in Assets/Shaders/Sdf/sdf-vm.hlsli). Clamped WITHOUT Abs, matching the shader's old
+        // max(data0.xyz, 0.001) — a negative spacing must keep behaving as it did. Unlike Repeat there is no free lane
+        // for the reciprocal (Data1.xyz carries the limit), so the shader keeps its divide.
+        var clamped = Vector3.Max(spacing, new Vector3(0.001f));
+
         return Transform(
             data0: new Vector4(
-                value: spacing,
+                value: clamped,
                 w: 0f
             ),
             data1: new Vector4(
@@ -368,14 +555,39 @@ public sealed class SdfProgramBuilder {
 
         return this;
     }
+    /// <summary>Mirrors the point across the local X = 0 plane (<c>abs(p.x)</c>) — convenience sugar for
+    /// <see cref="SymmetryPlane"/> with the X-axis normal (the axis <c>SymmetryX</c> op it replaced).</summary>
     public SdfProgramBuilder SymmetryX() {
-        return Transform(op: SdfOp.SymmetryX);
+        return SymmetryPlane(normal: Vector3.UnitX);
     }
+    /// <summary>Mirrors the point across the local Y = 0 plane — sugar for <see cref="SymmetryPlane"/> (Y-axis normal).</summary>
     public SdfProgramBuilder SymmetryY() {
-        return Transform(op: SdfOp.SymmetryY);
+        return SymmetryPlane(normal: Vector3.UnitY);
     }
+    /// <summary>Mirrors the point across the local Z = 0 plane — sugar for <see cref="SymmetryPlane"/> (Z-axis normal).</summary>
     public SdfProgramBuilder SymmetryZ() {
-        return Transform(op: SdfOp.SymmetryZ);
+        return SymmetryPlane(normal: Vector3.UnitZ);
+    }
+    /// <summary>Reflection fold across an ARBITRARY plane — the general-normal superset of <see cref="SymmetryX"/>/
+    /// <see cref="SymmetryY"/>/<see cref="SymmetryZ"/>: everything on the plane's negative side (<c>dot(p, normal) +
+    /// offset &lt; 0</c>) is mirrored onto its positive side, so one authored half repeats mirror-imaged (a kaleidoscope
+    /// leaf, a bilateral body, the reflect atom of a KIFS fold). A reflection is an ISOMETRY, so the field stays
+    /// 1-Lipschitz (factor 1, NO step clamp) and no cull bound changes. Like the axis symmetries, keep authored content
+    /// on the plane's positive (kept) side. The normal is normalized host-side. KEEP IN SYNC with SDF_OP_SYMMETRY_PLANE
+    /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="normal">The plane normal (normalized here; the positive side, toward the normal, is the kept half).</param>
+    /// <param name="offset">The plane's constant term: the mirror plane is <c>dot(p, normal) + offset = 0</c>, so it
+    /// sits at signed distance <c>-offset</c> along the normal. A POSITIVE offset therefore moves the plane AGAINST the
+    /// normal. 0 puts it through the local origin.</param>
+    public SdfProgramBuilder SymmetryPlane(Vector3 normal, float offset = 0f) {
+        // Normalized HOST-SIDE (the shader's reflect assumes a unit normal; a drifted one would scale the mirrored half).
+        return Transform(
+            data0: new Vector4(
+                value: Vector3.Normalize(value: normal),
+                w: offset
+            ),
+            op: SdfOp.SymmetryPlane
+        );
     }
     public SdfProgramBuilder Sphere(float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         return Shape(
@@ -388,6 +600,167 @@ public sealed class SdfProgramBuilder {
             ),
             material: material,
             shape: SdfShapeType.Sphere,
+            smooth: smooth
+        );
+    }
+    /// <summary>A vesica (lens): the intersection of two spheres of radius <paramref name="radius"/> whose centers are
+    /// 2·<paramref name="halfSeparation"/> apart, revolved into a 3D lens pointed along ±Y (a disc of radius
+    /// radius−halfSeparation in XZ). <paramref name="halfSeparation"/> is clamped below <paramref name="radius"/> so
+    /// the tip half-height √(r²−d²) is real; it is HOST-BAKED (skips the per-eval sqrt) — KEEP IN SYNC with sdfVesica
+    /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    public SdfProgramBuilder Vesica(float radius, float halfSeparation, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        var r = MathF.Abs(radius);
+        var d = MathF.Min(MathF.Abs(halfSeparation), (r * 0.9999f)); // d < r keeps b = √(r²−d²) real and positive
+        var b = MathF.Sqrt((r * r) - (d * d));
+
+        return Shape(
+            blend: blend,
+            dimensions: new Vector4(
+                w: 0f,
+                x: r,
+                y: d,
+                z: b
+            ),
+            material: material,
+            shape: SdfShapeType.Vesica,
+            smooth: smooth
+        );
+    }
+    /// <summary>A rounded rectangle (iq sdRoundedBox) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
+    /// rounded slab/plaque, <see cref="SdfLift.Revolve"/> a rounded disc/puck. Exact and 1-Lipschitz. KEEP IN SYNC
+    /// with sdfRoundedRect in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="halfWidth">Half-width of the rectangle (its local X half-extent).</param>
+    /// <param name="halfHeight">Half-height of the rectangle (its local Y half-extent).</param>
+    /// <param name="cornerRadius">Corner-rounding radius; clamped to the smaller half-extent (corners round inward).</param>
+    /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
+    /// <param name="liftAmount">The revolve offset (for <see cref="SdfLift.Revolve"/>) or the extrude half-height (for
+    /// <see cref="SdfLift.Extrude"/>); clamped to ≥ 0.</param>
+    public SdfProgramBuilder RoundedRectangle(float halfWidth, float halfHeight, float cornerRadius, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        var hw = MathF.Abs(halfWidth);
+        var hh = MathF.Abs(halfHeight);
+
+        return Shape(
+            blend: blend,
+            derived1: (float)(uint)lift,
+            dimensions: new Vector4(
+                w: MathF.Max(0f, liftAmount),
+                x: hw,
+                y: hh,
+                z: Math.Clamp(cornerRadius, 0f, MathF.Min(hw, hh))
+            ),
+            material: material,
+            shape: SdfShapeType.RoundedRectangle,
+            smooth: smooth
+        );
+    }
+    /// <summary>A regular convex <paramref name="sides"/>-gon (iq sdStar with the m = 2 regular-polygon case) lifted to
+    /// a 3D solid — <see cref="SdfLift.Extrude"/> gives a prism (a nut, a column, a gem), <see cref="SdfLift.Revolve"/>
+    /// a lathe of the polygon's profile. The half-sector π/n is HOST-BAKED. Exact and 1-Lipschitz. KEEP IN SYNC with
+    /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="sides">The side count n (clamped to ≥ 3).</param>
+    /// <param name="radius">The circumradius (centre to a vertex).</param>
+    /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
+    /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    public SdfProgramBuilder RegularPolygon(int sides, float radius, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        var n = Math.Max(3, sides);
+
+        return Shape(
+            blend: blend,
+            derived1: (float)(uint)lift,      // Data1.y = lift mode
+            derived2: 1f,                     // Data1.z = ecs.y = 1 (m = 2: the regular-polygon case)
+            dimensions: new Vector4(
+                w: MathF.Max(0f, liftAmount),
+                x: MathF.Abs(radius),
+                y: (MathF.PI / n),            // an = π/n, HOST-BAKED
+                z: 0f                         // ecs.x = 0
+            ),
+            material: material,
+            shape: SdfShapeType.RegularPolygon,
+            smooth: smooth
+        );
+    }
+    /// <summary>An <paramref name="points"/>-pointed star (iq sdStar) lifted to a 3D solid — <see cref="SdfLift.Extrude"/>
+    /// gives a star prism (a badge, a gem), <see cref="SdfLift.Revolve"/> a spiked lathe. The baked constants
+    /// (π/n and ecs = (cos(π/m), sin(π/m))) are HOST-BAKED. Exact and 1-Lipschitz. KEEP IN SYNC with
+    /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="points">The point count n (clamped to ≥ 2).</param>
+    /// <param name="radius">The outer radius (centre to a point tip).</param>
+    /// <param name="sharpness">The inner-radius control m, clamped to [2, n]: 2 is a convex n-gon, larger is sharper
+    /// (deeper notches between points).</param>
+    /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
+    /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    public SdfProgramBuilder Star(int points, float radius, float sharpness, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        var n = Math.Max(2, points);
+        var m = Math.Clamp(sharpness, 2f, n);
+        var en = (MathF.PI / m);
+
+        return Shape(
+            blend: blend,
+            derived1: (float)(uint)lift,      // Data1.y = lift mode
+            derived2: MathF.Sin(en),          // Data1.z = ecs.y = sin(π/m)
+            dimensions: new Vector4(
+                w: MathF.Max(0f, liftAmount),
+                x: MathF.Abs(radius),
+                y: (MathF.PI / n),            // an = π/n, HOST-BAKED
+                z: MathF.Cos(en)             // ecs.x = cos(π/m), HOST-BAKED
+            ),
+            material: material,
+            shape: SdfShapeType.Star,
+            smooth: smooth
+        );
+    }
+    /// <summary>An isosceles trapezoid (iq sdTrapezoid) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
+    /// keystone/wedge prism, <see cref="SdfLift.Revolve"/> a frustum/lampshade/cup. Exact and 1-Lipschitz. KEEP IN
+    /// SYNC with sdfTrapezoidSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="bottomHalfWidth">Half-width of the bottom edge (at local −Y).</param>
+    /// <param name="topHalfWidth">Half-width of the top edge (at local +Y).</param>
+    /// <param name="halfHeight">Half-height of the trapezoid.</param>
+    /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
+    /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    public SdfProgramBuilder Trapezoid(float bottomHalfWidth, float topHalfWidth, float halfHeight, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        return Shape(
+            blend: blend,
+            derived1: (float)(uint)lift,
+            dimensions: new Vector4(
+                w: MathF.Max(0f, liftAmount),
+                x: MathF.Abs(bottomHalfWidth),
+                y: MathF.Abs(topHalfWidth),
+                z: MathF.Abs(halfHeight)
+            ),
+            material: material,
+            shape: SdfShapeType.Trapezoid,
+            smooth: smooth
+        );
+    }
+    /// <summary>An ellipse (iq's exact sdEllipse) lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives
+    /// an exact SPHEROID (which, unlike the approximate <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float)"/> #6,
+    /// earns a real cull bound), <see cref="SdfLift.Extrude"/> an elliptic-cylinder prism. Exact and 1-Lipschitz.
+    /// KEEP IN SYNC with sdfEllipseSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="semiX">The semi-axis along local X.</param>
+    /// <param name="semiY">The semi-axis along local Y.</param>
+    /// <param name="lift">Whether to revolve the profile around Y (offset 0 ⇒ a spheroid) or extrude it along Z.</param>
+    /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    public SdfProgramBuilder Ellipse(float semiX, float semiY, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        var ea = MathF.Max(MathF.Abs(semiX), 1e-4f);
+        var eb = MathF.Max(MathF.Abs(semiY), 1e-4f);
+
+        // The exact ellipse divides by (eb²−ea²); nudge a perfect circle apart so it never divides by zero (a circle is
+        // better served by Sphere/Cylinder anyway). Sub-pixel at any sane authoring scale.
+        if (MathF.Abs(ea - eb) < 1e-4f) {
+            eb = (ea + 1e-4f);
+        }
+
+        return Shape(
+            blend: blend,
+            derived1: (float)(uint)lift,
+            dimensions: new Vector4(
+                w: MathF.Max(0f, liftAmount),
+                x: ea,
+                y: eb,
+                z: 0f
+            ),
+            material: material,
+            shape: SdfShapeType.Ellipse,
             smooth: smooth
         );
     }

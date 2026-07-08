@@ -15,6 +15,7 @@ public sealed class JsonSdfFrameSource : ISdfFrameSource {
     private readonly ICamera[] m_cameras;
     private readonly SdfProgram m_program;
     private readonly NormalizedRect[] m_regions;
+    private readonly SdfViewSnapshot[] m_views;
     private bool m_programPending = true;
     private float m_time;
 
@@ -40,6 +41,10 @@ public sealed class JsonSdfFrameSource : ISdfFrameSource {
         m_cameras = cameras;
         m_program = program;
         m_regions = regions;
+
+        // The per-frame view snapshots are fixed in count; allocate once and refill in place so CaptureFrame is
+        // zero-alloc on the render thread. Every element is overwritten each frame, so no stale view can leak.
+        m_views = new SdfViewSnapshot[cameras.Length];
     }
 
     /// <inheritdoc/>
@@ -49,7 +54,7 @@ public sealed class JsonSdfFrameSource : ISdfFrameSource {
         _ = interpolationAlpha;
         m_time += deltaSeconds;
 
-        var views = new SdfViewSnapshot[m_cameras.Length];
+        var views = m_views;
 
         for (var index = 0; (index < m_cameras.Length); index++) {
             var region = m_regions[index];

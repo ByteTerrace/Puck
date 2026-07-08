@@ -7,7 +7,7 @@ namespace Puck.Scene;
 /// the launcher (exit-after, render rate), the neutral presentation preferences (present mode, surface format), the
 /// host backend (which graphics API hosts the window), and the backend feature toggles surfaced from environment
 /// variables (ray query, GPU timing). Every field is OPTIONAL — an omitted field falls back to the demo's default, so
-/// a document with no host section reproduces the <c>--world</c> defaults (Vulkan host, 1280x800, vsync).
+/// a document with no host section reproduces the demo's defaults (Vulkan host, 1280x800, vsync).
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record HostDocument {

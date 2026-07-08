@@ -167,7 +167,7 @@ public sealed class CreatorScene {
     public float TargetSmooth => (TargetIsGhost ? m_ghostSmooth : m_shapes[m_selectionIndex].Smooth);
     /// <summary>The TARGET's palette slot.</summary>
     public int TargetMaterialIndex => (TargetIsGhost ? m_ghostMaterial : m_shapes[m_selectionIndex].MaterialIndex);
-    /// <summary>The TARGET's mirror flag (<see cref="Puck.SdfVm.SdfOp.SymmetryX"/>).</summary>
+    /// <summary>The TARGET's mirror flag (<see cref="Puck.SdfVm.SdfProgramBuilder.SymmetryX"/>).</summary>
     public bool TargetMirror => (TargetIsGhost ? m_ghostMirror : m_shapes[m_selectionIndex].Mirror);
     /// <summary>The TARGET's twist rate (<see cref="Puck.SdfVm.SdfOp.TwistY"/>).</summary>
     public float TargetTwist => (TargetIsGhost ? m_ghostTwist : m_shapes[m_selectionIndex].Twist);
@@ -714,7 +714,7 @@ public sealed class CreatorScene {
         return next;
     }
 
-    /// <summary>Toggles the TARGET's mirror flag (<see cref="Puck.SdfVm.SdfOp.SymmetryX"/> — a no-op on a chain
+    /// <summary>Toggles the TARGET's mirror flag (<see cref="Puck.SdfVm.SdfProgramBuilder.SymmetryX"/> — a no-op on a chain
     /// goal). Rebuilds the program.</summary>
     /// <returns>The target's new mirror flag.</returns>
     public bool ToggleMirror() {
@@ -1913,26 +1913,6 @@ public sealed class CreatorScene {
         }
 
         return ((count > 0) ? (sum / count) : m_workbench.MidPoint);
-    }
-
-    /// <summary>Lifts the currently PLACED shapes into a self-contained, recentered <see cref="AvatarDefinition"/> —
-    /// the seam the forge consumes to bake a spritesheet and a playable ROM from the player's creation. The live
-    /// ghost (not yet placed) is excluded; an empty scene yields a single unit sphere so the forge never renders
-    /// nothing.</summary>
-    /// <returns>The player's avatar in its own local frame.</returns>
-    public AvatarDefinition ExportAvatar() {
-        var shapes = new List<AvatarShape>(capacity: m_shapes.Count);
-
-        foreach (var placed in m_shapes) {
-            shapes.Add(item: new AvatarShape(
-                Position: placed.Position,
-                Rotation: placed.Rotation,
-                Scale: placed.Scale,
-                Type: placed.Type
-            ));
-        }
-
-        return AvatarDefinition.FromPlacedShapes(shapes: shapes);
     }
 
     // Every program-content change also counts as a plain revision (the preview re-bakes on either).

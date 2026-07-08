@@ -50,4 +50,21 @@ internal static class CommandArgs {
     /// <returns>Whether the token parsed.</returns>
     public static bool TryParseInt(string text, out int value) =>
         int.TryParse(s: text, result: out value, provider: CultureInfo.InvariantCulture, style: NumberStyles.Integer);
+
+    /// <summary>The exception set a document-LOAD or file-capture verb treats as unreadable/corrupt INPUT — a JSON
+    /// parse failure, a schema/shape mismatch, a bad base64/number, or a filesystem fault — so a malformed file or a
+    /// hostile path echoes a friendly error instead of escaping the command pump (which catches only
+    /// <c>DeviceLostException</c>) and tearing the single-session host down. A genuine logic bug (a
+    /// <see cref="NullReferenceException"/>, an <see cref="InvalidOperationException"/>, …) is deliberately NOT in the
+    /// set, so it still surfaces rather than being masked.</summary>
+    /// <param name="exception">The caught exception.</param>
+    /// <returns>Whether it is a malformed-input or I/O fault safe to narrate rather than rethrow.</returns>
+    public static bool IsMalformedInput(Exception exception) =>
+        exception is System.Text.Json.JsonException
+            or System.IO.InvalidDataException
+            or System.IO.IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or ArgumentException
+            or FormatException;
 }

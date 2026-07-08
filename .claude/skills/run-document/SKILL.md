@@ -10,6 +10,12 @@ this file argues against a demanded change, it is stale; update it in the
 same change. The model lives in `src/Puck.Scene`; `schema/run.schema.json` is
 GENERATED, never hand-edited.
 
+> **Unification-contract alignment** (see "The unification contract" atop
+> docs/overworld-demo-plan.md): choosing what a session loads (world/ROM) is
+> intended to be an IN-WORLD act — a data-file field plus console verbs —
+> not only a `--run`/`--rom` launch. The `world` graph kind and the DirectX
+> host below are a documented dev/CI launch affordance, not the only path.
+
 ## Doctrine (user-settled)
 
 - **One versioned document** (`puck.run.v1`) describes an entire run: host,

@@ -18,6 +18,15 @@ public sealed class TextCommandSource : ICommandSource {
     private readonly ConcurrentQueue<string> m_pending = new();
     private readonly CommandRegistry m_registry;
 
+    /// <summary>An optional per-frame HOLD gate the drain honors: while it returns <see langword="true"/>,
+    /// <see cref="Collect"/> dequeues nothing (and a line whose handler turns the gate on stops the drain immediately),
+    /// so a queued command stream resumes only once the gate lets go. This is the seam that lets a scripted-console
+    /// verb (a <c>step &lt;n&gt;</c> / <c>settle</c>) DEFER the rest of the piped script by a number of produced frames
+    /// or until a transition quiesces: the host sets a gate that counts produced frames, and the queued verbs after the
+    /// gate wait on the frame boundary rather than all running the frame they arrive. <see langword="null"/> (the
+    /// default) never holds, so an unwired run drains every line each frame exactly as before.</summary>
+    public Func<bool>? HoldGate { get; set; }
+
     /// <summary>Initializes a new instance of the <see cref="TextCommandSource"/> class.</summary>
     /// <param name="registry">The registry whose text path each enqueued line is submitted to.</param>
     /// <param name="onResult">An optional callback invoked with each submitted line and its result.</param>
@@ -44,8 +53,19 @@ public sealed class TextCommandSource : ICommandSource {
     public void Collect(ICommandSink sink) {
         ArgumentNullException.ThrowIfNull(sink);
 
-        while (m_pending.TryDequeue(result: out var line)) {
-            if (string.IsNullOrWhiteSpace(value: line)) {
+        // Honor the HOLD gate BEFORE draining and AGAIN after each submitted line: a line whose handler arms the gate
+        // (a step/settle verb) stops the drain for this frame, and the remaining queued lines wait for the gate to
+        // release on a later frame — the queue itself is FIFO, so their order is preserved across the pause.
+        while (
+            !(HoldGate?.Invoke() ?? false) &&
+            m_pending.TryDequeue(result: out var line)
+        ) {
+            // Blank lines and '#' COMMENT lines are skipped, so a piped driving SCRIPT can be self-documenting: an
+            // agent pipes a commented list of verbs (a "# what this run proves" header, per-step notes) and only the
+            // real verbs run. A comment is a line whose first non-whitespace character is '#'.
+            var content = line.AsSpan().TrimStart();
+
+            if (content.IsEmpty || (content[0] == '#')) {
                 continue;
             }
 

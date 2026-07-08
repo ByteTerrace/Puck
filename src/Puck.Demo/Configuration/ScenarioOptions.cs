@@ -26,7 +26,7 @@ public sealed class ScenarioOptions {
 
     /// <summary>The creation to review: a name resolved under <c>./creations/</c>, or a direct path (the flagships live
     /// at <c>docs/examples/creations/*.creation.json</c>). Loaded into creator mode at boot — the harness equivalent of
-    /// <c>PUCK_CREATOR_LOAD</c> + <c>PUCK_OVERWORLD_CREATOR=1</c>.</summary>
+    /// the <c>creator</c> + <c>creator.load</c> console verbs.</summary>
     public string? Creation { get; init; }
 
     /// <summary>The SAFETY-NET auto-exit, in seconds — a scenario run is COMPLETION-DRIVEN (it exits when the last shot
@@ -56,7 +56,7 @@ public sealed class ScenarioOptions {
     /// the canned review turntable, but a scenario may set <see cref="ScenarioBackdrop.Room"/> to shoot the creation in
     /// its arcade-room context instead). Studio drops the room/cabinet/shelf content and lights the scene flat and
     /// bright so the palette reads TRUE; room keeps the dim overworld mood. Only the scenario harness ever engages
-    /// studio — the plain demo and the legacy <c>PUCK_*</c> capture ritual stay room-framed.</summary>
+    /// studio — the plain demo and the live <c>capture</c> console verb stay room-framed.</summary>
     public ScenarioBackdrop Backdrop { get; init; } = ScenarioBackdrop.Studio;
 
     /// <summary>The capture plan — where the shots are written and how the camera moves.</summary>

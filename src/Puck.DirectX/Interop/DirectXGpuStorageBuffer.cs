@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.System.Com;
 
@@ -27,11 +28,25 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
 
     /// <inheritdoc/>
     public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged {
+        Write(data: data, destinationOffsetBytes: 0UL);
+    }
+
+    /// <inheritdoc/>
+    public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
-        var destination = new Span<T>(pointer: m_mapped, length: (int)(SizeBytes / (ulong)sizeof(T)));
+        var size = ((ulong)data.Length * (ulong)sizeof(T));
 
-        data.CopyTo(destination: destination);
+        if ((destinationOffsetBytes > SizeBytes) || (size > (SizeBytes - destinationOffsetBytes))) {
+            throw new ArgumentOutOfRangeException(
+                message: "Data size plus destination offset exceeds storage buffer size.",
+                paramName: nameof(data)
+            );
+        }
+
+        var destination = new Span<byte>(pointer: ((byte*)m_mapped + destinationOffsetBytes), length: (int)(SizeBytes - destinationOffsetBytes));
+
+        MemoryMarshal.AsBytes(span: data).CopyTo(destination: destination);
     }
 
     /// <inheritdoc/>

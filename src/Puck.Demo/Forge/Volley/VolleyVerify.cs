@@ -30,8 +30,9 @@ internal static class VolleyVerify {
         AssertSramPersistence(rom: rom, sram: sram, expectedMirror: expectedMirror);
         AssertTopSlotInsertion(rom: rom);
         AssertCorruptionRecovery(rom: rom, sram: sram);
+        AssertVictoryShareConverge(rom: rom);
 
-        Console.WriteLine(value: $"volley verify | boot→title | attract in+out | seed entropy + same-frame replay | paddle up/down + clamp | rally chase scores | dodge concedes | pause freeze | match to {VolleyProtocol.MatchPoint} → game over | score {score:D6} | entry BCA → slot {slot} | top-slot insert + shift | sram round-trip (independent sum16) | corruption → defaults");
+        Console.WriteLine(value: $"volley verify | boot→title | attract in+out | seed entropy + same-frame replay | paddle up/down + clamp | rally chase scores | dodge concedes | pause freeze | match to {VolleyProtocol.MatchPoint} → game over | score {score:D6} | entry BCA → slot {slot} | top-slot insert + shift | sram round-trip (independent sum16) | corruption → defaults | meta-victory share converge + boot reset");
     }
 
     // (1) Boot: the machine reaches the title state within ~8 frames with the VBlank handler alive and the boot's
@@ -319,6 +320,86 @@ internal static class VolleyVerify {
         Assert(condition: ReadMirror(driver: driver).AsSpan().SequenceEqual(other: VolleyTables.BuildDefaultScoreTable()), message: "a corrupt save did not fall back to the ROM's default table");
     }
 
+    // (10) The 128-bit META VICTORY share converge (Stage 2 of the self-editing arcade arc). This is the GAME-SIDE
+    // proof of the whole meta gate: the host seeds a cabinet's authored share into the framework's victory-share WRAM
+    // slot at boot, and a completed game must copy it verbatim into the TOP-16 SRAM region the room XORs across
+    // cabinets. Every leg is run on a real machine:
+    //   (a) the seeded WRAM slot SURVIVES the framework's boot work-RAM clear (the split-around-the-slot in
+    //       FrameworkKernel.EmitBootPrologue) — the seed poked before the first frame is still present after boot;
+    //   (b) the top-16 SRAM win region is CLEAR after boot (the boot reset in VictoryModule.EmitBootReset) and stays
+    //       clear right up until the win — so a partial state can never look like a share;
+    //   (c) a staged match end (game over) copies the EXACT seeded share into the region — whole-region-on-win;
+    //   (d) a FRESH boot from a .sav that already carries a share RE-CLEARS the region (no persistence, re-earn each
+    //       session) — the stale-save-cannot-auto-fire guarantee the room depends on.
+    private static void AssertVictoryShareConverge(byte[] rom) {
+        // A recognizable, structured share (a valid v4 GUID's bytes) so a stray zero/garbage region can't pass by luck.
+        var share = new byte[] { 0xA5, 0x3C, 0x10, 0x24, 0x77, 0x91, 0x4B, 0xCD, 0x8E, 0x0F, 0xF0, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E };
+
+        using var driver = new Driver(rom: rom);
+
+        // (a) Seed the share into the framework's victory-share WRAM slot BEFORE the game boots — exactly the host's
+        // per-cabinet pre-boot poke — then boot. The slot must survive the boot work-RAM clear.
+        for (var index = 0; (index < share.Length); index++) {
+            driver.Write(address: (ushort)(FrameworkMemoryMap.VictoryShareSource + index), value: share[index]);
+        }
+
+        driver.RunFrames(buttons: JoypadButtons.None, frames: 8);
+        Assert(condition: (driver.Read(address: FrameworkMemoryMap.GameState) == VolleyProtocol.StateTitle), message: "the victory-share machine did not reach the title");
+
+        for (var index = 0; (index < share.Length); index++) {
+            Assert(condition: (driver.Read(address: (ushort)(FrameworkMemoryMap.VictoryShareSource + index)) == share[index]), message: "the seeded victory-share WRAM slot was wiped by the boot RAM clear (the split-around-the-slot regressed)");
+        }
+
+        // (b) The top-16 SRAM win region is CLEAR after boot and stays clear until the win.
+        Assert(condition: IsRegionClear(driver: driver), message: "the top-16 SRAM win region was not clear after boot (the boot reset did not run)");
+
+        // Drive a staged match to game over (the win edge that fires the share write). Stage the AI at match point
+        // minus one and dodge, exactly like the gameplay battery above.
+        StartPlay(driver: driver, idleFrames: 40);
+        driver.RunFrames(buttons: JoypadButtons.None, frames: VolleyProtocol.ServeFrames);
+
+        Assert(condition: IsRegionClear(driver: driver), message: "the win region filled BEFORE the game ended (the write hook fired too early)");
+
+        driver.Write(address: VolleyProtocol.AiPoints, value: (byte)(VolleyProtocol.MatchPoint - 1));
+
+        var over = false;
+
+        for (var frame = 0; ((frame < 900) && !over); frame++) {
+            driver.RunFrames(buttons: DodgeButtons(driver: driver), frames: 1);
+            over = (driver.Read(address: FrameworkMemoryMap.GameState) == VolleyProtocol.StateGameOver);
+        }
+
+        Assert(condition: over, message: "the victory-share session never reached game over");
+
+        // (c) The region now holds the EXACT seeded share — whole-region-on-win.
+        var region = driver.ReadVictoryRegion();
+
+        Assert(condition: region.AsSpan().SequenceEqual(other: share), message: "the win region did not converge on the seeded 128-bit share after the game ended");
+
+        // (d) A FRESH boot from the just-won .sav must RE-CLEAR the region: no persistence, re-earn each session. Import
+        // the won save into a new machine WITHOUT seeding a share this time — the region must come up clear regardless.
+        var wonSram = driver.ExportExternalRam();
+
+        Assert(condition: !wonSram.AsSpan(start: (wonSram.Length - FrameworkMemoryMap.VictoryShareByteCount)).SequenceEqual(other: new byte[FrameworkMemoryMap.VictoryShareByteCount]), message: "the exported save's top-16 did not carry the won share (the store never reached SRAM)");
+
+        using var reboot = new Driver(rom: rom, externalRam: wonSram);
+
+        reboot.RunFrames(buttons: JoypadButtons.None, frames: 8);
+        Assert(condition: IsRegionClear(driver: reboot), message: "a fresh boot from a save carrying a share did not re-clear the win region (a stale save could auto-fire the gate)");
+    }
+
+    private static bool IsRegionClear(Driver driver) {
+        var region = driver.ReadVictoryRegion();
+
+        foreach (var value in region) {
+            if (value != 0) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // ==== Helpers. =======================================================================================================
 
     // Boot a fresh machine and press START after `idleFrames` on the title (the D4 entropy sample point).
@@ -481,6 +562,16 @@ internal static class VolleyVerify {
         }
 
         public byte[] ExportExternalRam() => m_cartridge.ExportExternalRam();
+
+        // The top-16 SRAM win region, read exactly as the host's meta gate does (ReadExternalRam by absolute offset —
+        // bank-independent, side-effect-free): the highest 16 bytes of the cartridge's external RAM.
+        public byte[] ReadVictoryRegion() {
+            var region = new byte[FrameworkMemoryMap.VictoryShareByteCount];
+
+            m_cartridge.ReadExternalRam(offset: (m_cartridge.ExternalRamByteCount - region.Length), destination: region);
+
+            return region;
+        }
 
         public void Dispose() => m_machine.Dispose();
     }

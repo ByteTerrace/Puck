@@ -1,0 +1,551 @@
+{
+  "schema": "puck.creation.v1",
+  "name": "town-cottage-b",
+  "intent": "Object",
+  "bakeStyle": "classic",
+  "palette": [
+    {
+      "albedo": {
+        "x": 0.52,
+        "y": 0.2,
+        "z": 0.16
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.16,
+        "y": 0.42,
+        "z": 0.44
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.86,
+        "y": 0.78,
+        "z": 0.62
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.28,
+        "y": 0.3,
+        "z": 0.34
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.98,
+        "y": 0.86,
+        "z": 0.48
+      },
+      "emissive": 1.5,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.26,
+        "y": 0.17,
+        "z": 0.1
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.44,
+        "y": 0.46,
+        "z": 0.5
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.4,
+        "y": 0.15,
+        "z": 0.13
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.5171839
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.66308224,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.8089806,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.74512255,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.5992242
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.45332584,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.39257106,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.53847086,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    }
+  ],
+  "shapes": [
+    {
+      "id": 0,
+      "name": "body",
+      "type": "Box",
+      "position": {
+        "x": -0.35,
+        "y": 1.2,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.7647059,
+        "y": 2.7941177,
+        "z": 1.7647059
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 1,
+      "name": "roofHip",
+      "type": "Box",
+      "position": {
+        "x": -0.35,
+        "y": 2.24,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.1176472,
+        "y": 0.29411766,
+        "z": 2.1176472
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 2,
+      "name": "roofRidge",
+      "type": "Box",
+      "position": {
+        "x": -0.35,
+        "y": 2.42,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": false,
+        "x": 0,
+        "y": 0,
+        "z": 0.38268346,
+        "w": 0.9238795
+      },
+      "scale": {
+        "x": 1.2352941,
+        "y": 1.2352941,
+        "z": 0.9411764
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 3,
+      "name": "wing",
+      "type": "Box",
+      "position": {
+        "x": 0.6,
+        "y": 0.75,
+        "z": 0.12
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.617647,
+        "y": 1.617647,
+        "z": 1.4705882
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 4,
+      "name": "wingRoof",
+      "type": "Box",
+      "position": {
+        "x": 0.6,
+        "y": 1.42,
+        "z": 0.12
+      },
+      "rotation": {
+        "isIdentity": false,
+        "x": 0,
+        "y": 0,
+        "z": 0.104528464,
+        "w": 0.9945219
+      },
+      "scale": {
+        "x": 1.7647059,
+        "y": 0.2,
+        "z": 1.617647
+      },
+      "material": 3,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 5,
+      "name": "chimney",
+      "type": "Box",
+      "position": {
+        "x": -0.7,
+        "y": 2.3,
+        "z": -0.25
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.3235294,
+        "y": 1,
+        "z": 0.3235294
+      },
+      "material": 7,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 6,
+      "name": "chimneyCap",
+      "type": "Box",
+      "position": {
+        "x": -0.7,
+        "y": 2.5,
+        "z": -0.25
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.4117647,
+        "y": 0.2,
+        "z": 0.4117647
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 7,
+      "name": "doorFrame",
+      "type": "Box",
+      "position": {
+        "x": -0.35,
+        "y": 0.78,
+        "z": 0.6
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5882353,
+        "y": 1.4117646,
+        "z": 0.2352941
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 8,
+      "name": "doorPanel",
+      "type": "Box",
+      "position": {
+        "x": -0.35,
+        "y": 0.74,
+        "z": 0.66
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.4117647,
+        "y": 1.1764706,
+        "z": 0.2
+      },
+      "material": 7,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 9,
+      "name": "winFrameTall",
+      "type": "Box",
+      "position": {
+        "x": -0.35,
+        "y": 1.5,
+        "z": 0.6
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5882353,
+        "y": 0.76470584,
+        "z": 0.20588236
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 10,
+      "name": "winGlowTall",
+      "type": "Box",
+      "position": {
+        "x": -0.35,
+        "y": 1.5,
+        "z": 0.66
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.4117647,
+        "y": 0.5882353,
+        "z": 0.2
+      },
+      "material": 4,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 11,
+      "name": "winFrameWing",
+      "type": "Box",
+      "position": {
+        "x": 0.6,
+        "y": 0.78,
+        "z": 0.62
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5294118,
+        "y": 0.5294118,
+        "z": 0.20588236
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 12,
+      "name": "winGlowWing",
+      "type": "Box",
+      "position": {
+        "x": 0.6,
+        "y": 0.78,
+        "z": 0.68
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.38235292,
+        "y": 0.38235292,
+        "z": 0.2
+      },
+      "material": 4,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    }
+  ],
+  "frames": null,
+  "chains": null,
+  "cameras": null,
+  "behavior": null
+}

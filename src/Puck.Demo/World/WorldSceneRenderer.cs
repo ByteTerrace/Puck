@@ -147,7 +147,15 @@ public sealed class WorldSceneRenderer {
             var center = new Vector3((0.5f * (entry.MinX + entry.MaxX)), m_scene.Bounds.FloorY, (0.5f * (entry.MinZ + entry.MaxZ)));
             var halfExtents = new Vector3((0.5f * (entry.MaxX - entry.MinX)), 0.01f, (0.5f * (entry.MaxZ - entry.MinZ)));
 
-            _ = builder.ResetPoint().Translate(offset: center).Onion(thickness: 0.03f).Box(halfExtents: halfExtents, material: material, round: 0f);
+            // A plain solid plate. There used to be an Onion(0.03) between the Translate and the Box, which did nothing
+            // to the plate at all: Onion is a FIELD op — it rewrites the running distance as abs(d) - t — and mapCore's
+            // accumulator is never reset (ResetPoint resets the POINT, not result.distance). So it shelled the terrain and
+            // the lamps emitted before it, and NESTED with every earlier ghost's onion. Measured against the exact mapCore
+            // arithmetic with two overrides: a terrain slice fell from 83% solid to 15%, and its top rose by 0.06 —
+            // burying the very 0.02-thick plates the op preceded, and deeper for every extra override. No emission order
+            // can scope an onion to one of SEVERAL markers in a flat-accumulator program; see the accumulator rule on
+            // SdfBlendOp.
+            _ = builder.ResetPoint().Translate(offset: center).Box(halfExtents: halfExtents, material: material, round: 0f);
         }
     }
 
@@ -176,12 +184,7 @@ public sealed class WorldSceneRenderer {
             var boundRadius = (((reach + foldSpan) * placement.Scale) + PlacementBoundMargin);
 
             _ = builder.BeginInstance(boundCenter: placement.Position, boundRadius: boundRadius);
-
-            var chain = builder.ResetPoint().Translate(offset: placement.Position).Rotate(rotation: rotation);
-
-            chain = AppendFoldOps(chain: chain, placement: in placement);
-            _ = chain.Scale(scale: new Vector3(placement.Scale));
-            EmitCreationChain(builder: builder, creation: creation, paletteIds: paletteIds);
+            EmitPlacedShapes(builder: builder, creation: creation, paletteIds: paletteIds, placement: in placement, placementOrigin: placement.Position, placementRotation: rotation, repeatLimit: null, repeatSpacing: null);
             _ = builder.EndInstance();
 
             return;
@@ -216,14 +219,16 @@ public sealed class WorldSceneRenderer {
                 var boundRadius = ((segmentReach * placement.Scale) + PlacementBoundMargin);
 
                 _ = builder.BeginInstance(boundCenter: segmentCenter, boundRadius: boundRadius);
-
-                var chain = builder.ResetPoint().Translate(offset: segmentOrigin).Rotate(rotation: rotation);
-
-                chain = AppendFoldOps(chain: chain, placement: in placement);
-                _ = chain
-                    .RepeatLimited(spacing: new Vector3(repeat.SpacingX, 0f, repeat.SpacingZ), limit: new Vector3((countX - 1), 0f, (countZ - 1)))
-                    .Scale(scale: new Vector3(placement.Scale));
-                EmitCreationChain(builder: builder, creation: creation, paletteIds: paletteIds);
+                EmitPlacedShapes(
+                    builder: builder,
+                    creation: creation,
+                    paletteIds: paletteIds,
+                    placement: in placement,
+                    placementOrigin: segmentOrigin,
+                    placementRotation: rotation,
+                    repeatLimit: new Vector3((countX - 1), 0f, (countZ - 1)),
+                    repeatSpacing: new Vector3(repeat.SpacingX, 0f, repeat.SpacingZ)
+                );
                 _ = builder.EndInstance();
             }
         }
@@ -272,10 +277,38 @@ public sealed class WorldSceneRenderer {
         return MathF.Min(MathF.Sqrt((spanX * spanX) + (spanZ * spanZ)), UnlimitedFoldLimit);
     }
 
-    // Replays a creation's authored shape chain with the placement's transform already applied to the point
-    // (Translate/Rotate/Scale, immediate — not dynamic; placements cost zero dynamic slots at rest). Non-Union
-    // blends only ever combine within the SAME creation's own group-of-one/group members (the creator's own
-    // structural invariant), so replaying the chain unmodified never smooth-blends across this instance's boundary.
+    // Emits a STATIC placement's shapes, each as ITS OWN segment carrying the FULL placement-transform prefix
+    // (Translate → Rotate → the optional fold ops → the optional repeat → the uniform placement Scale) composed with
+    // the shape's own local Translate/Rotate/Scale, then the primitive. The prefix MUST ride EVERY shape's segment:
+    // the shader splits the instruction stream at each ResetPoint and a segment's transforms are local to that
+    // segment, so a single shared prefix segment (with no primitive of its own) is DEAD — every shape would render at
+    // the creation's local origin at unit scale, ignoring where and how big the stamp was placed. Uniform placement
+    // scale commutes with the per-shape rotations, so the composition is shear-free (a single T·R·S per shape after
+    // the fold/repeat domain ops), and the probe reserves this full per-shape op budget.
+    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, IReadOnlyList<int> paletteIds, in WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? repeatSpacing, Vector3? repeatLimit) {
+        var placementScale = placement.Scale;
+
+        foreach (var shape in (creation.Shapes ?? [])) {
+            var material = paletteIds[Math.Clamp(value: (shape.Material ?? 0), max: (paletteIds.Count - 1), min: 0)];
+            var chain = AppendFoldOps(chain: builder.ResetPoint().Translate(offset: placementOrigin).Rotate(rotation: placementRotation), placement: in placement);
+
+            if ((repeatSpacing is { } spacing) && (repeatLimit is { } limit)) {
+                chain = chain.RepeatLimited(spacing: spacing, limit: limit);
+            }
+
+            chain = chain
+                .Scale(scale: new Vector3(placementScale))
+                .Translate(offset: shape.Position)
+                .Rotate(rotation: shape.Rotation)
+                .Scale(scale: shape.Scale);
+            _ = AvatarDefinition.AppendPrimitive(blend: (shape.Blend ?? SdfBlendOp.Union), chain: chain, material: material, smooth: (shape.Smooth ?? 0f), type: shape.Type);
+        }
+    }
+
+    // Replays a creation's authored shape chain at the creation's LOCAL frame — the ghost/drag DYNAMIC slots, whose
+    // per-frame TransformDynamic positions the whole instance (a dynamic instance applies its slot transform at the
+    // instance level, so the shapes need only their own local transforms here). A STATIC placement instead uses
+    // EmitPlacedShapes, which bakes the placement transform into every shape's own segment.
     private static void EmitCreationChain(SdfProgramBuilder builder, CreationDocument creation, IReadOnlyList<int> paletteIds) {
         foreach (var shape in (creation.Shapes ?? [])) {
             var material = paletteIds[Math.Clamp(value: (shape.Material ?? 0), max: (paletteIds.Count - 1), min: 0)];
@@ -449,29 +482,36 @@ public sealed class WorldSceneRenderer {
             _ = builder.ResetPoint().Translate(offset: new Vector3((index * probeSpread), 1f, 0f)).Sphere(material: lightMaterial, radius: LightRadius);
         }
 
+        // KEEP IN SYNC with EmitWalkOverrideGhosts: the probe must remain a worst-case upper bound of the live emission,
+        // instruction for instruction. Its Onion went with the live one (see there for why).
         for (var index = 0; (index < WorldScene.MaxWalkOverrides); index++) {
-            _ = builder.ResetPoint().Translate(offset: new Vector3((index * probeSpread), 0.01f, 1f)).Onion(thickness: 0.03f).Box(halfExtents: new Vector3(0.5f, 0.01f, 0.5f), material: walkOverrideMaterial, round: 0f);
+            _ = builder.ResetPoint().Translate(offset: new Vector3((index * probeSpread), 0.01f, 1f)).Box(halfExtents: new Vector3(0.5f, 0.01f, 0.5f), material: walkOverrideMaterial, round: 0f);
         }
 
-        // MaxPlacements densest-legal SEGMENT instances: the full 7-op chain (mirror + pattern + repeat all at
-        // once) wrapping MaxShapesPerStamp shapes, each shape its full 5-op form.
+        // MaxPlacements densest-legal instances. EmitPlacedShapes bakes the placement transform into EVERY shape's
+        // own segment (the shader resets the point at each segment, so a shared prefix segment would be dead), so the
+        // worst case is per-shape: the full placement prefix (Translate + Rotate + both fold ops + the repeat + the
+        // placement Scale) followed by the shape's own Translate + Rotate + Scale + primitive — reserved for every
+        // shape so a real folded/patterned/repeated stamp always fits the once-sized buffers.
         for (var index = 0; (index < WorldScene.MaxPlacements); index++) {
             var center = new Vector3(index, 4f, 0f);
 
             _ = builder.BeginInstance(boundCenter: center, boundRadius: 12f);
-            _ = builder.ResetPoint()
-                .Translate(offset: center)
-                .Rotate(rotation: Quaternion.Identity)
-                .SymmetryX()
-                .WallpaperFold(cell: new Vector2(2f, 2f), group: SdfWallpaperGroup.P1, limit: new Vector2(4f, 4f))
-                .RepeatLimited(spacing: new Vector3(1f, 0f, 1f), limit: new Vector3(WorldScene.MaxRepeatPerSegment, 0f, WorldScene.MaxRepeatPerSegment))
-                .Scale(scale: Vector3.One);
 
             for (var shapeIndex = 0; (shapeIndex < WorldScene.MaxShapesPerStamp); shapeIndex++) {
                 var material = placementMaterialIds[shapeIndex % CreatorScene.PaletteSize];
-                var chain = builder.ResetPoint().Translate(offset: Vector3.Zero).Rotate(rotation: Quaternion.Identity).Scale(scale: Vector3.One);
 
-                _ = chain.Sphere(material: material, radius: 0.3f);
+                _ = builder.ResetPoint()
+                    .Translate(offset: center)
+                    .Rotate(rotation: Quaternion.Identity)
+                    .SymmetryX()
+                    .WallpaperFold(cell: new Vector2(2f, 2f), group: SdfWallpaperGroup.P1, limit: new Vector2(4f, 4f))
+                    .RepeatLimited(spacing: new Vector3(1f, 0f, 1f), limit: new Vector3(WorldScene.MaxRepeatPerSegment, 0f, WorldScene.MaxRepeatPerSegment))
+                    .Scale(scale: Vector3.One)
+                    .Translate(offset: Vector3.Zero)
+                    .Rotate(rotation: Quaternion.Identity)
+                    .Scale(scale: Vector3.One)
+                    .Sphere(material: material, radius: 0.3f);
             }
 
             _ = builder.EndInstance();

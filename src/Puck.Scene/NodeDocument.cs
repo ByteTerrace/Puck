@@ -63,7 +63,7 @@ public sealed record WorldNode : NodeDocument {
 }
 
 /// <summary>The overworld: a controller-driven player avatar that runs around a room, rendered by the compute SDF world
-/// path with a per-frame dynamic-entity transform, with up to three console stands the player boots — each boot lights
+/// path with a per-frame dynamic-entity transform, with up to four console stands the player boots — each boot lights
 /// a GamingBrick pane and the screen layout walks its staged transition. It builds its own dynamic scene + views each
 /// frame, so it consumes no document scene/viewports (the console list here replaces per-viewport brick sources). It
 /// renders on the host device, so <c>produce</c> is meaningless and rejected.</summary>
@@ -93,6 +93,29 @@ public sealed record OverworldNode : NodeDocument {
     /// stand at their stands, the games continuing on the diegetic screens). Requires every console pre-inserted
     /// (there is no walkable room to fetch a cartridge from until the reveal).</summary>
     public bool? Immersed { get; init; }
+    // NOTE: nullable-optional-field pattern (see the note in GamingBrickSource) — a polymorphic-derived record
+    // deserialized through the run-document parse path skips property initializers, so an omitted member arrives
+    // NULL regardless of any initializer; validate/normalize only when present.
+    /// <summary>A saved <c>puck.world.v1</c> world handle (resolved under <c>./worlds/</c>, or a direct path, plus the
+    /// CAS store) the overworld LOADS and COMMITS at boot, so the room the player stands in — and the room the
+    /// immersed fourth-wall reveal eases them out INTO — is that sculpted world (e.g. the town, <c>"puckton"</c>)
+    /// rather than the bare default room. Null (the default, and every document authored before this field existed)
+    /// leaves the plain room, so the default demo is byte-unchanged. Loading is GRACEFUL: an unreadable handle or a
+    /// world whose creations are missing from the store narrates to stderr and leaves the plain room rather than
+    /// crashing the boot (parse validation never checks file existence — the boot-load does). This is the run-document
+    /// home of the former <c>PUCK_OVERWORLD_WORLD</c> env var; the live mid-session path is the <c>world.load</c>
+    /// console verb.</summary>
+    public string? World { get; init; }
+    // NOTE: nullable-optional-field pattern (see the note in GamingBrickSource) — a polymorphic-derived record
+    // deserialized through the run-document parse path skips property initializers, so an omitted member arrives
+    // NULL regardless of any initializer; ANY long value is a valid cell, so this is validated only for PRESENCE (there
+    // is nothing to range-check), and normalized at consumption (null → cell 0, the origin).
+    /// <summary>The FAR spawn cell (applied to BOTH the X and Z axes) the whole room is placed at — the planet-scale
+    /// coordinate-stability demonstration: the simulation is cell-agnostic (identical per-tick local motion at any cell)
+    /// and the floating-origin render seam keeps it crisp arbitrarily far from the origin. Null (the default, and every
+    /// document authored before this field existed) is the origin cell (0), so the default demo is byte-unchanged. This
+    /// is the run-document home of the former <c>PUCK_OVERWORLD_CELL</c> env var.</summary>
+    public long? Cell { get; init; }
 
     private protected override string DefaultBackend => "vulkan";
 
@@ -134,6 +157,14 @@ public sealed record OverworldNode : NodeDocument {
         }
         // An immersed console may now start EMPTY: a built-in immersed cart (the world-lens) or the cabinet's own
         // cart-cycle feeds it, so no pre-inserted romPath is required.
+
+        // The world handle is validated only when PRESENT (the nullable-optional-field pattern): an empty/whitespace
+        // string is a malformed handle. A non-empty handle is NOT checked for existence here — parse validation never
+        // touches the filesystem; the boot-load resolves it under ./worlds/ + the CAS store and narrates-and-skips a
+        // bad handle rather than crashing (see OverworldFrameSource.LoadBootWorld).
+        if ((World is not null) && string.IsNullOrWhiteSpace(value: World)) {
+            errors.Add(path: $"{path}.world", message: "the world handle is empty; omit the field to load no world, or name a saved world (resolved under ./worlds/ or a direct path)");
+        }
     }
 
     // Cross-cabinet META validation: cabinets sharing a group must (a) agree on the target, (b) number at least two, and

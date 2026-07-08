@@ -33,7 +33,11 @@ internal static class WorldCommands {
     /// <param name="store">The content-addressed store to resolve against.</param>
     /// <param name="nameOrPath">The save handle or file path.</param>
     public static string Load(WorldScene scene, ContentAddressedStore store, string nameOrPath) {
-        if (WorldDocumentStore.Load(nameOrPath: nameOrPath) is not { } document) {
+        if (!WorldDocumentStore.TryLoad(nameOrPath: nameOrPath, out var loadedDocument, out var loadError)) {
+            return $"[world.load: '{nameOrPath}' is unreadable — {loadError}]";
+        }
+
+        if (loadedDocument is not { } document) {
             return $"[world.load: nothing readable at '{nameOrPath}']";
         }
 

@@ -39,8 +39,6 @@ battery's own output is the source of truth for what covers what).
 | `Sdf/sdf-child.comp.hlsl` | Deterministic animated storage-image source used as a hosted child or test pattern. | Post harnesses, `PostProbeNode` |
 | `Sdf/sdf-world-rt-debug.rq.comp.hlsl` | Shader Model 6.5 inline ray-query diagnostic path. TLAS cull, SDF march, and RT shadows. | The Post ray-query stage (ray-query capable hardware) |
 | `Sdf/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | Overworld binding-bar overlay |
-| `Sdf/sdf-view.frag.hlsl` | Legacy single-view fragment raymarch path. | No current `src` runtime consumer found — compile-shipped only; retire or re-host deliberately |
-| `Sdf/composite.frag.hlsl` | Legacy sampled-view fragment compositor with warp transition. | No current `src` runtime consumer found — compile-shipped only; retire or re-host deliberately |
 
 ## Neutral image and viewport kernels
 

@@ -32,6 +32,7 @@ internal sealed class GameFramework {
         States = new GameStateMachine(emitter: Emitter);
         m_dmaTrampoline = Data.Add(name: "dma-trampoline", bytes: FrameworkKernel.BuildDmaTrampolineBlob());
         Save = new SaveModule(emitter: Emitter, defaults: Data.Add(name: "save-defaults", bytes: saveDefaultPayload), version: saveVersion);
+        Victory = new VictoryModule(emitter: Emitter);
         m_sound = (sound ?? new NoOpSoundDriver());
     }
 
@@ -52,6 +53,9 @@ internal sealed class GameFramework {
     public PrngModule Prng { get; }
     /// <summary>The battery-save module.</summary>
     public SaveModule Save { get; }
+    /// <summary>The 128-bit meta-victory module: a game calls <see cref="VictoryModule.EmitStoreShare"/> at its win
+    /// edge (its <c>StateGameOver</c> enter) to converge this cabinet's SRAM win region on the host-seeded share.</summary>
+    public VictoryModule Victory { get; }
     /// <summary>The font and text printers.</summary>
     public TextModule Text { get; }
     /// <summary>The game state machine.</summary>
@@ -72,11 +76,14 @@ internal sealed class GameFramework {
         // The fixed prologue: jp boot at 0x0150, the VBlank handler at 0x0153 (the 0x0040 vector's target).
         FrameworkKernel.EmitPrologue(emitter: Emitter, bootLabel: bootLabel);
 
-        // Boot: hardware bring-up (LCD off), the sound driver's setup, the save mirror load, then interrupts on.
+        // Boot: hardware bring-up (LCD off), the sound driver's setup, the save mirror load, the win-region reset, then
+        // interrupts on. The victory-region reset runs AFTER the save load so a persisted <c>.sav</c> whose top-16 SRAM
+        // bytes still carry a previous session's share can never auto-fire the meta gate on reboot — it is re-earned.
         Emitter.MarkLabel(label: bootLabel);
         FrameworkKernel.EmitBootPrologue(emitter: Emitter, spec: bootSpec, dmaTrampoline: m_dmaTrampoline);
         m_sound.EmitBoot(emitter: Emitter);
         Save.EmitLoad();
+        VictoryModule.EmitBootReset(emitter: Emitter);
         FrameworkKernel.EmitBootEpilogue(emitter: Emitter, spec: bootSpec);
 
         // The main loop: one pass per displayed frame, woken by the VBlank handler.
@@ -92,6 +99,7 @@ internal sealed class GameFramework {
         Input.EmitLibrary();
         Prng.EmitLibrary();
         Save.EmitLibrary();
+        Victory.EmitLibrary();
         Text.EmitLibrary();
         m_sound.EmitLibrary(emitter: Emitter);
         emitGameLibrary?.Invoke(Emitter);

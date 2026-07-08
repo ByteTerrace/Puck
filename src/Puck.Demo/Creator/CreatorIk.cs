@@ -28,6 +28,13 @@ public static class CreatorIk {
     /// <param name="restDirection">The unit direction the chain holds when the goal is degenerate (≈ the root).</param>
     /// <returns>The solved mid and tip joint positions.</returns>
     public static (Vector3 Mid, Vector3 Tip) SolveLimb(Vector3 root, Vector3 goal, float lenA, float lenB, Vector3 pole, Vector3 restDirection) {
+        // Floor each bone off zero before solving. A limb whose root bone has zero length (two shapes stacked at one
+        // point) would otherwise divide by 2*lenA*distance = 0 in the law of cosines and normalize a zero-length
+        // mid→root — producing a NaN tip that strict JSON serialization (creator.save) later rejects uncaught. Real
+        // authored bones dwarf Epsilon, so this is a no-op for any non-degenerate capture.
+        lenA = MathF.Max(lenA, Epsilon);
+        lenB = MathF.Max(lenB, Epsilon);
+
         var toGoal = (goal - root);
         var distance = toGoal.Length();
         var rest = ((restDirection.LengthSquared() > Epsilon) ? Vector3.Normalize(restDirection) : Vector3.UnitY);

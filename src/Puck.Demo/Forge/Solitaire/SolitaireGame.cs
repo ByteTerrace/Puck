@@ -2146,6 +2146,10 @@ internal sealed class SolitaireGame {
         e.MarkLabel(label: noBest);
         m_fw.Save.EmitStore();
 
+        // The 128-bit meta-victory converge: a completed game (all foundations built) writes this cabinet's host-seeded
+        // share into the top-16 SRAM win region (the room XORs it across cabinets to drive the editor reveal).
+        m_fw.Victory.EmitStoreShare();
+
         e.LoadAImmediate(value: WinFrames);
         e.StoreAToAddress(address: SolitaireProtocol.WinTimer);
 

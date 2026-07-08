@@ -55,6 +55,25 @@ Settled — never re-litigate; the OPEN forks are mandatory prompts.
 
 ## THE NEXT ARC — the world sculptor (start here)
 
+> **★CONTENT PASS BEGUN (2026-07-06, branch `features/alpha-prep`).** The first
+> real TOWN exists — "Puckton" (`src/Puck.Demo/Town/`, `--forge-town`): a cozy
+> dusk block sculpted out of player-reachable creations (arcade, storefronts,
+> fountain, lamps, trees), saved deterministically to the CAS, walkable
+> (buildings block via the baked walk grid), and REVEALED by the zoom-out — a
+> run document naming `"world": "puckton"` (`OverworldNode.World`; e.g.
+> `docs/examples/overworld-town.json`) makes it the room the fourth-wall reveal
+> eases you into after you win the intro cartridge (the user's chosen front
+> door). The
+> flagship trio inhabit it as roaming companions. This proved the whole chain
+> (sculpt → save-to-CAS → place → bake → load → reveal) end-to-end and exposed +
+> fixed a real latent renderer bug (static placements dropped their transform —
+> see the alpha-prep memory). Seams still open: richer authoring in-engine
+> (place→edit-in-situ), the flagship rigs posed live, cabinet re-homing, a proper
+> road surface, and the render-range ceiling that forces a COMPACT block today
+> (the machine-fleet/perf seam — a bigger town needs the reveal camera + the SDF
+> instancing to reach farther). The town is CONTENT (verified by RUNNING +
+> `--forge-town`'s self-proofs), never a gate.
+
 **This arc is the convergence, not another feature list.** Everything built
 so far is an instrument waiting to be played together:
 

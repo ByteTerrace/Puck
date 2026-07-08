@@ -40,6 +40,15 @@ internal sealed class RunDocumentStage : IPostStage {
 
         foreach (var examplePath in examplePaths) {
             var exampleName = Path.GetFileName(path: examplePath);
+
+            // World documents (`puck.world.v1` — a DIFFERENT format authored by the world-sculpt subsystem, e.g. the
+            // town's committed reference `docs/examples/puckton.world.json`) share this examples directory but are NOT
+            // run documents; they carry their own validation path (the world forge's determinism + round-trip proof),
+            // so the run-document funnel SKIPS them rather than rejecting them as malformed run docs.
+            if (exampleName.EndsWith(value: ".world.json", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
             PuckRunDocument document;
 
             if (exampleName.Contains(value: "-bad-", comparisonType: StringComparison.OrdinalIgnoreCase)) {

@@ -22,6 +22,19 @@ public sealed unsafe class VulkanQueueSubmitter {
 
         SubmitCore(
             commandBufferHandles: commandBufferHandles,
+            fenceHandle: 0,
+            graphicsQueue: graphicsQueue,
+            pointers: GetPointers(deviceHandle: deviceHandle)
+        );
+    }
+    public void Submit(nint deviceHandle, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle) {
+        if (commandBufferHandles.IsEmpty) {
+            return;
+        }
+
+        SubmitCore(
+            commandBufferHandles: commandBufferHandles,
+            fenceHandle: fenceHandle,
             graphicsQueue: graphicsQueue,
             pointers: GetPointers(deviceHandle: deviceHandle)
         );
@@ -35,6 +48,7 @@ public sealed unsafe class VulkanQueueSubmitter {
 
         SubmitCore(
             commandBufferHandles: commandBufferHandles,
+            fenceHandle: 0,
             graphicsQueue: graphicsQueue,
             pointers: pointers
         );
@@ -42,7 +56,7 @@ public sealed unsafe class VulkanQueueSubmitter {
         pointers.QueueWaitIdle(graphicsQueue.Handle).ThrowIfFailed(operation: "vkQueueWaitIdle");
     }
 
-    private static void SubmitCore(DevicePointers pointers, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles) {
+    private static void SubmitCore(DevicePointers pointers, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle) {
         fixed (nint* commandBuffersPointer = commandBufferHandles) {
             var submitInfo = new VkSubmitInfo {
                 CommandBufferCount = (uint)commandBufferHandles.Length,
@@ -54,7 +68,7 @@ public sealed unsafe class VulkanQueueSubmitter {
                 graphicsQueue.Handle,
                 1,
                 in submitInfo,
-                0
+                fenceHandle
             ).ThrowIfFailed(operation: "vkQueueSubmit");
         }
     }

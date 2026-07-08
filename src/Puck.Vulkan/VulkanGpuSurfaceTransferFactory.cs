@@ -14,6 +14,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
     IVulkanExternalMemoryApi externalMemoryApi,
     IVulkanFramebufferSetApi framebufferSetApi,
     IVulkanFrameReadbackApi frameReadbackApi,
+    IVulkanFrameSynchronizationApi frameSynchronizationApi,
     IVulkanOffscreenImageApi offscreenImageApi,
     IVulkanStorageBufferFactory storageBufferFactory,
     VulkanQueueSubmitter queueSubmitter
@@ -24,6 +25,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
             frameReadbackApi: frameReadbackApi,
+            frameSynchronizationApi: frameSynchronizationApi,
             queueSubmitter: queueSubmitter
         ));
     /// <inheritdoc/>
@@ -57,6 +59,17 @@ file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSu
             vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
             width: width
         );
+    public void SubmitRead(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel) =>
+        inner.SubmitRead(
+            bytesPerPixel: bytesPerPixel,
+            deviceContext: (IVulkanDeviceContext)deviceContext,
+            height: height,
+            sourceImageHandle: sourceImageHandle,
+            vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
+            width: width
+        );
+    public bool IsReadComplete() => inner.IsReadComplete();
+    public ReadOnlyMemory<byte> MapPixels() => inner.MapPixels();
     public void Dispose() => inner.Dispose();
 }
 file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfaceUpload {

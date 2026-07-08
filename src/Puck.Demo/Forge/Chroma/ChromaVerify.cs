@@ -16,6 +16,9 @@ namespace Puck.Demo.Forge;
 internal static class ChromaVerify {
     private const ulong TCyclesPerFrame = 70224UL;
     private const int CellCount = (ChromaProtocol.Cols * ChromaProtocol.Rows);
+    // The window for a STAGED (forced-drip) top-out to reach the game-over card — a few frames' headroom over the one
+    // drip StageTopOut arms. Comfortable rather than tight, but the outcome no longer depends on the PRNG spawn phase.
+    private const int TopOutWindowFrames = (ChromaProtocol.DropInterval * 3);
 
     /// <summary>Runs the whole battery.</summary>
     /// <param name="rom">The ROM image.</param>
@@ -180,11 +183,9 @@ internal static class ChromaVerify {
 
         Assert(condition: resumed, message: "the drip timer did not resume after unpause");
 
-        // (7) A staged top-out: fill the whole well with a matchless checkerboard — the next drip (at most
-        // DropInterval frames away) finds its column full and must resolve to the game-over card, then (score > the
-        // zero-scored fifth entry after the staged clear) to initials entry.
-        PokeCheckerboard(driver: driver);
-        Assert(condition: driver.RunUntilState(state: ChromaProtocol.StateGameOver, buttons: JoypadButtons.None, maxFrames: (ChromaProtocol.DropInterval * 3)), message: "a staged full well never reached the game-over state");
+        // (7) A staged top-out: fill the whole well and force the imminent drip, so the next spawn finds row 0 occupied
+        // and tops the game out (see DriveStagedTopOut for why this is done robustly, not by waiting on a lucky PRNG spawn).
+        Assert(condition: DriveStagedTopOut(driver: driver), message: "a staged full well never reached the game-over state");
 
         var finalScore = new[] { driver.Read(address: ChromaProtocol.Score), driver.Read(address: (ushort)(ChromaProtocol.Score + 1)), driver.Read(address: (ushort)(ChromaProtocol.Score + 2)) };
 
@@ -280,8 +281,7 @@ internal static class ChromaVerify {
         }
 
         Assert(condition: scored, message: "the top-slot session's staged run never scored");
-        PokeCheckerboard(driver: driver);
-        Assert(condition: driver.RunUntilState(state: ChromaProtocol.StateGameOver, buttons: JoypadButtons.None, maxFrames: (ChromaProtocol.DropInterval * 3)), message: "the top-slot session's staged top-out never reached game over");
+        Assert(condition: DriveStagedTopOut(driver: driver), message: "the top-slot session's staged top-out never reached game over");
 
         var finalScore = new[] { driver.Read(address: ChromaProtocol.Score), driver.Read(address: (ushort)(ChromaProtocol.Score + 1)), driver.Read(address: (ushort)(ChromaProtocol.Score + 2)) };
 
@@ -325,6 +325,26 @@ internal static class ChromaVerify {
         driver.RunFrames(buttons: JoypadButtons.None, frames: idleFrames);
         driver.Press(buttons: JoypadButtons.Start);
         Assert(condition: driver.RunUntilState(state: ChromaProtocol.StatePlay, buttons: JoypadButtons.None, maxFrames: 30), message: "START on the title did not start a game");
+    }
+
+    // Drive a guaranteed, LAYOUT-INDEPENDENT top-out to the game-over card, and return whether it reached it. Rather
+    // than fill the well once and hope a drip lands before the in-flight cascade (from the caller's staged run) empties
+    // the top row — a phase that shifts with any ROM-layout change and made the old "wait a few drips" byte-layout
+    // brittle — this REFILLS the whole well every frame and re-arms the drip timer, so row 0 is occupied in every
+    // column at the instant the next spawn checks it. EmitSpawn tops out immediately when grid[col] (row 0) is occupied
+    // BEFORE placing, so the game-over card is reached deterministically within a couple of drips. Bounded.
+    private static bool DriveStagedTopOut(Driver driver) {
+        for (var frame = 0; (frame < TopOutWindowFrames); frame++) {
+            PokeCheckerboard(driver: driver);
+            driver.Write(address: ChromaProtocol.DropTimer, value: (byte)(ChromaProtocol.DropInterval - 1));
+            driver.RunFrames(buttons: JoypadButtons.None, frames: 1);
+
+            if (driver.Read(address: FrameworkMemoryMap.GameState) == ChromaProtocol.StateGameOver) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Fill the whole well with a matchless 1/2 checkerboard (no two adjacent cells share a colour, so no run can

@@ -32,15 +32,31 @@ static const int MaxSteps = 160;
 static const float MaxDistance = 60.0;
 static const float SurfaceEpsilon = 0.001;
 static const float CullSkin = 0.5;          // pull the march start back by the max smooth-blend bulge, for safety
-static const float3 LightDirection = float3(0.55, 0.85, 0.35);
+// The "this ray hit nothing" sentinel traceInstanceEntry / traceGroundPlane return. It MUST exceed MaxDistance: every
+// caller decides "culled" by testing the returned entry against MaxDistance (or ShadowMaxDistance, which is smaller).
+static const float NoRayHit = (MaxDistance * 2.0);
+// Degenerate-ground-plane guards. The scene declares "no floor" as an all-zero plane normal, so dot(n, n) below this
+// floor means no plane at all; and a ray whose dot(direction, n) is not at least this far NEGATIVE is parallel to, or
+// receding from, the plane's front face and never crosses it.
+static const float GroundPlaneNormalLengthSquaredMin = 1.0e-6;
+static const float GroundPlaneApproachMax = -1.0e-5;
 static const int ShadowSteps = 48;
 static const float ShadowMaxDistance = 24.0;
 static const float ShadowBias = 0.02;
 static const float ShadowSharpness = 9.0;
 static const float ShadowAmbient = 0.30;    // residual light in shadow (ambient term keeps shadows from going black)
+// The soft-shadow march's per-step advance clamp — MIRRORS sdf-world.hlsli's ShadowStepMin / ShadowStepMax (same values,
+// same IQ semantics: the floor keeps a near-tangent march from stalling, the ceiling keeps the penumbra from
+// over-marching a grazing silhouette). Declared locally because this ray-query kernel cannot include sdf-world.hlsli.
+static const float ShadowStepMin = 0.02;
+static const float ShadowStepMax = 0.6;
+// The gradient probe's finite-difference offset.
+static const float NormalProbeEpsilon = 0.0006;
 
+// A 6-tap central difference — deliberately NOT the world path's 4-tap tetrahedron probe. The two disagree by a few
+// LSB, and RtStage's cross-backend parity budget is measured against THIS probe; migrating it would move every pixel.
 float3 calculateNormal(float3 p) {
-    float2 e = float2(0.0006, 0.0);
+    float2 e = float2(NormalProbeEpsilon, 0.0);
 
     return normalize(float3(
         (map(p + e.xyy).distance - map(p - e.xyy).distance),
@@ -48,10 +64,16 @@ float3 calculateNormal(float3 p) {
         (map(p + e.yyx).distance - map(p - e.yyx).distance)
     ));
 }
+// A DELIBERATELY brighter, higher-contrast gradient than sdf-world.hlsli's sky (0.04,0.05,0.07 -> 0.10,0.13,0.20): this
+// is a diagnostic-only palette that makes the ray-traced cull's sky/geometry boundary legible. Not drift — do not
+// "reconcile" it with the world path.
+static const float3 SkyHorizonColor = float3(0.02, 0.03, 0.06);
+static const float3 SkyZenithColor = float3(0.20, 0.30, 0.45);
+
 float3 skyColor(float3 direction) {
     float t = clamp((0.5 * (direction.y + 1.0)), 0.0, 1.0);
 
-    return lerp(float3(0.02, 0.03, 0.06), float3(0.20, 0.30, 0.45), t);
+    return lerp(SkyHorizonColor, SkyZenithColor, t);
 }
 
 // Nearest entry distance of any TLAS instance the ray pierces, or a large value on a miss. The BLAS is procedural, so
@@ -88,7 +110,7 @@ float traceInstanceEntry(float3 rayOrigin, float3 rayDirection, float tMin, floa
         }
     }
 
-    return ((query.CommittedStatus() == COMMITTED_PROCEDURAL_PRIMITIVE_HIT) ? query.CommittedRayT() : (MaxDistance * 2.0));
+    return ((query.CommittedStatus() == COMMITTED_PROCEDURAL_PRIMITIVE_HIT) ? query.CommittedRayT() : NoRayHit);
 }
 
 // The ray's crossing of the scene's infinite ground plane (dot(p, n) + offset = 0), or a large value when the ray
@@ -96,14 +118,14 @@ float traceInstanceEntry(float3 rayOrigin, float3 rayDirection, float tMin, floa
 float traceGroundPlane(float3 rayOrigin, float3 rayDirection) {
     float3 normal = params.groundPlane.xyz;
 
-    if (dot(normal, normal) < 1.0e-6) {
-        return (MaxDistance * 2.0); // no floor in this scene
+    if (dot(normal, normal) < GroundPlaneNormalLengthSquaredMin) {
+        return NoRayHit; // no floor in this scene
     }
 
     float denominator = dot(rayDirection, normal);
 
-    if (denominator > -1.0e-5) {
-        return (MaxDistance * 2.0); // parallel to, or receding from, the plane front
+    if (denominator > GroundPlaneApproachMax) {
+        return NoRayHit; // parallel to, or receding from, the plane front
     }
 
     return (-(dot(rayOrigin, normal) + params.groundPlane.w) / denominator);
@@ -126,14 +148,15 @@ float lightShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirecti
 
     [loop]
     for (int step = 0; (step < ShadowSteps); step++) {
-        float distance = map(origin + (lightDirection * traveled)).distance;
+        // `clearance`, not `distance`: a local named `distance` shadows the HLSL distance() intrinsic.
+        float clearance = map(origin + (lightDirection * traveled)).distance;
 
-        if (distance < SurfaceEpsilon) {
+        if (clearance < SurfaceEpsilon) {
             return 0.0; // hard occlusion
         }
 
-        result = min(result, ((ShadowSharpness * distance) / traveled));
-        traveled += clamp(distance, 0.02, 0.6);
+        result = min(result, ((ShadowSharpness * clearance) / traveled));
+        traveled += clamp(clearance, ShadowStepMin, ShadowStepMax);
 
         if (traveled > ShadowMaxDistance) {
             break;
@@ -183,18 +206,22 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     } else {
         float traveled = max(SurfaceEpsilon, (candidate - CullSkin));
         bool hitSurface = false;
+        // The hit's material, CARRIED OUT of the march. The loop already evaluated map() at the surface point; a second
+        // map(position) below purely to recover .material would re-run the whole program (~10% of this kernel's code).
+        int hitMaterial = 0;
 
         [loop]
         for (int step = 0; (step < MaxSteps); step++) {
             float3 position = (rayOrigin + (rayDirection * traveled));
-            SdfHit sample = map(position);
+            SdfHit hit = map(position);
 
-            if (sample.distance < SurfaceEpsilon) {
+            if (hit.distance < SurfaceEpsilon) {
                 hitSurface = true;
+                hitMaterial = hit.material;
                 break;
             }
 
-            traveled += sample.distance;
+            traveled += hit.distance;
 
             if (traveled > MaxDistance) {
                 break;
@@ -202,20 +229,32 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
 
         if (hitSurface) {
+            // `traveled` is unchanged since the breaking iteration, so this reproduces that iteration's point exactly.
             float3 position = (rayOrigin + (rayDirection * traveled));
-            SdfHit surface = map(position);
             float3 normal = calculateNormal(position);
-            float3 lightDirection = normalize(LightDirection);
             // RT shadow: the second TLAS query of the frame, accelerating the occlusion test.
-            float shadow = lerp(ShadowAmbient, 1.0, lightShadow(position, normal, lightDirection));
-            float diffuse = (max(0.0, dot(normal, lightDirection)) * shadow);
+            float shadow = lerp(ShadowAmbient, 1.0, lightShadow(position, normal, SdfSunDirection));
+            float diffuse = (max(0.0, dot(normal, SdfSunDirection)) * shadow);
 
-            // The highlight attenuates by the same RT shadow term as the diffuse (a highlight never glows in shadow).
-            color = sdfMaterialShade(sdfMaterialLoad(surface.material), (float3(1.0, 1.0, 1.0) * (0.25 + (0.75 * diffuse))), normal, rayDirection, lightDirection, shadow);
+            if (hitMaterial >= SDF_SCREEN_MATERIAL) {
+                // A screen sentinel (SDF_SCREEN_MATERIAL and up) names no row of the material table — sdfMaterialLoad
+                // would index past its end. This DIAGNOSTIC kernel has no screen sources bound and must not invent
+                // screen shading, so a screen face reads black. That is exactly what an unguarded out-of-bounds
+                // structured-buffer read already yields on Direct3D 12 (zeroed), while on Vulkan the same read is only
+                // defined under robustBufferAccess — so the guard makes both backends agree by CONSTRUCTION rather than
+                // by driver luck, and moves no pixel of any program that declares no ScreenSlab.
+                color = float3(0.0, 0.0, 0.0);
+            } else {
+                // The highlight attenuates by the same RT shadow term as the diffuse (a highlight never glows in shadow).
+                color = sdfMaterialShade(sdfMaterialLoad(hitMaterial), (float3(1.0, 1.0, 1.0) * (0.25 + (0.75 * diffuse))), normal, rayDirection, SdfSunDirection, shadow);
+            }
         } else {
             color = skyColor(rayDirection);
         }
     }
 
+    // No sdfR2Dither here, deliberately: the world path dithers before its 8-bit store to break sky/fog gradient
+    // banding, but this kernel is a cross-backend PARITY probe — the store must stay a pure function of the shaded
+    // color, with no pixel-coordinate-keyed noise folded in.
     outputImage[id.xy] = float4(color, 1.0);
 }

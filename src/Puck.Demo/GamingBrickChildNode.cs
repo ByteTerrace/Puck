@@ -113,15 +113,26 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
     private WorldLensState m_pendingWorldState;
     private ICartridge? m_cartridge;
     private IGpuComputeCommandPool? m_commandPool;
-    private readonly ushort m_exitAddress;
-    private readonly BrickExitCondition? m_exitCondition;
+    // The fourth-wall exit + 128-bit victory conditions are load-once run-document data at construction, but they are
+    // now LIVE-EDITABLE through SetExitCondition / SetVictoryCondition (the console condition.* verbs — "the recursion":
+    // the win/reveal gate that unlocked the editor is itself re-forgeable). Non-readonly so an edit can re-parse the
+    // address/target/share, clear the one-shot fired latch (a re-edited cabinet may win again), and re-seed a meta
+    // share into the running machine. The per-frame polls (ProduceFrame's exit / solo reads) re-read these fields each
+    // frame, so a swapped condition takes effect the next frame with no rebuild here.
+    private ushort m_exitAddress;
+    private BrickExitCondition? m_exitCondition;
     private bool m_exitFired;
     // The 128-bit win condition (top 16 bytes of the cartridge's highest SRAM address). Solo precomputes its target for
     // the per-frame compare and fires locally; meta leaves the target null (the overworld room XORs the cabinets'
     // regions) and only keeps the 16-byte scratch the room reads through TryReadVictoryRegion.
-    private readonly BrickVictoryCondition? m_victoryCondition;
-    private readonly byte[]? m_victoryTarget;
-    private readonly byte[]? m_victoryRegion;
+    private BrickVictoryCondition? m_victoryCondition;
+    private byte[]? m_victoryTarget;
+    // META only: this cabinet's authored 128-bit share, seeded into the running framework game's victory-share WRAM slot
+    // at every (re)assembly so the game's on-win hook converges the top-16 SRAM region on it. Document-driven +
+    // re-forgeable (never baked into the shared-per-type cart ROM). Live-editable: a meta condition.set re-seeds it into
+    // the running machine's slot at once (SeedVictoryShare) so the change takes effect on the running game.
+    private byte[]? m_victoryShare;
+    private byte[]? m_victoryRegion;
     private bool m_victoryFired;
     private int m_framesSinceSaveFlush;
     private string? m_peripheral;
@@ -223,7 +234,11 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
 
         // The 128-bit win condition (read from the source, like the peripheral/fit/speed fields) arrives pre-validated.
         // Solo precomputes its target bytes for the per-frame compare; meta leaves the target null here (the room XORs
-        // the cabinets' regions) and keeps only the region scratch.
+        // the cabinets' regions) and keeps only the region scratch. A META condition also parses this cabinet's SHARE
+        // bytes: the host SEEDS them into the running framework game's victory-share WRAM slot at boot (see
+        // SeedVictoryShare), and the game's on-win hook copies that slot into the top-16 SRAM region the room reads —
+        // so the per-cabinet share stays DOCUMENT-DRIVEN (source.Victory.Share) and RE-FORGEABLE without baking it into
+        // the shared-per-type cart ROM.
         if (source.Victory is { } victoryCondition) {
             m_victoryCondition = victoryCondition;
             m_victoryRegion = new byte[VictoryGate.RegionByteCount];
@@ -233,6 +248,13 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
 
                 if (victoryCondition.TryParseTarget(destination: target)) {
                     m_victoryTarget = target;
+                }
+            }
+            else {
+                var share = new byte[VictoryGate.RegionByteCount];
+
+                if (victoryCondition.TryParseShare(destination: share)) {
+                    m_victoryShare = share;
                 }
             }
         }
@@ -356,21 +378,86 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
         // flush left it (the footer's wall timestamp is interop metadata, ignored here): time pauses while powered
         // off and never goes backward, so a game's own elapsed-time bookkeeping (a Gen-II real-time-clock cartridge) stays consistent.
         if ((m_savePath is { } savePath) && cartridge.Header.HasBattery && File.Exists(path: savePath)) {
-            var save = File.ReadAllBytes(path: savePath);
-            var ramByteCount = cartridge.ExternalRamByteCount;
+            try {
+                var save = File.ReadAllBytes(path: savePath);
+                var ramByteCount = cartridge.ExternalRamByteCount;
 
-            if (ramByteCount > 0) {
-                cartridge.ImportExternalRam(source: save.AsSpan(start: 0, length: Math.Min(save.Length, ramByteCount)));
+                if (ramByteCount > 0) {
+                    cartridge.ImportExternalRam(source: save.AsSpan(start: 0, length: Math.Min(save.Length, ramByteCount)));
+                }
+
+                if ((cartridge.PersistentClockByteCount > 0) && (save.Length >= (ramByteCount + cartridge.PersistentClockByteCount))) {
+                    cartridge.ImportPersistentClock(source: save.AsSpan(start: ramByteCount, length: cartridge.PersistentClockByteCount));
+                }
             }
-
-            if ((cartridge.PersistentClockByteCount > 0) && (save.Length >= (ramByteCount + cartridge.PersistentClockByteCount))) {
-                cartridge.ImportPersistentClock(source: save.AsSpan(start: ramByteCount, length: cartridge.PersistentClockByteCount));
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                Console.Error.WriteLine(value: $"[battery-save: '{savePath}' unreadable ({exception.Message}) — booting with fresh external RAM]");
             }
         }
+
+        SeedVictoryShare(machine: machine);
 
         RepackFramebuffer();
 
         m_rgbaFresh = true;
+    }
+
+    // Seeds this cabinet's authored 128-bit meta share into the freshly-assembled framework game's victory-share WRAM
+    // slot (FrameworkMemoryMap.VictoryShareSource, 0xC0F0) BEFORE the game boots — a per-cabinet host poke, exactly the
+    // mechanism the mode-swap "boot shim" uses (SystemMemory.PokeCpuByte into work RAM). The framework's boot work-RAM
+    // clear deliberately steps OVER this slot, so the seed survives to the game's win, where its on-win hook copies the
+    // slot into the top-16 SRAM region the room's meta gate reads. Only a META condition seeds (solo converges on its
+    // own target), and only into a running FRAMEWORK game — the sole cart that owns the slot; a non-framework cart is
+    // left untouched, since it may use 0xC0F0..0xC0FF as ordinary work RAM. Re-seeded on every (re)assembly, so a live
+    // re-forge of the share document field takes effect the next time the cart is inserted.
+    private void SeedVictoryShare(MachineInstance machine) {
+        if (m_victoryShare is not { } share) {
+            return;
+        }
+
+        // Only a FRAMEWORK game carries the VictoryModule that reads the VictoryShareSource slot on its win edge. A
+        // non-framework cart (a hand-authored game, SDF art, the Pocket Camera, the world-lens) never reads
+        // 0xC0F0..0xC0FF but may use that page as ordinary work RAM, so seeding it would clobber live state — the real
+        // vector is a meta condition.set onto a cabinet holding a non-framework cart. Skip it: that cart simply never
+        // contributes a share, and a framework cart's boot-time/live seed is unchanged.
+        if (!RunningCartIsFrameworkGame()) {
+            return;
+        }
+
+        var memory = machine.GetRequiredService<SystemMemory>();
+
+        for (var index = 0; (index < share.Length); index++) {
+            memory.PokeCpuByte(address: (ushort)(Puck.Demo.Forge.Framework.FrameworkMemoryMap.VictoryShareSource + index), value: share[index]);
+        }
+    }
+
+    // The two SM83 opcodes the framework prologue is recognized by: `nop` (0x00) and `jp nn` (0xC3).
+    private const byte Sm83NopOpcode = 0x00;
+    private const byte Sm83JumpAbsoluteOpcode = 0xC3;
+
+    // Whether the CURRENTLY loaded cart is a framework game — the only cart that owns the VictoryShareSource WRAM slot,
+    // so the one it is meaningful (rather than destructive) to seed. Recognized by the framework cartridge's fixed
+    // prologue fingerprint (Forge/Framework/FrameworkCartridge assembles every framework game through it, and validates
+    // it): the header trampoline at 0x0100 is `nop; jp Hw.EntryAddress`, the VBlank vector at 0x0040 jumps to the
+    // handler at Hw.VBlankHandlerAddress, and the routine at Hw.EntryAddress opens with `jp boot`. Read off m_cartridgeRom
+    // so it stays honest across a live cart-cycle, not just the boot cart.
+    private bool RunningCartIsFrameworkGame() {
+        var rom = m_cartridgeRom;
+
+        if ((rom is null) || (rom.Length <= Puck.Demo.Forge.Framework.Hw.EntryAddress)) {
+            return false;
+        }
+
+        return (
+            (rom[0x0100] == Sm83NopOpcode) &&
+            (rom[0x0101] == Sm83JumpAbsoluteOpcode) &&
+            (rom[0x0102] == (byte)(Puck.Demo.Forge.Framework.Hw.EntryAddress & 0xFF)) &&
+            (rom[0x0103] == (byte)(Puck.Demo.Forge.Framework.Hw.EntryAddress >> 8)) &&
+            (rom[0x0040] == Sm83JumpAbsoluteOpcode) &&
+            (rom[0x0041] == (byte)(Puck.Demo.Forge.Framework.Hw.VBlankHandlerAddress & 0xFF)) &&
+            (rom[0x0042] == (byte)(Puck.Demo.Forge.Framework.Hw.VBlankHandlerAddress >> 8)) &&
+            (rom[Puck.Demo.Forge.Framework.Hw.EntryAddress] == Sm83JumpAbsoluteOpcode)
+        );
     }
 
     private void AttachMachine(MachineInstance machine, ConsoleModel model) {
@@ -545,6 +632,127 @@ internal sealed class GamingBrickChildNode : ISteppableRenderNode {
         cartridge.ReadExternalRam(offset: (ramByteCount - VictoryGate.RegionByteCount), destination: destination);
 
         return true;
+    }
+
+    /// <summary>Forces this cabinet's game to its WIN by writing its AUTHORED victory bytes — a meta cabinet's private
+    /// <c>share</c>, or a solo cabinet's <c>target</c> — into the top-16 SRAM win region the meta gate reads, exactly as
+    /// the game's own on-win hook would (export the external RAM, overwrite its highest 16 bytes, import it back). The
+    /// room's REAL meta XOR / solo poll then counts it. The node half of the <c>win</c> control verb — it lets a script
+    /// drive "complete X games → the editor reveal" end to end without real gameplay input. Returns <see langword="false"/>
+    /// when the cabinet has no victory condition or no assembled cartridge.</summary>
+    /// <returns><see langword="null"/> on success, else a short human reason the win could not be forced (for the verb's
+    /// stderr narration) — so an agent driving the console sees WHY (no condition, not booted, or the running cart has no
+    /// victory region because it isn't a framework game).</returns>
+    internal string? ForceVictoryWin() {
+        // Meta converges its region on its private share; solo converges directly on its target.
+        var bytes = (m_victoryShare ?? m_victoryTarget);
+
+        if (bytes is null) {
+            return "no victory condition (condition.set it, or cycle to a game with a meta/solo victory)";
+        }
+
+        if (m_cartridge is not { } cartridge) {
+            return "no cartridge assembled (boot it first)";
+        }
+
+        var ram = cartridge.ExportExternalRam();
+
+        if (ram.Length < VictoryGate.RegionByteCount) {
+            return "the running cart has no victory region (cart-cycle it to a framework game, types 4-8)";
+        }
+
+        // The region is the HIGHEST SRAM address (exactly what TryReadVictoryRegion + the meta gate read), so overwrite
+        // the tail and import it back — the running game sees the converged region on its next poll.
+        bytes.AsSpan().CopyTo(destination: ram.AsSpan(start: (ram.Length - VictoryGate.RegionByteCount)));
+        cartridge.ImportExternalRam(source: ram);
+
+        // Re-arm a solo one-shot so a re-forced win can fire its reveal again (the meta gate re-reads the region each frame).
+        m_victoryFired = false;
+
+        return null;
+    }
+
+    /// <summary>Gets this cabinet's current fourth-wall EXIT condition (load-once document data, live-editable through
+    /// <see cref="SetExitCondition"/>), or <see langword="null"/> when none is set — the source the <c>condition.show</c>
+    /// verb echoes for assertions.</summary>
+    internal BrickExitCondition? ExitCondition => m_exitCondition;
+
+    /// <summary>Gets this cabinet's current 128-bit VICTORY condition (load-once document data, live-editable through
+    /// <see cref="SetVictoryCondition"/>), or <see langword="null"/> when none is set — the source the
+    /// <c>condition.show</c> verb echoes for assertions.</summary>
+    internal BrickVictoryCondition? VictoryCondition => m_victoryCondition;
+
+    /// <summary>Replaces (or clears, with <see langword="null"/>) this cabinet's fourth-wall EXIT condition LIVE — the
+    /// scriptable half of "the recursion" (a player re-forging the win/reveal gate in-game). Re-parses the work-RAM
+    /// address, and CLEARS the fired one-shot so a re-edited cabinet can fire the reveal again. Acquires the machine's
+    /// <see cref="SystemMemory"/> lazily when a condition is set on a cabinet that started with none (it is only cached
+    /// at assembly for a documented exit condition). The per-frame poll re-reads these fields, so the swap takes effect
+    /// the next frame with no rebuild. A malformed condition (unparseable address) leaves the poll inert rather than
+    /// throwing — the caller has already usage-checked it.</summary>
+    /// <param name="condition">The new exit condition, or <see langword="null"/> to clear.</param>
+    internal void SetExitCondition(BrickExitCondition? condition) {
+        m_exitFired = false;
+
+        if ((condition is not null) && condition.TryParseAddress(address: out var address)) {
+            m_exitAddress = address;
+            m_exitCondition = condition;
+
+            // The exit poll needs the machine's SystemMemory; it is only cached at assembly when the cabinet booted
+            // WITH a documented exit condition, so a live edit onto a previously-condition-less cabinet fetches it now
+            // (SystemMemory is always registered for a Humble machine).
+            m_systemMemory ??= m_machine?.GetRequiredService<SystemMemory>();
+        }
+        else {
+            m_exitAddress = 0;
+            m_exitCondition = null;
+        }
+    }
+
+    /// <summary>Replaces (or clears, with <see langword="null"/>) this cabinet's 128-bit VICTORY condition LIVE. Re-parses
+    /// the solo target (or the meta share), CLEARS the fired one-shot so a re-edited cabinet can win again, and for a META
+    /// condition RE-SEEDS the new share into the running framework game's victory-share WRAM slot (the Stage-2
+    /// <see cref="SeedVictoryShare"/> / <see cref="Puck.Demo.Forge.Framework.FrameworkMemoryMap.VictoryShareSource"/>
+    /// poke) so the change takes effect on the running game — its on-win hook then converges the top-16 SRAM region on
+    /// the new share. The room-level XOR watch (<c>MetaVictoryWatch</c>) reads the console-source records, not this
+    /// field, so the caller REBUILDS it after a group/target/share edit (this method only touches this cabinet's own
+    /// state + running machine).</summary>
+    /// <param name="condition">The new victory condition, or <see langword="null"/> to clear.</param>
+    internal void SetVictoryCondition(BrickVictoryCondition? condition) {
+        m_victoryFired = false;
+        m_victoryCondition = condition;
+        m_victoryTarget = null;
+        m_victoryShare = null;
+
+        if (condition is null) {
+            m_victoryRegion = null;
+
+            return;
+        }
+
+        m_victoryRegion ??= new byte[VictoryGate.RegionByteCount];
+
+        if (!condition.IsMeta) {
+            var target = new byte[VictoryGate.RegionByteCount];
+
+            if (condition.TryParseTarget(destination: target)) {
+                m_victoryTarget = target;
+            }
+        }
+        else {
+            var share = new byte[VictoryGate.RegionByteCount];
+
+            if (condition.TryParseShare(destination: share)) {
+                m_victoryShare = share;
+
+                // Re-seed the running machine's WRAM share slot at once, so a meta re-forge takes effect on the game
+                // already running (its next win converges the region on the new share) — the same per-cabinet poke the
+                // boot-time seed uses; no reboot.
+                if (m_machine is { } machine) {
+                    SeedVictoryShare(machine: machine);
+                    Console.Error.WriteLine(value: $"[condition] brick {m_brickOrdinal}: re-seeded meta share into the running machine's WRAM slot 0x{Puck.Demo.Forge.Framework.FrameworkMemoryMap.VictoryShareSource:X4} (the game's next win converges the region on it).");
+                }
+            }
+        }
     }
 
     /// <summary>Gets or sets the input-timeline source. When set it REPLACES per-frame input sampling: each produced

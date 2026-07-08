@@ -10,8 +10,9 @@ namespace Puck.Demo;
 /// </summary>
 internal static class DemoRunDocuments {
     /// <summary>Turns the resolved CLI flags into the run document the single data-driven path consumes: the
-    /// self-contained <c>--validate-overworld</c> gate, a fullscreen single-machine boot for <c>--rom &lt;path&gt;</c>,
-    /// or the OVERWORLD for <c>--overworld</c> or no flags at all (the demo IS the overworld).</summary>
+    /// self-contained <c>--validate-overworld</c> gate, the IMMERSED overworld's four StandingMachines all seated
+    /// with the same cartridge for <c>--rom &lt;path&gt;</c>, or the OVERWORLD for <c>--overworld</c> or no flags at
+    /// all (the demo IS the overworld).</summary>
     /// <param name="backend">The <c>--backend</c> the live render hosts on (<c>vulkan</c>/<c>directx</c>).</param>
     /// <param name="exitAfterSeconds">The <c>--exit-after-seconds</c> auto-exit duration.</param>
     /// <param name="presentMode">The <c>--present-mode</c> swapchain present mode.</param>
@@ -48,7 +49,9 @@ internal static class DemoRunDocuments {
             var exit = ((romExit is { } spec) ? ParseExitSpec(spec: spec) : null);
 
             return new PuckRunDocument {
-                Graph = new OverworldNode { Consoles = StandingMachines(romPath: bootRomPath, exit: exit), Immersed = true },
+                // World = null: the --rom boot loads no sculpted world (revealing into the bare default room), so the
+                // synthesized document stays byte-unchanged — loading a world is a run-document (or world.load) choice.
+                Graph = new OverworldNode { Consoles = StandingMachines(romPath: bootRomPath, exit: exit), Immersed = true, World = null },
                 Host = (host with { Backend = "vulkan" }),
                 Version = PuckRunDocument.CurrentVersion,
             };
@@ -64,6 +67,9 @@ internal static class DemoRunDocuments {
             Graph = new OverworldNode {
                 Consoles = WorldLensMachines(),
                 Immersed = true,
+                // World = null: the default demo loads no sculpted world (the bare room), so it is byte-unchanged.
+                // Making the default reveal into a world is a later content choice, expressed in a run document.
+                World = null,
             },
             Host = (host with { Backend = "vulkan" }),
             Version = PuckRunDocument.CurrentVersion,

@@ -7,6 +7,11 @@
 // output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.
 #include "sdf-world.hlsli"
 
+// register(t0) DELIBERATELY shadows sdf-vm.hlsli's sdfWords (and t1 shadows sdf-world.hlsli's viewports): this kernel
+// reads NEITHER, DXC dead-code-eliminates both declarations, and `tiles` ends up the only SRV — which the Direct3D 12
+// pipeline factory assigns t0 by binding order anyway. If you ever call map() or read viewports[] from here, the
+// overlap becomes real: split CompositeParams/isChildViewport out of sdf-world.hlsli rather than renumbering this
+// register, because the factory assigns registers POSITIONALLY and an annotation change alone desyncs the root signature.
 [[vk::binding(3, 0)]] StructuredBuffer<float> tiles : register(t0);       // read-only beam cull buffer
 [[vk::binding(5, 0)]] RWStructuredBuffer<uint> viewsArgs : register(u0);  // [groupCountX, groupCountY, groupCountZ]
 [[vk::binding(6, 0)]] RWStructuredBuffer<uint> cullBounds : register(u1); // [minGroupX, minGroupY]

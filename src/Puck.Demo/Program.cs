@@ -18,7 +18,7 @@ var validateOverworldOption = new Option<bool>(name: "--validate-overworld") {
     Description = "Runs the overworld determinism + replay self-check (pure CPU: a scripted input run — roster churn + console boots — twice must produce identical per-tick state hashes, and a record->replay must reproduce them bit-for-bit) and exits (0 pass, 1 divergence, 2 infra-fail).",
 };
 var overworldOption = new Option<bool>(name: "--overworld") {
-    Description = "Renders the OVERWORLD — the demo, and the default with no flags at all: a controller-driven player in a room with three console stands (the showcase cartridge on the DMG/CGB/AGB costumes of the one machine). Walk with the left stick, jump with South, and press North at a stand to boot it — each boot lights its pane and the screen walks its staged split. Vulkan host.",
+    Description = "Renders the OVERWORLD — the demo, and the default with no flags at all: a controller-driven player immersed inside four StandingMachines (the showcase cartridge on the DMG/CGB/AGB costumes of the one machine). Walk with the left stick, jump with South, and press North at a machine to boot it — each boot lights its pane and the screen walks its staged split. Vulkan host.",
 };
 var romOption = new Option<string?>(name: "--rom") {
     DefaultValueFactory = static _ => null,
@@ -30,7 +30,7 @@ var romExitOption = new Option<string?>(name: "--rom-exit") {
 };
 var runOption = new Option<string?>(name: "--run") {
     DefaultValueFactory = static _ => null,
-    Description = "Path to a data-driven run document (run.json). Its graph selects the producer and its scene + viewports drive the render, replacing the world/showcase flags. Hosts on Vulkan.",
+    Description = "Path to a data-driven run document (run.json). Its graph selects the producer and its scene + viewports drive the render, replacing the world/showcase flags. Hosts on the backend the document's host section selects (Vulkan or DirectX).",
 };
 var emitSchemaOption = new Option<string?>(name: "--emit-schema") {
     DefaultValueFactory = static _ => null,
@@ -58,6 +58,7 @@ var launchCommand = new RootCommand(description: "Puck Demo") {
     Puck.Demo.Forge.ForgeCliSeams.AvatarFromOption,
     Puck.Demo.Forge.ForgeCliSeams.AvatarMovementModeOption,
     Puck.Demo.Forge.ForgeCliSeams.FlagshipsOption,
+    Puck.Demo.Forge.ForgeCliSeams.TownOption,
     Puck.Demo.Forge.ForgeCliSeams.BakeOption,
     Puck.Demo.Forge.ForgeCliSeams.BakeCalibrationOption,
     Puck.Demo.Forge.ForgeCliSeams.BakeStressOption,

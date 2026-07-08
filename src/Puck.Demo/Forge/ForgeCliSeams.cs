@@ -45,6 +45,11 @@ internal static class ForgeCliSeams {
         Description = "Headless tool: regenerate the three flagship avatars (lantern-fish, crt-robot, adventurer) from their recipes, assert byte-identical content determinism against docs/examples/creations/*.creation.json plus per-flagship rig assertions, then forge the adventurer through the avatar-forge path to the given .gbc path (proving the bake inherits the IK'd stride).",
     };
 
+    /// <summary>The <c>--forge-town</c> option (a flag — the town writes to fixed locations, not a given path).</summary>
+    public static Option<bool> TownOption { get; } = new(name: "--forge-town") {
+        Description = "Headless tool: build + verify PUCKTON, the flagship town — regenerate every town creation (buildings + street props) byte-identically against docs/examples/creations/town-*.creation.json, assemble + walk-grid-bake the puck.world.v1 world, assert it is byte-identical to docs/examples/puckton.world.json plus determinism (build-twice) and round-trip (save→reload) proofs, and MATERIALIZE it into the runtime CAS store + ./worlds/puckton.world.json. Then walk it with --run docs/examples/overworld-town.json (whose overworld node names \"world\": \"puckton\"), or the live world.load puckton console verb. No GPU.",
+    };
+
     /// <summary>The <c>--forge-volley</c> option.</summary>
     public static Option<string?> VolleyOption { get; } = new(name: "--forge-volley") {
         DefaultValueFactory = static _ => null,
@@ -119,6 +124,11 @@ internal static class ForgeCliSeams {
         }
         if (parseResult.GetValue(CameraOption) is { } cameraPath) {
             return await RomForge.RunCameraAsync(outputPath: cameraPath);
+        }
+        if (parseResult.GetValue(TownOption)) {
+            // Dispatched straight to the town forge (not via RomForge, which is at its class-coupling ceiling): the
+            // town needs no GPU host, so Run is a synchronous CPU build+verify.
+            return Puck.Demo.Town.TownForge.Run(args: args);
         }
         if (parseResult.GetValue(VolleyOption) is { } volleyPath) {
             return await RomForge.RunVolleyAsync(outputPath: volleyPath, args: args);

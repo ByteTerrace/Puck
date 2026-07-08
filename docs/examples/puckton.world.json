@@ -1,0 +1,452 @@
+{
+  "schema": "puck.world.v1",
+  "name": "puckton",
+  "bounds": {
+    "minX": -9,
+    "minZ": -9,
+    "maxX": 9,
+    "maxZ": 7,
+    "floorY": 0
+  },
+  "terrain": [],
+  "placements": [
+    {
+      "id": 0,
+      "name": "town-arcade",
+      "source": "sha256/4dcc2484116c79661624260675398399ee32ca11ba9d2b692cd59b8cf16dbe32",
+      "position": {
+        "x": 0,
+        "y": -0.48,
+        "z": -8
+      },
+      "yawDegrees": 0,
+      "scale": 3,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 1,
+      "name": "town-cottage-a",
+      "source": "sha256/7f88828ff017e10eb180c96b343044bbeb8999b54162e49ebd5dc347a0372be5",
+      "position": {
+        "x": -7,
+        "y": -0.42,
+        "z": 2.8
+      },
+      "yawDegrees": 55,
+      "scale": 1.95,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 2,
+      "name": "town-cottage-b",
+      "source": "sha256/696765fb4ac31260ad123e9aebf32c18254efd124b512d642f3808bae4901e35",
+      "position": {
+        "x": -6.5,
+        "y": -0.38,
+        "z": -4
+      },
+      "yawDegrees": 25,
+      "scale": 2.1,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 3,
+      "name": "town-grocery",
+      "source": "sha256/083a242289c950a14de150f777317f0404f5ff5477461a8fbdc57a837c3de1e7",
+      "position": {
+        "x": 7,
+        "y": -0.4,
+        "z": 0.5
+      },
+      "yawDegrees": 320,
+      "scale": 2.3,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 4,
+      "name": "town-fountain",
+      "source": "sha256/44e2b2c2234e67d17b9ddc4d689f546f05fe116095201e10f02c46c9bf4da3cd",
+      "position": {
+        "x": 0,
+        "y": -0.6,
+        "z": 0
+      },
+      "yawDegrees": 0,
+      "scale": 1.7,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 5,
+      "name": "town-lamp",
+      "source": "sha256/11725971d5aefadd1edcb4c02497c3f1d284d33802cac58fad257b929de5b64f",
+      "position": {
+        "x": -5,
+        "y": -0.39,
+        "z": -5.5
+      },
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "repeat": {
+        "spacingX": 0,
+        "spacingZ": 3.5,
+        "countX": 1,
+        "countZ": 4
+      },
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 6,
+      "name": "town-lamp",
+      "source": "sha256/11725971d5aefadd1edcb4c02497c3f1d284d33802cac58fad257b929de5b64f",
+      "position": {
+        "x": 5,
+        "y": -0.39,
+        "z": -5.5
+      },
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "repeat": {
+        "spacingX": 0,
+        "spacingZ": 3.5,
+        "countX": 1,
+        "countZ": 4
+      },
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 7,
+      "name": "town-tree",
+      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "position": {
+        "x": -8,
+        "y": -0.3,
+        "z": -8
+      },
+      "yawDegrees": 0,
+      "scale": 2,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 8,
+      "name": "town-tree",
+      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "position": {
+        "x": 8,
+        "y": -0.3,
+        "z": -8
+      },
+      "yawDegrees": 25,
+      "scale": 2,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 9,
+      "name": "town-tree",
+      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "position": {
+        "x": -8,
+        "y": -0.3,
+        "z": 6
+      },
+      "yawDegrees": 200,
+      "scale": 2,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 10,
+      "name": "town-tree",
+      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "position": {
+        "x": 8,
+        "y": -0.3,
+        "z": 6
+      },
+      "yawDegrees": 110,
+      "scale": 2,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 11,
+      "name": "town-bench",
+      "source": "sha256/d28e9d0063f38c4e8548faffb8b14cb6ba5c8e16a2484cb4835c6de3f480a137",
+      "position": {
+        "x": -2.6,
+        "y": -0.25,
+        "z": 0
+      },
+      "yawDegrees": 90,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 12,
+      "name": "town-bench",
+      "source": "sha256/d28e9d0063f38c4e8548faffb8b14cb6ba5c8e16a2484cb4835c6de3f480a137",
+      "position": {
+        "x": 2.6,
+        "y": -0.25,
+        "z": 0
+      },
+      "yawDegrees": 270,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 13,
+      "name": "town-planter",
+      "source": "sha256/29d5d2f1baea105e189149af85bddc7a62cd2e83edd1953f5f39177b22b12497",
+      "position": {
+        "x": -3,
+        "y": -0.49,
+        "z": 3.5
+      },
+      "yawDegrees": 0,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 14,
+      "name": "town-planter",
+      "source": "sha256/29d5d2f1baea105e189149af85bddc7a62cd2e83edd1953f5f39177b22b12497",
+      "position": {
+        "x": 3,
+        "y": -0.49,
+        "z": 3.5
+      },
+      "yawDegrees": 0,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    },
+    {
+      "id": 15,
+      "name": "town-mailbox",
+      "source": "sha256/5f59eb22133dea6bcfee800999db12ebf3a0ed4928d5fe49fd1330987a336cd7",
+      "position": {
+        "x": 4.5,
+        "y": -0.24,
+        "z": 4
+      },
+      "yawDegrees": 210,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null
+    }
+  ],
+  "lights": [
+    {
+      "position": {
+        "x": -5,
+        "y": 3.4,
+        "z": -5.5
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": -5,
+        "y": 3.4,
+        "z": -2
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": -5,
+        "y": 3.4,
+        "z": 1.5
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": -5,
+        "y": 3.4,
+        "z": 5
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": 5,
+        "y": 3.4,
+        "z": -5.5
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": 5,
+        "y": 3.4,
+        "z": -2
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": 5,
+        "y": 3.4,
+        "z": 1.5
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": 5,
+        "y": 3.4,
+        "z": 5
+      },
+      "color": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.38
+      },
+      "intensity": 1.8
+    },
+    {
+      "position": {
+        "x": 0,
+        "y": 3.2,
+        "z": -5.5
+      },
+      "color": {
+        "x": 1,
+        "y": 0.66,
+        "z": 0.34
+      },
+      "intensity": 1.9
+    },
+    {
+      "position": {
+        "x": 0,
+        "y": 5.5,
+        "z": 1.5
+      },
+      "color": {
+        "x": 0.92,
+        "y": 0.64,
+        "z": 0.42
+      },
+      "intensity": 1.3
+    },
+    {
+      "position": {
+        "x": 0,
+        "y": 4.5,
+        "z": -4
+      },
+      "color": {
+        "x": 0.88,
+        "y": 0.6,
+        "z": 0.4
+      },
+      "intensity": 0.9
+    },
+    {
+      "position": {
+        "x": 0,
+        "y": 2,
+        "z": 0
+      },
+      "color": {
+        "x": 0.55,
+        "y": 0.72,
+        "z": 0.92
+      },
+      "intensity": 1.2
+    }
+  ],
+  "walkOverrides": [],
+  "walkGrid": {
+    "originXRaw": -589824,
+    "originZRaw": -589824,
+    "cellSizeRaw": 16384,
+    "width": 72,
+    "height": 64,
+    "cells": "//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////9///////////9///////////9///////////9///////////9///////////9///////////9/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////HwD4//////8/AAD4//////8/AAD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAAAAPD//w8AAAAAAPD//w8AAAAAAPD//w8AAAAAAPD/",
+    "kind": null,
+    "rowStrideRaw": null
+  },
+  "movementLock": null,
+  "cameras": [],
+  "wiring": []
+}

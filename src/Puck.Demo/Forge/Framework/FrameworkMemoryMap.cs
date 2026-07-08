@@ -81,8 +81,19 @@ internal static class FrameworkMemoryMap {
     /// <summary>Frames left before the noise SFX voice advances to its next step.</summary>
     public const ushort SoundNoiseWait = 0xC0B2;
 
-    /// <summary>Framework scratch (0xC0B4..0xC0FF), free for module-internal temporaries.</summary>
+    /// <summary>Framework scratch (0xC0B4..0xC0EF), free for module-internal temporaries.</summary>
     public const ushort Scratch = 0xC0B4;
+
+    /// <summary>The 16-byte "victory share" source slot (0xC0F0..0xC0FF): the host SEEDS this cabinet's authored 128-bit
+    /// meta victory share here at boot (a per-cabinet <see cref="Sm83Emitter"/>-invisible poke, like the mode-swap boot
+    /// shim), and <see cref="VictoryModule"/> copies it verbatim into the top-16 SRAM win region on the game's win edge.
+    /// It is DELIBERATELY EXCLUDED from the boot work-RAM clear (the block-fill splits around it in
+    /// <see cref="FrameworkKernel.EmitBootPrologue"/>) so the host's seed survives the game's boot; a game never reads or
+    /// writes it (games own <see cref="GameRam"/> upward). A cabinet with no seeded share leaves it all-zero — the game
+    /// then converges the region on zero, which the room XOR never mistakes for a real share group.</summary>
+    public const ushort VictoryShareSource = 0xC0F0;
+    /// <summary>The victory-share source slot's width (a 128-bit gate = 16 bytes; matches <c>VictoryGate.RegionByteCount</c>).</summary>
+    public const int VictoryShareByteCount = 16;
 
     /// <summary>The 160-byte shadow OAM page the HRAM trampoline DMA-copies to the hardware OAM every VBlank.</summary>
     public const ushort ShadowOam = 0xC100;

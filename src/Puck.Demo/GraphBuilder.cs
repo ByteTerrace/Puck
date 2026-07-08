@@ -38,7 +38,13 @@ internal static class GraphBuilder {
                 immersed: (overworld.Immersed == true),
                 library: (overworld.Library ?? []),
                 serviceProvider: serviceProvider,
-                width: width
+                width: width,
+                // The boot-load world handle: the overworld resolves + commits it at boot so the room (and the reveal
+                // target) is that sculpted world, not the default room (see OverworldFrameSource.LoadBootWorld).
+                world: overworld.World,
+                // The far spawn cell (both axes) — the planet-scale coordinate-stability toggle (former
+                // PUCK_OVERWORLD_CELL). Null (the default) is the origin cell; normalized at the node.
+                cell: overworld.Cell
             ),
             WorldNode world => CreateWorldRootNode(
                 capturePath: capture,

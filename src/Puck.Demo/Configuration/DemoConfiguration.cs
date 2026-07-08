@@ -7,15 +7,18 @@ namespace Puck.Demo.Configuration;
 /// <summary>
 /// The demo's configuration composition root: it layers the run's configuration sources in the required precedence
 /// (scenario / <c>appsettings.json</c> &lt; environment variables &lt; command line) and binds the typed options
-/// (<see cref="DemoOptions"/>, <see cref="ScenarioOptions"/>, and the launcher's <c>PUCK_*</c> runtime toggles).
-/// <para>Every legacy <c>PUCK_X=value</c> invocation keeps working verbatim: rather than a bare prefix provider (whose
-/// stripped keys would not match the hierarchical option keys), a small explicit map turns each known <c>PUCK_*</c>
-/// variable into its configuration key, added as an in-memory source ABOVE the JSON files (so environment overrides
-/// file config) and BELOW the command-line <c>--scenario-set</c> overrides (so the command line wins).</para>
+/// (<see cref="ScenarioOptions"/> and the launcher's <c>PUCK_*</c> runtime toggles).
+/// <para>The demo's entire <c>Demo:*</c> / <c>PUCK_OVERWORLD_*</c> / <c>PUCK_COMPANION_*</c> option surface was REMOVED
+/// in the unification arc — every former env var is now a console verb (the scripted-console control plane) or a
+/// run-document field (<c>OverworldNode.World</c> / <c>OverworldNode.Cell</c> / per-console <c>startCart</c>). The env
+/// map below carries only the three LAUNCHER/engine diagnostic toggles that remain
+/// (<c>PUCK_PRESENT_TIMING</c>/<c>PUCK_GENLOCK</c>/<c>PUCK_TEST_DEVICE_LOSS</c>): a small explicit map turns each into
+/// its configuration key, added as an in-memory source ABOVE the JSON files (so environment overrides file config) and
+/// BELOW the command-line <c>--scenario-set</c> overrides (so the command line wins).</para>
 /// <para>
 /// THE CONFIGURATION VOCABULARY RULE, so a new type doesn't have to re-derive it: a config-bound POCO — one that
 /// <c>services.Configure&lt;T&gt;</c> binds straight from a configuration section — is named <c>*Options</c>
-/// (<see cref="DemoOptions"/>, <see cref="ScenarioOptions"/>). <see cref="Puck.Demo.HostSettings"/> is the one
+/// (<see cref="ScenarioOptions"/>). <see cref="Puck.Demo.HostSettings"/> is the one
 /// deliberate exception: it is DERIVED (resolved from the run document's host section plus CLI-flag fallback, then
 /// applied to the DI container and registered as its own singleton), not bound from a configuration section, so it
 /// keeps the <c>*Settings</c> name to signal that difference rather than pretending to be a POCO a binder produced.
@@ -24,7 +27,7 @@ namespace Puck.Demo.Configuration;
 /// wants an env var (e.g. <see cref="Puck.SdfVm.SdfEngineNode"/>'s <c>PUCK_TIMING</c>/<c>PUCK_RAY_QUERY</c> reads)
 /// gets an optional constructor argument that falls back to the environment read when the caller has nothing
 /// resolved to pass, rather than the reverse plumbing. A static accessor over an options object for a
-/// coupling-ceiling escape (<see cref="DemoOptionsAccessor"/>) is neither of the above — it owns no state — and is
+/// coupling-ceiling escape (<see cref="ScenarioAccessor"/>) is neither of the above — it owns no state — and is
 /// named for what it is (an accessor), not <c>*Settings</c>.
 /// </para>
 /// <para>
@@ -39,19 +42,6 @@ internal static class DemoConfiguration {
     // Each known PUCK_* environment variable -> the configuration key it feeds. Booleans that historically meant
     // "=1 turns it on" are normalized to "true"/"false" as they are copied in (see ReadEnvironmentOverrides).
     private static readonly (string Env, string Key, bool Boolean)[] s_environmentMap = [
-        ("PUCK_CREATOR_LOAD", "Demo:CreatorLoad", false),
-        ("PUCK_OVERWORLD_CREATOR", "Demo:Creator", true),
-        ("PUCK_OVERWORLD_DEBUG_PLAYERS", "Demo:DebugPlayers", false),
-        ("PUCK_OVERWORLD_CELL", "Demo:Cell", false),
-        ("PUCK_OVERWORLD_CAPTURE_FRAME", "Demo:CaptureFrame", false),
-        ("PUCK_OVERWORLD_CART", "Demo:Cart", false),
-        ("PUCK_OVERWORLD_DEBUG_BOOT", "Demo:DebugBoot", false),
-        ("PUCK_LINK_CABLE_PROBE", "Demo:LinkCableProbe", true),
-        ("PUCK_COMPANION_LOAD", "Demo:CompanionLoad", false),
-        ("PUCK_COMPANION_WIRE", "Demo:CompanionWire", false),
-        ("PUCK_COMPANION_FACE", "Demo:CompanionFace", false),
-        ("PUCK_WORLD_ROUNDTRIP", "Demo:WorldRoundtrip", true),
-        ("PUCK_CONSOLE_OPEN", "Demo:ConsoleOpen", false),
         ("PUCK_PRESENT_TIMING", "Launcher:LogPresentTiming", true),
         ("PUCK_GENLOCK", "Launcher:Genlock", false),
         ("PUCK_TEST_DEVICE_LOSS", "Launcher:SyntheticDeviceLossSeconds", false),
@@ -74,7 +64,7 @@ internal static class DemoConfiguration {
         }
 
         AddDemoSources(configuration: builder.Configuration, scenarioPath: scenarioPath, scenarioSets: scenarioSets);
-        AddDemoOptions(services: builder.Services, configuration: builder.Configuration);
+        AddScenarioOptions(services: builder.Services, configuration: builder.Configuration);
 
         return builder.Configuration.GetSection(key: ScenarioOptions.Section).GetValue<int>(key: nameof(ScenarioOptions.ExitAfterSeconds));
     }
@@ -101,9 +91,9 @@ internal static class DemoConfiguration {
         _ = configuration.AddInMemoryCollection(initialData: ParseScenarioSets(scenarioSets: scenarioSets));
     }
 
-    // Binds the demo + scenario options from configuration into the container.
-    private static void AddDemoOptions(IServiceCollection services, IConfiguration configuration) {
-        _ = services.Configure<DemoOptions>(config: configuration.GetSection(key: DemoOptions.Section));
+    // Binds the scenario options from configuration into the container (the demo's whole Demo:* option surface was
+    // removed in the unification arc; only the --scenario review harness's options remain).
+    private static void AddScenarioOptions(IServiceCollection services, IConfiguration configuration) {
         _ = services.Configure<ScenarioOptions>(config: configuration.GetSection(key: ScenarioOptions.Section));
     }
 

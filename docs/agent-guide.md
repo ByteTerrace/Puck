@@ -72,18 +72,24 @@ present cadence, device-lost, backend hot-switch — D3/D4 relaunch the exe as
   handle-import mechanism, exercised with a synthetic frame, is Post's
   `camera-share` stage (`--filter camera-share`).
 - The overworld (the default `Puck.Demo` run — see
-  [overworld-demo-plan.md](overworld-demo-plan.md); the demo's other faces are
-  `--run <document>`, which runs `world` documents live through the shared
-  renderer on the host backend, and `--rom <path>`, which synthesizes a
-  fullscreen one-machine world document) is GREENFIELD — verify demo work by
-  RUNNING it, not by a gate. It keeps exactly one OPTIONAL demo-resident
+  [overworld-demo-plan.md](overworld-demo-plan.md), whose top-section
+  "unification contract" is the demo's north star) is ONE session, not a menu
+  of launch modes: every capability is reachable in-game (a diegetic act, a
+  pad chord, or a console verb), never only behind a flag. The composition
+  root can ALSO load a bare `world` document (`--run <document>`, live through
+  the shared renderer on the host backend) or boot straight into an immersed
+  ROM (`--rom <path>`, synthesizing a fullscreen one-machine world document) —
+  these are developer/CI launch conveniences, not separate products. This is
+  GREENFIELD — verify demo work by RUNNING it, not by a gate. It keeps exactly
+  one OPTIONAL demo-resident
   self-check, `--validate-overworld` (pure-CPU determinism + replay), which you
   may run by hand (Puck.Post can't reference the demo). Only genuine ENGINE
   contracts — determinism/replay, the paged binding-profile resolver, and
   cross-backend world parity — live in the Puck.Post battery above; a demo
   feature is not promoted there unless the user explicitly asks (see the
-  anti-calcification doctrine, rule 5). The overworld's staged boot layouts are captured headlessly with
-  `PUCK_OVERWORLD_DEBUG_BOOT` + `PUCK_OVERWORLD_CAPTURE_FRAME` (env table below). Whole-app
+  anti-calcification doctrine, rule 5). The overworld's staged boot layouts are captured headlessly by piping a
+  console-verb script over stdin — `boot <i>` / `step <n>` / `settle` / `capture <png>` (see the console-verb
+  section below; the demo `PUCK_*` capture env vars are gone). Whole-app
   capture PNGs are only MARGINALLY stable across runs (tick allocation sits
   near a wall-clock boundary) — the pixel proof style is pane-vs-pane bit-lock
   WITHIN one capture, never cross-run file equality.
@@ -129,6 +135,23 @@ Batteries skip-with-note when they're absent.
 | jsmolka gba-tests / mGBA suite / AGS checker / commercial GBA ROMs | `PUCK_GBA_TESTROMS`, `PUCK_GBA_MGBA_SUITE`, `PUCK_GBA_AGS` (TCHK10 dump only), `PUCK_GBA_GAMES` |
 | GB/GBC test suites (blargg, mooneye) | `--roms` flag, else `PUCK_GB_TESTROMS` |
 
+## Driving the demo over stdin (the agent-facing control surface)
+
+Per the unification contract (rule 3,
+[overworld-demo-plan.md](overworld-demo-plan.md#the-unification-contract-read-first--the-north-star-for-this-arc)),
+the on-screen console and process **stdin** drive ONE command registry, and
+results echo to **stdout** — pipe a verb script (or `--script <file>`) into a
+run and read the echoed results. This is the agent-facing control +
+deterministic-testing surface: it is how a script or another agent reaches a
+demo capability (boot a cabinet, load a world, wire a companion's feed, spawn
+players, capture a frame) without a GUI and without a bespoke env var per
+capability, and it is how demo changes get verified — by RUNNING the demo,
+now reproducibly instead of by hand. The stdin→registry→stdout transport
+already exists in the launcher; verb COVERAGE (naming a console verb for
+every capability below) is the in-progress work — see the migration table in
+the unification contract for which verbs replace which env vars today vs. as
+TODOs.
+
 ## Reviewing a creation: the scenario harness (THE capture recipe)
 
 To photograph a `puck.creation.v1` creation, do NOT hand-roll env vars — use
@@ -157,30 +180,47 @@ in configuration precedence. Scenario files live in `src/Puck.Demo/scenarios/`.
 
 The env vars below remain the low-level hooks (they are a configuration
 provider now) — reach for them for room/layout/boot captures, not for
-creation review.
+creation review. As with the rest of the table below, prefer the console-verb
+form (piped over stdin) where one already exists.
 
-## Environment variables
+## Environment variables — the demo `PUCK_*` surface is GONE
+
+Per the unification contract (rule 2), **the demo's entire `PUCK_*`
+environment surface was REMOVED** (the unification arc's Slice 3). There is no
+`PUCK_OVERWORLD_*`, `PUCK_COMPANION_*`, `PUCK_CREATOR_LOAD`,
+`PUCK_LINK_CABLE_PROBE`, `PUCK_WORLD_ROUNDTRIP`, or `PUCK_CONSOLE_OPEN` any
+more — setting one is inert. Reach every former capability through a **console
+verb** (piped over stdin, per the section above) or a **run-document field**:
+
+- Driving / capture: `boot <i>`, `cart <i> <type>`, `reveal`, `link <i> <j>`,
+  `player.add` / `join`, `capture <png>` (after `step <n>` / `settle`), `state`.
+- Authoring: `creator`, `creator.load <name>`, `companion.add`, `world.wire`,
+  `companion.face`, `world.verify`.
+- Durable config: the overworld node's `world` and `cell` fields (and each
+  console's cart — set live with `cart`).
+- **The 3D-capture recipe** (was `PUCK_OVERWORLD_CREATOR=1`): the demo boots
+  seated INSIDE a brick game, so a naive `--capture` photographs the fullscreen
+  brick pane. To shoot the SDF room, drive `creator` (or a `--scenario`) so the
+  authoring view renders — the workbench subject and companions render there.
+  For a settled deterministic shot, `boot`/`step`/`settle` then `capture <png>`.
+
+The authoritative migration table lives in
+[overworld-demo-plan.md](overworld-demo-plan.md#the-unification-contract-read-first--the-north-star-for-this-arc).
+
+Non-demo **engine / launcher diagnostics** are a separate concern and are
+UNTOUCHED (these are not in the demo `Demo:*` config; three are still mapped as
+launcher toggles):
 
 | Variable | Effect |
 |---|---|
 | `PUCK_TIMING=1` | Per-pass GPU-ms timestamps + share, both backends (document: `host.timing`) |
 | `PUCK_RAY_QUERY` | Permit/deny the ray-query path (document: `host.rayQuery`) |
-| `PUCK_GENLOCK=0` | Disable the genlock phase-align control law (document: `host.genlock`) |
-| `PUCK_PRESENT_TIMING` | Log measured present intervals |
+| `PUCK_GENLOCK=0` | Disable the genlock phase-align control law (document: `host.genlock`; launcher toggle) |
+| `PUCK_PRESENT_TIMING` | Log measured present intervals (launcher toggle) |
+| `PUCK_TEST_DEVICE_LOSS=<sec>` | Synthetic device-loss after N seconds (launcher toggle; used by Puck.Post) |
 | `PUCK_D3D12_DEBUG` | Opt-in D3D12 GPU validation layer — **see gotcha below** |
 | `PUCK_PARITY_STRICT=1` | Opt into the STRICT pixel-perfect parity calibrations (the long-term ideal). The default posture is RELAXED: cross-backend gates keep only the mean/spread guards a real divergence cannot dodge and shrug at FP-noise classes (±1 redistribution, boundary-winner flips), which re-roll with every shader-codegen change. Both `ParityThresholds` copies (Demo + Post) honor it |
-| `PUCK_CAPTURE_FRAME=N` | Delay the one-shot `--capture` to the Nth produced frame on a `world`-document run (the engine node's capture; overworld runs use their own variable below) |
-| `PUCK_OVERWORLD_CAPTURE_FRAME=N` | Overworld runs: delay the one-shot `--capture` to the Nth produced frame — the plain `--capture` grabs frame 0 (black, pre-boot). Frames accrue ≈25–40/s of wall time (startup + emulators) — keep N ≲ 200 and give `--exit-after-seconds` headroom. **The deterministic-screenshot recipe**: this + `--capture <png>` (+ `PUCK_CREATOR_LOAD` for creator scenes) |
-| `PUCK_OVERWORLD_DEBUG_BOOT=t0,t1,t2` | Boot overworld console 0,1,2… at those sim ticks (240 ticks/s) — walks every layout stage headlessly for captures |
-| `PUCK_OVERWORLD_DEBUG_PLAYERS=N` | Bare-room overworld only: spawn N scripted players that walk apart (split-screen capture without controllers) |
-| `PUCK_OVERWORLD_CELL=N` | Place the overworld room at a far world cell (planet-scale coordinate demo) |
-| `PUCK_OVERWORLD_CREATOR=1` | Enter creator mode at startup (headless authoring screenshots). **The 3D-capture recipe**: the demo BOOTS SEATED INSIDE A BRICK GAME, so a naive `--capture` photographs the fullscreen brick pane — set this on EVERY capture run that wants the SDF room; companions and the workbench subject both render in that view |
-| `PUCK_CREATOR_LOAD=<name-or-path>` | Load a saved creation (a `./creations/*.creation.json` name or a file path) and enter creator mode at startup — the headless proof hook for creator scenes |
-| `PUCK_COMPANION_LOAD=<names>` | Spawn comma-separated saved creations as wandering room companions at boot (resolves CAS refs, then `./creations/`) — the headless companion-capture hook. Locomotion (walk/swim) comes from each creation's behavior manifest |
-| `PUCK_COMPANION_WIRE=<screen>:<source>` | Headless twin of the `world.wire` verb (keyboardless captures): route a feed onto a screen, e.g. `0:named:lure` shows the loaded fish's lure camera feed on cabinet screen 0. Comma-separated, repeatable |
-| `PUCK_COMPANION_FACE=<index>:<feed\|auto>` | Headless twin of the `companion.face` verb: pin a companion's face to a feed name (1-based index), e.g. `1:lure`, or `1:auto` to resume the hail-radius tune-in. Comma-separated, repeatable |
-| `PUCK_WORLD_ROUNDTRIP=1` | Boot-time bit-for-bit proof for the world sculptor: save the live world (through the walk-grid bake), reload from disk, byte-compare — prints `[world-roundtrip] MATCH/MISMATCH` to stderr. Never a gate |
-| `PUCK_LINK_CABLE_PROBE=1` | Fake a linked cabinet pair (0,1) so the diegetic link cable renders headlessly — presentation-debug only |
+| `PUCK_CAPTURE_FRAME=N` | Delay the one-shot `--capture` to the Nth produced frame on a `world`-document run (the engine node's capture; the `--run`-launch developer/CI affordance) |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Turn `--forge-flagships` into the content-UPDATE mode: rewrite `docs/examples/creations/*.creation.json` from the recipes (the add-a-field ritual for creation-schema evolutions). Default mode stays the loud byte-identical assertion |
 
 ## Hardware gotchas (hard-won; verify before "fixing")
@@ -376,11 +416,12 @@ partial delivery are the real hazard, git is the rollback).
 4. Analyzer-ceiling warnings: CA1502/CA1506 run as errors and several hot
    types sit at EXACT limits; name the repo's escapes (frame-source
    composition, static logic classes, `*CliSeams`) — never suppression.
-5. The VERIFICATION recipe, concretely: which runs to make (this doc's env
-   table + the scenario harness), what "working" looks like, and the
-   standing rule — demo work is verified by RUNNING, engine work by the
-   Post battery. Include the capture gotcha (`PUCK_OVERWORLD_CREATOR=1` for
-   any 3D capture) in every brief that captures.
+5. The VERIFICATION recipe, concretely: which runs to make (piped console-verb
+   scripts over stdin + the scenario harness), what "working" looks like, and
+   the standing rule — demo work is verified by RUNNING, engine work by the
+   Post battery. Include the capture gotcha (drive `creator` or a `--scenario`
+   so the SDF room renders, not the fullscreen brick pane) in every brief that
+   captures.
 6. Commit discipline: logical commits in the worktree, hand-written
    messages, no `Co-Authored-By` trailers.
 

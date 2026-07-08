@@ -15,6 +15,13 @@ machinery that Volley and Chroma once hand-assembled on was retired with their r
 > `experimental/Puck.HumbleGamingBrickRom` stays mechanical. Greenfield discipline holds: verify
 > by running the forge tools, never by adding a gate.
 
+> **In-game reflection** (the [unification contract](../../../../docs/overworld-demo-plan.md#the-unification-contract-read-first--the-north-star-for-this-arc)):
+> the built-in games this framework powers (Brickfall, Volley, Chroma) are reached
+> in-session — walk up to a cabinet, Cycle to the cart, boot it — with no restart. The
+> `--forge-*` CLIs (e.g. `--forge-brickfall`) are the headless CI/proof twin that builds
+> and self-verifies the same cartridge the in-game path boots, not the only way to
+> produce or reach one.
+
 ## Module map
 
 | File | Role |

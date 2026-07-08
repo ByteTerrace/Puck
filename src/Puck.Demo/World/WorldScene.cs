@@ -198,6 +198,29 @@ public sealed class WorldScene {
     public IReadOnlyList<WorldWalkOverride> WalkOverrides => m_walkOverrides;
     /// <summary>The placed camera eyes, in insertion order.</summary>
     public IReadOnlyList<CameraEye> Cameras => m_cameras;
+
+    /// <summary>Resolves a placement's LIVE world pose by id — position plus heading in radians — so a camera eye
+    /// anchored to that placement rides it as it is dragged/rotated (Move/Rotate mutate <see cref="m_placements"/> in
+    /// place). Returns <see langword="false"/> when no placement has the id (the caller keeps the zero pose).</summary>
+    /// <param name="placementId">The placement id the eye is anchored to (<see cref="CameraEye.AnchorId"/>).</param>
+    /// <param name="position">The placement's live world-space origin, or zero when unresolved.</param>
+    /// <param name="yawRadians">The placement's live heading in radians, or zero when unresolved.</param>
+    /// <returns>Whether a placement with the id exists.</returns>
+    public bool TryResolvePlacementPose(int placementId, out Vector3 position, out float yawRadians) {
+        foreach (var placement in m_placements) {
+            if (placement.Id == placementId) {
+                position = placement.Position;
+                yawRadians = float.DegreesToRadians(degrees: placement.YawDegrees);
+
+                return true;
+            }
+        }
+
+        position = Vector3.Zero;
+        yawRadians = 0f;
+
+        return false;
+    }
     /// <summary>The screen-surface wiring table (screen index → the source it displays). At most one entry per screen
     /// index; a screen with no entry falls back to its default behavior (its brick viewport / flat material).</summary>
     public IReadOnlyDictionary<int, ScreenWireSource> Wiring => m_wiring;

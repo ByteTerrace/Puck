@@ -1,0 +1,696 @@
+{
+  "schema": "puck.creation.v1",
+  "name": "town-grocery",
+  "intent": "Object",
+  "bakeStyle": "classic",
+  "palette": [
+    {
+      "albedo": {
+        "x": 0.52,
+        "y": 0.2,
+        "z": 0.16
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.4,
+        "y": 0.15,
+        "z": 0.13
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.42,
+        "y": 0.28,
+        "z": 0.16
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.26,
+        "y": 0.17,
+        "z": 0.1
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.98,
+        "y": 0.86,
+        "z": 0.48
+      },
+      "emissive": 1.5,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.72,
+        "y": 0.2,
+        "z": 0.18
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.9,
+        "y": 0.86,
+        "z": 0.74
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.55,
+        "y": 0.38,
+        "z": 0.2
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.5171839
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.66308224,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.8089806,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.74512255,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.5992242
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.45332584,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.39257106,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.53847086,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    }
+  ],
+  "shapes": [
+    {
+      "id": 0,
+      "name": "body",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.12,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.5,
+        "y": 2.7941177,
+        "z": 2.0588236
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 1,
+      "name": "cornice",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 2.06,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.7058823,
+        "y": 0.2352941,
+        "z": 2.235294
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 2,
+      "name": "parapet",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 2.16,
+        "z": 0.66
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.5882351,
+        "y": 0.2352941,
+        "z": 0.20588236
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 3,
+      "name": "shopFrame",
+      "type": "Box",
+      "position": {
+        "x": -0.28,
+        "y": 0.95,
+        "z": 0.7
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.2941176,
+        "y": 1.2352941,
+        "z": 0.2352941
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 4,
+      "name": "shopGlass",
+      "type": "Box",
+      "position": {
+        "x": -0.28,
+        "y": 0.95,
+        "z": 0.76
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.0588236,
+        "y": 1,
+        "z": 0.2
+      },
+      "material": 4,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 5,
+      "name": "shopMullionV",
+      "type": "Box",
+      "position": {
+        "x": -0.28,
+        "y": 0.95,
+        "z": 0.8
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 1,
+        "z": 0.2
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 6,
+      "name": "shopMullionH",
+      "type": "Box",
+      "position": {
+        "x": -0.28,
+        "y": 0.95,
+        "z": 0.8
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.0588236,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 7,
+      "name": "doorFrame",
+      "type": "Box",
+      "position": {
+        "x": 0.52,
+        "y": 0.82,
+        "z": 0.7
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.7058823,
+        "y": 1.4705882,
+        "z": 0.2352941
+      },
+      "material": 3,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 8,
+      "name": "doorPanel",
+      "type": "Box",
+      "position": {
+        "x": 0.52,
+        "y": 0.78,
+        "z": 0.76
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5,
+        "y": 1.2352941,
+        "z": 0.2
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 9,
+      "name": "awningRed",
+      "type": "Box",
+      "position": {
+        "x": -0.42,
+        "y": 1.42,
+        "z": 0.86
+      },
+      "rotation": {
+        "isIdentity": false,
+        "x": 0,
+        "y": 0,
+        "z": 0.15643448,
+        "w": 0.98768836
+      },
+      "scale": {
+        "x": 1.2352941,
+        "y": 0.2,
+        "z": 0.76470584
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 10,
+      "name": "awningCream",
+      "type": "Box",
+      "position": {
+        "x": 0.4,
+        "y": 1.42,
+        "z": 0.86
+      },
+      "rotation": {
+        "isIdentity": false,
+        "x": 0,
+        "y": 0,
+        "z": 0.15643448,
+        "w": 0.98768836
+      },
+      "scale": {
+        "x": 1.1764706,
+        "y": 0.2,
+        "z": 0.76470584
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 11,
+      "name": "valanceRed",
+      "type": "Box",
+      "position": {
+        "x": -0.42,
+        "y": 1.24,
+        "z": 1.08
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.2352941,
+        "y": 0.2647059,
+        "z": 0.2
+      },
+      "material": 5,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 12,
+      "name": "valanceCream",
+      "type": "Box",
+      "position": {
+        "x": 0.4,
+        "y": 1.24,
+        "z": 1.08
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 1.1764706,
+        "y": 0.2647059,
+        "z": 0.2
+      },
+      "material": 6,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 13,
+      "name": "signArm",
+      "type": "Box",
+      "position": {
+        "x": 0.86,
+        "y": 1.62,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5882353,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "material": 3,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 14,
+      "name": "signPlaque",
+      "type": "Box",
+      "position": {
+        "x": 1.02,
+        "y": 1.44,
+        "z": 0.72
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.5294118,
+        "z": 0.4705882
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 15,
+      "name": "crate0",
+      "type": "Box",
+      "position": {
+        "x": -0.7,
+        "y": 0.55,
+        "z": 0.95
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5882353,
+        "y": 0.5588235,
+        "z": 0.5588235
+      },
+      "material": 7,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 16,
+      "name": "crate1",
+      "type": "Box",
+      "position": {
+        "x": -0.34,
+        "y": 0.53,
+        "z": 1
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5294118,
+        "y": 0.5,
+        "z": 0.5
+      },
+      "material": 7,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    },
+    {
+      "id": 17,
+      "name": "crate2",
+      "type": "Box",
+      "position": {
+        "x": -0.6,
+        "y": 0.86,
+        "z": 0.92
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.44117647,
+        "y": 0.4117647,
+        "z": 0.4117647
+      },
+      "material": 7,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0
+    }
+  ],
+  "frames": null,
+  "chains": null,
+  "cameras": null,
+  "behavior": null
+}

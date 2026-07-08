@@ -40,6 +40,7 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
     private BakePlan? m_plan;
     private List<RasterizedView> m_rasterized = [];
     private int m_viewIndex;
+    private bool m_viewSubmitted;
     private Task<BakeResult>? m_cpuTask;
     private string? m_lastErrorMessage;
 
@@ -67,7 +68,10 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
         try {
             TickCore(context: in context);
         } catch (Exception exception) {
-            // Degrade, keep the last image, and skip this revision so a deterministic failure never hot-loops.
+            // Degrade, keep the last image, and skip this revision so a deterministic failure never hot-loops. Drain
+            // any pipelined frame first so the shared engine's single-in-flight guard is clear for the next bake.
+            m_rasterizer.DrainPending();
+            m_viewSubmitted = false;
             m_state = BakeState.Idle;
             m_cpuTask = null;
             m_lastBakedRevision = m_snapshotRevision;
@@ -127,12 +131,18 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
         m_snapshotRevision = revision;
         m_rasterized = new List<RasterizedView>(capacity: m_plan.Views.Count);
         m_viewIndex = 0;
+        m_viewSubmitted = false;
         m_state = BakeState.Rasterizing;
     }
 
-    // One view per produced frame; a mid-bake edit abandons the pass (the debounce restarts it from the new state).
+    // One view per produced frame, in two phases: BEGIN the view's non-blocking fenced rasterize once, then COMPLETE
+    // it on a later frame when the readback lands (the copy is pipelined, so it never idles the shared present queue).
+    // A mid-bake edit abandons the pass (the debounce restarts it from the new state) — but first drains any pipelined
+    // frame so the shared engine's single-in-flight guard is clear before it is reused.
     private void StepRasterize(in FrameContext context) {
         if (m_scene.Revision != m_snapshotRevision) {
+            m_rasterizer.DrainPending();
+            m_viewSubmitted = false;
             m_state = BakeState.Idle;
 
             return;
@@ -142,7 +152,19 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
             return;
         }
 
-        m_rasterized.Add(item: m_rasterizer.Rasterize(device: device, gpu: gpu, plan: m_plan!, viewIndex: m_viewIndex));
+        if (!m_viewSubmitted) {
+            m_rasterizer.BeginRasterize(device: device, gpu: gpu, plan: m_plan!, viewIndex: m_viewIndex);
+            m_viewSubmitted = true;
+
+            return;
+        }
+
+        if (!m_rasterizer.TryCompleteRasterize(plan: m_plan!, viewIndex: m_viewIndex, view: out var view)) {
+            return;
+        }
+
+        m_rasterized.Add(item: view);
+        m_viewSubmitted = false;
         m_viewIndex++;
 
         if (m_viewIndex >= m_plan!.Views.Count) {

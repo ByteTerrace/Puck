@@ -27,7 +27,7 @@ namespace Puck.Demo.Overworld;
 /// cartridge, or control moves purely by changing the per-frame dynamic-transform buffer (a free player slot's box
 /// rides a hidden position) and the per-frame view regions.
 /// </summary>
-public sealed class OverworldFrameSource : ISdfFrameSource {
+public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldControlHost {
     // The default per-console accent palette, by console index — matching the default document's dmg/cgb/agb
     // console order. Presentation only; see ConsoleAccentPalette for the shared source.
     private static readonly Vector3[] DefaultAccents = [
@@ -92,6 +92,35 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     private const float CableSagDrop = 0.6f;
     private const float CableSmooth = 0.04f;
 
+    // THE DIEGETIC WORKBENCH (Stage 3 of the self-editing arc): a room-only prop — a desk with a terminal screen panel
+    // — that reveals the world is EDITABLE. DARK/powered-off by default; when the editor reveal fires (the meta-victory
+    // "complete X games", or the `reveal editor` verb) it POWERS ON — its panel lights with an emissive CRT glow eased
+    // in over a transition, so it reads as "the workshop opens." Room-only because the four view slots are all spoken
+    // for (room + 3 cabinet panes) — the workbench is never a paned cabinet, only an SDF prop in the room scene.
+    private const float WorkbenchDeskHalfWidth = 0.7f;   // the desk slab's half-width (X)
+    private const float WorkbenchDeskHalfDepth = 0.4f;   // half-depth (Z) — the player faces its −X front from the room
+    private const float WorkbenchDeskHalfHeight = 0.06f; // a thin slab desktop
+    private const float WorkbenchDeskTopY = 0.85f;       // the desktop height above the floor
+    private const float WorkbenchLegHalfHeight = 0.4f;   // the two support legs' half-height (floor → under the desktop)
+    private const float WorkbenchPanelHalfWidth = 0.5f;  // the terminal screen panel's half-width
+    private const float WorkbenchPanelHalfHeight = 0.36f;// its half-height (a stout CRT terminal, ~10:7)
+    private const float WorkbenchPanelHalfDepth = 0.06f; // the panel's thickness
+    private const float WorkbenchPanelRiseY = 0.5f;      // how far the panel center sits above the desktop
+    // The monitor tilts BACK (face up and toward the room) so its glowing face is caught both by a player approaching
+    // at floor level AND by the high isometric reveal camera — a screen laid back like a drafting terminal.
+    private const float WorkbenchPanelTiltRadians = (26f * (MathF.PI / 180f));
+    private const float WorkbenchInstanceRadius = 1.5f;  // covers desk + legs + panel (the farthest member ~1.4 up-left)
+    // The lit panel's peak emissive strength (albedo * emissive adds self-illumination, town-lamp style) — sized so a
+    // fully-powered workbench reads clearly as the one lit object in the dim room, its CRT teal still showing (a higher
+    // value blows the face to flat white).
+    private const float WorkbenchLitEmissive = 1.5f;
+    // How fast the power-on glow eases in once EditorRevealed latches (per second) — ~0.7 s to full, matching the
+    // reveal's transition feel. The program rebuilds while the glow ramps (a handful of rebuilds, exactly a boot's
+    // cost profile); once at 0 or 1 it is settled and stops rebuilding. Quantized into buckets for the rebuild key so
+    // the ramp rebuilds a bounded number of times, never once per frame indefinitely.
+    private const float WorkbenchGlowRate = 1.45f;
+    private const int WorkbenchGlowBuckets = 12;
+
     /// <summary>The engine's screen-surface slot capacity (mirrors <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>
     /// as a primitive) — exposed so the render node, at its analyzer coupling ceiling, never needs to name
     /// <see cref="SdfProgramBuilder"/> itself just to bound its generic headroom loop.</summary>
@@ -142,6 +171,13 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // content moves it, and CaptureFrame rebuilds (a creator MOVE never does — it rides the dynamic transforms).
     private int m_builtProgramRevision = -1;
     private float m_time;
+    // THE WORKBENCH power-on glow (Stage 3): 0 = dark/locked, 1 = fully lit. It eases toward the target the editor
+    // unlock implies (EditorRevealed → 1) on the render clock in CaptureFrame — presentation only, never hashed. The
+    // program's workbench panel bakes an emissive proportional to this, so the ramp rebuilds the program (like a boot)
+    // as it crosses quantized buckets; m_builtWorkbenchBucket is the bucket the current program baked, so a settled
+    // glow (bucket unchanged) never rebuilds. The FALLBACK bucket (-1) forces the first build.
+    private float m_workbenchGlow;
+    private int m_builtWorkbenchBucket = -1;
     // CREATOR-MODE presentation state (never hashed — the deterministic sim knows nothing of it): the authored scene
     // model, its program/transform emitter, and the pad state machine that edits it. This source is the composition
     // point for the creator objects — the render node drives them through thin forwarders so its own type coupling
@@ -298,6 +334,24 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         // (the player IS the cursor — steep pitch, generous distance, so a street reads while stamping). Both ride
         // the director's one eased CreatorCameraSource seam (this source is the composition point).
         m_director.CreatorCameraSource = () => (m_creatorController.CameraFrame ?? WorldSculptCameraFrame());
+        // When a world (the town) is loaded, the fourth-wall reveal frames the WHOLE lot rather than the fixed
+        // default-room overview — centred on the lot, pulled back to its bounds. Null while no world is applied, so
+        // the default room's reveal framing is byte-unchanged.
+        m_director.RoomFramingSource = () => ((m_appliedWorldCommit is null)
+            ? (ScreenLayoutDirector.RoomFraming?)null
+            : new ScreenLayoutDirector.RoomFraming(
+                Center: new Vector3((0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)), (m_room.FloorY + 0.5f), (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))),
+                HalfDepth: (0.5f * (m_room.BoundsMax.Y - m_room.BoundsMin.Y)),
+                HalfWidth: (0.5f * (m_room.BoundsMax.X - m_room.BoundsMin.X))
+            ));
+        // Drive each pane camera from its cabinet's diegetic-screen center + the overworld's per-console closeness. The
+        // screen center is a fixed room-local position; render-relative equals local here (the render origin is the
+        // spawn anchor at local zero), so it shares the space of the active player positions the director frames.
+        // Assigned ONCE: the lambda resolves current instance state (m_room, PaneCloseness) at INVOKE time (each
+        // Compose), so it never needs per-frame recreation — a fresh capturing delegate every frame was pure churn.
+        m_director.PaneCameraSource = paneIndex => ((paneIndex >= 0) && (paneIndex < m_room.Consoles.Count)
+            ? (ScreenCenterLocal(consoleIndex: paneIndex), (PaneCloseness?.Invoke(paneIndex) ?? 0f), ScreenHalfHeightLocal(consoleIndex: paneIndex))
+            : ((Vector3, float, float)?)null);
 
         // The WORLD SCULPTOR: the scene/renderer/controller trio mirrors the creator pool's composition exactly —
         // this source is the composition point, the node only toggles the mode and forwards the creating slot's pad.
@@ -333,113 +387,44 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
 
     }
 
-    // The boot-time headless capture aids, driven from the bound demo options (formerly the PUCK_COMPANION_LOAD +
-    // PUCK_WORLD_ROUNDTRIP environment reads) — invoked once from InstallScenario after the source is composed.
-    private void SpawnHeadlessAids(string? companionFace, string? companionLoad, string? companionWire, bool worldRoundtrip) {
-        // Comma-separated creation names/hashes spawn as companions at boot (the headless capture hook, mirroring the
-        // creator-load aid). Locomotion (walk/swim) is DEFERRED to each creation's behavior manifest — the loaded fish
-        // swims because its manifest says so, no explicit token needed.
-        if (!string.IsNullOrEmpty(value: companionLoad)) {
-            foreach (var companionName in companionLoad.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))) {
-                if (CompanionState.ResolveDocument(nameOrHash: companionName, store: m_worldStore) is { } companionDocument) {
-                    _ = m_companions.Add(companion: new CompanionState(bounds: CompanionBounds, document: companionDocument, spawnPosition: CompanionSpawnPosition(rosterIndex: m_companions.Companions.Count)));
-                    Console.Error.WriteLine(value: $"[companion: '{companionDocument.Name}' joined the room{(LocomotionNote(document: companionDocument))}]");
-                }
-                else {
-                    Console.Error.WriteLine(value: $"[companion: '{companionName}' did not resolve — creator.save it first]");
-                }
-            }
-        }
-
-        // Headless world.wire aids (the keyboardless capture twin of the console verb): "<screen>:<source>", e.g.
-        // "0:named:lure" shows the loaded fish's lure feed on cabinet screen 0. Applied to the live world scene's
-        // wiring table (presentation only — never crosses the sim seam).
-        ApplyHeadlessWires(companionWire: companionWire);
-
-        // Headless companion.face aids (the keyboardless twin of that verb): "<index>:<feed|auto>", exercising the
-        // face-feed pin/auto path without a keyboard.
-        ApplyHeadlessFaces(companionFace: companionFace);
-
-        DoWorldRoundtrip(worldRoundtrip: worldRoundtrip);
-    }
-
-    // Applies the headless companion.face capture aids: "<index>:<feed|auto>" (1-based). "auto" resumes the tune-in;
-    // any other token pins the face to that feed name.
-    private void ApplyHeadlessFaces(string? companionFace) {
-        if (string.IsNullOrEmpty(value: companionFace)) {
+    // The boot-time world load: when the run document names a world handle (OverworldNode.World), resolve it from
+    // ./worlds/ (or a direct path) plus the CAS store and COMMIT it, so the first tick-boundary ConsumePendingWorldLoad
+    // swaps the room, collision, and walk grid to that sculpted world BEFORE the player ever moves — the town is
+    // already live at boot; the fourth-wall reveal reframes the camera OUT of the intro machines and INTO that
+    // already-loaded world (rung 2 of the unification contract's reveal ladder — the world the DATA FILE defines).
+    // Mirrors WorldCommands.Load's resolve-then-commit exactly, but GRACEFUL at boot: an unreadable handle or a
+    // partially-resolved world (a creation missing from the store) narrates to stderr and leaves the plain room,
+    // rather than crashing the boot (the bit-for-bit doctrine still forbids a PARTIAL load — it's all or nothing,
+    // just non-fatal here). The live mid-session equivalent is the world.load console verb.
+    private void LoadBootWorld(string? handle) {
+        if (string.IsNullOrWhiteSpace(value: handle)) {
             return;
         }
 
-        foreach (var entry in companionFace.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))) {
-            var split = entry.IndexOf(value: ':');
+        if (!WorldDocumentStore.TryLoad(nameOrPath: handle, out var bootDocument, out var loadError)) {
+            Console.Error.WriteLine(value: $"[boot-world: '{handle}' is unreadable ({loadError}) — the room stays plain]");
 
-            if ((split <= 0) || !int.TryParse(s: entry[..split], result: out var oneBased) || (oneBased < 1) || (oneBased > m_companions.Companions.Count)) {
-                Console.Error.WriteLine(value: $"[companion.face: '{entry}' is not <index>:<feed|auto> for a loaded companion]");
-
-                continue;
-            }
-
-            var token = entry[(split + 1)..];
-            var auto = string.Equals(a: token, b: "auto", comparisonType: StringComparison.OrdinalIgnoreCase);
-
-            m_companions.Companions[oneBased - 1].SetFaceFeed(feedName: (auto ? null : token));
-            Console.Error.WriteLine(value: $"[companion.face: #{oneBased} = {(auto ? "auto" : token)}]");
-        }
-    }
-
-    // Applies the headless world.wire capture aids to the live world scene (see the PUCK_COMPANION_WIRE option). Each
-    // entry is "<screen>:<source>", split on the FIRST colon only (the source itself carries a colon: named:lure).
-    private void ApplyHeadlessWires(string? companionWire) {
-        if (string.IsNullOrEmpty(value: companionWire)) {
             return;
         }
 
-        foreach (var entry in companionWire.Split(separator: ',', options: (StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))) {
-            var split = entry.IndexOf(value: ':');
+        if (bootDocument is not { } document) {
+            Console.Error.WriteLine(value: $"[boot-world: nothing readable at '{handle}' — the room stays plain]");
 
-            if ((split <= 0) || !int.TryParse(s: entry[..split], result: out var screenIndex)) {
-                Console.Error.WriteLine(value: $"[companion.wire: '{entry}' is not <screen>:<source> — e.g. 0:named:lure]");
-
-                continue;
-            }
-
-            if (!WorldCommands.TryParseWireSource(text: entry[(split + 1)..], out var source, error: out var error)) {
-                Console.Error.WriteLine(value: $"[companion.wire: {error}]");
-
-                continue;
-            }
-
-            if (m_worldScene.WireScreen(screenIndex: screenIndex, source: source)) {
-                Console.Error.WriteLine(value: $"[companion.wire: screen {screenIndex} ← {source}]");
-            }
-            else {
-                Console.Error.WriteLine(value: $"[companion.wire: screen {screenIndex} is out of range]");
-            }
+            return;
         }
-    }
 
-    // A one-word locomotion note for the companion-join narration (from the creation's behavior manifest).
-    private static string LocomotionNote(CreationDocument document) =>
-        (document.Behavior?.Locomotion switch {
-            "swim" => " — swimming",
-            "hover" => " — hovering",
-            _ => "",
-        });
+        _ = WorldDocumentStore.TryResolvePlacementSources(document: document, missing: out var missing, store: m_worldStore);
 
-    private void DoWorldRoundtrip(bool worldRoundtrip) {
-        // The hands-off bit-for-bit proof, observable in an --exit-after-seconds run — save the (possibly empty) live
-        // world through the full bake, reload the bytes from disk, and byte-compare. Never a gate; a boot-time stderr
-        // verdict for eyeballs and captures.
-        if (worldRoundtrip) {
-            var (savedPath, savedHash) = m_worldScene.Save(store: m_worldStore);
-            var reloaded = WorldDocumentStore.Load(nameOrPath: savedPath);
-            var committedJson = ((m_worldScene.CommittedDocument is { } committedDocument) ? WorldDocumentStore.ToJson(document: committedDocument) : "");
-            var reloadedJson = ((reloaded is { } reloadedDocument) ? WorldDocumentStore.ToJson(document: reloadedDocument) : null);
+        if (missing.Count > 0) {
+            Console.Error.WriteLine(value: $"[boot-world: '{handle}' refused — {missing.Count} placement(s) reference creations missing from the store (ids: {string.Join(separator: ", ", values: missing)}); the room stays plain]");
 
-            Console.Error.WriteLine(value: (string.Equals(a: committedJson, b: reloadedJson, comparisonType: StringComparison.Ordinal)
-                ? $"[world-roundtrip] MATCH — save→reload byte-identical ({savedHash ?? savedPath})"
-                : $"[world-roundtrip] MISMATCH — the reloaded bytes differ from the committed save ({savedPath}); the bit-for-bit doctrine is broken"));
+            return;
         }
+
+        var loaded = m_worldScene.LoadDocument(document: document, store: m_worldStore);
+
+        m_worldScene.MarkCommitted(document: document);
+        Console.Error.WriteLine(value: $"[boot-world: '{document.Name}' — {loaded} placement(s) applying on the first tick]");
     }
 
     /// <summary>The ROOM view's normalized region as of the most recent <see cref="CaptureFrame"/> — the rect the
@@ -494,14 +479,21 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         ResolveScreenMux(linkedPair: linkedPair);
         PlanDiegeticFeeds();
 
+        // Ease the workbench power-on glow toward the editor unlock (revealed → 1, else 0) on the render clock; a
+        // crossed quantized bucket rebuilds the program (its panel bakes an emissive proportional to the glow), so the
+        // power-on reads as an eased "the workshop opens" rather than a hard cut. Presentation only — never hashed.
+        AdvanceWorkbenchGlow(deltaSeconds: deltaSeconds);
+
         var bootedMask = m_world.BootedMask;
         var activePlayerMask = ActivePlayerMask();
-        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair));
+        var workbenchBucket = WorkbenchGlowBucket();
+        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (workbenchBucket != m_builtWorkbenchBucket) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair));
 
         if (programChanged) {
             m_program = BuildProgram(bootedMask: bootedMask);
             m_programBootedMask = bootedMask;
             m_builtActivePlayerMask = activePlayerMask;
+            m_builtWorkbenchBucket = workbenchBucket;
             m_builtProgramRevision = m_creator.ProgramRevision;
             m_builtWorldRevision = m_worldScene.ProgramRevision;
             m_builtCompanionCount = m_companions.Companions.Count;
@@ -526,13 +518,9 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
                 : player.Body.RenderRelativePositionAt(renderOrigin: renderOrigin, alpha: interpolationAlpha)));
         }
 
-        // Drive each pane camera from its cabinet's diegetic-screen center + the overworld's per-console closeness. The
-        // screen center is a fixed room-local position; render-relative equals local here (the render origin is the
-        // spawn anchor at local zero), so it lives in the same space as the active player positions the camera frames.
-        m_director.PaneCameraSource = paneIndex => ((paneIndex >= 0) && (paneIndex < m_room.Consoles.Count)
-            ? (ScreenCenterLocal(consoleIndex: paneIndex), (PaneCloseness?.Invoke(paneIndex) ?? 0f), ScreenHalfHeightLocal(consoleIndex: paneIndex))
-            : ((Vector3, float, float)?)null);
-
+        // The pane cameras ride m_director.PaneCameraSource, assigned once in the constructor (it resolves live
+        // instance state each Compose) rather than reassigned per frame.
+        //
         // The scenario harness's per-frame pose is settled by the render node's ScenarioTick BEFORE this compose (the
         // node owns the capture-arm + graceful-exit seams; see ScenarioTick), so the director already holds this
         // frame's verbatim shot pose here. Nothing to advance in the source itself.
@@ -581,8 +569,8 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // GENERICALLY by owner token, never by role.
     private void ResolveScreenMux((int A, int B)? linkedPair) {
         // Stashed for BuildProgram (the sagging cable's emission reads this — see EmitLinkCable), validated against
-        // the room's actual console count so a stale/out-of-range PUCK_LINK_CABLE_PROBE pair can never index past
-        // m_room.Consoles.
+        // the room's actual console count so a stale/out-of-range linked pair (e.g. from the `link` console verb) can
+        // never index past m_room.Consoles.
         m_currentLinkedPair = ((linkedPair is { A: >= 0, B: >= 0 } pair) && (pair.A < m_room.Consoles.Count) && (pair.B < m_room.Consoles.Count) && (pair.A != pair.B))
             ? linkedPair
             : null;
@@ -927,10 +915,20 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
                 continue;
             }
 
+            // A Placement-anchored eye rides its prop's LIVE pose (so a camera on a dragged building follows it); a
+            // World-anchored eye poses straight from its own Position/Yaw (CameraEye.Resolve ignores the anchor pose),
+            // so the zero default is correct there.
+            var anchorPosition = Vector3.Zero;
+            var anchorYaw = 0f;
+
+            if (eye.Anchor == CameraAnchorKind.Placement) {
+                _ = m_worldScene.TryResolvePlacementPose(placementId: eye.AnchorId, out anchorPosition, out anchorYaw);
+            }
+
             byName[feedName] = requests.Count;
             requests.Add(item: new CameraFeedRequest(
-                AnchorPosition: Vector3.Zero,
-                AnchorYaw: 0f,
+                AnchorPosition: anchorPosition,
+                AnchorYaw: anchorYaw,
                 Eye: eye,
                 Name: feedName,
                 WiredScreens: WiredScreenSet(feedName: feedName)
@@ -1192,12 +1190,6 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     /// <summary>How many shapes have been placed so far.</summary>
     public int CreatorPlacedCount => m_creator.PlacedCount;
 
-    /// <summary>Lifts the currently PLACED shapes into a self-contained, recentered <see cref="Forge.AvatarDefinition"/>
-    /// — the seam the forge consumes to bake a spritesheet and a playable ROM from the player's creation.</summary>
-    /// <returns>The player's avatar in its own local frame.</returns>
-    public Forge.AvatarDefinition ExportAvatar() =>
-        m_creator.ExportAvatar();
-
     // ---- World sculpt mode (the town authoring surface) ----------------------------------------------------------
     // The model trio lives in Puck.Demo.World (shared with the world.* console verbs through the render node's
     // IWorldSculptModeHost); these thin seams keep the node's coupling flat. Presentation only until a deliberate
@@ -1288,46 +1280,8 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
     // document's placements (resolved from the store), terrain patches, and the room's own console stands, honoring
     // the scene's tessellation knob — so the saved bytes carry the EXACT collision a reload walks. Deterministic:
     // bake-twice from the same document is byte-identical (the WS-3 battery's proof).
-    private WorldDocument BakeWorldForSave(WorldDocument document) {
-        var bounds = (document.Bounds ?? new WorldBoundsDocument(FloorY: m_baseRoom.FloorY, MaxX: m_baseRoom.BoundsMax.X, MaxZ: m_baseRoom.BoundsMax.Y, MinX: m_baseRoom.BoundsMin.X, MinZ: m_baseRoom.BoundsMin.Y));
-        var footprints = new List<WorldFootprint>();
-
-        foreach (var placement in (document.Placements ?? [])) {
-            if ((placement.Source is { Length: > 0 } source) && m_worldStore.TryGet(content: out var bytes, hash: source) && (CreationDocumentBytes.Deserialize(bytes: bytes) is { } creation)) {
-                footprints.AddRange(collection: WorldFootprintDerivation.ForPlacement(creation: creation, placement: placement));
-            }
-        }
-        foreach (var patch in (document.Terrain ?? [])) {
-            footprints.Add(item: WorldFootprintDerivation.ForTerrainPatch(patch: patch));
-        }
-        // The room's own stands block exactly as the sim's FixedConsole boxes do (full walk-band height). Room
-        // planar coordinates are Vector2 XZ (X = world X, Y = world Z — the room's own convention).
-        foreach (var stand in m_room.Consoles) {
-            footprints.Add(item: new WorldFootprint(
-                MaxX: (stand.Center.X + stand.HalfExtents.X),
-                MaxY: (m_room.FloorY + (2f * m_room.PlayerHalfExtents.Y)),
-                MaxZ: (stand.Center.Y + stand.HalfExtents.Y),
-                MinX: (stand.Center.X - stand.HalfExtents.X),
-                MinY: m_room.FloorY,
-                MinZ: (stand.Center.Y - stand.HalfExtents.Y)
-            ));
-        }
-
-        var overrides = (document.WalkOverrides ?? []).Select(selector: static entry => WalkOverrideInput.FromDocument(document: entry));
-        var kind = (string.Equals(a: m_worldScene.WalkGridKind, b: "hex", comparisonType: StringComparison.OrdinalIgnoreCase) ? WalkGridKind.Hex : WalkGridKind.Square);
-        var grid = WalkGridBaker.Bake(
-            bounds: bounds,
-            footprints: footprints,
-            kind: kind,
-            overrides: overrides,
-            playerHalfExtentX: m_room.PlayerHalfExtents.X,
-            playerHalfExtentZ: m_room.PlayerHalfExtents.Z,
-            walkBandFloorY: bounds.FloorY,
-            walkBandHeight: (2f * m_room.PlayerHalfExtents.Y)
-        );
-
-        return (document with { WalkGrid = grid });
-    }
+    private WorldDocument BakeWorldForSave(WorldDocument document) =>
+        WorldWalkGridBake.Bake(document: document, room: m_room, store: m_worldStore, walkGridKind: m_worldScene.WalkGridKind);
 
     /// <summary>Enters or leaves creator mode (see <see cref="CreatorScene.SetActive"/>); toggling also clears the
     /// pad state machine's edge tracking so a held button never fires a stale edge into the other mode.</summary>
@@ -1389,17 +1343,20 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         ConnectBakePreview(preview: m_bakePreviewService);
     }
 
-    /// <summary>Composes the boot-time headless aids and the <c>--scenario</c> capture driver from the bound options
-    /// (formerly the <c>PUCK_COMPANION_LOAD</c> / <c>PUCK_WORLD_ROUNDTRIP</c> environment reads and the scenario
-    /// harness). The render node calls this once at resource build so its own type coupling stays flat — this source
-    /// is the composition point for the scenario objects.</summary>
-    /// <param name="services">The application services (the bound demo + scenario options).</param>
-    public void InstallScenario(IServiceProvider services) {
+    /// <summary>Loads the document's boot world and composes the <c>--scenario</c> capture driver — the render node
+    /// calls this once at resource build so its own type coupling stays flat (this source is the composition point for
+    /// the scenario objects). The former companion / wire / face / world-roundtrip boot-time capture aids are gone; the
+    /// live in-session paths (<c>companion.add</c> / <c>world.wire</c> / <c>companion.face</c> / <c>world.verify</c>
+    /// console verbs) are the only way to reach them now.</summary>
+    /// <param name="services">The application services (the bound scenario options).</param>
+    /// <param name="bootWorld">The document's world handle (<see cref="Puck.Scene.OverworldNode.World"/>) resolved +
+    /// committed at boot, or null for the plain room. The render node threads it from the run document (it is a
+    /// durable document field, not an env var). The first tick-boundary ConsumePendingWorldLoad swaps the
+    /// room/collision/walk-grid to it.</param>
+    public void InstallScenario(IServiceProvider services, string? bootWorld = null) {
         ArgumentNullException.ThrowIfNull(services);
 
-        var demoOptions = (services.GetService<IOptions<DemoOptions>>()?.Value ?? new DemoOptions());
-
-        SpawnHeadlessAids(companionFace: demoOptions.CompanionFace, companionLoad: demoOptions.CompanionLoad, companionWire: demoOptions.CompanionWire, worldRoundtrip: demoOptions.WorldRoundtrip);
+        LoadBootWorld(handle: bootWorld);
 
         if ((services.GetService<IOptions<ScenarioOptions>>()?.Value is { Active: true } scenario) && (m_captureSequencer is null)) {
             m_captureSequencer = new CaptureSequencer(director: m_director, options: scenario, defaultTarget: m_creator.Workbench.SpawnPosition);
@@ -1445,8 +1402,8 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         m_bakePreview = new NullCreatorBakePreview();
     }
 
-    /// <summary>Loads a saved creation into the scene by save handle or file path (the <c>PUCK_CREATOR_LOAD</c>
-    /// headless hook rides this; the console's <c>creator.load</c> uses the store directly).</summary>
+    /// <summary>Loads a saved creation into the scene by save handle or file path (the <c>--scenario</c> review harness
+    /// rides this to open its creation; the console's <c>creator.load</c> uses the store directly).</summary>
     /// <param name="nameOrPath">The save handle or file path.</param>
     /// <returns>A one-line status for the console.</returns>
     public string LoadCreationFile(string nameOrPath) {
@@ -1531,6 +1488,25 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
 
     private Vector3 HiddenPosition() =>
         new(0f, (m_room.FloorY - 1000f), 0f);
+
+    // Ease the workbench power-on glow toward the editor unlock (1 when EditorRevealed, else 0). A linear ramp on the
+    // render clock — enough that the panel's emissive fades in smoothly; the discrete bucket quantization below keeps the
+    // rebuild count bounded (~WorkbenchGlowBuckets rebuilds over the whole ramp, a boot's cost profile). Presentation
+    // only; the sim never sees the glow.
+    private void AdvanceWorkbenchGlow(float deltaSeconds) {
+        var target = (m_editorRevealed ? 1f : 0f);
+        var step = (WorkbenchGlowRate * MathF.Max(deltaSeconds, 0f));
+
+        m_workbenchGlow = ((m_workbenchGlow < target)
+            ? MathF.Min(target, (m_workbenchGlow + step))
+            : MathF.Max(target, (m_workbenchGlow - step)));
+    }
+
+    // The current glow quantized into a bucket 0..WorkbenchGlowBuckets — the program-rebuild key for the workbench
+    // panel's emissive (so the ramp rebuilds a bounded number of times, never once per frame at rest). 0 = dark, the
+    // top bucket = fully lit.
+    private int WorkbenchGlowBucket() =>
+        (int)MathF.Round(Math.Clamp(value: m_workbenchGlow, min: 0f, max: 1f) * WorkbenchGlowBuckets);
 
     // Instance bounding-sphere radii (world units), each the worst-case reach of its wrapped geometry from the chosen
     // center plus a generous rounding/margin — a fat bound only costs a rare extra evaluation, a tight one clips
@@ -1713,6 +1689,12 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
             _ = builder.ResetPoint().TransformDynamic(slot: slot).Box(halfExtents: m_room.PlayerHalfExtents, round: 0.06f, material: playerMaterial);
             _ = builder.EndInstance();
         }
+
+        // THE DIEGETIC WORKBENCH (Stage 3): the room-only editor prop — a desk + a terminal panel that lights up when
+        // the editor reveal fires. Emitted with the room content; the probe always emits it in its LIT (brightest)
+        // form, so its one static instance + words join the worst-case envelope — MeasureWorstCaseEnvelope's binding
+        // rule for any new emission. Its panel's emissive is proportional to the eased glow (0 dark → peak lit).
+        EmitWorkbench(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
         }
 
         // The CREATOR pool: the scene's palette + ghost + one instance per placed-shape slot, emitted by the
@@ -1749,6 +1731,55 @@ public sealed class OverworldFrameSource : ISdfFrameSource {
         EmitStudioBackdrop(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
 
         return builder.Build();
+    }
+
+    // The diegetic WORKBENCH prop (Stage 3): a desk (a thin slab on two legs) with a stout terminal SCREEN PANEL, one
+    // static instance bounded on the desk center (WorkbenchInstanceRadius). Room-only — it is never a paned cabinet
+    // (the four view slots are all spoken for). The panel is DARK (a matte off-screen box) by default and lights with
+    // an EMISSIVE CRT glow as the eased glow ramps up on the editor reveal — so it reads as "the workshop opens." The
+    // WORD/INSTANCE COUNT IS CONSTANT regardless of the glow (only the panel material's emissive scalar changes), so
+    // the eased rebuilds never resize a buffer; the probe bakes the LIT peak (worst case is identical in size, but the
+    // probe form is unconditional to satisfy MeasureWorstCaseEnvelope's binding rule for any new emission).
+    private void EmitWorkbench(SdfProgramBuilder builder, Vector3 origin, bool probeWorstCase) {
+        var (centerX, centerZ) = m_world.WorkbenchCenterLocal;
+        // The panel's emissive: the probe uses the LIT peak (envelope worst case); a live build scales the peak by the
+        // eased glow, so the powered-off panel is a plain matte box (emissive 0) and a fully-revealed one glows.
+        var glow = (probeWorstCase ? 1f : Math.Clamp(value: m_workbenchGlow, min: 0f, max: 1f));
+        var deskMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.30f, 0.26f, 0.22f)));
+        var frameMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.12f, 0.13f, 0.15f)));
+        // The lit panel: a cool CRT teal that brightens from near-black (dark) to a self-illuminated glow. The albedo
+        // itself lifts a touch with the glow so the OFF panel reads as a dead dark screen, not a dim colored one.
+        var panelAlbedo = Vector3.Lerp(value1: new Vector3(0.05f, 0.06f, 0.07f), value2: new Vector3(0.45f, 0.85f, 0.70f), amount: glow);
+        var panelMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: panelAlbedo, Emissive: (WorkbenchLitEmissive * glow)));
+
+        var floorY = m_room.FloorY;
+        var deskCenter = new Vector3(centerX, (floorY + WorkbenchDeskTopY), centerZ);
+        var legY = (floorY + WorkbenchLegHalfHeight);
+        var legFrontZ = (centerZ - (WorkbenchDeskHalfDepth * 0.7f));
+        var legBackZ = (centerZ + (WorkbenchDeskHalfDepth * 0.7f));
+        var legLeftX = (centerX - (WorkbenchDeskHalfWidth * 0.8f));
+        var legRightX = (centerX + (WorkbenchDeskHalfWidth * 0.8f));
+        // The monitor rides above the desk, tilted slightly back. Its dark backing/hood sits BEHIND (+Z) the glowing
+        // panel; the emissive panel is pushed clearly IN FRONT (−Z, the room-facing side the player approaches) so the
+        // lit face is the surface every ray hits first — never occluded by the hood (the sliver-behind-a-frame bug).
+        var monitorCenter = new Vector3(centerX, (deskCenter.Y + WorkbenchPanelRiseY), centerZ);
+        var panelTilt = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: WorkbenchPanelTiltRadians);
+
+        _ = builder.BeginInstance(boundCenter: deskCenter, boundRadius: WorkbenchInstanceRadius);
+        // Desktop slab.
+        _ = builder.ResetPoint().Translate(offset: (deskCenter - origin)).Box(halfExtents: new Vector3(WorkbenchDeskHalfWidth, WorkbenchDeskHalfHeight, WorkbenchDeskHalfDepth), round: 0.03f, material: deskMaterial);
+        // Two legs (front-left, back-right — a diagonal pair reads as support without four separate members).
+        _ = builder.ResetPoint().Translate(offset: (new Vector3(legLeftX, legY, legFrontZ) - origin)).Box(halfExtents: new Vector3(0.05f, WorkbenchLegHalfHeight, 0.05f), round: 0.01f, material: deskMaterial);
+        _ = builder.ResetPoint().Translate(offset: (new Vector3(legRightX, legY, legBackZ) - origin)).Box(halfExtents: new Vector3(0.05f, WorkbenchLegHalfHeight, 0.05f), round: 0.01f, material: deskMaterial);
+        // The monitor's dark matte backing plate: sits directly BEHIND the panel along the tilted local +Z (the
+        // laid-back screen's underside), a hair thinner and the same footprint, so it gives the terminal a solid body
+        // without ever occluding the up-facing glowing face the camera and player both see.
+        _ = builder.ResetPoint().Translate(offset: (monitorCenter - origin)).Rotate(rotation: panelTilt).Translate(offset: new Vector3(0f, 0f, (WorkbenchPanelHalfDepth * 1.6f))).Box(halfExtents: new Vector3((WorkbenchPanelHalfWidth + 0.04f), (WorkbenchPanelHalfHeight + 0.04f), (WorkbenchPanelHalfDepth * 0.6f)), round: 0.03f, material: frameMaterial);
+        // The screen panel: dark box when locked, an emissive CRT glow when revealed. Tilted back so its lit face
+        // points up-and-toward the room — visible from a floor-level approach AND the high iso reveal camera. Emissive
+        // lifts every visible face uniformly, so the whole panel reads as powered-on.
+        _ = builder.ResetPoint().Translate(offset: (monitorCenter - origin)).Rotate(rotation: panelTilt).Box(halfExtents: new Vector3(WorkbenchPanelHalfWidth, WorkbenchPanelHalfHeight, WorkbenchPanelHalfDepth), round: 0.02f, material: panelMaterial);
+        _ = builder.EndInstance();
     }
 
     // Two thin dark capsules sagging from each linked cabinet's screen-top to a shared low midpoint, plus a small

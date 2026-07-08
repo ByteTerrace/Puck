@@ -1,0 +1,39 @@
+# Puck.Demo THE RECURSION (Stage 4): re-forge the win/reveal conditions LIVE, in-session.
+#
+# The win/reveal conditions that gated the editor -- a cabinet's exit poll (GamingBrickSource.Exit) and its 128-bit
+# victory gate (.Victory: solo = region==target, or meta = a group's cabinet shares XOR to target) -- used to be
+# immutable, load-once run-document data frozen into the child node at boot. They are now RE-FORGEABLE LIVE through the
+# condition.* console verbs, including the meta gate that unlocked the editor. Nothing is hashed: these are the
+# fourth-wall / reveal instrumentation the host polls, not deterministic sim state.
+#
+# Run against the editor-gate example (its three cabinets carry a meta victory group):
+#   dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/overworld-editor-gate.json --exit-after-seconds 12 < docs/examples/scripts/condition-recursion.console
+
+# Echo cabinet 0's ORIGINAL condition (no exit; a meta victory with the authored share a1a1... in group "workshop").
+condition.show 0
+
+# Re-forge cabinet 0's meta share LIVE. The child node re-parses the share, clears the fired one-shot (the cabinet
+# can win again), and RE-SEEDS the running game's WRAM share slot (0xC0F0) so the change takes effect immediately.
+# NOTE: 11111111... breaks the group's XOR-to-target -- an ACCEPTED transient-invalid state (it just won't fire) that
+# WARNS to stderr, never refuses. The dev/authoring path is never gated, so a self-locking edit is always recoverable.
+condition.set 0 victory meta target=ffffffff-ffff-4fff-bfff-ffffffffffff share=11111111-1111-4111-8111-111111111111 group=workshop
+condition.show 0
+
+# Set a fourth-wall EXIT gate on cabinet 1 (a WRAM 0xC004 poll). condition.show reflects it on the next line.
+condition.set 1 exit 0xC004>=1
+condition.show 1
+
+# Restore cabinet 0's share to the XOR-consistent value (a1a1... = target XOR the other two shares): the group is
+# reachable again, the MetaVictoryWatch rebuilds over the synced console records, and NO warning fires this time.
+condition.set 0 victory meta target=ffffffff-ffff-4fff-bfff-ffffffffffff share=a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1 group=workshop
+step 2
+condition.show 0
+
+# Graceful refusals: a non-existent cabinet, a bad guid, and a garbled exit spec each echo a usage line, never throw.
+condition.show 9
+condition.set 0 victory meta target=notaguid share=11111111-1111-4111-8111-111111111111
+condition.set 1 exit garbage
+
+# Clear a gate.
+condition.clear 1 exit
+condition.show 1

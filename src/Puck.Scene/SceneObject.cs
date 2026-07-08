@@ -26,23 +26,34 @@ public abstract record SceneObject {
     /// <summary>The id (index into <c>scene.materials</c>) of this object's surface material. Ignored by
     /// <see cref="ScreenSlabObject"/>, which always uses the screen-material sentinel.</summary>
     public int Material { get; init; }
-    /// <summary>How this object melds into the accumulated field.</summary>
+    /// <summary>How this object melds into the accumulated field — the field of EVERY object before it in
+    /// <c>scene.objects</c>, not the object before it. Union and the subtraction family are local and may appear
+    /// anywhere; the INTERSECTION family is not — <c>max(accumulator, candidate)</c> returns the candidate everywhere
+    /// outside this object's own shape, so it annihilates every earlier object it does not overlap, the ground included.
+    /// An intersecting object must therefore be FIRST. See the accumulator rule on <see cref="SdfBlendOp"/>.</summary>
     public SdfBlendOp Blend { get; init; } = SdfBlendOp.Union;
     /// <summary>The smooth-blend radius, used only when <see cref="Blend"/> is one of the smooth ops
     /// (<see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.SmoothIntersection"/>/<see cref="SdfBlendOp.SmoothSubtraction"/>).</summary>
     public float Smooth { get; init; }
-    /// <summary>An inflation radius applied AFTER this object melds in — and, like the FIELD op it is, it fattens the
-    /// ENTIRE field accumulated so far (every earlier object too), exactly like the source VM. Order objects
-    /// accordingly. 0 (the default) = off.</summary>
+    /// <summary>An inflation radius applied AFTER this object melds in — and, being the FIELD op it is, it fattens the
+    /// ENTIRE field accumulated so far (every earlier object too), exactly like the source VM. 0 (the default) = off.
+    /// <para>ONLY THE FIRST OBJECT CAN CARRY ONE CORRECTLY. "Order objects accordingly" works for exactly one field op:
+    /// put that object first and it inflates only itself. With two, no ordering exists — the second one's dilate always
+    /// sees the first, and they nest. The array order IS the semantics, so there is nothing to reorder. Closing that gap
+    /// needs a scoped accumulator in the VM (a push/pop field scope); until then, treat this as a one-per-document
+    /// field.</para></summary>
     public float Dilate { get; init; }
     /// <summary>A shell half-thickness applied AFTER this object melds in (after <see cref="Dilate"/>) — a FIELD op:
-    /// it hollows the ENTIRE field accumulated so far into a skin, every earlier object included. Order objects
-    /// accordingly. 0 (the default) = off.</summary>
+    /// it hollows the ENTIRE field accumulated so far into a skin, every earlier object included. 0 (the default) = off.
+    /// <para>Same one-per-document restriction as <see cref="Dilate"/>, and the same fix. Note the failure mode is
+    /// INFLATION, not deletion: <c>abs(d) - t = 0</c> puts the outer surface at <c>d = +t</c>, so every earlier object
+    /// simply grows by <c>t</c> and goes hollow. That reads as "a slightly larger object" and hides for a long time.</para></summary>
     public float Onion { get; init; }
 
     // Resets the point, applies every op in order, then emits the terminal shape — the exact sequence the demo's
     // hand-authored BuildScene uses per object, reproduced from data. The optional FIELD ops follow the shape in
-    // fixed dilate-then-onion order (inflate first, then shell the inflated solid).
+    // fixed dilate-then-onion order (inflate, then shell). They act on the WHOLE accumulated field, not on this
+    // object — see Dilate/Onion above.
     internal void Emit(SdfProgramBuilder builder) {
         _ = builder.ResetPoint();
 

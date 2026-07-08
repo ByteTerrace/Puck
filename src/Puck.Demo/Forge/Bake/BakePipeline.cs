@@ -136,29 +136,41 @@ internal static class BakePipeline {
         var tilesPerView = ((plan.NativeWidth / 8) * (plan.NativeHeight / 8));
         var errors = new ErrorAccumulator();
 
+        // A degenerate sprite can render nothing quantizable — a fully subtractive scene, or a fill matching the
+        // corner sample — leaving an empty foreground mask in every facing and thus a zero-palette fit. Substitute
+        // one transparent palette so the per-tile lookup resolves (its colours are never sampled: every pixel stays
+        // index 0, a blank view) and surface the emptiness plainly instead of a stale easel + IndexOutOfRange.
+        var palettes = fit.Palettes;
+        var notes = new List<string>();
+
+        if (palettes.Count == 0) {
+            palettes = [new ushort[usableColours]];
+            notes.Add(item: "creation rendered empty — nothing to bake (a fully subtractive or corner-matching scene?)");
+        }
+
         for (var viewIndex = 0; (viewIndex < natives.Count); viewIndex++) {
             quantized.Add(item: QuantizeCgbView(
                 assignments: fit.Assignments.AsSpan(start: (viewIndex * tilesPerView), length: tilesPerView).ToArray(),
                 errors: errors,
                 native: natives[viewIndex],
-                palettes: fit.Palettes,
+                palettes: palettes,
                 plan: plan,
                 sprite: sprite
             ));
         }
 
         return new QuantizeOutcome(
-            DiagnosticPalettes: FlattenPalettes(palettes: fit.Palettes, transparentSlot: sprite),
+            DiagnosticPalettes: FlattenPalettes(palettes: palettes, transparentSlot: sprite),
             MaxTileError: errors.MaxTileMean,
             MeanError: errors.Mean,
-            Notes: [],
+            Notes: notes,
             PaletteBudget: budget,
-            PreviewPalettes: fit.Palettes,
+            PreviewPalettes: palettes,
             Registers: null,
             SourceColourCount: sourceColours,
             TilePaletteCount: fit.TilePaletteCount,
             Views: quantized,
-            WirePalettes: BakeColor.EncodePalettes(palettes: fit.Palettes, reserveTransparentSlot: sprite)
+            WirePalettes: BakeColor.EncodePalettes(palettes: palettes, reserveTransparentSlot: sprite)
         );
     }
 

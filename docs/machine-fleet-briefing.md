@@ -57,6 +57,8 @@ shifting combinations of:
   reveals the avatar playing a humble device in the overworld. Presentation
   cost is just an inverted layout start (pane fullscreen, room hidden); the
   machine keeps running through the reveal because a pane IS the machine.
+  (This is rungs 1–2 of the reveal ladder in the unification contract —
+  [overworld-demo-plan.md](overworld-demo-plan.md#the-unification-contract).)
 - **Machine → engine events** — the inverse of the sensor feed, and the
   channel the whole in-fiction economy rides on: an item found INSIDE a ROM
   promotes the real device (mushroom from within), an in-ROM embedded

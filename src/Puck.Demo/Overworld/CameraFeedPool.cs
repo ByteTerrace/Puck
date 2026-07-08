@@ -72,7 +72,10 @@ internal sealed class CameraFeedPool : IDisposable {
     private int m_lastUploadedRevision = -1;
     private int m_activeFeedCount;
     // This frame's plan (produced in PlanFeeds, consumed in TickFeeds one frame later). Empty when nothing is wired.
-    private IReadOnlyList<PlannedFeed> m_plan = [];
+    // Reused in place (Clear + refill each PlanFeeds) rather than reallocated per frame — the default room wires no
+    // feed, so a fresh list every frame would be pure Gen0 churn. Concrete type so TickFeeds' foreach binds the struct
+    // enumerator (no boxing).
+    private readonly List<PlannedFeed> m_plan = [];
     // The named-feed handle map for THIS frame's screen-source resolution: feed name -> its live image-view handle.
     // Rebuilt every PlanFeeds so a screen wired by name resolves to whatever feed currently carries that name.
     private readonly Dictionary<string, nint> m_namedHandles = new(comparer: StringComparer.Ordinal);
@@ -145,12 +148,13 @@ internal sealed class CameraFeedPool : IDisposable {
         m_namedLights[CompanionState.DefaultFaceFeed] = m_faceFeed.CurrentImageViewHandle != 0 ? FaceFeedGlow : Vector3.Zero;
 
         var granted = Math.Min(val1: requestedFeeds.Count, val2: MaxCameraFeeds);
-        var plan = new List<PlannedFeed>(capacity: granted);
+
+        m_plan.Clear();
 
         for (var index = 0; (index < granted); index++) {
             var request = requestedFeeds[index];
 
-            plan.Add(item: new PlannedFeed(
+            m_plan.Add(item: new PlannedFeed(
                 AnchorPosition: request.AnchorPosition,
                 AnchorYaw: request.AnchorYaw,
                 Eye: request.Eye,
@@ -162,8 +166,6 @@ internal sealed class CameraFeedPool : IDisposable {
             // The named handle for a camera feed is the pool slot's OUTPUT from the last tick (0 until first rendered).
             m_namedHandles[request.Name] = FeedOutputHandle(feedIndex: index);
         }
-
-        m_plan = plan;
     }
 
     /// <summary>Renders this frame's planned camera feeds and ticks the procedural face feed — the render-thread half,
