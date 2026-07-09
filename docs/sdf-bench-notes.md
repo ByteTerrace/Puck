@@ -226,3 +226,50 @@ sub-ms deltas). Views medians, run1/run2 (ms):
 - The sweep's beam-slope verdict is untouched: O(instances), exponent ~0.97,
   the uniform-grid cull is the gate before any hundreds-of-live-instances
   scene and before 16384.
+
+---
+
+## 2026-07-09 — the carve ladder (`sdf.bench carves`, Phase-1 destructible baseline)
+
+A carve = one static Subtraction instance (translate + sphere, `stepScale`
+stays 1.0) emitted after the subject+floor; the pool is `sdf.carve`-driven
+replayable data. The ladder measures the two orthogonal cost curves
+(snapped camera, Vulkan 1280×800, warm=8 samples=32):
+
+```
+  config                  | frame med   |    beam |   views
+  carves clustered  x16   |    5.972    |   1.491 |   4.466
+  carves clustered  x64   |   11.031    |   4.539 |   6.479
+  carves clustered  x256  |   38.396    |  23.033 |  15.188
+  carves clustered  x1024 |  154.634    | 101.119 |  53.698
+  carves scattered  x16   |    4.202    |   1.266 |   2.924
+  carves scattered  x64   |    8.203    |   4.707 |   3.485
+  carves scattered  x256  |   35.823    |  29.912 |   5.893
+  carves scattered  x1024 |  131.210    | 118.967 |  12.255
+  carves smooth     x256  |   53.471    |  29.390 |  24.062
+```
+
+- **Scattered = the beam wall, isolated.** Views stays near-flat (2.9→12.3 —
+  the carves mask out) while beam grows O(n) to **119 ms at 1024** (91 % of a
+  7.6-fps frame). This is the line the uniform-grid cull must flatten: a
+  scattered carve interacts with a handful of grid cells, so the post-cull
+  beam should be near-constant in total carve count.
+- **Clustered = the views ceiling no cull removes.** Carves overlapping the
+  subject's tiles are genuinely un-cullable there; views grows to 53.7 ms at
+  1024 densely-stacked carves. The engine's honest destruction budget is
+  therefore *dense local damage per tile*, not total carves — the grid cull
+  raises the TOTAL ceiling (scattered/persistent world damage), not the
+  per-spot stacking ceiling.
+- **Smooth carves cost ~1.6× hard carves in views at 256** (24.1 vs 15.2 —
+  the `+k` halo widens every bound, so more tiles enumerate them); beam is
+  unchanged. Melt-style destruction should budget accordingly.
+- Beam per-instance cost runs ~2× the torus sweep's at equal count (119 vs
+  50 ms at 1024) — the carve scene carries world-level subject+floor segments
+  the cone march walks every step, where the sweep is instances-only. The
+  grid cull targets the per-instance term; the world-segment term is the
+  cone march's own.
+
+**The Phase-2 success gate:** flatten BOTH the sweep beam line (187.8 ms
+@4096) and the scattered-carve beam line (119.0 ms @1024) with bit-identical
+per-tile masks (grid==flat); clustered views must stay within noise of the
+table above (the cull must not touch un-cullable work).
