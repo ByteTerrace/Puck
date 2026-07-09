@@ -273,3 +273,64 @@ replayable data. The ladder measures the two orthogonal cost curves
 @4096) and the scattered-carve beam line (119.0 ms @1024) with bit-identical
 per-tile masks (grid==flat); clustered views must stay within noise of the
 table above (the cull must not touch un-cullable work).
+
+---
+
+## 2026-07-09 (b) — the mask-first cull: the beam wall falls, and what it really was
+
+**The discovery (this is the section's headline).** The measured O(instances)
+"beam slope" was never the per-tile instance BINNING loop — splitting the
+instance cull into its own kernel isolated the terms: binning 4096 instances
+costs ~0.4 ms flat and ~0.1 ms through the uniform grid. **The O(n) was the
+CONE MARCH's field evaluation itself**: ~96 steps × 4000 tiles, each map()
+walking every instance segment's bound early-out — ~1.6B cheap checks = the
+187 ms. A first fused grid attempt also taught a second lesson: a 512 B
+per-thread mask scratch in the beam kernel raised its register high-water
+mark and taxed the co-resident cone march ~+12% on BOTH paths — occupancy is
+part of the contract, not a detail.
+
+**The fix — mask-FIRST.** The tile's relevant-instance set is exactly what
+the grid cull computes, for ~0.1 ms. The pipeline reordered to
+`sdf-instance-cull` (per-tile mask via the packed world-space uniform grid;
+CSR bin-by-center, ray∩grid-clipped slab walk, always-list for
+dynamic/unmaskable) → `sdf-beam` (cone march consuming the tile-masked field)
+→ cull-args → views → composite. Correctness rides the EXISTING exact-cull
+contract (a masked-out instance returns the accumulator to the bit), proven
+by `world-grid-cull` (grid==flat bit-identical) and instanced==flat holding
+on the masked march. `sdf.grid on|off` is the live A/B lever. The bench
+table's `beam` column now sums beam+mask so every ladder stays comparable;
+the split shows in `sdf.info` / `[world-timing]`.
+
+**After (same harness; before = the committed baselines above):**
+
+```
+  sweep torus         beam+mask: before -> after      frame: before -> after
+    x1024               50.5   ->  1.91  (26x)          67.1  -> 19.3
+    x4096              187.8   ->  6.58  (28x)         243.9  -> 61.5
+    x16384 (NEW cap)   ~750 (extrapolated) -> 21.8     — 187.0 (views 165)
+  carves scattered
+    x1024              119.0   ->  1.02  (117x)        131.2  -> 13.4  (60fps+)
+    x4096 (NEW cap)      —     ->  5.12                  —    -> 44.9
+  carves clustered
+    x1024              101.1   ->  8.79  (11x)         154.6  -> 62.2
+  carves smooth x256    29.4   ->  2.50  (12x)          53.5  -> 28.1
+```
+
+Views is UNCHANGED at every matched rung (the bit-identical mask means the
+per-pixel work is identical) — the clustered views ceiling stands exactly as
+§2026-07-09 predicted, and every frame past ~1024 on-screen instances is now
+views-bound, not beam-bound.
+
+**The destruction budget this buys (the session's bottom line):**
+- **~1024 scattered carves fully IN FRAME sustain 60 fps** (13.4 ms debug
+  scene; the 16.7 ms budget breaks between the 1024 and 4096 rungs, ~1500 as
+  framed by this bench).
+- **Total persistent carve count is no longer the constraint**: beam+mask
+  cost tracks instances near each tile's cone, so carves outside the view —
+  a persistently damaged WORLD — cost ~nothing per frame (mask 0.1 ms @4096
+  scattered). The honest ceilings are now (a) per-tile dense stacking
+  (clustered views: ~62 ms at 1024 stacked in frame) and (b) on-screen
+  visible-instance shading (views), both per-pixel costs the grid rightly
+  does not touch.
+- MaxInstances 4096 → 16384 and MaxCarves 1024 → 4096 raised accordingly
+  (the deferred-pending-measurement gate in the packer doc is satisfied).
