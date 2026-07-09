@@ -16,10 +16,18 @@ internal readonly record struct SdfInstanceGridInput(Vector3 Center, float Radiu
 
 /// <summary>Builds the deterministic world-space uniform grid the tile-cull beam prepass walks instead of testing every
 /// instance in every tile (docs/sdf-bench-notes.md, the 2026-07-09 carve ladder). Static, maskable instances are
-/// counting-sorted into a CSR cell directory (count → exclusive prefix-sum → scatter, all in instance-index order — no
-/// atomics, no wave intrinsics, bit-identical every run); dynamic, unmaskable, and sprawling instances go in an
-/// always-tested list (the world-segment-list pattern). The beam then tests only the instances in the grid cells the
-/// tile's cone footprint overlaps plus the always-list, so beam cost tracks instances NEAR the cone, not the total.
+/// counting-sorted BY CENTER into a CSR cell directory — exactly ONE cell per instance (count → exclusive prefix-sum →
+/// scatter, all in instance-index order — deterministic by construction, no atomics, no wave intrinsics); dynamic and
+/// unmaskable instances go in an always-tested list (the world-segment-list pattern). The beam then tests only the
+/// instances in the grid cells its cone footprint overlaps plus the always-list, so beam cost tracks instances NEAR
+/// the tile's cone, not the total.
+/// <para>BIN-BY-CENTER is the load-bearing pairing with the header's <c>footprintPad</c>: because an instance occupies
+/// only its center's cell, the beam's query AABB must be inflated by the LARGEST binned bound radius (footprintPad =
+/// max binned radius) — an instance whose bound touches the cone at a point q has its center within that radius of q,
+/// so the padded query reaches the center's cell. The pad is CORRECTNESS, not slop: shrinking it below the max binned
+/// radius holes the mask. The rejected alternative (scatter each instance into every covered cell + pad anyway)
+/// duplicated entries and re-tested each instance from many neighboring cells — measured as a net beam REGRESSION at
+/// every bench rung.</para>
 /// <para>The packed block is a self-contained <see cref="uint"/> array appended to the program word stream after the
 /// world-segment list. KEEP IN SYNC with the grid decode in Assets/Shaders/Sdf/sdf-vm.hlsli (<c>sdfGrid*</c>) and the
 /// cell walk in sdf-world.hlsli (<c>collectInstanceGridMask</c>). Extracted from <see cref="SdfProgram"/> as its own
@@ -30,15 +38,16 @@ internal readonly record struct SdfInstanceGridInput(Vector3 Center, float Radiu
 /// <list type="table">
 /// <item><description><b>Header</b> (16 uints = 4 <c>uint4</c> rows): <c>[0]</c> enabled (1 = grid path, 0 = flat
 /// fallback); <c>[1..3]</c> dimX/dimY/dimZ; <c>[4..6]</c> grid-AABB origin xyz (float bits); <c>[7]</c> invCellSize
-/// (host-baked 1/cellSize — the shader never divides); <c>[8]</c> cellSize (world edge, for the cone-march step);
-/// <c>[9]</c> footprintPad (host-baked = the max binned radius, the world margin the cone footprint adds); <c>[10]</c>
-/// cellStartWord; <c>[11]</c> entryWord; <c>[12]</c> alwaysWord (all uint offsets from the block start); <c>[13]</c>
-/// alwaysCount; <c>[14]</c> cellCount (= dimX·dimY·dimZ); <c>[15]</c> reserved.</description></item>
+/// (host-baked 1/cellSize — the shader never divides by the cell edge); <c>[8]</c> cellSize (world edge, the beam's
+/// slab-march step unit); <c>[9]</c> footprintPad (the max binned bound radius + the float-safety epsilon — the world
+/// margin every cone-footprint query MUST add; see the bin-by-center note above); <c>[10]</c> cellStartWord;
+/// <c>[11]</c> entryWord; <c>[12]</c> alwaysWord (all uint offsets from the block start); <c>[13]</c> alwaysCount;
+/// <c>[14]</c> cellCount (= dimX·dimY·dimZ); <c>[15]</c> reserved.</description></item>
 /// <item><description><b>cellStart</b> (<c>cellCount + 1</c> uints @ <c>cellStartWord</c>): the CSR exclusive
 /// prefix-sums — cell <c>c</c>'s entries are <c>entries[cellStart[c] .. cellStart[c+1])</c>; <c>cellStart[cellCount]</c>
 /// is the entry total.</description></item>
-/// <item><description><b>entries</b> (<c>entryTotal</c> uints @ <c>entryWord</c>): instance indices, grouped by cell,
-/// ascending within a cell — the beam recovers each instance's bound (and, if a future consumer wants them, its
+/// <item><description><b>entries</b> (one uint per BINNED instance @ <c>entryWord</c>): instance indices, grouped by
+/// cell, ascending within a cell — the beam recovers each instance's bound (and, if a future consumer wants them, its
 /// segment range) from the instance directory by this index.</description></item>
 /// <item><description><b>alwaysList</b> (<c>alwaysCount</c> uints @ <c>alwaysWord</c>): the always-tested instance
 /// indices, ascending.</description></item>
@@ -55,19 +64,23 @@ internal static class SdfInstanceGrid {
     /// too-fine derivation is coarsened by <see cref="CellCapacityFactor"/> / <see cref="MaxDimension"/>.</summary>
     private const float CellDiameterFactor = 3.0f;
     /// <summary>The grid-resolution ceiling: <c>cellCount ≤ CellCapacityFactor · maxInstances</c>, so the frozen word
-    /// envelope stays O(maxInstances) (a probe grows it automatically through the same Build). The derivation coarsens
-    /// the cell size until the resolution fits. Worst-case entry total is bounded the same way: an instance is scattered
-    /// into at most <see cref="MaxCellSpanPerInstance"/> cells, so entries ≤ that × binnable ≤ that × maxInstances.</summary>
+    /// envelope stays O(maxInstances) (a probe grows it automatically through the same Build). The entry total is
+    /// exactly the binned instance count (bin-by-center — one cell per instance), so the whole block is bounded by
+    /// HeaderWords + (CellCapacityFactor + 1) × maxInstances + binned + always ≤ HeaderWords +
+    /// (CellCapacityFactor + 2) × maxInstances uints. The derivation coarsens the cell size until the resolution fits.</summary>
     private const int CellCapacityFactor = 4;
-    /// <summary>The per-AXIS cell-count cap. Bounds the cone-march SLAB count (≤ √3·MaxDimension), so a degenerate
-    /// near-1-D instance layout cannot make the beam walk thousands of slabs. Coarsening enforces it alongside
-    /// <see cref="CellCapacityFactor"/>. KEEP IN SYNC with <c>SDF_GRID_MAX_DIM</c> in sdf-vm.hlsli.</summary>
+    /// <summary>The per-AXIS cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
+    /// ~√3·MaxDimension cells), so a degenerate near-1-D instance layout cannot make the beam walk thousands of slabs.
+    /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. KEEP IN SYNC with the slab-budget reasoning at
+    /// <c>SDF_GRID_MAX_SLABS</c> in sdf-vm.hlsli.</summary>
     private const int MaxDimension = 64;
-    /// <summary>The per-instance cell-span cap: a binnable instance whose AABB covers more than this many cells is moved
-    /// to the always-tested list instead of scattered (its bound is large relative to the cell, so it would occupy a big
-    /// fraction of cells anyway, and testing it unconditionally is cheaper than fattening the CSR). 27 = a 3×3×3 span,
-    /// so a bound up to ~1.5 cells in radius still bins; only genuine outliers (a bound several × the median) overflow.</summary>
-    private const int MaxCellSpanPerInstance = 27;
+    /// <summary>The float-safety epsilon folded into the packed <c>footprintPad</c>, in CELL EDGES: the host bins a
+    /// center by <c>floor((center − origin) · invCellSize)</c> and the beam rasterizes its query AABB through the same
+    /// mapping — a center within a few ulps of a cell wall could land on either side, so the query is padded strictly
+    /// past every rounding disagreement. 1e-3 of a cell edge dwarfs the ~1e-6 relative float error while staying
+    /// cost-wise negligible (it replaces the old ±1 whole-cell over-cover ring, which multiplied the walked cells by up
+    /// to 27× and was the measured beam regression).</summary>
+    private const float FootprintEpsilonCells = 1.0e-3f;
     /// <summary>The smallest cell edge the derivation admits, so an all-coincident binnable set (zero extent) cannot
     /// produce a zero or denormal cell size.</summary>
     private const float MinCellSize = 1.0e-4f;
@@ -89,10 +102,12 @@ internal static class SdfInstanceGrid {
         }
 
         // Pass 0: partition the instances. A binnable candidate carries its center/radius; everything else is either an
-        // always-list member (active but dynamic/unmaskable) or excluded (parked, negative radius).
+        // always-list member (active but dynamic/unmaskable) or excluded (parked, negative radius). The grid AABB covers
+        // center ± radius, so every binnable CENTER is strictly inside it by construction.
         var binnableIndices = new List<int>();
         var minBounds = new Vector3(float.PositiveInfinity);
         var maxBounds = new Vector3(float.NegativeInfinity);
+        var maxBinnedRadius = 0.0f;
 
         for (var index = 0; (index < instances.Count); index++) {
             var input = instances[index];
@@ -102,6 +117,7 @@ internal static class SdfInstanceGrid {
             }
 
             binnableIndices.Add(item: index);
+            maxBinnedRadius = MathF.Max(maxBinnedRadius, input.Radius);
 
             var radius = new Vector3(input.Radius);
 
@@ -128,42 +144,18 @@ internal static class SdfInstanceGrid {
         var invCellSize = (1.0f / cellSize);
         var cellCount = (dimensions.X * dimensions.Y * dimensions.Z);
 
-        // Pass 1: classify each binnable candidate as SCATTERED (its cell-AABB fits the span cap) or OVERFLOW (too many
-        // cells ⇒ always-list), remembering the cell-AABB of the scattered ones. Overflow + the non-binnable actives
-        // form the always-list, kept in ascending instance-index order.
-        var cellLow = new (int X, int Y, int Z)[binnableIndices.Count];
-        var cellHigh = new (int X, int Y, int Z)[binnableIndices.Count];
-        var scattered = new bool[binnableIndices.Count];
-        var overflow = new List<int>();
-        var maxBinnedRadius = 0.0f;
+        // Pass 1: COUNT per cell — each binnable instance in exactly its CENTER's cell (see the bin-by-center note in
+        // the type doc: the beam's footprintPad-inflated query is what reaches a bound whose center sits in a
+        // neighboring cell).
+        var cellStart = new int[cellCount + 1];
+        var homeCell = new int[binnableIndices.Count];
 
         for (var slot = 0; (slot < binnableIndices.Count); slot++) {
             var input = instances[binnableIndices[slot]];
-            var low = CellOf(point: (input.Center - new Vector3(input.Radius)), origin: origin, invCellSize: invCellSize, dimensions: dimensions);
-            var high = CellOf(point: (input.Center + new Vector3(input.Radius)), origin: origin, invCellSize: invCellSize, dimensions: dimensions);
-            var span = (((high.X - low.X) + 1) * ((high.Y - low.Y) + 1) * ((high.Z - low.Z) + 1));
+            var cell = CellOf(point: input.Center, origin: origin, invCellSize: invCellSize, dimensions: dimensions);
 
-            cellLow[slot] = low;
-            cellHigh[slot] = high;
-
-            if (span > MaxCellSpanPerInstance) {
-                scattered[slot] = false;
-                overflow.Add(item: binnableIndices[slot]);
-            } else {
-                scattered[slot] = true;
-                maxBinnedRadius = MathF.Max(maxBinnedRadius, input.Radius);
-            }
-        }
-
-        // Pass 2: COUNT per cell.
-        var cellStart = new int[cellCount + 1];
-
-        for (var slot = 0; (slot < binnableIndices.Count); slot++) {
-            if (!scattered[slot]) {
-                continue;
-            }
-
-            AddSpanCounts(cellStart: cellStart, low: cellLow[slot], high: cellHigh[slot], dimensions: dimensions);
+            homeCell[slot] = cell;
+            cellStart[cell]++;
         }
 
         // Exclusive prefix-sum: cellStart[c] becomes the first entry index of cell c; cellStart[cellCount] the total.
@@ -176,66 +168,38 @@ internal static class SdfInstanceGrid {
             running += count;
         }
 
-        var entryTotal = running;
-
-        // Pass 3: SCATTER in instance-index order (binnableIndices is already ascending), so a cell's entries ascend by
+        // Pass 2: SCATTER in instance-index order (binnableIndices is already ascending), so a cell's entries ascend by
         // instance index — deterministic by construction. A moving cursor per cell advances from its prefix-sum start.
-        var entries = new int[entryTotal];
+        var entries = new int[running];
         var cursor = new int[cellCount];
 
         Array.Copy(sourceArray: cellStart, destinationArray: cursor, length: cellCount);
 
         for (var slot = 0; (slot < binnableIndices.Count); slot++) {
-            if (!scattered[slot]) {
-                continue;
-            }
+            var cell = homeCell[slot];
 
-            ScatterSpan(entries: entries, cursor: cursor, instanceIndex: binnableIndices[slot], low: cellLow[slot], high: cellHigh[slot], dimensions: dimensions);
+            entries[cursor[cell]] = binnableIndices[slot];
+            cursor[cell]++;
         }
 
-        // The always-list: every ACTIVE non-binnable instance (dynamic or unmaskable — radius ≥ 0) plus the overflow,
-        // merged in ascending instance-index order. Parked instances (radius < 0) are omitted entirely — a parked pool
-        // costs zero. The two sources are each ascending, so a merge keeps the whole list ascending.
-        var alwaysList = BuildAlwaysList(instances: instances, overflow: overflow);
-
-        return Pack(dimensions: dimensions, origin: origin, invCellSize: invCellSize, cellSize: cellSize, footprintPad: maxBinnedRadius, cellStart: cellStart, entries: entries, alwaysList: alwaysList);
-    }
-
-    // The active non-binnable instances (dynamic/unmaskable, radius >= 0) merged with the overflow list, both ascending
-    // by instance index, into one ascending always-tested list.
-    private static List<int> BuildAlwaysList(IReadOnlyList<SdfInstanceGridInput> instances, List<int> overflow) {
-        var always = new List<int>(capacity: overflow.Count);
-        var overflowCursor = 0;
+        // The always-list: every ACTIVE non-binnable instance (dynamic or unmaskable — radius ≥ 0), in ascending
+        // instance-index order (the walk order). Parked instances (radius < 0) are omitted entirely — a parked pool
+        // costs zero.
+        var alwaysList = new List<int>();
 
         for (var index = 0; (index < instances.Count); index++) {
-            while ((overflowCursor < overflow.Count) && (overflow[overflowCursor] < index)) {
-                always.Add(item: overflow[overflowCursor]);
-                overflowCursor++;
-            }
-
-            if ((overflowCursor < overflow.Count) && (overflow[overflowCursor] == index)) {
-                always.Add(item: overflow[overflowCursor]);
-                overflowCursor++;
-
-                continue; // an overflowed binnable is already recorded; do not also test its Binnable flag below
-            }
-
             var input = instances[index];
 
-            // Active (radius >= 0) AND non-binnable ⇒ a dynamic or unmaskable instance the frozen grid cannot bin: it
-            // must be tested every tile, exactly as the flat loop tested it. A parked slot (radius < 0) contributes
-            // nothing and is skipped. A binnable instance is in the cells (or already handled as overflow above).
             if (!input.Binnable && (input.Radius >= 0.0f)) {
-                always.Add(item: index);
+                alwaysList.Add(item: index);
             }
         }
 
-        while (overflowCursor < overflow.Count) {
-            always.Add(item: overflow[overflowCursor]);
-            overflowCursor++;
-        }
+        // footprintPad = the max binned radius (load-bearing — see the type doc) + the float-safety epsilon that keeps
+        // the beam's floor() of a padded query AABB corner from disagreeing with the host's floor() of a center by a cell.
+        var footprintPad = (maxBinnedRadius + (FootprintEpsilonCells * cellSize));
 
-        return always;
+        return Pack(dimensions: dimensions, origin: origin, invCellSize: invCellSize, cellSize: cellSize, footprintPad: footprintPad, cellStart: cellStart, entries: entries, alwaysList: alwaysList);
     }
 
     // Derives the cell edge from the median binned-bound diameter, then coarsens until the resolution honors both the
@@ -255,8 +219,8 @@ internal static class SdfInstanceGrid {
 
         dimensions = DimensionsFor(extent: extent, cellSize: cellSize);
 
-        // Coarsen (grow the cell size) until the resolution fits both caps. Each step at least doubles the cell size, so
-        // the loop terminates quickly (the extent is finite and dims fall toward 1).
+        // Coarsen (grow the cell size) until the resolution fits both caps. Each step doubles the cell size, so the
+        // loop terminates quickly (the extent is finite and dims fall toward 1).
         while (
             (((long)dimensions.X * dimensions.Y * dimensions.Z) > maxCells) ||
             (dimensions.X > MaxDimension) ||
@@ -278,41 +242,15 @@ internal static class SdfInstanceGrid {
         );
     }
 
-    // The cell coordinate of a world point, clamped into the grid (floor of the scaled offset; KEEP IN SYNC with the
-    // shader's identical mapping in collectInstanceGridMask — the host bins by this, the beam rasterizes the cone by it).
-    private static (int X, int Y, int Z) CellOf(Vector3 point, Vector3 origin, float invCellSize, (int X, int Y, int Z) dimensions) {
-        return (
-            Math.Clamp((int)MathF.Floor((point.X - origin.X) * invCellSize), 0, (dimensions.X - 1)),
-            Math.Clamp((int)MathF.Floor((point.Y - origin.Y) * invCellSize), 0, (dimensions.Y - 1)),
-            Math.Clamp((int)MathF.Floor((point.Z - origin.Z) * invCellSize), 0, (dimensions.Z - 1))
-        );
-    }
+    // The cell index of a world point, clamped into the grid (floor of the scaled offset; KEEP IN SYNC with the
+    // shader's identical mapping in collectInstanceGridMask — the host bins by this, the beam rasterizes its padded
+    // cone footprint by it).
+    private static int CellOf(Vector3 point, Vector3 origin, float invCellSize, (int X, int Y, int Z) dimensions) {
+        var x = Math.Clamp((int)MathF.Floor((point.X - origin.X) * invCellSize), 0, (dimensions.X - 1));
+        var y = Math.Clamp((int)MathF.Floor((point.Y - origin.Y) * invCellSize), 0, (dimensions.Y - 1));
+        var z = Math.Clamp((int)MathF.Floor((point.Z - origin.Z) * invCellSize), 0, (dimensions.Z - 1));
 
-    private static int CellIndex(int x, int y, int z, (int X, int Y, int Z) dimensions) {
-        return (((z * dimensions.Y) + y) * dimensions.X) + x;
-    }
-
-    private static void AddSpanCounts(int[] cellStart, (int X, int Y, int Z) low, (int X, int Y, int Z) high, (int X, int Y, int Z) dimensions) {
-        for (var z = low.Z; (z <= high.Z); z++) {
-            for (var y = low.Y; (y <= high.Y); y++) {
-                for (var x = low.X; (x <= high.X); x++) {
-                    cellStart[CellIndex(x: x, y: y, z: z, dimensions: dimensions)]++;
-                }
-            }
-        }
-    }
-
-    private static void ScatterSpan(int[] entries, int[] cursor, int instanceIndex, (int X, int Y, int Z) low, (int X, int Y, int Z) high, (int X, int Y, int Z) dimensions) {
-        for (var z = low.Z; (z <= high.Z); z++) {
-            for (var y = low.Y; (y <= high.Y); y++) {
-                for (var x = low.X; (x <= high.X); x++) {
-                    var cell = CellIndex(x: x, y: y, z: z, dimensions: dimensions);
-
-                    entries[cursor[cell]] = instanceIndex;
-                    cursor[cell]++;
-                }
-            }
-        }
+        return ((((z * dimensions.Y) + y) * dimensions.X) + x);
     }
 
     private static uint[] DisabledBlock() {

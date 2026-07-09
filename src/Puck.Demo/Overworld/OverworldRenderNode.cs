@@ -853,8 +853,11 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             var hasTimings = TryReadSdfPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frame);
             // The bench keeps its FIXED four columns (frame + beam/views/composite) so the ladder tables stay comparable
             // run to run; a pass added to PassTimingLabels surfaces in sdf.info / [world-timing] but not as a new column.
+            // The "beam" column FOLDS IN the instance-mask pass (split out of the beam kernel for occupancy), so the
+            // column keeps meaning what every historical ladder measured: everything between frame start and views.
             // Resolved through SdfEngineNode (already coupled) so the node stays under its CA1506 class-coupling ceiling.
-            var beam = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "beam");
+            var beam = (SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "beam")
+                + SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "mask"));
             var views = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "views");
             var composite = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "composite");
 

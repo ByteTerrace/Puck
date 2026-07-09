@@ -113,7 +113,7 @@ public sealed class SdfWorldEngine : IDisposable {
     // sdf.info verb, the [world-timing] line, and the bench's per-pass feed all surface it with no further change (each
     // reads PassTimingLabels / TryReadPassTimings, never a hardcoded tuple). TimingCapacity (8) is the pool ceiling, so
     // at most 7 passes fit before the pools must be resized.
-    private static readonly string[] PassLabels = ["beam", "views", "composite"];
+    private static readonly string[] PassLabels = ["mask", "beam", "views", "composite"];
     private static readonly uint TimingMarkCount = (uint)(PassLabels.Length + 1);
     private const int ViewportByteLength = ((sizeof(float) * 4) * 5); // 80-byte ViewportData (KEEP IN SYNC with sdf-world.hlsli)
     private const uint ViewportBindingIndex = 2; // matches sdf-world.hlsli's [[vk::binding(2, 0)]]
@@ -148,6 +148,9 @@ public sealed class SdfWorldEngine : IDisposable {
     private readonly bool m_exportMode;
     private readonly IGpuComputeServices m_gpu;
     private readonly uint m_height;
+    private readonly IGpuComputePipeline m_instanceCullPipeline;
+    private readonly nint m_instanceCullSet;
+    private readonly IGpuShaderModule m_instanceCullShaderModule;
     private readonly IGpuStorageBuffer m_instanceMaskBuffer;
     private readonly int m_instanceMaskWordCount;
     private readonly nint m_pool;
@@ -239,6 +242,7 @@ public sealed class SdfWorldEngine : IDisposable {
         m_width = width;
 
         m_beamShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.Beam);
+        m_instanceCullShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.InstanceCull);
         m_cullArgsShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.CullArgs);
         m_viewsShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.Views);
         m_compositeShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.Composite);
@@ -321,13 +325,27 @@ public sealed class SdfWorldEngine : IDisposable {
         var compositePushBinding = new GpuPushConstantBinding(data: m_compositePush, offset: 0, stageFlags: GpuShaderStage.Compute);
 
         // Beam prepass: program (1) + viewports (2) + dynamic entity transforms (9) + cull buffer written (3) + the
-        // per-tile instance mask written (7). No output image. The cone march runs map(), so it reads the dynamic
-        // transforms — listed after viewport so its SRV is t2.
+        // per-tile instance mask READ (7 — the MASK-FIRST order: the cone march evaluates the tile-masked field the
+        // instance-cull pass wrote, so a march sample costs O(instances near the tile), not O(all instances)). No
+        // output image. Direct3D 12 assigns registers from THIS order: t0 program, t1 viewports, t2 dynamicTransforms,
+        // u0 tiles, t3 instanceMasks — the kernel's SDF_INSTANCE_MASKS_REGISTER override mirrors it.
         GpuComputeBinding[] beamBindings = [
             new GpuComputeBinding(Binding: ProgramBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
             new GpuComputeBinding(Binding: ViewportBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
             new GpuComputeBinding(Binding: DynamicTransformBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
             new GpuComputeBinding(Binding: TileBindingIndex, Kind: GpuComputeBindingKind.StorageBufferReadWrite),
+            new GpuComputeBinding(Binding: InstanceMaskBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
+        ];
+
+        // Instance-cull pass (sdf-instance-cull.comp — the frame's FIRST pass, and its OWN kernel so the cell walk's
+        // register footprint never taxes the cone march's occupancy): program (1) + viewports (2) + dynamic entity
+        // transforms (9, a DYNAMIC instance's bound resolves through it) + the per-tile instance mask written (7).
+        // Direct3D 12 assigns registers from THIS order: t0 program, t1 viewports, t2 dynamicTransforms, u0
+        // instanceMasks — the kernel's register() annotations mirror it exactly.
+        GpuComputeBinding[] instanceCullBindings = [
+            new GpuComputeBinding(Binding: ProgramBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
+            new GpuComputeBinding(Binding: ViewportBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
+            new GpuComputeBinding(Binding: DynamicTransformBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
             new GpuComputeBinding(Binding: InstanceMaskBindingIndex, Kind: GpuComputeBindingKind.StorageBufferReadWrite),
         ];
 
@@ -378,17 +396,18 @@ public sealed class SdfWorldEngine : IDisposable {
         ];
 
         m_beamPipeline = gpu.ComputePipelineFactory.Create(bindings: beamBindings, computeShaderModule: m_beamShaderModule, deviceContext: device, pushConstantBinding: pushConstantBinding);
+        m_instanceCullPipeline = gpu.ComputePipelineFactory.Create(bindings: instanceCullBindings, computeShaderModule: m_instanceCullShaderModule, deviceContext: device, pushConstantBinding: pushConstantBinding);
         m_cullArgsPipeline = gpu.ComputePipelineFactory.Create(bindings: cullArgsBindings, computeShaderModule: m_cullArgsShaderModule, deviceContext: device, pushConstantBinding: pushConstantBinding);
         // Nearest filtering end to end: a bound screen source (an emulator/child's native pixels) magnifies as crisp
         // cells, never bilinear smears — the whole point of sampling instead of the flat material.
         m_viewsPipeline = gpu.ComputePipelineFactory.Create(bindings: viewsBindings, computeShaderModule: m_viewsShaderModule, deviceContext: device, pushConstantBinding: pushConstantBinding, samplerFilter: GpuSamplerFilter.Nearest);
         m_compositePipeline = gpu.ComputePipelineFactory.Create(bindings: compositeBindings, computeShaderModule: m_compositeShaderModule, deviceContext: device, pushConstantBinding: compositePushBinding);
 
-        // One pool, FOUR independent sets — the Direct3D 12 allocator bump-allocates a non-overlapping heap region per
-        // set (like a Vulkan pool), so they never clobber. The capacity is DERIVED from the four sets' binding lists
+        // One pool, FIVE independent sets — the Direct3D 12 allocator bump-allocates a non-overlapping heap region per
+        // set (like a Vulkan pool), so they never clobber. The capacity is DERIVED from the five sets' binding lists
         // (an array binding contributes its full Count), so it can never drift out of sync when a binding is added or
         // MaxViewports changes.
-        var poolSizes = GpuDescriptorPoolSizes.ForSets(beamBindings, cullArgsBindings, viewsBindings, compositeBindings);
+        var poolSizes = GpuDescriptorPoolSizes.ForSets(beamBindings, instanceCullBindings, cullArgsBindings, viewsBindings, compositeBindings);
 
         m_pool = m_descriptorAllocator.CreatePool(deviceHandle: m_deviceHandle, sizes: poolSizes);
 
@@ -397,7 +416,14 @@ public sealed class SdfWorldEngine : IDisposable {
         WriteStorageBuffer(set: m_beamSet, binding: ViewportBindingIndex, buffer: m_viewportBuffer);
         WriteStorageBuffer(set: m_beamSet, binding: DynamicTransformBindingIndex, buffer: m_dynamicTransformBuffer);
         WriteStorageBufferReadWrite(set: m_beamSet, binding: TileBindingIndex, buffer: m_tileBuffer);
-        WriteStorageBufferReadWrite(set: m_beamSet, binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer);
+        WriteStorageBufferReadOnly(set: m_beamSet, binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer);
+
+        // The instance-cull set: the mask buffer written (the frame's first pass — the beam then reads it).
+        m_instanceCullSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_instanceCullPipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
+        WriteStorageBuffer(set: m_instanceCullSet, binding: ProgramBindingIndex, buffer: m_programBuffer);
+        WriteStorageBuffer(set: m_instanceCullSet, binding: ViewportBindingIndex, buffer: m_viewportBuffer);
+        WriteStorageBuffer(set: m_instanceCullSet, binding: DynamicTransformBindingIndex, buffer: m_dynamicTransformBuffer);
+        WriteStorageBufferReadWrite(set: m_instanceCullSet, binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer);
 
         // The cull buffer is read-only here (a stride-4 SRV on Direct3D 12); the args + bounds are written (UAVs).
         m_cullArgsSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_cullArgsPipeline.DescriptorSetLayoutHandle, deviceHandle: m_deviceHandle, poolHandle: m_pool);
@@ -814,6 +840,7 @@ public sealed class SdfWorldEngine : IDisposable {
         m_screenSurfaceBuffer.Dispose();
         m_screenLightBuffer.Dispose();
         m_beamPipeline.Dispose();
+        m_instanceCullPipeline.Dispose();
         m_cullArgsPipeline.Dispose();
         m_viewsPipeline.Dispose();
         m_compositePipeline.Dispose();
@@ -827,6 +854,7 @@ public sealed class SdfWorldEngine : IDisposable {
         m_screenSourceFiller.Dispose();
         m_storageImage.Dispose();
         m_beamShaderModule.Dispose();
+        m_instanceCullShaderModule.Dispose();
         m_cullArgsShaderModule.Dispose();
         m_viewsShaderModule.Dispose();
         m_compositeShaderModule.Dispose();
@@ -1054,7 +1082,33 @@ public sealed class SdfWorldEngine : IDisposable {
             m_timingRecorder.WriteTimestamp(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, poolHandle: timingPool, queryIndex: 0, stageFlags: GpuTimingStage.TopOfPipe);
         }
 
-        // Tile-cull prepass: one invocation per (tile, viewport).
+        // Instance-cull pass FIRST (mask-first): one invocation per (tile, viewport) — bins the program's instances
+        // against each tile's cone into the per-tile mask (the uniform-grid walk, or the flat loop when the program
+        // packs no grid). Its OWN kernel so its register footprint never taxes the cone march's occupancy.
+        recorder.BindComputePipeline(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, pipelineHandle: m_instanceCullPipeline.Handle);
+        recorder.BindComputeDescriptorSet(commandBufferHandle: commandBuffer, descriptorSetHandle: m_instanceCullSet, deviceHandle: m_deviceHandle, pipelineLayoutHandle: m_instanceCullPipeline.LayoutHandle);
+        recorder.PushConstants(commandBufferHandle: commandBuffer, data: m_pushConstant, deviceHandle: m_deviceHandle, offset: 0, pipelineLayoutHandle: m_instanceCullPipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+        recorder.Dispatch(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle,
+            groupCountX: ((m_tileGridX + (WorkgroupEdge - 1)) / WorkgroupEdge),
+            groupCountY: ((m_tileGridY + (WorkgroupEdge - 1)) / WorkgroupEdge),
+            groupCountZ: viewportCount
+        );
+
+        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 1, timingPool: timingPool); // close: instance-mask cull
+
+        // Make the instance-mask writes visible to the beam's cone march (it evaluates the tile-masked field).
+        recorder.MemoryBarrier(
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuComputeAccess.ShaderRead,
+            destinationStageMask: GpuComputeStage.ComputeShader,
+            deviceHandle: m_deviceHandle,
+            sourceAccessMask: GpuComputeAccess.ShaderWrite,
+            sourceStageMask: GpuComputeStage.ComputeShader
+        );
+
+        // Tile-cull prepass: one invocation per (tile, viewport), cone-marching the tile-MASKED field.
         recorder.BindComputePipeline(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, pipelineHandle: m_beamPipeline.Handle);
         recorder.BindComputeDescriptorSet(commandBufferHandle: commandBuffer, descriptorSetHandle: m_beamSet, deviceHandle: m_deviceHandle, pipelineLayoutHandle: m_beamPipeline.LayoutHandle);
         recorder.PushConstants(commandBufferHandle: commandBuffer, data: m_pushConstant, deviceHandle: m_deviceHandle, offset: 0, pipelineLayoutHandle: m_beamPipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
@@ -1066,10 +1120,10 @@ public sealed class SdfWorldEngine : IDisposable {
             groupCountZ: viewportCount
         );
 
-        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 1, timingPool: timingPool); // close: beam prepass
+        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 2, timingPool: timingPool); // close: beam prepass
 
-        // Make the prepass's tile + instance-mask writes visible to the cull-args reduction's (and Stage 1's) reads —
-        // a global memory barrier, so it covers the new instance-mask buffer with no per-resource change.
+        // Make the beam's tile writes visible to the cull-args reduction's (and Stage 1's) reads — a global memory
+        // barrier (the mask writes are already visible from the first barrier; a second global one costs nothing more).
         recorder.MemoryBarrier(
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuComputeAccess.ShaderRead,
@@ -1158,7 +1212,7 @@ public sealed class SdfWorldEngine : IDisposable {
             deviceHandle: m_deviceHandle
         );
 
-        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 2, timingPool: timingPool); // close: cull-args + Stage 1 views
+        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 3, timingPool: timingPool); // close: cull-args + Stage 1 views
 
         // Make Stage 1's source writes visible to Stage 2's reads.
         recorder.MemoryBarrier(
@@ -1193,7 +1247,7 @@ public sealed class SdfWorldEngine : IDisposable {
             deviceHandle: m_deviceHandle
         );
 
-        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 3, timingPool: timingPool); // close: Stage 2 composite
+        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 4, timingPool: timingPool); // close: Stage 2 composite
 
         // Hand the output off in its consumer layout: shader-readable for a same-device consumer (compositor or
         // readback), or the cross-backend External handoff layout. Routing this through the recorder keeps its

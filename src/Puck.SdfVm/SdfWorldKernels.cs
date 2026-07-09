@@ -1,18 +1,22 @@
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The four compiled compute kernels of the SDF world pipeline, in chain order: <c>sdf-beam.comp</c> (tile-cull
-/// cone-march prepass), <c>sdf-cull-args.comp</c> (GPU-written INDIRECT dispatch args: the surviving-tile bbox),
-/// <c>sdf-world-views.comp</c> (per-view render, dispatched indirectly from those args), and
-/// <c>sdf-world-composite.comp</c> (source-agnostic region composite). One backend's set — SPIR-V for Vulkan, DXIL
-/// for Direct3D 12; <see cref="Load(string)"/> reads whichever the extension selects from the deployed assets.
+/// The five compiled compute kernels of the SDF world pipeline, in chain order: <c>sdf-beam.comp</c> (tile-cull
+/// cone-march prepass), <c>sdf-instance-cull.comp</c> (the per-tile instance-mask pass — its own kernel so its cell
+/// walk's register footprint never taxes the cone march's occupancy), <c>sdf-cull-args.comp</c> (GPU-written INDIRECT
+/// dispatch args: the surviving-tile bbox), <c>sdf-world-views.comp</c> (per-view render, dispatched indirectly from
+/// those args), and <c>sdf-world-composite.comp</c> (source-agnostic region composite). One backend's set — SPIR-V
+/// for Vulkan, DXIL for Direct3D 12; <see cref="Load(string)"/> reads whichever the extension selects from the
+/// deployed assets.
 /// </summary>
 /// <param name="Beam">The tile-cull prepass kernel.</param>
+/// <param name="InstanceCull">The per-tile instance-mask kernel.</param>
 /// <param name="CullArgs">The cull-args reduction kernel.</param>
 /// <param name="Views">The Stage 1 per-view SDF kernel.</param>
 /// <param name="Composite">The Stage 2 source-agnostic compositor kernel.</param>
 public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Beam,
+    ReadOnlyMemory<byte> InstanceCull,
     ReadOnlyMemory<byte> CullArgs,
     ReadOnlyMemory<byte> Views,
     ReadOnlyMemory<byte> Composite
@@ -35,6 +39,7 @@ public readonly record struct SdfWorldKernels(
             Beam: File.ReadAllBytes(path: Path.Combine(directory, $"sdf-beam.comp{bytecodeExtension}")),
             Composite: File.ReadAllBytes(path: Path.Combine(directory, $"sdf-world-composite.comp{bytecodeExtension}")),
             CullArgs: File.ReadAllBytes(path: Path.Combine(directory, $"sdf-cull-args.comp{bytecodeExtension}")),
+            InstanceCull: File.ReadAllBytes(path: Path.Combine(directory, $"sdf-instance-cull.comp{bytecodeExtension}")),
             Views: File.ReadAllBytes(path: Path.Combine(directory, $"sdf-world-views.comp{bytecodeExtension}"))
         );
     }

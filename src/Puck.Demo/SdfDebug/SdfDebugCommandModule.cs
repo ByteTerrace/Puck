@@ -137,6 +137,11 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             name: "sdf.scope"
         );
         yield return WithArgs(
+            description: "Toggles the beam prepass's uniform-grid instance cull for the mode's programs: sdf.grid on|off. ON (default) packs the world-space grid the beam walks; OFF packs a disabled grid so the beam flat-loops every instance — the live A/B lever for grid-vs-flat beam measurement (pair with sdf.bench). No args echoes the current state.",
+            handler: (context, args) => new CommandResult(HandleGrid(args: args)),
+            name: "sdf.grid"
+        );
+        yield return WithArgs(
             description: "Poses the orbit camera deterministically (the scriptable form of the pad orbit): sdf.cam [pitch <p>] [yaw <y>] [dist <d>] [target <x y z>]. Each clause is optional and keeps the current value; pitch clamps to [0.05, 1.35] (low = grazing), dist to [0.5, 14]. Use a low pitch + far target to graze the ground behind a tall occluder.",
             handler: (context, args) => new CommandResult(HandleCam(args: args)),
             name: "sdf.cam"
@@ -151,6 +156,24 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             handler: (context, args) => new CommandResult(HandleBench(args: args)),
             name: "sdf.bench"
         );
+    }
+
+    // The uniform-grid instance cull's live A/B toggle (SdfDebugMode.SetGridCull → the frame source's Build(
+    // buildInstanceGrid:) + a revision bump, so the next frame's takeover program packs the new state).
+    private string HandleGrid(string[] args) {
+        if (Mode is not { } mode) {
+            return "[sdf.grid: unavailable — the overworld is not the active root]";
+        }
+
+        if (args.Length == 0) {
+            return $"[sdf.grid {(mode.GridCull ? "on" : "off")}] — sdf.grid on|off (the beam's uniform-grid instance cull; off = the flat per-instance loop)";
+        }
+
+        var on = ParseOnOff(token: args[0]);
+
+        mode.SetGridCull(on: on);
+
+        return $"[sdf.grid {(on ? "on" : "off")}]{(on ? string.Empty : " — the beam flat-loops every instance (the pre-grid reference path)")}";
     }
 
     private string HandleCam(string[] args) {

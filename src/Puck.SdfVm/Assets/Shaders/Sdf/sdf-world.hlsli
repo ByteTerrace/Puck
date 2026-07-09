@@ -417,14 +417,26 @@ struct TileBounds {
     float secondEntry;
 };
 
-// map()-based cone march that additionally records the first proven-empty gap past the entry band. The GAP is
+// Cone march that additionally records the first proven-empty gap past the entry band. The GAP is
 // conservative for the WHOLE tile cone: `firstExit` is a t at which the cone clearance is strictly positive (every
 // ray in the tile is clear there) and the search then steps by <= clearance/(1+chord) — the sphere-trace guarantee —
 // so it cannot skip the cone re-entering geometry; the first re-entry is `secondEntry`. Overstepping the interior of
 // the first band (the through-band phase) can only MISS a gap (reporting firstExit = MaxDistance), never invent one,
 // so a teleport is never unsafe. Reaching MaxDistance while clear yields secondEntry = MaxDistance (an empty tail —
 // the ray teleports to the far plane and ends), the one far-bound benefit taken here.
-TileBounds coneMarchTileBounds(ViewportData view, TileCone cone) {
+//
+// The march evaluates the TILE-MASKED field (mapMasked at `instanceMaskBase` — the mask the instance-cull pass wrote
+// for THIS tile, dispatched immediately before the beam): each sample walks only the instances overlapping the tile's
+// cone, so the march's per-step cost is O(instances near this tile), not O(all instances) — the measured O(n) beam
+// wall (docs/sdf-bench-notes.md) was exactly this per-sample enumeration (~1.6B segment-bound checks at 4096
+// instances), never the per-tile binning. BIT-EXACT by the same contract Stage 1's masked march rides: a masked-out
+// instance's bound excludes every point of the tile's cone (the sphere-vs-cone test is a necessary condition for the
+// bound to touch it), and the bound-sizing contract (SdfProgram.PackInstances — union influence margins, smooth
+// halos, scoped-field reach, the unmaskable sentinel) guarantees such an instance's compose returns the accumulator
+// bit-exactly at any point outside its influence — so every mapMasked sample here equals the unmasked map() to the
+// bit, and marchStart/the gap planes are unchanged. World segments have no mask bits and always evaluate (mapCore's
+// world/instance merge). A consumer with no mask passes SDF_INSTANCE_MASK_ALL and gets the unmasked march verbatim.
+TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMaskBase) {
     float3 origin = view.position.xyz;
 
     TileBounds b;
@@ -441,7 +453,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone) {
 
     [loop]
     for (int i = 0; (i < ConeMarchSteps); i++) {
-        float clearance = (map(origin + (cone.centerDirection * t)).distance - (cone.chord * t));
+        float clearance = (mapMasked(origin + (cone.centerDirection * t), instanceMaskBase).distance - (cone.chord * t));
 
         if (clearance <= ConeEpsilon) {
             b.entry = t;
@@ -470,7 +482,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone) {
 
     [loop]
     for (int j = 0; (j < TileGapSteps); j++) {
-        float clearance = (map(origin + (cone.centerDirection * t)).distance - (cone.chord * t));
+        float clearance = (mapMasked(origin + (cone.centerDirection * t), instanceMaskBase).distance - (cone.chord * t));
 
         if (!clear) {
             if (clearance > ConeEpsilon) {
@@ -584,98 +596,13 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
     return bits;
 }
 
-// Accumulates one tile's per-instance mask via the UNIFORM GRID (the beam prepass's default when the grid is enabled),
-// into `scratch` (the caller's per-thread SDF_MAX_INSTANCES/32-word accumulator, its first `maskWordCount` words
-// pre-zeroed). Two sources, each setting a bit by the SAME sdfInstancePassesTileCone test the flat loop uses:
-//   (1) the ALWAYS-tested list — dynamic, unmaskable, and sprawling instances the frozen grid cannot bin (an unmaskable
-//       instance's 1e30 bound passes every tile, so it just sets its bit; a parked one is rejected inside the test).
-//   (2) the grid cells the tile's cone FOOTPRINT overlaps — a conservative swept-cone rasterization. For each march
-//       slab [t0, t1] (step = one cell edge, from the apex to where the cone leaves the grid AABB) the cone frustum is
-//       bounded by a world AABB (the two disk centres +/- (chord*t1 + footprintPad)); that AABB is converted to a cell
-//       range, EXPANDED by SDF_GRID_CELL_RING cells (the host/GPU floor may disagree by a cell), and every entry in
-//       those cells is tested. CONSERVATIVENESS: an instance that passes the flat test touches the bare cone at some
-//       point q within its own bound; q lies in the slab covering that depth, so q's cell is walked and the instance
-//       (binned into that cell by its bound) is found. An instance in several overlapped cells sets its bit more than
-//       once — idempotent (OR). So every flat-set bit is set here; and since only cell/always members are tested by the
-//       identical rule, no extra bit is set: the grid mask equals the flat mask.
-void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture, inout uint scratch[SDF_INSTANCE_MASK_MAX_WORDS]) {
-    // (1) The always-tested list.
-    [loop]
-    for (uint a = 0u; (a < grid.alwaysCount); a++) {
-        uint index = sdfWordAt(grid.baseWord + grid.alwaysWord + a);
-        float4 bound = sdfInstanceBoundAt(instanceOffset, index);
-
-        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
-            scratch[index >> 5u] |= (1u << (index & 31u));
-        }
-    }
-
-    // (2) The cone footprint's grid cells.
-    float3 gridMin = grid.origin;
-    float3 gridMax = (grid.origin + (float3(grid.dims) * grid.cellSize));
-    // The far bound of the march: the largest projection of the grid AABB onto the ray (0 if the grid is behind it).
-    // Past it no instance centre projects, so the cone need not be marched farther (a near-apex instance is still
-    // covered by the t0 = 0 slab). Picking the per-axis corner that maximizes the projection avoids marching all 8.
-    float3 farCorner = float3(
-        ((centerDirection.x > 0.0) ? gridMax.x : gridMin.x),
-        ((centerDirection.y > 0.0) ? gridMax.y : gridMin.y),
-        ((centerDirection.z > 0.0) ? gridMax.z : gridMin.z)
-    );
-    float tEnd = max(dot((farCorner - rayOrigin), centerDirection), 0.0);
-    int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
-
-    float t0 = 0.0;
-
-    [loop]
-    for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
-        float t1 = min((t0 + grid.cellSize), max(tEnd, t0)); // t1 >= t0; a behind-grid ray degenerates to one apex slab
-        float3 c0 = (rayOrigin + (centerDirection * t0));
-        float3 c1 = (rayOrigin + (centerDirection * t1));
-        float radius = ((chord * t1) + grid.footprintPad);
-        float3 low = (min(c0, c1) - radius);
-        float3 high = (max(c0, c1) + radius);
-
-        // Skip the slab entirely when its AABB does not overlap the grid AABB (a cone leaving the grid, or one whose
-        // apex sits outside it). clamp() would otherwise pin an off-grid AABB onto a boundary cell and test it spuriously
-        // (harmless, but wasteful).
-        if (all(high >= gridMin) && all(low <= gridMax)) {
-            int3 cellLow = (int3(floor((low - grid.origin) * grid.invCellSize)) - SDF_GRID_CELL_RING);
-            int3 cellHigh = (int3(floor((high - grid.origin) * grid.invCellSize)) + SDF_GRID_CELL_RING);
-
-            cellLow = clamp(cellLow, int3(0, 0, 0), dimensionsMinusOne);
-            cellHigh = clamp(cellHigh, int3(0, 0, 0), dimensionsMinusOne);
-
-            [loop]
-            for (int cz = cellLow.z; (cz <= cellHigh.z); cz++) {
-                [loop]
-                for (int cy = cellLow.y; (cy <= cellHigh.y); cy++) {
-                    [loop]
-                    for (int cx = cellLow.x; (cx <= cellHigh.x); cx++) {
-                        uint cell = ((((uint)cz * grid.dims.y) + (uint)cy) * grid.dims.x) + (uint)cx;
-                        uint entryStart = sdfWordAt(grid.baseWord + grid.cellStartWord + cell);
-                        uint entryEnd = sdfWordAt(grid.baseWord + grid.cellStartWord + cell + 1u);
-
-                        [loop]
-                        for (uint k = entryStart; (k < entryEnd); k++) {
-                            uint index = sdfWordAt(grid.baseWord + grid.entryWord + k);
-                            float4 bound = sdfInstanceBoundAt(instanceOffset, index);
-
-                            if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
-                                scratch[index >> 5u] |= (1u << (index & 31u));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (t1 >= tEnd) {
-            break;
-        }
-
-        t0 = t1;
-    }
-}
+// The uniform-grid CELL WALK lives in sdf-instance-cull.comp.hlsl (collectInstanceGridMask): it writes mask bits
+// straight into the per-tile mask buffer (each tile's words are exclusively owned by ONE invocation, so a same-thread
+// read-modify-write is race-free), which only that kernel binds writable. Two rejected shapes, both MEASURED worse on
+// the 4096-instance sweep: (a) a per-thread accumulation array — a dynamically indexed uint[SDF_MAX_INSTANCES/32]
+// local allocates 512 B of thread scratch per invocation; (b) fusing the cull into sdf-beam — the walk's register
+// high-water mark cost the co-resident cone march ~12% occupancy on BOTH paths (grid enabled or not). Hence the
+// dedicated pass.
 
 // March + shade one viewport's ray for a pixel at the viewport-local UV, starting the march at `marchStart` (the
 // tile-cull lower bound; TileEmpty skips the march entirely → background) and resolving the debug view mode.

@@ -35,10 +35,6 @@
 // ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 128
 // words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
 #define SDF_MAX_INSTANCES 4096u
-// The most per-tile mask WORDS a program can derive (ceil(SDF_MAX_INSTANCES / 32)) — the fixed size of the beam's
-// per-thread grid-cull accumulation scratch (SDF_MAX_INSTANCES / 32 = 128). Spelled without the `u` suffix so it is a
-// legal array dimension. KEEP IN SYNC with SDF_MAX_INSTANCES.
-#define SDF_INSTANCE_MASK_MAX_WORDS 128
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still
@@ -46,12 +42,17 @@
 #define SDF_INSTANCE_MASK_ALL 0xFFFFFFFFu
 
 #ifdef SDF_INSTANCE_MASKS
-// The per-tile instance mask sdf-beam.comp wrote (world render path, Stage 1 ONLY): a flat uint buffer,
+// The per-tile instance mask sdf-instance-cull.comp wrote (world render path): a flat uint buffer,
 // params.instanceMaskWordCount (the host-pushed live program width) elements per (viewport, tile) entry, same
-// (viewport, tile) indexing as the cull buffer.
-// register(t13): the first SRV slot free of Stage 1's program/viewport/dynamicTransforms/cullBounds/screenSurfaces/
-// screenSources run (t0..t12). KEEP IN SYNC with SdfWorldEngine's InstanceMaskBindingIndex.
-[[vk::binding(7, 0)]] StructuredBuffer<uint> sdfInstanceMasks : register(t13);
+// (viewport, tile) indexing as the cull buffer. TWO readers, with different Direct3D 12 SRV registers (the register
+// follows each kernel's engine binding-list order): Stage 1 at the default t13 (the first slot free of its
+// program/viewport/dynamicTransforms/cullBounds/screenSurfaces/screenSources run, t0..t12) and the beam cone march at
+// t3 (its list is program/viewports/dynamicTransforms + this) — the consumer overrides SDF_INSTANCE_MASKS_REGISTER
+// before including. KEEP IN SYNC with SdfWorldEngine's binding lists.
+#ifndef SDF_INSTANCE_MASKS_REGISTER
+#define SDF_INSTANCE_MASKS_REGISTER t13
+#endif
+[[vk::binding(7, 0)]] StructuredBuffer<uint> sdfInstanceMasks : register(SDF_INSTANCE_MASKS_REGISTER);
 #endif
 
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
@@ -137,10 +138,12 @@ uint sdfInstanceCountClamped() {
 // instances NEAR a tile's cone. KEEP IN SYNC with Puck.SdfVm.SdfInstanceGrid (the host packer) — the header layout,
 // SDF_GRID_HEADER_WORDS, and SDF_GRID_MAX_DIM.
 #define SDF_GRID_HEADER_WORDS 16u
-#define SDF_GRID_MAX_DIM 64u    // per-axis cell-count cap (KEEP IN SYNC with SdfInstanceGrid.MaxDimension)
-#define SDF_GRID_CELL_RING 1    // the cone footprint's integer cell over-cover ring (float-safety margin, both sides)
-// The cone-march slab cap: the host guarantees the real slab count (grid depth / cellSize) is at most the grid's cell
-// diagonal, sqrt(3)*SDF_GRID_MAX_DIM ≈ 110.85, so 128 is a hard loop bound that never truncates a legal grid walk.
+#define SDF_GRID_MAX_DIM 64u     // per-axis cell-count cap (KEEP IN SYNC with SdfInstanceGrid.MaxDimension)
+#define SDF_GRID_SLAB_CELLS 2.0  // cone-march slab length in cell edges (fewer iterations + fewer slab-boundary re-tests than 1)
+// The cone-march slab budget. The walk clamps to the ray∩grid interval (at most sqrt(3)*SDF_GRID_MAX_DIM ≈ 111 cells,
+// ~56 slabs at SDF_GRID_SLAB_CELLS = 2) plus the query inflation's few extra slabs, so 128 comfortably covers every
+// legal walk — and the LAST budget slab force-covers the remaining interval whole (see collectInstanceGridMask), so
+// even a pathological clip can only get more conservative, never truncate.
 #define SDF_GRID_MAX_SLABS 128u
 
 // One uint of the program word stream. The stream is a StructuredBuffer<uint4>; every table before the grid is
@@ -166,9 +169,11 @@ struct SdfInstanceGridHeader {
     bool enabled;
     uint3 dims;
     float3 origin;      // grid-AABB min (world)
-    float invCellSize;  // host-baked 1/cellSize (the shader never divides)
-    float cellSize;     // world cell edge (the cone-march step)
-    float footprintPad; // host-baked world margin the cone footprint adds (the max binned bound radius)
+    float invCellSize;  // host-baked 1/cellSize (the shader never divides by the cell edge)
+    float cellSize;     // world cell edge (the slab-march step unit)
+    float footprintPad; // LOAD-BEARING query margin: max binned bound radius + float-safety epsilon. Instances are
+                        // binned by CENTER (one cell each), so a query that omits this pad misses any bound whose
+                        // center sits in a neighboring cell — a hole-in-the-world bug, not slop.
     uint cellStartWord; // block-relative uint offset of cellStart[]
     uint entryWord;     // block-relative uint offset of the cell entries
     uint alwaysWord;    // block-relative uint offset of the always-tested list

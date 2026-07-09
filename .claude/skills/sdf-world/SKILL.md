@@ -157,10 +157,33 @@ disagree. Copy that shape for any future slot sharing: one flag, one rebuild.
 `dotnet build src/Puck.SdfVm -c Release` runs DXC IN PLACE in the source tree
 (build FAILS without DXC; `/p:DxcCommand=` overrides) — commit the
 regenerated `.spv`/`.dxil` with the source change. Editing `sdf-world.hlsli`
-or `sdf-vm.hlsli` recompiles `sdf-beam.comp`, `sdf-world-views.comp`, AND
-`sdf-cull-args.comp`. `ValidateShaderBytecodeSources` fails the build on
-bytecode without a same-stem `.hlsl` (Puck.SdfVm only; the other
-shader-shipping projects lack the guard — a known follow-up).
+or `sdf-vm.hlsli` recompiles `sdf-instance-cull.comp`, `sdf-beam.comp`,
+`sdf-world-views.comp`, AND `sdf-cull-args.comp`.
+`ValidateShaderBytecodeSources` fails the build on bytecode without a
+same-stem `.hlsl` (Puck.SdfVm only; the other shader-shipping projects lack
+the guard — a known follow-up).
+
+**The MASK-FIRST pass order (the uniform-grid instance-cull arc).** FIVE
+kernels per frame: `sdf-instance-cull.comp` (per-tile instance mask — the
+host-built CSR uniform grid from `SdfInstanceGrid`, bin-by-CENTER with the
+LOAD-BEARING `footprintPad` = max binned radius; dynamic/unmaskable instances
+ride an always-tested list; a disabled grid falls back to the flat
+per-instance loop, forced by `SdfProgramBuilder.Build(buildInstanceGrid:
+false)` / the demo's `sdf.grid off` verb) → `sdf-beam.comp` (cone march over
+the TILE-MASKED field via `mapMasked` — bit-exact per the bound-sizing
+contract because a masked-out instance's bound excludes the tile's whole
+cone; this is what flattened the O(instances) beam wall: 187.8→6.6 ms @4096,
+119→1.0 ms @1024 scattered carves) → `sdf-cull-args` → views → composite.
+The instance cull is deliberately NOT fused into the beam (its register
+footprint cost the cone march ~12% occupancy, measured), and it uses direct
+mask-buffer bit writes, NOT a per-thread accumulation array (512 B/thread
+scratch, also measured worse). `sdfInstanceMasks`' D3D12 register is
+per-consumer: Stage 1 t13 (default), the beam t3 via
+`SDF_INSTANCE_MASKS_REGISTER` before the include. Timing pass labels are
+`["mask", "beam", "views", "composite"]` (`SdfWorldEngine.PassLabels`); the
+bench's beam column reports beam+mask so ladders stay comparable. Gated by
+`world-grid-cull` (grid==flat bit-identical via the destructible-slab scene)
+plus the existing instanced==flat stages.
 
 ## Gotchas (verified, expensive to re-learn)
 

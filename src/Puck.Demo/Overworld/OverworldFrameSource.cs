@@ -1605,7 +1605,9 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         if (!probeWorstCase && m_sdfDebug.Active) {
             m_sdfDebug.Emit(builder: builder);
 
-            return builder.Build();
+            // The sdf.grid verb's live A/B lever: OFF packs a DISABLED grid so the beam takes the flat per-instance
+            // fallback over the same instances — grid-vs-flat beam cost measurable in one session, no rebuild.
+            return builder.Build(buildInstanceGrid: m_sdfDebug.GridCull);
         }
 
         // AGB-DEBUG takeover: the native GBA scene is ONE fullscreen diegetic slab sampling the ARM7TDMI framebuffer

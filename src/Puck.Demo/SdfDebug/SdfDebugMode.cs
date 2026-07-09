@@ -17,6 +17,8 @@ public sealed class SdfDebugMode {
     private readonly SdfDebugRenderer m_renderer = new();
     private readonly SdfDebugController m_controller = new();
     private bool m_active;
+    private bool m_gridCull = true;
+    private int m_gridRevision;
 
     /// <summary>The debug scene the <c>sdf.*</c> verbs mutate (shape, op stack, floor, lift).</summary>
     public SdfDebugScene Scene => m_scene;
@@ -32,8 +34,25 @@ public sealed class SdfDebugMode {
     public bool BenchRunning => m_bench.Running;
 
     /// <summary>The content revision the frame source rebuilds on — the debug scene's revision plus the bench's (so a
-    /// bench config change forces a program rebuild exactly as a scene edit does).</summary>
-    public int Revision => (m_scene.Revision + m_bench.Revision);
+    /// bench config change forces a program rebuild exactly as a scene edit does) plus the grid-cull toggle's.</summary>
+    public int Revision => (m_scene.Revision + m_bench.Revision + m_gridRevision);
+
+    /// <summary>Whether the mode's takeover programs pack the uniform-grid instance cull (default ON — the production
+    /// path). OFF packs a DISABLED grid so the beam takes the flat per-instance fallback over the same instances — the
+    /// <c>sdf.grid</c> verb's live A/B lever for grid-vs-flat beam measurement (no rebuild, no checkout).</summary>
+    public bool GridCull => m_gridCull;
+
+    /// <summary>Sets the grid-cull toggle (see <see cref="GridCull"/>) and bumps the revision so the frame source
+    /// rebuilds the takeover program with the new packing on the next frame.</summary>
+    /// <param name="on">Whether the uniform-grid instance cull is packed.</param>
+    public void SetGridCull(bool on) {
+        if (m_gridCull == on) {
+            return;
+        }
+
+        m_gridCull = on;
+        m_gridRevision++;
+    }
 
     /// <summary>The SLICE view's plane selector as a frame-channel float (0 = camera-locked, 1/2/3 = world X/Y/Z) —
     /// the frame source threads it into <see cref="SdfFrame.DebugSliceAxis"/> every frame.</summary>
