@@ -22,13 +22,23 @@ premises are now false).
 
 ## Performance levers (engine, Post-gated)
 
-1. **Per-region tape pruning** (survey row 10, R2) — Barbier Lipschitz
-   criterion, CPU-baked per-cell active-segment subsets. **Doubly unblocked**:
-   the scoped accumulator landed (restores maskability/eligibility to the
-   onion/intersection chains) AND the grid's CSR cell lists exist
-   (`SdfInstanceGrid` — the per-cell instance membership a pruner hangs off).
-   Now the front of the perf queue: it attacks the views term, which is the
-   new bottleneck.
+1. **Per-region tape pruning — REFUTED AS SPECIFIED (2026-07-09,
+   measure-first build; see the wiki negative-results ledger).** The full
+   candidate (per-tile world-segment masks riding the cull pass) was built,
+   gated, and disproven on both axes: VALUE — the room is 284 single-segment
+   instances + only 2 world segments (~1.04 seg/instance; the tape is already
+   as short as instance masking makes it); CORRECTNESS — bit-identity is
+   unreachable for auto-bounded world segments (pruned-vs-flat diff 1.51%,
+   8700 px: a Union segment occludes softShadow/calcAO rays in tiles its
+   geometric bound never touches; instance masks are bit-exact only because
+   authors OVERSIZE bounds — world-instanced uses bound 4–5 for a 0.3-radius
+   sphere — a discipline auto-analysis cannot replicate). If ever revisited,
+   it needs authored per-world-segment influence bounds, and a content
+   profile with many multi-segment chains. The measurement's real finding:
+   **the room's views (92% of frame) is the SHADING EPILOGUE eval count**
+   (softShadow's full per-lit-pixel sphere-trace is the largest term) — the
+   promoted levers are #4 (compute shadow-cull), #10 (closestApproach
+   factoring), #11 (cone-AO tier).
 2. **Segment tracing** (Galin 2020 — the D-series' deferred "D"; survey row 13
    prerequisite) — per-segment directional Lipschitz bounds baked alongside
    the per-shape bounds → larger safe steps. The linear member of the

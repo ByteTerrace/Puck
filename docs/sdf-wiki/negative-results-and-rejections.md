@@ -386,3 +386,38 @@ These are deferred pending other work landing first, not rejected on technical m
 - **Reconsider if:** revisited, each op needs its own halo/norm/POP triple-derivation — do not port
   the closed-form arithmetic without redoing that derivation per op.
 - **See also:** [materials-and-primitives.md](materials-and-primitives.md), [lipschitz-and-field-correctness.md](lipschitz-and-field-correctness.md)
+
+### Per-tile world-segment tape pruning (built in-house, 2026-07-09)
+
+- **What:** extend the mask-first instance cull to also emit a per-tile
+  WORLD-SEGMENT mask (precomputing the per-sample bounding early-out at tile
+  granularity), so `mapCore`'s world walk skips segments whose auto-analyzed
+  geometric bound misses the tile's cone — survey row 10's first leg.
+- **Result: REFUTED on both axes, by a full measure-first build** (the
+  candidate was implemented end-to-end, gated, and backed out; zero tree
+  residue). **Value:** the canonical room is 284 single-segment instances +
+  only 2 world segments (~1.04 segments/instance) — instance masking already
+  minimizes the tape; there was ~nothing to prune. **Correctness:** the
+  bit-identity bar is unreachable with auto-derived geometric bounds —
+  pruned-vs-flat diverged 1.51% (8700 px, maxΔ98) because a Union world
+  segment's INFLUENCE (as the running min feeding `softShadow`/`calcAO`
+  occlusion) extends along corridors far outside its geometry: a floating
+  sphere shadows floor tiles its bound never touches. The instance mask is
+  bit-exact only because authors deliberately OVERSIZE instance bounds to
+  cover that influence corridor (`world-instanced` uses bound 4–5 for a
+  0.3-radius sphere) — a discipline no auto-analysis replicates. Note the
+  trap's shape: `AnalyzeSegment` grants maskable bounds exactly to
+  plain-Union chains, which is precisely the influence-unbounded case.
+- **The real finding:** the room's views (92% of frame) is the SHADING
+  EPILOGUE eval count — `softShadow`'s full per-lit-pixel sphere-trace
+  dominates, then AO taps + the normal dual. The views levers are the
+  shadow-cull, `closestApproach` factoring, and the cone-AO tier — not
+  shorter tapes.
+- **Reconsider if:** content ever carries many multi-segment world chains
+  (a sculpted world authored as raw world segments rather than instances),
+  AND per-world-segment influence bounds become AUTHORED (the instance
+  discipline) rather than auto-derived. Barbier's criterion does not rescue
+  auto-bounds: it bounds field VALUE at a region, not the shading-occlusion
+  corridor that broke bit-identity here.
+- **See also:** [tape-pruning-and-inclusion.md](tape-pruning-and-inclusion.md),
+  [hierarchical-and-instance-acceleration.md](hierarchical-and-instance-acceleration.md)
