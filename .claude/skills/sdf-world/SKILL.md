@@ -195,6 +195,33 @@ plus the existing instanced==flat stages.
 
 ## Gotchas (verified, expensive to re-learn)
 
+- **The soft-shadow march is GRID-CULLED (default ON; `sdf.shadowcull on|off`,
+  `SdfFrame.DisableShadowCull`).** `renderView`'s `softShadow` no longer marches
+  the CAMERA-tile mask (the wrong occluder set for a ray that leaves the camera
+  cone). Instead `sdfShadowGather` (sdf-world.hlsli) walks the SAME view-
+  independent `SdfInstanceGrid` the beam cull walks, along the SUN ray, into a
+  per-lit-pixel LOCAL mask (`sdfShadowMaskWords`, `SDF_SHADOW_MASK_WORDS = 32` =
+  ≤1024 addressable instances) that `mapMasked` reads via the `sdfShadowMaskActive`
+  static — so the culled shadow is BIT-IDENTICAL to the flat all-instances march
+  (gated by `world-shadow-cull`) yet restricted to the shadow ray's neighbourhood,
+  AND newly CORRECT for occluders outside the camera frustum (the corridor case).
+  THREE settled pins: (1) the gather cone is the **penumbra cone**
+  `ShadowPenumbraChord = 3/ShadowSharpness`, NOT a bare ray — the Aaltonen
+  closest-approach refinement couples each sample to the PREVIOUS sample's nearest-
+  surface clearance, so a bare ray (chord 0) or the direct 1/k penumbra drops
+  penumbra-edge px (measured: 1/k→840, 2/k→125, 3/k→0); a wider cone is always a
+  safe superset, only less selective. (2) The fallback is 3-way: gather BUILT (2) →
+  the cull; grid present but >1024 instances (1) → the CAMERA-tile mask (the cheap
+  pre-cull behaviour — NOT flat, which is ~20× on a dense 4096 scene); NO grid (0)
+  → flat all-instances (cheap for few instances, and MATCHES a would-be gather so
+  the `sdf.grid` toggle stays render-invariant — the `world-grid-cull` contract).
+  (3) PERF is scene-dependent and MEASURED: the per-pixel gather WINS on spread
+  scenes (the town reveal 254→116 ms views vs flat; 134→116 vs the old camera-tile)
+  but LOSES on dense clustering (1024 carves stacked in one spot 46→101 ms — the
+  amortized per-tile camera-tile mask beats the per-pixel gather when the cone can't
+  narrow). A density-adaptive gate (skip to camera-tile when the grid is dense) is
+  the open follow-up; the lever ships ON for the overworld's benefit.
+
 - **SmoothUnion against WORLD geometry — now cullable (was the headline cull
   gotcha, closed by D1 increment E).** `blendSmoothUnion` is written far-exact
   (`lerp(a, b, 1-h)`): once the seam saturates past the blend radius k, `h`

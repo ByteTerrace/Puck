@@ -19,6 +19,7 @@ public sealed class SdfDebugMode {
     private readonly SdfDebugController m_controller = new();
     private bool m_active;
     private bool m_gridCull = true;
+    private bool m_shadowCull = true;
     private bool m_useFdNormals;
     private int m_gridRevision;
 
@@ -81,6 +82,20 @@ public sealed class SdfDebugMode {
 
         m_gridCull = on;
         m_gridRevision++;
+    }
+
+    /// <summary>Whether the soft-shadow GRID CULL is ON (default true = the production path). ON gathers each lit pixel's
+    /// shadow-ray grid neighborhood and marches only those instances (bit-identical to flat, cheaper on spread scenes);
+    /// OFF forces the flat all-instances shadow march — the <c>sdf.shadowcull</c> verb's live A/B lever. A pure
+    /// frame-channel flag (<see cref="SdfFrame.DisableShadowCull"/>), so no rebuild — the frame source reads it fresh
+    /// each frame.</summary>
+    public bool ShadowCull => m_shadowCull;
+
+    /// <summary>Sets the soft-shadow grid-cull toggle (see <see cref="ShadowCull"/>). A pure frame channel — no revision
+    /// bump.</summary>
+    /// <param name="on">Whether the shadow march uses the grid cull; <see langword="false"/> = the flat reference.</param>
+    public void SetShadowCull(bool on) {
+        m_shadowCull = on;
     }
 
     /// <summary>Whether the lit surface normal uses the legacy 4-tap finite-difference probe (the A/B lever) instead of

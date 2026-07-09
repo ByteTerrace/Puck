@@ -55,6 +55,22 @@
 [[vk::binding(7, 0)]] StructuredBuffer<uint> sdfInstanceMasks : register(SDF_INSTANCE_MASKS_REGISTER);
 #endif
 
+// === Shadow-ray instance cull (the world LIT path only) ==============================================================
+// A per-lit-pixel LOCAL instance mask over the shadow ray's grid neighborhood, built by sdf-world.hlsli's
+// sdfShadowGather (the grid slab walk along the sun ray) and consumed by mapMasked EXACTLY like the device per-tile
+// mask — so a culled soft-shadow march is BIT-IDENTICAL to the flat all-instances march by the same exact-cull contract
+// (an omitted instance's bound excludes every on-axis shadow sample, so its compose returns the accumulator to the
+// bit). Capped at SDF_SHADOW_MASK_WORDS words = the most instances the local mask can address; a larger program gathers
+// nothing and the caller marches the flat field instead. sdfShadowMaskActive gates sdfInstanceMaskWord onto this static
+// array for the duration of ONE softShadow call and is false everywhere else, so every OTHER map()/mapMasked consumer
+// (the primary march, normals, AO, coverage) is unchanged. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
+// shades, so only it pays the static array's per-invocation footprint (the beam/cull/rt kernels never see it).
+#ifdef SDF_SCREEN_SOURCES
+#define SDF_SHADOW_MASK_WORDS 32u  // <= 1024 addressable instances (room 284, town, carve ladders fit; larger => flat fallback)
+static uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
+static bool sdfShadowMaskActive = false;
+#endif
+
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
 // keeps one all-zero word so the mask buffer indexing stays uniform). Used ONLY for the reader's inner word
 // iteration — buffer INDEXING (entry width and tile base) comes from the host-pushed
@@ -72,11 +88,21 @@ uint sdfInstanceMaskWordCount(uint instanceCount) {
 uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCount) {
     uint word = 0xFFFFFFFFu;
 
-#ifdef SDF_INSTANCE_MASKS
-    if (instanceMaskBase != SDF_INSTANCE_MASK_ALL) {
-        word = sdfInstanceMasks[instanceMaskBase + wordIndex];
-    }
+#ifdef SDF_SCREEN_SOURCES
+    // The active shadow-ray mask OVERRIDES the device per-tile mask for one culled softShadow march (false everywhere
+    // else). A word past the cap reads 0, but the gather only ran because the program fit the cap, so a real instance
+    // word is never past it. The `else` avoids a wasted device-buffer read while the shadow mask is live.
+    if (sdfShadowMaskActive) {
+        word = ((wordIndex < SDF_SHADOW_MASK_WORDS) ? sdfShadowMaskWords[wordIndex] : 0u);
+    } else
 #endif
+    {
+#ifdef SDF_INSTANCE_MASKS
+        if (instanceMaskBase != SDF_INSTANCE_MASK_ALL) {
+            word = sdfInstanceMasks[instanceMaskBase + wordIndex];
+        }
+#endif
+    }
 
     uint remaining = (instanceCount - (wordIndex << 5u));
 

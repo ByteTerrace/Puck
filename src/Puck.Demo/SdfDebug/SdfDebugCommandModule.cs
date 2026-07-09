@@ -165,6 +165,11 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             name: "sdf.normals"
         );
         yield return WithArgs(
+            description: "Toggles the soft-shadow grid cull: sdf.shadowcull on|off. ON (default) gathers each lit pixel's shadow-ray grid neighborhood and marches only those instances — bit-identical to the flat all-instances shadow but far cheaper on spread scenes (and correct for occluders outside the camera cone); OFF marches every instance (the flat reference, the A/B lever for shadow-cull measurement — pair with sdf.bench). No args echoes the current state.",
+            handler: (context, args) => new CommandResult(HandleShadowCull(args: args)),
+            name: "sdf.shadowcull"
+        );
+        yield return WithArgs(
             description: "Poses the orbit camera deterministically (the scriptable form of the pad orbit): sdf.cam [pitch <p>] [yaw <y>] [dist <d>] [target <x y z>]. Each clause is optional and keeps the current value; pitch clamps to [0.05, 1.35] (low = grazing), dist to [0.5, 14]. Use a low pitch + far target to graze the ground behind a tall occluder.",
             handler: (context, args) => new CommandResult(HandleCam(args: args)),
             name: "sdf.cam"
@@ -256,6 +261,24 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             default:
                 return $"[sdf.normals: '{args[0]}' — taps|analytic]";
         }
+    }
+
+    // The soft-shadow grid-cull A/B lever (SdfDebugMode.SetShadowCull → the frame's DisableShadowCull flag; a pure frame
+    // channel, no program rebuild — the grid the shadow march walks is the SAME one the beam already packs).
+    private string HandleShadowCull(string[] args) {
+        if (Mode is not { } mode) {
+            return "[sdf.shadowcull: unavailable — the overworld is not the active root]";
+        }
+
+        if (args.Length == 0) {
+            return $"[sdf.shadowcull {(mode.ShadowCull ? "on" : "off")}] — sdf.shadowcull on|off (the soft-shadow march's grid cull; off = the flat all-instances reference)";
+        }
+
+        var on = ParseOnOff(token: args[0]);
+
+        mode.SetShadowCull(on: on);
+
+        return $"[sdf.shadowcull {(on ? "on" : "off")}]{(on ? string.Empty : " — the shadow march evaluates every instance (the flat reference path)")}";
     }
 
     private string HandleCam(string[] args) {

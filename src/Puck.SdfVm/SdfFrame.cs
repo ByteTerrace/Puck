@@ -47,6 +47,15 @@ public sealed record SdfFrame(
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldUseTapNormals</c>); a frame that never sets
     /// it uploads 0 and shades with analytic normals.</summary>
     public bool UseFiniteDifferenceNormals { get; init; }
+    /// <summary>Disables the soft-shadow GRID CULL (default <see langword="false"/> = the cull is ON). With the cull ON
+    /// the world lit path gathers each lit pixel's shadow-ray grid neighborhood and marches only those instances —
+    /// bit-identical to the flat all-instances shadow but far cheaper on spread scenes (and correct for occluders
+    /// outside the camera cone that the old camera-tile-mask shadow missed). Setting this <see langword="true"/> forces
+    /// the flat all-instances march: the ground-truth reference the Post <c>world-shadow-cull</c> gate matches and the
+    /// A/B lever's OFF state (the <c>sdf.shadowcull</c> verb). Rides the screen-light buffer's grid-object-params row's
+    /// reserved <c>.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's
+    /// <c>worldShadowCullEnabled</c>); an unset frame uploads 0 and the cull stays ON.</summary>
+    public bool DisableShadowCull { get; init; }
     /// <summary>The grid-lock overlay flags (bit0 = draw the world floor grid, bit1 = draw the object grid). Rides
     /// the screen-light buffer's grid rows 9..12 (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and
     /// sdf-world.hlsli's <c>SdfGridWorld..SdfGridObjParams</c> decode). Default 0 = no overlay, so a frame that never

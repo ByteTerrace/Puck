@@ -296,6 +296,19 @@ static const float ShadowMaxDistance = 12.0;
 static const float ShadowBias = 0.02;
 static const float ShadowStepMin = 0.02;  // an occluder thinner than this can be stepped through (IQ-inherited)
 static const float ShadowStepMax = 0.6;
+// The soft-shadow PENUMBRA half-aperture, the shadow-cull gather's cone chord (see sdfShadowGather). The DIRECT penumbra
+// reach is 1/ShadowSharpness: an occluder softens the shadow while its along-ray clearance d keeps sample =
+// ShadowSharpness*d/traveled below 1 (d < traveled/ShadowSharpness), i.e. out to perpendicular distance boundRadius +
+// traveled/ShadowSharpness — a cone of half-slope 1/ShadowSharpness (chord 0, a bare ray, MISSES this ring, the
+// world-grid-cull self-shadow diff a chord-0 gather dropped). But the march's Aaltonen closest-approach REFINEMENT
+// couples each sample to the PREVIOUS sample's clearance (previousTrue = the true nearest-surface distance), so a
+// second occluder that is merely the nearest surface one step BEFORE a shadowing sample perturbs that sample's parabola
+// — the influence-corridor class that killed tape pruning. That coupling occluder sits within a few × the shadowing
+// occluder's distance, so the sound gather cone is WIDER than the direct penumbra: 3/ShadowSharpness is calibrated to
+// reproduce the flat soft shadow BIT-IDENTICALLY (measured — 1/k left 840 penumbra-edge px, 2/k 125, 3/k a clean 0 with
+// margin, on the overlapping-penumbra world-shadow-cull scene). A wider cone is always safe (a superset), only less
+// selective; this is the least-wide value that clears the gate with margin.
+static const float ShadowPenumbraChord = (3.0 / ShadowSharpness);
 // The gradient probe's finite-difference offset. Small enough that the tetrahedron's O(eps) curvature error is
 // sub-LSB, large enough to stay clear of the field's own float noise.
 static const float NormalProbeEpsilon = 0.0006;
@@ -653,6 +666,164 @@ bool worldUseTapNormals() {
     return false;
 #endif
 }
+
+#ifdef SDF_SCREEN_SOURCES
+// The soft-shadow GRID-CULL A/B lever (the sdf.shadowcull verb). Rides SdfGridObjParams.w: 0 (the DEFAULT, an unset
+// frame uploads 0) = ON — the grid-gathered shadow-ray march; 1 = OFF — the flat all-instances march (the ground-truth
+// reference the Post gate matches, and the A/B lever's slow reference). KEEP IN SYNC with SdfFrame.DisableShadowCull
+// and SdfWorldEngine.PackScreenLights.
+bool worldShadowCullEnabled() {
+    return (sdfScreenLights[SdfGridObjParams].w < 0.5);
+}
+
+// Build the shadow-ray candidate mask into sdfShadowMaskWords for a soft-shadow march from `origin` toward `direction`
+// out to `reach` (ShadowMaxDistance). Returns true when the mask is COMPLETE (the program fits SDF_SHADOW_MASK_WORDS and
+// packs an enabled grid) — softShadow then marches it under sdfShadowMaskActive; false => the caller marches the flat
+// all-instances field. SUPERSET-PRESERVING: it sets a bit for every instance whose bound falls within the shadow ray's
+// PENUMBRA CONE (chord ShadowPenumbraChord = 1/ShadowSharpness — see that constant: an occluder softens the shadow out
+// to perpendicular distance boundRadius + traveled/ShadowSharpness, so the exact ray is NOT enough), so mapMasked over
+// this mask equals the flat map() soft shadow TO THE BIT — a wider-than-direct-penumbra cone so the parabola coupling
+// occluder is caught too (see ShadowPenumbraChord); an omitted instance can neither lower a sample's clearance below
+// full light nor perturb a shadowing sample's parabola, so it cannot change the result min. The walk is collectInstanceGridMask's
+// SAME robust-slabs cone rasterization, the cone here being the penumbra cone about the shadow ray, capped at the march
+// reach + footprintPad (samples past `reach` are never taken). KEEP THE WALK IN SYNC with sdf-instance-cull.comp.hlsl's
+// collectInstanceGridMask (the device-buffer twin — a hand-maintained near-clone, like the EmitShape pair): same cell
+// rasterization, same footprintPad contract; only the bit TARGET (this static array), the chord (the penumbra
+// aperture), and the tExit cap (the shadow reach) differ. World segments need no bit — mapCore always evaluates them.
+// Returns the fallback DECISION so the caller marches correctly whether or not the mask was built:
+//   2 = mask BUILT into sdfShadowMaskWords — march it (the cull);
+//   1 = a grid is packed but the program has MORE instances than the local mask can address — march the CAMERA-TILE
+//       mask (the pre-cull shipped fallback, cheap; NOT the ~20x-slower flat all-instances march);
+//   0 = NO grid packed (a grid-suppressed or few-instance program) — march the FLAT all-instances field, which for a
+//       few-instance program is cheap AND, for a deliberately grid-suppressed program, MATCHES the grid-present gather
+//       so the grid toggle stays render-invariant (the world-grid-cull grid==flat contract).
+uint sdfShadowGather(float3 origin, float3 direction, float reach) {
+    uint packedInstanceCount = sdfInstanceCount();
+    uint instanceCount = min(packedInstanceCount, SDF_MAX_INSTANCES);
+
+    uint instanceOffset = sdfInstanceDirectoryOffset();
+    SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(instanceOffset, packedInstanceCount);
+
+    if (!grid.enabled) {
+        return 0u; // no grid — flat fallback (cheap for few instances; matches a would-be gather so the grid toggle is invariant)
+    }
+
+    uint wordCount = sdfInstanceMaskWordCount(instanceCount);
+
+    if (wordCount > SDF_SHADOW_MASK_WORDS) {
+        return 1u; // grid packed but too many instances to address the local mask — the camera-tile fallback (no flat catastrophe)
+    }
+
+    [loop]
+    for (uint z = 0u; (z < wordCount); z++) {
+        sdfShadowMaskWords[z] = 0u;
+    }
+
+    float chord = ShadowPenumbraChord; // the soft penumbra cone's half-slope, NOT a bare ray (see ShadowPenumbraChord)
+    float inverseAperture = rsqrt(max((1.0 - (chord * chord)), 1.0e-6));
+
+    // (1) The ALWAYS-tested list — dynamic + unmaskable instances the frozen grid cannot bin — against the penumbra cone.
+    [loop]
+    for (uint a = 0u; (a < grid.alwaysCount); a++) {
+        uint index = sdfWordAt(grid.baseWord + grid.alwaysWord + a);
+        float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+
+        if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture)) {
+            sdfShadowMaskWords[index >> 5u] |= (1u << (index & 31u));
+        }
+    }
+
+    // (2) The grid cells the penumbra cone sweeps, far bound capped at the shadow reach + the query pad — the same
+    // robust-slabs clip + cell rasterization the beam cull uses (see collectInstanceGridMask), the cone here being the
+    // penumbra cone about the shadow ray.
+    float3 gridMin = grid.origin;
+    float3 gridMax = (grid.origin + (float3(grid.dims) * grid.cellSize));
+    float3 farCorner = float3(
+        ((direction.x > 0.0) ? gridMax.x : gridMin.x),
+        ((direction.y > 0.0) ? gridMax.y : gridMin.y),
+        ((direction.z > 0.0) ? gridMax.z : gridMin.z)
+    );
+    float projection = max(dot((farCorner - origin), direction), 0.0);
+    float tFar = min(((projection + grid.footprintPad) / max((1.0 - chord), 0.01)), (reach + grid.footprintPad));
+
+    float inflate = ((chord * tFar) + grid.footprintPad); // the widest query radius any slab uses (chord grows it with t)
+    float3 clipMin = (gridMin - inflate);
+    float3 clipMax = (gridMax + inflate);
+    float tEnter = 0.0;
+    float tExit = tFar;
+
+    [unroll]
+    for (int axis = 0; (axis < 3); axis++) {
+        float dir = direction[axis];
+        float ori = origin[axis];
+
+        if (abs(dir) > 1.0e-8) {
+            float tA = ((clipMin[axis] - ori) / dir);
+            float tB = ((clipMax[axis] - ori) / dir);
+
+            tEnter = max(tEnter, min(tA, tB));
+            tExit = min(tExit, max(tA, tB));
+        }
+        else if ((ori < clipMin[axis]) || (ori > clipMax[axis])) {
+            return 2u; // the cone provably misses the grid on this axis — only the always-list bits (set above) matter
+        }
+    }
+
+    if (tEnter > tExit) {
+        return 2u; // the cone never overlaps the grid — always-list only
+    }
+
+    int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
+    float slabStep = (grid.cellSize * SDF_GRID_SLAB_CELLS);
+    float t0 = tEnter;
+
+    [loop]
+    for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
+        float t1 = (((slab + 1u) < SDF_GRID_MAX_SLABS) ? min((t0 + slabStep), tExit) : tExit);
+        float3 c0 = (origin + (direction * t0));
+        float3 c1 = (origin + (direction * t1));
+        float radius = ((chord * t1) + grid.footprintPad);
+        float3 low = (min(c0, c1) - radius);
+        float3 high = (max(c0, c1) + radius);
+
+        if (all(high >= gridMin) && all(low <= gridMax)) {
+            int3 cellLow = clamp(int3(floor((low - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
+            int3 cellHigh = clamp(int3(floor((high - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
+
+            [loop]
+            for (int cz = cellLow.z; (cz <= cellHigh.z); cz++) {
+                [loop]
+                for (int cy = cellLow.y; (cy <= cellHigh.y); cy++) {
+                    [loop]
+                    for (int cx = cellLow.x; (cx <= cellHigh.x); cx++) {
+                        uint cell = ((((uint)cz * grid.dims.y) + (uint)cy) * grid.dims.x) + (uint)cx;
+                        uint entryStart = sdfWordAt(grid.baseWord + grid.cellStartWord + cell);
+                        uint entryEnd = sdfWordAt(grid.baseWord + grid.cellStartWord + cell + 1u);
+
+                        [loop]
+                        for (uint k = entryStart; (k < entryEnd); k++) {
+                            uint index = sdfWordAt(grid.baseWord + grid.entryWord + k);
+                            float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+
+                            if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture)) {
+                                sdfShadowMaskWords[index >> 5u] |= (1u << (index & 31u));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (t1 >= tExit) {
+            break;
+        }
+
+        t0 = t1;
+    }
+
+    return 2u;
+}
+#endif
 
 // De-scale a Lipschitz-CLAMPED field sample back to WORLD units — the ONE primitive genuinely shared by the three
 // shading-epilogue field walks (softShadow, calcAO, coverage-AA). mapMasked/map return the field pre-multiplied by the
@@ -1105,7 +1276,27 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // not black). Skip the march where the surface already faces away from the sun (sunDiffuse == 0).
             // The procedural screen branch below consumes sunDiffuse too, so this march is NOT dead there.
             if (sunDiffuse > 0.0) {
+#ifdef SDF_SCREEN_SOURCES
+                // The shadow GRID CULL (default ON). Gather this lit pixel's shadow-ray grid neighbourhood into the local
+                // mask (sdfShadowMaskWords) and march THAT — bit-identical to the flat all-instances march (proven by the
+                // world-shadow-cull gate) but restricted to the instances the shadow ray can actually reach, so the
+                // shadow walks neither the camera-tile mask (the wrong occluder set for a ray that leaves the camera
+                // cone) NOR every instance. sdfShadowGather returns 2 (mask BUILT — the cull), 1 (a grid is packed but
+                // the program overflows the local mask → the camera-tile fallback, the cheap pre-cull behaviour, NOT the
+                // ~20x-slower all-instances flat), or 0 (NO grid → the flat all-instances fallback, which is cheap for a
+                // few-instance program and keeps the grid toggle render-invariant). The cull OFF marches flat
+                // all-instances — the ground-truth reference the A/B lever and the world-shadow-cull gate use.
+                bool cullOn = worldShadowCullEnabled();
+                uint gather = (cullOn ? sdfShadowGather((surfacePoint + (normal * ShadowBias)), SdfSunDirection, ShadowMaxDistance) : 0u);
+                bool culled = (gather == 2u);
+                uint shadowFallbackMask = ((cullOn && (gather == 1u)) ? instanceMaskBase : SDF_INSTANCE_MASK_ALL);
+
+                sdfShadowMaskActive = culled;
+                sunDiffuse *= softShadow(surfacePoint, normal, SdfSunDirection, shadowFallbackMask, stepScale);
+                sdfShadowMaskActive = false;
+#else
                 sunDiffuse *= softShadow(surfacePoint, normal, SdfSunDirection, instanceMaskBase, stepScale);
+#endif
             }
 
             if (material >= SDF_SCREEN_MATERIAL) {

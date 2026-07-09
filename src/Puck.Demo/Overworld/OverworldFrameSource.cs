@@ -633,6 +633,10 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             // dual; true swaps back to the 4-tap finite-difference probe. A pure frame flag (no geometry), so it rides
             // the same per-frame channel as the slice lanes above.
             UseFiniteDifferenceNormals = m_sdfDebug.UseFiniteDifferenceNormals,
+            // The soft-shadow grid-cull A/B lever (the sdf.shadowcull verb): default ON (DisableShadowCull false), so the
+            // shadow march gathers each lit pixel's shadow-ray grid neighbourhood; OFF forces the flat all-instances
+            // reference. A pure frame flag, same per-frame channel as the normals lever above.
+            DisableShadowCull = !m_sdfDebug.ShadowCull,
             DynamicTransforms = dynamicTransforms,
             // The grid-lock overlay channel (grid-locking §4), threaded into SdfFrame's Grid* fields exactly like the
             // slice lanes above (the active editor wrote the locals; all-zero outside an editor).
