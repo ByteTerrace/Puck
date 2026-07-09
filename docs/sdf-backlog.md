@@ -34,7 +34,22 @@ premises are now false).
    authors OVERSIZE bounds — world-instanced uses bound 4–5 for a 0.3-radius
    sphere — a discipline auto-analysis cannot replicate). If ever revisited,
    it needs authored per-world-segment influence bounds, and a content
-   profile with many multi-segment chains. The measurement's real finding:
+   profile with many multi-segment chains. **Scale addendum (2026-07-09,
+   user-prompted):** the refutation splits — the influence-vs-geometry margin
+   truth holds at ANY scale (secondary shadow/AO rays wander outside the
+   camera cone; bounds must cover geometry ⊕ shadow reach ⊕ AO ladder — the
+   instance mask has always implicitly lived by this via authored oversized
+   bounds), but the VALUE verdict is the ROOM's profile. Future content flips
+   it: placed creations are ONE instance per placement carrying the whole
+   composition's segment chain (up to the 64-shape envelope) — a Puckton
+   street is exactly the multi-segment tape the room lacks. At world scales
+   >> the 12-unit shadow reach, influence-inflated per-tile masks become both
+   bit-exact and effective — for whole instances the landed grid cull ALREADY
+   IS that pruner; the open remainder is WITHIN-instance segment pruning for
+   placed creations, whose per-segment influence bounds belong at BAKE time
+   (the creation bake knows its shapes — deterministic, authored-equivalent;
+   aligns with tier-2 carve consolidation). Item 6 (profile the town) is the
+   gating measurement. The measurement's real finding:
    **the room's views (92% of frame) is the SHADING EPILOGUE eval count**
    (softShadow's full per-lit-pixel sphere-trace is the largest term) — the
    promoted levers are #4 (compute shadow-cull), #10 (closestApproach
