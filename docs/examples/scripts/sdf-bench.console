@@ -1,0 +1,29 @@
+# Puck.Demo SDF perf-bench tour — drive the fullscreen SDF perf-bench over stdin and collect its tables.
+# Run (bash):       PUCK_TIMING=1 dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 120 < docs/examples/scripts/sdf-bench.console
+# Run (PowerShell): $env:PUCK_TIMING=1; Get-Content docs/examples/scripts/sdf-bench.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 120
+#
+# The bench runs ASYNC across produced frames: each configuration warms W frames then samples M (defaults 8/32), so a
+# run needs configs*(W+M+1) frames. `step <n>` defers the rest of the script by n PRODUCED frames (capped at 600), so
+# chain several `step` calls to cover a long run — the bench prints "[sdf.bench] DONE ..." when the table is out, and
+# every progress/table line goes to stdout (grep for "[sdf.bench]"). PUCK_TIMING=1 is REQUIRED (no timings => the run
+# aborts loudly). The bench needs the sdf mode active (the workload replaces the room), so enter `sdf` first.
+#
+# NOTE ON WALL TIME: 4096 instances renders at only a few fps, so a config's frames can take seconds of wall clock even
+# though `step` counts PRODUCED frames — size --exit-after-seconds generously (120 s covers all three runs here).
+
+sdf
+
+# (a) Per-primitive cost — one fullscreen shape per debuggable SdfShapeType (13 configs -> ~533 frames).
+sdf.bench shapes
+step 600
+
+# (b) Per-op marginal cost — a fixed torus + exactly one op, 16 rows incl. the baseline (16 configs -> ~656 frames).
+sdf.bench ops
+step 600
+step 100
+
+# (c) The beam-slope sweep — 64/256/1024/4096 real torus instances (4 configs; the 4096 rung is the slow one).
+sdf.bench sweep torus
+step 400
+
+state

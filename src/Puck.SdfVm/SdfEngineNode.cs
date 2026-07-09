@@ -210,6 +210,24 @@ public sealed class SdfEngineNode : IRenderNode {
         m_debugCapturePath = path;
     }
 
+    /// <summary>Reads the previous frame's per-pass GPU times through the live engine (a passthrough of
+    /// <see cref="SdfWorldEngine.TryReadPassTimings"/>, mirroring the <see cref="DebugMode"/> forwarder) — the seam an
+    /// <c>sdf.info</c>-style verb reads without depending on the engine. False when the engine is not yet built or
+    /// timing is off (<c>PUCK_TIMING=1</c> / the spec Timing flag).</summary>
+    /// <param name="beam">The beam prepass milliseconds.</param>
+    /// <param name="views">The cull-args + Stage 1 views milliseconds.</param>
+    /// <param name="composite">The Stage 2 composite milliseconds.</param>
+    /// <param name="frame">The whole-frame milliseconds.</param>
+    /// <returns>Whether timing is live and the previous frame's marks were readable.</returns>
+    public bool TryReadPassTimings(out double beam, out double views, out double composite, out double frame) {
+        beam = 0.0;
+        views = 0.0;
+        composite = 0.0;
+        frame = 0.0;
+
+        return (m_engine?.TryReadPassTimings(beam: out beam, composite: out composite, frame: out frame, views: out views) ?? false);
+    }
+
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {
         if (m_disposed) {

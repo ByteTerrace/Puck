@@ -139,6 +139,13 @@ landed and are verified by running + the full Post battery). What is BUILT:
   forge (byte-identical to `--forge-avatar-from`). **The demo's ENTIRE `PUCK_*`
   surface is REMOVED** — every former env var is now a console verb or a
   run-document field (see the migration table above).
+- **2026-07-08 additions:** the `sdf` fullscreen SDF-inspection debug mode
+  (`sdf.shape`/`sdf.shape2`/`sdf.blend`/`sdf.op`/`sdf.floor`/`sdf.scope`/
+  `sdf.slice`/`sdf.cam`/`sdf.info` verbs) plus its `sdf.bench shapes | ops |
+  instances | sweep` perf-bench instrument; grid-locking's `world.snap` /
+  `creator.snap` verb family (on/off, pitch, rotation snap, align-to-shape
+  reference, grid visibility) in both the world sculptor and creator mode,
+  plus a RightShoulder chord toggling it live in each editor.
 - **Next arc (the recursion — see "Next steps" below):** **rung 3**, the
   diegetic editor reveal, GATED on completing X arcade games (the 128-bit
   `meta` victory across cabinets) — the state latch + `EditorRevealed` unlock

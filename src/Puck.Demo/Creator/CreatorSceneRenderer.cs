@@ -70,9 +70,9 @@ public sealed class CreatorSceneRenderer {
     /// <summary>Emits the creator pool into the program under construction: the palette + ghost materials (constant
     /// count), the ghost's instance, and one instance per placed-shape slot. With <paramref name="probeWorstCase"/>
     /// the emission takes its LARGEST possible form — every slot carries the reserved per-shape modifier envelope
-    /// (two extra transform ops) — which is what the frame source measures at construction to size the engine's
-    /// program-word and instance-count floors. Growing this emission (a new per-shape op) MUST grow the probe in the
-    /// same change.</summary>
+    /// (mirror + twist point ops AND the onion field op WRAPPED IN ITS PushField/PopField scope — five extra words)
+    /// — which is what the frame source measures at construction to size the engine's program-word and instance-count
+    /// floors. Growing this emission (a new per-shape op) MUST grow the probe in the same change.</summary>
     /// <param name="builder">The program builder (the room content is already emitted).</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
     /// <param name="suppressEasel">Drop the preview easel (the post + bake-preview screen slab) — the studio review
@@ -247,32 +247,53 @@ public sealed class CreatorSceneRenderer {
             }
 
             emittedGroups[emittedCount++] = groupId;
-            _ = builder.BeginInstance(boundCenter: workbench.MidPoint, boundRadius: groupBound);
+            EmitGroup(builder: builder, fromIndex: index, groupBound: groupBound, groupId: groupId, highlightMaterial: highlightMaterial, paletteIds: paletteIds, probeWorstCase: probeWorstCase, selectedIndex: selectedIndex, shapes: shapes, workbenchMid: workbench.MidPoint);
+        }
+    }
 
-            for (var member = index; (member < shapes.Count); member++) {
-                var shape = shapes[member];
+    // Emits ONE composition group as a single static instance: the members in document order with their authored
+    // blend/smooth, wrapped in a PushField(Union)/PopField field scope when the group needs one (GroupNeedsScope).
+    // The scope is what makes a member's blend compose against its GROUP-MATES (the fresh FAR-seeded accumulator),
+    // not against the whole workbench — so an Intersection member intersects its group instead of wiping the room
+    // (the documented creator defect). Members pass inGroupScope: true and never nest their own scope (the depth-1
+    // cap allows exactly the one the group opened). A pure-Union, no-onion group takes no scope and emits flat.
+    private void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<CreatorShapeState> shapes, int groupId, int fromIndex, int selectedIndex, int[] paletteIds, int highlightMaterial, bool probeWorstCase, Vector3 workbenchMid, float groupBound) {
+        var groupNeedsScope = GroupNeedsScope(fromIndex: fromIndex, groupId: groupId, shapes: shapes);
 
-                if (shape.GroupId != groupId) {
-                    continue;
-                }
+        _ = builder.BeginInstance(boundCenter: workbenchMid, boundRadius: groupBound);
 
-                EmitShape(
-                    blend: shape.Blend,
-                    builder: builder,
-                    material: ((member == selectedIndex) ? highlightMaterial : paletteIds[shape.MaterialIndex]),
-                    mirror: shape.Mirror,
-                    onion: shape.Onion,
-                    probeWorstCase: probeWorstCase,
-                    scale: shape.Scale,
-                    slot: (m_slotBase + 1 + member),
-                    smooth: shape.Smooth,
-                    twist: shape.Twist,
-                    type: shape.Type
-                );
+        if (groupNeedsScope) {
+            _ = builder.PushField(compose: SdfBlendOp.Union);
+        }
+
+        for (var member = fromIndex; (member < shapes.Count); member++) {
+            var shape = shapes[member];
+
+            if (shape.GroupId != groupId) {
+                continue;
             }
 
-            _ = builder.EndInstance();
+            EmitShape(
+                blend: shape.Blend,
+                builder: builder,
+                inGroupScope: true,
+                material: ((member == selectedIndex) ? highlightMaterial : paletteIds[shape.MaterialIndex]),
+                mirror: shape.Mirror,
+                onion: shape.Onion,
+                probeWorstCase: probeWorstCase,
+                scale: shape.Scale,
+                slot: (m_slotBase + 1 + member),
+                smooth: shape.Smooth,
+                twist: shape.Twist,
+                type: shape.Type
+            );
         }
+
+        if (groupNeedsScope) {
+            _ = builder.PopField();
+        }
+
+        _ = builder.EndInstance();
     }
 
     /// <summary>Packs the pool's per-frame transforms: the ghost rides its live position/orientation while the mode
@@ -321,10 +342,23 @@ public sealed class CreatorSceneRenderer {
     // the shape — see SdfOp.Onion's remarks: it shells the accumulated field, not the point]. Position/orientation
     // come from the slot's per-frame dynamic transform; scale is baked; the primitive dimensions come from the
     // SHARED canonical source (AvatarDefinition), so the shape the player previews is byte-for-byte the geometry
-    // the forge later bakes. THE BINDING RULE: probeWorstCase emits ALL THREE ops unconditionally (mirror on,
-    // twist/onion nonzero) so the probe measures the true worst case — any FUTURE per-shape modifier must join
-    // this same probe path.
-    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float onion = 0f) {
+    // the forge later bakes.
+    //
+    // SCOPING (the accumulator fix — see docs/sdf-accumulator-plan.md + the accumulator rule on SdfBlendOp): a
+    // shape's onion is a FIELD op, so in the flat accumulator it shells EVERY shape emitted before it (the floor and
+    // every earlier shape), not this shape. A NON-GROUP shape (Pass 1 + the ghost — always plain Union) therefore
+    // wraps its shape + onion in a one-deep PushField(Union)/PopField scope, so the shell hollows THIS shape alone
+    // and then unions into the workbench — the SceneObject.Emit precedent (commit 5ca8dfa) applied to the live
+    // editor. A shape with NO onion takes the flat path and emits BYTE-IDENTICALLY to before this change (the
+    // union-only, no-field-op creations stay bit-for-bit). A GROUP member passes inGroupScope: true and does NOT
+    // open its own scope — it already sits inside its group's single PushField scope (EmitPool Pass 2), and the
+    // depth-1 field-scope cap (SdfProgramBuilder.MaxFieldScopeDepth) forbids nesting; a grouped member's onion
+    // shells the group-so-far, the best depth 1 allows.
+    //
+    // THE BINDING RULE: probeWorstCase emits EVERY op unconditionally (mirror on, twist/onion nonzero, AND the
+    // onion scope's Push/Pop) so the probe measures the true worst case — any FUTURE per-shape modifier must join
+    // this same probe path (the capacity envelope is derived from it; see EmitPool's remarks).
+    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float onion = 0f, bool inGroupScope = false) {
         var chain = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: scale);
 
         if (probeWorstCase || mirror) {
@@ -335,11 +369,40 @@ public sealed class CreatorSceneRenderer {
             chain = chain.TwistY(rate: (probeWorstCase ? 1f : twist));
         }
 
+        var wantsOnion = (probeWorstCase || (onion != 0f));
+
+        // A non-group shape scopes its own onion: Push its Union compose, emit the shape as Union INSIDE the fresh
+        // FAR-seeded accumulator (against which it IS the shape), shell it, then Pop it into the workbench. A group
+        // member never nests (the enclosing group already opened the one allowed scope) and emits flat.
+        if (wantsOnion && !inGroupScope) {
+            var scoped = AvatarDefinition.AppendPrimitive(blend: SdfBlendOp.Union, chain: chain.PushField(compose: blend, smooth: smooth), material: material, smooth: 0f, type: type);
+
+            _ = scoped.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion)).PopField();
+
+            return;
+        }
+
         var afterShape = AvatarDefinition.AppendPrimitive(blend: blend, chain: chain, material: material, smooth: smooth, type: type);
 
-        if (probeWorstCase || (onion != 0f)) {
+        if (wantsOnion) {
             _ = afterShape.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion));
         }
+    }
+
+    // Whether a composition group must be emitted inside a PushField/PopField field scope: true when any member
+    // carries a non-Union blend (the Intersection family wipes the whole accumulated workbench otherwise — the
+    // documented creator defect) or an onion field op. A pure-Union, no-onion group stays flat (byte-identical), so
+    // a union-only creation loads bit-for-bit. See the accumulator rule on SdfBlendOp / docs/sdf-accumulator-plan.md.
+    private static bool GroupNeedsScope(IReadOnlyList<CreatorShapeState> shapes, int groupId, int fromIndex) {
+        for (var member = fromIndex; (member < shapes.Count); member++) {
+            var shape = shapes[member];
+
+            if ((shape.GroupId == groupId) && ((shape.Blend != SdfBlendOp.Union) || (shape.Onion != 0f))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // A scaled shape's dynamic instance bound: the unit-scale bound grown by the largest scale component, so the beam

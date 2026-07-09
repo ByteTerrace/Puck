@@ -53,9 +53,21 @@ internal sealed class WorldDomainWarpSolidityStage : IPostStage {
     // still carries a real enclosed-gap floor (measured ~1.6% clamped); this only trips on GROSS holing well above
     // that — COVERAGE is the real regression catch.
     private const double MaxEnclosedHoleFraction = 0.03;
-    // A background (sky) pixel has a LOW red channel (skyColor tops out ~26/255 in red); the warm emissive blade is
-    // always HIGH red (>= ~150/255 from emissive alone, under any shading). The threshold sits far from both.
-    private const byte SolidRedThreshold = 90;
+    // A background (sky) pixel has a LOW red channel (skyColor tops out ~26/255 in red). The threshold sits in the wide
+    // valley just above it. It was 90 on the premise that a 0.7-emissive blade stays red >= ~150 "under any shading" —
+    // FALSE since the shading wave landed: emissive is still added un-occluded, but the lit color then passes through
+    // the curvature ink-outline/cavity-darken, the 5-tap AO on the ambient fill, distance fog (dimming the far boxes
+    // toward the vanishing point), and coverage AA — which together pull present-blade edges/creases/far-boxes into the
+    // ~40-90 red band on this HIGH-perimeter thin-blade row (DomainWarp's point wobble makes the inter-box gaps more
+    // irregular than Displace's, so it darkens/encloses more). A red-90 cut miscounts those as sky, eroding coverage
+    // (~15k px) and inflating the enclosed-gap count with shaded-but-present blade. Dropping to 40 (still 14 above the
+    // sky ceiling) re-counts shaded blade as blade, while a REAL march hole — pure sky, red ~15-26, punched clean
+    // through a blade — stays below 40 and is still caught: the coverage floor and enclosed cap below are UNCHANGED, so
+    // the teeth keep their full discriminating power. Verified NOT a clamp regression: at the true-sky threshold the
+    // coverage recovers to the CLAMPED calibration (234842 px, ~= 235121 and far above the unclamped 221217), the
+    // enclosed pixels are inter-box sky slivers between the wobbled boxes (scene geometry, not tunneling — confirmed by
+    // overlay), and world-warp-solidity (a single wide low-perimeter blade) still passes untouched.
+    private const byte SolidRedThreshold = 40;
 
     /// <inheritdoc/>
     public string Name => "world-domain-warp-solidity";
@@ -103,7 +115,7 @@ internal sealed class WorldDomainWarpSolidityStage : IPostStage {
 
         // Primary teeth: the warp overestimate erodes coverage as grazing rays step over a wobble crest.
         if (solidPixels < MinBladeCoverage) {
-            return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"the warped blade row eroded to {solidPixels} blade pixels (< {MinBladeCoverage}; the clamp renders ~235121) — DomainWarp's overestimate steps over the blades WITHOUT the Lipschitz step clamp");
+            return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"the warped blade row eroded to {solidPixels} blade pixels (< {MinBladeCoverage}; the clamp renders ~232312) — DomainWarp's overestimate steps over the blades WITHOUT the Lipschitz step clamp");
         }
 
         // Secondary catch (silhouette-agnostic): sky reachable from any border is legitimate background; sky the

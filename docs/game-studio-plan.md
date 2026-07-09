@@ -129,7 +129,10 @@ belongs to the arc itself):**
    instancing to 1024; creator mode already sculpts `puck.creation.v1`
    documents live. The missing move is authoring INTO the world's own SDF
    program — place, edit, and keep world-scale geometry in the room you
-   stand in.
+   stand in. *(2026-07-08: grid-locking landed — `world.snap`/`creator.snap`
+   console verbs plus a RightShoulder chord snap position/rotation to a
+   configurable lattice, with an align-to-shape face/center mode, in both the
+   world sculptor and creator mode; the grid renders live in each editor.)*
 2. **Domain ops as authoring verbs.** Repeat / mirror / twist / bend exist
    in the VM and the renderer reserves two per-shape modifier slots — the
    editor exposes none of them. A road IS a repeat; a row of street lights

@@ -48,6 +48,7 @@ internal static class PostStages {
             new WorldRepeatPolarStage(),
             new WorldSymmetryPlaneStage(),
             new WorldChamferStage(),
+            new WorldScopeStage(),
             new WorldDisplaceStage(),
             new WorldDomainWarpStage(),
             new WorldDisplaceSolidityStage(),

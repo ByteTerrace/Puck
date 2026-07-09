@@ -59,7 +59,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float2 localUv = ((float2(pixel) + 0.5) / float2(rectDims));
     uint2 tileCoord = (pixel / WorldTileSize);
     uint tileIndex = worldTileIndex(id.z, tileCoord, params.tileGrid);
-    float marchStart = tiles[tileIndex];
+    float marchStart = tiles[worldTileMarchStartIndex(tileIndex)];
+    // The four-bound teleport's proven-empty gap for this tile (planes 1/2; sdf-beam wrote them). firstExit =
+    // MaxDistance when no gap was proven — the teleport in renderView is then a dead branch.
+    float firstExit = tiles[worldTileFirstExitIndex(tileIndex)];
+    float secondEntry = tiles[worldTileSecondEntryIndex(tileIndex)];
     // The tile's mask BASE (not the words themselves), using the same host-pushed width the beam prepass wrote with.
     uint instanceMaskBase = worldInstanceMaskBase(tileIndex);
     // The per-pixel world footprint scale (footprint at distance t = pixelFootprint * t): the viewport's vertical field
@@ -67,7 +71,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // This is a pixel DIAMETER, deliberately 2x the pixel radius Keinert's termination test names — a half-pixel of
     // conservative silhouette, in the same direction as the Lipschitz clamp's bias.
     float pixelFootprint = ((2.0 * view.right.w) / max(float(rectDims.y), 1.0));
-    float3 color = renderView(view, localUv, marchStart, instanceMaskBase, pixelFootprint);
+    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, instanceMaskBase, pixelFootprint);
 
     // Dither before the 8-bit store to break gradient banding (sky, distance fog) into blue-ish high-frequency noise:
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.

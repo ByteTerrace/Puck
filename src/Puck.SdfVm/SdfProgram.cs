@@ -526,6 +526,18 @@ public sealed class SdfProgram {
 
                     break;
                 }
+                case SdfOp.PushField:
+                case SdfOp.PopField: {
+                    // A scope boundary op mutates the FIELD (the running accumulator), not the point/transform, so the
+                    // chain's world-space sphere stays sound — chainBoundable is left TRUE, and any Union shape after the
+                    // Push in this SAME chain still earns its per-shape cull bound (the accumulator-plan correction: the
+                    // default arm's chainBoundable = false would suppress those bounds, a real cull regression). But a
+                    // whole-segment skip must NEVER jump a Push (savedDistance would be unset) or a Pop (the parent
+                    // compose would be lost), so the segment holding one is always evaluated.
+                    segmentEligible = false;
+
+                    break;
+                }
                 default: {
                     // Scale (distance rescale), Repeat/RepeatLimited/SymmetryPlane/WallpaperFold/CellJitter/RepeatPolar
                     // (space folding), Twist/Bend/Elongate/DomainWarp (non-isometries), Onion/Dilate/Displace (field ops a skip must never jump over):
@@ -656,6 +668,12 @@ public sealed class SdfProgram {
             // Onion/Dilate/Displace field op — takes the unmaskable path instead: no halo can rescue it (see
             // HasUnmaskableCompose), and PARKING one is an authoring error, because a parked slot asserts "contributes
             // nothing", which such an op violates even where its geometry is absent.
+            //
+            // A SCOPED field op (Onion/Dilate/Displace inside a balanced PushField/PopField) is the exception: it is
+            // maskable (HasUnmaskableCompose skips scope-nested ops), so it packs a finite bound — but the op moves the
+            // scope's surface OUTWARD past the authored geometry radius, so the bound must be inflated by that reach
+            // (MaxScopedFieldReach) exactly as the smooth halo is, or the tiles the grown shell reaches get masked out
+            // and hole at the seams. Both margins add to the geometry radius (an over-covered instance is always cull-safe).
             var unmaskable = HasUnmaskableCompose(first: instance.First, end: instance.End);
 
             if (unmaskable && !instance.Active) {
@@ -663,8 +681,9 @@ public sealed class SdfProgram {
             }
 
             var smoothMargin = MaxSmoothBlendRadius(first: instance.First, end: instance.End);
+            var scopedFieldReach = MaxScopedFieldReach(first: instance.First, end: instance.End);
             var packedRadius = instance.Active
-                ? (unmaskable ? UnmaskableBoundRadius : (((instance.Radius + smoothMargin) * BoundRadiusScale) + BoundRadiusPadding))
+                ? (unmaskable ? UnmaskableBoundRadius : (((instance.Radius + smoothMargin + scopedFieldReach) * BoundRadiusScale) + BoundRadiusPadding))
                 : ParkedBoundRadius;
 
             WriteVector4(
@@ -696,7 +715,13 @@ public sealed class SdfProgram {
     /// accumulator long after b passes c. Neutrality needs <c>(a + b - c)/sqrt(2) >= a</c>, whose worst case b == a gives
     /// <c>a >= c*(2 + sqrt(2))/2 = 1.70711*c</c>. Verified: with c = 1, a = b = 1.700 evaluates to 1.697056 (sags) while
     /// a = b = 1.710 is neutral. A margin of c under-inflates a ChamferUnion instance's halo by 0.71*c, so a masked-out
-    /// tile is NOT bit-exact. Margin = 1.70711*c.</para></summary>
+    /// tile is NOT bit-exact. Margin = 1.70711*c.</para>
+    /// <para>Xor — DELIBERATELY zero halo, like the other hard blends (verified 2026-07-08, real-GPU slice comparison):
+    /// <c>max(min(a, b), -max(a, b))</c> reduces to <c>min(a, b)</c> — the plain union — everywhere OUTSIDE the
+    /// candidate (b &gt; 0; the negated arm only wins when a + b &lt; 0, deeper inside than a first-hit march ever
+    /// samples), so a far candidate returns the accumulator exactly. Do not add Xor here or to HasUnmaskableCompose.
+    /// SIZING: an Xor member competes on the running min wherever it is nearest, so its authored cull bound needs the
+    /// UNION-style generous influence margin, never the subtraction-style tight bound.</para></summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
     /// <param name="end">The instance's instruction end index (exclusive).</param>
     /// <returns>The largest coupling halo among the slice's soft blends.</returns>
@@ -706,10 +731,13 @@ public sealed class SdfProgram {
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
 
-            // The Blend lane only carries an SdfBlendOp on a ShapeBlend instruction; the fold ops reuse it (CellJitter's
-            // noise flavor, RepeatPolar's mirror flag, WallpaperFold's plane), and Data1.x means something else entirely
-            // on those, so both must be read under this guard.
-            if (instruction.Op != SdfOp.ShapeBlend) {
+            // The Blend lane + Data1.x carry a compose blend + smooth radius on a ShapeBlend AND on a PopField (whose
+            // scope composes into the parent through that blend), but mean something else on the fold ops (CellJitter's
+            // noise flavor, RepeatPolar's mirror flag, WallpaperFold's plane), so read them only under this guard. A
+            // scoped soft compose couples the whole scope to the parent within its radius exactly as a soft ShapeBlend
+            // couples one shape — so its halo joins the max the instance bound is inflated by (conservative: an
+            // over-covered instance is always cull-safe).
+            if ((instruction.Op != SdfOp.ShapeBlend) && (instruction.Op != SdfOp.PopField)) {
                 continue;
             }
 
@@ -725,6 +753,71 @@ public sealed class SdfProgram {
             else if (instruction.Blend == (uint)SdfBlendOp.ChamferUnion) {
                 margin = MathF.Max(margin, (ChamferUnionHaloScale * radius));
             }
+        }
+
+        return margin;
+    }
+    /// <summary>The outward SURFACE REACH an instance's SCOPED field ops (an <see cref="SdfOp.Onion"/>/
+    /// <see cref="SdfOp.Dilate"/>/<see cref="SdfOp.Displace"/> between a balanced <see cref="SdfOp.PushField"/>/
+    /// <see cref="SdfOp.PopField"/>) add on top of its authored geometry bound — the cull-margin twin of
+    /// <see cref="MaxSmoothBlendRadius"/> for the scoped-accumulator payoff. A scoped field op is MASKABLE
+    /// (<see cref="HasUnmaskableCompose"/> only trips on an UNSCOPED field op or an intersection-family POP compose), so
+    /// it packs a FINITE bound instead of the 1e30 sentinel that would otherwise cover everything — but the op moves the
+    /// scope's zero-set OUTWARD past the packed radius, so that growth must be folded into the bound or the beam masks
+    /// out the tiles the grown shell reaches and the surface holes at the tile seams. Each op's outward reach is exact:
+    /// <list type="bullet">
+    /// <item><description><c>Onion(t)</c> — <c>abs(d) - t</c>: the shell's OUTER surface sits exactly <c>t</c> beyond the
+    /// original surface, so reach grows by <c>|t|</c> (<c>Data0.x</c>).</description></item>
+    /// <item><description><c>Dilate(r)</c> — <c>d - r</c>: the surface inflates by <c>r</c> everywhere, so reach grows by
+    /// <c>|r|</c> (<c>Data0.x</c>).</description></item>
+    /// <item><description><c>Displace(a)</c> — <c>d + a·sin·sin·sin</c>: the relief pushes the surface out by at most
+    /// <c>|a|</c> (the basis bottoms at −1), so reach grows by <c>|a|</c> (<c>Data0.w</c>).</description></item>
+    /// </list>
+    /// Field ops COMPOUND within one scope (an Onion then a Dilate grows the surface by <c>t</c> then <c>r</c>), so they
+    /// SUM inside a scope; the instance margin is the largest such per-scope sum (nesting is capped at depth 1, and
+    /// sibling scopes union, so a max over scopes is a sound conservative cover). An UNSCOPED field op never contributes
+    /// here — it makes the whole instance unmaskable, so the sentinel bound already covers it. 0 for an instance with no
+    /// scoped field op, so its bound is byte-identical.</summary>
+    /// <param name="first">The instance's first instruction index (inclusive).</param>
+    /// <param name="end">The instance's instruction end index (exclusive).</param>
+    /// <returns>The largest per-scope outward field reach within the slice.</returns>
+    private float MaxScopedFieldReach(int first, int end) {
+        var margin = 0.0f;
+        var scopeDepth = 0;
+        var scopeReach = 0.0f;
+
+        for (var index = first; (index < end); index++) {
+            var instruction = m_instructions[index];
+
+            if (instruction.Op == SdfOp.PushField) {
+                scopeDepth++;
+                scopeReach = 0.0f; // depth is capped at 1, so a Push always opens a fresh (empty) scope
+
+                continue;
+            }
+
+            if (instruction.Op == SdfOp.PopField) {
+                margin = MathF.Max(margin, scopeReach);
+
+                if (scopeDepth > 0) {
+                    scopeDepth--;
+                }
+
+                continue;
+            }
+
+            // An UNSCOPED field op is unmaskable (the sentinel bound covers it) — only a scope-nested op grows the finite
+            // bound this method sizes.
+            if (scopeDepth <= 0) {
+                continue;
+            }
+
+            scopeReach += instruction.Op switch {
+                SdfOp.Onion => MathF.Abs(instruction.Data0.X),
+                SdfOp.Dilate => MathF.Abs(instruction.Data0.X),
+                SdfOp.Displace => MathF.Abs(instruction.Data0.W),
+                _ => 0.0f,
+            };
         }
 
         return margin;
@@ -745,7 +838,12 @@ public sealed class SdfProgram {
     /// the beam prepass's cone march hides the intersection case (an intersection annihilates everything outside its own
     /// shape, so the tiles that would differ are already empty) but cannot hide this one. Creator mode emits <c>Onion</c>
     /// inside <c>BeginInstanceDynamic</c>, so it is live. <see cref="SdfOp.DomainWarp"/> is deliberately NOT here: it is a
-    /// POINT op and never reads the accumulator.</para>
+    /// POINT op and never reads the accumulator. <see cref="SdfBlendOp.Xor"/> is deliberately NOT here either (verified
+    /// 2026-07-08, real-GPU slice comparison): it reads the accumulator, but <c>max(min(a, b), -max(a, b))</c> reduces to
+    /// the plain union <c>min(a, b)</c> everywhere outside the candidate, and the extra surface it carves (the overlap
+    /// hole) lives strictly inside the union hull — inside any covering bound — so masking an Xor instance with a
+    /// covering, union-margin bound is exactly as safe as masking a union member (see MaxSmoothBlendRadius's sizing
+    /// note).</para>
     /// <para>No bound inflation closes either gap, because the far-field answer is not the accumulator. Such an instance
     /// therefore packs <see cref="UnmaskableBoundRadius"/>, a bound so large that the beam prepass's sphere-vs-cone test
     /// passes for every tile and the instance is always evaluated — the same graceful degradation <c>AnalyzeSegment</c>
@@ -755,8 +853,50 @@ public sealed class SdfProgram {
     /// <param name="end">The instance's instruction end index (exclusive).</param>
     /// <returns><see langword="true"/> when the slice carries an op that reads the running accumulator.</returns>
     private bool HasUnmaskableCompose(int first, int end) {
+        var scopeDepth = 0;
+
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
+
+            // A PushField reseeds the accumulator, so an accumulator-reading op INSIDE the scope (scopeDepth > 0) reads
+            // only the scope's own field — it does NOT make the instance unmaskable. That is the scoped-accumulator
+            // payoff: a scoped Onion/Dilate/intersection hands the instance a finite, cullable bound back, instead of
+            // the flat model's 1e30 always-evaluated sentinel. Only the POP's OWN compose blend, acting at the parent
+            // depth, can be unmaskable (an intersection-family compose composes the whole scope against the parent).
+            if (instruction.Op == SdfOp.PushField) {
+                scopeDepth++;
+
+                continue;
+            }
+
+            if (instruction.Op == SdfOp.PopField) {
+                // The builder guarantees balanced scopes, so a PopField at depth 0 is impossible on a real stream — but
+                // decode it LOUD rather than silently clamping to 0 (the codebase's fail-fast convention): a silent
+                // Math.Max would mask a corrupt/hand-assembled stream and let a bogus compose blend read as unmaskable.
+                if (scopeDepth == 0) {
+                    throw new InvalidOperationException(message: $"Unbalanced PopField at instruction {index} in the instance range [{first}, {end}): a PopField with no open PushField scope. The builder emits balanced Push/Pop pairs, so this indicates a corrupt instruction stream.");
+                }
+
+                scopeDepth--;
+
+                if (
+                    (scopeDepth == 0) &&
+                    (
+                        (instruction.Blend == (uint)SdfBlendOp.Intersection) ||
+                        (instruction.Blend == (uint)SdfBlendOp.SmoothIntersection) ||
+                        (instruction.Blend == (uint)SdfBlendOp.ChamferIntersection)
+                    )
+                ) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            // Ops nested in a scope are already handled by the scope's own compose (above): skip them.
+            if (scopeDepth > 0) {
+                continue;
+            }
 
             if (
                 (instruction.Op == SdfOp.Onion) ||
@@ -931,6 +1071,11 @@ public sealed class SdfProgram {
     // order), so the chain's warp rates and its reach accumulate as the walk proceeds and fold together at chain end.
     private static float AnalyzeLipschitz(IReadOnlyList<SdfInstruction> instructions) {
         var programLipschitz = 1.0f;
+        // Whether ANY PopField composes its scope with a chamfer blend — the one non-1-Lipschitz compose. A chamfer POP
+        // composing a warped scope needs √2·max(L_parent, L_child); since programLipschitz already folds the max L over
+        // every chain (≥ both), multiplying the whole program by √2 at the end is a sound (conservative) upper bound and
+        // never under-clamps. False (no chamfer POP) leaves programLipschitz untouched, so scope-free scenes stay exact.
+        var hasChamferPop = false;
         // Each warp's |rate| plus whether its keyed coordinate lies inside the plane it rotates (see BendOperatorNorm).
         var chainWarpRates = new List<(float Rate, bool KeyInRotatedPlane)>();
         var chainShapeApproxMax = 1.0f;   // max ellipsoid eccentricity among the chain's shapes (1 = none / perfectly round)
@@ -1035,6 +1180,22 @@ public sealed class SdfProgram {
                     chainTranslateReach += (1.7320508f * MathF.Abs(instruction.Data0.W));
                     break;
                 }
+                case SdfOp.PopField: {
+                    // A scope's compose blend rides the POP's Blend lane. A chamfer compose is the one that is not
+                    // 1-Lipschitz (bevel gradient up to √2), so flag the program for the √2 factor folded in at the end.
+                    // Every other compose (Union/Subtraction/Smooth) preserves the Lipschitz bound of the fields it
+                    // composes, which their own chains already contributed to programLipschitz. PushField contributes
+                    // nothing (it only reseeds the accumulator) — it falls to the default arm.
+                    if (
+                        (instruction.Blend == (uint)SdfBlendOp.ChamferUnion) ||
+                        (instruction.Blend == (uint)SdfBlendOp.ChamferIntersection) ||
+                        (instruction.Blend == (uint)SdfBlendOp.ChamferSubtraction)
+                    ) {
+                        hasChamferPop = true;
+                    }
+
+                    break;
+                }
                 default: {
                     // ResetPoint/Rotate/Scale/TransformDynamic/SymmetryPlane/Repeat/RepeatLimited/WallpaperFold/RepeatPolar/
                     // Elongate/Onion/Dilate: factor 1 (isometry, non-expansive projection, field op, or the runtime
@@ -1048,6 +1209,13 @@ public sealed class SdfProgram {
 
         // Fold the final (or only) chain.
         programLipschitz = MathF.Max(programLipschitz, (FoldChainLipschitz(warpRates: chainWarpRates, shapeApproxMax: chainShapeApproxMax, reach: (chainTranslateReach + chainShapeReach)) * chainLogSphereProduct * chainChamferFactor * chainDisplaceWarpProduct * FoldCellJitterProduct(cellJitters: chainCellJitters, shapeReach: chainShapeReach)));
+
+        // A chamfer POP composes its scope with a √2-bevel seam that can overestimate true distance by up to √2 beyond
+        // the max L of the fields it joins — fold that in over the whole program (a conservative bound on √2·max(L_parent,
+        // L_child); see hasChamferPop). No chamfer POP leaves this exact, so scope-free scenes stay byte-identical.
+        if (hasChamferPop) {
+            programLipschitz *= 1.41421356f;
+        }
 
         // stepScale = 1 / max(L, 1), clamped to (0, 1]. A warp-free, eccentricity-free program has L == 1 exactly, so
         // this returns 1.0f to the bit (max(1,1) = 1, 1/1 = 1). The finite guard keeps an extreme authored warp from

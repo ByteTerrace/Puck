@@ -329,6 +329,9 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             if (m_frameSource is { WorldSculptActive: true }) {
                 SetWorldSculptMode(active: false);
             }
+            if (m_frameSource is { SdfDebugActive: true }) {
+                SetSdfDebugMode(active: false);
+            }
         }
 
         return Puck.Demo.Forge.ForgeCommands.TrackerToggle(services: m_serviceProvider);
@@ -383,6 +386,24 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             return true;
         }
 
+        // SDF-debug mode: exactly like creator/tracker above (mutually exclusive — the toggles force-exit one another).
+        // The orbit controller consumes the creating slot's pad, the player's joypad is zeroed, and normal walking is
+        // skipped; North exits (consumed here, like creator's exit request).
+        if (m_frameSource is { SdfDebugActive: true } sdfDebug) {
+            sdfDebug.AdvanceSdfDebugInput(raw: in raw, deltaSeconds: (float)EngineTicks.ToSeconds(ticks: context.DeltaTicks));
+
+            if (sdfDebug.ConsumeSdfDebugExitRequest()) {
+                SetSdfDebugMode(active: false);
+            }
+            pads.PublishPlayerJoypad(playerIndex: slot, joypad: default);
+            creatorButtons = raw.Buttons;
+            heldIntents[slot] = PlayerIntent.None;
+            firstTickIntents[slot] = PlayerIntent.None;
+            m_jumpHeldLastBySlot[slot] = false;
+
+            return true;
+        }
+
         // World-sculpt mode: the THIRD takeover — but unlike the two above, the player KEEPS WALKING.
         if (m_frameSource is { WorldSculptActive: true } sculptSource) {
             sculptSource.AdvanceWorldSculptInput(deltaSeconds: (float)EngineTicks.ToSeconds(ticks: context.DeltaTicks), raw: in raw);
@@ -403,6 +424,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 SetCreatorMode(active: false);
             }
             Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
+            SetSdfDebugMode(active: false);
         }
 
         frameSource.SetWorldSculptActive(active: active);
@@ -411,6 +433,61 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         if (m_director is not null) {
             m_director.CreatorView = active;
         }
+    }
+
+    /// <inheritdoc/>
+    public bool SdfDebugModeActive => (m_frameSource?.SdfDebugActive ?? false);
+
+    /// <inheritdoc/>
+    public string ToggleSdfDebugMode() {
+        if (m_frameSource is not { } frameSource) {
+            return "[sdf: unavailable — the overworld is not the active root]";
+        }
+
+        SetSdfDebugMode(active: !frameSource.SdfDebugActive);
+
+        return (frameSource.SdfDebugActive
+            ? "[sdf-debug] ENTER — one shape, fullscreen. Left stick orbits, triggers zoom, right stick pans, North exits. Console: sdf.shape / sdf.op / sdf.floor / sdf.info; debug.view.* (termination, slice) shade it."
+            : "[sdf-debug] EXIT — back to the room.");
+    }
+
+    /// <inheritdoc/>
+    public bool TryReadSdfPassTimings(out double beam, out double views, out double composite, out double frame) {
+        beam = 0.0;
+        views = 0.0;
+        composite = 0.0;
+        frame = 0.0;
+
+        return (m_producer?.TryReadPassTimings(beam: out beam, composite: out composite, frame: out frame, views: out views) ?? false);
+    }
+
+    // Enters/leaves SDF-DEBUG mode on the frame source — the fullscreen single-shape debug tool, the FOURTH creating-
+    // slot takeover, mutually exclusive with creator/world-sculpt/tracker (each force-exits the others; the room has one
+    // authoring surface at a time). Rides the SAME CreatorView flag world-sculpt/creator use for the fullscreen room
+    // takeover. Thin by construction: it names only the frame source + director (already coupled) and primitives, so
+    // the node stays under its analyzer coupling ceiling — all the debug logic lives in Puck.Demo.SdfDebug.
+    private void SetSdfDebugMode(bool active) {
+        if ((m_frameSource is not { } frameSource) || (frameSource.SdfDebugActive == active)) {
+            return;
+        }
+
+        if (active) {
+            if (frameSource.CreatorActive) {
+                SetCreatorMode(active: false);
+            }
+            SetWorldSculptMode(active: false);
+            Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
+        }
+
+        frameSource.SetSdfDebugActive(active: active);
+        // Fullscreen takeover: the room eases to fullscreen and every game pane hides (the CreatorView flag), so the
+        // debug subject fills the screen even from an immersed game.
+        if (m_director is not null) {
+            m_director.CreatorView = active;
+        }
+        Console.Error.WriteLine(value: (active
+            ? "[sdf-debug] the room is replaced by one shape at the origin — orbit it, stack modifiers, and shade it with the debug views."
+            : "[sdf-debug] the room returns."));
     }
 
     // THE GATED WORKBENCH ENTRY (Stage 3 of the self-editing arc): the DIEGETIC door into world-sculpt. Once the editor
@@ -568,6 +645,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         if (active) {
             Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
             SetWorldSculptMode(active: false);
+            SetSdfDebugMode(active: false);
         }
 
         frameSource.SetCreatorActive(active: active);
@@ -655,6 +733,16 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // reveal is the fourth-wall break, exactly like the exit/solo triggers that also only fire in immersed mode.
         if (m_immersed) {
             EvaluateMetaVictory();
+        }
+
+        // The SDF perf-bench (async, per-frame): while a run is in flight, feed the runner the PREVIOUS frame's per-pass
+        // GPU ms and the render info its report names, BEFORE this frame's CaptureFrame (so a config change this step
+        // rebuilds the program to the new workload this same frame). The node owns the producer's timings; the frame
+        // source stays coupling-flat behind AdvanceSdfBench. No new type is named here.
+        if (m_frameSource is { } benchSource && benchSource.SdfBenchRunning) {
+            var hasTimings = TryReadSdfPassTimings(beam: out var beam, views: out var views, composite: out var composite, frame: out var frame);
+
+            benchSource.AdvanceSdfBench(hasTimings: hasTimings, beam: beam, views: views, composite: composite, frame: frame, width: m_width, height: m_height, backendIsDirectX: m_hostsOnDirectX);
         }
 
         return m_root!.ProduceFrame(context: in context);
@@ -2382,6 +2470,20 @@ internal interface ICreatorModeHost {
 
     /// <summary>Toggles tracker mode and returns the new state.</summary>
     bool ToggleTrackerMode();
+
+    /// <summary>Whether the fullscreen SDF-debug mode is currently active.</summary>
+    bool SdfDebugModeActive { get; }
+
+    /// <summary>Toggles the fullscreen SDF-debug mode (the single-shape debug tool; mutually exclusive with
+    /// creator/world-sculpt/tracker) and returns the narration line. The <c>sdf.*</c> verbs reach the debug scene
+    /// through <see cref="CreatorFrameSource"/>, every authoring surface's composition point.</summary>
+    string ToggleSdfDebugMode();
+
+    /// <summary>Reads the previous frame's per-pass GPU times (beam/views/composite/frame milliseconds) for
+    /// <c>sdf.info</c> — a primitive-typed passthrough of the producer's <c>SdfEngineNode.TryReadPassTimings</c> so the
+    /// node names no engine type it does not already. False when the producer is absent or timing is off
+    /// (<c>PUCK_TIMING=1</c> / the spec Timing flag).</summary>
+    bool TryReadSdfPassTimings(out double beam, out double views, out double composite, out double frame);
 
     /// <summary>Starts or stops the headless preview of the working tune. Returns a status line for the console.</summary>
     /// <param name="play"><see langword="true"/> to (re)start the preview, <see langword="false"/> to stop it.</param>

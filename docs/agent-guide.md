@@ -266,6 +266,14 @@ these, the listed conclusion is settled — don't re-litigate it.
   DXIL at build time; `dxc` must be on PATH (Vulkan SDK or Windows SDK). There
   is no GLSL and no `glslc` step anywhere in the build. The C# ISA in
   `Puck.SdfVm` and the `sdf-vm` HLSL must change **together**.
+- **DXIL does not dead-code-eliminate an arithmetic ×0 gate the way SPIR-V
+  does** (found 2026-07-08, commit `44bfd88`): a shading term gated by
+  multiplying its contribution by a compile-time-zero gain folded to ~+20
+  bytes on SPIR-V but left DXC's DXIL backend keeping ~13 KB of dead
+  arithmetic (a divide + an extra `map()` tap) it should have stripped. For a
+  chain expensive enough to matter when disabled, gate it with a compile-time
+  `static const bool` dead-branch guard instead — DXC strips that on both
+  backends.
 - **Stale build artifacts fake regressions.** After heavy cherry-picking (or a
   crashed process), a checkout's incremental build can serve STALE committed
   shader bytecode (or a corrupted `obj` ref assembly) from `bin/` — the

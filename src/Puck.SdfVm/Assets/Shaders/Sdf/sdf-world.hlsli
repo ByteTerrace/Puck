@@ -35,6 +35,28 @@ bool isChildViewport(uint viewportIndex) {
 uint worldInstanceMaskBase(uint tileIndex) {
     return (params.instanceMaskWordCount * tileIndex);
 }
+// The tile cull buffer's plane layout (four-bound teleport, Larsson "The Gunk"). Plane 0 = the march-start lower
+// bound (the classic beam output; sdf-cull-args + the compositor read ONLY this plane, so their worldTileIndex
+// stride is unchanged). Planes 1/2 = the proven-empty gap [firstExit, secondEntry] a tile's cone cleared between
+// two occupied bands: sdf-beam writes them, sdf-world-views teleports across them. Each plane is one entry per
+// (viewport, tile) THIS frame — the same span worldTileIndex covers — so plane k of tile T sits at
+// (k * stride + tileIndex). KEEP IN SYNC with SdfWorldEngine.TilePlaneCount.
+static const uint WorldTilePlaneCount = 3u;
+uint worldTilePlaneStride() {
+    return (params.tileGrid.x * params.tileGrid.y * params.viewportCount);
+}
+// Plane 0 (march-start) needs no stride multiply — this accessor exists only for symmetry with the two below (see
+// the layout comment above: sdf-cull-args and the compositor deliberately read plane 0 directly, unaffected by any
+// plane-count change, so they do not call it).
+uint worldTileMarchStartIndex(uint tileIndex) {
+    return tileIndex;
+}
+uint worldTileFirstExitIndex(uint tileIndex) {
+    return (worldTilePlaneStride() + tileIndex);
+}
+uint worldTileSecondEntryIndex(uint tileIndex) {
+    return (((WorldTilePlaneCount - 1u) * worldTilePlaneStride()) + tileIndex);
+}
 
 #ifdef SDF_SCREEN_SOURCES
 // A declared ScreenSlab instance's world-space front-face frame (see Puck.SdfVm.SdfScreenSurface) — Stage 1 ONLY
@@ -78,11 +100,24 @@ struct ScreenSurfaceData {
 [[vk::combinedImageSampler]] [[vk::binding(19, 0)]] SamplerState screenSampler7 : register(s7);
 // Per-frame screen LIGHT records (binding 11, register t14 — the LAST SRV in the views set): entries 0..7 carry each
 // screen's emitted light (rgb = the framebuffer's average color this frame, a = intensity gain), entry 8 is the
-// ENVIRONMENT (x = ambient scale, y = sun scale — dim the room so the glow dominates; zw pad). A light's geometry
+// ENVIRONMENT (x = ambient scale, y = sun scale — dim the room so the glow dominates; z/w = the SLICE debug view's
+// plane selector: z = axis (0 camera-locked, 1/2/3 world X/Y/Z), w = the axis plane's signed offset — see
+// SdfFrame.DebugSliceAxis; read only by debug view mode 7). A light's geometry
 // (position/orientation/extent) is the SAME screenSurfaces[i] entry above — a screen is an area emitter, so it needs
 // only its color here. KEEP IN SYNC with SdfWorldEngine's screen-light buffer packing.
 [[vk::binding(11, 0)]] StructuredBuffer<float4> sdfScreenLights : register(t14);
 static const uint SdfScreenLightEnv = 8u;
+
+// Grid-lock overlay rows (grid-locking §4a): FOUR float4 rows AFTER the env entry (env stays at 8 — load-bearing as
+// the screen-count loop bound above). KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's Grid* fields.
+static const uint SdfGridWorld = 9u;      // x = flags (bit0 world floor grid, bit1 object grid), y = floorY, zw = world pitch (X, Z)
+static const uint SdfGridObjOrigin = 10u; // xyz = reference origin (world), w = object pitch X
+static const uint SdfGridObjFrame = 11u;  // xyzw = reference frame quaternion
+static const uint SdfGridObjParams = 12u; // x = object pitch Z, y = patch radius (reference-local), zw = reserved
+static const float GridFadeDistance = 32.0;                       // the world grid fades to flat past this (far-field anti-moire)
+static const float GridGrazeCos = 0.30;                           // bands vanish as the view flattens against the plane
+static const float3 GridWorldLineColor = float3(0.34, 0.56, 0.95);  // cool — the world floor lattice
+static const float3 GridObjectLineColor = float3(0.96, 0.66, 0.28); // warm — the reference's own lattice
 
 // CRT glass-face knobs. The tuned look is a FLAT SQUARE tube: no pincushion bulge, near-square corners, a thin crisp
 // dark bezel, faint aperture-grille stripes, subtle native-line scanlines, and a soft bright-pixel bloom knee — so the
@@ -200,6 +235,42 @@ static const float SphereTraceOmega = 1.2; // Keinert over-relaxation factor (1 
 static const int ConeMarchSteps = 96;
 static const float ConeNear = 0.02;
 static const float ConeEpsilon = 0.002;
+// Four-bound teleport (Larsson "The Gunk"): after the beam cone finds the tile's ENTRY (the classic marchStart), it
+// keeps marching a bounded budget to detect ONE proven-empty gap between two occupied bands — [firstExit,
+// secondEntry] — that sdf-world-views teleports the fine ray across. TileGapSteps caps the extra beam cost;
+// TileGapMinStep floors the through-band advance so a near-zero cone clearance can't stall the search.
+static const int TileGapSteps = 24;
+static const float TileGapMinStep = 0.15;
+// Early-abandon for the through-band phase: a ground/wall tile whose cone never re-clears would otherwise burn all
+// TileGapSteps descending monotonically deeper into the half-space. After this many CONSECUTIVE in-band steps whose
+// clearance stays below the open-threshold AND is non-increasing (the cone is only going deeper), give up proving a
+// gap — a real gap re-clears within a few magnitude-stepped steps, so it resets the streak first. Missing a gap is
+// SAFE: the teleport just does not arm, and the fine march is pixel-identical whether or not it teleports (the jump
+// lands at secondEntry <= the true re-entry). Restores the beam cost a gap-less tile used to waste (~+0.33ms/room).
+static const int TileGapStallLimit = 4;
+// Bán & Valasek 2023 auto-relaxed sphere tracing (EG short paper). The fine march tracks the field's along-ray slope
+// with an EMA `m` and over-relaxes adaptively — `omega = max(1, 2/(1 - m))`, so a planar (m -> 1) approach takes a big
+// step and a concave (m -> -1) one degenerates to a plain step — instead of a fixed omega. This SUBSUMES the fixed
+// DIST clear-space multiplier the first four-bound-teleport increment carried: auto-relaxed is the principled adaptive
+// form of "step harder where it's safe." SlopeBeta is the paper's default (knob-insensitive: 0.2..0.3 within 2%);
+// SlopeCap clamps `1 - m` away from 0 at tangency so `omega` stays finite (the field is stepScale-clamped to
+// <= 1-Lipschitz, so the measured slope M is in [-1, 1] and m never legitimately exceeds SlopeCap).
+static const float SlopeBeta = 0.3;
+static const float SlopeCap = 0.8;   // omega <= 2 / (1 - 0.8) = 10
+// STRICT-MARCH fallback (SDF_STRICT_MARCH). Defining it (a build-time flip, rebuild the kernels) replaces the default
+// Bán 2023 auto-relaxed marcher with the PRE-WAVE Keinert over-relaxed marcher: a fixed omega = 1.2 with a
+// disjoint-sphere step-back that LATCHES omega to 1 for the rest of the ray after an overshoot — and omega is NEVER
+// re-armed thereafter, not even across a four-bound teleport (the teleport jump itself still runs — it is bound-proven
+// on both paths — but it does not reset the latch). So strict is exactly "pre-wave Keinert marcher + the four-bound
+// teleport, omega never re-armed." It is NOT byte-identical to any earlier build (the teleport rides it too); it is
+// only the CONSERVATIVE, division-free reference marcher. Chosen as a compile-time #define, not a runtime toggle or env
+// var, because the world kernels are AOT-compiled by DXC in-place at build and the engine has no runtime shader-variant
+// selection — a runtime switch would mean shipping and selecting two pipelines, far past the "cheapest honest seam."
+// It is NOT built by default and is exercised by NO gate — a hand-flip parity anchor only. The DEFAULT auto-relaxed
+// step's DIVISION is the one new cross-backend hazard (FMA contraction amplified near tangency can flip the disjoint-
+// sphere fallback compare), so the divided step and that compare are pinned `precise` on both backends and the strict
+// path never rides the division. The four-bound teleport rides BOTH paths (branchless, no division).
+// #define SDF_STRICT_MARCH
 // WorldTileSize / TileEmpty / worldTileIndex live in sdf-tile.hlsli — shared with sdf-world-composite.comp.
 
 // Shading weights of the world's one directional-sun-plus-hemisphere model.
@@ -248,6 +319,29 @@ float3 calculateNormal(float3 p, uint instanceMaskBase) {
         (k.yxy * mapMasked(p + (k.yxy * e), instanceMaskBase).distance) +
         (k.xxx * mapMasked(p + (k.xxx * e), instanceMaskBase).distance)
     );
+}
+// A curvature-carrying variant of the tetrahedron normal probe: it reuses the SAME four taps to ALSO recover the
+// field's discrete Laplacian. Because the tetrahedron offsets are isotropic (Σ dᵢdᵢᵀ = 4·I, Σ dᵢ = 0), the four tap
+// distances minus four times the center distance is 2·e²·∇²d to first order — which for a metric SDF (|∇d| ≈ 1)
+// approximates the mean curvature of the level set: concave creases read negative, convex ridges/silhouettes positive.
+// One extra CENTER tap on top of the normal's four. The whole curvature chain — the center tap, the sum, the /(2 e²) —
+// feeds ONLY `curvature`, which the stylization knobs below multiply by 0 in the default build, so DXC dead-code-
+// eliminates it on both backends and the default lit path stays byte-identical to calculateNormal (the four taps and
+// the normalize survive unchanged). The Laplacian is de-scaled by stepScale so the signal is world-unit curvature.
+float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, out float curvature) {
+    const float2 k = float2(1.0, -1.0);
+    const float e = NormalProbeEpsilon;
+
+    float d0 = mapMasked(p + (k.xyy * e), instanceMaskBase).distance;
+    float d1 = mapMasked(p + (k.yyx * e), instanceMaskBase).distance;
+    float d2 = mapMasked(p + (k.yxy * e), instanceMaskBase).distance;
+    float d3 = mapMasked(p + (k.xxx * e), instanceMaskBase).distance;
+    float center = mapMasked(p, instanceMaskBase).distance;
+    float stepScale = sdfStepScale();
+
+    curvature = (((d0 + d1 + d2 + d3) - (4.0 * center)) / ((2.0 * e * e) * stepScale));
+
+    return normalize(((k.xyy * d0) + (k.yyx * d1) + (k.yxy * d2) + (k.xxx * d3)));
 }
 // Procedural placeholder for a SCREEN_SLAB face: an animated test-card.
 float3 screenContent(float3 p, float time) {
@@ -310,31 +404,129 @@ TileCone buildTileCone(ViewportData view, float2 localUvMin, float2 localUvMax) 
     return cone;
 }
 
-// Conservative cone (beam) march over the distance field for a tile's UV rect. map() is a true distance field, so
-// the cone of half-spread `chord` clears ALL of its rays while map(center) - chord*t > 0, and a 1-Lipschitz-safe
-// step is clearance / (1 + chord). Returns the earliest t at which any ray in the tile could hit — a march-start
-// lower bound shared by every pixel in the tile — or TileEmpty when the cone clears the field out to MaxDistance.
-float coneMarchTile(ViewportData view, TileCone cone) {
+// The four-bound teleport's per-tile output (Larsson "The Gunk"). `entry` is the classic conservative-cone marchStart
+// (the earliest t at which any ray in the tile could hit — a march-start lower bound shared by every pixel in the tile,
+// or TileEmpty when the cone clears the field out to MaxDistance), so plane 0 — and therefore the cull-args bbox, the
+// compositor's empty-tile test, and the footprint-adaptive termination the ground-notch rides — is the exact classic
+// beam output. `firstExit`/`secondEntry` bound ONE proven-empty gap the cone cleared between two occupied bands; when
+// no gap is proven, firstExit = MaxDistance so the consumer's teleport is a total no-op (a total function, per the
+// determinism pin). secondEntry >= firstExit always.
+struct TileBounds {
+    float entry;
+    float firstExit;
+    float secondEntry;
+};
+
+// map()-based cone march that additionally records the first proven-empty gap past the entry band. The GAP is
+// conservative for the WHOLE tile cone: `firstExit` is a t at which the cone clearance is strictly positive (every
+// ray in the tile is clear there) and the search then steps by <= clearance/(1+chord) — the sphere-trace guarantee —
+// so it cannot skip the cone re-entering geometry; the first re-entry is `secondEntry`. Overstepping the interior of
+// the first band (the through-band phase) can only MISS a gap (reporting firstExit = MaxDistance), never invent one,
+// so a teleport is never unsafe. Reaching MaxDistance while clear yields secondEntry = MaxDistance (an empty tail —
+// the ray teleports to the far plane and ends), the one far-bound benefit taken here.
+TileBounds coneMarchTileBounds(ViewportData view, TileCone cone) {
     float3 origin = view.position.xyz;
 
+    TileBounds b;
+    b.entry = TileEmpty;
+    b.firstExit = MaxDistance;   // no proven gap => teleport disabled (total function)
+    b.secondEntry = MaxDistance;
+
+    // Phase 1 — ENTRY (the classic conservative cone/beam march). map() is a true distance field, so the cone of
+    // half-spread `chord` clears ALL of its rays while map(center) - chord*t > 0, and a 1-Lipschitz-safe step is
+    // clearance / (1 + chord). Returns the earliest t at which the cone could hit (the shared per-tile marchStart), or
+    // TileEmpty when the cone clears the field out to MaxDistance.
     float t = ConeNear;
+    bool foundEntry = false;
 
     [loop]
     for (int i = 0; (i < ConeMarchSteps); i++) {
         float clearance = (map(origin + (cone.centerDirection * t)).distance - (cone.chord * t));
 
         if (clearance <= ConeEpsilon) {
-            return t;
+            b.entry = t;
+            foundEntry = true;
+            break;
         }
 
         t += (clearance / (1.0 + cone.chord));
 
         if (t > MaxDistance) {
-            return TileEmpty;
+            return b; // TileEmpty entry, no gap — cull-args drops the tile
         }
     }
 
-    return t;
+    if (!foundEntry) {
+        b.entry = t; // step budget exhausted at the entry band — matches coneMarchTile's fallthrough `return t`
+
+        return b;
+    }
+
+    // Phases 2/3 — walk PAST the entry band to prove one empty gap. `clear` flips true once the cone is provably
+    // clear again (firstExit); the first time it dips back under ConeEpsilon after that is secondEntry.
+    bool clear = false;
+    int stall = 0;                    // consecutive in-band, non-increasing-clearance steps (the early-abandon streak)
+    float previousClearance = 1.0e20; // seeded large so the first in-band step counts as non-increasing
+
+    [loop]
+    for (int j = 0; (j < TileGapSteps); j++) {
+        float clearance = (map(origin + (cone.centerDirection * t)).distance - (cone.chord * t));
+
+        if (!clear) {
+            if (clearance > ConeEpsilon) {
+                b.firstExit = t;               // start of a proven-clear span
+                clear = true;
+                t += (clearance / (1.0 + cone.chord)); // conservative step within the clear span
+            }
+            else {
+                // Still inside/near the entry band. Early-abandon a cone that is only descending deeper (a ground/wall
+                // tile with no gap): count consecutive non-increasing in-band clearances and give up once the streak
+                // hits TileGapStallLimit. A real gap's cone re-clears within a few magnitude-stepped steps, resetting
+                // the streak first; abandoning a non-gap tile only skips an unproven teleport (pixel-identical).
+                stall = ((clearance <= previousClearance) ? (stall + 1) : 0);
+
+                if (stall >= TileGapStallLimit) {
+                    b.firstExit = MaxDistance;
+                    b.secondEntry = MaxDistance;
+
+                    return b;
+                }
+
+                // advance through the band (magnitude-stepped, floored so a near-zero clearance can't stall).
+                // Overshooting the exit only shrinks/misses a gap, never invents one.
+                t += (max(-clearance, TileGapMinStep) / (1.0 + cone.chord));
+            }
+
+            previousClearance = clearance;
+        }
+        else {
+            if (clearance <= ConeEpsilon) {
+                b.secondEntry = t;             // cone re-enters geometry — gap = [firstExit, secondEntry]
+
+                return b; // one gap is the 90% win (Larsson clamps to one re-entry)
+            }
+
+            t += (clearance / (1.0 + cone.chord)); // stay conservative across the clear span
+        }
+
+        if (t > MaxDistance) {
+            if (clear) {
+                b.secondEntry = MaxDistance;   // proven clear to the far plane — teleport ends the ray (the far bound)
+            }
+            else {
+                b.firstExit = MaxDistance;     // never cleanly exited the band — disable the teleport
+            }
+
+            return b;
+        }
+    }
+
+    // Budget exhausted without a clean second entry: we cannot prove the span past firstExit stays empty, so DISABLE
+    // the teleport (stay conservative — never teleport past unproven space).
+    b.firstExit = MaxDistance;
+    b.secondEntry = MaxDistance;
+
+    return b;
 }
 
 // Per-tile instance cull (the beam prepass, world path only — requires SDF_DYNAMIC_TRANSFORMS for a DYNAMIC
@@ -393,8 +585,13 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
 // The debug-view-mode wire contract: viewport forward.w carries the mode index into DebugViewModes.Names
 // (src/Puck.Demo/DebugView.cs — the list's ORDER is the wire value; KEEP IN SYNC, including the switch below).
 // Mode 0 / >= DebugViewModeCount render final shading.
-static const int DebugViewModeCount = 6;
+static const int DebugViewModeCount = 8;
 static const int DebugViewModeNormals = 2;
+// Mode 7 (slice) is special-cased in TWO other places: renderView SKIPS the march for it (the slice never needs a
+// hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
+// and Stage 2's empty-tile flatten cannot truncate the field picture — the slice must show the IDEAL field wall to
+// wall. KEEP IN SYNC with DebugViewModes.Names in src/Puck.Demo/DebugView.cs.
+static const int DebugViewModeSlice = 7;
 
 // A soft shadow toward the (directional) sun: an IQ-style penumbra march of the field from the surface point up toward
 // the light, tracking the closest-approach ratio (ShadowSharpness · clearance / traveled) so grazing occluders cast a
@@ -408,11 +605,13 @@ static const int DebugViewModeNormals = 2;
 // divide the clamp back out. Without that, a program carrying any chamfer blend (stepScale = 1/√2) darkened every soft
 // shadow in the scene by ~30% for no geometric reason; a Displace/DomainWarp/eccentric-Ellipsoid program darkens more.
 // stepScale == 1.0 for an isometric program and x*1.0f == x to the bit, so those scenes stay byte-identical.
-float softShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase) {
+// `stepScale` is the per-program Lipschitz clamp, HOISTED by renderView (one sdfStepScale() read shared across the lit
+// path) and passed in — the sample it divides back out of the penumbra ratio is world-space (see below).
+float softShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale) {
     float3 origin = (surfacePoint + (surfaceNormal * ShadowBias));
     float traveled = ShadowBias;
     float result = 1.0;
-    float stepScale = sdfStepScale();
+    float previousTrue = 1.0e20; // Aaltonen's `ph`, seeded large so the first step's closest-approach y is ~0.
 
     [loop]
     for (int step = 0; (step < ShadowSteps); step++) {
@@ -422,7 +621,35 @@ float softShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirectio
             return 0.0; // fully occluded
         }
 
-        result = min(result, ((ShadowSharpness * clearance) / (traveled * stepScale)));
+        // Aaltonen 2017 closest-approach refinement over IQ's classic k*h/t: treat the previous and current SDF samples
+        // as a local parabola and recover the PERPENDICULAR miss distance `d` at the estimated closest point BETWEEN
+        // samples (y = h^2/(2*ph), d = sqrt(h^2 - y^2)), so a sharp occluder no longer bands at the step frequency —
+        // same per-step cost bar two ops and a sqrt, no extra map() evals. LOAD-BEARING pin: y and d are WORLD-space,
+        // so the Lipschitz clamp is divided back out of the sample FIRST (clearanceTrue = clearance / stepScale) — the
+        // denominator keeps the RAW `traveled` exactly as the classic form did, so in the far limit (y->0,
+        // d->clearanceTrue) this reduces to the old k*clearance/(traveled*stepScale) to the bit and an isometric
+        // program (stepScale == 1) stays byte-identical. Mixing a scaled clearance into y/d here resurrects the
+        // ~30%-darkening chamfer bug a prior fix already closed.
+        float clearanceTrue = (clearance / stepScale);
+        float y = ((clearanceTrue * clearanceTrue) / (2.0 * previousTrue));
+        // Closest-point-behind guard (Aaltonen): when the parabola places the estimated closest point AT OR BEYOND the
+        // current sample (y >= clearanceTrue — a tight graze followed by an opening field, or the degenerate first
+        // sample where previousTrue is seeded huge), d = sqrt(clearanceTrue^2 - y^2) collapses to 0 and result LATCHES
+        // to full occlusion (the black-speck band). Fall back to IQ's classic k*clearanceTrue/traveled term for that
+        // sample instead of the parabola. In the far limit (y -> 0) the parabola already reduces to this term to the
+        // bit, so existing (isometric) shadows are unchanged — only the latch case flips.
+        float sample;
+
+        if (y >= clearanceTrue) {
+            sample = ((ShadowSharpness * clearanceTrue) / max(traveled, 1.0e-4));
+        }
+        else {
+            float d = sqrt(max(((clearanceTrue * clearanceTrue) - (y * y)), 0.0));
+            sample = ((ShadowSharpness * d) / max((traveled - y), 1.0e-4));
+        }
+
+        result = min(result, sample);
+        previousTrue = clearanceTrue;
         // The step clamp is IQ's: the floor keeps a near-tangent march from stalling (at the cost of stepping through
         // occluders thinner than it), the ceiling keeps the penumbra from over-marching past a grazing silhouette.
         traveled += clamp(clearance, ShadowStepMin, ShadowStepMax);
@@ -434,7 +661,121 @@ float softShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirectio
 
     return result;
 }
-float3 renderView(ViewportData view, float2 localUv, float marchStart, uint instanceMaskBase, float pixelFootprint) {
+// iq's 5-tap normal-ladder ambient occlusion (calcAO): from the hit, step a short ladder of fixed rungs OUTWARD along
+// the surface normal; at each rung compare the distance expected to travel (h) against what the field actually reports
+// (d) — where nearby geometry crowds the normal the field under-reports and the deficit (h - d) accumulates as
+// occlusion, with an outer-rung falloff and a gain/clamp. Five mapMasked() calls, the same currency as the 4-tap
+// normal, paid ONLY on lit hits and tile-masked exactly like softShadow (a masked-out instance is as absent from a
+// nearby tap as it is from the hit itself). Purely local — no cones, no hemisphere, no history — but reads convincingly
+// as contact shadowing in creases and under overhangs.
+//
+// Applied to the AMBIENT/sky fill ONLY, never the sun: soft shadows govern direct light, and multiplying occlusion into
+// direct light ghosts (iq's Multiresolution-AO warning). The (h - d) subtract mixes a WORLD-space rung h with a
+// mapMasked distance pre-scaled by the Lipschitz clamp, so d is divided back to world units FIRST (d / stepScale) — the
+// same divide-back softShadow applies; without it occlusion strength tracks each program's stepScale bake, not geometry.
+// `stepScale` is renderView's hoisted Lipschitz clamp (see softShadow): the (h - d) rung subtract mixes a world-space
+// rung with a mapMasked distance, so d is divided back to world units by it first.
+float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale) {
+    float occlusion = 0.0;
+    float scale = 1.0;
+
+    [unroll]
+    for (int i = 0; (i < 5); i++) {
+        float h = (0.01 + ((0.12 * float(i)) / 4.0));
+        float d = (mapMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase).distance / stepScale);
+        occlusion += ((h - d) * scale);
+        scale *= 0.95;
+    }
+
+    return clamp((1.0 - (3.0 * occlusion)), 0.0, 1.0);
+}
+// STYLIZED curvature/NPR shading — artistic, not physically-based, so OFF by default. The master switch is a compile-
+// time static-const bool: unlike the CRT gains above (which fold through `fmul fast`), the curvature chain carries a
+// divide and a 5th `map()` center tap that DXC's DXIL backend does NOT dead-code-eliminate from an arithmetic *0 gain
+// (SPIR-V does; DXIL kept ~13 KB), so a `if (CurvatureShadingEnabled)` dead-branch guard is used instead — DXC strips
+// the whole branch (extra tap included) on BOTH backends, keeping the shipped look byte-identical and zero-cost. This
+// is the least-plumbing seam that guarantees that: no new PUCK_* var, no push-constant/env-buffer contract change. Flip
+// the bool (and rebuild) to author with it; the gains below then tune cavity depth, rim strength, and ink width.
+static const bool CurvatureShadingEnabled = false;
+static const float CurvatureCavityGain = 0.0; // darken concave creases (curvature < 0) — cavity/crease shading
+static const float CurvatureRimGain = 0.0;    // brighten convex ridges/silhouettes (curvature > 0) — rim light
+static const float CurvatureInkGain = 0.0;    // ink-line outline strength where |curvature| spikes (creases + edges)
+static const float CurvatureInkLo = 6.0;      // |curvature| where the ink line starts
+static const float CurvatureInkHi = 16.0;     // |curvature| where the ink line saturates
+static const float3 CurvatureInkColor = float3(0.02, 0.02, 0.03); // near-black ink
+
+// Fold the stylized curvature terms into an already-lit surface color. Cavity darkening scales the color down in
+// concavities, rim light adds on ridges, and the ink outline lerps toward the ink color where |curvature| spikes. With
+// the gains at 0 this returns `shaded` unchanged (and the curvature that feeds it dead-code-eliminates upstream).
+float3 applyCurvatureShading(float3 shaded, float curvature) {
+    shaded *= (1.0 - (CurvatureCavityGain * max(-curvature, 0.0)));
+    shaded += (CurvatureRimGain * max(curvature, 0.0));
+
+    float ink = (CurvatureInkGain * smoothstep(CurvatureInkLo, CurvatureInkHi, abs(curvature)));
+
+    return lerp(shaded, CurvatureInkColor, saturate(ink));
+}
+#ifdef SDF_SCREEN_SOURCES
+// The world FLOOR grid (grid-locking §4b): two-scale frac bands on the floor's XZ, tinted (not replaced) toward a cool
+// line color, with distance + grazing fades so the far field and skimming rays never moire. A line is drawn where
+// EITHER axis sits near a cell boundary; the major band (4x pitch) reads heavier so distance counts at a glance.
+// Guarded on SDF_SCREEN_SOURCES: it reads the grid rows from sdfScreenLights, bound only in that configuration.
+float3 applyWorldFloorGrid(float3 color, float2 xz, float2 pitch, float3 rayDirection, float traveled) {
+    if ((pitch.x <= 0.0) || (pitch.y <= 0.0)) {
+        return color;
+    }
+
+    float2 minorEdge = min(frac(xz / pitch), (1.0 - frac(xz / pitch)));
+    float2 majorEdge = min(frac(xz / (pitch * 4.0)), (1.0 - frac(xz / (pitch * 4.0))));
+    float minorLine = (1.0 - smoothstep(0.0, 0.04, min(minorEdge.x, minorEdge.y)));
+    float majorLine = (1.0 - smoothstep(0.0, 0.04, min(majorEdge.x, majorEdge.y)));
+    float strength = max((minorLine * 0.45), (majorLine * 0.9));
+
+    // Anti-moire (§4d): fade with distance (far pitch < 1px) and with grazing angle (floor normal = +Y).
+    strength *= saturate(1.0 - (traveled / GridFadeDistance));
+    strength *= saturate(abs(rayDirection.y) / GridGrazeCos);
+
+    return lerp(color, GridWorldLineColor, (strength * 0.55));
+}
+
+// The OBJECT grid (grid-locking §4c): a FINITE lattice patch — the reference's OWN lattice, floor-projected around the
+// guide within a bounded radius. The floor point is transformed into the reference's LOCAL frame and the frac bands
+// are evaluated on its local XZ, so a rotated reference renders a correctly-rotated grid for free (the world->local
+// transform bakes the rotation — no lines are rotated in screen space). Warm, so it reads distinct from the cool
+// world floor grid it overlays; a radial fade keeps the patch finite and legible around the reference.
+float3 applyObjectGrid(float3 color, float3 surfacePoint, float3 rayDirection, float floorY) {
+    if (abs(surfacePoint.y - floorY) >= 0.02) {
+        return color; // floor-projected: only paints the floor plane (it overlays the cool world grid)
+    }
+
+    float4 originRow = sdfScreenLights[SdfGridObjOrigin];
+    float4 frame = sdfScreenLights[SdfGridObjFrame];
+    float4 paramsRow = sdfScreenLights[SdfGridObjParams];
+    float2 pitch = float2(originRow.w, paramsRow.x);
+    float patchRadius = paramsRow.y;
+
+    if ((pitch.x <= 0.0) || (pitch.y <= 0.0) || (patchRadius <= 0.0)) {
+        return color;
+    }
+
+    float3 local = rotatePointByInverseQuaternion((surfacePoint - originRow.xyz), frame); // world -> reference-local
+    float planar = length(local.xz);
+
+    if (planar > patchRadius) {
+        return color; // finite patch, not an infinite plane
+    }
+
+    float2 minorEdge = min(frac(local.xz / pitch), (1.0 - frac(local.xz / pitch)));
+    float minorLine = (1.0 - smoothstep(0.0, 0.05, min(minorEdge.x, minorEdge.y)));
+    float radialFade = saturate(1.0 - (planar / patchRadius));
+    float graze = saturate(abs(rayDirection.y) / GridGrazeCos); // floor normal = +Y
+    float strength = ((minorLine * radialFade) * graze);
+
+    return lerp(color, GridObjectLineColor, (strength * 0.7));
+}
+#endif
+
+float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, uint instanceMaskBase, float pixelFootprint) {
     float3 rayOrigin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, localUv);
     int viewMode = (int)round(view.forward.w);
@@ -444,14 +785,44 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
     bool hitSurface = false;
     int material = 0;
     int marchStep = 0;
+    // Tier-0 coverage AA: the CLAMPED field at the accepted hit (the terminal-step residual), captured by both march
+    // paths at their hit-accept. The coverage metric derived from it in the epilogue must live in the SAME units as
+    // the footprint-adaptive termination test (clamped radius vs hitThreshold) — do NOT divide by stepScale here.
+    // The divide-back that is correct for softShadow/calcAO (world-space geometric comparisons) is WRONG for this
+    // metric: de-scaling inflated the ratio by 1/stepScale (3.16x on a twisted program), saturating it to ~1 on
+    // EVERY solid hit — the coverage signal vanished and the whole blend rode on a noisy one-tap gate, which read as
+    // scaly/blocky moire across solid surfaces (the wave-1 Row 3 regression). See the epilogue comment.
+    float terminalRadius = 0.0;
+    // The footprint-adaptive hit threshold captured at the SAME accept step as terminalRadius (both march paths). The
+    // epilogue's coverage = terminalRadius / hitThreshold, and `traveled` is frozen at the hit after the loop breaks, so
+    // this equals a recompute of max(SurfaceEpsilon, pixelFootprint * traveled) there — capture once instead.
+    float terminalHitThreshold = SurfaceEpsilon;
+    // The per-program Lipschitz clamp, read ONCE and shared by softShadow, calcAO, and the coverage-AA epilogue (each
+    // divides it back out of a WORLD-space comparison — a penumbra ratio, an AO rung, the open-space rise; NOT the
+    // coverage ratio itself, which lives in the same clamped units as the termination test). Hoisting the single
+    // sdfStepScale() read here drops three redundant reads of the same segment-directory header lane.
+    float stepScale = sdfStepScale();
 
-    if (marchStart >= 0.0) {
-        // Keinert Enhanced Sphere Tracing: OVER-RELAXED steps (omega * radius) with a disjoint-sphere step-back, and a
-        // footprint-ADAPTIVE hit threshold — these are one algorithm, not two. The field mapMasked returns is already
-        // Lipschitz-clamped (SdfProgram stepScale, D1 keystone), so over-relaxing it stays safe: if an over-relaxed step
-        // lands where the new unbounding sphere no longer overlaps the previous one, we overshot — retreat into the
-        // verified-empty overlap and fall to plain sphere tracing (omega = 1) for the rest of this ray.
+    // The SLICE view never marches: it evaluates the field on a plane instead (its case below), and the beam prepass
+    // force-survives every tile for it — marching those would be pure waste (sky pixels would run the full MaxSteps).
+    if ((marchStart >= 0.0) && (viewMode != DebugViewModeSlice)) {
+        // Sphere-trace to the surface with a footprint-ADAPTIVE hit threshold. The field mapMasked returns is already
+        // Lipschitz-clamped (SdfProgram stepScale, D1 keystone; <= 1-Lipschitz along the ray), so over-relaxing stays
+        // safe. DEFAULT: Bán & Valasek 2023 AUTO-RELAXED tracing — a per-ray slope EMA `slopeM` drives an adaptive
+        // over-relaxation omega = max(1, 2/(1 - m)) (planar approach steps big, concave degenerates to a plain step),
+        // with a disjoint-sphere step-back on overshoot. This subsumes the fixed clear-space multiplier the teleport
+        // increment carried. STRICT (SDF_STRICT_MARCH): the plain omega=1.2 Keinert marcher — the conservative
+        // cross-backend parity reference; the auto-relaxed step's division never rides the strict gate. The four-bound
+        // teleport runs in BOTH paths.
+        //
+        // Footprint-hit biases (both conservative toward the camera — fatten a silhouette, never drop geometry):
+        // (1) pixelFootprint * traveled is the pixel's full world DIAMETER (2x Keinert's radius); (2) `radius` is
+        // Lipschitz-clamped, so the test fires at true distance threshold/stepScale.
+#ifdef SDF_STRICT_MARCH
         float omega = SphereTraceOmega;
+#else
+        float slopeM = -1.0; // slope EMA, init -1 => the first step is plain (omega = 1)
+#endif
         float previousRadius = 0.0;
         float stepLength = 0.0;
 
@@ -459,7 +830,13 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
         for (marchStep = 0; (marchStep < MaxSteps); marchStep++) {
             SdfHit hit = mapMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase);
             float radius = hit.distance;
-            bool overshoot = ((omega > 1.0) && ((radius + previousRadius) < stepLength));
+            float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
+            bool overshoot;
+
+#ifdef SDF_STRICT_MARCH
+            // Keinert over-relaxation: omega=1.2 with a disjoint-sphere step-back, latching to plain tracing (omega=1)
+            // for the rest of the ray once it overshoots. Never terminate on an overshoot-retreat step.
+            overshoot = ((omega > 1.0) && ((radius + previousRadius) < stepLength));
 
             if (overshoot) {
                 stepLength -= (omega * stepLength);
@@ -470,22 +847,71 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
             }
 
             previousRadius = radius;
+#else
+            // Auto-relaxed step (Bán 2023). `stepLength` is the step that reached this sample. A disjoint-sphere
+            // overshoot (`stepLength > |R| + r` — the over-relaxed step tunneled past / off the previous unbounding
+            // sphere) is rejected: retreat to the previous sample and plain-step, resetting the slope. The divided
+            // step and the fallback compare are `precise` so DXC's SPIR-V/DXIL FMA contraction can't flip the branch
+            // near tangency; SlopeCap keeps (1 - m) away from 0 there.
+            precise float sphereReach = (abs(radius) + previousRadius);
+            overshoot = ((stepLength > 0.0) && (stepLength > sphereReach));
 
-            // Footprint-adaptive termination: the surface is "hit" once the field is smaller than the pixel's world
-            // footprint at this distance (an absolute floor keeps near-camera precision bounded) — resolution-independent
-            // and cheaper at range than a fixed epsilon. Never on an overshoot-retreat step (that step isn't a hit).
-            //
-            // Two deliberate conservative biases, both toward the camera (they can only make a silhouette fatter, never
-            // drop geometry). (1) pixelFootprint * traveled is the pixel's full world DIAMETER at that depth — 2x
-            // Keinert's pixel RADIUS. (2) `radius` is the Lipschitz-clamped distance, so the test fires at true distance
-            // threshold/stepScale. Undoing either lengthens every march and risks the MaxSteps ceiling on warped scenes.
-            if (!overshoot && (radius < max(SurfaceEpsilon, (pixelFootprint * traveled)))) {
+            if (overshoot) {
+                traveled -= stepLength; // undo the unsafe step — back to the previous accepted sample
+                radius = previousRadius;
+                slopeM = -1.0;          // next step is plain (omega = 1)
+            }
+#endif
+
+            // SHARED hit-accept: both march paths have now decided this sample's overshoot/step outcome and land
+            // here — an overshoot-retreat sample is never tested (there is nothing new to accept this iteration),
+            // and the coverage-AA epilogue's terminal-state capture (terminalRadius/terminalHitThreshold) lives in
+            // ONE place instead of duplicated per path.
+            if (!overshoot && (radius < hitThreshold)) {
                 hitSurface = true;
                 material = hit.material;
+                terminalRadius = radius;
+                terminalHitThreshold = hitThreshold;
                 break;
             }
 
+#ifdef SDF_STRICT_MARCH
             traveled += stepLength;
+#else
+            // Update the slope EMA from the step that reached this sample (skip the very first sample; an
+            // overshoot-retreat step already reset slopeM above). Only reached when the shared accept check did
+            // not break.
+            if (!overshoot && (stepLength > 0.0)) {
+                precise float slope = ((radius - previousRadius) / stepLength);
+                slopeM = lerp(slopeM, slope, SlopeBeta);
+            }
+
+            precise float denominator = (1.0 - min(slopeM, SlopeCap));
+            precise float omega = max(1.0, (2.0 / denominator));
+            precise float advance = (radius * omega);
+            previousRadius = radius;
+            stepLength = advance;
+            traveled += stepLength;
+#endif
+            // Four-bound teleport (Larsson "The Gunk"): once the ray marches past the tile's first occupied band without
+            // converging, it is inside the beam-proven-empty gap — jump straight to the second band's start. secondEntry
+            // >= firstExit, so this fires at most once (past secondEntry it is a no-op); a tile with no proven gap packs
+            // firstExit = MaxDistance, making the branch dead. The teleport lands at secondEntry <= the ray's true
+            // re-entry, so `traveled` — and the footprint threshold — is never inflated beyond a normal march (it cannot
+            // worsen the ground-notch). Reset the relaxation state so a stale step/slope does not carry across the jump.
+            if ((traveled >= firstExit) && (traveled < secondEntry)) {
+                traveled = secondEntry;
+                previousRadius = 0.0;
+                stepLength = 0.0;
+#ifndef SDF_STRICT_MARCH
+                slopeM = -1.0;
+#else
+                // Strict keeps the pre-wave semantics: omega is NEVER re-armed — a latched omega=1 (post-overshoot)
+                // stays latched across the teleport. Only previousRadius/stepLength reset, so the disjoint-sphere
+                // step-back restarts cleanly at the landing sample without resurrecting over-relaxation the overshoot
+                // already retired.
+#endif
+            }
 
             if (traveled > MaxDistance) {
                 break;
@@ -513,8 +939,16 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
         bool needsLitColor = (useFinalShading && !sampledScreen);
         bool needsNormal = ((viewMode == DebugViewModeNormals) || needsLitColor);
 
+        float curvature = 0.0; // level-set mean curvature at the hit (drives the stylized cavity/rim/ink terms below)
+
         if (needsNormal) {
-            normal = calculateNormal(surfacePoint, instanceMaskBase);
+            // The curvature variant reuses the normal's four taps plus one center tap; the plain probe (the default)
+            // strips to exactly the four-tap normal on both backends via this compile-time branch.
+            if (CurvatureShadingEnabled) {
+                normal = calculateNormalCurvature(surfacePoint, instanceMaskBase, curvature);
+            } else {
+                normal = calculateNormal(surfacePoint, instanceMaskBase);
+            }
         }
 
         if (needsLitColor) {
@@ -535,7 +969,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
             // not black). Skip the march where the surface already faces away from the sun (sunDiffuse == 0).
             // The procedural screen branch below consumes sunDiffuse too, so this march is NOT dead there.
             if (sunDiffuse > 0.0) {
-                sunDiffuse *= softShadow(surfacePoint, normal, SdfSunDirection, instanceMaskBase);
+                sunDiffuse *= softShadow(surfacePoint, normal, SdfSunDirection, instanceMaskBase, stepScale);
             }
 
             if (material >= SDF_SCREEN_MATERIAL) {
@@ -545,7 +979,10 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
                 // SDF_SCREEN_MATERIAL + 1 + screenIndex and must never index the material table.
                 color = (screenContent(surfacePoint, time) * (ScreenCardBase + (ScreenCardSunTint * sunDiffuse)));
             } else {
-                float3 radiance = (float3(1.0, 1.0, 1.0) * ((ambient * ambientScale) + ((SunWeight * sunDiffuse) * sunScale)));
+                // 5-tap normal-ladder AO, into the AMBIENT fill ONLY (the sun stays governed by softShadow above).
+                // Computed in the material branch so the emissive screen-card path never pays its five taps.
+                float ambientOcclusion = calcAO(surfacePoint, normal, instanceMaskBase, stepScale);
+                float3 radiance = (float3(1.0, 1.0, 1.0) * (((ambient * ambientScale) * ambientOcclusion) + ((SunWeight * sunDiffuse) * sunScale)));
 
 #ifdef SDF_SCREEN_SOURCES
                 // Every BOUND diegetic screen is a colored area light: its position/orientation come from the
@@ -571,12 +1008,85 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
 #endif
 
                 color = sdfMaterialShade(sdfMaterialLoad(material), radiance, normal, rayDirection, SdfSunDirection, sunScale);
+                // Stylized curvature enrichment (cavity darken / rim light / ink outline). The compile-time guard strips
+                // it (and the extra center tap upstream) from the shipped build on both backends.
+                if (CurvatureShadingEnabled) {
+                    color = applyCurvatureShading(color, curvature);
+                }
             }
         }
 
         if (useFinalShading) {
+#ifdef SDF_SCREEN_SOURCES
+            // Grid-lock overlays (grid-locking §4): tint the lit color BEFORE the distance fog so a far grid still
+            // recedes. The world grid gates on the surface being the floor plane by HEIGHT (its material id is
+            // runtime-assigned, so height is the stable test); the object grid is a finite patch in the reference frame.
+            float4 gridControl = sdfScreenLights[SdfGridWorld];
+            uint gridFlags = (uint)(gridControl.x + 0.5);
+
+            if (((gridFlags & 1u) != 0u) && (abs(surfacePoint.y - gridControl.y) < 0.02)) {
+                color = applyWorldFloorGrid(color, surfacePoint.xz, gridControl.zw, rayDirection, traveled);
+            }
+
+            if ((gridFlags & 2u) != 0u) {
+                color = applyObjectGrid(color, surfacePoint, rayDirection, gridControl.y);
+            }
+#endif
+
             float fog = (1.0 - exp(-FogDensity * traveled));
             color = lerp(color, skyColor(rayDirection), fog);
+
+            // Tier-0 coverage antialiasing: blend a HIT pixel toward the sky only where three independent signals agree
+            // it is a genuine silhouette edge, so a grazing edge ramps toward the background (reconstructing the
+            // sub-pixel silhouette ordered dither provably cannot) while solid surfaces stay bit-solid. This CORRECTS
+            // the wave-1 Row 3 increment, which had two coupled faults:
+            //   (1) its coverage metric (running min of the DE-SCALED field over footprint) divided the Lipschitz
+            //       clamp back out, inflating the ratio by 1/stepScale and saturating it to ~1 on every solid hit —
+            //       the metric carried no interior-vs-silhouette signal at all (forcing its gate to 1 washed the
+            //       ENTIRE scene to sky). Do not "re-fix" that divide back in: the metric must live in the SAME
+            //       CLAMPED units as the footprint-adaptive termination test it mirrors (clamped radius vs
+            //       hitThreshold); the divide-back that softShadow/calcAO need for world-space geometry is wrong here.
+            //   (2) the whole blend therefore rode on a single ABSOLUTE forward field tap, which on grazing-but-solid
+            //       surfaces (the far floor, oblique twisted-torus flanks) leaked the per-pixel terminal gap as a
+            //       fractional sky blend — the scaly/blocky moire.
+            // The corrected signals:
+            //   coverage — the terminal-step residual over the SAME hitThreshold the march terminated against (both
+            //       clamped units). A dead-on/overstepped hit lands deep below threshold (~0, saturate handles a
+            //       negative overstep); only a tangent-creep hit — the outermost ray of a silhouette — reads ~1.
+            //   grazing — the normal-facing clamp: a camera-facing surface can never blend, whatever the probes say.
+            //       Costs nothing (the normal is already computed on lit hits; an emissive screen face skips the
+            //       normal, reads grazing=1, and relies on the other two gates — its slab interior still gates to 0).
+            //   opened — the open-space confirmation, now RELATIVE: the field's rise from the terminal residual to a
+            //       probe a few footprints along the ray. A solid surface the ray is entering has a falling field
+            //       (opened <= 0 — the floor gates to 0 regardless of its terminal gap, the fault-2 leak); only a true
+            //       silhouette, where the ray exits past the edge into open space, rises. The rise is a world-space
+            //       geometric comparison, so de-scaling the DIFFERENCE by stepScale here is correct (same rule as
+            //       softShadow/calcAO) — fault 1 was de-scaling the absolute metric, not a difference.
+            // Sky-blend ONLY (Tier 0); blending against farther GEOMETRY is the gated Tier-1 continuation, out of
+            // scope here. Ordered dither runs AFTER this (the 8-bit store in sdf-world-views.comp), so the coverage
+            // ramp quantizes last and is never dithered-then-smeared along the edge.
+            // coverage rides terminalHitThreshold — the SAME threshold the march accepted the hit against, captured at
+            // accept (traveled is frozen at the hit after the loop, so this equals recomputing it here).
+            float coverage = saturate(terminalRadius / terminalHitThreshold);
+            float grazing = (1.0 - saturate(-dot(normal, rayDirection)));
+            // The open-space probe (aheadField) is a WHOLE extra VM interpretation, so gate it: only a genuine
+            // silhouette candidate — coverage AND grazing both non-trivial — can produce a visible blend. A camera-
+            // facing solid hit reads grazing ~0 (and an overstepped one coverage ~0), so edgeWeight falls below the
+            // 8-bit dither quantum, the blend would quantize away, and the probe is pure waste there. Below the gate
+            // `opened` stays 0 and the lerp is a no-op — visually identical, one fewer map() on the common path.
+            float edgeWeight = (coverage * grazing);
+            float opened = 0.0;
+
+            if (edgeWeight > DitherQuantum) {
+                float probeSpan = max((pixelFootprint * traveled) * 3.0, SurfaceEpsilon);
+                float aheadField = mapMasked(surfacePoint + (rayDirection * probeSpan), instanceMaskBase).distance;
+
+                // The open-space rise is a world-space geometric difference, so divide the Lipschitz clamp back out
+                // (same rule as softShadow/calcAO — fault 1 was de-scaling the ABSOLUTE coverage metric, not a difference).
+                opened = smoothstep(0.0, (0.5 * probeSpan), ((aheadField - terminalRadius) / stepScale));
+            }
+
+            color = lerp(color, skyColor(rayDirection), (edgeWeight * opened));
         }
     }
 
@@ -603,6 +1113,99 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, uint inst
         case 5: { // iteration count ramp (after the cull fast-forward — empty tiles read ~0)
             float ramp = (float(marchStep) / float(MaxSteps));
             viewColor = float3(ramp, ramp, ramp);
+            break;
+        }
+        case 6: { // termination cause — WHY the march loop exited, per pixel (reconstructed from post-loop state so
+                  // the hot non-debug path's codegen is untouched: no per-step tracking, just a read of the exit facts).
+                  // green = epsilon-dominated hit, cyan = footprint-dominated hit, red = MaxSteps exhausted (the ground-
+                  // notch hypothesis), dark blue = escaped past MaxDistance (or a tile the beam culled empty).
+                  //
+                  // THE TERMINATION/SLICE SPLIT (deliberate, keep it): this view shows what the REAL pipeline does —
+                  // tile cull included (a beam-culled tile reads as escaped/background here, because that is exactly
+                  // what the production march would do). The SLICE view below shows the IDEAL field instead: the beam
+                  // force-survives every tile for it and its evaluation is the UNMASKED map(), so no cull or mask can
+                  // truncate the picture. One view diagnoses the pipeline, the other the mathematics.
+            if (hitSurface) {
+                // Which term won the footprint-adaptive threshold at the hit: SurfaceEpsilon (near-camera precision
+                // floor) or the pixel's world footprint (pixelFootprint * traveled). Same comparison the loop's
+                // max(SurfaceEpsilon, pixelFootprint*traveled) made, read back at the hit distance.
+                bool epsilonDominated = (SurfaceEpsilon >= (pixelFootprint * traveled));
+                viewColor = (epsilonDominated ? float3(0.15, 0.90, 0.25) : float3(0.15, 0.80, 0.95));
+            }
+            else if ((marchStart < 0.0) || (traveled > MaxDistance)) {
+                viewColor = float3(0.02, 0.05, 0.28); // escaped to the sky (or a beam-culled empty tile) — background
+            }
+            else {
+                viewColor = float3(0.92, 0.16, 0.10); // the loop ran out of steps without hitting or escaping
+            }
+
+            break;
+        }
+        case 7: { // distance-field cross-section — the IDEAL field, wall to wall (see the termination/slice split
+                  // note on case 6). The march was skipped (the gate above); the beam force-survived every in-viewport
+                  // tile for this mode, so every pixel of the viewport reaches here — no tile truncation, no staircase.
+                  // Default plane: through the WORLD ORIGIN with normal = camera forward (the debug subject sits at
+                  // the origin — a camera-locked slice). The env entry's z/w lanes optionally select a world-axis
+                  // plane instead (the `sdf.slice` verb; camera-locked when the lanes are 0/absent).
+            float3 sliceNormal = view.forward.xyz; // already unit (the camera basis)
+            float planeOffset = 0.0;               // the plane is dot(p, n) = planeOffset
+
+#ifdef SDF_SCREEN_SOURCES
+            float4 sliceEnv = sdfScreenLights[SdfScreenLightEnv];
+            int sliceAxis = (int)round(sliceEnv.z);
+
+            if (sliceAxis == 1) { sliceNormal = float3(1.0, 0.0, 0.0); planeOffset = sliceEnv.w; }
+            else if (sliceAxis == 2) { sliceNormal = float3(0.0, 1.0, 0.0); planeOffset = sliceEnv.w; }
+            else if (sliceAxis == 3) { sliceNormal = float3(0.0, 0.0, 1.0); planeOffset = sliceEnv.w; }
+#endif
+
+            float denominator = dot(rayDirection, sliceNormal);
+
+            if (abs(denominator) < 1.0e-4) {
+                viewColor = float3(0.0, 0.0, 0.0); // ray parallel to the slice — nothing to sample
+                break;
+            }
+
+            float planeT = ((planeOffset - dot(rayOrigin, sliceNormal)) / denominator);
+
+            if (planeT < 0.0) {
+                viewColor = float3(0.0, 0.0, 0.0); // the plane is behind the camera along this ray
+                break;
+            }
+
+            // The UNMASKED field (map, the rt-debug kernel's precedent — never mapMasked): the slice is the ideal
+            // mathematics, so no per-tile instance mask may hide far-field contributions. Still the post-stepScale-
+            // clamp distance — the quantity the marcher steps on — so an isoline IS a level set of the marched field.
+            float sliceDistance = map(rayOrigin + (rayDirection * planeT)).distance;
+
+            // Two-scale isolines over the sign-split hue ramp (inside warm/red, outside cool/blue): brightness ramps
+            // within each MINOR band (0.25 wu) so the gradient direction stays readable; a thin dark line marks every
+            // minor boundary and a heavier, darker line every MAJOR band (1.0 wu), so distance reads at a glance
+            // (count the heavy rings, then the light ones). The zero contour stays the one bright white line.
+            const float MinorBand = 0.25;
+            const float MajorBand = 1.0;
+            float fieldMagnitude = abs(sliceDistance);
+            float minorPhase = frac(fieldMagnitude / MinorBand);
+            float majorPhase = frac(fieldMagnitude / MajorBand);
+            float3 field = ((sliceDistance < 0.0) ? float3(0.90, 0.35, 0.22) : float3(0.22, 0.45, 0.90));
+            float3 sliceColor = (field * (0.35 + (0.50 * minorPhase)));
+            // Distance to the nearest band boundary, in band units (0 at a boundary, 0.5 mid-band).
+            float minorEdge = min(minorPhase, (1.0 - minorPhase));
+            float majorEdge = min(majorPhase, (1.0 - majorPhase));
+
+            if (minorEdge < 0.05) {  // ~0.0125 wu half-width: thin dark minor line
+                sliceColor *= 0.45;
+            }
+
+            if (majorEdge < 0.02) {  // ~0.02 wu half-width: heavier, near-black major line
+                sliceColor *= 0.15;
+            }
+
+            if (fieldMagnitude < 0.02) {
+                sliceColor = float3(1.0, 1.0, 1.0); // the bright zero contour — the cross-section outline wins over all
+            }
+
+            viewColor = sliceColor;
             break;
         }
     }

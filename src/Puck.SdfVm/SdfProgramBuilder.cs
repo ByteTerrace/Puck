@@ -7,17 +7,42 @@ public sealed class SdfProgramBuilder {
     public const int ScreenMaterialId = 65535;
     /// <summary>The instance CEILING — the most instances one program may declare. The world renderer's per-tile
     /// mask is a DERIVED ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
-    /// it at 32 words per tile. KEEP IN SYNC with SDF_MAX_INSTANCES in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
-    public const int MaxInstances = 1024;
+    /// it at 128 words per tile (4096/32). Everything downstream DERIVES from the LIVE program's instance count — the
+    /// mask width, the host-pushed indexing, and the mask-buffer sizing all use
+    /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring FEWER instances than this cap packs
+    /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
+    /// constant tracks it. 16384 is explicitly DEFERRED pending the SDF perf-bench instrument's beam-slope measurement
+    /// (does <c>sdf-beam</c> grow linearly with instance count, and where does it dominate frame time?); the survey's
+    /// uniform-grid cull row (docs/sdf-sota-survey.md row 15) is the gate for pushing past this without a spatial
+    /// acceleration structure. KEEP IN SYNC with SDF_MAX_INSTANCES in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    public const int MaxInstances = 4096;
     /// <summary>The most screen surfaces one program may declare (matches <see cref="SdfWorldEngine.MaxScreenSurfaces"/>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract SEPARATE from the
     /// viewport capacity <see cref="SdfWorldEngine.MaxViewports"/>).</summary>
     public const int MaxScreenSurfaces = 8;
+    /// <summary>The deepest a <see cref="PushField"/>/<see cref="PopField"/> scope may nest. Depth 1 covers every case
+    /// that exists today — creator groups cannot nest and a chamfer wedge is depth 1 — enforced by a validator rule and
+    /// NOT part of the packed word layout, so raising it never re-gates the stream. But it is NOT a one-line bump: the
+    /// interpreter holds the parent accumulator in ONE non-indexed <c>(savedFieldDistance, savedFieldMaterial)</c> SCALAR
+    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/sdf-vm.hlsli), and the <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> there is
+    /// DOCUMENTATION ONLY — no shader expression reads it. Raising this depth means converting that save pair into an
+    /// indexed ARRAY and giving PUSH/POP real push/pop-by-depth stack semantics in the shader FIRST, then bumping the
+    /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    public const int MaxFieldScopeDepth = 1;
 
     private readonly List<SdfInstanceRange> m_instances = [];
     private readonly List<SdfInstruction> m_instructions = [];
     private readonly List<SdfMaterial> m_materials = [];
     private readonly List<SdfScreenSurface> m_screenSurfaces = [];
+    // The one open field scope (a PushField without its PopField yet), or null when none is open: carries the compose
+    // blend + smooth radius PopField bakes onto its instruction, and the ShapeBlend count when it opened (so a
+    // shape-less scope is rejected at close). Null for a scope-free program, so its packed words stay byte-identical.
+    // A single nullable slot, not a list/array — MaxFieldScopeDepth (the depth cap) is 1, so there is never more than
+    // one open scope; every call site below is an is-open/the-open-scope check, never an index. Raising the depth
+    // cap needs converting this to an indexed structure (see MaxFieldScopeDepth's doc) — the depth guard below keeps
+    // reading MaxFieldScopeDepth rather than hardcoding 1, so that conversion stays localized to this field + guard.
+    private (SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen)? m_fieldScope;
+    private int m_shapeCount;
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
     private bool m_openInstanceActive;
@@ -94,6 +119,10 @@ public sealed class SdfProgramBuilder {
             throw new InvalidOperationException(message: "EndInstance was called with no open instance (unbalanced Begin/EndInstance).");
         }
 
+        if (m_fieldScope is not null) {
+            throw new InvalidOperationException(message: "EndInstance was called with a field scope still open (PushField without its PopField). Close every scope opened inside the instance before EndInstance.");
+        }
+
         if (m_instances.Count >= MaxInstances) {
             throw new InvalidOperationException(message: $"A program may declare at most {MaxInstances} instances.");
         }
@@ -119,6 +148,10 @@ public sealed class SdfProgramBuilder {
 
         if (m_openInstanceFirst >= 0) {
             throw new InvalidOperationException(message: "BeginInstance/BeginInstanceDynamic was called with an instance already open (nesting is not supported).");
+        }
+
+        if (m_fieldScope is not null) {
+            throw new InvalidOperationException(message: "BeginInstance/BeginInstanceDynamic was called with a field scope open (PushField without its PopField). A scope must sit entirely inside one instance or entirely in the world set, never crossing an instance boundary.");
         }
 
         m_openInstanceFirst = m_instructions.Count;
@@ -259,8 +292,14 @@ public sealed class SdfProgramBuilder {
     /// cell decisions are bit-identical across both GPU backends. jitter/tumble/materialVariants each default to an EXACT
     /// identity, so an unused op leaves the point byte-identical. Like <see cref="Repeat"/>, keep the prototype clear of
     /// the cell boundary: the caller must ensure jitter/2 + prototype radius ≤ min(spacing)/2 (this builder validates
-    /// only the half it can see — that the displacement alone cannot cross a boundary). KEEP IN SYNC with
-    /// SDF_OP_CELL_JITTER in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// only the half it can see — that the displacement alone cannot cross a boundary; the prototype is emitted later,
+    /// so its radius is unknown here). CONTAINMENT IS NOT SUFFICIENT (verified 2026-07-08, slice capture): even with
+    /// the in-cell rule satisfied, the single-cell <c>round()</c> fold can pick the WRONG copy near a cell wall — a
+    /// copy jittered toward the boundary is nearer to the adjacent cell's query points than that cell's own copy — so
+    /// the field OVERestimates at cell boundaries (visible seams, grazing-angle hole risk). The in-cell rule keeps the
+    /// SURFACE watertight inside each cell; the boundary field stays merely conservative-looking-but-overestimating, so
+    /// keep jitter conservative relative to spacing. KEEP IN SYNC with SDF_OP_CELL_JITTER in
+    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
     /// <param name="jitter">The peak-to-peak per-cell position displacement in world units (0 = no displacement).</param>
     /// <param name="seed">The hash seed — different seeds give independent jitter/tumble/variant fields.</param>
@@ -289,7 +328,7 @@ public sealed class SdfProgramBuilder {
         var minSpacing = MathF.Min(clamped.X, MathF.Min(clamped.Y, clamped.Z));
 
         if ((MathF.Abs(jitter) * 0.5f) >= (0.5f * minSpacing)) {
-            throw new ArgumentException(message: "CellJitter jitter/2 must be < min(spacing)/2, or jittered content crosses the cell boundary and holes the march (the caller must also keep jitter/2 + prototype radius <= min(spacing)/2).", paramName: nameof(jitter));
+            throw new ArgumentException(message: "CellJitter jitter/2 must be < min(spacing)/2, or jittered content crosses the cell boundary and holes the march. The caller must ALSO keep jitter/2 + prototype radius <= min(spacing)/2 (the prototype is emitted later, so this builder cannot check it) — and even then the single-cell round() fold overestimates near cell walls (containment does not guarantee the nearest copy; boundary seams and grazing-angle hole risk persist), so keep jitter conservative.", paramName: nameof(jitter));
         }
 
         var clampedTumble = Math.Clamp(tumble, 0f, 1f);
@@ -462,6 +501,78 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.DomainWarp
         );
     }
+    /// <summary>Opens a SCOPED field accumulator (<see cref="SdfOp.PushField"/>): every accumulator-reading op emitted
+    /// until the matching <see cref="PopField"/> — the intersection family, and the <see cref="Onion"/>/
+    /// <see cref="Dilate"/>/<see cref="Displace"/> field ops — acts on THIS scope's shapes alone, not on everything
+    /// emitted before it. Pair it with <see cref="PopField"/> to compose the scope back into the parent field; the
+    /// <paramref name="compose"/> blend + <paramref name="smooth"/> given here are baked onto the POP instruction (a
+    /// Union compose keeps the scope FAR-NEUTRAL, so a scoped instance stays cullable and segment-eligible; an
+    /// intersection-family compose composes the scope globally, unmaskable). The scope must contain at least one shape,
+    /// nest no deeper than <see cref="MaxFieldScopeDepth"/>, and close (via <see cref="PopField"/>) before
+    /// <see cref="Build"/> or an enclosing <see cref="EndInstance"/>. A scope touches only the FIELD, not the point, so
+    /// per-shape cull bounds inside it stay sound and <see cref="ResetPoint"/> works as usual. KEEP IN SYNC with
+    /// SDF_OP_PUSH_FIELD in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="compose">How the closed scope's field composes back into the parent (default <see cref="SdfBlendOp.Union"/>).</param>
+    /// <param name="smooth">The smooth/chamfer radius of the <paramref name="compose"/> blend (ignored by the hard blends).</param>
+    /// <exception cref="InvalidOperationException">The scope would nest deeper than <see cref="MaxFieldScopeDepth"/>.</exception>
+    public SdfProgramBuilder PushField(SdfBlendOp compose = SdfBlendOp.Union, float smooth = 0f) {
+        // The depth guard reads MaxFieldScopeDepth (rather than just testing m_fieldScope is not null) so raising the
+        // cap past 1 stays a localized change to this field + guard (see m_fieldScope's doc).
+        var openDepth = ((m_fieldScope is null) ? 0 : 1);
+
+        if (openDepth >= MaxFieldScopeDepth) {
+            throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
+        }
+
+        m_fieldScope = (compose, smooth, m_shapeCount);
+
+        // A bare marker: the compose blend + smooth ride the POP instruction (a POP is the candidate), so the PUSH
+        // carries no data — the shader only saves the accumulator and reseeds. Not routed through Transform() because
+        // that path is byte-for-byte the pre-scope emission and must not gain a new caller here.
+        m_instructions.Add(item: new SdfInstruction(
+            Blend: 0,
+            Data0: default,
+            Data1: default,
+            Material: 0,
+            Op: SdfOp.PushField,
+            Shape: 0
+        ));
+
+        return this;
+    }
+    /// <summary>Closes the scope opened by the matching <see cref="PushField"/> and composes its field back into the
+    /// parent as one candidate, using the compose blend + smooth radius that <see cref="PushField"/> recorded. KEEP IN
+    /// SYNC with SDF_OP_POP_FIELD in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <exception cref="InvalidOperationException">No field scope is open, or the scope emitted no shape.</exception>
+    public SdfProgramBuilder PopField() {
+        if (m_fieldScope is not { } scope) {
+            throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
+        }
+
+        m_fieldScope = null;
+
+        if (m_shapeCount == scope.ShapeCountAtOpen) {
+            throw new InvalidOperationException(message: "A field scope (PushField/PopField) must contain at least one shape — an empty scope composes SDF_FAR_DISTANCE and would carve nothing.");
+        }
+
+        // The POP carries the compose blend (Blend lane, header.z) and its smooth radius (Data1.x) — the SAME lanes a
+        // ShapeBlend uses, because the shader treats a POP as just another candidate through the shared blend tail.
+        m_instructions.Add(item: new SdfInstruction(
+            Blend: (uint)scope.Blend,
+            Data0: default,
+            Data1: new Vector4(
+                w: 0f,
+                x: MathF.Max(0f, scope.Smooth),
+                y: 0f,
+                z: 0f
+            ),
+            Material: 0,
+            Op: SdfOp.PopField,
+            Shape: 0
+        ));
+
+        return this;
+    }
     /// <summary>Inflates the ENTIRE field accumulated so far by a radius (rounds and fattens everything before it) —
     /// a FIELD op: order it after everything it should inflate.</summary>
     /// <param name="radius">The inflation radius.</param>
@@ -476,6 +587,18 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Dilate
         );
     }
+    /// <summary>Infinite DOMAIN-REPEAT fold: tiles space into cells of <paramref name="spacing"/> with a single-cell
+    /// <c>round()</c> fold, so the prototype that follows repeats on the lattice. EXACTNESS CONTRACT (verified
+    /// 2026-07-08, slice capture): the returned distance is the CURRENT cell's copy only, so the fold is exact ONLY for
+    /// an ON-CENTER prototype contained within half-<paramref name="spacing"/> per axis. An off-center or oversized
+    /// prototype creases the field at the cell walls with an OVERestimate (the nearest surface lives in a neighbouring
+    /// cell the fold never consults) — an overestimate can hole the march, and neither the Lipschitz step clamp nor the
+    /// over-relaxation step-back catches it (they bound the field's rate, not a boundary discontinuity). The builder
+    /// CANNOT validate this (the prototype is emitted later and its post-fold translation matters as much as its
+    /// radius) — the caller owns the rule, exactly like <see cref="CellJitter"/>'s in-cell rule. iq's 3^k neighbour-cell
+    /// check would remove the constraint but is judged not worth the interpreter cost at current usage. KEEP IN SYNC
+    /// with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
     public SdfProgramBuilder Repeat(Vector3 spacing) {
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz): shapes evaluate millions of
         // times per frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli).
@@ -493,6 +616,13 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Repeat
         );
     }
+    /// <summary>Bounded DOMAIN-REPEAT fold: <see cref="Repeat"/> with the cell index clamped to ±<paramref name="limit"/>
+    /// per axis. Carries <see cref="Repeat"/>'s EXACTNESS CONTRACT unchanged: exact only for an on-center prototype
+    /// within half-<paramref name="spacing"/> per axis; off-center/oversized prototypes crease the field at interior
+    /// cell walls with a march-holing OVERestimate (see <see cref="Repeat"/> — the caller owns the rule; the builder
+    /// cannot see the prototype).</summary>
+    /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
+    /// <param name="limit">The per-axis repeat-cell limit (the lattice spans cell indices −limit..+limit).</param>
     public SdfProgramBuilder RepeatLimited(Vector3 spacing, Vector3 limit) {
         // The degenerate-spacing clamp is HOST-BAKED, exactly as <see cref="Repeat"/> bakes it (KEEP IN SYNC with
         // SDF_OP_REPEAT_LIMITED in Assets/Shaders/Sdf/sdf-vm.hlsli). Clamped WITHOUT Abs, matching the shader's old
@@ -965,6 +1095,10 @@ public sealed class SdfProgramBuilder {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
 
+        if (m_fieldScope is not null) {
+            throw new InvalidOperationException(message: "Build was called with a field scope still open (PushField without its PopField).");
+        }
+
         return new SdfProgram(
             instructions: m_instructions,
             instances: m_instances,
@@ -988,6 +1122,9 @@ public sealed class SdfProgramBuilder {
     // Data1.x is the ISA-wide smooth-blend radius; .yzw carry per-shape HOST-BAKED derived constants (the shader's
     // decode is per shape case — KEEP IN SYNC with sdf-vm.hlsli evaluateShape).
     private SdfProgramBuilder Shape(SdfShapeType shape, Vector4 dimensions, int material, SdfBlendOp blend, float smooth, float derived1 = 0f, float derived2 = 0f, float derived3 = 0f) {
+        // Counts ShapeBlend emissions so PopField can reject a shape-less scope. A scope-free program never reads it.
+        m_shapeCount++;
+
         m_instructions.Add(item: new SdfInstruction(
             Blend: (uint)blend,
             Data0: dimensions,

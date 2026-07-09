@@ -2,6 +2,8 @@ using System.Numerics;
 using System.Text.Json;
 using Puck.Assets;
 using Puck.Demo.Creator;
+using Puck.Demo.Editing;
+using Puck.Demo.Forge;
 
 namespace Puck.Demo.World;
 
@@ -171,6 +173,14 @@ public sealed class WorldScene {
     // (no Revision/ProgramRevision impact) — they take effect at save/load, applied by the host's save hook.
     private string m_walkGridKind = "square";
     private string m_movementLock = "free";
+    // Grid-locking (session-only authoring state — the resolved F6 rule; never persisted, saves stay byte-identical).
+    // m_snap carries the enable/pitch/rotation/reference; m_snapIntent is the retained pre-snap integrated cursor
+    // (the resolved F3 magnetize-while-dragging source of truth) and m_snapLastCommitted is the last value the snap
+    // path wrote — an external mutation (select/exact-set/undo) leaves current != last, reseeding the intent.
+    private SnapConfig m_snap = SnapConfig.WorldDefault;
+    private Vector3 m_snapIntent;
+    private Vector3 m_snapLastCommitted;
+    private bool m_snapGridVisible;
 
     // The ghost stamp — the ready-to-place creation, anchor-relative to the player.
     private string? m_ghostRefName;
@@ -375,14 +385,38 @@ public sealed class WorldScene {
         }
 
         if (TargetIsGhost) {
-            m_ghostPosition = m_bounds.Clamp(position: (m_ghostPosition + step));
+            m_ghostPosition = SnapAndClampMove(current: m_ghostPosition, step: step);
         } else {
             var placement = m_placements[m_selectionIndex];
 
-            m_placements[m_selectionIndex] = placement with { Position = m_bounds.Clamp(position: (placement.Position + step)) };
+            m_placements[m_selectionIndex] = placement with { Position = SnapAndClampMove(current: placement.Position, step: step) };
         }
 
         Revision++;
+    }
+
+    // The one interception point both the pad path and the console exact-set path funnel through (WorldCommands
+    // synthesizes a delta and calls Move). When snap is off this is exactly today's clamp — so a verb lands where
+    // asked; when snap is on the integrated INTENT (retained un-snapped so sub-pitch aiming survives) is snapped to
+    // the lattice/reference before the bounds clamp, so the pad ghost and the verb both land on the grid.
+    private Vector3 SnapAndClampMove(Vector3 current, Vector3 step) {
+        if (!m_snap.Enabled) {
+            return m_bounds.Clamp(position: (current + step));
+        }
+
+        // An external mutation moved the target out from under the last snap write — reseed the intent from it.
+        if (current != m_snapLastCommitted) {
+            m_snapIntent = current;
+        }
+
+        m_snapIntent += step;
+
+        var snapped = GridSnap.Apply(intent: m_snapIntent, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: current);
+        var clamped = m_bounds.Clamp(position: snapped);
+
+        m_snapLastCommitted = clamped;
+
+        return clamped;
     }
 
     /// <summary>Spins the TARGET this frame about world up. A pure transform update (Revision only).</summary>
@@ -397,14 +431,219 @@ public sealed class WorldScene {
         var deltaDegrees = (rate * rotateSpeed * deltaSeconds);
 
         if (TargetIsGhost) {
-            m_ghostYawDegrees = WrapDegrees(degrees: (m_ghostYawDegrees + deltaDegrees));
+            m_ghostYawDegrees = SnapYaw(yawDegrees: WrapDegrees(degrees: (m_ghostYawDegrees + deltaDegrees)));
         } else {
             var placement = m_placements[m_selectionIndex];
 
-            m_placements[m_selectionIndex] = placement with { YawDegrees = WrapDegrees(degrees: (placement.YawDegrees + deltaDegrees)) };
+            m_placements[m_selectionIndex] = placement with { YawDegrees = SnapYaw(yawDegrees: WrapDegrees(degrees: (placement.YawDegrees + deltaDegrees))) };
         }
 
         Revision++;
+    }
+
+    /// <summary>Sets the TARGET's position to an exact requested value (the console <c>world.move</c> exact-set) —
+    /// path-INDEPENDENT: with snap on it snaps the REQUESTED absolute position to the nearest lattice/reference node
+    /// with no magnetize band (unlike the pad drag, which retains a sub-pitch intent), then resyncs the pad
+    /// accumulator so a following drag continues from the set node. Y is left at the target's current height
+    /// (floor-rest), exactly as the analog <see cref="Move"/> path does.</summary>
+    /// <param name="requested">The requested world position (Y ignored — floor-rest).</param>
+    public void SetTargetPositionExact(Vector3 requested) {
+        var planar = new Vector3(requested.X, TargetPosition.Y, requested.Z);
+        var result = (m_snap.Enabled
+            ? m_bounds.Clamp(position: GridSnap.Apply(intent: planar, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: new Vector3(float.NaN)))
+            : m_bounds.Clamp(position: planar));
+
+        m_snapIntent = result;
+        m_snapLastCommitted = result;
+
+        if (TargetIsGhost) {
+            m_ghostPosition = result;
+        } else {
+            m_placements[m_selectionIndex] = m_placements[m_selectionIndex] with { Position = result };
+        }
+
+        Revision++;
+    }
+
+    // World-sculpt's rotation snap is the scalar yaw-only path (proposal §1d): round the wrapped yaw to the
+    // increment when snapping is on and a rotation increment is set; otherwise the yaw is left exact.
+    private float SnapYaw(float yawDegrees) =>
+        ((m_snap.Enabled && (m_snap.Rotation != RotationSnap.Off)) ? GridSnap.SnapYawDegrees(yawDegrees: yawDegrees, mode: m_snap.Rotation) : yawDegrees);
+
+    /// <summary>The live grid-lock configuration (session-only; the frame source reads it each frame for the grid
+    /// overlay, and the verbs echo it). Internal — the <see cref="SnapConfig"/> type is authoring-side Demo state.</summary>
+    internal SnapConfig Snap => m_snap;
+    /// <summary>Whether the grid overlay should draw in world-sculpt (session-only). Defaults to following snap
+    /// on/off; <c>world.snap grid show|hide</c> overrides it for the session.</summary>
+    public bool SnapGridVisible => m_snapGridVisible;
+
+    /// <summary>Toggles grid-snapping. Also reseeds the magnetize intent from the current target and defaults the grid
+    /// overlay to follow (shows while on, hides while off — an explicit <c>snap grid show|hide</c> overrides after).</summary>
+    /// <param name="enabled">Whether snapping is on.</param>
+    public void SetSnapEnabled(bool enabled) {
+        m_snap = m_snap with { Enabled = enabled };
+        m_snapGridVisible = enabled;
+        m_snapIntent = TargetPosition;
+        m_snapLastCommitted = TargetPosition;
+        Revision++;
+    }
+
+    /// <summary>Sets the per-axis world-lattice pitch (a component &lt;= 0 leaves that axis free — the world default
+    /// keeps Y at 0 for floor-rest).</summary>
+    /// <param name="pitch">The per-axis pitch.</param>
+    public void SetSnapPitch(Vector3 pitch) {
+        m_snap = m_snap with { Pitch = pitch };
+        Revision++;
+    }
+
+    /// <summary>Sets the rotation-snap increment (yaw-only in world-sculpt).</summary>
+    /// <param name="rotation">The increment (Off/Deg90/Deg45).</param>
+    internal void SetSnapRotation(RotationSnap rotation) {
+        m_snap = m_snap with { Rotation = rotation };
+        Revision++;
+    }
+
+    /// <summary>Overrides the grid overlay's visibility for the session (independent of snap on/off).</summary>
+    /// <param name="visible">Whether the overlay draws.</param>
+    public void SetSnapGridVisible(bool visible) {
+        m_snapGridVisible = visible;
+        Revision++;
+    }
+
+    /// <summary>Captures the SELECTED placement as the frozen align-to reference (the resolved F4 rule). Refuses when
+    /// nothing is selected or the creation is unresolved.</summary>
+    /// <param name="echo">A human echo of what was captured (or why it was refused).</param>
+    /// <returns>Whether a reference was captured.</returns>
+    public bool TrySetSnapReferenceSelected(out string echo) {
+        if (TargetIsGhost) {
+            echo = "nothing selected — world.select <id> first, or world.snap ref <id>";
+
+            return false;
+        }
+
+        var placement = m_placements[m_selectionIndex];
+
+        return TrySetSnapReferenceFrom(hash: placement.SourceHash, origin: placement.Position, yawDegrees: placement.YawDegrees, scale: placement.Scale, id: placement.Id, echo: out echo);
+    }
+
+    /// <summary>Captures the placement with the given id as the frozen align-to reference WITHOUT disturbing the
+    /// current selection (so the moved shape can stay selected while the reference stays fixed — the common case).</summary>
+    /// <param name="id">The reference placement's id.</param>
+    /// <param name="echo">A human echo of what was captured (or why it was refused).</param>
+    /// <returns>Whether a reference was captured.</returns>
+    public bool TrySetSnapReferenceById(int id, out string echo) {
+        foreach (var placement in m_placements) {
+            if (placement.Id == id) {
+                return TrySetSnapReferenceFrom(hash: placement.SourceHash, origin: placement.Position, yawDegrees: placement.YawDegrees, scale: placement.Scale, id: placement.Id, echo: out echo);
+            }
+        }
+
+        echo = $"no placement with id {id}";
+
+        return false;
+    }
+
+    /// <summary>Clears the align-to reference (back to world-lattice-only).</summary>
+    public void ClearSnapReference() {
+        m_snap = m_snap with { Reference = null };
+        Revision++;
+    }
+
+    /// <summary>Writes the grid-lock overlay channel (grid-locking §4) as primitives — the frame source threads these
+    /// into <c>SdfFrame</c> without naming <see cref="GridOverlayState"/> (staying under its coupling ceiling; the
+    /// scene names the facade instead). All out values are 0/identity when the grid is hidden.</summary>
+    /// <param name="floorY">The room's floor plane height.</param>
+    /// <param name="flags">Overlay flags (bit0 world floor grid, bit1 object grid).</param>
+    /// <param name="worldPitch">The world floor grid's X/Z pitch.</param>
+    /// <param name="objectOrigin">The object grid's reference origin.</param>
+    /// <param name="objectFrame">The object grid's reference frame.</param>
+    /// <param name="objectPitch">The object grid's in-plane pitch (X/Z).</param>
+    /// <param name="objectPatchRadius">The object grid's finite-patch radius.</param>
+    public void WriteGridOverlay(float floorY, out uint flags, out Vector2 worldPitch, out Vector3 objectOrigin, out Quaternion objectFrame, out Vector2 objectPitch, out float objectPatchRadius) {
+        var overlay = GridOverlayState.From(snap: m_snap, gridVisible: m_snapGridVisible, floorY: floorY);
+
+        flags = overlay.Flags;
+        objectFrame = overlay.ObjectFrame;
+        objectOrigin = overlay.ObjectOrigin;
+        objectPatchRadius = overlay.ObjectPatchRadius;
+        objectPitch = overlay.ObjectPitch;
+        worldPitch = overlay.WorldPitch;
+    }
+
+    private bool TrySetSnapReferenceFrom(string hash, Vector3 origin, float yawDegrees, float scale, int id, out string echo) {
+        if (!m_creationCache.TryGetValue(key: hash, value: out var entry)) {
+            echo = $"#{id}'s creation is not resolved in the store — load or place it first";
+
+            return false;
+        }
+
+        var half = LocalHalfExtentsAboutOrigin(creation: entry.Document, scale: scale);
+        var frame = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: float.DegreesToRadians(degrees: yawDegrees));
+
+        m_snap = m_snap with {
+            Reference = new SnapReference(
+                FaceRadius: FaceRadiusFor(pitch: m_snap.Pitch),
+                Frame: frame,
+                LocalHalfExtents: half,
+                Origin: origin,
+                Pitch: m_snap.Pitch
+            ),
+        };
+        echo = $"reference = #{id} @ ({origin.X:F2}, {origin.Y:F2}, {origin.Z:F2}) half-extent ({half.X:F2}, {half.Y:F2}, {half.Z:F2})";
+        Revision++;
+
+        return true;
+    }
+
+    // The moving target's half-extents along its own axes (about its origin) — the candidate bound the face-to-face
+    // butt-join needs (proposal §1c/§1e). Resolved from the creation cache the ghost/placement already populated;
+    // Zero (center-on-face) when the creation is not cached.
+    private Vector3 TargetSnapHalfExtents() {
+        var hash = (TargetIsGhost ? m_ghostSourceHash : m_placements[m_selectionIndex].SourceHash);
+
+        if ((hash is null) || !m_creationCache.TryGetValue(key: hash, value: out var entry)) {
+            return Vector3.Zero;
+        }
+
+        return LocalHalfExtentsAboutOrigin(creation: entry.Document, scale: TargetScale);
+    }
+
+    // A creation's conservative half-extents about its LOCAL origin (per axis, the outer face distance): each shape's
+    // scaled local center ± the primitive's worst-case reach (the SAME reach WorldFootprintDerivation trusts), no
+    // placement rotation (the reference frame carries the rotation). max(|min|, |max|) per axis reaches the outer face.
+    private static Vector3 LocalHalfExtentsAboutOrigin(CreationDocument creation, float scale) {
+        if (creation.Shapes is not { Count: > 0 } shapes) {
+            return Vector3.Zero;
+        }
+
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+
+        foreach (var shape in shapes) {
+            var shapeScale = ((shape.Scale == default) ? Vector3.One : shape.Scale);
+            var center = (shape.Position * scale);
+            var shapeMaxScale = MathF.Max(shapeScale.X, MathF.Max(shapeScale.Y, shapeScale.Z));
+            var reach = (AvatarDefinition.Reach(type: shape.Type, scale: Vector3.One) * shapeMaxScale * scale);
+
+            min = Vector3.Min(value1: min, value2: (center - new Vector3(reach)));
+            max = Vector3.Max(value1: max, value2: (center + new Vector3(reach)));
+        }
+
+        return new Vector3(
+            MathF.Max(MathF.Abs(min.X), MathF.Abs(max.X)),
+            MathF.Max(MathF.Abs(min.Y), MathF.Abs(max.Y)),
+            MathF.Max(MathF.Abs(min.Z), MathF.Abs(max.Z))
+        );
+    }
+
+    private static float FaceRadiusFor(Vector3 pitch) {
+        var min = float.MaxValue;
+
+        if (pitch.X > 0f) { min = MathF.Min(x: min, y: pitch.X); }
+        if (pitch.Y > 0f) { min = MathF.Min(x: min, y: pitch.Y); }
+        if (pitch.Z > 0f) { min = MathF.Min(x: min, y: pitch.Z); }
+
+        return (0.5f * ((min == float.MaxValue) ? 0.25f : min));
     }
 
     /// <summary>Grows or shrinks the TARGET's uniform scale this frame, clamped to the scale envelope. Scale is

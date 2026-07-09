@@ -26,6 +26,8 @@ internal static class DebugViewModes {
         "raydir",
         "material-id",
         "iteration-count",
+        "termination",
+        "slice",
     ];
 
     /// <summary>Gets the number of debug view modes.</summary>

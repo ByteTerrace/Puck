@@ -69,7 +69,24 @@ None of the below is started. Roughly ordered by when it will matter.
 The Stage-0 beam is **single-level** (fixed 16×16 tiles) and does an
 **O(instances)** flat sphere-vs-cone loop per tile. The hero scene is ~1 ms today
 (CPU-simulation-bound, not GPU-bound), so this is deferred until complex scenes
-make it bite. Two moves:
+make it bite.
+
+> **2026-07-08: the trigger is now MEASURED, not deferred-on-vibes.** The
+> `sdf.bench sweep` instrument (inside the `sdf` fullscreen debug mode) measured
+> `sdf-beam` growing essentially **linearly** in instance count — O(instances),
+> exponent ≈0.97 across 64→256→1024→4096 — and overtaking `views` (the
+> per-pixel march) at **n ≈ 256 live instances**, owning **77%** of a
+> 4096-instance frame (~4 fps). That crossover *is* "complex scenes make it
+> bite." The promoted follow-up is narrower than an instance BVH, though: the
+> SOTA survey's adversarial review ([sdf-sota-survey.md](sdf-sota-survey.md),
+> row 15) settled on a deterministic **uniform-grid / spatial-hash instance
+> cull** (a CSR scatter build, no atomic append) over a BVH — the same
+> O(instances) → O(instances-in-nearby-cells) win without a non-deterministic
+> build step. It is the gate before raising `MaxInstances` past 4096. Full
+> numbers: [sdf-bench-notes.md](sdf-bench-notes.md). Not yet started; segment
+> tracing (below) stays deferred behind it as originally scoped.
+
+Two moves:
 - A coarser **pre-beam** (e.g. 64×64 → 16×16 — the recursive/cone-marching idea
   from the pointersgonewild article) to hand Stage 1 a tighter `marchStart` and
   cull instances against big cones once.

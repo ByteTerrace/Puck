@@ -32,9 +32,9 @@
 [[vk::binding(1, 0)]] StructuredBuffer<uint4> sdfWords : register(t0);
 
 // The instance CEILING — the most instances one program may declare. The per-tile mask is a DERIVED
-// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 32
+// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 128
 // words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
-#define SDF_MAX_INSTANCES 1024u
+#define SDF_MAX_INSTANCES 4096u
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still
@@ -160,6 +160,15 @@ uint sdfInstanceCountClamped() {
 #define SDF_OP_DISPLACE        24u
 #define SDF_OP_DOMAIN_WARP     25u
 #define SDF_OP_SYMMETRY_PLANE  26u
+// Scoped field accumulator (KEEP IN SYNC with Puck.SdfVm.SdfOp.PushField/PopField). PUSH saves the running accumulator
+// into a one-deep slot and reseeds a fresh scope; POP composes the scope's field back into the saved parent as a
+// candidate (reusing SHAPE's blend tail). SDF_MAX_FIELD_SCOPE_DEPTH is DOCUMENTATION ONLY — no shader expression reads
+// it; the real capacity is the single non-indexed (savedFieldDistance, savedFieldMaterial) scalar pair in mapCore, which
+// holds exactly ONE parent. Raising the depth means making that pair an indexed array with push/pop-by-depth stack
+// semantics HERE, not just bumping this #define. KEEP IN SYNC with SdfProgramBuilder.MaxFieldScopeDepth.
+#define SDF_OP_PUSH_FIELD      27u
+#define SDF_OP_POP_FIELD       28u
+#define SDF_MAX_FIELD_SCOPE_DEPTH 1u
 // SDF_OP_CELL_JITTER Blend-lane (instructionHeader.z) noise flavor: how the per-cell POSITION offset is distributed
 // (KEEP IN SYNC with Puck.SdfVm.SdfNoiseFlavor). Reshapes ONLY r0 — tumble and material variant are unaffected.
 #define SDF_NOISE_WHITE          0u
@@ -962,6 +971,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
     result.distance = SDF_FAR_DISTANCE;
     result.material = 0;
 
+    // The one-deep SCOPED-ACCUMULATOR slot (SDF_OP_PUSH_FIELD/POP_FIELD): PUSH saves the parent accumulator here and
+    // reseeds `result`; POP composes the scope's `result` back into this saved value. This is a single NON-INDEXED pair,
+    // so it holds exactly ONE parent — the builder's validator rejects nesting past SDF_MAX_FIELD_SCOPE_DEPTH == 1, and
+    // raising that depth would require turning this pair into an indexed array with push/pop-by-depth stack semantics
+    // (SDF_MAX_FIELD_SCOPE_DEPTH is documentation only — nothing here reads it). Untouched by a scope-free program, so
+    // its codegen and render stay byte-identical.
+    float savedFieldDistance = SDF_FAR_DISTANCE;
+    int savedFieldMaterial = 0;
+
     // The OUTER loop walks chain segments (the stream split at ResetPoints), the inner loop interprets a segment's
     // instructions exactly as before — the zero-instance linear walk visits every segment in directory order, and
     // the instanced merge visits the world segments plus the visible instances' ranges in the SAME ascending order,
@@ -1034,6 +1052,17 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
             uint op = instructionHeader.x;
             float4 data0 = asfloat(sdfWords[dataOffset + (2u * index)]);
             float4 data1 = asfloat(sdfWords[dataOffset + (2u * index) + 1u]);
+
+            // The SHARED BLEND TAIL's inputs. SHAPE and POP_FIELD both feed it a candidate (already in world units) plus
+            // a blend/material/smooth, then it runs the ONE material-winner + blendShape below — so a POP reuses SHAPE's
+            // tail instead of a second copy of the ten-way blend switch (the whole cost saving; accumulator plan). Every
+            // other op leaves composePending false, so a scope-free program's SHAPE path computes the identical floats it
+            // did before (byte-identical render) — the tail simply moved a few lines down.
+            bool composePending = false;
+            float composeCandidate = SDF_FAR_DISTANCE;
+            uint composeBlend = SDF_BLEND_UNION;
+            int composeMaterial = 0;
+            float composeSmooth = 0.0;
 
             switch (op) {
                 case SDF_OP_RESET: {
@@ -1381,7 +1410,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                     }
 
                     uint shapeType = instructionHeader.y;
-                    uint blendOp = instructionHeader.z;
                     int material = (int)instructionHeader.w;
                     float candidate = (evaluateShape(shapeType, localPosition, data0, data1) * distanceScale);
 
@@ -1391,28 +1419,67 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase) {
                         material += parityMaterialDelta;
                     }
 
-                    // Per-op material OWNERSHIP: union-like ops win when nearer, intersection-like when farther (the
-                    // surviving surface is the farther field's), and subtraction-like when the CARVED surface shows
-                    // (-candidate > current) — so a bowl carved from a box wears the carving shape's interior material.
-                    bool shapeWins = false;
-
-                    switch (blendOp) {
-                        case SDF_BLEND_INTERSECTION:
-                        case SDF_BLEND_SMOOTH_INTERSECTION:
-                        case SDF_BLEND_CHAMFER_INTERSECTION: { shapeWins = (candidate > result.distance); break; }
-                        case SDF_BLEND_SUBTRACTION:
-                        case SDF_BLEND_SMOOTH_SUBTRACTION:
-                        case SDF_BLEND_CHAMFER_SUBTRACTION:  { shapeWins = (-candidate > result.distance); break; }
-                        default:                             { shapeWins = (candidate < result.distance); break; }
-                    }
-
-                    if (shapeWins) {
-                        result.material = material;
-                    }
-
-                    result.distance = blendShape(result.distance, candidate, blendOp, data1.x);
+                    // Hand the DISTANCE-SCALED candidate to the shared blend tail below.
+                    composeCandidate = candidate;
+                    composeMaterial = material;
+                    composeBlend = instructionHeader.z;
+                    composeSmooth = data1.x;
+                    composePending = true;
                     break;
                 }
+                // Scoped field accumulator (KEEP IN SYNC with Puck.SdfVm.SdfOp.PushField/PopField). A scope touches ONLY
+                // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
+                // and ResetPoint semantics are unchanged.
+                case SDF_OP_PUSH_FIELD: {
+                    // Save the parent accumulator into the one-deep slot and reseed a fresh scope. Every accumulator-
+                    // reading op until the matching POP now composes against SDF_FAR_DISTANCE (this scope), not the scene.
+                    savedFieldDistance = result.distance;
+                    savedFieldMaterial = result.material;
+                    result.distance = SDF_FAR_DISTANCE;
+                    result.material = 0;
+                    break;
+                }
+                case SDF_OP_POP_FIELD: {
+                    // The scope's accumulated field IS the candidate — ALREADY in world units (its shapes were
+                    // distance-scaled as they blended in), so it is NOT re-multiplied by distanceScale, and the point
+                    // parityMaterialDelta must NOT touch it (the fusion trap). Restore the parent accumulator as the
+                    // blend LHS, then fall into the SAME material-winner + blendShape tail a SHAPE uses. The compose blend
+                    // + smooth ride the POP instruction (header.z / data1.x, baked by SdfProgramBuilder.PushField).
+                    composeCandidate = result.distance;
+                    composeMaterial = result.material;
+                    composeBlend = instructionHeader.z;
+                    composeSmooth = data1.x;
+                    result.distance = savedFieldDistance;
+                    result.material = savedFieldMaterial;
+                    composePending = true;
+                    break;
+                }
+            }
+
+            // The SHARED BLEND TAIL (SHAPE + POP_FIELD). The material winner uses the SAME strict compares a shape does —
+            // union-like wins when nearer, intersection-like when farther (the surviving surface is the farther field's),
+            // subtraction-like when the CARVED surface shows — so a bowl carved from a box wears the carving shape's
+            // interior material, and the incumbent keeps its material on a TIE (a scoped shape resting on the ground plane
+            // is a contact locus of ties). Then blend the candidate into result.distance. composePending is false for
+            // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
+            if (composePending) {
+                bool candidateWins;
+
+                switch (composeBlend) {
+                    case SDF_BLEND_INTERSECTION:
+                    case SDF_BLEND_SMOOTH_INTERSECTION:
+                    case SDF_BLEND_CHAMFER_INTERSECTION: { candidateWins = (composeCandidate > result.distance); break; }
+                    case SDF_BLEND_SUBTRACTION:
+                    case SDF_BLEND_SMOOTH_SUBTRACTION:
+                    case SDF_BLEND_CHAMFER_SUBTRACTION:  { candidateWins = (-composeCandidate > result.distance); break; }
+                    default:                             { candidateWins = (composeCandidate < result.distance); break; }
+                }
+
+                if (candidateWins) {
+                    result.material = composeMaterial;
+                }
+
+                result.distance = blendShape(result.distance, composeCandidate, composeBlend, composeSmooth);
             }
         }
     }

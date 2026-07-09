@@ -105,7 +105,55 @@ internal sealed class SdfLipschitzStage : IPostStage {
             return PostStageOutcome.Fail(detail: $"the DomainWarp scene baked stepScale {domainWarpStepScale:R}, expected ≈ 0.5 (1 / (1 + amp·‖freq‖ = 1))");
         }
 
-        return PostStageOutcome.Pass(detail: $"warp-free stepScale == 1.0f exactly; steep twist {twistStepScale:0.###}, 4:1 ellipsoid {ellipsoidStepScale:0.###}, log-spherical fold {logSphereStepScale:0.###}, CellJitter blades {cellJitterStepScale:0.###}, chamfer {chamferStepScale:0.###}, Displace {displaceStepScale:0.###}, DomainWarp {domainWarpStepScale:0.###} all < 1 — the per-program Lipschitz factor is computed and baked into the segment-directory header");
+        // 9. A CHAMFER POP compose (a scoped-accumulator scope closed with a chamfer blend) must fold the SAME √2 the
+        // chamfer ShapeBlend does — AnalyzeLipschitz's tree-fold correction (the plan's "expect the next bug here"). A
+        // scope closed with a plain Union compose stays EXACTLY 1.0f (the compose is 1-Lipschitz and the scope's shapes
+        // are warp-free), so a scope-free/union-compose program is unaffected; only the chamfer compose clamps.
+        var unionPopStepScale = BuildUnionPopScene().StepScale;
+
+        if (BitConverter.SingleToUInt32Bits(value: unionPopStepScale) != BitConverter.SingleToUInt32Bits(value: 1.0f)) {
+            return PostStageOutcome.Fail(detail: $"a warp-free Union-compose field scope baked stepScale {unionPopStepScale:R} (0x{BitConverter.SingleToUInt32Bits(value: unionPopStepScale):X8}), not exactly 1.0f — a far-neutral scope must not clamp the march");
+        }
+
+        var chamferPopStepScale = BuildChamferPopScene().StepScale;
+
+        if (MathF.Abs(chamferPopStepScale - expectedChamferStepScale) > 0.01f) {
+            return PostStageOutcome.Fail(detail: $"a chamfer-compose field scope baked stepScale {chamferPopStepScale:R}, expected ≈ {expectedChamferStepScale:0.###} (1 / √2 — the chamfer POP's bevel gradient, folded by AnalyzeLipschitz exactly like a chamfer ShapeBlend)");
+        }
+
+        return PostStageOutcome.Pass(detail: $"warp-free stepScale == 1.0f exactly; steep twist {twistStepScale:0.###}, 4:1 ellipsoid {ellipsoidStepScale:0.###}, log-spherical fold {logSphereStepScale:0.###}, CellJitter blades {cellJitterStepScale:0.###}, chamfer {chamferStepScale:0.###}, Displace {displaceStepScale:0.###}, DomainWarp {domainWarpStepScale:0.###}, chamfer-POP {chamferPopStepScale:0.###} all < 1, Union-POP == 1.0f exactly — the per-program Lipschitz factor is computed and baked into the segment-directory header");
+    }
+
+    // A field scope closed with a plain Union compose over a warp-free subject: every op is 1-Lipschitz and the compose
+    // is far-neutral, so stepScale must be EXACTLY 1.0f — a scope, by itself, must never clamp the march.
+    private static SdfProgram BuildUnionPopScene() {
+        var builder = new SdfProgramBuilder();
+        var slate = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.55f, 0.6f)));
+
+        return builder
+            .Box(halfExtents: new Vector3(0.6f, 0.6f, 0.6f), round: 0f, material: slate)
+            .PushField(compose: SdfBlendOp.Union)
+            .Translate(offset: new Vector3(0.7f, 0f, 0f))
+            .Sphere(radius: 0.5f, material: slate)
+            .Onion(thickness: 0.05f)
+            .PopField()
+            .Build();
+    }
+
+    // A field scope closed with a ChamferUnion compose: the chamfer bevel's √2 acute-corner gradient is the ONLY
+    // Lipschitz contributor (the scope's own shapes are warp-free), so stepScale = 1/√2 — the POP counterpart of the
+    // chamfer ShapeBlend isolation (BuildChamferScene), asserting AnalyzeLipschitz folds the chamfer factor for a POP.
+    private static SdfProgram BuildChamferPopScene() {
+        var builder = new SdfProgramBuilder();
+        var steel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.6f, 0.62f, 0.68f)));
+
+        return builder
+            .Box(halfExtents: new Vector3(0.6f, 0.6f, 0.6f), round: 0f, material: steel)
+            .PushField(compose: SdfBlendOp.ChamferUnion, smooth: 0.3f)
+            .Translate(offset: new Vector3(0.7f, 0f, 0f))
+            .Sphere(radius: 0.6f, material: steel)
+            .PopField()
+            .Build();
     }
 
     // A box chamfer-unioned to a sphere: the ChamferUnion bevel's √2 acute-corner gradient is the ONLY Lipschitz

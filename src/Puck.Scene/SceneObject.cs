@@ -35,25 +35,23 @@ public abstract record SceneObject {
     /// <summary>The smooth-blend radius, used only when <see cref="Blend"/> is one of the smooth ops
     /// (<see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.SmoothIntersection"/>/<see cref="SdfBlendOp.SmoothSubtraction"/>).</summary>
     public float Smooth { get; init; }
-    /// <summary>An inflation radius applied AFTER this object melds in — and, being the FIELD op it is, it fattens the
-    /// ENTIRE field accumulated so far (every earlier object too), exactly like the source VM. 0 (the default) = off.
-    /// <para>ONLY THE FIRST OBJECT CAN CARRY ONE CORRECTLY. "Order objects accordingly" works for exactly one field op:
-    /// put that object first and it inflates only itself. With two, no ordering exists — the second one's dilate always
-    /// sees the first, and they nest. The array order IS the semantics, so there is nothing to reorder. Closing that gap
-    /// needs a scoped accumulator in the VM (a push/pop field scope); until then, treat this as a one-per-document
-    /// field.</para></summary>
+    /// <summary>An inflation radius applied AFTER this object melds in — a FIELD op. 0 (the default) = off.
+    /// <para>SCOPED to this object alone (2026-07-08, commit 5ca8dfa): <see cref="Emit"/> wraps the shape plus its
+    /// dilate/onion in a <c>PushField</c>/<c>PopField</c> scope, so it inflates only this object, never the field
+    /// accumulated by earlier objects. Every object may carry one, in any order — the old "only the first object
+    /// works" restriction, from before the VM had a scoped accumulator, no longer applies.</para></summary>
     public float Dilate { get; init; }
-    /// <summary>A shell half-thickness applied AFTER this object melds in (after <see cref="Dilate"/>) — a FIELD op:
-    /// it hollows the ENTIRE field accumulated so far into a skin, every earlier object included. 0 (the default) = off.
-    /// <para>Same one-per-document restriction as <see cref="Dilate"/>, and the same fix. Note the failure mode is
-    /// INFLATION, not deletion: <c>abs(d) - t = 0</c> puts the outer surface at <c>d = +t</c>, so every earlier object
-    /// simply grows by <c>t</c> and goes hollow. That reads as "a slightly larger object" and hides for a long time.</para></summary>
+    /// <summary>A shell half-thickness applied AFTER this object melds in (after <see cref="Dilate"/>) — a FIELD op.
+    /// 0 (the default) = off.
+    /// <para>SCOPED to this object alone, same as <see cref="Dilate"/> (2026-07-08, commit 5ca8dfa) — it hollows only
+    /// this object's own field, never earlier objects. Before scoping, the failure mode was INFLATION, not deletion:
+    /// <c>abs(d) - t = 0</c> puts the outer surface at <c>d = +t</c>, so an unscoped onion grew every earlier object by
+    /// <c>t</c> and hollowed it — a shape wrapped in its own scope never exhibits that.</para></summary>
     public float Onion { get; init; }
 
     // Resets the point, applies every op in order, then emits the terminal shape — the exact sequence the demo's
     // hand-authored BuildScene uses per object, reproduced from data. The optional FIELD ops follow the shape in
-    // fixed dilate-then-onion order (inflate, then shell). They act on the WHOLE accumulated field, not on this
-    // object — see Dilate/Onion above.
+    // fixed dilate-then-onion order (inflate, then shell), SCOPED to this object (see below).
     internal void Emit(SdfProgramBuilder builder) {
         _ = builder.ResetPoint();
 
@@ -63,14 +61,28 @@ public abstract record SceneObject {
             op?.Apply(builder: builder);
         }
 
-        EmitShape(builder: builder);
+        // The field ops (dilate/onion) are FIELD ops — in the FLAT accumulator they inflate/hollow the ENTIRE scene
+        // emitted so far, which is why the Dilate/Onion docs above said only the FIRST object could carry one. Scope
+        // them: PushField reseeds a fresh accumulator, so the shape (emitted as a plain Union — against the fresh
+        // SDF_FAR_DISTANCE seed it IS the shape) plus its dilate/onion form THIS object's field ALONE, then PopField
+        // melds that finished object into the scene through the object's own Blend/Smooth. An object with no field op
+        // takes the flat path and emits byte-identically to before this change.
+        if ((Dilate > 0f) || (Onion > 0f)) {
+            _ = builder.PushField(compose: Blend, smooth: Smooth);
 
-        if (Dilate > 0f) {
-            _ = builder.Dilate(radius: Dilate);
-        }
+            EmitShape(builder: builder, blend: SdfBlendOp.Union, smooth: 0f);
 
-        if (Onion > 0f) {
-            _ = builder.Onion(thickness: Onion);
+            if (Dilate > 0f) {
+                _ = builder.Dilate(radius: Dilate);
+            }
+
+            if (Onion > 0f) {
+                _ = builder.Onion(thickness: Onion);
+            }
+
+            _ = builder.PopField();
+        } else {
+            EmitShape(builder: builder, blend: Blend, smooth: Smooth);
         }
     }
     internal void Validate(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
@@ -133,7 +145,10 @@ public abstract record SceneObject {
             errors.Add(path: $"{path}.material", message: $"material {Material} is out of range; the scene declares {materialCount} material(s) (valid ids 0..{materialCount - 1})");
         }
     }
-    private protected abstract void EmitShape(SdfProgramBuilder builder);
+    // Emits the terminal shape with the given <paramref name="blend"/>/<paramref name="smooth"/> — the object's own
+    // Blend/Smooth on the flat path, or Union/0 inside a field-op scope (Emit hands the object's Blend/Smooth to the
+    // closing PopField instead).
+    private protected abstract void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth);
     private protected abstract void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors);
 }
 
@@ -143,8 +158,8 @@ public sealed record SphereObject : SceneObject {
     /// <summary>The sphere radius.</summary>
     public float Radius { get; init; }
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.Sphere(blend: Blend, material: Material, radius: Radius, smooth: Smooth);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Sphere(blend: blend, material: Material, radius: Radius, smooth: smooth);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -160,8 +175,8 @@ public sealed record BoxObject : SceneObject {
     /// <summary>The corner rounding radius.</summary>
     public float Round { get; init; }
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.Box(blend: Blend, halfExtents: JsonVector.ToVector3(components: HalfExtents), material: Material, round: Round, smooth: Smooth);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Box(blend: blend, halfExtents: JsonVector.ToVector3(components: HalfExtents), material: Material, round: Round, smooth: smooth);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -186,8 +201,8 @@ public sealed record TorusObject : SceneObject {
     /// <summary>The minor radius (tube thickness).</summary>
     public float MinorRadius { get; init; }
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.Torus(blend: Blend, majorRadius: MajorRadius, material: Material, minorRadius: MinorRadius, smooth: Smooth);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Torus(blend: blend, majorRadius: MajorRadius, material: Material, minorRadius: MinorRadius, smooth: smooth);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -205,8 +220,8 @@ public sealed record PlaneObject : SceneObject {
     /// <summary>The signed offset of the plane from the origin along the normal.</summary>
     public float Offset { get; init; }
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.Plane(blend: Blend, material: Material, normal: JsonVector.ToVector3(components: Normal), offset: Offset, smooth: Smooth);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Plane(blend: blend, material: Material, normal: JsonVector.ToVector3(components: Normal), offset: Offset, smooth: smooth);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -230,8 +245,8 @@ public sealed record RoundConeObject : SceneObject {
     /// <summary>The height between the cap centers.</summary>
     public float Height { get; init; }
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.RoundCone(blend: Blend, height: Height, lowerRadius: LowerRadius, material: Material, smooth: Smooth, upperRadius: UpperRadius);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.RoundCone(blend: blend, height: Height, lowerRadius: LowerRadius, material: Material, smooth: smooth, upperRadius: UpperRadius);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -256,8 +271,8 @@ public sealed record CapsuleObject : SceneObject {
     /// <summary>The capsule radius.</summary>
     public float Radius { get; init; }
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.Capsule(blend: Blend, endpoint: JsonVector.ToVector3(components: Endpoint), material: Material, radius: Radius, smooth: Smooth);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Capsule(blend: blend, endpoint: JsonVector.ToVector3(components: Endpoint), material: Material, radius: Radius, smooth: smooth);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -289,8 +304,8 @@ public sealed record CylinderObject : SceneObject {
     /// <summary>The half-height (the cylinder spans ±halfHeight along the local Y axis).</summary>
     public float HalfHeight { get; init; }
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.Cylinder(blend: Blend, halfHeight: HalfHeight, material: Material, radius: Radius, smooth: Smooth);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Cylinder(blend: blend, halfHeight: HalfHeight, material: Material, radius: Radius, smooth: smooth);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -307,8 +322,8 @@ public sealed record EllipsoidObject : SceneObject {
     /// <summary>The per-axis radii, as a 3-element <c>[x, y, z]</c> array.</summary>
     public IReadOnlyList<float> Radii { get; init; } = [];
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
-        _ = builder.Ellipsoid(blend: Blend, material: Material, radii: JsonVector.ToVector3(components: Radii), smooth: Smooth);
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Ellipsoid(blend: blend, material: Material, radii: JsonVector.ToVector3(components: Radii), smooth: smooth);
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
@@ -351,20 +366,20 @@ public sealed record ScreenSlabObject : SceneObject {
 
     internal override bool ReferencesMaterialPalette => false;
 
-    private protected override void EmitShape(SdfProgramBuilder builder) {
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
         if (ScreenIndex is int screenIndex) {
             _ = builder.ScreenSlab(
-                blend: Blend,
+                blend: blend,
                 halfExtents: JsonVector.ToVector3(components: HalfExtents),
                 round: Round,
                 screenIndex: screenIndex,
-                smooth: Smooth,
+                smooth: smooth,
                 worldOrigin: JsonVector.ToVector3(components: WorldOrigin!),
                 worldRight: JsonVector.ToVector3(components: WorldRight!),
                 worldUp: JsonVector.ToVector3(components: WorldUp!)
             );
         } else {
-            _ = builder.ScreenSlab(blend: Blend, halfExtents: JsonVector.ToVector3(components: HalfExtents), round: Round, smooth: Smooth);
+            _ = builder.ScreenSlab(blend: blend, halfExtents: JsonVector.ToVector3(components: HalfExtents), round: Round, smooth: smooth);
         }
     }
     private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {

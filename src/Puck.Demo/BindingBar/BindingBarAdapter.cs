@@ -313,11 +313,12 @@ internal sealed class BindingBarAdapter {
                 slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);
                 slots[DpadRightSlot] = Badge(slot: DpadRightSlot, button: GamepadButtons.DpadRight);
                 break;
-            default: // STAMP (bare) — place/clear the ghost, undo/redo; d-pad = repeat count/spacing.
+            default: // STAMP (bare) — place/clear the ghost, undo/redo, RB grid-snap toggle; d-pad = repeat count/spacing.
                 slots[SouthSlot] = Verb(slot: SouthSlot, icon: BindingIconId.CreatorPlace, button: GamepadButtons.ButtonSouth);
                 slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorDelete, button: GamepadButtons.ButtonEast);
                 slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorPrev, button: GamepadButtons.ButtonNorth);
                 slots[LeftShoulderSlot] = Verb(slot: LeftShoulderSlot, icon: BindingIconId.CreatorNext, button: GamepadButtons.LeftShoulder);
+                slots[RightShoulderSlot] = Verb(slot: RightShoulderSlot, icon: BindingIconId.Target, button: GamepadButtons.RightShoulder);
                 slots[DpadUpSlot] = Badge(slot: DpadUpSlot, button: GamepadButtons.DpadUp);
                 slots[DpadDownSlot] = Badge(slot: DpadDownSlot, button: GamepadButtons.DpadDown);
                 slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);

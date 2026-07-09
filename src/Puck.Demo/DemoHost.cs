@@ -37,6 +37,8 @@ internal static class DemoHost {
         services.AddSingleton<ICommandModule, Puck.Demo.Tracker.TrackerCommandModule>();
         services.AddSingleton<ICommandModule, Puck.Demo.World.WorldCommandModule>();
         services.AddSingleton<ICommandModule, Puck.Demo.Creator.CompanionCommandModule>();
+        // The fullscreen SDF-debug tool (the SDF-VM accuracy arc's debugger): sdf / sdf.shape / sdf.op / sdf.floor / sdf.info.
+        services.AddSingleton<ICommandModule, Puck.Demo.SdfDebug.SdfDebugCommandModule>();
         // The live win/reveal-condition editor ("the recursion"): condition.show/set/clear re-forge a cabinet's exit +
         // victory gates in-session, routed through the same IOverworldControlHost seam the reveal/link/cart verbs use.
         services.AddSingleton<ICommandModule, ConditionCommandModule>();

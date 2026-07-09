@@ -263,6 +263,28 @@ flat-accumulator program can own a clean accumulator.** Its `Xor` pair still
 composes globally, and reads correctly only because the teal sphere overlaps
 nothing but its brick partner.
 
+## Status (2026-07-08)
+
+**Landed, not merely recommended** — a reader arriving at the "Recommendation"
+below should know it already happened. The engine stage is BUILT:
+`PushField`/`PopField` are real opcodes (27/28), `AnalyzeLipschitz` folds a
+scope as a tree fold (a chamfer-compose POP pins the same `√2` factor as a
+`ChamferUnion`, asserted by `sdf-lipschitz`), and a scoped instance's cull
+bound now inflates by its scoped field-op reach (`MaxScopedFieldReach`,
+commit `57c1b33`) so masking stays sound instead of falling back to
+`UnmaskableBoundRadius`. Both consumers named in "Where it bit" above are
+landed: `SceneObject.Dilate`/`Onion` (`src/Puck.Scene`) scope PER OBJECT, not
+just object zero (`5ca8dfa`); the creator scopes at the composition GROUP
+(Pass-2) and the ungrouped shape (Pass-1), not at the per-member blend
+(`93d47e8` — see "Open, filed elsewhere" below). That is the depth-1 lesson
+this design pass surfaced: wrapping every member's own blend op in its own
+scope would need a second nesting level this ISA doesn't carry, so the fix
+that actually works is one `PushField(Union)` per group/object, never one per
+blend. Gates are green: `world-scope` + `sdf-lipschitz`, full battery.
+**Remaining, exactly as staged below:** run-document nesting beyond a single
+object's field ops (stage 3's open half) and depth > 1 (needs the shader
+save-slot array to grow past one pair).
+
 ## Recommendation
 
 **Do it, at depth 1.** Depth is not in the ISA — it is a shader constant plus a
@@ -273,16 +295,18 @@ re-gating of the packed layout.
 
 Staged landing:
 
-1. **Engine, Post-gated.** The ops, the fused tail, the validator, the
+1. **Engine, Post-gated.** ✅ LANDED. The ops, the fused tail, the validator, the
    `AnalyzeSegment`/`AnalyzeLipschitz` corrections, a `world-scope` stage
    asserting a scoped intersection renders as the intersection of its own
    members *and* that a scoped instance is maskable with `instanced == flat`,
    plus the `blendSmoothUnion` endpoint gate.
-2. **Demo (greenfield — verify by running).** Creator wraps Pass-2 groups and
-   each Pass-1 shape's onion in a scope. Fixes the workbench wipe and the
-   ground-shell, and hands culling back to every onion'd shape.
-3. **Run document.** The nesting construct; `WorldChamferStage` can drop its
-   emit-intersections-first trick.
+2. **Demo (greenfield — verify by running).** ✅ LANDED. Creator (and its
+   `CompanionRenderer` clone) wraps each Pass-2 group and each Pass-1 shape's
+   onion in a scope. Fixes the workbench wipe and the ground-shell, and hands
+   culling back to every onion'd shape.
+3. **Run document.** ✅ LANDED (`SceneObject.Emit`, commit 5ca8dfa — the field-op
+   scope). The general nesting construct + `WorldChamferStage` dropping its
+   emit-intersections-first trick remain open.
 
 **What would change the recommendation:** a VGPR count showing the register cost
 eats occupancy in `sdf-world-views`. DXIL will not give it — RGA, or an A/B on
@@ -291,8 +315,17 @@ against it.
 
 ## Open, filed elsewhere
 
-- **Creator's `Intersection` blend wipes the workbench** — Pass-2 groups are
-  emitted after the floor. Options: reorder, scope, or drop the blend.
+- ~~**Creator's `Intersection` blend wipes the workbench**~~ — CLOSED (demo-side,
+  verify-by-running). `CreatorSceneRenderer` (and its `CompanionRenderer` clone)
+  now wrap each Pass-2 composition group in one `PushField(Union)`/`PopField`
+  scope, so a member's blend composes against its group-mates (the fresh
+  FAR-seeded accumulator), not the whole room — an `Intersection` member renders
+  a local lens, the workbench stays intact. Each Pass-1 (ungrouped) shape's onion
+  is scoped the same way (shells itself, not the scene), the SceneObject.Emit
+  precedent applied to the live editor. A pure-Union, no-onion group/shape stays
+  flat (byte-identical), so union-only creations load bit-for-bit. The creator
+  worst-case probe grows through `EmitShape`'s `probeWorstCase` path (the scope's
+  Push/Pop join it), so the capacity envelope covers the new ops.
 - **The run document's op gap** — `logSphere`, `repeatPolar`, `symmetryPlane`,
   `displace`, `domainWarp` and the whole 2D-primitive family are unauthorable
   from a data file.

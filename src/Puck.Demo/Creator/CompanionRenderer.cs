@@ -212,31 +212,7 @@ public sealed class CompanionRenderer {
             }
 
             emittedGroups[emittedCount++] = groupId;
-            _ = builder.BeginInstanceDynamic(slot: rootSlot, boundOffset: Vector3.Zero, boundRadius: (reach + RootBoundMargin));
-
-            for (var member = index; (member < shapes.Count); member++) {
-                var shape = shapes[member];
-
-                if ((shape.Group ?? 0) != groupId) {
-                    continue;
-                }
-
-                EmitShape(
-                    blend: (shape.Blend ?? SdfBlendOp.Union),
-                    builder: builder,
-                    material: paletteIds[(shape.Material ?? 0) % paletteIds.Length],
-                    mirror: (shape.Mirror ?? false),
-                    onion: (shape.Onion ?? 0f),
-                    probeWorstCase: probeWorstCase,
-                    scale: shape.Scale,
-                    slot: (rootSlot + 1 + member),
-                    smooth: (shape.Smooth ?? 0f),
-                    twist: (shape.Twist ?? 0f),
-                    type: shape.Type
-                );
-            }
-
-            _ = builder.EndInstance();
+            EmitGroup(builder: builder, fromIndex: index, groupId: groupId, paletteIds: paletteIds, probeWorstCase: probeWorstCase, reach: reach, rootSlot: rootSlot, shapes: shapes);
         }
 
         // The robot archetype's face slab: emitted only when the host has marked this companion as screen-faced AND
@@ -268,6 +244,50 @@ public sealed class CompanionRenderer {
                 throw new InvalidOperationException(message: "AddMaterial returned an invalid index.");
             }
         }
+    }
+
+    // Emits ONE of a companion's composition groups as a single dynamic instance anchored on the ROOT slot: the
+    // members in document order with their authored blend/smooth, wrapped in a PushField(Union)/PopField field scope
+    // when the group needs one (GroupNeedsScope) so each member composes against its GROUP-MATES, not the whole scene
+    // — the Intersection-wipe fix (mirrors CreatorSceneRenderer.EmitGroup). A pure-Union, no-onion group takes no
+    // scope and emits flat (byte-identical for a union-only creation).
+    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, bool probeWorstCase, float reach) {
+        var groupNeedsScope = GroupNeedsScope(fromIndex: fromIndex, groupId: groupId, shapes: shapes);
+
+        _ = builder.BeginInstanceDynamic(slot: rootSlot, boundOffset: Vector3.Zero, boundRadius: (reach + RootBoundMargin));
+
+        if (groupNeedsScope) {
+            _ = builder.PushField(compose: SdfBlendOp.Union);
+        }
+
+        for (var member = fromIndex; (member < shapes.Count); member++) {
+            var shape = shapes[member];
+
+            if ((shape.Group ?? 0) != groupId) {
+                continue;
+            }
+
+            EmitShape(
+                blend: (shape.Blend ?? SdfBlendOp.Union),
+                builder: builder,
+                inGroupScope: true,
+                material: paletteIds[(shape.Material ?? 0) % paletteIds.Length],
+                mirror: (shape.Mirror ?? false),
+                onion: (shape.Onion ?? 0f),
+                probeWorstCase: probeWorstCase,
+                scale: shape.Scale,
+                slot: (rootSlot + 1 + member),
+                smooth: (shape.Smooth ?? 0f),
+                twist: (shape.Twist ?? 0f),
+                type: shape.Type
+            );
+        }
+
+        if (groupNeedsScope) {
+            _ = builder.PopField();
+        }
+
+        _ = builder.EndInstance();
     }
 
     // Emits one companion's palette: a real companion's OWN authored palette (so its creation reads with its
@@ -364,7 +384,13 @@ public sealed class CompanionRenderer {
     // op sequence to CreatorSceneRenderer.EmitShape (the SAME shared canonical dimensions via AvatarDefinition, so a
     // companion's shape is byte-for-byte the geometry the creator previewed and the forge could bake).
     // probeWorstCase emits ALL per-shape modifier ops unconditionally, matching CreatorSceneRenderer's binding rule.
-    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float onion = 0f) {
+    //
+    // SCOPING mirrors CreatorSceneRenderer.EmitShape exactly (see its remarks + docs/sdf-accumulator-plan.md): a
+    // non-group shape (Pass 1 — always plain Union) wraps its onion field op in a PushField(Union)/PopField scope so
+    // the shell hollows THIS shape, not the whole scene; a no-onion shape stays flat (byte-identical). A group member
+    // passes inGroupScope: true and emits flat — it already sits inside its group's single PushField scope
+    // (EmitOneCompanion Pass 2), which the depth-1 cap forbids nesting.
+    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float onion = 0f, bool inGroupScope = false) {
         var chain = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: scale);
 
         if (probeWorstCase || mirror) {
@@ -375,11 +401,37 @@ public sealed class CompanionRenderer {
             chain = chain.TwistY(rate: (probeWorstCase ? 1f : twist));
         }
 
+        var wantsOnion = (probeWorstCase || (onion != 0f));
+
+        if (wantsOnion && !inGroupScope) {
+            var scoped = AvatarDefinition.AppendPrimitive(blend: SdfBlendOp.Union, chain: chain.PushField(compose: blend, smooth: smooth), material: material, smooth: 0f, type: type);
+
+            _ = scoped.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion)).PopField();
+
+            return;
+        }
+
         var afterShape = AvatarDefinition.AppendPrimitive(blend: blend, chain: chain, material: material, smooth: smooth, type: type);
 
-        if (probeWorstCase || (onion != 0f)) {
+        if (wantsOnion) {
             _ = afterShape.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion));
         }
+    }
+
+    // Whether a companion's composition group must emit inside a PushField/PopField field scope — mirrors
+    // CreatorSceneRenderer.GroupNeedsScope: true when any member carries a non-Union blend (the Intersection family
+    // wipes the whole accumulated scene otherwise) or an onion field op. A pure-Union, no-onion group stays flat, so
+    // a union-only creation loads byte-identically. See docs/sdf-accumulator-plan.md.
+    private static bool GroupNeedsScope(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex) {
+        for (var member = fromIndex; (member < shapes.Count); member++) {
+            var shape = shapes[member];
+
+            if (((shape.Group ?? 0) == groupId) && (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // A scaled shape's dynamic instance bound: the unit-scale bound grown by the largest scale component — mirrors

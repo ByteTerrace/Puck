@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Demo.Editing;
 using Puck.Demo.Forge;
 using Puck.SdfVm;
 
@@ -68,6 +69,13 @@ public sealed class CreatorScene {
     private bool m_active;
     private int m_nextShapeId;
     private int m_nextGroupId = 1;
+    // Grid-locking (session-only authoring state — never persisted; the resolved F6 rule). m_snapIntent is the
+    // retained pre-snap integrated cursor (F3 magnetize-while-dragging), reseeded whenever an external mutation
+    // leaves the target's position != m_snapLastCommitted (the last value the snap path wrote).
+    private SnapConfig m_snap = SnapConfig.CreatorDefault;
+    private Vector3 m_snapIntent;
+    private Vector3 m_snapLastCommitted;
+    private bool m_snapGridVisible;
     private int m_selectionIndex = -1;
     // The selection BEFORE the current one — the chain-link partner the SELECT page's link verb groups with.
     private int m_previousSelectionIndex = -1;
@@ -280,19 +288,24 @@ public sealed class CreatorScene {
         }
 
         if (TargetIsGhost) {
-            m_ghostPosition = m_workbench.Clamp(position: (m_ghostPosition + step));
+            m_ghostPosition = SnapAndClampMove(current: m_ghostPosition, step: step);
         } else if (GroupScopeApplies()) {
+            // Snap the group as a RIGID BODY (proposal §2): snap the primary member (the anchor) through the
+            // accumulator, derive one delta, and shift every member by it — snapping each member independently would
+            // shear the group onto the lattice.
             var groupId = m_shapes[m_selectionIndex].GroupId;
+            var anchor = m_shapes[m_selectionIndex].Position;
+            var groupDelta = (SnapAndClampMove(current: anchor, step: step) - anchor);
 
             for (var index = 0; (index < m_shapes.Count); index++) {
                 if (m_shapes[index].GroupId == groupId) {
-                    m_shapes[index] = m_shapes[index] with { Position = m_workbench.Clamp(position: (m_shapes[index].Position + step)) };
+                    m_shapes[index] = m_shapes[index] with { Position = m_workbench.Clamp(position: (m_shapes[index].Position + groupDelta)) };
                 }
             }
         } else {
             var shape = m_shapes[m_selectionIndex];
 
-            m_shapes[m_selectionIndex] = shape with { Position = m_workbench.Clamp(position: (shape.Position + step)) };
+            m_shapes[m_selectionIndex] = shape with { Position = SnapAndClampMove(current: shape.Position, step: step) };
         }
 
         Revision++;
@@ -321,7 +334,7 @@ public sealed class CreatorScene {
             * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (roll * step)));
 
         if (TargetIsGhost) {
-            m_ghostRotation = Quaternion.Normalize(value: (delta * m_ghostRotation));
+            m_ghostRotation = SnapRot(Quaternion.Normalize(value: (delta * m_ghostRotation)));
         } else if (GroupScopeApplies()) {
             // The whole group turns about its centroid: every member's position orbits it and every member's
             // orientation composes the same delta — the group reads as one rigid body.
@@ -343,7 +356,7 @@ public sealed class CreatorScene {
         } else {
             var shape = m_shapes[m_selectionIndex];
 
-            m_shapes[m_selectionIndex] = shape with { Rotation = Quaternion.Normalize(value: (delta * shape.Rotation)) };
+            m_shapes[m_selectionIndex] = shape with { Rotation = SnapRot(Quaternion.Normalize(value: (delta * shape.Rotation))) };
         }
 
         Revision++;
@@ -1026,12 +1039,198 @@ public sealed class CreatorScene {
         return clamped;
     }
 
+    // ── Grid-locking (session-only; the resolved forks) ────────────────────────────────────────────────────────────
+
+    /// <summary>The live grid-lock configuration (session-only; the frame source reads it each frame for the grid
+    /// overlay, and the verbs echo it). Internal — <see cref="SnapConfig"/> is authoring-side Demo state.</summary>
+    internal SnapConfig Snap => m_snap;
+    /// <summary>Whether the grid overlay should draw in creator (session-only; follows snap on/off by default,
+    /// overridden by <c>creator.snap grid show|hide</c>).</summary>
+    public bool SnapGridVisible => m_snapGridVisible;
+
+    /// <summary>Toggles grid-snapping. Reseeds the magnetize intent from the current target and defaults the overlay
+    /// to follow (shows while on).</summary>
+    /// <param name="enabled">Whether snapping is on.</param>
+    public void SetSnapEnabled(bool enabled) {
+        m_snap = m_snap with { Enabled = enabled };
+        m_snapGridVisible = enabled;
+        m_snapIntent = TargetPositionInternal;
+        m_snapLastCommitted = TargetPositionInternal;
+        Revision++;
+    }
+
+    /// <summary>Sets the per-axis snap pitch (a component &lt;= 0 leaves that axis free).</summary>
+    /// <param name="pitch">The per-axis pitch.</param>
+    public void SetSnapPitch(Vector3 pitch) {
+        m_snap = m_snap with { Pitch = pitch };
+        Revision++;
+    }
+
+    /// <summary>Sets the rotation-snap increment (creator snaps the full orientation to the nearest coarse
+    /// orientation — octahedral for Deg90, the 45°-granular set for Deg45).</summary>
+    /// <param name="rotation">The increment.</param>
+    internal void SetSnapRotation(RotationSnap rotation) {
+        m_snap = m_snap with { Rotation = rotation };
+        Revision++;
+    }
+
+    /// <summary>Overrides the grid overlay's visibility (independent of snap on/off).</summary>
+    /// <param name="visible">Whether the overlay draws.</param>
+    public void SetSnapGridVisible(bool visible) {
+        m_snapGridVisible = visible;
+        Revision++;
+    }
+
+    /// <summary>Captures a shape (by id or name) as the frozen align-to reference (the resolved F4 rule) WITHOUT
+    /// disturbing the selection.</summary>
+    /// <param name="idOrName">The reference shape's id or name.</param>
+    /// <param name="echo">A human echo of what was captured (or why it was refused).</param>
+    /// <returns>Whether a reference was captured.</returns>
+    public bool TrySetSnapReference(string idOrName, out string echo) {
+        if ((ResolveShapeId(idOrName: idOrName) is not { } id) || !TryFindShape(id: id, shape: out var shape)) {
+            echo = $"no shape '{idOrName}' — creator.list shows the ids/names";
+
+            return false;
+        }
+
+        return SetReferenceFromShape(shape: shape, echo: out echo);
+    }
+
+    /// <summary>Captures the SELECTED shape as the frozen align-to reference.</summary>
+    /// <param name="echo">A human echo of what was captured (or why it was refused).</param>
+    /// <returns>Whether a reference was captured.</returns>
+    public bool TrySetSnapReferenceSelected(out string echo) {
+        if (SelectedShape is not { } shape) {
+            echo = "nothing selected — creator.select <id|name> first, or creator.snap ref <id|name>";
+
+            return false;
+        }
+
+        return SetReferenceFromShape(shape: shape, echo: out echo);
+    }
+
+    /// <summary>Clears the align-to reference (back to world-lattice-only).</summary>
+    public void ClearSnapReference() {
+        m_snap = m_snap with { Reference = null };
+        Revision++;
+    }
+
+    /// <summary>Writes the grid-lock overlay channel (grid-locking §4) as primitives — the frame source threads these
+    /// into <c>SdfFrame</c> without naming <see cref="GridOverlayState"/> (staying under its coupling ceiling). All
+    /// out values are 0/identity when the grid is hidden.</summary>
+    /// <param name="floorY">The room's floor plane height.</param>
+    /// <param name="flags">Overlay flags (bit0 world floor grid, bit1 object grid).</param>
+    /// <param name="worldPitch">The world floor grid's X/Z pitch.</param>
+    /// <param name="objectOrigin">The object grid's reference origin.</param>
+    /// <param name="objectFrame">The object grid's reference frame.</param>
+    /// <param name="objectPitch">The object grid's in-plane pitch (X/Z).</param>
+    /// <param name="objectPatchRadius">The object grid's finite-patch radius.</param>
+    public void WriteGridOverlay(float floorY, out uint flags, out Vector2 worldPitch, out Vector3 objectOrigin, out Quaternion objectFrame, out Vector2 objectPitch, out float objectPatchRadius) {
+        var overlay = GridOverlayState.From(snap: m_snap, gridVisible: m_snapGridVisible, floorY: floorY);
+
+        flags = overlay.Flags;
+        objectFrame = overlay.ObjectFrame;
+        objectOrigin = overlay.ObjectOrigin;
+        objectPatchRadius = overlay.ObjectPatchRadius;
+        objectPitch = overlay.ObjectPitch;
+        worldPitch = overlay.WorldPitch;
+    }
+
+    private bool SetReferenceFromShape(CreatorShapeState shape, out string echo) {
+        var reach = AvatarDefinition.Reach(type: shape.Type, scale: shape.Scale);
+
+        m_snap = m_snap with {
+            Reference = new SnapReference(
+                FaceRadius: FaceRadiusFor(pitch: m_snap.Pitch),
+                Frame: shape.Rotation,
+                LocalHalfExtents: new Vector3(reach),
+                Origin: shape.Position,
+                Pitch: m_snap.Pitch
+            ),
+        };
+        echo = $"reference = #{shape.Id} @ ({shape.Position.X:F2}, {shape.Position.Y:F2}, {shape.Position.Z:F2}) reach {reach:F2}";
+        Revision++;
+
+        return true;
+    }
+
+    private bool TryFindShape(int id, out CreatorShapeState shape) {
+        if (m_shapeIndexById.TryGetValue(key: id, value: out var index) && (index >= 0) && (index < m_shapes.Count)) {
+            shape = m_shapes[index];
+
+            return true;
+        }
+
+        shape = default;
+
+        return false;
+    }
+
+    // The current target's transform, unified across ghost / selected shape / chain goal — the snap plumbing reads
+    // these so a mid-drag reseed and the exact-set start from the right pose.
+    private Vector3 TargetPositionInternal =>
+        (TargetIsGoal ? m_chains[m_goalChainIndex].Goal : (TargetIsGhost ? m_ghostPosition : m_shapes[m_selectionIndex].Position));
+    private Vector3 TargetScaleInternal =>
+        ((TargetIsGhost || TargetIsGoal) ? m_ghostScale : m_shapes[m_selectionIndex].Scale);
+    private AvatarPrimitive TargetTypeInternal =>
+        ((TargetIsGhost || TargetIsGoal) ? m_ghostType : m_shapes[m_selectionIndex].Type);
+
+    // The magnetize move seam (proposal §1g/§2): off = today's clamp; on = the retained pre-snap intent snapped to the
+    // lattice/reference before the workbench clamp. An external mutation (select/exact-set/undo) reseeds the intent.
+    private Vector3 SnapAndClampMove(Vector3 current, Vector3 step) {
+        if (!m_snap.Enabled) {
+            return m_workbench.Clamp(position: (current + step));
+        }
+
+        if (current != m_snapLastCommitted) {
+            m_snapIntent = current;
+        }
+
+        m_snapIntent += step;
+
+        var snapped = GridSnap.Apply(intent: m_snapIntent, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: current);
+        var clamped = m_workbench.Clamp(position: snapped);
+
+        m_snapLastCommitted = clamped;
+
+        return clamped;
+    }
+
+    // The path-independent exact-set seam (console verbs): snap the requested absolute position with no magnetize band.
+    private Vector3 SnapAndClampExact(Vector3 requested) =>
+        (m_snap.Enabled
+            ? m_workbench.Clamp(position: GridSnap.Apply(intent: requested, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: new Vector3(float.NaN)))
+            : m_workbench.Clamp(position: requested));
+
+    private Quaternion SnapRot(Quaternion orientation) =>
+        ((m_snap.Enabled && (m_snap.Rotation != RotationSnap.Off)) ? GridSnap.SnapRotation(orientation: orientation, mode: m_snap.Rotation) : orientation);
+
+    // The moving target's conservative half-extents about its origin (isotropic reach) — the candidate bound the
+    // face-to-face butt-join needs (proposal §1c/§1e).
+    private Vector3 TargetSnapHalfExtents() =>
+        new(AvatarDefinition.Reach(type: TargetTypeInternal, scale: TargetScaleInternal));
+
+    private static float FaceRadiusFor(Vector3 pitch) {
+        var min = float.MaxValue;
+
+        if (pitch.X > 0f) { min = MathF.Min(x: min, y: pitch.X); }
+        if (pitch.Y > 0f) { min = MathF.Min(x: min, y: pitch.Y); }
+        if (pitch.Z > 0f) { min = MathF.Min(x: min, y: pitch.Z); }
+
+        return (0.5f * ((min == float.MaxValue) ? 0.25f : min));
+    }
+
     /// <summary>Places the TARGET at an exact position (clamped to the workbench; a goal target moves the goal and
     /// re-solves — see <see cref="Move"/>). A transform update (no rebuild).</summary>
     /// <param name="position">The desired position.</param>
     /// <returns>The clamped position actually applied.</returns>
     public Vector3 SetTargetPosition(Vector3 position) {
-        var clamped = m_workbench.Clamp(position: position);
+        // Path-independent (no magnetize band): the console exact-set snaps the REQUESTED absolute position, then
+        // resyncs the pad accumulator so a following drag continues from the set node.
+        var clamped = SnapAndClampExact(requested: position);
+
+        m_snapIntent = clamped;
+        m_snapLastCommitted = clamped;
 
         if (TargetIsGoal) {
             var chain = m_chains[m_goalChainIndex];
@@ -1065,10 +1264,10 @@ public sealed class CreatorScene {
         }
 
         const float toRadians = (MathF.PI / 180f);
-        var rotation = Quaternion.Normalize(value: (
+        var rotation = SnapRot(Quaternion.Normalize(value: (
             Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (yawDegrees * toRadians))
             * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (pitchDegrees * toRadians))
-            * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (rollDegrees * toRadians))));
+            * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (rollDegrees * toRadians)))));
 
         if (TargetIsGhost) {
             m_ghostRotation = rotation;

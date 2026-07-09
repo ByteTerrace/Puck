@@ -193,9 +193,11 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private readonly CreatorScene m_creator;
     private readonly CreatorSceneRenderer m_creatorRenderer;
     private readonly CreatorController m_creatorController;
-    // The live bake-preview seam the easel's screen slab samples — the null stand-in until the bake pipeline's
-    // service replaces it (ConnectBakePreview).
-    private ICreatorBakePreview m_bakePreview = new NullCreatorBakePreview();
+    // The live bake-preview seam the easel's screen slab samples — NULL until the bake pipeline's service replaces it
+    // (ConnectBakePreview); a null seam reads as a powered-off easel (handle 0 / zero glow), same as the former
+    // NullCreatorBakePreview null-object. Kept nullable (not a null-object) so this source names one fewer type — it
+    // sits at its exact analyzer coupling ceiling, and the SDF-debug facade needs the room.
+    private ICreatorBakePreview? m_bakePreview;
     // The owned live bake service, when installed (InstallBakePreview) — this source composes it so the render
     // node's coupling stays flat.
     private Forge.Bake.BakePreviewService? m_bakePreviewService;
@@ -219,6 +221,14 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private readonly int m_worldSlotBase;
     private int m_builtWorldRevision = -1;
     private bool m_worldSculptActive;
+
+    // SDF-DEBUG mode (the fullscreen single-shape debug tool): the whole mode (scene + orbit controller + emitter) is
+    // composed behind ONE facade type — this source is at its exact analyzer coupling ceiling and cannot name three
+    // (it sheds NullCreatorBakePreview's reference to make room; see m_bakePreview). Presentation only — the sim never
+    // sees it. While the mode is up the program REPLACES the room with the debug subject (BuildProgram's early branch);
+    // the capacity probe folds the subject's worst case in (EmitProbe), so a live op push can never outgrow the buffers.
+    private readonly Puck.Demo.SdfDebug.SdfDebugMode m_sdfDebug = new();
+    private int m_builtSdfDebugRevision = -1;
 
     // The diegetic-feed director (the camera-feed pool + the procedural face feed + the named-feed registry) — this
     // source owns and drives it (InstallFeeds composes it once the render assembly's envelope is known); null until
@@ -333,7 +343,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // orbit/head-on framing; while WORLD-SCULPT is up, a lifted town-read orbit anchored on the creating slot
         // (the player IS the cursor — steep pitch, generous distance, so a street reads while stamping). Both ride
         // the director's one eased CreatorCameraSource seam (this source is the composition point).
-        m_director.CreatorCameraSource = () => (m_creatorController.CameraFrame ?? WorldSculptCameraFrame());
+        m_director.CreatorCameraSource = () => (m_sdfDebug.CameraFrame ?? m_creatorController.CameraFrame ?? WorldSculptCameraFrame());
         // When a world (the town) is loaded, the fourth-wall reveal frames the WHOLE lot rather than the fixed
         // default-room overview — centred on the lot, pulled back to its bounds. Null while no world is applied, so
         // the default room's reveal framing is byte-unchanged.
@@ -487,7 +497,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         var bootedMask = m_world.BootedMask;
         var activePlayerMask = ActivePlayerMask();
         var workbenchBucket = WorkbenchGlowBucket();
-        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (workbenchBucket != m_builtWorkbenchBucket) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair));
+        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (workbenchBucket != m_builtWorkbenchBucket) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair) || (m_sdfDebug.Active && (m_sdfDebug.Revision != m_builtSdfDebugRevision)));
 
         if (programChanged) {
             m_program = BuildProgram(bootedMask: bootedMask);
@@ -498,6 +508,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             m_builtWorldRevision = m_worldScene.ProgramRevision;
             m_builtCompanionCount = m_companions.Companions.Count;
             m_builtLinkedPair = linkedPair;
+            m_builtSdfDebugRevision = m_sdfDebug.Revision;
             // The camera feeds share this program object; bump the feed revision only when it actually rebuilds, so the
             // feed engine re-uploads once per real program change, not every frame (Rebuild no-ops on an unchanged rev).
             m_builtFeedRevision++;
@@ -536,6 +547,23 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // render BLACK — a native handheld/emulator look — easing up to the arcade mood as the reveal lights the room.
         var roomLight = m_director.RoomLightFactor;
 
+        // The grid-lock overlay channel (grid-locking §4): the ACTIVE editor writes it as primitives (no new type
+        // named here — the scenes name the GridOverlayState facade, keeping this class under its coupling ceiling).
+        // Outside an editor it stays all-zero (byte-identical upload to before the channel existed).
+        var gridFloorY = m_room.FloorY;
+        var gridFlags = 0u;
+        var gridWorldPitch = Vector2.Zero;
+        var gridObjectOrigin = Vector3.Zero;
+        var gridObjectFrame = Quaternion.Identity;
+        var gridObjectPitch = Vector2.Zero;
+        var gridObjectPatchRadius = 0f;
+
+        if (m_worldSculptActive) {
+            m_worldScene.WriteGridOverlay(floorY: gridFloorY, flags: out gridFlags, worldPitch: out gridWorldPitch, objectOrigin: out gridObjectOrigin, objectFrame: out gridObjectFrame, objectPitch: out gridObjectPitch, objectPatchRadius: out gridObjectPatchRadius);
+        } else if (m_creator.Active) {
+            m_creator.WriteGridOverlay(floorY: gridFloorY, flags: out gridFlags, worldPitch: out gridWorldPitch, objectOrigin: out gridObjectOrigin, objectFrame: out gridObjectFrame, objectPitch: out gridObjectPitch, objectPatchRadius: out gridObjectPatchRadius);
+        }
+
         return new SdfFrame(
             Program: m_program!, // non-null: programChanged is true whenever m_program was null, so it was just built
             ProgramChanged: programChanged,
@@ -549,9 +577,25 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             // A studio scenario lights the workpiece FLAT and BRIGHT (constant scales, no roomLight/daylight damper) so
             // the palette reads true; otherwise the sculpted world's DAYLIGHT dial rides the same presentation seam the
             // reveal's room-light does — at dusk the authored lamps' emissive materials carry the room (world.dusk).
-            AmbientScale = (m_scenarioStudio ? StudioAmbientScale : (OverworldAmbientScale * roomLight * m_worldScene.Daylight)),
+            // SDF-debug pins the room full-bright (Ambient/Sun 1) so the lit/normals views read true against the
+            // replaced-room debug subject; otherwise studio's flat lighting or the dim arcade mood applies.
+            AmbientScale = (m_sdfDebug.Active ? 1f : (m_scenarioStudio ? StudioAmbientScale : (OverworldAmbientScale * roomLight * m_worldScene.Daylight))),
+            // The SLICE debug view's plane channel (two floats riding the frame's screen-light env lanes — see
+            // SdfFrame.DebugSliceAxis): the sdf.slice verb positions an axis-aligned slice plane; the defaults (0)
+            // are the camera-locked plane, so a run that never touches the verb uploads the same zeros as before.
+            DebugSliceAxis = m_sdfDebug.SliceAxis,
+            DebugSliceOffset = m_sdfDebug.SliceOffset,
             DynamicTransforms = m_dynamicTransforms,
-            SunScale = (m_scenarioStudio ? StudioSunScale : (OverworldSunScale * roomLight * m_worldScene.Daylight)),
+            // The grid-lock overlay channel (grid-locking §4), threaded into SdfFrame's Grid* fields exactly like the
+            // slice lanes above (the active editor wrote the locals; all-zero outside an editor).
+            GridFlags = gridFlags,
+            GridFloorY = gridFloorY,
+            GridObjectFrame = gridObjectFrame,
+            GridObjectOrigin = gridObjectOrigin,
+            GridObjectPatchRadius = gridObjectPatchRadius,
+            GridObjectPitch = gridObjectPitch,
+            GridWorldPitch = gridWorldPitch,
+            SunScale = (m_sdfDebug.Active ? 1f : (m_scenarioStudio ? StudioSunScale : (OverworldSunScale * roomLight * m_worldScene.Daylight))),
         };
     }
 
@@ -1314,10 +1358,10 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
 
     /// <summary>The bake preview's live image handle for the easel slab (0 until the first bake lands, and always 0
     /// while the mode is down — the borrowed cabinet's own source resumes then).</summary>
-    public nint CreatorPreviewHandle => (m_creator.Active ? m_bakePreview.CurrentImageViewHandle : 0);
+    public nint CreatorPreviewHandle => ((m_creator.Active ? m_bakePreview?.CurrentImageViewHandle : 0) ?? 0);
 
     /// <summary>The bake preview's screen-light color (the workbench glows with the creation; zero when dark).</summary>
-    public Vector3 CreatorPreviewLight => (m_creator.Active ? m_bakePreview.PreviewAverageColor : Vector3.Zero);
+    public Vector3 CreatorPreviewLight => ((m_creator.Active ? m_bakePreview?.PreviewAverageColor : Vector3.Zero) ?? Vector3.Zero);
 
     /// <summary>Replaces the bake-preview seam (the bake pipeline's live service plugs in here; the null stand-in
     /// keeps the easel dark until then).</summary>
@@ -1399,7 +1443,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     public void DisposeBakePreview() {
         m_bakePreviewService?.Dispose();
         m_bakePreviewService = null;
-        m_bakePreview = new NullCreatorBakePreview();
+        m_bakePreview = null;
     }
 
     /// <summary>Loads a saved creation into the scene by save handle or file path (the <c>--scenario</c> review harness
@@ -1430,7 +1474,18 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         var fullBootMask = ((m_room.Consoles.Count >= 32) ? uint.MaxValue : ((1u << m_room.Consoles.Count) - 1u));
         var probe = BuildProgram(bootedMask: fullBootMask, probeWorstCase: true);
 
-        return (probe.Words.Length, probe.Instances.Count);
+        // The SDF-debug mode's takeover is EITHER the room's own debug subject OR a bench workload (up to 4096
+        // instances) — never both, and 4096 bench instances cannot pile onto the room's instances in one program (past
+        // the cap). So the bench worst case is a SEPARATE probe and the envelope is the MAX, not the sum. This reserves
+        // 4096 instance slots always (the parked-slot machinery keeps reserved-but-inactive slots cheap per frame; the
+        // one-time cost is the mask/bounds buffer sizing, reported by sdf.info / the bench header).
+        var benchBuilder = new Puck.SdfVm.SdfProgramBuilder();
+
+        m_sdfDebug.EmitBenchProbe(builder: benchBuilder);
+
+        var benchProbe = benchBuilder.Build();
+
+        return (Math.Max(probe.Words.Length, benchProbe.Words.Length), Math.Max(probe.Instances.Count, benchProbe.Instances.Count));
     }
 
     // Each console's control cluster: a d-pad cross (tilts toward the held direction) and two round buttons (A/B,
@@ -1539,6 +1594,17 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // frame source already feeds render-relative to the same anchor.
         var origin = Vector3.Zero;
         var builder = new SdfProgramBuilder();
+
+        // SDF-DEBUG takeover: while the mode is up (and not probing), the program is ONLY the debug subject (+ optional
+        // floor) at the world origin — the room is replaced. The probe below still emits the full room AND folds the
+        // debug subject's worst case in (EmitProbe), so the frozen envelope covers both; a live debug program is a
+        // strict subset of that sum.
+        if (!probeWorstCase && m_sdfDebug.Active) {
+            m_sdfDebug.Emit(builder: builder);
+
+            return builder.Build();
+        }
+
         var floorMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.34f, 0.36f, 0.42f)));
         var wallMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.50f, 0.46f, 0.58f)));
         var playerMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.93f, 0.52f, 0.18f)));
@@ -1729,6 +1795,13 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // optional emission). One static instance; its bound intentionally spans the scene (it IS the background every
         // missed-ray tile needs — there is nothing else large to cull against in a studio review).
         EmitStudioBackdrop(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
+
+        // THE SDF-DEBUG subject's worst case joins the probe (a full MaxOps stack + the wordiest shape + floor), so the
+        // frozen envelope covers a live debug program — MeasureWorstCaseEnvelope's binding rule for any new emission.
+        // Only the probe path reaches here (a live debug frame returned at the early branch above).
+        if (probeWorstCase) {
+            m_sdfDebug.EmitProbe(builder: builder);
+        }
 
         return builder.Build();
     }

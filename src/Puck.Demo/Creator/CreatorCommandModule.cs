@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Numerics;
 using Puck.Commands;
+using Puck.Demo.Editing;
 using Puck.Demo.Overworld;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -260,6 +261,11 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             }),
             name: "creator.scale"
         );
+        yield return WithArgs(
+            description: "Grid-locking: creator.snap on|off | pitch <x y z>|<n> | rot <90|45|off> | ref [<id|name>]|clear | grid <show|hide>.",
+            handler: WithSceneArgs(handler: static (scene, args) => CreatorSnap(scene: scene, args: args)),
+            name: "creator.snap"
+        );
         yield return Plain(
             description: "Groups the SELECTED shape with the PREVIOUSLY selected one (select one, select the other, then group).",
             handler: WithScene(handler: static scene => ((scene.LinkWithPrevious() is { } group)
@@ -387,6 +393,105 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             inactiveMessage: "[creator: enter creator mode first (console: creator)]",
             unavailableMessage: "[creator: unavailable — the overworld is not the active root]"
         );
+
+    // The creator.snap verb family — identical grammar to world.snap; ref resolves id|name, rotation snaps the full
+    // orientation. Every branch echoes the resulting state (the console-is-control-plane contract).
+    private static string CreatorSnap(CreatorScene scene, string[] args) {
+        if (args.Length == 0) {
+            return CreatorSnapState(scene: scene);
+        }
+
+        switch (args[0].ToLowerInvariant()) {
+            case "on": {
+                scene.SetSnapEnabled(enabled: true);
+
+                return CreatorSnapState(scene: scene);
+            }
+            case "off": {
+                scene.SetSnapEnabled(enabled: false);
+
+                return CreatorSnapState(scene: scene);
+            }
+            case "pitch": {
+                if ((args.Length == 2) && TryParseFloat(text: args[1], value: out var uniform)) {
+                    scene.SetSnapPitch(pitch: new Vector3(uniform));
+
+                    return CreatorSnapState(scene: scene);
+                }
+
+                if (TryParseFloats(args: args, count: 3, start: 1, values: out var xyz)) {
+                    scene.SetSnapPitch(pitch: new Vector3(xyz[0], xyz[1], xyz[2]));
+
+                    return CreatorSnapState(scene: scene);
+                }
+
+                return "[creator.snap pitch: usage — creator.snap pitch <x> <y> <z>, or creator.snap pitch <n>]";
+            }
+            case "rot": {
+                RotationSnap? mode = (((args.Length >= 2) ? args[1].ToLowerInvariant() : null) switch {
+                    "90" => RotationSnap.Deg90,
+                    "45" => RotationSnap.Deg45,
+                    "off" or "none" or "0" => RotationSnap.Off,
+                    _ => null,
+                });
+
+                if (mode is not { } resolved) {
+                    return "[creator.snap rot: usage — creator.snap rot <90|45|off>]";
+                }
+
+                scene.SetSnapRotation(rotation: resolved);
+
+                return CreatorSnapState(scene: scene);
+            }
+            case "ref": {
+                if (args.Length == 1) {
+                    return (scene.TrySetSnapReferenceSelected(echo: out var echo) ? $"[creator.snap: {echo}]" : $"[creator.snap ref: {echo}]");
+                }
+
+                if (string.Equals(a: args[1], b: "clear", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    scene.ClearSnapReference();
+
+                    return "[creator.snap: reference cleared — world-lattice only]";
+                }
+
+                return (scene.TrySetSnapReference(idOrName: args[1], echo: out var refEcho) ? $"[creator.snap: {refEcho}]" : $"[creator.snap ref: {refEcho}]");
+            }
+            case "grid": {
+                if ((args.Length >= 2) && string.Equals(a: args[1], b: "show", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    scene.SetSnapGridVisible(visible: true);
+
+                    return CreatorSnapState(scene: scene);
+                }
+
+                if ((args.Length >= 2) && string.Equals(a: args[1], b: "hide", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    scene.SetSnapGridVisible(visible: false);
+
+                    return CreatorSnapState(scene: scene);
+                }
+
+                return "[creator.snap grid: usage — creator.snap grid <show|hide>]";
+            }
+            default: {
+                return "[creator.snap: usage — creator.snap on|off | pitch <x> <y> <z> (or <n>) | rot <90|45|off> | ref [<id|name>] (or clear) | grid <show|hide>]";
+            }
+        }
+    }
+
+    private static string CreatorSnapState(CreatorScene scene) {
+        var snap = scene.Snap;
+        var target = (scene.SelectedShape?.Position ?? scene.GhostPosition);
+        var orientation = (scene.SelectedShape?.Rotation ?? scene.GhostRotation);
+        var reference = ((snap.Reference is { } captured)
+            ? $"({captured.Origin.X:F2}, {captured.Origin.Y:F2}, {captured.Origin.Z:F2})"
+            : "none");
+        var rotation = (snap.Rotation switch {
+            RotationSnap.Deg90 => "90",
+            RotationSnap.Deg45 => "45",
+            _ => "off",
+        });
+
+        return $"[creator.snap: {(snap.Enabled ? "on" : "off")} | pitch ({snap.Pitch.X:F2}, {snap.Pitch.Y:F2}, {snap.Pitch.Z:F2}) | rot {rotation} | grid {(scene.SnapGridVisible ? "show" : "hide")} | ref {reference} | target ({target.X:F2}, {target.Y:F2}, {target.Z:F2}) quat ({orientation.X:F2}, {orientation.Y:F2}, {orientation.Z:F2}, {orientation.W:F2})]";
+    }
 
     private static SdfBlendOp? ParseBlend(string name) {
         return name.ToLowerInvariant() switch {

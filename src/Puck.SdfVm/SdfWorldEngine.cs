@@ -94,9 +94,17 @@ public sealed class SdfWorldEngine : IDisposable {
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli)
     private const uint ScreenSurfaceBindingIndex = 10; // sdf-world-views.comp (Stage 1 ONLY): screenSurfaces, register t4
     private const uint ScreenLightBindingIndex = 11; // sdf-world-views.comp (Stage 1 ONLY): sdfScreenLights, register t14 — the LAST SRV (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 1)); // 144-byte: float4 rgb+intensity per screen (0..7) + float4 environment (ambientScale, sunScale, pad, pad)
+    private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 5)); // float4 rgb+intensity per screen (0..7) + env (8) + FOUR grid-lock rows (9..12: world grid, object origin+pitchX, object frame quat, object pitchZ+patchRadius) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfGridObjParams
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const uint TileBindingIndex = 3; // matches sdf-world.hlsli's [[vk::binding(3, 0)]]
+    // The tile cull buffer carries THREE planes per (viewport, tile), each of stride
+    // (tileGrid.x * tileGrid.y * viewportCount): plane 0 = the march-start lower bound (the classic beam
+    // output; the ONLY plane cull-args + the compositor read, so their indexing is unchanged), plane 1 =
+    // firstExit, plane 2 = secondEntry — the four-bound teleport's proven-empty gap [firstExit, secondEntry]
+    // (Larsson "The Gunk"). The extra planes are written by sdf-beam and read by sdf-world-views only; a tile
+    // with no proven gap packs firstExit = MaxDistance (teleport disabled), so the plane is a total function.
+    // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in sdf-world.hlsli / sdf-tile.hlsli.
+    private const uint TilePlaneCount = 3;
     private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
     private const uint TimingCapacity = 8; // timestamp slots per pool (headroom over the marks)
     private const uint TimingMarkCount = 4; // frameStart + beam-close + views-close + composite-close
@@ -272,7 +280,9 @@ public sealed class SdfWorldEngine : IDisposable {
         // dynamic-transform buffer. Bound to the views set only (Stage 1 shades; the beam prepass does not).
         m_screenLightBuffer = gpu.StorageBufferFactory.Create(deviceContext: device, sizeBytes: (ulong)m_screenLightScratch.Length);
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
-        m_tileBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(deviceContext: device, sizeBytes: ((ulong)m_viewportCapacity * m_tileGridX * m_tileGridY * sizeof(float)));
+        // Sized for TilePlaneCount planes (marchStart + firstExit + secondEntry — the four-bound teleport); cull-args and
+        // the compositor read only plane 0, so their (viewport, tile) indexing is unaffected by the extra capacity.
+        m_tileBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(deviceContext: device, sizeBytes: ((ulong)TilePlaneCount * m_viewportCapacity * m_tileGridX * m_tileGridY * sizeof(float)));
         // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by the beam
         // prepass alongside it (a UAV, so device-local too), read by Stage 1 to gate its masked map() calls. The
         // buffer is sized for the CONSTRUCTION program's width (ceil(instanceCount/32) uints, at least 1 —
@@ -946,7 +956,24 @@ public sealed class SdfWorldEngine : IDisposable {
 
         var envBase = (MaxScreenSurfaces * 4);
 
-        floats[envBase + 0] = frame.AmbientScale; floats[envBase + 1] = frame.SunScale; floats[envBase + 2] = 0f; floats[envBase + 3] = 0f;
+        // The env entry's zw lanes carry the SLICE debug view's plane selector (axis + offset — see
+        // SdfFrame.DebugSliceAxis); they were spare pads before, so a frame that never sets them uploads the same zeros.
+        floats[envBase + 0] = frame.AmbientScale; floats[envBase + 1] = frame.SunScale; floats[envBase + 2] = frame.DebugSliceAxis; floats[envBase + 3] = frame.DebugSliceOffset;
+
+        // The grid-lock overlay rows (grid-locking §4a): four float4 rows AFTER the env entry (env stays at
+        // MaxScreenSurfaces, load-bearing as the shader's screen-count loop bound). Default 0 = no overlay, so a frame
+        // that never sets the Grid* fields uploads the same zeros. KEEP IN SYNC with sdf-world.hlsli's SdfGridWorld..
+        var gridWorldBase = ((MaxScreenSurfaces + 1) * 4);
+        floats[gridWorldBase + 0] = frame.GridFlags; floats[gridWorldBase + 1] = frame.GridFloorY; floats[gridWorldBase + 2] = frame.GridWorldPitch.X; floats[gridWorldBase + 3] = frame.GridWorldPitch.Y;
+
+        var gridObjOriginBase = ((MaxScreenSurfaces + 2) * 4);
+        floats[gridObjOriginBase + 0] = frame.GridObjectOrigin.X; floats[gridObjOriginBase + 1] = frame.GridObjectOrigin.Y; floats[gridObjOriginBase + 2] = frame.GridObjectOrigin.Z; floats[gridObjOriginBase + 3] = frame.GridObjectPitch.X;
+
+        var gridObjFrameBase = ((MaxScreenSurfaces + 3) * 4);
+        floats[gridObjFrameBase + 0] = frame.GridObjectFrame.X; floats[gridObjFrameBase + 1] = frame.GridObjectFrame.Y; floats[gridObjFrameBase + 2] = frame.GridObjectFrame.Z; floats[gridObjFrameBase + 3] = frame.GridObjectFrame.W;
+
+        var gridObjParamsBase = ((MaxScreenSurfaces + 4) * 4);
+        floats[gridObjParamsBase + 0] = frame.GridObjectPitch.Y; floats[gridObjParamsBase + 1] = frame.GridObjectPatchRadius; floats[gridObjParamsBase + 2] = 0f; floats[gridObjParamsBase + 3] = 0f;
     }
 
     // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint tileGridPacked; float4 rects[5]; }: the

@@ -52,9 +52,20 @@ internal sealed class WorldDisplaceSolidityStage : IPostStage {
     // occluding folds leave a small enclosed-gap floor even when solid (measured ~0.3% clamped); this only trips on
     // GROSS holing well above that — COVERAGE is the real regression catch.
     private const double MaxEnclosedHoleFraction = 0.01;
-    // A background (sky) pixel has a LOW red channel (skyColor tops out ~26/255 in red); the warm emissive blade is
-    // always HIGH red (>= ~150/255 from emissive alone, under any shading). The threshold sits far from both.
-    private const byte SolidRedThreshold = 90;
+    // A background (sky) pixel has a LOW red channel (skyColor tops out ~26/255 in red). The threshold sits in the wide
+    // valley just above it. It was 90 on the premise that a 0.7-emissive blade stays red >= ~150 "under any shading" —
+    // FALSE since the shading wave landed: emissive is still added un-occluded, but the lit color then passes through
+    // the curvature ink-outline/cavity-darken, the 5-tap AO on the ambient fill, distance fog (dimming the far boxes
+    // toward the vanishing point), and coverage AA — which together pull present-blade edges/creases/far-boxes into the
+    // ~40-90 red band on this HIGH-perimeter thin-blade row. A red-90 cut miscounts those as sky, eroding coverage
+    // (~10k px) and inventing enclosed "holes" that are really shaded-but-present blade. Dropping to 40 (still 14 above
+    // the sky ceiling) re-counts shaded blade as blade, while a REAL march hole — pure sky, red ~15-26, punched clean
+    // through a blade — stays below 40 and is still caught: the coverage floor and enclosed cap below are UNCHANGED, so
+    // the teeth keep their full discriminating power. Verified NOT a clamp regression: at the true-sky threshold the
+    // coverage recovers to the CLAMPED calibration (231210 px, above 230705 and far above the unclamped 218861), the
+    // enclosed pixels are inter-box sky slivers (scene geometry, not tunneling — confirmed by overlay), and
+    // world-warp-solidity (a single wide low-perimeter blade, few crevices) still passes untouched.
+    private const byte SolidRedThreshold = 40;
 
     /// <inheritdoc/>
     public string Name => "world-displace-solidity";
@@ -102,7 +113,7 @@ internal sealed class WorldDisplaceSolidityStage : IPostStage {
 
         // Primary teeth: the relief overestimate erodes coverage as grazing rays step over a corrugation crest.
         if (solidPixels < MinBladeCoverage) {
-            return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"the displaced blade row eroded to {solidPixels} blade pixels (< {MinBladeCoverage}; the clamp renders ~230705) — Displace's relief overestimate steps over the blades WITHOUT the Lipschitz step clamp");
+            return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"the displaced blade row eroded to {solidPixels} blade pixels (< {MinBladeCoverage}; the clamp renders ~229867) — Displace's relief overestimate steps over the blades WITHOUT the Lipschitz step clamp");
         }
 
         // Secondary catch (silhouette-agnostic): sky reachable from any border is legitimate background; sky the

@@ -20,8 +20,9 @@ namespace Puck.Demo.World;
 /// <item><term>SCULPT (bare)</term><description>
 /// Left stick = move ghost planar; right stick X = spin ghost yaw; d-pad up/down = scale ghost. South = place;
 /// East = cancel ghost (clears the armed creation); West = cycle a placed creation by ref name (console-loaded
-/// list); North = undo; LeftShoulder = redo; RightShoulder = toggle group-scope reserved (unused here — kept free);
-/// LeftStickClick = save; RightStickClick = enter/exit sculpt (host-level toggle, consumed by the render node).
+/// list); North = undo; LeftShoulder = redo; RightShoulder = toggle grid-snapping (the grid-lock on/off chord; pitch/
+/// ref/rotation stay console-only via world.snap); LeftStickClick = save; RightStickClick = enter/exit sculpt
+/// (host-level toggle, consumed by the render node).
 /// </description></item>
 /// <item><term>SELECT ([LT])</term><description>
 /// Left stick = move SELECTED placement planar; right stick X = rotate it; d-pad up/down = scale it — all three
@@ -236,6 +237,13 @@ internal sealed class WorldSculptController {
 
         if (pressed(arg: GamepadButtons.LeftStickPress)) {
             Save();
+        }
+
+        // The documented-free bare-page slot: toggle grid-snapping (the highest-frequency grid-lock act). Pitch/ref/
+        // rotation stay console-only — a chord can't express typed parameters (the world.pattern precedent).
+        if (pressed(arg: GamepadButtons.RightShoulder)) {
+            m_scene.SetSnapEnabled(enabled: !m_scene.Snap.Enabled);
+            m_narrate($"[world] snap {(m_scene.Snap.Enabled ? "on" : "off")} — world.snap pitch/ref/rot/grid tune it");
         }
     }
 
@@ -603,7 +611,7 @@ internal sealed class WorldSculptController {
             Page.TerrainLights => "TERRAIN/LIGHTS — South adds a slab, East a plaza, West a light, North removes the nearest; left stick resizes, right stick cycles material, d-pad adjusts light intensity",
             Page.WalkOverrides => "WALK OVERRIDES — South paints a blocker, East a walkable, North removes the nearest; left stick resizes the pending rectangle",
             Page.BoundsSaveRepeat => "BOUNDS/SAVE/REPEAT — South saves, East verifies, West clears the selected repeat, North cycles the selected mirror (off/x/z); left stick grows bounds, right stick/d-pad adjust the selected repeat count",
-            _ => "SCULPT — South places the ghost, East clears it, North undoes, LB redoes, left-stick-click saves; left stick moves/right stick spins/d-pad scales the ghost",
+            _ => "SCULPT — South places the ghost, East clears it, North undoes, LB redoes, RB toggles grid-snap, left-stick-click saves; left stick moves/right stick spins/d-pad scales the ghost",
         };
     }
 }

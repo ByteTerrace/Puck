@@ -60,8 +60,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float2 regionSizePx = float2((uint2)(view.region.zw * float2(params.imageExtent)));
     float2 tileMinPx = (float2(id.xy) * float(WorldTileSize));
 
-    // Tiles past the viewport's pixel extent hold no rays — leave them empty.
-    float result = TileEmpty;
+    // Tiles past the viewport's pixel extent hold no rays — leave them empty. `bounds` carries the classic march-start
+    // (bounds.entry, plane 0) plus the four-bound teleport's proven-empty gap (firstExit/secondEntry, planes 1/2);
+    // MaxDistance defaults mean "no gap — teleport disabled" for the outside-viewport tiles (whose planes Stage 1
+    // never reads anyway, since it skips a tile with marchStart < 0).
     bool insideViewport = (
         (tileMinPx.x < regionSizePx.x) &&
         (tileMinPx.y < regionSizePx.y)
@@ -70,13 +72,30 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint maskWordCount = params.instanceMaskWordCount;
     uint maskBase = worldInstanceMaskBase(tileIndex);
     TileCone cone = (TileCone)0;
+    TileBounds bounds;
+    bounds.entry = TileEmpty;
+    bounds.firstExit = MaxDistance;
+    bounds.secondEntry = MaxDistance;
 
     if (insideViewport) {
         float2 tileMaxPx = min((tileMinPx + float(WorldTileSize)), regionSizePx);
 
         cone = buildTileCone(view, (tileMinPx / regionSizePx), (tileMaxPx / regionSizePx));
-        result = coneMarchTile(view, cone);
+        bounds = coneMarchTileBounds(view, cone);
+
+        // FULL-FIELD SLICE OVERRIDE (debug view mode 7 — see the termination/slice split note in renderView): the
+        // slice view must color EVERY pixel of the viewport with the ideal field, so no in-viewport tile may stay
+        // TileEmpty in that mode — an empty tile would be dropped by the cull-args bbox AND flattened by Stage 2's
+        // empty-tile test, truncating the isolines into 16-px tile staircases around the shape. Forcing a 0.0
+        // march-start keeps both downstream consumers on their normal "live tile" path; renderView skips the march
+        // for slice anyway, so the forced tiles never pay a wasted march. Every OTHER mode leaves this kernel
+        // byte-identical (the override keys exactly on the viewport row's forward.w mode lane).
+        if (((int)round(view.forward.w) == DebugViewModeSlice) && (bounds.entry == TileEmpty)) {
+            bounds.entry = 0.0;
+        }
     }
+
+    float result = bounds.entry;
 
     // The same tile cone drives both the march-start cull and the instance cull. A tile the cone already cleared
     // (TileEmpty), or one outside the viewport, has provably DEAD mask words: renderView gates its entire march — and
@@ -101,5 +120,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    tiles[tileIndex] = result;
+    tiles[worldTileMarchStartIndex(tileIndex)] = result;
+    // The four-bound teleport's extra planes (Stage 1 reads them; cull-args + the compositor ignore them). Always
+    // written so the device-local buffer holds a defined, total-function gap for every (viewport, tile) this frame.
+    tiles[worldTileFirstExitIndex(tileIndex)] = bounds.firstExit;
+    tiles[worldTileSecondEntryIndex(tileIndex)] = bounds.secondEntry;
 }

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets;
+using Puck.Demo.Editing;
 using static Puck.Demo.CommandArgs;
 
 namespace Puck.Demo.World;
@@ -509,6 +510,131 @@ internal static class WorldCommands {
             : $"[world.wire: screen {screenIndex} ← {source}]");
     }
 
+    /// <summary>The grid-lock verb family — <c>world.snap on|off</c>, <c>world.snap pitch &lt;x y z&gt;|&lt;n&gt;</c>,
+    /// <c>world.snap rot &lt;90|45|off&gt;</c>, <c>world.snap ref [&lt;id&gt;]|clear</c>, <c>world.snap grid
+    /// show|hide</c>. Distinct from <c>world.grid</c> (the walk-grid tessellation — a NAME COLLISION the map warns
+    /// about). Session-only authoring state; every branch echoes the resulting state (the console-is-control-plane
+    /// contract).</summary>
+    /// <param name="scene">The live scene.</param>
+    /// <param name="args">The subcommand and its arguments.</param>
+    public static string Snap(WorldScene scene, string[] args) {
+        if (args.Length == 0) {
+            return SnapState(scene: scene);
+        }
+
+        switch (args[0].ToLowerInvariant()) {
+            case "on": {
+                scene.SetSnapEnabled(enabled: true);
+
+                return SnapState(scene: scene);
+            }
+            case "off": {
+                scene.SetSnapEnabled(enabled: false);
+
+                return SnapState(scene: scene);
+            }
+            case "pitch": {
+                return SnapPitch(scene: scene, args: args);
+            }
+            case "rot": {
+                return SnapRotate(scene: scene, args: args);
+            }
+            case "ref": {
+                return SnapReference(scene: scene, args: args);
+            }
+            case "grid": {
+                return SnapGrid(scene: scene, args: args);
+            }
+            default: {
+                return SnapUsage;
+            }
+        }
+    }
+
+    private const string SnapUsage = "[world.snap: usage — world.snap on|off | pitch <x> <y> <z> (or <n>) | rot <90|45|off> | ref [<id>] (or clear) | grid <show|hide>]";
+
+    private static string SnapState(WorldScene scene) {
+        var snap = scene.Snap;
+        var target = scene.TargetPosition;
+        var reference = ((snap.Reference is { } captured)
+            ? $"({captured.Origin.X:F2}, {captured.Origin.Y:F2}, {captured.Origin.Z:F2})"
+            : "none");
+        var rotation = (snap.Rotation switch {
+            RotationSnap.Deg90 => "90",
+            RotationSnap.Deg45 => "45",
+            _ => "off",
+        });
+
+        return $"[world.snap: {(snap.Enabled ? "on" : "off")} | pitch ({snap.Pitch.X:F2}, {snap.Pitch.Y:F2}, {snap.Pitch.Z:F2}) | rot {rotation} | grid {(scene.SnapGridVisible ? "show" : "hide")} | ref {reference} | target ({target.X:F2}, {target.Y:F2}, {target.Z:F2}) yaw {scene.TargetYawDegrees:F1}°]";
+    }
+
+    private static string SnapPitch(WorldScene scene, string[] args) {
+        if ((args.Length == 2) && TryParseFloat(text: args[1], value: out var uniform)) {
+            scene.SetSnapPitch(pitch: new Vector3(uniform));
+
+            return SnapState(scene: scene);
+        }
+
+        if (TryParseFloats(args: args, count: 3, start: 1, values: out var xyz)) {
+            scene.SetSnapPitch(pitch: new Vector3(xyz[0], xyz[1], xyz[2]));
+
+            return SnapState(scene: scene);
+        }
+
+        return "[world.snap pitch: usage — world.snap pitch <x> <y> <z>, or world.snap pitch <n>]";
+    }
+
+    private static string SnapRotate(WorldScene scene, string[] args) {
+        RotationSnap? mode = (((args.Length >= 2) ? args[1].ToLowerInvariant() : null) switch {
+            "90" => RotationSnap.Deg90,
+            "45" => RotationSnap.Deg45,
+            "off" or "none" or "0" => RotationSnap.Off,
+            _ => null,
+        });
+
+        if (mode is not { } resolved) {
+            return "[world.snap rot: usage — world.snap rot <90|45|off>]";
+        }
+
+        scene.SetSnapRotation(rotation: resolved);
+
+        return SnapState(scene: scene);
+    }
+
+    private static string SnapReference(WorldScene scene, string[] args) {
+        if (args.Length == 1) {
+            return (scene.TrySetSnapReferenceSelected(echo: out var echo) ? $"[world.snap: {echo}]" : $"[world.snap ref: {echo}]");
+        }
+
+        if (string.Equals(a: args[1], b: "clear", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            scene.ClearSnapReference();
+
+            return "[world.snap: reference cleared — world-lattice only]";
+        }
+
+        if (TryParseInt(text: args[1], value: out var id)) {
+            return (scene.TrySetSnapReferenceById(id: id, echo: out var echo) ? $"[world.snap: {echo}]" : $"[world.snap ref: {echo}]");
+        }
+
+        return "[world.snap ref: usage — world.snap ref [<id>], or world.snap ref clear]";
+    }
+
+    private static string SnapGrid(WorldScene scene, string[] args) {
+        if ((args.Length >= 2) && string.Equals(a: args[1], b: "show", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            scene.SetSnapGridVisible(visible: true);
+
+            return SnapState(scene: scene);
+        }
+
+        if ((args.Length >= 2) && string.Equals(a: args[1], b: "hide", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            scene.SetSnapGridVisible(visible: false);
+
+            return SnapState(scene: scene);
+        }
+
+        return "[world.snap grid: usage — world.snap grid <show|hide>]";
+    }
+
     private static string CameraAdd(WorldScene scene, EditHistory<WorldScene.Snapshot>? history, string[] args) {
         // world.camera add                    -> lot center, level
         // world.camera add x y z              -> that world position, level
@@ -718,9 +844,11 @@ internal static class WorldCommands {
     }
 
     private static void SetTargetPositionExact(WorldScene scene, Vector3 position) {
-        var delta = (position - scene.TargetPosition);
-
-        scene.Move(deltaSeconds: 1f, planar: new Vector2(delta.X, delta.Z));
+        // The scene's exact-set is path-independent (snaps the requested absolute position, no magnetize band) and
+        // resyncs the pad accumulator — the correct semantics for a console SET (the analog Move path integrates a
+        // rate and retains the sub-pitch intent for the drag). This also fixes the prior 4x delta the integrator
+        // round-trip produced (Move's moveSpeed=4 with deltaSeconds=1).
+        scene.SetTargetPositionExact(requested: position);
     }
 
     private static void SetTargetYawExact(WorldScene scene, float yawDegrees) {

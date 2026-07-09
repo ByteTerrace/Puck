@@ -123,4 +123,29 @@ public enum SdfOp : uint {
     /// the axis symmetries, keep authored content on the plane's positive side (the kept half); content straddling the
     /// plane is folded onto itself.</summary>
     SymmetryPlane = 26,
+    /// <summary>Opens a SCOPED field accumulator — the first half of the <see cref="PushField"/>/<see cref="PopField"/>
+    /// pair (<see cref="SdfProgramBuilder.PushField"/>). Saves the running nearest-surface distance into a one-deep slot
+    /// and reseeds a FRESH accumulator (<c>SDF_FAR_DISTANCE</c>), so every accumulator-reading op emitted until the
+    /// matching <see cref="PopField"/> — the intersection family, and the <see cref="Onion"/>/<see cref="Dilate"/>/
+    /// <see cref="Displace"/> field ops — acts on THIS scope's field alone, not on everything emitted before it. That is
+    /// the whole cure for the flat accumulator's "a field op shells the entire scene" bug: an <c>Onion</c> inside a scope
+    /// shells only the scope's own shapes. A scope touches the FIELD, never the evaluation POINT (localPosition /
+    /// distanceScale / the wallpaper material delta), so <see cref="ResetPoint"/> semantics are unchanged and per-shape
+    /// cull bounds after the Push in the same chain stay sound. Depth is capped at
+    /// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/> (a shader-constant + validator rule, NOT part of the packed
+    /// layout). Op-unused (scope-free) programs are byte-identical. KEEP IN SYNC with SDF_OP_PUSH_FIELD in
+    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    PushField = 27,
+    /// <summary>Closes the scope opened by the matching <see cref="PushField"/> and composes the scope's accumulated
+    /// field back into the saved parent accumulator as a single CANDIDATE — reusing the SHAPE blend tail (a POP is just
+    /// another candidate), so it costs no second copy of the blend switch. The compose blend + smooth radius are carried
+    /// on the POP instruction (Blend lane + Data1.x, <see cref="SdfProgramBuilder.PushField"/>'s arguments): a Union
+    /// compose makes the whole scope FAR-NEUTRAL (and so maskable / segment-eligible again — the culling payoff), while an
+    /// intersection-family compose composes the scope globally (unmaskable, exactly like an unscoped intersection). The
+    /// scope's candidate is ALREADY in world units (its shapes were distance-scaled as they blended in) and must NOT be
+    /// re-scaled or take the point material delta (the fusion trap). Its material tie-break matches SHAPE's (strict
+    /// compare — the parent keeps its material on a tie). A CHAMFER compose is the one non-1-Lipschitz case: it folds a
+    /// conservative √2 into <see cref="SdfProgram.StepScale"/>. KEEP IN SYNC with SDF_OP_POP_FIELD in
+    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    PopField = 28,
 }
