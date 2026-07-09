@@ -6,13 +6,34 @@ namespace Puck.Demo.SdfDebug;
 
 /// <summary>The workload family a bench run measures — <see cref="Shapes"/> (each debuggable primitive fullscreen),
 /// <see cref="Ops"/> (a fixed torus + one modifier, marginal-cost vs the bare subject), <see cref="Instances"/>
-/// (a 3D grid of N real instances of one shape), and <see cref="Carves"/> (a fixed subject + N subtraction carves in a
-/// placement family — the runtime-carving cost profile).</summary>
+/// (a 3D grid of N real instances of one shape), <see cref="Carves"/> (a fixed subject + N subtraction carves in a
+/// placement family — the runtime-carving cost profile), and <see cref="Storm"/> (the motion/churn ladder — every
+/// instance moves, or the whole program rebuilds, each produced frame; see <see cref="SdfBenchStormMode"/>).</summary>
 public enum SdfBenchWorkload {
     Shapes,
     Ops,
     Instances,
     Carves,
+    Storm,
+}
+
+/// <summary>The churn axis a <see cref="SdfBenchWorkload.Storm"/> config exercises. <see cref="Motion"/> — N DYNAMIC
+/// instances that ALL move per produced frame through the per-frame dynamic-transform buffer: the host bins only
+/// STATIC instances into the uniform grid, so a per-frame-moving instance rides the FLAT always-tested list and beam
+/// returns O(moving-n) BY DESIGN — this rung is that cliff made measurable (the GPU-built-grid fork needs it before the
+/// machine-fleet arc). <see cref="Rebuild"/> — the SAME counts of STATIC instances but a full program REBUILD every
+/// produced frame (a per-frame revision bump forces BuildProgram + UploadProgram + the packer), so the ladder measures
+/// the authoring/carve path's upload+pack ceiling at scale. <see cref="Camera"/> — one mid-size STATIC workload whose
+/// bench camera pose orbits a FULL REVOLUTION across the sample window (still deterministic per produced frame), the
+/// re-cull cost of a moving view over a still scene. The mode rides each config's label so the table reads it back
+/// (<c>storm x1024</c>, <c>storm rebuild x1024</c>, <c>storm camera x1024</c>).
+/// <para>DEFERRED to the many-eyes arc: a <c>monitors</c> rung (N small viewports refreshing round-robin) — viewport
+/// right-sizing does not exist yet (naive 32-slot scaling is a 262 MB mask buffer at the instance cap), so the honest
+/// aggregate-of-per-viewport-fixed-costs measurement waits on that work (docs/sdf-backlog.md §the many-eyes arc).</para></summary>
+public enum SdfBenchStormMode {
+    Motion,
+    Rebuild,
+    Camera,
 }
 
 /// <summary>The placement family a <see cref="SdfBenchWorkload.Carves"/> run uses — <see cref="Clustered"/> (carves
@@ -55,7 +76,7 @@ public enum SdfBenchOp {
 /// Carves read <see cref="InstanceCount"/>, Carves also reads <see cref="CarveFamily"/>). A run is an ordered list of
 /// these; the runner emits, warms, and samples each in turn. <see cref="CarveFamily"/> defaults so the non-carve call
 /// sites stay unchanged.</summary>
-public readonly record struct SdfBenchConfig(string Label, SdfBenchWorkload Workload, SdfDebugShapeKind Shape, SdfBenchOp Op, int InstanceCount, SdfBenchCarveFamily CarveFamily = SdfBenchCarveFamily.Clustered);
+public readonly record struct SdfBenchConfig(string Label, SdfBenchWorkload Workload, SdfDebugShapeKind Shape, SdfBenchOp Op, int InstanceCount, SdfBenchCarveFamily CarveFamily = SdfBenchCarveFamily.Clustered, SdfBenchStormMode StormMode = SdfBenchStormMode.Motion);
 
 /// <summary>One configuration's measured timing: the median plus min/max of each per-pass GPU-ms channel over the
 /// sample window. <see cref="HasTimings"/> is false when the window collected no timing samples (PUCK_TIMING off or no
@@ -104,6 +125,30 @@ public sealed class SdfBenchScene {
     internal const float InstanceSpacing = 1.25f;
     internal const float InstanceBoundRadius = 0.6f;
 
+    // The STORM ladder (the motion/churn family). Tops out at 4096 = the dynamic-transform capacity floor the render
+    // assembly reserves for the mode (SdfDebugMode.WorstCaseDynamicTransformCapacity), so a storm run can never ask
+    // for more moving slots than the engine was constructed with.
+    internal const int MaxStormInstances = 4096;
+    private static readonly int[] StormLadder = [64, 256, 1024, 4096];
+    // The single fast-camera rung's static count (mid-size — enough to make the re-cull cost read, small enough to
+    // stay well framed while the pose sweeps a full revolution).
+    private const int StormCameraRung = 1024;
+    // The deterministic storm motion (all phases are pure functions of the instance index + the produced-frame counter;
+    // no wall clock, no RNG). Amplitudes stay under half the InstanceSpacing so orbiting neighbours never overlap and
+    // every copy holds inside the camera's framing (and inside MaxDistance).
+    private const float StormOrbitRadius = 0.32f;
+    private const float StormBobAmplitude = 0.28f;
+    private const float StormOrbitSpeed = 0.11f; // radians of orbit per produced frame
+    private const float StormBobSpeed = 0.07f;   // radians of bob phase per produced frame
+    private const float StormSpinSpeed = 0.05f;  // radians of per-instance Y spin per produced frame
+    private const float StormGoldenAngle = 2.399963f; // π · (3 − √5) — the per-instance phase spread
+    // A moving instance's compact per-copy size (a small sphere). The full orbit+bob displacement is baked into the
+    // slot's per-frame POSITION, and a dynamic instance's bound center resolves as (slot position + boundOffset), so the
+    // bound tracks the mover — the covering radius need only hold the sphere itself (plus float-safety padding), NOT the
+    // orbit reach.
+    internal const float StormInstanceRadius = 0.28f;
+    internal const float StormBoundRadius = (StormInstanceRadius + 0.05f);
+
     // The default sweep ladder.
     private static readonly int[] DefaultSweep = [64, 256, 1024, 4096, 16384];
     // The carve ladder (per family). Tops out at 4096 = SdfDebugScene.MaxCarves (the live pool cap), so the bench and
@@ -127,6 +172,14 @@ public sealed class SdfBenchScene {
     private int m_revision;
     private bool m_anyTimingsSeen;
     private string m_runLabel = "";
+    // The produced-frame counter the STORM family's deterministic motion + camera sweep read (advanced once per
+    // produced frame while a run is in flight — pure frame count, never the wall clock). Reset to 0 at each run's
+    // Begin so a run reproduces bit-for-bit.
+    private int m_producedFrame;
+    // The storm MOTION rung's per-frame dynamic transforms — grown to the active config's instance count and repacked
+    // each frame from (index, m_producedFrame). Owned here; the frame source reads it as the frame's DynamicTransforms
+    // while a motion config is live (see TryPackStormTransforms).
+    private Puck.SdfVm.DynamicTransform[] m_stormTransforms = [];
 
     // Header facts, refreshed each Advance while running (constant during a run) — the report names them.
     private uint m_width;
@@ -158,11 +211,29 @@ public sealed class SdfBenchScene {
     /// <summary>The configuration currently being emitted (valid only while <see cref="Running"/>).</summary>
     public SdfBenchConfig ActiveConfig => m_configs[m_index];
 
-    /// <summary>The fixed deterministic orbit pose framing the active configuration's whole workload, or null when no
-    /// run is in flight (the debug controller's pad orbit resumes). Distance is computed per config; yaw/pitch are
-    /// constant.</summary>
-    public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame =>
-        (Running ? (Vector3.Zero, OrbitYaw, OrbitPitch, ComputeDistance(config: ActiveConfig), false) : null);
+    /// <summary>The deterministic orbit pose framing the active configuration's whole workload, or null when no run is
+    /// in flight (the debug controller's pad orbit resumes). Distance is computed per config; yaw/pitch are constant
+    /// FOR EVERY workload except the storm CAMERA rung, whose yaw sweeps a full revolution across the sample window
+    /// (m_producedFrame-driven, so still deterministic) — every other config returns the byte-identical fixed pose the
+    /// ladder tables have always compared against.</summary>
+    public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame {
+        get {
+            if (!Running) {
+                return null;
+            }
+
+            var config = ActiveConfig;
+            var yaw = OrbitYaw;
+
+            if ((config.Workload == SdfBenchWorkload.Storm) && (config.StormMode == SdfBenchStormMode.Camera)) {
+                // One revolution per sample-window's worth of produced frames — a moving VIEW over a still scene, so
+                // every sampled frame re-culls at a fresh angle. Deterministic (integer frame count · a fixed step).
+                yaw += (m_producedFrame * (MathF.Tau / MathF.Max(1, m_sampleFrames)));
+            }
+
+            return (Vector3.Zero, yaw, OrbitPitch, ComputeDistance(config: config), false);
+        }
+    }
 
     /// <summary>Sets the warm-up frame count (clamped to ≥ 0). Rejected mid-run.</summary>
     /// <returns>A status line.</returns>
@@ -272,6 +343,83 @@ public sealed class SdfBenchScene {
         return Begin(label: "carves", configs: configs);
     }
 
+    /// <summary>Starts the STORM run — the motion/churn ladder. Three families, one battery: the MOTION ladder
+    /// (64/256/1024/4096 DYNAMIC instances all moving per frame — the always-list cliff), the REBUILD ladder (the same
+    /// counts STATIC but a full program rebuild every frame — the upload/pack ceiling), and one CAMERA rung (a mid-size
+    /// static workload under a pose sweeping a full revolution across the sample window). Each rung is one table row; the
+    /// mode is in the label (e.g. <c>storm x1024</c>, <c>storm rebuild x1024</c>, <c>storm camera x1024</c>).</summary>
+    public string StartStorm() {
+        var configs = new List<SdfBenchConfig>();
+
+        foreach (var n in StormLadder) {
+            configs.Add(item: new SdfBenchConfig(Label: $"storm x{n}", Workload: SdfBenchWorkload.Storm, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: n, StormMode: SdfBenchStormMode.Motion));
+        }
+
+        foreach (var n in StormLadder) {
+            configs.Add(item: new SdfBenchConfig(Label: $"storm rebuild x{n}", Workload: SdfBenchWorkload.Storm, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: n, StormMode: SdfBenchStormMode.Rebuild));
+        }
+
+        configs.Add(item: new SdfBenchConfig(Label: $"storm camera x{StormCameraRung}", Workload: SdfBenchWorkload.Storm, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: StormCameraRung, StormMode: SdfBenchStormMode.Camera));
+
+        return Begin(label: "storm", configs: configs);
+    }
+
+    /// <summary>Whether the active configuration is a storm MOTION rung, and if so packs this produced frame's dynamic
+    /// transforms (grown to the config's instance count) into <paramref name="transforms"/> — the frame source supplies
+    /// them as the frame's <c>DynamicTransforms</c> so the moving instances ride the per-frame buffer without a program
+    /// rebuild. Every non-motion state (idle, the rebuild/camera rungs, every other workload) returns false, so the room's
+    /// own dynamic-transform buffer is used unchanged.</summary>
+    public bool TryPackStormTransforms(out Puck.SdfVm.DynamicTransform[] transforms) {
+        transforms = [];
+
+        if (!Running) {
+            return false;
+        }
+
+        var config = ActiveConfig;
+
+        if ((config.Workload != SdfBenchWorkload.Storm) || (config.StormMode != SdfBenchStormMode.Motion)) {
+            return false;
+        }
+
+        var n = Math.Clamp(value: config.InstanceCount, min: 1, max: MaxStormInstances);
+
+        if (m_stormTransforms.Length != n) {
+            m_stormTransforms = new Puck.SdfVm.DynamicTransform[n];
+        }
+
+        var grid = GridDimension(count: n);
+        var half = (((grid - 1) * InstanceSpacing) * 0.5f);
+        var frame = (float)m_producedFrame;
+
+        for (var index = 0; (index < n); index++) {
+            var ix = (index % grid);
+            var iy = ((index / grid) % grid);
+            var iz = (index / (grid * grid));
+            var basePosition = new Vector3(
+                ((ix * InstanceSpacing) - half),
+                ((iy * InstanceSpacing) - half),
+                ((iz * InstanceSpacing) - half)
+            );
+            var phase = (index * StormGoldenAngle);
+            var orbit = (phase + (frame * StormOrbitSpeed));
+            var displaced = new Vector3(
+                (basePosition.X + (StormOrbitRadius * MathF.Cos(x: orbit))),
+                (basePosition.Y + (StormBobAmplitude * MathF.Sin(x: (phase + (frame * StormBobSpeed))))),
+                (basePosition.Z + (StormOrbitRadius * MathF.Sin(x: orbit)))
+            );
+
+            m_stormTransforms[index] = new Puck.SdfVm.DynamicTransform(
+                Position: displaced,
+                Orientation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (phase + (frame * StormSpinSpeed)))
+            );
+        }
+
+        transforms = m_stormTransforms;
+
+        return true;
+    }
+
     /// <summary>The worst-case frame budget a run needs, so a script can size its <c>step</c> gates: per config,
     /// warm-up + samples, plus one settle frame each.</summary>
     public int EstimatedFramesFor(int configCount) => (configCount * (m_warmFrames + m_sampleFrames + 1));
@@ -287,6 +435,18 @@ public sealed class SdfBenchScene {
         m_width = width;
         m_height = height;
         m_backendIsDirectX = backendIsDirectX;
+
+        // Advance the deterministic frame clock the storm family reads (motion phases + the camera sweep). One tick per
+        // produced frame — Advance runs BEFORE this frame's CaptureFrame in the render node's produce loop, so the tick
+        // and any rebuild it forces land THIS frame.
+        m_producedFrame++;
+
+        // The storm REBUILD rung forces a full program rebuild every produced frame — bump the revision so the frame
+        // source's programChanged check fires and BuildProgram + UploadProgram + the packer run again (the measurement).
+        // The motion rung rides the dynamic-transform buffer instead (no rebuild); the camera rung rides the pose.
+        if ((ActiveConfig.Workload == SdfBenchWorkload.Storm) && (ActiveConfig.StormMode == SdfBenchStormMode.Rebuild)) {
+            m_revision++;
+        }
 
         if (m_phase == Phase.Warm) {
             if (--m_framesLeft <= 0) {
@@ -353,6 +513,7 @@ public sealed class SdfBenchScene {
         m_configs.AddRange(collection: configs);
         m_results.Clear();
         m_index = 0;
+        m_producedFrame = 0;
         m_anyTimingsSeen = false;
         m_runLabel = label;
 
@@ -440,7 +601,9 @@ public sealed class SdfBenchScene {
     // fullscreen shape (shapes/ops) a fixed distance keeps the camera still; for an instance grid it scales with the
     // grid's half-extent so every copy stays in frame and inside the march budget.
     private static float ComputeDistance(SdfBenchConfig config) {
-        if (config.Workload != SdfBenchWorkload.Instances) {
+        // The instance-grid workloads (Instances + every Storm rung) frame the whole grid; a single fullscreen subject
+        // (shapes/ops/carves) holds a fixed distance so the camera never reframes across the run.
+        if ((config.Workload != SdfBenchWorkload.Instances) && (config.Workload != SdfBenchWorkload.Storm)) {
             return SingleShapeDistance;
         }
 

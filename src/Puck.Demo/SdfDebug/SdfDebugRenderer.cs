@@ -318,10 +318,43 @@ public sealed class SdfDebugRenderer {
                 EmitBenchCarves(builder: builder, family: config.CarveFamily, count: config.InstanceCount, material: material);
 
                 break;
+            case SdfBenchWorkload.Storm:
+                if (config.StormMode == SdfBenchStormMode.Motion) {
+                    // The MOTION rung: N DYNAMIC instances riding the per-frame transform buffer (the always-list cliff).
+                    EmitStorm(builder: builder, count: config.InstanceCount, material: material);
+                }
+                else {
+                    // The REBUILD + CAMERA rungs: N STATIC instances (grid-cullable) — rebuild bumps the revision every
+                    // frame (upload/pack cost), camera sweeps the pose (re-cull cost); neither moves the geometry.
+                    EmitInstances(builder: builder, shape: config.Shape, count: config.InstanceCount, material: material);
+                }
+
+                break;
             default:
                 _ = builder.ResetPoint().Sphere(radius: 1f, material: material);
 
                 break;
+        }
+    }
+
+    /// <summary>Emits <paramref name="count"/> DYNAMIC instances of a compact sphere, each on its OWN dynamic-transform
+    /// slot (instance i rides slot i), so all move per produced frame purely through the frame's dynamic-transform buffer
+    /// — no program rebuild. The host bins only STATIC instances into the uniform grid, so these ride the beam's FLAT
+    /// always-tested list by design: this is the workload that exposes the O(moving-n) beam/mask cliff. Its per-frame
+    /// transforms come from <see cref="SdfBenchScene.TryPackStormTransforms"/> (deterministic: instance index +
+    /// produced-frame counter). The count is clamped to the storm ceiling, which the render assembly reserves dynamic-
+    /// transform capacity for (<see cref="SdfBenchScene.MaxStormInstances"/>).</summary>
+    public void EmitStorm(SdfProgramBuilder builder, int count, int material) {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        var n = Math.Clamp(value: count, min: 0, max: Math.Min(SdfBenchScene.MaxStormInstances, SdfProgramBuilder.MaxInstances));
+
+        for (var index = 0; (index < n); index++) {
+            // boundOffset zero: the whole orbit+bob displacement is baked into the slot's per-frame position, so the
+            // instance's bound (center = slot position + offset) tracks the mover and need only cover the sphere.
+            builder.BeginInstanceDynamic(slot: index, boundOffset: Vector3.Zero, boundRadius: SdfBenchScene.StormBoundRadius);
+            _ = builder.ResetPoint().TransformDynamic(slot: index).Sphere(radius: SdfBenchScene.StormInstanceRadius, material: material);
+            builder.EndInstance();
         }
     }
 
@@ -389,7 +422,14 @@ public sealed class SdfDebugRenderer {
 
     /// <summary>Folds the bench WORST CASE into the frame source's capacity probe: <see cref="SdfProgramBuilder.MaxInstances"/>
     /// instances of the WORDIEST single shape (a lifted Star bakes the most constants) — so <c>sdf.bench instances 4096</c>
-    /// always fits the frozen program/instance envelope. Never rendered.</summary>
+    /// always fits the frozen program/instance envelope. Never rendered.
+    /// <para>STORM does NOT grow this probe. Its worst rung is 4096 DYNAMIC spheres
+    /// (<see cref="SdfBenchScene.MaxStormInstances"/>); 4096 &lt; 16384 (MaxInstances) on the instance axis, and a
+    /// dynamic sphere instance (BeginInstanceDynamic + ResetPoint + TransformDynamic + Sphere) is FEWER words than a
+    /// lifted Star, so 16384 Stars dominates both the word and instance dimensions this probe already reserves. The one
+    /// axis storm DOES grow is DYNAMIC-TRANSFORM capacity — 4096 moving slots vs the room's few dozen — but that floor
+    /// is a SEPARATE render-assembly reservation (the frame source's WorstCaseDynamicTransformCapacity →
+    /// SdfWorldRenderSpec.DynamicTransformCapacity), NOT this word/instance probe, so nothing here changes for it.</para></summary>
     public void EmitBenchProbe(SdfProgramBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
 

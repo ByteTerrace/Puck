@@ -157,7 +157,7 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             name: "sdf.info"
         );
         yield return WithArgs(
-            description: "The SDF perf-bench (needs the sdf mode active + PUCK_TIMING=1): sdf.bench shapes | ops | carves | instances <shape> <n> | sweep [shape] (ladder 64/256/1024/4096) | warm <n> | frames <n> | abort. Runs async across frames — progress + a fixed-width table print to stdout (step past it).",
+            description: "The SDF perf-bench (needs the sdf mode active + PUCK_TIMING=1): sdf.bench shapes | ops | carves | storm | instances <shape> <n> | sweep [shape] (ladder 64/256/1024/4096) | warm <n> | frames <n> | abort. storm = the motion/churn ladder (moving instances + per-frame rebuild + a camera sweep). Runs async across frames — progress + a fixed-width table print to stdout (step past it).",
             handler: (context, args) => new CommandResult(HandleBench(args: args)),
             name: "sdf.bench"
         );
@@ -266,7 +266,7 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
         var bench = mode.Bench;
 
         if (args.Length == 0) {
-            return $"[sdf.bench: shapes | ops | carves | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort — warm={bench.WarmFrames} samples={bench.SampleFrames}]";
+            return $"[sdf.bench: shapes | ops | carves | storm | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort — warm={bench.WarmFrames} samples={bench.SampleFrames}]";
         }
 
         switch (args[0].ToLowerInvariant()) {
@@ -282,6 +282,8 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
                 return (RequireBenchMode(mode: mode) ?? bench.StartOps());
             case "carves":
                 return (RequireBenchMode(mode: mode) ?? bench.StartCarves());
+            case "storm":
+                return (RequireBenchMode(mode: mode) ?? bench.StartStorm());
             case "instances":
                 return HandleBenchInstances(mode: mode, bench: bench, args: args);
             case "sweep": {
@@ -290,7 +292,7 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
                 return (RequireBenchMode(mode: mode) ?? bench.StartSweep(shape: shape));
             }
             default:
-                return $"[sdf.bench: '{args[0]}' — shapes | ops | carves | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort]";
+                return $"[sdf.bench: '{args[0]}' — shapes | ops | carves | storm | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort]";
         }
     }
 

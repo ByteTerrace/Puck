@@ -578,6 +578,15 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
 
         PackDynamicTransforms(renderOrigin: renderOrigin, alpha: interpolationAlpha);
 
+        // While a STORM MOTION bench rung is live, the moving instances ride a per-frame dynamic-transform buffer the
+        // bench packs (deterministic from its produced-frame counter); its length matches the storm program's dynamic-
+        // slot count, and the render assembly reserved DynamicTransformCapacity for its ceiling
+        // (WorstCaseDynamicTransformCapacity). Every other state — the room, the debug subject, the non-motion bench
+        // rungs (static geometry, zero dynamic slots) — uses the room's own packed transforms unchanged.
+        var dynamicTransforms = ((m_sdfDebug.Active && m_sdfDebug.TryPackBenchDynamicTransforms(out var benchDynamicTransforms))
+            ? benchDynamicTransforms
+            : (IReadOnlyList<DynamicTransform>)m_dynamicTransforms);
+
         // While immersed the room is UNLIT (RoomLightFactor 0), so the letterbox margins around a contained screen
         // render BLACK — a native handheld/emulator look — easing up to the arcade mood as the reveal lights the room.
         var roomLight = m_director.RoomLightFactor;
@@ -624,7 +633,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             // dual; true swaps back to the 4-tap finite-difference probe. A pure frame flag (no geometry), so it rides
             // the same per-frame channel as the slice lanes above.
             UseFiniteDifferenceNormals = m_sdfDebug.UseFiniteDifferenceNormals,
-            DynamicTransforms = m_dynamicTransforms,
+            DynamicTransforms = dynamicTransforms,
             // The grid-lock overlay channel (grid-locking §4), threaded into SdfFrame's Grid* fields exactly like the
             // slice lanes above (the active editor wrote the locals; all-zero outside an editor).
             GridFlags = gridFlags,
@@ -1522,6 +1531,14 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     /// <summary>The instance-count floor the engine's mask buffer must reserve (see
     /// <see cref="WorstCaseProgramWordCapacity"/>).</summary>
     public int WorstCaseInstanceCapacity => (m_worstCase ??= MeasureWorstCaseEnvelope()).Instances;
+
+    /// <summary>The dynamic-transform slot FLOOR the render assembly reserves — the max of the room's own moving-slot
+    /// population and the SDF-debug mode's storm-bench ceiling (read through the composed facade). The engine sizes its
+    /// per-frame dynamic-transform buffer ONCE at construction, so a storm MOTION program (up to that many moving
+    /// instances) can only upload if this floor was passed to the assembly — the room's small population never
+    /// approaches it, so this is entirely the storm reservation (a one-time buffer sizing; the reserved-but-unused
+    /// slots cost no per-frame work outside a storm run).</summary>
+    public int WorstCaseDynamicTransformCapacity => Math.Max(m_dynamicTransformCount, m_sdfDebug.WorstCaseDynamicTransformCapacity);
 
     private (int Words, int Instances) MeasureWorstCaseEnvelope() {
         var fullBootMask = ((m_room.Consoles.Count >= 32) ? uint.MaxValue : ((1u << m_room.Consoles.Count) - 1u));

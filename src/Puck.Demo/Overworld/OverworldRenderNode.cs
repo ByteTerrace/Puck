@@ -1097,6 +1097,10 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 // change forgets to grow the probe with it.
                 InstanceCapacity = frameSource.WorstCaseInstanceCapacity,
                 ProgramWordCapacity = frameSource.WorstCaseProgramWordCapacity,
+                // The dynamic-transform slot floor: the room's own movers, raised to the SDF-debug storm bench's motion
+                // ceiling so a `sdf.bench storm` motion rung (up to 4096 per-frame-moving instances) fits the engine's
+                // once-sized dynamic-transform buffer.
+                DynamicTransformCapacity = frameSource.WorstCaseDynamicTransformCapacity,
                 ScreenSources = BuildScreenSources(),
                 ScreenLights = BuildScreenLights(),
                 // Screen-surface transforms: the frame source implements ISdfFrameSource.ScreenSurfaceTransforms

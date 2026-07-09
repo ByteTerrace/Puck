@@ -34,6 +34,28 @@ public sealed class SdfDebugMode {
     /// bench workload rather than the debug subject).</summary>
     public bool BenchRunning => m_bench.Running;
 
+    /// <summary>The dynamic-transform slot count the render assembly must RESERVE for this mode — the storm bench's
+    /// motion ceiling (<see cref="SdfBenchScene.MaxStormInstances"/> moving instances). The engine sizes its per-frame
+    /// dynamic-transform buffer ONCE at construction, so a storm motion program (up to this many dynamic slots) can only
+    /// upload if the render assembly's <c>DynamicTransformCapacity</c> floor was raised to it. Presentation only — the
+    /// room's own transforms sit far below this, and the reserved-but-unused slots cost one buffer allocation, no
+    /// per-frame work. An INSTANCE property (not a const) so the frame source reads it through the already-composed
+    /// facade instead of naming this type statically — that source sits at its exact analyzer coupling ceiling.</summary>
+    public int WorstCaseDynamicTransformCapacity => SdfBenchScene.MaxStormInstances;
+
+    /// <summary>Whether the active bench config is a storm MOTION rung, and if so packs this produced frame's dynamic
+    /// transforms (see <see cref="SdfBenchScene.TryPackStormTransforms"/>) — the frame source supplies them as the
+    /// frame's <c>DynamicTransforms</c> so the moving instances ride the per-frame buffer without a rebuild. False for
+    /// every other state (the room's own dynamic transforms then apply).</summary>
+    /// <param name="transforms">The packed per-frame storm transforms when this returns true; empty otherwise.</param>
+    public bool TryPackBenchDynamicTransforms(out IReadOnlyList<DynamicTransform> transforms) {
+        var packed = m_bench.TryPackStormTransforms(transforms: out var stormTransforms);
+
+        transforms = stormTransforms;
+
+        return packed;
+    }
+
     /// <summary>The content revision the frame source rebuilds on — the debug scene's revision plus the bench's (so a
     /// bench config change forces a program rebuild exactly as a scene edit does) plus the grid-cull toggle's.</summary>
     public int Revision => (m_scene.Revision + m_bench.Revision + m_gridRevision);
