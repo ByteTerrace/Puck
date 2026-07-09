@@ -69,10 +69,17 @@ premises are now false).
 5. **Per-tile / per-segment Lipschitz refinement** — fold each visible warped
    instance's baked `L` into a per-tile max-L so only warp-bearing tiles slow.
    Eventually superseded by #2.
-6. **Confirm the Puckton town ceiling** — the catalog's "far geometry exceeds
-   the reveal overview's SDF render range" was never reconciled as
-   camera/content-vs-producer. Measure with the grid cull in place and record
-   the verdict.
+6. **The Puckton town ceiling — MEASURED (2026-07-09): a views-bound
+   producer cost.** At the town reveal overview (16 placements, 12 lights):
+   frame 147.5 ms = mask 0.03 (0%) + beam 13.6 (9%) + views 133.8 (91%).
+   The grid cull holds at town scale (mask free, beam single-digit); the
+   whole cost is per-pixel — placed-creation multi-segment tapes + the
+   shading epilogue at full-screen coverage. The town renders artifact-free
+   (artifacts/console/town-reveal.png); it is not a render-range mystery.
+   The levers are exactly the promoted set: #4 shadow-cull, #10
+   closestApproach, and (per item 1's scale addendum) bake-time
+   within-instance segment bounds for placed creations. Attribution split
+   (epilogue vs tape walk) is the storm/views instruments' first real job.
 7. *Demoted, revisit only if a new beam-dominant regime appears*: the 64×64
    pre-beam pyramid (row 16 — near-moot post-grid); proxy/LOD far-field +
    Sphere Carving (row 14 — the far-field ceiling is views-bound now).
