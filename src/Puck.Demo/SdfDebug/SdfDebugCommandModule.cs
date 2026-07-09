@@ -142,6 +142,11 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             name: "sdf.grid"
         );
         yield return WithArgs(
+            description: "Selects the lit surface-normal probe: sdf.normals taps|analytic. ANALYTIC (default) is the forward-mode gradient dual — one dual field eval at the hit, exact through the transform chain and free of finite-difference banding; TAPS is the legacy 4-tap probe, kept for the A/B lever (pair with debug.view.normals). No args echoes the current mode.",
+            handler: (context, args) => new CommandResult(HandleNormals(args: args)),
+            name: "sdf.normals"
+        );
+        yield return WithArgs(
             description: "Poses the orbit camera deterministically (the scriptable form of the pad orbit): sdf.cam [pitch <p>] [yaw <y>] [dist <d>] [target <x y z>]. Each clause is optional and keeps the current value; pitch clamps to [0.05, 1.35] (low = grazing), dist to [0.5, 14]. Use a low pitch + far target to graze the ground behind a tall occluder.",
             handler: (context, args) => new CommandResult(HandleCam(args: args)),
             name: "sdf.cam"
@@ -174,6 +179,31 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
         mode.SetGridCull(on: on);
 
         return $"[sdf.grid {(on ? "on" : "off")}]{(on ? string.Empty : " — the beam flat-loops every instance (the pre-grid reference path)")}";
+    }
+
+    // The analytic-vs-taps surface-normal A/B lever (SdfDebugMode.SetFiniteDifferenceNormals → the frame's
+    // UseFiniteDifferenceNormals flag; a pure frame channel, no program rebuild).
+    private string HandleNormals(string[] args) {
+        if (Mode is not { } mode) {
+            return "[sdf.normals: unavailable — the overworld is not the active root]";
+        }
+
+        if (args.Length == 0) {
+            return $"[sdf.normals {(mode.UseFiniteDifferenceNormals ? "taps" : "analytic")}] — sdf.normals taps|analytic (analytic = the forward-mode gradient dual)";
+        }
+
+        switch (args[0].ToLowerInvariant()) {
+            case "taps":
+            case "fd":
+                mode.SetFiniteDifferenceNormals(useTaps: true);
+                return "[sdf.normals taps] — the legacy 4-tap finite-difference probe (the A/B reference)";
+            case "analytic":
+            case "dual":
+                mode.SetFiniteDifferenceNormals(useTaps: false);
+                return "[sdf.normals analytic] — the forward-mode gradient dual (one dual eval at the hit)";
+            default:
+                return $"[sdf.normals: '{args[0]}' — taps|analytic]";
+        }
     }
 
     private string HandleCam(string[] args) {

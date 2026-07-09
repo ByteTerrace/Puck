@@ -343,6 +343,19 @@ float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, out float curva
 
     return normalize(((k.xyy * d0) + (k.yyx * d1) + (k.yxy * d2) + (k.xxx * d3)));
 }
+// The ANALYTIC surface normal (forward-mode gradient dual): ONE dual field eval at the hit — replacing the four taps —
+// carries the exact world-space field gradient through the transform chain (sdf-vm.hlsli's mapGradMasked). Immune to
+// the finite-difference catastrophic cancellation the taps suffer near a warp/fold/displace, and more cross-backend-
+// stable (the survey's R7 parity argument). mapGradMasked returns the UN-normalized gradient; the stepScale the scalar
+// distance still carries is a uniform positive factor that cancels under this normalize, so the dual never applies it.
+// Same tile instance mask as the primary march, so the analytic normal sees the identical masked field the hit did.
+float3 calculateNormalAnalytic(float3 p, uint instanceMaskBase) {
+    float3 gradient;
+
+    mapGradMasked(p, instanceMaskBase, gradient);
+
+    return sdfSafeNormalize(gradient);
+}
 // Procedural placeholder for a SCREEN_SLAB face: an animated test-card.
 float3 screenContent(float3 p, float time) {
     float bars = (0.5 + (0.5 * sin((p.y * 26.0) - (time * 5.0))));
@@ -619,6 +632,19 @@ static const int DebugViewModeNormals = 2;
 // and Stage 2's empty-tile flatten cannot truncate the field picture — the slice must show the IDEAL field wall to
 // wall. KEEP IN SYNC with DebugViewModes.Names in src/Puck.Demo/DebugView.cs.
 static const int DebugViewModeSlice = 7;
+
+// The analytic-normal A/B toggle (the forward-mode dual's debug lever). Rides a reserved lane of the grid-object-params
+// screen-light row (SdfGridObjParams.z): 0 (the DEFAULT) selects the analytic dual normal (calculateNormalAnalytic),
+// 1 selects the legacy 4-tap finite-difference probe (calculateNormal) so the lead can A/B them under debug.view.normals.
+// Decoded only under SDF_SCREEN_SOURCES — the world-views kernel is the sole SDF-hit shader; every other config keeps
+// analytic. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals and SdfWorldEngine.PackScreenLights.
+bool worldUseTapNormals() {
+#ifdef SDF_SCREEN_SOURCES
+    return (sdfScreenLights[SdfGridObjParams].z > 0.5);
+#else
+    return false;
+#endif
+}
 
 // A soft shadow toward the (directional) sun: an IQ-style penumbra march of the field from the surface point up toward
 // the light, tracking the closest-approach ratio (ShadowSharpness · clearance / traveled) so grazing occluders cast a
@@ -969,12 +995,16 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         float curvature = 0.0; // level-set mean curvature at the hit (drives the stylized cavity/rim/ink terms below)
 
         if (needsNormal) {
-            // The curvature variant reuses the normal's four taps plus one center tap; the plain probe (the default)
-            // strips to exactly the four-tap normal on both backends via this compile-time branch.
+            // The curvature variant reuses the normal's four taps plus one center tap (compile-time, off by default).
+            // Otherwise the runtime toggle selects between the ANALYTIC forward-mode dual normal (the default — one dual
+            // eval, exact through the op chain) and the legacy 4-tap finite-difference probe (worldUseTapNormals, for the
+            // A/B lever). The 4-tap path stays compiled; the toggle picks at runtime.
             if (CurvatureShadingEnabled) {
                 normal = calculateNormalCurvature(surfacePoint, instanceMaskBase, curvature);
-            } else {
+            } else if (worldUseTapNormals()) {
                 normal = calculateNormal(surfacePoint, instanceMaskBase);
+            } else {
+                normal = calculateNormalAnalytic(surfacePoint, instanceMaskBase);
             }
         }
 

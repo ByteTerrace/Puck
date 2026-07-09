@@ -1036,8 +1036,11 @@ public sealed class SdfWorldEngine : IDisposable {
         var gridObjFrameBase = ((MaxScreenSurfaces + 3) * 4);
         floats[gridObjFrameBase + 0] = frame.GridObjectFrame.X; floats[gridObjFrameBase + 1] = frame.GridObjectFrame.Y; floats[gridObjFrameBase + 2] = frame.GridObjectFrame.Z; floats[gridObjFrameBase + 3] = frame.GridObjectFrame.W;
 
+        // The .z lane is the analytic-normal A/B toggle (0 = the forward-mode dual normal, the default; 1 = the legacy
+        // 4-tap finite-difference probe), read by sdf-world.hlsli's worldUseTapNormals. Reserved before, so an unset
+        // frame uploads 0 and shades with analytic normals. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals.
         var gridObjParamsBase = ((MaxScreenSurfaces + 4) * 4);
-        floats[gridObjParamsBase + 0] = frame.GridObjectPitch.Y; floats[gridObjParamsBase + 1] = frame.GridObjectPatchRadius; floats[gridObjParamsBase + 2] = 0f; floats[gridObjParamsBase + 3] = 0f;
+        floats[gridObjParamsBase + 0] = frame.GridObjectPitch.Y; floats[gridObjParamsBase + 1] = frame.GridObjectPatchRadius; floats[gridObjParamsBase + 2] = (frame.UseFiniteDifferenceNormals ? 1f : 0f); floats[gridObjParamsBase + 3] = 0f;
     }
 
     // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint tileGridPacked; float4 rects[5]; }: the

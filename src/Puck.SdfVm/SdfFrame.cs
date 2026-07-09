@@ -40,6 +40,13 @@ public sealed record SdfFrame(
     /// <summary>The axis-aligned slice plane's signed offset along the <see cref="DebugSliceAxis"/> axis (world
     /// units). Ignored while <see cref="DebugSliceAxis"/> is 0 (camera-locked).</summary>
     public float DebugSliceOffset { get; init; }
+    /// <summary>Selects the legacy 4-tap finite-difference surface normal (the A/B lever) instead of the DEFAULT
+    /// analytic forward-mode gradient dual. Default <see langword="false"/> = analytic normals (one dual field eval at
+    /// the hit — exact through the transform chain, immune to finite-difference cancellation). Rides the screen-light
+    /// buffer's grid-object-params row's reserved <c>.z</c> lane (KEEP IN SYNC with
+    /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldUseTapNormals</c>); a frame that never sets
+    /// it uploads 0 and shades with analytic normals.</summary>
+    public bool UseFiniteDifferenceNormals { get; init; }
     /// <summary>The grid-lock overlay flags (bit0 = draw the world floor grid, bit1 = draw the object grid). Rides
     /// the screen-light buffer's grid rows 9..12 (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and
     /// sdf-world.hlsli's <c>SdfGridWorld..SdfGridObjParams</c> decode). Default 0 = no overlay, so a frame that never

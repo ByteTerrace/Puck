@@ -922,6 +922,202 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
     return result;
 }
 
+// === Forward-mode gradient dual (analytic normals) ===================================================================
+// mapGradCore below is the HIT-ONLY dual twin of mapCore: it walks the SAME instruction stream and, alongside the
+// scalar distance, carries the WORLD-space gradient of the accumulated field so the surface normal is analytic —
+// forward-mode chain rule through the runtime transforms, NOT the baked Lipschitz scalars (those bound the STEP; these
+// propagate the DERIVATIVE). It runs once per lit hit pixel, replacing the 4-tap finite-difference calculateNormal;
+// the march stays scalar (mapCore). The dual eval costs ~2x a scalar one, paid once per hit — never in the march loop.
+//
+// TRANSPORT STATE. The gradient is created only at a SHAPE (a primitive's local gradient), so between shapes there is
+// no gradient to move; what the point ops build up instead is the JACOBIAN of the transform chain, carried as its three
+// COLUMNS jx = d(localPosition)/d(worldPosition.x), jy = .../.y, jz = .../.z (column j of the matrix J with
+// J[i][j] = d(lp_i)/d(w_j)). A point op with local point-Jacobian A (lp_new = A*lp_old + b) updates each column by
+// A*column (sdfApplyJacobian applies A given as its three ROWS, or the op's own orthogonal map is applied to the
+// vector directly). RESET restores jx/jy/jz to identity exactly as it restores localPosition. At a SHAPE the local
+// gradient g maps to world by worldGrad_j = dot(g, column_j) = (dot(jx,g), dot(jy,g), dot(jz,g)), times the distanceScale
+// (Scale/LogSphere's metric factor multiplies the gradient exactly as it multiplies the distance). stepScale is NOT
+// applied — it is a uniform positive scale on the whole returned field, and normalize() at the consumer cancels it, so
+// the dual ignores it entirely for normal purposes.
+
+#define SDF_SHAPE_GRAD_EPSILON 0.0006  // shape-LOCAL FD offset for the exotic-primitive gradient fallback (one primitive, no chain)
+
+float3 sdfSafeNormalize(float3 v) {
+    return (v * rsqrt(max(dot(v, v), 1.0e-24)));
+}
+
+// Applies a 3x3 point-Jacobian A (given as its three ROWS ax/ay/az) to each carried Jacobian column vector. Each new
+// vector is a full float3 built from dot products of the OLD vector, so the in/out aliasing is safe.
+void sdfApplyJacobian(float3 ax, float3 ay, float3 az, inout float3 jx, inout float3 jy, inout float3 jz) {
+    jx = float3(dot(ax, jx), dot(ay, jx), dot(az, jx));
+    jy = float3(dot(ax, jy), dot(ay, jy), dot(az, jy));
+    jz = float3(dot(ax, jz), dot(ay, jz), dot(az, jz));
+}
+
+// --- analytic LEAF gradients (the cheap majority; exact for a metric SDF) ---
+// The box: outside, the gradient is the outward direction of the exterior offset, signed per octant; inside, it points
+// along the nearest face's axis. cornerRadius rounds the surface but not the gradient direction.
+float3 sdfBoxGradient(float3 p, float3 halfExtents, float cornerRadius) {
+    float3 s = float3((p.x < 0.0) ? -1.0 : 1.0, (p.y < 0.0) ? -1.0 : 1.0, (p.z < 0.0) ? -1.0 : 1.0);
+    float3 q = (abs(p) - (halfExtents - cornerRadius));
+    float m = max(q.x, max(q.y, q.z));
+
+    if (m > 0.0) {
+        return (s * sdfSafeNormalize(max(q, 0.0)));
+    }
+
+    float3 axis = float3((q.x >= m) ? 1.0 : 0.0, (q.y >= m) ? 1.0 : 0.0, (q.z >= m) ? 1.0 : 0.0);
+
+    return (s * sdfSafeNormalize(axis));
+}
+float3 sdfTorusGradient(float3 p, float major, float minor) {
+    float lxz = length(p.xz);
+    float2 q = float2((lxz - major), p.y);
+    float lq = max(length(q), 1.0e-12);
+    float2 radial = ((lxz > 1.0e-12) ? (p.xz / lxz) : float2(0.0, 0.0));
+
+    return float3(((q.x / lq) * radial.x), (q.y / lq), ((q.x / lq) * radial.y));
+}
+float3 sdfCapsuleGradient(float3 p, float3 endpoint, float inverseLengthSquared) {
+    float h = clamp((dot(p, endpoint) * inverseLengthSquared), 0.0, 1.0);
+
+    return sdfSafeNormalize(p - (h * endpoint));
+}
+float3 sdfCylinderGradient(float3 p, float radius, float halfHeight) {
+    float lxz = length(p.xz);
+    float2 radial = ((lxz > 1.0e-12) ? (p.xz / lxz) : float2(0.0, 0.0));
+    float ySign = ((p.y < 0.0) ? -1.0 : 1.0);
+    float2 d = (float2(lxz, abs(p.y)) - float2(radius, halfHeight));
+
+    if (max(d.x, d.y) <= 0.0) {
+        return ((d.x > d.y) ? float3(radial.x, 0.0, radial.y) : float3(0.0, ySign, 0.0));
+    }
+
+    float2 e = max(d, 0.0);
+    float le = max(length(e), 1.0e-12);
+    float2 n = (e / le);
+
+    return float3((n.x * radial.x), (n.y * ySign), (n.x * radial.y));
+}
+// Shape-LOCAL 4-tap tetrahedron FD for the exotic primitives (ellipsoid/vesica/roundcone/the 2D-lifted family): a tight
+// difference of just that one primitive's SDF in folded space, no transform chain — so it fixes the op-CHAIN
+// propagation (the real win) with a cheap, cancellation-light leaf. Same isotropic tetrahedron the world normal uses.
+float3 sdfShapeGradientFd(uint shapeType, float3 p, float4 data0, float4 data1) {
+    const float2 k = float2(1.0, -1.0);
+    const float e = SDF_SHAPE_GRAD_EPSILON;
+
+    return sdfSafeNormalize(
+        (k.xyy * evaluateShape(shapeType, (p + (k.xyy * e)), data0, data1)) +
+        (k.yyx * evaluateShape(shapeType, (p + (k.yyx * e)), data0, data1)) +
+        (k.yxy * evaluateShape(shapeType, (p + (k.yxy * e)), data0, data1)) +
+        (k.xxx * evaluateShape(shapeType, (p + (k.xxx * e)), data0, data1)));
+}
+// The gradient companion to evaluateShape (same dispatch): analytic for the cheap majority, shape-local FD for the rest.
+float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data1) {
+    switch (shapeType) {
+        case SDF_SHAPE_SPHERE:      return sdfSafeNormalize(p);
+        // The plane's gradient is its (host-normalized) normal, exactly.
+        case SDF_SHAPE_PLANE:       return data0.xyz;
+        case SDF_SHAPE_BOX:
+        case SDF_SHAPE_SCREEN_SLAB: return sdfBoxGradient(p, data0.xyz, data0.w);
+        case SDF_SHAPE_TORUS:       return sdfTorusGradient(p, data0.x, data0.y);
+        case SDF_SHAPE_CAPSULE:     return sdfCapsuleGradient(p, data0.xyz, data1.y);
+        case SDF_SHAPE_CYLINDER:    return sdfCylinderGradient(p, data0.x, data0.y);
+        default:                    return sdfShapeGradientFd(shapeType, p, data0, data1);
+    }
+}
+// The gradient-carrying twin of blendShape: reproduces its distance branch-for-branch AND propagates the world-space
+// surface gradient. HARD blends SELECT the winning branch's gradient (negated where the distance formula negates the
+// candidate — the subtraction sign bug lives here). SMOOTH blends LERP the two gradients by the SAME h weight the
+// distance lerp uses; the exact smin gradient carries an extra tangential term, but the normal normalizes and the SOTA
+// survey accepts the standard lerp approximation, so it is used here. CHAMFER blends select the winning one of their
+// three terms (the bevel term's gradient is the summed/differenced unit gradients times sqrt(1/2)).
+void blendShapeDual(float current, float3 currentGrad, float candidate, float3 candidateGrad, uint blendOp, float smoothRadius, out float outDist, out float3 outGrad) {
+    float smoothK = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);
+    float chamfer = max(smoothRadius, 0.0);
+
+    outDist = min(current, candidate);                                  // SDF_BLEND_UNION (the default)
+    outGrad = ((candidate < current) ? candidateGrad : currentGrad);
+
+    switch (blendOp) {
+        case SDF_BLEND_SMOOTH_UNION: {
+            float h = clamp((0.5 + ((0.5 * (candidate - current)) / smoothK)), 0.0, 1.0);
+            outDist = blendSmoothUnion(current, candidate, smoothK);
+            outGrad = lerp(currentGrad, candidateGrad, (1.0 - h));
+            break;
+        }
+        case SDF_BLEND_SUBTRACTION: {
+            outDist = max(current, -candidate);
+            outGrad = (((-candidate) > current) ? (-candidateGrad) : currentGrad);
+            break;
+        }
+        case SDF_BLEND_INTERSECTION: {
+            outDist = max(current, candidate);
+            outGrad = ((candidate > current) ? candidateGrad : currentGrad);
+            break;
+        }
+        case SDF_BLEND_XOR: {
+            float mn = min(current, candidate);
+            float mx = max(current, candidate);
+            outDist = max(mn, -mx);
+
+            if ((-mx) > mn) {
+                outGrad = ((current > candidate) ? (-currentGrad) : (-candidateGrad));
+            }
+            else {
+                outGrad = ((current < candidate) ? currentGrad : candidateGrad);
+            }
+
+            break;
+        }
+        case SDF_BLEND_SMOOTH_INTERSECTION: {
+            float h = clamp((0.5 + ((0.5 * (current - candidate)) / smoothK)), 0.0, 1.0);
+            outDist = -blendSmoothUnion(-current, -candidate, smoothK);
+            outGrad = lerp(currentGrad, candidateGrad, (1.0 - h));
+            break;
+        }
+        case SDF_BLEND_SMOOTH_SUBTRACTION: {
+            float h = clamp((0.5 + ((0.5 * ((-current) - candidate)) / smoothK)), 0.0, 1.0);
+            outDist = -blendSmoothUnion(candidate, -current, smoothK);
+            outGrad = lerp((-candidateGrad), currentGrad, (1.0 - h));
+            break;
+        }
+        case SDF_BLEND_CHAMFER_UNION: {
+            float bevel = ((current + candidate - chamfer) * SDF_SQRT_HALF);
+            outDist = min(min(current, candidate), bevel);
+            outGrad = currentGrad;
+            if (candidate < current) { outGrad = candidateGrad; }
+            if (bevel <= min(current, candidate)) { outGrad = ((currentGrad + candidateGrad) * SDF_SQRT_HALF); }
+            break;
+        }
+        case SDF_BLEND_CHAMFER_INTERSECTION: {
+            float bevel = ((current + candidate + chamfer) * SDF_SQRT_HALF);
+            outDist = max(max(current, candidate), bevel);
+            outGrad = currentGrad;
+            if (candidate > current) { outGrad = candidateGrad; }
+            if (bevel >= max(current, candidate)) { outGrad = ((currentGrad + candidateGrad) * SDF_SQRT_HALF); }
+            break;
+        }
+        case SDF_BLEND_CHAMFER_SUBTRACTION: {
+            float bevel = ((current - candidate + chamfer) * SDF_SQRT_HALF);
+            outDist = max(max(current, -candidate), bevel);
+            outGrad = currentGrad;
+            if ((-candidate) > current) { outGrad = -candidateGrad; }
+            if (bevel >= max(current, -candidate)) { outGrad = ((currentGrad - candidateGrad) * SDF_SQRT_HALF); }
+            break;
+        }
+    }
+}
+// The one-deep scoped-accumulator SAVE SLOT for the dual walk. A STRUCT carrying {distance, material, gradient} even at
+// depth 1 (SDF_MAX_FIELD_SCOPE_DEPTH): raising the depth and adding this gradient lane must be ONE migration to an
+// indexed stack, not two — so the struct exists now (mirrors mapCore's savedFieldDistance/savedFieldMaterial pair plus
+// the new gradient lane the dual needs).
+struct SdfFieldSave {
+    float distance;
+    int material;
+    float3 gradient;
+};
+
 // The merge cursors' "exhausted" sentinel: no segment remains on that side (an impossible segment-directory index).
 // Numerically equal to SDF_INSTANCE_MASK_ALL by coincidence only — the two name unrelated contracts.
 #define SDF_SEGMENT_NONE 0xFFFFFFFFu
@@ -1590,6 +1786,546 @@ SdfHit map(float3 worldPosition) {
 // mapCore(worldPosition, SDF_INSTANCE_MASK_ALL) call for every ray the mask keeps correct.
 SdfHit mapMasked(float3 worldPosition, uint instanceMaskBase) {
     return mapCore(worldPosition, instanceMaskBase);
+}
+
+// Applies a RepeatPolar sector fold's local orthogonal map (a rotation by -angle*sector in the fold plane, then an
+// optional reflection across the sector bisector — both isometries, piecewise-constant per sector) to a Jacobian
+// column vector `b`, identity on the axial coordinate. `rc`/`rs` = cos/sin(angle*sector); `flip` = -1 when the point's
+// rotated v-coordinate was negative and the op mirrors, else 1.
+float3 sdfApplyPolarJacobian(float3 b, uint axis, float rc, float rs, float flip) {
+    float2 uv;
+
+    if (axis == SDF_POLAR_AXIS_X) { uv = b.yz; }
+    else if (axis == SDF_POLAR_AXIS_Z) { uv = b.xy; }
+    else { uv = b.xz; }
+
+    float2 nuv = float2(((rc * uv.x) + (rs * uv.y)), (((-rs * uv.x) + (rc * uv.y)) * flip));
+
+    if (axis == SDF_POLAR_AXIS_X) { b.yz = nuv; }
+    else if (axis == SDF_POLAR_AXIS_Z) { b.xy = nuv; }
+    else { b.xz = nuv; }
+
+    return b;
+}
+// Applies a wallpaper fold's local 2x2 in-plane Jacobian (its two columns, recovered by a shape-local finite difference
+// of the fold map — the fold is an isometry but composes many conditional reflections/rotations no single closed form
+// spells) to a Jacobian column vector `b`, identity on the third axis.
+float3 sdfApplyPlaneJacobian(float3 b, int axisA, int axisB, float2 col0, float2 col1) {
+    float bA = b[axisA];
+    float bB = b[axisB];
+
+    b[axisA] = ((col0.x * bA) + (col1.x * bB));
+    b[axisB] = ((col0.y * bA) + (col1.y * bB));
+
+    return b;
+}
+
+// The forward-mode dual twin of mapCore (see the "Forward-mode gradient dual" banner above blendShapeDual). Walks the
+// SAME segment/instance merge and the SAME op stream, tracking — beside the scalar accumulator — the transform-chain
+// Jacobian columns jx/jy/jz (= d(localPosition)/d(worldPosition.{x,y,z}); the point ops build them, RESET restores
+// identity) and the world-space accumulator gradient `resultGradient`. `gradient` (out) is the UN-normalized surface
+// gradient at the hit; the consumer normalizes (which cancels the stepScale the scalar distance still carries). HIT-
+// ONLY: never called from the march, so its ~2x cost is paid once per lit pixel. KEEP the walk skeleton IN SYNC with
+// mapCore — this is a parallel evaluation path, not a rewrite: only the gradient lane is added.
+SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradient) {
+    uint4 header = sdfWords[0];
+    uint instructionCount = header.x;
+    uint dataOffset = header.z;
+    uint boundsOffset = (header.w + (2u * header.y));
+    uint segmentOffset = (boundsOffset + (2u * header.x));
+    uint4 segmentHeader = sdfWords[segmentOffset];
+    uint segmentCount = segmentHeader.x;
+    float stepScale = asfloat(segmentHeader.y);
+    stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
+    uint instanceOffset = sdfInstanceDirectoryOffsetFrom(segmentOffset, segmentCount);
+    uint instanceCount = sdfWords[instanceOffset].x;
+    uint worldSegmentOffset = (instanceOffset + 1u + (2u * instanceCount));
+    bool hasInstances = (instanceCount != 0u);
+
+    uint linearCursor = 0u;
+    uint worldCursor = 0u;
+    uint worldCount = 0u;
+    uint worldNext = SDF_SEGMENT_NONE;
+    uint maskWordIndex = 0xFFFFFFFFu;
+    uint maskWordBits = 0u;
+    uint instanceSegment = SDF_SEGMENT_NONE;
+    uint instanceSegmentEnd = SDF_SEGMENT_NONE;
+
+    if (hasInstances) {
+        worldCount = sdfWords[worldSegmentOffset].x;
+        worldNext = ((0u < worldCount) ? sdfWords[worldSegmentOffset + 1u].x : SDF_SEGMENT_NONE);
+        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd);
+    }
+
+    float3 localPosition = worldPosition;
+    float distanceScale = 1.0;
+    // The transform-chain Jacobian columns: jx = d(localPosition)/d(worldPosition.x), etc. Identity at the start of
+    // every chain segment (RESET restores them, exactly as it restores localPosition). worldGrad_j = dot(localGrad, j_).
+    float3 jx = float3(1.0, 0.0, 0.0);
+    float3 jy = float3(0.0, 1.0, 0.0);
+    float3 jz = float3(0.0, 0.0, 1.0);
+    SdfHit result;
+
+    result.distance = SDF_FAR_DISTANCE;
+    result.material = 0;
+    float3 resultGradient = float3(0.0, 0.0, 0.0);
+
+    // The one-deep scoped-accumulator save slot — a {distance, material, gradient} struct so a future depth raise and
+    // this gradient lane are ONE migration (see SdfFieldSave).
+    SdfFieldSave saved;
+    saved.distance = SDF_FAR_DISTANCE;
+    saved.material = 0;
+    saved.gradient = float3(0.0, 0.0, 0.0);
+
+    [loop]
+    for (;;) {
+        uint segment;
+
+        if (!hasInstances) {
+            if (linearCursor >= segmentCount) {
+                break;
+            }
+
+            segment = linearCursor++;
+        } else if (worldNext < instanceSegment) {
+            segment = worldNext;
+            worldCursor++;
+            worldNext = ((worldCursor < worldCount) ? sdfWords[worldSegmentOffset + 1u + worldCursor].x : SDF_SEGMENT_NONE);
+        } else if (instanceSegment < instanceSegmentEnd) {
+            segment = instanceSegment++;
+
+            if (instanceSegment == instanceSegmentEnd) {
+                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd);
+            }
+        } else {
+            break;
+        }
+
+        uint4 segmentMeta = sdfWords[segmentOffset + 1u + (2u * segment) + 1u];
+
+        [branch]
+        if (segmentMeta.x != SDF_BOUND_NONE) {
+            float4 segmentBound = asfloat(sdfWords[segmentOffset + 1u + (2u * segment)]);
+            float3 boundCenter = segmentBound.xyz;
+            bool boundReady = (segmentMeta.x == SDF_BOUND_STATIC);
+
+#ifdef SDF_DYNAMIC_TRANSFORMS
+            if (segmentMeta.x == SDF_BOUND_DYNAMIC) {
+                boundCenter += sdfDynamicTransforms[2u * segmentMeta.y].xyz;
+                boundReady = true;
+            }
+#endif
+
+            if (boundReady) {
+                float3 toCenter = (worldPosition - boundCenter);
+                float clearance = max((result.distance + segmentBound.w), 0.0);
+
+                if (dot(toCenter, toCenter) >= (clearance * clearance)) {
+                    continue;
+                }
+            }
+        }
+
+        [loop]
+        for (uint index = segmentMeta.z; (index < segmentMeta.w); index++) {
+            uint4 instructionHeader = sdfWords[1u + index];
+            uint op = instructionHeader.x;
+            float4 data0 = asfloat(sdfWords[dataOffset + (2u * index)]);
+            float4 data1 = asfloat(sdfWords[dataOffset + (2u * index) + 1u]);
+
+            bool composePending = false;
+            float composeCandidate = SDF_FAR_DISTANCE;
+            float3 composeGradient = float3(0.0, 0.0, 0.0);
+            uint composeBlend = SDF_BLEND_UNION;
+            int composeMaterial = 0;
+            float composeSmooth = 0.0;
+
+            switch (op) {
+                case SDF_OP_RESET: {
+                    localPosition = worldPosition;
+                    distanceScale = 1.0;
+                    jx = float3(1.0, 0.0, 0.0);
+                    jy = float3(0.0, 1.0, 0.0);
+                    jz = float3(0.0, 0.0, 1.0);
+                    break;
+                }
+                case SDF_OP_TRANSLATE: {
+                    localPosition -= data0.xyz;   // A = I (a constant offset has zero Jacobian)
+                    break;
+                }
+                case SDF_OP_ROTATE: {
+                    // A = R^T (the same inverse rotation the point takes), applied to each Jacobian column.
+                    localPosition = rotatePointByInverseQuaternion(localPosition, data0);
+                    jx = rotatePointByInverseQuaternion(jx, data0);
+                    jy = rotatePointByInverseQuaternion(jy, data0);
+                    jz = rotatePointByInverseQuaternion(jz, data0);
+                    break;
+                }
+                case SDF_OP_SCALE: {
+                    localPosition /= data0.xyz;   // A = diag(1/scale)
+                    jx /= data0.xyz;
+                    jy /= data0.xyz;
+                    jz /= data0.xyz;
+                    distanceScale *= data0.w;
+                    break;
+                }
+                case SDF_OP_LOG_SPHERE: {
+                    float logRadius = log(max(length(localPosition), SDF_LOGSPHERE_MIN_RADIUS));
+                    float shell = round(logRadius * data0.z);
+                    float shellScale = exp(shell * data0.x);
+                    float spinAngle = (shell * data0.y);
+                    float spinCos = cos(spinAngle);
+                    float spinSin = sin(spinAngle);
+                    float invShell = (1.0 / shellScale);
+
+                    // A = (1/shellScale) * Rz(spin) — the shell is locally constant (round), so this is the exact linear
+                    // part; the shellScale factor rides distanceScale below and cancels the 1/shellScale here under norm.
+                    jx = float3(((spinCos * jx.x) - (spinSin * jx.y)), ((spinSin * jx.x) + (spinCos * jx.y)), jx.z) * invShell;
+                    jy = float3(((spinCos * jy.x) - (spinSin * jy.y)), ((spinSin * jy.x) + (spinCos * jy.y)), jy.z) * invShell;
+                    jz = float3(((spinCos * jz.x) - (spinSin * jz.y)), ((spinSin * jz.x) + (spinCos * jz.y)), jz.z) * invShell;
+
+                    localPosition /= shellScale;
+                    localPosition.xy = float2(
+                        ((spinCos * localPosition.x) - (spinSin * localPosition.y)),
+                        ((spinSin * localPosition.x) + (spinCos * localPosition.y)));
+                    distanceScale *= shellScale;
+                    break;
+                }
+#ifdef SDF_DYNAMIC_TRANSFORMS
+                case SDF_OP_TRANSFORM_DYNAMIC: {
+                    uint dynamicSlot = (uint)data0.x;
+                    float4 dynamicPosition = sdfDynamicTransforms[(2u * dynamicSlot)];
+                    float4 dynamicOrientation = sdfDynamicTransforms[((2u * dynamicSlot) + 1u)];
+                    localPosition = rotatePointByInverseQuaternion((localPosition - dynamicPosition.xyz), dynamicOrientation);
+                    jx = rotatePointByInverseQuaternion(jx, dynamicOrientation);
+                    jy = rotatePointByInverseQuaternion(jy, dynamicOrientation);
+                    jz = rotatePointByInverseQuaternion(jz, dynamicOrientation);
+                    break;
+                }
+#endif
+                case SDF_OP_REPEAT: {
+                    localPosition -= (data0.xyz * round(localPosition * data1.xyz));   // A = I (round is locally constant)
+                    break;
+                }
+                case SDF_OP_REPEAT_LIMITED: {
+                    localPosition -= (data0.xyz * clamp(round(localPosition / data0.xyz), -data1.xyz, data1.xyz));
+                    break;
+                }
+                case SDF_OP_CELL_JITTER: {
+                    float3 cell = round(localPosition * data1.xyz);
+                    uint3 seed = uint3(instructionHeader.y, (instructionHeader.y * SDF_HASH_STREAM_A), (instructionHeader.y * SDF_HASH_STREAM_B));
+                    uint3 key = (asuint(int3(cell)) ^ seed);
+                    uint3 h0 = sdfPcg3d(key);
+
+                    uint noiseFlavor = instructionHeader.z;
+                    float3 r0;
+                    if (noiseFlavor == SDF_NOISE_BLUE) {
+                        uint3 uc = (asuint(int3(cell)) + seed);
+                        uint bx = ((uc.x * SDF_R3_ALPHA1) + (uc.y * SDF_R3_ALPHA2) + (uc.z * SDF_R3_ALPHA3));
+                        uint by = ((uc.x * SDF_R3_ALPHA2) + (uc.y * SDF_R3_ALPHA3) + (uc.z * SDF_R3_ALPHA1));
+                        uint bz = ((uc.x * SDF_R3_ALPHA3) + (uc.y * SDF_R3_ALPHA1) + (uc.z * SDF_R3_ALPHA2));
+                        r0 = (float3(bx, by, bz) * SDF_INV_2POW32);
+                    } else if (noiseFlavor == SDF_NOISE_GAUSSIAN) {
+                        uint3 g1 = sdfPcg3d(key ^ SDF_HASH_STREAM_A);
+                        uint3 g2 = sdfPcg3d(key ^ SDF_HASH_STREAM_B);
+                        r0 = (((float3)h0 + (float3)g1 + (float3)g2) * (SDF_INV_2POW32 / 3.0));
+                    } else {
+                        r0 = ((float3)h0 * SDF_INV_2POW32);
+                    }
+
+                    localPosition -= (data0.xyz * cell);          // A = I (fold + constant jitter)
+                    localPosition -= ((r0 - 0.5) * data0.w);
+
+                    // Tumble is a per-cell isometry: apply the same rotation to the Jacobian columns.
+                    if (data1.w > 0.0) {
+                        uint3 h1 = sdfPcg3d(key ^ SDF_HASH_TUMBLE);
+                        float3 r1 = ((float3)h1 * SDF_INV_2POW32);
+                        float zz = ((2.0 * r1.x) - 1.0);
+                        float rr = sqrt(max(0.0, (1.0 - (zz * zz))));
+                        float phi = (SDF_TAU * r1.y);
+                        float3 axis = float3((rr * cos(phi)), (rr * sin(phi)), zz);
+                        float angle = ((r1.z * data1.w) * SDF_PI);
+                        float ha = (0.5 * angle);
+                        float sa = sin(ha);
+                        float4 q = float4((axis * sa), cos(ha));
+                        localPosition = rotatePointByInverseQuaternion(localPosition, q);
+                        jx = rotatePointByInverseQuaternion(jx, q);
+                        jy = rotatePointByInverseQuaternion(jy, q);
+                        jz = rotatePointByInverseQuaternion(jz, q);
+                    }
+
+                    break;
+                }
+                case SDF_OP_REPEAT_POLAR: {
+                    uint polarAxis = instructionHeader.y;
+                    float2 pv;
+                    if (polarAxis == SDF_POLAR_AXIS_X) { pv = localPosition.yz; }
+                    else if (polarAxis == SDF_POLAR_AXIS_Z) { pv = localPosition.xy; }
+                    else { pv = localPosition.xz; }
+
+                    float sectorAngle = data0.x;
+                    float a = (atan2(pv.y, pv.x) + (0.5 * sectorAngle));
+                    float r = length(pv);
+                    float sector = floor(a * data0.y);
+                    a = ((a - (sectorAngle * sector)) - (0.5 * sectorAngle));
+
+                    // The local linear map = rotation by -sectorAngle*sector, then an optional v-flip (the mirror). rc/rs
+                    // = cos/sin(sectorAngle*sector); the flip fires where the rotated v (== r*sin(a)) is negative.
+                    float rc = cos(sectorAngle * sector);
+                    float rs = sin(sectorAngle * sector);
+                    float flip = (((instructionHeader.z != 0u) && (a < 0.0)) ? -1.0 : 1.0);
+                    jx = sdfApplyPolarJacobian(jx, polarAxis, rc, rs, flip);
+                    jy = sdfApplyPolarJacobian(jy, polarAxis, rc, rs, flip);
+                    jz = sdfApplyPolarJacobian(jz, polarAxis, rc, rs, flip);
+
+                    if (instructionHeader.z != 0u) { a = abs(a); }
+                    pv = (float2(cos(a), sin(a)) * r);
+
+                    if (polarAxis == SDF_POLAR_AXIS_X) { localPosition.yz = pv; }
+                    else if (polarAxis == SDF_POLAR_AXIS_Z) { localPosition.xy = pv; }
+                    else { localPosition.xz = pv; }
+
+                    break;
+                }
+                case SDF_OP_DOMAIN_WARP: {
+                    // A = I + amp * M, M a scaled cyclic permutation (each axis driven by the next); rows below.
+                    float cx = cos(data0.x * localPosition.y);
+                    float cy = cos(data0.y * localPosition.z);
+                    float cz = cos(data0.z * localPosition.x);
+                    float3 ax = float3(1.0, (data0.w * data0.x * cx), 0.0);
+                    float3 ay = float3(0.0, 1.0, (data0.w * data0.y * cy));
+                    float3 az = float3((data0.w * data0.z * cz), 0.0, 1.0);
+                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
+
+                    localPosition += (data0.w * float3(
+                        sin(data0.x * localPosition.y),
+                        sin(data0.y * localPosition.z),
+                        sin(data0.z * localPosition.x)));
+                    break;
+                }
+                case SDF_OP_SYMMETRY_PLANE: {
+                    float spT = (dot(localPosition, data0.xyz) + data0.w);
+                    // Reflection A = I - 2 n n^T, applied only on the negative side (spT < 0) — the same half-space fold.
+                    float reflect = ((spT < 0.0) ? 2.0 : 0.0);
+                    jx -= ((reflect * dot(jx, data0.xyz)) * data0.xyz);
+                    jy -= ((reflect * dot(jy, data0.xyz)) * data0.xyz);
+                    jz -= ((reflect * dot(jz, data0.xyz)) * data0.xyz);
+                    localPosition -= ((2.0 * min(spT, 0.0)) * data0.xyz);
+                    break;
+                }
+                case SDF_OP_TWIST_Y: {
+                    float twistCos = cos(data0.x * localPosition.y);
+                    float twistSin = sin(data0.x * localPosition.y);
+                    float nx = ((twistCos * localPosition.x) + (twistSin * localPosition.z));
+                    float nz = ((-twistSin * localPosition.x) + (twistCos * localPosition.z));
+                    float k = data0.x;
+                    float3 ax = float3(twistCos, (k * nz), twistSin);
+                    float3 ay = float3(0.0, 1.0, 0.0);
+                    float3 az = float3(-twistSin, (-k * nx), twistCos);
+                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
+                    localPosition.xz = float2(nx, nz);
+                    break;
+                }
+                case SDF_OP_BEND_X: {
+                    float bendCos = cos(data0.x * localPosition.x);
+                    float bendSin = sin(data0.x * localPosition.x);
+                    float nx = ((bendCos * localPosition.x) + (bendSin * localPosition.y));
+                    float ny = ((-bendSin * localPosition.x) + (bendCos * localPosition.y));
+                    float k = data0.x;
+                    float3 ax = float3((bendCos + (k * ny)), bendSin, 0.0);
+                    float3 ay = float3((-bendSin - (k * nx)), bendCos, 0.0);
+                    float3 az = float3(0.0, 0.0, 1.0);
+                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
+                    localPosition.xy = float2(nx, ny);
+                    break;
+                }
+                case SDF_OP_BEND_Y: {
+                    float bendCos = cos(data0.x * localPosition.y);
+                    float bendSin = sin(data0.x * localPosition.y);
+                    float nx = ((bendCos * localPosition.x) + (bendSin * localPosition.y));
+                    float ny = ((-bendSin * localPosition.x) + (bendCos * localPosition.y));
+                    float k = data0.x;
+                    float3 ax = float3(bendCos, (bendSin + (k * ny)), 0.0);
+                    float3 ay = float3(-bendSin, (bendCos - (k * nx)), 0.0);
+                    float3 az = float3(0.0, 0.0, 1.0);
+                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
+                    localPosition.xy = float2(nx, ny);
+                    break;
+                }
+                case SDF_OP_BEND_Z: {
+                    float bendCos = cos(data0.x * localPosition.y);
+                    float bendSin = sin(data0.x * localPosition.y);
+                    float ny = ((bendCos * localPosition.y) + (bendSin * localPosition.z));
+                    float nz = ((-bendSin * localPosition.y) + (bendCos * localPosition.z));
+                    float k = data0.x;
+                    float3 ax = float3(1.0, 0.0, 0.0);
+                    float3 ay = float3(0.0, (bendCos + (k * nz)), bendSin);
+                    float3 az = float3(0.0, (-bendSin - (k * ny)), bendCos);
+                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
+                    localPosition.yz = float2(ny, nz);
+                    break;
+                }
+                case SDF_OP_ELONGATE: {
+                    // A = diag(indicator(|p_i| > h_i)): the interior of the swept region collapses onto the core (zero
+                    // derivative there), the outside translates rigidly (unit derivative).
+                    float3 a = step(data0.xyz, abs(localPosition));
+                    jx *= a;
+                    jy *= a;
+                    jz *= a;
+                    localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
+                    break;
+                }
+                case SDF_OP_ONION: {
+                    float onionSign = ((result.distance < 0.0) ? -1.0 : 1.0);   // d -> |d| - t flips the gradient by sign(d)
+                    result.distance = (abs(result.distance) - data0.x);
+                    resultGradient *= onionSign;
+                    break;
+                }
+                case SDF_OP_DILATE: {
+                    result.distance -= data0.x;   // gradient unchanged (a uniform outward offset)
+                    break;
+                }
+                case SDF_OP_DISPLACE: {
+                    // gradient += amp * grad(sin*sin*sin) — analytic and exact (the FD-cancellation win), mapped to world.
+                    float3 df = (data0.xyz * localPosition);
+                    float sx = sin(df.x);
+                    float sy = sin(df.y);
+                    float sz = sin(df.z);
+                    result.distance += (data0.w * ((sx * sy) * sz));
+                    float3 localGradProduct = (data0.w * float3(
+                        ((data0.x * cos(df.x)) * (sy * sz)),
+                        ((sx * data0.y * cos(df.y)) * sz),
+                        ((sx * sy) * (data0.z * cos(df.z)))));
+                    resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
+                    break;
+                }
+                case SDF_OP_WALLPAPER_FOLD: {
+                    uint group = instructionHeader.y;
+                    uint plane = instructionHeader.z;
+                    int axisA = ((plane == 2u) ? 1 : 0);
+                    int axisB = ((plane == 1u) ? 1 : 2);
+                    bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
+                    float2 cellIndex;
+                    float2 in2 = float2(localPosition[axisA], localPosition[axisB]);
+                    float2 folded = sdfWallpaperFoldCell(in2, group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
+
+                    // The fold is a composed isometry with no single closed-form linear part; recover its in-plane 2x2 by
+                    // a shape-local finite difference (both output columns), then transport the Jacobian columns through it.
+                    float2 idxScratch;
+                    float2 foldedA = sdfWallpaperFoldCell(in2 + float2(SDF_SHAPE_GRAD_EPSILON, 0.0), group, data0.xy, data0.zw, data1.xy, lodSimplify, idxScratch);
+                    float2 foldedB = sdfWallpaperFoldCell(in2 + float2(0.0, SDF_SHAPE_GRAD_EPSILON), group, data0.xy, data0.zw, data1.xy, lodSimplify, idxScratch);
+                    float2 col0 = ((foldedA - folded) * (1.0 / SDF_SHAPE_GRAD_EPSILON));
+                    float2 col1 = ((foldedB - folded) * (1.0 / SDF_SHAPE_GRAD_EPSILON));
+                    jx = sdfApplyPlaneJacobian(jx, axisA, axisB, col0, col1);
+                    jy = sdfApplyPlaneJacobian(jy, axisA, axisB, col0, col1);
+                    jz = sdfApplyPlaneJacobian(jz, axisA, axisB, col0, col1);
+
+                    localPosition[axisA] = folded.x;
+                    localPosition[axisB] = folded.y;
+                    break;
+                }
+                case SDF_OP_SHAPE: {
+                    uint4 shapeBoundMeta = sdfWords[boundsOffset + (2u * index) + 1u];
+
+                    [branch]
+                    if (shapeBoundMeta.x != SDF_BOUND_NONE) {
+                        float4 shapeBound = asfloat(sdfWords[boundsOffset + (2u * index)]);
+                        float3 shapeBoundCenter = shapeBound.xyz;
+                        bool shapeBoundReady = (shapeBoundMeta.x == SDF_BOUND_STATIC);
+
+#ifdef SDF_DYNAMIC_TRANSFORMS
+                        if (shapeBoundMeta.x == SDF_BOUND_DYNAMIC) {
+                            shapeBoundCenter += sdfDynamicTransforms[2u * shapeBoundMeta.y].xyz;
+                            shapeBoundReady = true;
+                        }
+#endif
+
+                        if (shapeBoundReady) {
+                            float3 toShapeCenter = (worldPosition - shapeBoundCenter);
+                            float shapeClearance = max((result.distance + shapeBound.w), 0.0);
+
+                            if (dot(toShapeCenter, toShapeCenter) >= (shapeClearance * shapeClearance)) {
+                                break;
+                            }
+                        }
+                    }
+
+                    uint shapeType = instructionHeader.y;
+                    int material = (int)instructionHeader.w;
+                    float candidate = (evaluateShape(shapeType, localPosition, data0, data1) * distanceScale);
+                    // The primitive's LOCAL gradient, mapped to world through the transform-chain Jacobian columns and
+                    // scaled by the same distanceScale the candidate distance took (Scale/LogSphere's metric factor).
+                    float3 localGrad = evaluateShapeGradient(shapeType, localPosition, data0, data1);
+                    float3 worldGrad = (float3(dot(localGrad, jx), dot(localGrad, jy), dot(localGrad, jz)) * distanceScale);
+
+                    composeCandidate = candidate;
+                    composeGradient = worldGrad;
+                    composeMaterial = material;
+                    composeBlend = instructionHeader.z;
+                    composeSmooth = data1.x;
+                    composePending = true;
+                    break;
+                }
+                case SDF_OP_PUSH_FIELD: {
+                    saved.distance = result.distance;
+                    saved.material = result.material;
+                    saved.gradient = resultGradient;
+                    result.distance = SDF_FAR_DISTANCE;
+                    result.material = 0;
+                    resultGradient = float3(0.0, 0.0, 0.0);
+                    break;
+                }
+                case SDF_OP_POP_FIELD: {
+                    composeCandidate = result.distance;
+                    composeGradient = resultGradient;
+                    composeMaterial = result.material;
+                    composeBlend = instructionHeader.z;
+                    composeSmooth = data1.x;
+                    result.distance = saved.distance;
+                    result.material = saved.material;
+                    resultGradient = saved.gradient;
+                    composePending = true;
+                    break;
+                }
+            }
+
+            if (composePending) {
+                bool candidateWins;
+
+                switch (composeBlend) {
+                    case SDF_BLEND_INTERSECTION:
+                    case SDF_BLEND_SMOOTH_INTERSECTION:
+                    case SDF_BLEND_CHAMFER_INTERSECTION: { candidateWins = (composeCandidate > result.distance); break; }
+                    case SDF_BLEND_SUBTRACTION:
+                    case SDF_BLEND_SMOOTH_SUBTRACTION:
+                    case SDF_BLEND_CHAMFER_SUBTRACTION:  { candidateWins = (-composeCandidate > result.distance); break; }
+                    default:                             { candidateWins = (composeCandidate < result.distance); break; }
+                }
+
+                if (candidateWins) {
+                    result.material = composeMaterial;
+                }
+
+                float blendedDistance;
+                float3 blendedGradient;
+                blendShapeDual(result.distance, resultGradient, composeCandidate, composeGradient, composeBlend, composeSmooth, blendedDistance, blendedGradient);
+                result.distance = blendedDistance;
+                resultGradient = blendedGradient;
+            }
+        }
+    }
+
+    result.distance *= stepScale;
+    // The gradient is NOT scaled by stepScale: it is a uniform positive factor on the whole field, and the consumer
+    // normalizes the gradient (which cancels it) — so applying it here would be undone anyway.
+    gradient = resultGradient;
+
+    return result;
+}
+// The per-tile MASKED dual entry (world render path, hit-only). Analytic surface gradient at `worldPosition` under the
+// same tile instance mask the primary march used (self-consistent with the hit). Consumers normalize `gradient`.
+SdfHit mapGradMasked(float3 worldPosition, uint instanceMaskBase, out float3 gradient) {
+    return mapGradCore(worldPosition, instanceMaskBase, gradient);
 }
 
 // Instance `index`'s bound within the directory at `instanceOffset` (the caller resolves

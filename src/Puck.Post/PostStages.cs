@@ -55,6 +55,7 @@ internal static class PostStages {
             new WorldDomainWarpSolidityStage(),
             new WorldWarpStage(),
             new WorldWarpSolidityStage(),
+            new WorldAnalyticNormalStage(),
             new WorldLogSphereStage(),
             new WorldLogSphereSolidityStage(),
             new WorldChildStage(),

@@ -211,6 +211,31 @@ plus the existing instanced==flat stages.
   is ~4 full VM interpretations per pixel in the hottest kernel (isotropic taps,
   `Σ dᵢdᵢᵀ = 4·I`, so it reconstructs the same gradient as the old 6-tap central
   difference at 2/3 the cost; the D1 `stepScale` cancels under `normalize`).
+- **The lit normal is ANALYTIC by default — the forward-mode gradient DUAL**
+  (`mapGradMasked`/`mapGradCore` in `sdf-vm.hlsli`, consumed by
+  `calculateNormalAnalytic` in `sdf-world.hlsli`). ONE dual field eval at the
+  hit replaces the four taps: `mapGradCore` is a HIT-ONLY parallel twin of
+  `mapCore` (KEEP the walk skeleton IN SYNC) that carries, beside the scalar
+  accumulator, the transform-chain Jacobian columns `jx/jy/jz`
+  (`= d(localPosition)/d(worldPosition.{x,y,z})`, identity at each RESET, each
+  point op applies its analytic point-Jacobian) and the world-space accumulator
+  gradient. At a SHAPE the primitive's LOCAL gradient (`evaluateShapeGradient`:
+  analytic for sphere/plane/box/torus/capsule/cylinder, shape-local 4-tap FD for
+  the exotic rest) maps to world through those columns ×`distanceScale`; field
+  ops and blends carry the gradient in `blendShapeDual` (subtraction NEGATES the
+  candidate gradient — the classic carve-inversion bug lives there; smooth blends
+  LERP by the same `h`; the scope save slot is the `{distance,material,gradient}`
+  `SdfFieldSave` struct, one migration for a future depth raise). `stepScale` is
+  NOT applied to the gradient — a uniform positive factor `normalize` cancels.
+  This is MORE cross-backend-stable than the taps (survey R7): the hero `world`
+  parity IMPROVED (51→11 diff px) and the hero gpu-budget dropped (~1.87→1.58 ms,
+  4 evals → 1 dual). The runtime A/B lever is `SdfFrame.UseFiniteDifferenceNormals`
+  → `worldUseTapNormals()` (rides `sdfScreenLights[SdfGridObjParams].z`; the demo
+  verb is `sdf.normals taps|analytic`, default analytic); the 4-tap path stays
+  compiled, selected at runtime. The `sdf-world-rt-debug` 6-tap is a DELIBERATE
+  parity probe — do NOT migrate it. Gated by `world-analytic-normal` (the op-chain
+  scene: twist+repeat+scoped-onion+smooth) plus every existing world stage, which
+  now render analytic by default.
 - Per-pass GPU-ms: `PUCK_TIMING=1`. Delayed captures: `PUCK_CAPTURE_FRAME=N`.
 
 ## Verifying

@@ -18,6 +18,7 @@ public sealed class SdfDebugMode {
     private readonly SdfDebugController m_controller = new();
     private bool m_active;
     private bool m_gridCull = true;
+    private bool m_useFdNormals;
     private int m_gridRevision;
 
     /// <summary>The debug scene the <c>sdf.*</c> verbs mutate (shape, op stack, floor, lift).</summary>
@@ -52,6 +53,19 @@ public sealed class SdfDebugMode {
 
         m_gridCull = on;
         m_gridRevision++;
+    }
+
+    /// <summary>Whether the lit surface normal uses the legacy 4-tap finite-difference probe (the A/B lever) instead of
+    /// the DEFAULT analytic forward-mode gradient dual. A pure frame-channel flag (<see cref="SdfFrame.UseFiniteDifferenceNormals"/>) —
+    /// it changes no geometry, so it needs no revision bump; the frame source reads it fresh each frame. Pair with
+    /// <c>debug.view.normals</c> for the visual A/B.</summary>
+    public bool UseFiniteDifferenceNormals => m_useFdNormals;
+
+    /// <summary>Selects the surface-normal probe (see <see cref="UseFiniteDifferenceNormals"/>): analytic dual (the
+    /// default) or the 4-tap finite difference.</summary>
+    /// <param name="useTaps">Whether to use the 4-tap finite-difference probe; <see langword="false"/> = analytic.</param>
+    public void SetFiniteDifferenceNormals(bool useTaps) {
+        m_useFdNormals = useTaps;
     }
 
     /// <summary>The SLICE view's plane selector as a frame-channel float (0 = camera-locked, 1/2/3 = world X/Y/Z) —

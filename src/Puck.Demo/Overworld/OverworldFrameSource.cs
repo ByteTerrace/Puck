@@ -588,6 +588,10 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             // are the camera-locked plane, so a run that never touches the verb uploads the same zeros as before.
             DebugSliceAxis = m_sdfDebug.SliceAxis,
             DebugSliceOffset = m_sdfDebug.SliceOffset,
+            // The analytic-normal A/B lever (the sdf.normals verb): default false = the analytic forward-mode gradient
+            // dual; true swaps back to the 4-tap finite-difference probe. A pure frame flag (no geometry), so it rides
+            // the same per-frame channel as the slice lanes above.
+            UseFiniteDifferenceNormals = m_sdfDebug.UseFiniteDifferenceNormals,
             DynamicTransforms = m_dynamicTransforms,
             // The grid-lock overlay channel (grid-locking §4), threaded into SdfFrame's Grid* fields exactly like the
             // slice lanes above (the active editor wrote the locals; all-zero outside an editor).
