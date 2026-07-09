@@ -96,6 +96,19 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     }
 
     /// <inheritdoc/>
+    public bool TryGetSpsr(out uint spsr) {
+        if (!HasSpsr) {
+            spsr = 0u;
+
+            return false;
+        }
+
+        spsr = m_bankSpsr[BankIndex(mode: CurrentMode)];
+
+        return true;
+    }
+
+    /// <inheritdoc/>
     public uint GetRegister(int index) => m_gpr[index];
 
     /// <inheritdoc/>

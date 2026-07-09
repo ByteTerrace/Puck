@@ -9,7 +9,7 @@ namespace Puck.AdvancedGamingBrick;
 /// left PENDING — no fabricated completion and no serial IRQ — exactly as real hardware does, so cable-less games
 /// (a representative commercial cartridge's boot SIO probe) proceed via their own timeouts instead of acting on a phantom partner.
 /// </summary>
-public sealed class AgbSerialController : IAgbSerialController {
+public sealed partial class AgbSerialController : IAgbSerialController {
     private readonly AgbScheduler m_scheduler;
     private readonly IAgbInterruptController m_interrupts;
     private readonly AgbScheduler.Event m_transferEvent;

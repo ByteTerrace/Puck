@@ -20,6 +20,14 @@ public sealed record GamingBrickSource : ViewportSource {
 
     /// <summary>The console costume the machine wears: <c>dmg</c>, <c>cgb</c>, or <c>agb</c>.</summary>
     public string Model { get; init; } = "cgb";
+    /// <summary>When <see langword="true"/>, this stand hosts the NATIVE Game Boy Advance machine — the real ARM7TDMI
+    /// core (a 240×160 <c>0xAARRGGBB</c> framebuffer) booted from <see cref="RomPath"/> — rather than the SM83 core in
+    /// its <c>agb</c> costume. A native stand's cartridge is pure DATA (the ROM path); it does NOT participate in the
+    /// SM83 cart-type Cycle system, the choir/link fleet, or the victory/exit instrumentation. Null (the default, and
+    /// what an omitted value means) keeps the SM83 path. The overworld boots a native stand into the fullscreen AGB
+    /// scene (the same surface the <c>agb.*</c> console verbs drive); <c>--rom &lt;path.gba&gt;</c> sets this
+    /// automatically by ROM detection.</summary>
+    public bool? Native { get; init; }
     /// <summary>How the machine's 160×144 output is fit into the viewport rect.</summary>
     public CameraFit Fit { get; init; } = CameraFit.Sample;
     // NOTE for the optional fields below: a polymorphic-derived record deserialized through the run-document

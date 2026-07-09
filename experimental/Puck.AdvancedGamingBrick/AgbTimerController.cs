@@ -9,7 +9,7 @@ namespace Puck.AdvancedGamingBrick;
 /// of the hardware's start-up latency — no <c>(now+2)</c> heuristic and no lazy <c>(now-last)&gt;&gt;prescale</c>
 /// reconstruction. <see cref="RunCycle"/> is the per-cycle driver the bus calls as it charges each access.
 /// </summary>
-public sealed class AgbTimerController : IAgbTimerController {
+public sealed partial class AgbTimerController : IAgbTimerController {
     // Prescaler period mask per the 2-bit control field: divide by 1 / 64 / 256 / 1024.
     private static readonly long[] s_mask = { 0, 63, 255, 1023 };
 

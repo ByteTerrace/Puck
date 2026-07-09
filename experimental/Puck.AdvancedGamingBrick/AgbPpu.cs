@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick;
 /// Each scanline spans 1232 master cycles (240 visible dots + 68 H-blank dots) and a frame spans 228 scanlines
 /// (160 visible + 68 V-blank). Timing, interrupts, and DMA triggers are cycle-accurate.
 /// </summary>
-public sealed class AgbPpu : IAgbPpu {
+public sealed partial class AgbPpu : IAgbPpu {
     private const int ScreenWidth = 240;
     private const int ScreenHeight = 160;
     private const int DotsPerLine = 1232;

@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick;
 /// clock cycles — a duty step lasts (2048 − frequency) × 16 of them, four times the Humble GamingBrick period
 /// because the Advanced GamingBrick's master clock is four times faster.
 /// </summary>
-public sealed class ApuPulseChannel {
+public sealed partial class ApuPulseChannel {
     private static readonly byte[] s_dutyPatterns = { 0b00000001, 0b00000011, 0b00001111, 0b11111100 };
 
     private readonly bool m_hasSweep;

@@ -7,7 +7,7 @@ namespace Puck.AdvancedGamingBrick;
 /// type is sniffed from the identifier string the developer libraries embed (e.g. <c>SRAM_V</c>,
 /// <c>FLASH1M_V</c>, <c>EEPROM_V</c>), the same heuristic real flash carts and emulators use.
 /// </summary>
-public sealed class AgbCartridge {
+public sealed partial class AgbCartridge {
     private static readonly byte[] s_flash1M = Encoding.ASCII.GetBytes(s: "FLASH1M_V");
     private static readonly byte[] s_flash512 = Encoding.ASCII.GetBytes(s: "FLASH512_V");
     private static readonly byte[] s_flash = Encoding.ASCII.GetBytes(s: "FLASH_V");
@@ -69,7 +69,12 @@ public sealed class AgbCartridge {
         ArgumentNullException.ThrowIfNull(rom);
 
         m_rom = rom;
-        Backup = Detect(rom: rom);
+
+        // The per-game override table (keyed by the header game code) corrects the cases the string scan gets wrong,
+        // BEFORE the string-scan fallback. A null field defers to the scan.
+        var over = AgbGameOverrides.Lookup(rom: rom);
+
+        Backup = over?.Backup ?? Detect(rom: rom);
         m_isFlash = Backup is CartridgeBackup.Flash64 or CartridgeBackup.Flash128;
         m_isEeprom = Backup is CartridgeBackup.Eeprom;
         m_save = new byte[BackupSize(backup: Backup)];
@@ -77,9 +82,9 @@ public sealed class AgbCartridge {
         // Flash and (uninitialised) SRAM read as 0xFF on real hardware.
         Array.Fill(array: m_save, value: (byte)0xFF);
 
-        // Diagnostic override (PUCK_GBA_NO_RTC=1): force the GPIO/RTC off to isolate whether an RTC-protocol issue
-        // is what stalls a game's boot, vs an engine-timing issue.
-        m_hasRtc = Contains(haystack: rom, needle: s_rtc)
+        // RTC presence: the override wins, else the SIIRTC_V string scan. Diagnostic override (PUCK_GBA_NO_RTC=1)
+        // forces the GPIO/RTC off, to isolate whether an RTC-protocol issue stalls a boot vs an engine-timing issue.
+        m_hasRtc = (over?.HasRtc ?? Contains(haystack: rom, needle: s_rtc))
             && (Environment.GetEnvironmentVariable(variable: "PUCK_GBA_NO_RTC") != "1");
         m_rtcControl = 0x40; // 24-hour mode
         InitRtcTime();

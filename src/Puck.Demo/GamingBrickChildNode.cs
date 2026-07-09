@@ -33,6 +33,13 @@ internal delegate int JoypadSegmentFiller(Span<JoypadSegment> destination);
 /// frame before the machine steps.
 /// </summary>
 internal sealed class GamingBrickChildNode : ISteppableRenderNode {
+    /// <summary>The SM83 machine's native framebuffer width (160). Exposed as a constant so the overworld render node
+    /// names the pane's native extent through THIS type (which it already references) rather than coupling directly to
+    /// the emulator's <see cref="Framebuffer"/> type — the render node sits at its exact analyzer coupling ceiling.</summary>
+    public const int NativeScreenWidth = Framebuffer.ScreenWidth;
+    /// <summary>The SM83 machine's native framebuffer height (144). See <see cref="NativeScreenWidth"/>.</summary>
+    public const int NativeScreenHeight = Framebuffer.ScreenHeight;
+
     private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;  // output format
     /// <summary>The machine's CPU T-cycle rate (2²² per second); with <see cref="EngineTicks.PerSecond"/> it forms the
     /// exact rational the tick accumulator carries remainders in.</summary>

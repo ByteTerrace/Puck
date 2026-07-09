@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick;
 /// for playback, so a game can prepare the next bank while one plays. A sample lasts (2048 − frequency) × 8
 /// master cycles.
 /// </summary>
-public sealed class ApuWaveChannel {
+public sealed partial class ApuWaveChannel {
     // Two 16-byte banks (32 four-bit samples each) = 64 samples total.
     private readonly byte[] m_waveRam = new byte[0x20];
 

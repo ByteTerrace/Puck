@@ -130,6 +130,7 @@ battery stays the default. Each takes a ROM path unless noted.
 
 | Flag | Purpose |
 |------|---------|
+| `--oracle` | run the self-authored cycle-oracle probe battery: measured-vs-documented per probe. Two rows are self-checking gates (Direct Sound FIFO ring/playing model; per-channel DMA read latch); the DMA/timer/IRQ/halt cycle rows are honest our-harness measurements against the documented corpus targets (divergence recorded, not chased). The interrupt/halt probes need the retail BIOS (`PUCK_GBA_BIOS`) and skip without it. |
 | `--save-test` | the save round-trip, standalone (self-contained; no ROM) |
 | `--gen-rom <kind> <out.gba>` | hand-assemble a timer/IRQ micro-ROM (`timer-irq` \| `timer-irq-iwram` \| `cascade-irq` \| `ime-delay`) |
 | `--ags <rom>` | run the AGS aging cartridge headlessly, print per-subtest pass/fail + timing diagnostics |
@@ -148,6 +149,13 @@ battery stays the default. Each takes a ROM path unless noted.
 Render-hash floors are deterministic; re-capture with `--render-hash` and update the `ExpectedHash`
 constants in `PostStages.cs` whenever an *intended* timing/PPU change shifts a frame (confirm the
 frame is still visually correct first).
+
+**BIOS pre-flight guard.** The cycle-parity / co-sim diagnostics (`--lockstep`, `--statetrace`,
+`--trace-cycles`) identify the loaded BIOS by SHA-1 and **refuse to run on a non-retail BIOS** — the
+documented "phantom cycle drift" trap, where a session was once burned diffing cycles against the
+replacement BIOS. Supply the retail image via `PUCK_GBA_BIOS`, or pass `--allow-replacement-bios` to
+downgrade the refusal to a warning and proceed. The classification is also surfaced through
+`AdvancedGamingBrickMachine.BiosIdentity` to the demo's `agb.status`.
 
 ---
 

@@ -17,6 +17,13 @@ public interface IAgbApu : IAgbClockedComponent {
     /// <param name="value">The value to write.</param>
     void WriteRegister(uint offset, ushort value);
 
+    /// <summary>Streams one byte into a Direct Sound FIFO (0 = A, 1 = B). The bus decomposes each 8/16/32-bit write
+    /// to the FIFO register windows into the exact bytes it carries and streams them here in write order, so a narrow
+    /// write correctly fills only part of the next 32-bit FIFO word.</summary>
+    /// <param name="fifo">The Direct Sound FIFO index (0 = A, 1 = B).</param>
+    /// <param name="value">The byte to append.</param>
+    void WriteFifoByte(int fifo, byte value);
+
     /// <summary>Notifies the APU that a timer overflowed, advancing whichever Direct Sound FIFO is clocked by it.</summary>
     /// <param name="timer">The timer index (0 or 1) that overflowed.</param>
     void OnTimerOverflow(int timer);

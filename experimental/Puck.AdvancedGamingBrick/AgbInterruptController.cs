@@ -5,7 +5,7 @@ namespace Puck.AdvancedGamingBrick;
 /// committed stage [0]; a per-cycle <see cref="StepSync"/> recomputes the synchronizer and shifts [1]→[0]. The
 /// 1-cycle register-visibility delay and the 2-cycle timer-overflow→CPU-recognition latency are produced by this
 /// pipeline rather than by any tuned constant.</summary>
-public sealed class AgbInterruptController : IAgbInterruptController {
+public sealed partial class AgbInterruptController : IAgbInterruptController {
     private const ushort SourceMask = 0x3FFF;
 
     // Two-stage pipeline. [0] = committed/current (what the CPU line and register reads see); [1] = programmed/next

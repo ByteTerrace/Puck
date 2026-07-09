@@ -947,6 +947,12 @@
                   "model": {
                     "type": "string"
                   },
+                  "native": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
                   "fit": {
                     "enum": [
                       "Sample",
@@ -1136,6 +1142,12 @@
                 "properties": {
                   "model": {
                     "type": "string"
+                  },
+                  "native": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
                   },
                   "fit": {
                     "enum": [

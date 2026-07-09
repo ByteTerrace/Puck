@@ -7,7 +7,7 @@ namespace Puck.AdvancedGamingBrick;
 /// access — the deferred-cycle discipline carried over from the DMG/CGB core. Width-typed accessors model the
 /// 16-bit external bus (a 32-bit access to a 16-bit region costs two transfers).
 /// </summary>
-public sealed class AgbBus : IAgbBus {
+public sealed partial class AgbBus : IAgbBus {
     private const uint RegionBios = 0x0;
     private const uint RegionEwram = 0x2;
     private const uint RegionIwram = 0x3;
@@ -110,6 +110,25 @@ public sealed class AgbBus : IAgbBus {
 
     /// <summary>Reads an I/O register halfword without advancing the clock — for the I/O-read differential dump.</summary>
     public ushort DebugReadIo(uint offset) => ReadIoHalf(offset: offset);
+
+    /// <summary>Reads a halfword without advancing the clock, the prefetch buffer, the open-bus latch, or any
+    /// DMA/EEPROM burst state — a side-effect-free peek for the trace/disassembly verbs. Routed the same way as
+    /// <see cref="Read16"/>, region by region, but through the pure accessor at each region instead of the
+    /// clock-charging one: EWRAM/IWRAM/palette/VRAM/OAM are plain array reads already; I/O reuses
+    /// <see cref="DebugReadIo"/>; ROM bypasses the game-pak burst-page counter entirely (safe — a CPU ROM read
+    /// never touches it) and reads the cartridge directly. The BIOS region is the one truthful exception: hardware
+    /// itself refuses to expose BIOS bytes to a read that isn't a code fetch from within the BIOS, and a debug peek
+    /// cannot pose as a code fetch without mutating <c>m_inCodeFetch</c> — so it returns the same "last fetched
+    /// opcode" value a live out-of-BIOS data read would see, not necessarily the byte at the requested address.</summary>
+    /// <param name="address">The 32-bit CPU address to peek; the hardware forces halfword alignment.</param>
+    /// <returns>The 16-bit value at <paramref name="address"/>.</returns>
+    public ushort DebugRead16(uint address) => (ushort)DebugReadRegion(address: address & ~1u, width: 2);
+
+    /// <summary>Reads a word without advancing the clock, the prefetch buffer, the open-bus latch, or any
+    /// DMA/EEPROM burst state. See <see cref="DebugRead16"/> for the region-by-region side-effect notes.</summary>
+    /// <param name="address">The 32-bit CPU address to peek; the hardware forces word alignment.</param>
+    /// <returns>The 32-bit value at <paramref name="address"/>.</returns>
+    public uint DebugRead32(uint address) => DebugReadRegion(address: address & ~3u, width: 4);
 
     /// <summary>Sets the KEYINPUT register (0x04000130). The value is active-low: bit 0 = A, bit 1 = B,
     /// bit 2 = Select, bit 3 = Start, bits 4–7 = D-pad (R/L/U/D), bits 8–9 = shoulder (R/L).
@@ -493,6 +512,40 @@ public sealed class AgbBus : IAgbBus {
         return value;
     }
 
+    // The debug-peek counterpart of ReadRegion: same region decode, but every case is the pure accessor (no clock
+    // charge, no open-bus latch update, no burst-counter/DMA state). Callers pre-align address to the access width.
+    private uint DebugReadRegion(uint address, int width) => (address >> 24) switch {
+        RegionBios => ReadBios(address: address, width: width),
+        RegionEwram => ReadArray(array: m_ewram, index: address & 0x3FFFFu, width: width),
+        RegionIwram => ReadArray(array: m_iwram, index: address & 0x7FFFu, width: width),
+        RegionIo => DebugReadIoRegion(address: address, width: width),
+        RegionPalette or RegionVram or RegionOam => m_ppu.ReadVideo(address: address, width: width),
+        0x8 or 0x9 or 0xA or 0xB or 0xC or 0xD => DebugReadRom(address: address, width: width),
+        0xE or 0xF => ReadSave(address: address, width: width),
+        _ => m_openBus,
+    };
+
+    private uint DebugReadIoRegion(uint address, int width) {
+        var offset = address & 0xFFFFFFu;
+
+        return (width == 4)
+            ? (DebugReadIo(offset: offset) | ((uint)DebugReadIo(offset: offset + 2u) << 16))
+            : DebugReadIo(offset: offset);
+    }
+
+    // Reads the cartridge ROM directly (the pure byte accessor), deliberately bypassing the game-pak burst-page
+    // counter that ReadRom's DMA branch mutates — a CPU/debug read never drives that counter on hardware either.
+    private uint DebugReadRom(uint address, int width) {
+        var offset = address & 0x01FFFFFFu;
+
+        return (width == 2)
+            ? (uint)(m_cartridge.ReadRom(offset: offset) | (m_cartridge.ReadRom(offset: offset + 1u) << 8))
+            : (uint)(m_cartridge.ReadRom(offset: offset)
+                | (m_cartridge.ReadRom(offset: offset + 1u) << 8)
+                | (m_cartridge.ReadRom(offset: offset + 2u) << 16)
+                | (m_cartridge.ReadRom(offset: offset + 3u) << 24));
+    }
+
     private void WriteRegion(uint address, int width, uint value) {
         // Aligned address for the wide-bus regions (the CPU forces 16/32-bit accesses to their natural alignment);
         // the save region below deliberately uses the raw address for its 8-bit byte select.
@@ -655,6 +708,19 @@ public sealed class AgbBus : IAgbBus {
 
             if ((offset <= 0x301u) && ((offset + (uint)width) > 0x301u)) {
                 Halt(stop: ((value >> (int)((0x301u - offset) * 8u)) & 0x80u) != 0u);
+            }
+
+            return;
+        }
+
+        // Direct Sound FIFO windows (FIFO_A 0xA0-0xA3, FIFO_B 0xA4-0xA7): stream the exact bytes this access carries
+        // straight into the APU FIFO, in write order, bypassing the halfword read-modify-write path — so an 8-bit or
+        // 16-bit write fills only part of the next FIFO word instead of corrupting it with an open-bus read-back.
+        if ((offset >= 0xA0u) && (offset < 0xA8u)) {
+            var fifo = (offset < 0xA4u) ? 0 : 1;
+
+            for (var i = 0; (i < width); ++i) {
+                m_apu.WriteFifoByte(fifo: fifo, value: (byte)(value >> (8 * i)));
             }
 
             return;

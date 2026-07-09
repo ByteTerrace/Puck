@@ -39,6 +39,12 @@ internal static class DemoHost {
         services.AddSingleton<ICommandModule, Puck.Demo.Creator.CompanionCommandModule>();
         // The fullscreen SDF-debug tool (the SDF-VM accuracy arc's debugger): sdf / sdf.shape / sdf.op / sdf.floor / sdf.info.
         services.AddSingleton<ICommandModule, Puck.Demo.SdfDebug.SdfDebugCommandModule>();
+        // The native GBA (ARM7TDMI) debug scene + execution-control verbs (agb.debug / agb.pause / agb.step / agb.frame /
+        // agb.until / agb.trace / agb.regs / agb.io / agb.status / agb.bios). The AGB machine state lives in a DI singleton
+        // reached by the module directly (the sanctioned IServiceProvider escape) and resolved by the overworld render node
+        // for its per-frame step + framebuffer upload — the node and frame source are both at their CA1506 ceilings.
+        services.AddSingleton<Puck.Demo.AgbDebug.AgbDebugService>();
+        services.AddSingleton<ICommandModule, Puck.Demo.AgbDebug.AgbDebugCommandModule>();
         // The live win/reveal-condition editor ("the recursion"): condition.show/set/clear re-forge a cabinet's exit +
         // victory gates in-session, routed through the same IOverworldControlHost seam the reveal/link/cart verbs use.
         services.AddSingleton<ICommandModule, ConditionCommandModule>();

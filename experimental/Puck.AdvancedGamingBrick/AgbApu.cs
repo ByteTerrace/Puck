@@ -5,7 +5,7 @@ namespace Puck.AdvancedGamingBrick;
 /// SOUNDCNT and resampled into a drainable stereo ring. A 512&#160;Hz frame sequencer clocks the PSG
 /// length/envelope/sweep units.
 /// </summary>
-public sealed class AgbApu : IAgbApu {
+public sealed partial class AgbApu : IAgbApu {
     private const int MasterClock = 16_777_216;
     private const int FrameSequencerPeriod = MasterClock / 512;
 
@@ -13,8 +13,8 @@ public sealed class AgbApu : IAgbApu {
     private readonly ApuPulseChannel m_pulse2 = new(hasSweep: false);
     private readonly ApuWaveChannel m_wave = new();
     private readonly ApuNoiseChannel m_noise = new();
-    private readonly Queue<sbyte> m_fifoA = new();
-    private readonly Queue<sbyte> m_fifoB = new();
+    private readonly DirectSoundFifo m_fifoA = new();
+    private readonly DirectSoundFifo m_fifoB = new();
 
     private ushort m_soundControlLow;
     private ushort m_soundControlHigh;
@@ -93,22 +93,24 @@ public sealed class AgbApu : IAgbApu {
 
     /// <inheritdoc/>
     public void OnTimerOverflow(int timer) {
-        // SOUNDCNT_H bit 10 selects timer 0/1 for Direct Sound A; bit 14 for B.
-        if ((((m_soundControlHigh >> 10) & 1) == timer) && (m_fifoA.Count > 0)) {
-            m_directSoundA = m_fifoA.Dequeue();
+        // SOUNDCNT_H bit 10 selects timer 0/1 for Direct Sound A; bit 14 for B. The selected timer's overflow is the
+        // FIFO's sample clock: it both requests a DMA top-up (when the ring has room) and advances the playing buffer
+        // by one byte. The DMA request originating ONLY here is what upholds the hardware invariant that two DMA
+        // requests can never occur without an intervening timer overflow (see DirectSoundFifo).
+        if (((m_soundControlHigh >> 10) & 1) == timer) {
+            if (m_fifoA.Tick(needsDma: out var dmaA, sample: out var sampleA)) {
+                m_directSoundA = sampleA;
+            }
+
+            m_fifoARefill |= dmaA;
         }
 
-        if ((((m_soundControlHigh >> 14) & 1) == timer) && (m_fifoB.Count > 0)) {
-            m_directSoundB = m_fifoB.Dequeue();
-        }
+        if (((m_soundControlHigh >> 14) & 1) == timer) {
+            if (m_fifoB.Tick(needsDma: out var dmaB, sample: out var sampleB)) {
+                m_directSoundB = sampleB;
+            }
 
-        // A FIFO at half or less asks the DMA to top it up (handled by the bus, kept acyclic).
-        if (m_fifoA.Count <= 16) {
-            m_fifoARefill = true;
-        }
-
-        if (m_fifoB.Count <= 16) {
-            m_fifoBRefill = true;
+            m_fifoBRefill |= dmaB;
         }
     }
 
@@ -220,13 +222,13 @@ public sealed class AgbApu : IAgbApu {
             case 0x82u:
                 m_soundControlHigh = value;
 
-                // Bits 11 and 15 reset the Direct Sound FIFOs.
+                // Bits 11 and 15 reset the Direct Sound FIFOs (ring + playing buffer both cleared).
                 if ((value & 0x0800) != 0) {
-                    m_fifoA.Clear();
+                    m_fifoA.Reset();
                 }
 
                 if ((value & 0x8000) != 0) {
-                    m_fifoB.Clear();
+                    m_fifoB.Reset();
                 }
 
                 break;
@@ -244,11 +246,14 @@ public sealed class AgbApu : IAgbApu {
 
                 break;
             case >= 0xA0u and <= 0xA3u:
-                EnqueueFifo(fifo: m_fifoA, value: value);
+                // A halfword register write streams two bytes into the fill word in write order.
+                m_fifoA.WriteByte(value: (byte)value);
+                m_fifoA.WriteByte(value: (byte)(value >> 8));
 
                 break;
             case >= 0xA4u and <= 0xA7u:
-                EnqueueFifo(fifo: m_fifoB, value: value);
+                m_fifoB.WriteByte(value: (byte)value);
+                m_fifoB.WriteByte(value: (byte)(value >> 8));
 
                 break;
             default:
@@ -256,12 +261,12 @@ public sealed class AgbApu : IAgbApu {
         }
     }
 
-    private static void EnqueueFifo(Queue<sbyte> fifo, ushort value) {
-        // The 16-byte FIFO holds 8-bit signed samples; a halfword write enqueues two.
-        if (fifo.Count < 32) {
-            fifo.Enqueue((sbyte)value);
-            fifo.Enqueue((sbyte)(value >> 8));
-        }
+    /// <inheritdoc/>
+    public void WriteFifoByte(int fifo, byte value) {
+        // The 0xA0-0xA7 FIFO register windows accept 8/16/32-bit writes; the bus decomposes each to the exact bytes
+        // it carries and streams them here in write order (a narrow write fills only part of the next word). A whole
+        // word (four streamed bytes) is pushed into the ring; the common MP2K path is a 32-bit DMA fill.
+        (fifo == 0 ? m_fifoA : m_fifoB).WriteByte(value: value);
     }
 
     private void ClockFrameSequencer() {
@@ -348,4 +353,139 @@ public sealed class AgbApu : IAgbApu {
 
     private static int CountBits(int nibble) =>
         (nibble & 1) + ((nibble >> 1) & 1) + ((nibble >> 2) & 1) + ((nibble >> 3) & 1);
+
+    /// <summary>The number of filled 32-bit words in a Direct Sound FIFO's ring (0-7) — a diagnostic peek that does
+    /// not disturb state; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
+    public int DebugFifoWordCount(int fifo) => (fifo == 0 ? m_fifoA : m_fifoB).WordCount;
+
+    /// <summary>The number of bytes remaining in a Direct Sound FIFO's 32-bit playing buffer (0-4) — a diagnostic
+    /// peek; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
+    public int DebugFifoPlayingBytes(int fifo) => (fifo == 0 ? m_fifoA : m_fifoB).PlayingBytes;
+
+    /// <summary>The 8-bit signed sample a Direct Sound channel is currently driving to the DAC (the last byte the
+    /// playing buffer produced) — a diagnostic peek; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
+    public int DebugDirectSound(int fifo) => (fifo == 0) ? m_directSoundA : m_directSoundB;
+
+    /// <summary>
+    /// The hardware-measured Direct Sound FIFO: a 7-word (28-byte) ring buffer plus a separate 32-bit playing
+    /// buffer (mGBA issue #1847). CPU/DMA writes stream bytes into the ring one word at a time; the selected timer's
+    /// overflow both requests a DMA top-up (when the ring has &#8805;4 empty words) and, independently, refills the
+    /// playing buffer from the ring when it empties. The DAC consumes one byte from the playing buffer per overflow.
+    /// Integer-only and fully deterministic — no wall-clock, RNG, or float.
+    /// </summary>
+    private sealed class DirectSoundFifo {
+        private const int RingWords = 7;
+
+        private readonly uint[] m_ring = new uint[RingWords];
+        private int m_head;     // index of the oldest filled word
+        private int m_count;    // filled words in the ring (0..7)
+        private uint m_fillWord;
+        private int m_fillBytes; // bytes accumulated toward the next word (0..3)
+
+        private uint m_playing;
+        private int m_playingBytes; // bytes remaining in the 32-bit playing buffer (0..4)
+
+        /// <summary>The number of filled words currently in the ring (0..7).</summary>
+        public int WordCount => m_count;
+
+        /// <summary>The bytes remaining in the playing buffer (0..4).</summary>
+        public int PlayingBytes => m_playingBytes;
+
+        /// <summary>Clears the whole FIFO — ring, fill accumulator, and playing buffer (a SOUNDCNT_H reset, or the
+        /// auto-reset hardware performs on a write overrun).</summary>
+        public void Reset() {
+            Array.Clear(array: m_ring);
+            m_head = 0;
+            m_count = 0;
+            m_fillWord = 0;
+            m_fillBytes = 0;
+            m_playing = 0;
+            m_playingBytes = 0;
+        }
+
+        /// <summary>Streams one byte into the FIFO. Bytes accumulate in write order; every fourth byte completes a
+        /// word and pushes it into the ring. Pushing into a full ring auto-resets the FIFO to empty (hardware drops
+        /// the buffered samples rather than wrapping).</summary>
+        public void WriteByte(byte value) {
+            m_fillWord = (m_fillWord & ~(0xFFu << (m_fillBytes * 8))) | ((uint)value << (m_fillBytes * 8));
+
+            if (++m_fillBytes < 4) {
+                return;
+            }
+
+            var word = m_fillWord;
+
+            m_fillWord = 0;
+            m_fillBytes = 0;
+
+            if (m_count >= RingWords) {
+                // Write overrun: hardware auto-resets the FIFO to empty and drops the incoming word.
+                Reset();
+
+                return;
+            }
+
+            m_ring[(m_head + m_count) % RingWords] = word;
+            ++m_count;
+        }
+
+        /// <summary>A selected-timer overflow. Requests a DMA top-up when the ring has &#8805;4 empty words; refills
+        /// the playing buffer from the ring when the buffer is empty; then hands the DAC one byte. Returns whether a
+        /// byte was produced (false on underrun — the caller holds the previous sample).</summary>
+        /// <param name="needsDma">Set when the ring has room for a 4-word DMA burst.</param>
+        /// <param name="sample">The 8-bit signed sample the DAC now plays (0 when none was produced).</param>
+        /// <returns><see langword="true"/> when a sample was produced.</returns>
+        public bool Tick(out bool needsDma, out sbyte sample) {
+            // (a) The DMA request is evaluated on the pre-pop ring occupancy: >=4 empty words asks for a 4-word burst.
+            needsDma = (RingWords - m_count) >= 4;
+
+            // (b) Independently, an empty playing buffer pulls the next word from the ring.
+            if ((m_playingBytes == 0) && (m_count > 0)) {
+                m_playing = m_ring[m_head];
+                m_head = (m_head + 1) % RingWords;
+                --m_count;
+                m_playingBytes = 4;
+            }
+
+            if (m_playingBytes > 0) {
+                sample = (sbyte)(m_playing & 0xFFu);
+                m_playing >>= 8;
+                --m_playingBytes;
+
+                return true;
+            }
+
+            sample = 0;
+
+            return false;
+        }
+
+        /// <summary>Captures the whole FIFO — ring contents, cursors, fill accumulator, and playing buffer.</summary>
+        public void SaveState(AgbStateWriter writer) {
+            for (var i = 0; (i < RingWords); ++i) {
+                writer.WriteUInt32(value: m_ring[i]);
+            }
+
+            writer.WriteInt32(value: m_head);
+            writer.WriteInt32(value: m_count);
+            writer.WriteUInt32(value: m_fillWord);
+            writer.WriteInt32(value: m_fillBytes);
+            writer.WriteUInt32(value: m_playing);
+            writer.WriteInt32(value: m_playingBytes);
+        }
+
+        /// <summary>Restores the whole FIFO from <see cref="SaveState"/>'s image.</summary>
+        public void LoadState(AgbStateReader reader) {
+            for (var i = 0; (i < RingWords); ++i) {
+                m_ring[i] = reader.ReadUInt32();
+            }
+
+            m_head = reader.ReadInt32();
+            m_count = reader.ReadInt32();
+            m_fillWord = reader.ReadUInt32();
+            m_fillBytes = reader.ReadInt32();
+            m_playing = reader.ReadUInt32();
+            m_playingBytes = reader.ReadInt32();
+        }
+    }
 }

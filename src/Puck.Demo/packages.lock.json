@@ -402,6 +402,12 @@
       "puck.abstractions": {
         "type": "Project"
       },
+      "puck.advancedgamingbrick": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+        }
+      },
       "puck.assets": {
         "type": "Project",
         "dependencies": {

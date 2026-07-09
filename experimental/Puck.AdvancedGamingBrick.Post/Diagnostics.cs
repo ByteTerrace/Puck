@@ -30,12 +30,33 @@ internal static class Diagnostics {
     public static bool TryRun(string[] args, out int exitCode) {
         exitCode = 0;
 
+        // --oracle: run the self-authored cycle-oracle probe battery (survey #1) — measured vs documented per probe.
+        if (Array.IndexOf(array: args, value: "--oracle") >= 0) {
+            exitCode = OracleProbes.RunOracle(args: args);
+
+            return true;
+        }
+
         // --save-test: verify the cartridge save-persistence (.sav) round-trip, standalone.
         if (Array.IndexOf(array: args, value: "--save-test") >= 0) {
             var (pass, detail) = SaveRoundTripProbe.Run();
 
             Console.WriteLine(value: $"== save persistence round-trip: {(pass ? "PASS" : "FAIL")} — {detail} ==");
             exitCode = (pass ? 0 : 1);
+
+            return true;
+        }
+
+        // --state-roundtrip [rom]: verify the whole-machine savestate (Snapshot/Restore) round-trip over the generated
+        // micro-ROMs and, when a path is supplied, a real ROM too.
+        var stateRoundTripIndex = Array.IndexOf(array: args, value: "--state-roundtrip");
+
+        if (stateRoundTripIndex >= 0) {
+            var romArg = (((stateRoundTripIndex + 1) < args.Length) && !args[stateRoundTripIndex + 1].StartsWith(value: "--", comparisonType: StringComparison.Ordinal))
+                ? args[stateRoundTripIndex + 1]
+                : null;
+
+            exitCode = StateRoundTrip(romPath: romArg);
 
             return true;
         }
@@ -85,6 +106,12 @@ internal static class Diagnostics {
         // --statetrace <rom> <steps>: full per-instruction CPU state, to diff against the mGBA cosim's --statetrace.
         for (var index = 0; index < (args.Length - 2); ++index) {
             if (args[index] == "--statetrace") {
+                if (ParityBiosGuard(mode: "--statetrace", args: args)) {
+                    exitCode = 2;
+
+                    return true;
+                }
+
                 StateTrace(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
 
                 return true;
@@ -103,6 +130,12 @@ internal static class Diagnostics {
         // --lockstep <rom> <steps> [direct]: step Puck against the ARES oracle in lockstep to the first divergence.
         for (var index = 0; index < (args.Length - 2); ++index) {
             if (args[index] == "--lockstep") {
+                if (ParityBiosGuard(mode: "--lockstep", args: args)) {
+                    exitCode = 2;
+
+                    return true;
+                }
+
                 exitCode = Lockstep(romPath: args[index + 1], steps: long.Parse(args[index + 2]), direct: Array.IndexOf(array: args, value: "direct") >= 0);
 
                 return true;
@@ -126,6 +159,12 @@ internal static class Diagnostics {
         // --trace-cycles <rom> <steps>: per-instruction cycle trace, to diff against the mGBA cosim oracle.
         for (var index = 0; index < (args.Length - 2); ++index) {
             if (args[index] == "--trace-cycles") {
+                if (ParityBiosGuard(mode: "--trace-cycles", args: args)) {
+                    exitCode = 2;
+
+                    return true;
+                }
+
                 TraceCycles(romPath: args[index + 1], steps: long.Parse(args[index + 2]));
 
                 return true;
@@ -149,6 +188,78 @@ internal static class Diagnostics {
                 return true;
             }
         }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Runs the whole-machine savestate round-trip diagnostic: every generated micro-ROM and, when
+    /// <paramref name="romPath"/> is a real ROM on disk, that cartridge too. Each ROM is booted, snapshotted at a
+    /// frame boundary and mid-frame, restored, and re-run — asserting the framebuffer + register recordings are
+    /// bit-identical. Returns 0 when every check passed, 1 otherwise.
+    /// </summary>
+    public static int StateRoundTrip(string? romPath) {
+        Console.WriteLine(value: "== whole-machine savestate round-trip ==");
+
+        var failures = 0;
+
+        foreach (var kind in MicroRoms.Kinds) {
+            var (pass, _) = StateRoundTripProbe.Run(rom: MicroRoms.GenerateBytes(kind: kind), label: $"micro:{kind}", bios: BiosImage);
+
+            if (!pass) {
+                ++failures;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(value: romPath)) {
+            if (File.Exists(path: romPath)) {
+                var (pass, _) = StateRoundTripProbe.Run(rom: File.ReadAllBytes(path: romPath), label: $"rom:{Path.GetFileName(path: romPath)}", bios: BiosImage);
+
+                if (!pass) {
+                    ++failures;
+                }
+            }
+            else {
+                Console.WriteLine(value: $"  [SKIP] rom:{romPath} — not found");
+            }
+        }
+
+        Console.WriteLine(value: $"== savestate round-trip: {(failures == 0 ? "PASS" : $"FAIL ({failures} ROM(s))")} ==");
+
+        return (failures == 0) ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Pre-flight BIOS gate for the cycle-parity / co-simulation diagnostics. It classifies <see cref="BiosImage"/>
+    /// by content hash and, when the image is not the verified retail BIOS, prints a prominent warning — the
+    /// documented "phantom cycle drift" trap, where a whole session was once burned diffing cycles against the
+    /// replacement BIOS. Returns <see langword="true"/> (abort the diagnostic) unless <c>--allow-replacement-bios</c>
+    /// is passed, which downgrades the refusal to a warning and proceeds.
+    /// </summary>
+    private static bool ParityBiosGuard(string mode, string[] args) {
+        var identity = AgbBiosProfile.Identify(image: BiosImage.Span);
+
+        if (identity.IsCycleParityTrustworthy) {
+            Console.WriteLine(value: $"  [bios] {mode}: {identity.Description} (sha1 {identity.Sha1}) — OK for cycle parity");
+
+            return false;
+        }
+
+        var allow = (Array.IndexOf(array: args, value: "--allow-replacement-bios") >= 0);
+
+        Console.WriteLine(value: "  ============================================================================");
+        Console.WriteLine(value: $"  !! WARNING: {mode} is running on a NON-RETAIL BIOS — {identity.Description}");
+        Console.WriteLine(value: "  !! Cycle-parity / co-sim numbers are UNTRUSTWORTHY on this image: the documented");
+        Console.WriteLine(value: "  !! 'phantom cycle drift' trap. Supply the retail BIOS via PUCK_GBA_BIOS.");
+        Console.WriteLine(value: "  ============================================================================");
+
+        if (!allow) {
+            Console.WriteLine(value: "  [bios] refusing to run (pass --allow-replacement-bios to override).");
+
+            return true;
+        }
+
+        Console.WriteLine(value: "  [bios] --allow-replacement-bios set: proceeding on the non-retail BIOS anyway.");
 
         return false;
     }

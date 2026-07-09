@@ -1,0 +1,16 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "A NATIVE Game Boy Advance stand: `native: true` boots the real ARM7TDMI core (a 240x160 framebuffer) from the .gba romPath instead of the SM83 core in its agb costume, and the overworld opens straight into the fullscreen AGB scene the agb.* console verbs debug. Equivalent to `Puck.Demo --rom game.gba`. Parse-validation does not check the romPath; the run path loads it (or falls back to a built-in ARM micro-ROM if absent).",
+    "host": {
+        "presentMode": "vsync"
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld",
+        "immersed": true,
+        "consoles": [
+            { "model": "agb", "native": true, "romPath": "game.gba" }
+        ]
+    }
+}

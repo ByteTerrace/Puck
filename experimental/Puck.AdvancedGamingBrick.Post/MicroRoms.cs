@@ -7,14 +7,21 @@ namespace Puck.AdvancedGamingBrick.Post;
 // which both cores jump to under direct boot; the real BIOS handles the IRQ vector and dispatches to the user
 // handler installed at 0x03007FFC.
 internal static class MicroRoms {
+    /// <summary>The micro-ROM kinds this generator knows, for the diagnostics that sweep them in memory.</summary>
+    public static readonly string[] Kinds = ["timer-irq", "timer-irq-iwram", "cascade-irq", "ime-delay"];
+
+    // Builds a micro-ROM image in memory (no disk), so the savestate round-trip diagnostic can boot every kind
+    // without a temp file.
+    public static byte[] GenerateBytes(string kind) => kind switch {
+        "timer-irq" => TimerIrq(reload: 0xFF00, control: 0x00C0),
+        "timer-irq-iwram" => TimerIrqIwram(reload: 0xFF00, control: 0x00C0),
+        "cascade-irq" => CascadeIrq(),
+        "ime-delay" => ImeDelay(),
+        _ => throw new ArgumentException(message: $"unknown micro-rom kind '{kind}' (timer-irq | timer-irq-iwram | cascade-irq | ime-delay)"),
+    };
+
     public static void Generate(string kind, string outPath) {
-        var rom = kind switch {
-            "timer-irq" => TimerIrq(reload: 0xFF00, control: 0x00C0),
-            "timer-irq-iwram" => TimerIrqIwram(reload: 0xFF00, control: 0x00C0),
-            "cascade-irq" => CascadeIrq(),
-            "ime-delay" => ImeDelay(),
-            _ => throw new ArgumentException(message: $"unknown micro-rom kind '{kind}' (timer-irq | timer-irq-iwram | cascade-irq | ime-delay)"),
-        };
+        var rom = GenerateBytes(kind: kind);
 
         File.WriteAllBytes(path: outPath, bytes: rom);
         Console.WriteLine($"== wrote '{kind}' micro-rom ({rom.Length} bytes) to {outPath} ==");

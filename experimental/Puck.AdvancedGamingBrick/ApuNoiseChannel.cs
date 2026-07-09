@@ -5,7 +5,7 @@ namespace Puck.AdvancedGamingBrick;
 /// rate, gated by a volume envelope and a length counter. The output is high whenever the register's low bit
 /// is clear.
 /// </summary>
-public sealed class ApuNoiseChannel {
+public sealed partial class ApuNoiseChannel {
     private static readonly int[] s_divisors = { 8, 16, 32, 48, 64, 80, 96, 112 };
 
     private int m_frequencyTimer;

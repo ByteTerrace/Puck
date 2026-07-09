@@ -36,4 +36,10 @@ public interface IArmCpu {
 
     /// <summary>Gets the current program status register.</summary>
     uint Cpsr { get; }
+
+    /// <summary>Attempts to read the banked saved program status register (SPSR) of the currently visible mode.</summary>
+    /// <param name="spsr">The banked SPSR value, when the current mode has one; otherwise 0.</param>
+    /// <returns><see langword="true"/> if the current mode banks an SPSR (every mode but User/System);
+    /// <see langword="false"/> in User/System mode, which has none.</returns>
+    bool TryGetSpsr(out uint spsr);
 }

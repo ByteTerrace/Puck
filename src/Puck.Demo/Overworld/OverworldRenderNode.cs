@@ -220,9 +220,19 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         ArgumentNullException.ThrowIfNull(library);
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
+        // A NATIVE AGB stand (GamingBrickSource.Native) hosts the real ARM7TDMI core, not the SM83 machinery: capture
+        // its ROM to auto-boot the fullscreen AGB scene on the first frame, and hand the SM83 cabinet side a RomPath-less
+        // copy so the stand stays a dark empty SM83 cabinet behind the takeover (never loaded/booted as SM83). The
+        // fullscreen AGB scene renders over it, so a native run reads as one native machine.
+        m_agbBootRomPath = consoles.FirstOrDefault(predicate: static c => (c.Native == true))?.RomPath;
+
+        var sm83Consoles = ((m_agbBootRomPath is null)
+            ? consoles
+            : consoles.Select(selector: static c => ((c.Native == true) ? (c with { RomPath = null }) : c)).ToArray());
+
         // A mutable copy (an array behind the IReadOnlyList) — the live condition editor replaces entries in place. Built
         // by MetaVictoryWatch (static) so the array type stays out of THIS node's coupling set.
-        m_consoles = MetaVictoryWatch.CopyConsoles(consoles: consoles);
+        m_consoles = MetaVictoryWatch.CopyConsoles(consoles: sm83Consoles);
         m_library = library;
         m_serviceProvider = serviceProvider;
         m_width = width;
@@ -332,6 +342,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             if (m_frameSource is { SdfDebugActive: true }) {
                 SetSdfDebugMode(active: false);
             }
+            ExitAgbDebugIfActive();
         }
 
         return Puck.Demo.Forge.ForgeCommands.TrackerToggle(services: m_serviceProvider);
@@ -425,6 +436,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             }
             Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
             SetSdfDebugMode(active: false);
+            ExitAgbDebugIfActive();
         }
 
         frameSource.SetWorldSculptActive(active: active);
@@ -477,6 +489,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             }
             SetWorldSculptMode(active: false);
             Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
+            ExitAgbDebugIfActive();
         }
 
         frameSource.SetSdfDebugActive(active: active);
@@ -488,6 +501,95 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         Console.Error.WriteLine(value: (active
             ? "[sdf-debug] the room is replaced by one shape at the origin — orbit it, stack modifiers, and shade it with the debug views."
             : "[sdf-debug] the room returns."));
+    }
+
+    // The native AGB (ARM7TDMI) debug scene: a DI singleton owns the machine + its execution-control state (the node and
+    // the frame source are both at their CA1506 ceilings, so the AGB state cannot be composed onto either — the sanctioned
+    // IServiceProvider escape). Resolved lazily, exactly like the pad-routing service. This adds ONE type to the node.
+    private Puck.Demo.AgbDebug.AgbDebugService? m_agbService;
+    private bool m_agbServiceResolved;
+    // A native AGB stand's ROM (captured from the document in the ctor), auto-booted into the fullscreen AGB scene on
+    // the first produced frame; null for a run with no native stand. The one-shot latch guards the boot.
+    private readonly string? m_agbBootRomPath;
+    private bool m_agbAutoBooted;
+
+    private Puck.Demo.AgbDebug.AgbDebugService? AgbService() {
+        if (!m_agbServiceResolved) {
+            m_agbServiceResolved = true;
+            m_agbService = (m_serviceProvider.GetService(serviceType: typeof(Puck.Demo.AgbDebug.AgbDebugService)) as Puck.Demo.AgbDebug.AgbDebugService);
+        }
+
+        return m_agbService;
+    }
+
+    /// <inheritdoc/>
+    public bool AgbDebugModeActive => (AgbService()?.Active ?? false);
+
+    /// <inheritdoc/>
+    public string ToggleAgbDebugMode(string? romPath) {
+        if (m_frameSource is null) {
+            return "[agb.debug: unavailable — the overworld is not the active root]";
+        }
+
+        if (AgbService() is not { } service) {
+            return "[agb.debug: unavailable — the AGB debug service is not registered]";
+        }
+
+        if (!service.Active) {
+            // The FIFTH creating-slot takeover — force-exit the other authoring modes (the room has one takeover at a time).
+            if (m_frameSource.CreatorActive) {
+                SetCreatorMode(active: false);
+            }
+            SetWorldSculptMode(active: false);
+            SetSdfDebugMode(active: false);
+            Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
+
+            var narration = service.Enter(romPathArg: romPath);
+
+            // Fullscreen takeover: the room eases to fullscreen and every game pane hides (the same CreatorView flag the
+            // other modes ride); the frame source picks up the active state next produce (SetAgbDebugScreen) and rebuilds.
+            if (service.Active && (m_director is not null)) {
+                m_director.CreatorView = true;
+            }
+
+            return narration;
+        }
+
+        var exitNarration = service.Exit();
+
+        if (m_director is not null) {
+            m_director.CreatorView = false;
+        }
+
+        return exitNarration;
+    }
+
+    // Force-exits the AGB debug scene when another creating-slot takeover is entered (the mutual-exclusion counterpart of
+    // the calls the other SetXMode helpers make). Pure service teardown — the entering mode owns the CreatorView flag.
+    private void ExitAgbDebugIfActive() {
+        if ((m_agbService ?? AgbService()) is { Active: true } service) {
+            _ = service.Exit();
+        }
+    }
+
+    // The native AGB scene's per-frame render-thread work, mirroring ProduceMachines' shape for the SM83 cabinets: while
+    // the scene is active, feed the machine the same per-tick sampled joypad the SM83 bricks consume, step + upload it
+    // (through the DI service — the node's only AGB coupling), and PUSH the resulting framebuffer handle + glow into the
+    // frame source (primitives only) so its fullscreen slab samples them and BuildScreenSources returns them for the AGB
+    // slot. When the scene has just closed, one last push clears the frame source's flag so the room rebuilds.
+    private void ProduceAgbDebug(in FrameContext context) {
+        if (m_frameSource is not { } frameSource) {
+            return;
+        }
+
+        if (AgbService() is { Active: true } service) {
+            service.SetJoypad(buttons: (m_padService?.SampleSharedStream(frameKey: context.RenderTicks) ?? default));
+            service.ProduceFrame(context: in context);
+            frameSource.SetAgbDebugScreen(active: true, handle: service.ViewHandle, glow: service.Glow);
+        }
+        else if (frameSource.AgbDebugActive) {
+            frameSource.SetAgbDebugScreen(active: false, handle: 0, glow: Vector3.Zero);
+        }
     }
 
     // THE GATED WORKBENCH ENTRY (Stage 3 of the self-editing arc): the DIEGETIC door into world-sculpt. Once the editor
@@ -646,6 +748,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
             SetWorldSculptMode(active: false);
             SetSdfDebugMode(active: false);
+            ExitAgbDebugIfActive();
         }
 
         frameSource.SetCreatorActive(active: active);
@@ -727,7 +830,15 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // the SDF render reads their framebuffers for the diegetic screens). One serial pass — four machines is well
         // inside the frame; the choir park/mirror still amortizes identical ones. Their resampled output is unused now
         // (the diegetic screens sample the raw framebuffer via NativeImageViewHandle), so they produce at native size.
+        // A native AGB stand auto-boots into the fullscreen AGB scene on the first frame (the --rom <path.gba> path and
+        // the run-doc GamingBrickSource.Native field). One-shot; the player can leave it with `agb.debug` afterward.
+        if (!m_agbAutoBooted && (m_agbBootRomPath is { } agbBootRom)) {
+            m_agbAutoBooted = true;
+            Console.Error.WriteLine(value: ToggleAgbDebugMode(romPath: agbBootRom));
+        }
+
         ProduceMachines(context: in context);
+        ProduceAgbDebug(context: in context);
 
         // The room-level meta (cooperative XOR) win, polled after the machines stepped this frame. Immersed only — the
         // reveal is the fourth-wall break, exactly like the exit/solo triggers that also only fire in immersed mode.
@@ -757,8 +868,8 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         }
 
         var machineContext = (context with {
-            TargetHeight = Framebuffer.ScreenHeight,
-            TargetWidth = Framebuffer.ScreenWidth,
+            TargetHeight = GamingBrickChildNode.NativeScreenHeight,
+            TargetWidth = GamingBrickChildNode.NativeScreenWidth,
         });
 
         // Linked pairs first: both cabinets stage this frame's inputs, then the pair advances TOGETHER through the
@@ -1421,11 +1532,14 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 : (cabinetSource?.Invoke() ?? 0));
 
             // The headroom slots (4..7): generically delegated — 0 (the flat/procedural fallback) when nothing
-            // registered a claim on the slot this frame.
+            // registered a claim on the slot this frame. The AGB debug slot additionally returns the native AGB
+            // framebuffer while its fullscreen scene is up (the frame source's pushed primitive state — no AGB type here).
             for (var index = ScreenMuxHeadroomStart; (index < OverworldFrameSource.MaxScreenSurfaceCount); index++) {
                 var slot = index;
 
-                sources[slot] = () => frameSource.ResolveDynamicSource(slot: slot);
+                sources[slot] = () => ((slot == OverworldFrameSource.AgbDebugScreenSlot) && frameSource.AgbDebugActive)
+                    ? frameSource.AgbDebugScreenHandle
+                    : frameSource.ResolveDynamicSource(slot: slot);
             }
         }
 
@@ -1462,11 +1576,13 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 : (cabinetLight?.Invoke() ?? Vector3.Zero));
 
             // The headroom slots' glow: generically delegated, scaled by the director's room-light factor exactly
-            // like every other light provider.
+            // like every other light provider. The AGB debug slot returns the native screen's glow while its scene is up.
             for (var index = ScreenMuxHeadroomStart; (index < OverworldFrameSource.MaxScreenSurfaceCount); index++) {
                 var slot = index;
 
-                lights[slot] = () => (frameSource.ResolveDynamicLight(slot: slot) * (m_director?.RoomLightFactor ?? 1f));
+                lights[slot] = () => (((slot == OverworldFrameSource.AgbDebugScreenSlot) && frameSource.AgbDebugActive)
+                    ? frameSource.AgbDebugScreenGlow
+                    : frameSource.ResolveDynamicLight(slot: slot)) * (m_director?.RoomLightFactor ?? 1f);
             }
         }
 
@@ -2408,6 +2524,8 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         foreach (var brick in m_bricks) {
             brick.OnDeviceLost();
         }
+
+        (m_agbService ?? AgbService())?.OnDeviceLost();
     }
 
     /// <inheritdoc/>
@@ -2428,6 +2546,10 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         foreach (var brick in m_bricks) {
             brick.Dispose();
         }
+
+        // The native AGB scene's machine + framebuffer upload (a DI singleton, but its GPU upload must fall before the
+        // device is destroyed, exactly like the bricks above).
+        (m_agbService ?? AgbService())?.Shutdown();
     }
 }
 
@@ -2488,6 +2610,16 @@ internal interface ICreatorModeHost {
     /// <summary>Starts or stops the headless preview of the working tune. Returns a status line for the console.</summary>
     /// <param name="play"><see langword="true"/> to (re)start the preview, <see langword="false"/> to stop it.</param>
     string RequestTrackerPreview(bool play);
+
+    /// <summary>Whether the fullscreen native AGB (ARM7TDMI) debug scene is currently active.</summary>
+    bool AgbDebugModeActive { get; }
+
+    /// <summary>Toggles the fullscreen native AGB debug scene (the FIFTH creating-slot takeover, mutually exclusive with
+    /// creator/world-sculpt/tracker/sdf-debug) and returns the narration. On enter it boots <paramref name="romPath"/>
+    /// (or the pending native/<c>--rom</c> cartridge, else a built-in micro-ROM) through the DI-held
+    /// <c>AgbDebugService</c>; the <c>agb.*</c> execution-control verbs drive that service directly.</summary>
+    /// <param name="romPath">An optional explicit cartridge ROM path.</param>
+    string ToggleAgbDebugMode(string? romPath);
 }
 
 /// <summary>How a player's input is coupled to their world-lens cabinet — the switchboard's per-connection setting.</summary>

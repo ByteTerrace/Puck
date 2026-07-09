@@ -96,14 +96,26 @@ internal static class DemoRunDocuments {
     // mode-verb binds. BOTH boot directions build the same four machines; only the immersion (start inside the ROM vs
     // in the room) and the exit instrumentation differ, so a player who joins inherits whatever mode the world booted in.
     private static GamingBrickSource[] StandingMachines(string romPath, BrickExitCondition? exit) {
+        // A .gba ROM boots the NATIVE ARM7TDMI cabinet (the fullscreen AGB scene) rather than the SM83 core in its agb
+        // costume — the overworld auto-boots a native stand and the agb.* verbs debug it. The SM83-only exit
+        // instrumentation does not apply to a native stand (it polls SM83 work RAM), so it is dropped there.
+        var native = IsGbaRom(romPath: romPath);
         var machines = new GamingBrickSource[OverworldNode.MaxConsoles];
 
         for (var index = 0; (index < machines.Length); index++) {
-            machines[index] = new GamingBrickSource { Exit = exit, Model = "agb", RomPath = romPath };
+            machines[index] = (native
+                ? new GamingBrickSource { Model = "agb", Native = true, RomPath = romPath }
+                : new GamingBrickSource { Exit = exit, Model = "agb", RomPath = romPath });
         }
 
         return machines;
     }
+
+    // Whether a --rom path names a Game Boy Advance cartridge (the ARM7TDMI native path) rather than an SM83 GB/GBC
+    // cartridge. Detected by extension — the reliable signal for a launch flag, and file-I/O-free at document synthesis
+    // (document validation never touches the filesystem; the run path loads the bytes).
+    private static bool IsGbaRom(string romPath) =>
+        romPath.EndsWith(value: ".gba", comparisonType: StringComparison.OrdinalIgnoreCase);
 
     // Parses a --rom-exit spec ("<0xADDR><op><value>", e.g. "0xDA22>=1") into the document exit condition. A
     // malformed spec is reported LOUDLY and dropped (the boot proceeds without instrumentation) rather than

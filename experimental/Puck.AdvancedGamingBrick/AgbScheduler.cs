@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick;
 /// absolute times on that clock, and the bus fires each one at its <b>exact</b> cycle (the cycle-stepped hardware model — no deferred
 /// batching, so a peripheral register read mid-instruction sees state that has advanced to the precise cycle).
 /// </summary>
-public sealed class AgbScheduler {
+public sealed partial class AgbScheduler {
     /// <summary>A scheduled callback. <see cref="When"/> is an absolute time on the <see cref="Now"/> clock.</summary>
     public sealed class Event {
         /// <summary>The callback, invoked with how many cycles late it fired (0 = exactly on time).</summary>

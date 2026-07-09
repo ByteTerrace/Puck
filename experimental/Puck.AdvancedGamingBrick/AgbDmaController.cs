@@ -4,7 +4,7 @@ namespace Puck.AdvancedGamingBrick;
 /// checked for readiness so a higher-priority channel can interrupt a lower-priority transfer mid-stream.
 /// ProcessEvents is called between bus operations so scheduler events (HBlank, VBlank) can activate timed
 /// channels during an immediate transfer — matching the cycle-stepped hardware reference.</summary>
-public sealed class AgbDmaController : IAgbDmaController {
+public sealed partial class AgbDmaController : IAgbDmaController {
     private const uint ChannelStride = 12u;
     private const int TimingImmediate = 0;
     private const int TimingVBlank = 1;
@@ -19,9 +19,11 @@ public sealed class AgbDmaController : IAgbDmaController {
     private readonly uint[] m_destinationLatch = new uint[4];
     private readonly uint[] m_remaining = new uint[4];
 
-    // Last value latched onto the internal DMA bus. A read from an undrivable source (BIOS region < 0x02000000)
-    // returns this open-bus latch rather than fetching; a halfword read mirrors into both halves so the destination
-    // alignment selects the right half (open-bus DMA behavior).
+    // Last value latched onto the internal DMA bus, PER CHANNEL (each of the four channels has its own 32-bit read
+    // latch — the hardware-measured behaviour; there is no single shared latch, so one channel's leftover never
+    // leaks into another channel's undrivable read). A read from an undrivable source (BIOS region < 0x02000000)
+    // returns this channel's open-bus latch rather than fetching; a halfword read mirrors into both halves so the
+    // destination alignment selects the right half (open-bus DMA behavior).
     private readonly uint[] m_dataLatch = new uint[4];
     private readonly bool[] m_active = new bool[4];
     private bool m_running;

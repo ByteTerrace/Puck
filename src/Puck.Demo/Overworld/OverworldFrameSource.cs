@@ -343,7 +343,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // orbit/head-on framing; while WORLD-SCULPT is up, a lifted town-read orbit anchored on the creating slot
         // (the player IS the cursor — steep pitch, generous distance, so a street reads while stamping). Both ride
         // the director's one eased CreatorCameraSource seam (this source is the composition point).
-        m_director.CreatorCameraSource = () => (m_sdfDebug.CameraFrame ?? m_creatorController.CameraFrame ?? WorldSculptCameraFrame());
+        m_director.CreatorCameraSource = () => (AgbDebugCameraFrame() ?? m_sdfDebug.CameraFrame ?? m_creatorController.CameraFrame ?? WorldSculptCameraFrame());
         // When a world (the town) is loaded, the fourth-wall reveal frames the WHOLE lot rather than the fixed
         // default-room overview — centred on the lot, pulled back to its bounds. Null while no world is applied, so
         // the default room's reveal framing is byte-unchanged.
@@ -579,7 +579,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             // reveal's room-light does — at dusk the authored lamps' emissive materials carry the room (world.dusk).
             // SDF-debug pins the room full-bright (Ambient/Sun 1) so the lit/normals views read true against the
             // replaced-room debug subject; otherwise studio's flat lighting or the dim arcade mood applies.
-            AmbientScale = (m_sdfDebug.Active ? 1f : (m_scenarioStudio ? StudioAmbientScale : (OverworldAmbientScale * roomLight * m_worldScene.Daylight))),
+            AmbientScale = ((m_sdfDebug.Active || m_agbActive) ? 1f : (m_scenarioStudio ? StudioAmbientScale : (OverworldAmbientScale * roomLight * m_worldScene.Daylight))),
             // The SLICE debug view's plane channel (two floats riding the frame's screen-light env lanes — see
             // SdfFrame.DebugSliceAxis): the sdf.slice verb positions an axis-aligned slice plane; the defaults (0)
             // are the camera-locked plane, so a run that never touches the verb uploads the same zeros as before.
@@ -595,7 +595,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             GridObjectPatchRadius = gridObjectPatchRadius,
             GridObjectPitch = gridObjectPitch,
             GridWorldPitch = gridWorldPitch,
-            SunScale = (m_sdfDebug.Active ? 1f : (m_scenarioStudio ? StudioSunScale : (OverworldSunScale * roomLight * m_worldScene.Daylight))),
+            SunScale = ((m_sdfDebug.Active || m_agbActive) ? 1f : (m_scenarioStudio ? StudioSunScale : (OverworldSunScale * roomLight * m_worldScene.Daylight))),
         };
     }
 
@@ -1603,6 +1603,13 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             m_sdfDebug.Emit(builder: builder);
 
             return builder.Build();
+        }
+
+        // AGB-DEBUG takeover: the native GBA scene is ONE fullscreen diegetic slab sampling the ARM7TDMI framebuffer
+        // (see the OverworldFrameSource.AgbDebug partial). Like the SDF-debug branch it replaces the room; the probe
+        // path never takes it (the room worst case strictly dominates one slab, so the frozen envelope already covers it).
+        if (!probeWorstCase && m_agbActive) {
+            return BuildAgbDebugProgram();
         }
 
         var floorMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.34f, 0.36f, 0.42f)));

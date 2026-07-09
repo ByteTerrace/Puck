@@ -16,6 +16,7 @@
         <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
         <ProjectReference Include="..\Puck.Scene\Puck.Scene.csproj" />
         <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <ProjectReference Include="..\..\experimental\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <ProjectReference Include="..\..\experimental\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
         <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
