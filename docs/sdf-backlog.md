@@ -211,6 +211,15 @@ premises are now false).
       text effects, and a screen-space quad-batch draw stack (not for the
       world-geometry op; possibly for later UI polish). Port with
       provenance, adapt to Puck conventions.
+    - **The overlay text upgrade (user-ratified 2026-07-09):** since the
+      overlay bar/console is PERMANENT, it graduates from GDI+ bitmap blits
+      to the decal-tier math in screen space — the shared atlas sampled with
+      `screenPxRange` coverage, median-of-3 legitimately (its designed 2D
+      job), plus the SDF contrast toolkit (outline/halo) the
+      floats-over-a-lit-world overlay has always needed. ONE atlas + ONE
+      `TextLayout` across overlay, diegetic decals, and world glyphs makes
+      "same layout, rolled in" literal: identical glyph metrics everywhere.
+      The Tier-2 UI type owns the atlas as SHARED infrastructure by design.
     - The recursion prize: UI elements become authorable creations
       (`puck.creation.v1`) — the editor can sculpt its own chrome.
     - 2D-arc **option B (flat-2D/ortho kernel) is DEMOTED** to
