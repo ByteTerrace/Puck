@@ -464,13 +464,11 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     }
 
     /// <inheritdoc/>
-    public bool TryReadSdfPassTimings(out double beam, out double views, out double composite, out double frame) {
-        beam = 0.0;
-        views = 0.0;
-        composite = 0.0;
+    public bool TryReadSdfPassTimings(Span<double> passMilliseconds, out int passCount, out double frame) {
+        passCount = 0;
         frame = 0.0;
 
-        return (m_producer?.TryReadPassTimings(beam: out beam, composite: out composite, frame: out frame, views: out views) ?? false);
+        return (m_producer?.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out passCount, frame: out frame) ?? false);
     }
 
     // Enters/leaves SDF-DEBUG mode on the frame source — the fullscreen single-shape debug tool, the FOURTH creating-
@@ -851,7 +849,14 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // rebuilds the program to the new workload this same frame). The node owns the producer's timings; the frame
         // source stays coupling-flat behind AdvanceSdfBench. No new type is named here.
         if (m_frameSource is { } benchSource && benchSource.SdfBenchRunning) {
-            var hasTimings = TryReadSdfPassTimings(beam: out var beam, views: out var views, composite: out var composite, frame: out var frame);
+            Span<double> passMilliseconds = stackalloc double[SdfEngineNode.PassTimingCount];
+            var hasTimings = TryReadSdfPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frame);
+            // The bench keeps its FIXED four columns (frame + beam/views/composite) so the ladder tables stay comparable
+            // run to run; a pass added to PassTimingLabels surfaces in sdf.info / [world-timing] but not as a new column.
+            // Resolved through SdfEngineNode (already coupled) so the node stays under its CA1506 class-coupling ceiling.
+            var beam = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "beam");
+            var views = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "views");
+            var composite = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "composite");
 
             benchSource.AdvanceSdfBench(hasTimings: hasTimings, beam: beam, views: views, composite: composite, frame: frame, width: m_width, height: m_height, backendIsDirectX: m_hostsOnDirectX);
         }
@@ -2601,11 +2606,14 @@ internal interface ICreatorModeHost {
     /// through <see cref="CreatorFrameSource"/>, every authoring surface's composition point.</summary>
     string ToggleSdfDebugMode();
 
-    /// <summary>Reads the previous frame's per-pass GPU times (beam/views/composite/frame milliseconds) for
-    /// <c>sdf.info</c> — a primitive-typed passthrough of the producer's <c>SdfEngineNode.TryReadPassTimings</c> so the
-    /// node names no engine type it does not already. False when the producer is absent or timing is off
-    /// (<c>PUCK_TIMING=1</c> / the spec Timing flag).</summary>
-    bool TryReadSdfPassTimings(out double beam, out double views, out double composite, out double frame);
+    /// <summary>Reads the previous frame's per-pass GPU times for <c>sdf.info</c> — a passthrough of the producer's
+    /// <c>SdfEngineNode.TryReadPassTimings</c> that fills <paramref name="passMilliseconds"/> (one entry per
+    /// <c>SdfWorldEngine.PassTimingLabels</c>, in order) and the whole-frame span, so the node names no engine type it
+    /// does not already. False when the producer is absent or timing is off (<c>PUCK_TIMING=1</c> / the spec Timing flag).</summary>
+    /// <param name="passMilliseconds">Receives each render pass's milliseconds; size it to <c>SdfWorldEngine.PassTimingCount</c>.</param>
+    /// <param name="passCount">The number of pass entries written (0 when unavailable).</param>
+    /// <param name="frame">The whole-frame milliseconds.</param>
+    bool TryReadSdfPassTimings(Span<double> passMilliseconds, out int passCount, out double frame);
 
     /// <summary>Starts or stops the headless preview of the working tune. Returns a status line for the console.</summary>
     /// <param name="play"><see langword="true"/> to (re)start the preview, <see langword="false"/> to stop it.</param>

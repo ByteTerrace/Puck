@@ -604,11 +604,28 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
         var lipschitz = ((stepScale == 1.0f) ? "1.0 (isometric — byte-exact)" : $"{stepScale:F4} (warp/relief clamp)");
         // The subject is WORLD-level (always evaluated, no per-object cull bound) — there is no instance sphere to report.
         var bound = ((instances == 0) ? "world-set (no cull bound — always evaluated)" : $"{instances} instance(s)");
-        var timing = (m_host is not null && m_host.TryReadSdfPassTimings(beam: out var beam, composite: out var composite, frame: out var frame, views: out var views)
-            ? $"beam={beam:F3} views={views:F3} composite={composite:F3} frame={frame:F3} ms"
-            : "off (set PUCK_TIMING=1 to time)");
+        var timing = DescribeTiming();
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.info active={mode.Active} {Summary(scene: scene)} slice={DescribeSlice(scene: scene)} | words={words} instances={instances} bound={bound} stepScale={lipschitz} | {ListOps(scene: scene)} | timing: {timing}]");
+    }
+
+    // The previous frame's per-pass GPU ms, one term per SdfWorldEngine.PassTimingLabels entry (so a future pass shows
+    // here with no edit), plus the whole-frame total. "off" when timing is not live (PUCK_TIMING=1 arms it).
+    private string DescribeTiming() {
+        Span<double> passMilliseconds = stackalloc double[SdfWorldEngine.PassTimingCount];
+
+        if ((m_host is null) || !m_host.TryReadSdfPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frame)) {
+            return "off (set PUCK_TIMING=1 to time)";
+        }
+
+        var builder = new System.Text.StringBuilder();
+        var labels = SdfWorldEngine.PassTimingLabels;
+
+        for (var index = 0; (index < passCount); index++) {
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{labels[index]}={passMilliseconds[index]:F3} ");
+        }
+
+        return builder.Append(provider: CultureInfo.InvariantCulture, handler: $"frame={frame:F3} ms").ToString();
     }
 
     private static CommandDefinition Plain(string description, Func<CommandContext, CommandResult> handler, string name) =>

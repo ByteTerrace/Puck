@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Capture;
@@ -214,19 +215,31 @@ public sealed class SdfEngineNode : IRenderNode {
     /// <see cref="SdfWorldEngine.TryReadPassTimings"/>, mirroring the <see cref="DebugMode"/> forwarder) — the seam an
     /// <c>sdf.info</c>-style verb reads without depending on the engine. False when the engine is not yet built or
     /// timing is off (<c>PUCK_TIMING=1</c> / the spec Timing flag).</summary>
-    /// <param name="beam">The beam prepass milliseconds.</param>
-    /// <param name="views">The cull-args + Stage 1 views milliseconds.</param>
-    /// <param name="composite">The Stage 2 composite milliseconds.</param>
+    /// <param name="passMilliseconds">Receives each render pass's milliseconds, in <see cref="SdfWorldEngine.PassTimingLabels"/>
+    /// order; size it to <see cref="SdfWorldEngine.PassTimingCount"/>.</param>
+    /// <param name="passCount">The number of pass entries written (0 when timing is off or the engine is not built).</param>
     /// <param name="frame">The whole-frame milliseconds.</param>
     /// <returns>Whether timing is live and the previous frame's marks were readable.</returns>
-    public bool TryReadPassTimings(out double beam, out double views, out double composite, out double frame) {
-        beam = 0.0;
-        views = 0.0;
-        composite = 0.0;
+    public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frame) {
+        passCount = 0;
         frame = 0.0;
 
-        return (m_engine?.TryReadPassTimings(beam: out beam, composite: out composite, frame: out frame, views: out views) ?? false);
+        return (m_engine?.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out passCount, frame: out frame) ?? false);
     }
+    /// <summary>The render-pass labels a <see cref="TryReadPassTimings"/> read fills, in order — a passthrough of
+    /// <see cref="SdfWorldEngine.PassTimingLabels"/> so a consumer holding only this node names no engine type.</summary>
+    public static ReadOnlySpan<string> PassTimingLabels => SdfWorldEngine.PassTimingLabels;
+    /// <summary>The pass count a <see cref="TryReadPassTimings"/> read reports — a passthrough of
+    /// <see cref="SdfWorldEngine.PassTimingCount"/> (the width a caller sizes its span to).</summary>
+    public static int PassTimingCount => SdfWorldEngine.PassTimingCount;
+    /// <summary>Looks up a named pass's milliseconds in a <see cref="TryReadPassTimings"/> result — a passthrough of
+    /// <see cref="SdfWorldEngine.PassMilliseconds"/>.</summary>
+    /// <param name="passMilliseconds">A filled <see cref="TryReadPassTimings"/> result span.</param>
+    /// <param name="passCount">The entry count that read reported.</param>
+    /// <param name="label">One of <see cref="PassTimingLabels"/>.</param>
+    /// <returns>The pass's milliseconds, or 0 when the label is not present.</returns>
+    public static double PassMilliseconds(ReadOnlySpan<double> passMilliseconds, int passCount, string label) =>
+        SdfWorldEngine.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: label);
 
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {
@@ -537,11 +550,20 @@ public sealed class SdfEngineNode : IRenderNode {
             return;
         }
 
-        if (!m_engine!.TryReadPassTimings(beam: out var beam, composite: out var composite, frame: out var frame, views: out var views)) {
+        Span<double> passMilliseconds = stackalloc double[SdfWorldEngine.PassTimingCount];
+
+        if (!m_engine!.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frame)) {
             return;
         }
 
-        Console.Error.WriteLine(value: $"[world-timing] frame {frame:0.000}ms | beam {beam:0.000} ({Percent(part: beam, whole: frame)}%) views {views:0.000} ({Percent(part: views, whole: frame)}%) composite {composite:0.000} ({Percent(part: composite, whole: frame)}%)");
+        var builder = new StringBuilder(value: $"[world-timing] frame {frame:0.000}ms");
+        var labels = SdfWorldEngine.PassTimingLabels;
+
+        for (var index = 0; (index < passCount); index++) {
+            _ = builder.Append($" | {labels[index]} {passMilliseconds[index]:0.000} ({Percent(part: passMilliseconds[index], whole: frame)}%)");
+        }
+
+        Console.Error.WriteLine(value: builder.ToString());
     }
     private static int Percent(double part, double whole) =>
         (int)Math.Round(a: ((100.0 * part) / whole));

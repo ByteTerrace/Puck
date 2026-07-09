@@ -178,18 +178,14 @@ internal sealed class WorldSwarmStage : IPostStage {
             vulkanFlatPixels = flatRenderer.RenderFrame(frame: flatFrame);
             vulkanFlatPixelsRepeat = flatRenderer.RenderFrame(frame: flatFrame);
 
-            if (flatRenderer.TryReadPassTimings(beam: out var beam, views: out var views, composite: out var composite, frame: out var frameMs)) {
-                flatTimingDigest = $"beam {beam:0.###} + views {views:0.###} + composite {composite:0.###} = {frameMs:0.###} ms";
-            }
+            flatTimingDigest = DescribePassTimings(renderer: flatRenderer);
         }
 
         using (var instancedRenderer = CreateEngine(program: instancedProgram, device: vulkanDevice, gpu: vulkanGpu, bytecodeExtension: ".spv", timingFactory: timingFactory, timingRecorder: timingRecorder)) {
             vulkanInstancedPixels = instancedRenderer.RenderFrame(frame: instancedFrame);
             vulkanInstancedPixelsRepeat = instancedRenderer.RenderFrame(frame: instancedFrame);
 
-            if (instancedRenderer.TryReadPassTimings(beam: out var beam, views: out var views, composite: out var composite, frame: out var frameMs)) {
-                instancedTimingDigest = $"beam {beam:0.###} + views {views:0.###} + composite {composite:0.###} = {frameMs:0.###} ms";
-            }
+            instancedTimingDigest = DescribePassTimings(renderer: instancedRenderer);
         }
 
         // Direct3D 12: both variants on the shared Tier-C device (DXIL kernels), the instanced one twice (the
@@ -269,5 +265,24 @@ internal sealed class WorldSwarmStage : IPostStage {
             options: new SdfWorldEngineOptions(DynamicTransformCapacity: MoverCount, Program: program, TimingFactory: timingFactory, TimingRecorder: timingRecorder),
             width: WorldWidth
         );
+    }
+
+    // The previous frame's per-pass GPU ms as one "label ms + label ms ... = frame ms" digest, iterating
+    // SdfWorldEngine.PassTimingLabels so a future pass appears with no edit here. "n/a" when timing is off.
+    private static string DescribePassTimings(SdfWorldEngine renderer) {
+        Span<double> passMilliseconds = stackalloc double[SdfWorldEngine.PassTimingCount];
+
+        if (!renderer.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frameMs)) {
+            return "n/a";
+        }
+
+        var builder = new System.Text.StringBuilder();
+        var labels = SdfWorldEngine.PassTimingLabels;
+
+        for (var index = 0; (index < passCount); index++) {
+            _ = builder.Append(value: (index == 0) ? string.Empty : " + ").Append(value: labels[index]).Append(value: ' ').Append(value: passMilliseconds[index].ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return builder.Append(value: " = ").Append(value: frameMs.ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)).Append(value: " ms").ToString();
     }
 }

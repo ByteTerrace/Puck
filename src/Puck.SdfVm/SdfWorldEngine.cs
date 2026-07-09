@@ -106,8 +106,15 @@ public sealed class SdfWorldEngine : IDisposable {
     // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in sdf-world.hlsli / sdf-tile.hlsli.
     private const uint TilePlaneCount = 3;
     private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
-    private const uint TimingCapacity = 8; // timestamp slots per pool (headroom over the marks)
-    private const uint TimingMarkCount = 4; // frameStart + beam-close + views-close + composite-close
+    private const uint TimingCapacity = 8; // timestamp slots per pool (headroom over the marks; must stay >= TimingMarkCount)
+    // The GPU timing marks: one frame-start mark (query 0, top of pipe), then one BOTTOM-OF-PIPE close per render pass,
+    // in submission order. The PASS between mark i and i+1 is named PassLabels[i]; the whole frame is mark 0 .. mark
+    // last. Adding a pass is TWO edits — append its label here AND its WriteTimingMark close in Record — after which the
+    // sdf.info verb, the [world-timing] line, and the bench's per-pass feed all surface it with no further change (each
+    // reads PassTimingLabels / TryReadPassTimings, never a hardcoded tuple). TimingCapacity (8) is the pool ceiling, so
+    // at most 7 passes fit before the pools must be resized.
+    private static readonly string[] PassLabels = ["beam", "views", "composite"];
+    private static readonly uint TimingMarkCount = (uint)(PassLabels.Length + 1);
     private const int ViewportByteLength = ((sizeof(float) * 4) * 5); // 80-byte ViewportData (KEEP IN SYNC with sdf-world.hlsli)
     private const uint ViewportBindingIndex = 2; // matches sdf-world.hlsli's [[vk::binding(2, 0)]]
     private const uint ViewsCullBoundsBindingIndex = 8; // sdf-world-views.comp: the bbox origin (register t3); the source array is ONE binding number (4) whose 5 elements pack into derived heap slots, so 8 never collides
@@ -714,17 +721,26 @@ public sealed class SdfWorldEngine : IDisposable {
         );
     }
 
-    /// <summary>Reads the PREVIOUS frame's per-pass GPU times — for a fire-and-forget host whose frame pacing drains
-    /// the device between frames, they are complete with no added stall (the double-buffered pools).</summary>
-    /// <param name="beam">The beam prepass milliseconds.</param>
-    /// <param name="views">The cull-args + Stage 1 views milliseconds.</param>
-    /// <param name="composite">The Stage 2 composite milliseconds.</param>
-    /// <param name="frame">The whole-frame (frame-start → composite-close) milliseconds.</param>
+    /// <summary>The render passes' labels, in submission order — the names a <see cref="TryReadPassTimings"/> read fills
+    /// alongside their milliseconds (pass <c>i</c> spans timing mark <c>i</c>..<c>i+1</c>). A FIXED-COLUMN consumer (the
+    /// bench) looks one up by name via <see cref="PassMilliseconds"/>; an ITERATING consumer (the <c>sdf.info</c> verb,
+    /// the <c>[world-timing]</c> line) walks them in order, so a future pass surfaces everywhere with no consumer edit.</summary>
+    public static ReadOnlySpan<string> PassTimingLabels => PassLabels;
+    /// <summary>The number of render passes a <see cref="TryReadPassTimings"/> read reports — the width a caller sizes
+    /// its milliseconds span to (<see cref="PassTimingLabels"/> has the same length).</summary>
+    public static int PassTimingCount => PassLabels.Length;
+
+    /// <summary>Reads the PREVIOUS frame's per-pass GPU times — for a fire-and-forget host whose frame pacing drains the
+    /// device between frames, they are complete with no added stall (the double-buffered pools). Fills
+    /// <paramref name="passMilliseconds"/> with one entry per <see cref="PassTimingLabels"/> (same order) and reports the
+    /// whole-frame span separately.</summary>
+    /// <param name="passMilliseconds">Receives each pass's milliseconds, in <see cref="PassTimingLabels"/> order; must be
+    /// at least <see cref="PassTimingCount"/> long.</param>
+    /// <param name="passCount">The number of pass entries written (equals <see cref="PassTimingCount"/> on success, 0 otherwise).</param>
+    /// <param name="frame">The whole-frame (frame-start → last-close) milliseconds.</param>
     /// <returns>Whether timing is live and the previous frame's marks were readable.</returns>
-    public bool TryReadPassTimings(out double beam, out double views, out double composite, out double frame) {
-        beam = 0.0;
-        views = 0.0;
-        composite = 0.0;
+    public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frame) {
+        passCount = 0;
         frame = 0.0;
 
         if (
@@ -741,12 +757,32 @@ public sealed class SdfWorldEngine : IDisposable {
             return false;
         }
 
-        beam = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[0], endTicks: ticks[1]);
-        views = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[1], endTicks: ticks[2]);
-        composite = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[2], endTicks: ticks[3]);
-        frame = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[0], endTicks: ticks[3]);
+        var count = PassLabels.Length;
+
+        for (var index = 0; (index < count); index++) {
+            passMilliseconds[index] = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[index], endTicks: ticks[(index + 1)]);
+        }
+
+        passCount = count;
+        frame = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[0], endTicks: ticks[(int)(TimingMarkCount - 1U)]);
 
         return (frame > 0.0);
+    }
+    /// <summary>Looks up a named pass's milliseconds in a <see cref="TryReadPassTimings"/> result. Returns 0 when the
+    /// label is absent (a pass renamed or removed), so a FIXED-COLUMN consumer (the bench's beam/views/composite) keeps
+    /// comparing across a pass-list change instead of hard-failing on a missing tuple element.</summary>
+    /// <param name="passMilliseconds">A filled <see cref="TryReadPassTimings"/> result span.</param>
+    /// <param name="passCount">The entry count that read reported.</param>
+    /// <param name="label">One of <see cref="PassTimingLabels"/>.</param>
+    /// <returns>The pass's milliseconds, or 0 when the label is not present.</returns>
+    public static double PassMilliseconds(ReadOnlySpan<double> passMilliseconds, int passCount, string label) {
+        for (var index = 0; ((index < passCount) && (index < PassLabels.Length)); index++) {
+            if (string.Equals(PassLabels[index], label, StringComparison.Ordinal)) {
+                return passMilliseconds[index];
+            }
+        }
+
+        return 0.0;
     }
 
     /// <inheritdoc/>
