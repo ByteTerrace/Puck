@@ -187,13 +187,15 @@ premises are now false).
   `debug.view.drift` (two devices in one process — the `camera-share` stage
   proved zero-copy D3D12→Vulkan sharing) only after the offline hunter
   proves interesting.
-- **`sdf.bench storm` — the motion/churn ladder.** N instances MOVING per
-  frame (64/256/1024/4096…): deliberately exposes the always-list cliff (the
-  host CSR bins only static instances — moving ones ride the always-tested
-  list, so beam returns O(moving-n) by design) and produces the measurement
-  the deferred GPU-built-grid fork needs before the machine-fleet arc. Plus
-  a rebuild-rate rung (`UploadProgram`s/sec at 16384 — the carve path's
-  ceiling) and a fast-camera rung.
+- **`sdf.bench storm` — BUILT and MEASURED (2026-07-09): the cliff doesn't
+  exist.** 4096 fully-moving instances = 8.7 ms beam+mask — the always-list
+  is only a BINNING fallback, never a MASKING one (movers still get per-tile
+  mask bits, so the mask-first march stays masked). **The GPU-built-grid
+  fork's measure-gate did NOT fire; it stays closed** until a profile with
+  ≫4096 simultaneous movers appears. Camera churn is free; the rebuild
+  ladder bounds only the GPU side (instrument caveat: a wall-clock fps
+  column is the missing piece if the CPU pack/upload ceiling ever matters).
+  Full tables: sdf-bench-notes.md §2026-07-09 (c).
 - **Edge-case debug views**: `debug.view` mask/cull density tint (per-tile
   kept-instance count — cull correctness by eye, and the natural way to
   watch the storm cliff) + an overshoot detector (clamped-vs-unclamped march
