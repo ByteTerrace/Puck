@@ -74,12 +74,27 @@ public sealed class SdfDebugMode {
         m_controller.Reset();
     }
 
-    /// <summary>Forwards the creating slot's pad state to the orbit controller (only while active).</summary>
+    /// <summary>Forwards the creating slot's pad state to the orbit controller (only while active) and drains a pending
+    /// pad-chord carve — appending it to the scene and echoing it to stdout. Draining HERE (the per-frame call the
+    /// render node already makes) keeps the carve as pure data without new render-node plumbing: a pad carve appends the
+    /// exact same <see cref="SdfCarve"/> a scripted <c>sdf.carve</c> does, and the same revision bump rebuilds the program.</summary>
     /// <param name="raw">The pad state.</param>
     /// <param name="deltaSeconds">The render-clock delta.</param>
     public void AdvanceInput(in GamepadState raw, float deltaSeconds) {
-        if (m_active) {
-            m_controller.Advance(raw: in raw, deltaSeconds: deltaSeconds);
+        if (!m_active) {
+            return;
+        }
+
+        m_controller.Advance(raw: in raw, deltaSeconds: deltaSeconds);
+
+        if (m_controller.ConsumeCarveRequest() is { } center) {
+            // A pad carve is a hard subtraction at the default radius (the chord carries no size/smooth args — the verb
+            // is the way to author those); the SmoothK rides along for a uniform record but is unused while Smooth=false.
+            var carve = new SdfCarve(Center: center, Radius: SdfDebugScene.DefaultCarveRadius, Smooth: false, SmoothK: SdfDebugScene.DefaultCarveSmoothK);
+
+            Console.Out.WriteLine(value: m_scene.AddCarve(carve: carve)
+                ? $"[sdf.carve (pad) {SdfDebugScene.FormatCarve(carve: carve)}] carves={m_scene.Carves.Count}"
+                : $"[sdf.carve (pad): pool full — MaxCarves={SdfDebugScene.MaxCarves} reached (sdf.carve.clear to reset)]");
         }
     }
 

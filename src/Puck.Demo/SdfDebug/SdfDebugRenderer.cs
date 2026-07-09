@@ -28,8 +28,11 @@ namespace Puck.Demo.SdfDebug;
 /// point context — an accepted debug quirk, since the point of flat mode is to EXHIBIT the flat behavior, and the
 /// scoped path is the correct authoring form.)
 /// </para>
-/// <see cref="EmitProbe"/> emits the worst case (max stack + the TWO wordiest shapes + floor, wrapped in the scoped
-/// Push/Pop pair — the wordier of the two orders) so the capacity probe covers any live state.
+/// CARVES (the runtime subtraction pool) always emit LAST, after the subject/floor and any flat-mode field ops — one
+/// static <see cref="SdfBlendOp.Subtraction"/> (or <see cref="SdfBlendOp.SmoothSubtraction"/>) instance per carve, so
+/// each bites the already-unioned subject+floor. <see cref="EmitProbe"/> emits the worst case (max stack + the TWO
+/// wordiest shapes + floor + scoped Push/Pop + a FULL pool of <see cref="SdfDebugScene.MaxCarves"/> carves) so the
+/// capacity probe covers any live state.
 /// </summary>
 public sealed class SdfDebugRenderer {
     // A pleasant off-white subject with modest specular, so the lit / normals views read form; the floor is a dimmer
@@ -41,6 +44,9 @@ public sealed class SdfDebugRenderer {
     private const float SubjectSpecular = 0.35f;
     private const float SubjectShininess = 40f;
     private static readonly Vector3 FloorAlbedo = new(0.28f, 0.30f, 0.34f);
+    // The carve cavity walls: a dark interior tone so a subtracted cavity reads as an exposed hollow against the
+    // off-white subject (the carve sphere is the cutter — its material shades the newly-exposed inner surface).
+    private static readonly Vector3 CarveAlbedo = new(0.20f, 0.18f, 0.22f);
     // The ground plane sits a little below the subject (its surface at y = -FloorDrop), so a ~1-unit shape rests on it.
     private const float FloorDrop = 1.3f;
 
@@ -109,6 +115,34 @@ public sealed class SdfDebugRenderer {
         if (!scoped) {
             _ = ApplyFieldOps(builder: builder, ops: scene.Ops);
         }
+
+        // CARVES (the subtraction pool) emit LAST — after the subject, the floor, AND any flat-mode field ops — so each
+        // carve has a higher segment index than everything it bites. By here the accumulator holds subject UNION floor
+        // (a scoped subject was already popped with a Union compose, so its field is folded in), so ONE static instance
+        // per carve subtracts from BOTH at once. Subtraction is FAR-NEUTRAL (max(acc, -sphere) = acc beyond the sphere),
+        // so each carve packs a finite bound (its radius) and stays cullable — the smooth variant's k halo is added by
+        // the packer (MaxSmoothBlendRadius); do NOT inflate it here.
+        if (scene.Carves.Count > 0) {
+            var carveMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: CarveAlbedo, Specular: SubjectSpecular, Shininess: SubjectShininess));
+
+            EmitCarves(builder: builder, carves: scene.Carves, material: carveMaterial);
+        }
+    }
+
+    // Emits each carve as a STATIC world-level instance: a bounding sphere at the carve, holding one Sphere baked to the
+    // carve position (ResetPoint + Translate) that SUBTRACTS from the running accumulator (hard Subtraction, or
+    // SmoothSubtraction with k when Smooth). Carves don't move, so the instance is STATIC (no dynamic slot). Bound =
+    // carve radius EXACTLY — the packer adds float-safety padding and the smooth halo, so passing the radius alone is
+    // correct (double-inflating would over-cull the cavity's seam tiles). Shared by the live subject (Emit) and the
+    // carve bench (EmitBenchCarves) and folded worst-case by EmitProbe.
+    internal static void EmitCarves(SdfProgramBuilder builder, IReadOnlyList<SdfCarve> carves, int material) {
+        foreach (var carve in carves) {
+            var blend = (carve.Smooth ? SdfBlendOp.SmoothSubtraction : SdfBlendOp.Subtraction);
+
+            builder.BeginInstance(boundCenter: carve.Center, boundRadius: carve.Radius);
+            _ = builder.ResetPoint().Translate(offset: carve.Center).Sphere(radius: carve.Radius, material: material, blend: blend, smooth: (carve.Smooth ? carve.SmoothK : 0f));
+            builder.EndInstance();
+        }
     }
 
     // Applies every FIELD-class op in emission order (shared by the scoped and flat paths in Emit — the two orders
@@ -160,6 +194,29 @@ public sealed class SdfDebugRenderer {
         chain = chain.ResetPoint().Translate(offset: new Vector3(1.2f, 0f, 0f)).Star(points: 5, radius: 0.9f, sharpness: 2.6f, lift: SdfLift.Revolve, liftAmount: 0.5f, material: secondMaterial, blend: SdfBlendOp.SmoothUnion, smooth: 0.25f);
 
         _ = chain.PopField();
+
+        // CARVES: the live subject can carry up to MaxCarves carves, each a static subtraction instance emitted after
+        // the subject/floor (see Emit + EmitCarves). Fold the worst FORM — SMOOTH subtraction — into the probe; a hard
+        // carve is word/instruction-identical (the smooth halo is a packer BOUND inflation, not extra words), so smooth
+        // vs. hard costs the same envelope. Full pool of MaxCarves, all at the origin (position is irrelevant to size).
+        //
+        // ENVELOPE MATH. Each carve = 1 instance (BeginInstance/EndInstance) + 3 instructions (ResetPoint, Translate,
+        // Sphere) + one instance-directory entry (2 vectors = 8 words). The debug subject + floor are WORLD-level (0
+        // instances), so the LIVE debug program tops out at MaxCarves = 1024 instances — well inside MaxInstances =
+        // 4096. This probe over-covers by folding the 1024 carves ON TOP OF the room's own instances (a few dozen), so
+        // the subject probe is (room + 1024) << 4096. The BENCH probe (EmitBenchProbe: 4096 lifted-Star instances) is a
+        // SEPARATE probe MAX-folded against this one (OverworldFrameSource.MeasureWorstCaseEnvelope) and DOMINATES both
+        // dimensions — 4096 > room + 1024 instances, and 4096 wordy Stars > 1024 carve spheres + the op stack — so the
+        // frozen envelope stays bench-bound and carves do not grow it. Folding them here keeps the subject probe honest
+        // regardless of which probe wins the MAX.
+        var carveMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: CarveAlbedo, Specular: SubjectSpecular, Shininess: SubjectShininess));
+        var worstCarves = new List<SdfCarve>(capacity: SdfDebugScene.MaxCarves);
+
+        for (var index = 0; (index < SdfDebugScene.MaxCarves); index++) {
+            worstCarves.Add(item: new SdfCarve(Center: Vector3.Zero, Radius: SdfDebugScene.DefaultCarveRadius, Smooth: true, SmoothK: SdfDebugScene.DefaultCarveSmoothK));
+        }
+
+        EmitCarves(builder: builder, carves: worstCarves, material: carveMaterial);
     }
 
     private static SdfProgramBuilder ApplyPointOp(SdfProgramBuilder builder, SdfDebugOp op) {
@@ -228,6 +285,14 @@ public sealed class SdfDebugRenderer {
     // The fixed subject for the ops workload — a plain torus (its default params), so each op's marginal cost reads
     // against the Baseline row (a bare torus behind an identity Translate).
     private static readonly float[] BenchTorusParams = [1f, 0.35f];
+    // The carve bench's fixed subject: a ~2-unit sphere at the origin (radius 1.6 → ~3.2 across) plus a floor below it,
+    // that the carve pool subtracts from. A FIXED subject means the bench camera never reframes across the ladder (the
+    // subject only shrinks as carves bite it, so it stays in frame at SingleShapeDistance — see SdfBenchScene).
+    private const float BenchCarveSubjectRadius = 1.6f;
+    private const float BenchCarveRadius = 0.35f;   // matches the live default — the honest per-carve footprint
+    private const float BenchCarveSmoothK = 0.15f;
+    private const float BenchCarveFloorDrop = 2.2f; // the floor sits below the subject so grounded scatter carves can bite it
+    private const float BenchScatterExtent = 12f;   // the scatter cube's full side (empty-space + floor spread, subject-dwarfing)
 
     /// <summary>Emits ONE bench configuration's workload into <paramref name="builder"/> (a takeover — the room is
     /// replaced). Dispatched by <see cref="SdfBenchWorkload"/>.</summary>
@@ -247,6 +312,10 @@ public sealed class SdfDebugRenderer {
                 break;
             case SdfBenchWorkload.Instances:
                 EmitInstances(builder: builder, shape: config.Shape, count: config.InstanceCount, material: material);
+
+                break;
+            case SdfBenchWorkload.Carves:
+                EmitBenchCarves(builder: builder, family: config.CarveFamily, count: config.InstanceCount, material: material);
 
                 break;
             default:
@@ -328,6 +397,68 @@ public sealed class SdfDebugRenderer {
 
         EmitInstances(builder: builder, shape: SdfDebugShapeKind.Star, count: SdfProgramBuilder.MaxInstances, material: material);
     }
+
+    /// <summary>Emits the CARVE bench workload: a fixed ~2-unit subject sphere + a floor (world-level), then
+    /// <paramref name="count"/> carves in the given <paramref name="family"/> — <see cref="SdfBenchCarveFamily.Clustered"/>
+    /// (packed on the subject surface, densely overlapping the same tiles: the honest views-cost worst case),
+    /// <see cref="SdfBenchCarveFamily.Scattered"/> (spread through empty space + the floor, mostly masking out: the
+    /// beam-wall control where beam grows O(n) while views stays flat), or <see cref="SdfBenchCarveFamily.Smooth"/>
+    /// (clustered SmoothSubtraction — halo × mask-width pressure). Placement is DETERMINISTIC (golden-angle /
+    /// low-discrepancy, no RNG), so a run reproduces bit-for-bit across sessions.</summary>
+    public void EmitBenchCarves(SdfProgramBuilder builder, SdfBenchCarveFamily family, int count, int material) {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        var n = Math.Clamp(value: count, min: 0, max: SdfDebugScene.MaxCarves);
+
+        // The subject the carves bite — a large sphere at the origin unioned with a floor plane. Both are WORLD-level
+        // (always evaluated); the carves are the instances the bench actually measures.
+        _ = builder.ResetPoint().Sphere(radius: BenchCarveSubjectRadius, material: material);
+        _ = builder.ResetPoint().Plane(normal: Vector3.UnitY, offset: BenchCarveFloorDrop, material: material);
+
+        var smooth = (family == SdfBenchCarveFamily.Smooth);
+        var carves = new List<SdfCarve>(capacity: n);
+
+        for (var index = 0; (index < n); index++) {
+            var center = ((family == SdfBenchCarveFamily.Scattered) ? ScatteredCarveCenter(index: index) : ClusteredCarveCenter(index: index, count: n));
+
+            carves.Add(item: new SdfCarve(Center: center, Radius: BenchCarveRadius, Smooth: smooth, SmoothK: BenchCarveSmoothK));
+        }
+
+        EmitCarves(builder: builder, carves: carves, material: material);
+    }
+
+    // A carve center ON the subject surface via the Fibonacci (golden-angle) sphere — a deterministic even spread. At
+    // high counts the carves densely overlap (footprint sum >> the subject's surface area), so many share the same
+    // screen tiles: the honest views-cost worst case (every overlapping carve is evaluated for each covered tile).
+    private static Vector3 ClusteredCarveCenter(int index, int count) {
+        const float goldenAngle = 2.399963f; // π · (3 − √5)
+        var t = ((index + 0.5f) / MathF.Max(1f, count));
+        var y = (1f - (2f * t));
+        var ring = MathF.Sqrt(MathF.Max(0f, (1f - (y * y))));
+        var phi = (index * goldenAngle);
+        var direction = new Vector3((ring * MathF.Cos(x: phi)), y, (ring * MathF.Sin(x: phi)));
+
+        return (direction * BenchCarveSubjectRadius);
+    }
+
+    // A carve center in a large cube (empty space + the floor) via the R2 low-discrepancy sequence (Roberts' additive
+    // recurrence, plastic-number alphas) — deterministic, hash-free, evenly spread with no clumping. Most land far from
+    // the ~2-unit subject and mask out (max(acc, −sphere) = acc where nothing is near), so views stays flat while the
+    // beam's per-tile instance scan grows O(n): the beam-wall control.
+    private static Vector3 ScatteredCarveCenter(int index) {
+        // Fractional parts of 1/plastic^k (k = 1..3) — the canonical 3D R2 basis.
+        const float a1 = 0.8191725f;
+        const float a2 = 0.6710436f;
+        const float a3 = 0.5497005f;
+        var i = (index + 1);
+        var x = Frac(value: (0.5f + (a1 * i)));
+        var y = Frac(value: (0.5f + (a2 * i)));
+        var z = Frac(value: (0.5f + (a3 * i)));
+
+        return new Vector3(((x - 0.5f) * BenchScatterExtent), ((y - 0.5f) * BenchScatterExtent), ((z - 0.5f) * BenchScatterExtent));
+    }
+
+    private static float Frac(float value) => (value - MathF.Floor(x: value));
 
     // Compact per-shape params so an instanced copy's bound stays under InstanceBoundRadius (no neighbour overlap at
     // InstanceSpacing). The lifted 2D family uses a small revolve offset (set at the call site).

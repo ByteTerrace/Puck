@@ -6,9 +6,10 @@ namespace Puck.Demo.SdfDebug;
 /// <summary>
 /// The SDF-debug mode's pad orbit camera — a trimmed clone of <c>CreatorController</c>'s workpiece orbit (there is no
 /// editing surface here; the whole pad drives the camera). Left stick orbits (yaw/pitch), the triggers zoom
-/// exponentially, the right stick pans the orbit target, and North EXITS the mode (a one-shot request the node
-/// consumes). The distance floor is widened to ~0.5 so the camera can get right up on a small subject. Presentation
-/// only — nothing here reaches the deterministic world.
+/// exponentially, the right stick pans the orbit target, North EXITS the mode, and a CARVE chord (hold RightShoulder,
+/// press South) fires a one-shot carve request — all one-shot requests the node/mode consume. The distance floor is
+/// widened to ~0.5 so the camera can get right up on a small subject. Presentation only — nothing here reaches the
+/// deterministic world.
 /// </summary>
 public sealed class SdfDebugController {
     // The orbit envelope: pitch off the poles, distance widened at the near end so we can inspect a tiny shape close up.
@@ -19,9 +20,14 @@ public sealed class SdfDebugController {
     private const float OrbitSpeed = 2.4f; // radians/second at full deflection
     private const float PanSpeed = 3.0f;   // world units/second at full deflection
     private const float ZoomRate = 1.2f;   // exponential zoom rate at full trigger
+    // The carve chord drops its carve on the subject's camera-facing NEAR side: the orbit direction (target -> eye)
+    // scaled to roughly the subject envelope radius, offset from the orbit target. Purely host-side (no field probe) —
+    // the point the player is looking at, computed from the pose alone.
+    private const float SubjectEnvelopeRadius = 1.2f;
 
     private GamepadButtons m_prevButtons;
     private bool m_exitRequested;
+    private Vector3? m_carveRequest; // a pad-chord carve center awaiting consume (computed at the chord edge from the live pose)
     private float m_orbitYaw;
     private float m_orbitPitch = 0.5f;
     private float m_orbitDistance = 4f;
@@ -57,10 +63,11 @@ public sealed class SdfDebugController {
         }
     }
 
-    /// <summary>Clears the edge tracking and any pending exit — call when the mode toggles so a held button never
+    /// <summary>Clears the edge tracking and any pending exit/carve — call when the mode toggles so a held button never
     /// fires a stale edge into the other mode. Leaves the framing (so re-entering keeps the last camera pose).</summary>
     public void Reset() {
         m_exitRequested = false;
+        m_carveRequest = null;
         m_prevButtons = GamepadButtons.None;
     }
 
@@ -71,6 +78,17 @@ public sealed class SdfDebugController {
         m_exitRequested = false;
 
         return requested;
+    }
+
+    /// <summary>Returns the pending pad-chord carve center (world units) if the carve chord fired since the last consume,
+    /// else null — and clears it. The center was computed at the chord edge from the live orbit pose (deterministic:
+    /// pure yaw/pitch/target, no field evaluation), so a pad carve appends the same data a scripted <c>sdf.carve</c> does.</summary>
+    public Vector3? ConsumeCarveRequest() {
+        var request = m_carveRequest;
+
+        m_carveRequest = null;
+
+        return request;
     }
 
     /// <summary>Advances one frame of pad input: left stick orbits, triggers zoom, right stick pans, North exits.</summary>
@@ -97,6 +115,29 @@ public sealed class SdfDebugController {
             m_exitRequested = true;
         }
 
+        // CARVE chord: hold RightShoulder (a guard, so an orbiting stick / a lone face press never fires a destructive
+        // carve) and PRESS South. Edge-tracked on South so a held chord carves exactly once; the center is snapped from
+        // the pose HERE (the near-side point moves with the camera). South is otherwise unbound and North stays EXIT.
+        var southEdge = ((0 != (buttons & GamepadButtons.ButtonSouth)) && (0 == (m_prevButtons & GamepadButtons.ButtonSouth)));
+
+        if (southEdge && (0 != (buttons & GamepadButtons.RightShoulder))) {
+            m_carveRequest = NearSideCarvePoint();
+        }
+
         m_prevButtons = buttons;
+    }
+
+    // The subject's camera-facing near-side point: the orbit direction (target -> eye, the SAME basis
+    // ScreenLayoutDirector builds the eye from) scaled to the subject envelope radius, offset from the orbit target. A
+    // pad carve therefore bites the surface the player is looking at, computed purely from the pose — no march, no probe.
+    private Vector3 NearSideCarvePoint() {
+        var cosPitch = MathF.Cos(x: m_orbitPitch);
+        var direction = new Vector3(
+            (MathF.Sin(x: m_orbitYaw) * cosPitch),
+            MathF.Sin(x: m_orbitPitch),
+            (MathF.Cos(x: m_orbitYaw) * cosPitch)
+        );
+
+        return (m_orbitTarget + (direction * SubjectEnvelopeRadius));
     }
 }

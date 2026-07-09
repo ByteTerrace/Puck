@@ -5,12 +5,25 @@ using System.Text;
 namespace Puck.Demo.SdfDebug;
 
 /// <summary>The workload family a bench run measures — <see cref="Shapes"/> (each debuggable primitive fullscreen),
-/// <see cref="Ops"/> (a fixed torus + one modifier, marginal-cost vs the bare subject), and <see cref="Instances"/>
-/// (a 3D grid of N real instances of one shape).</summary>
+/// <see cref="Ops"/> (a fixed torus + one modifier, marginal-cost vs the bare subject), <see cref="Instances"/>
+/// (a 3D grid of N real instances of one shape), and <see cref="Carves"/> (a fixed subject + N subtraction carves in a
+/// placement family — the runtime-carving cost profile).</summary>
 public enum SdfBenchWorkload {
     Shapes,
     Ops,
     Instances,
+    Carves,
+}
+
+/// <summary>The placement family a <see cref="SdfBenchWorkload.Carves"/> run uses — <see cref="Clustered"/> (carves
+/// packed on the subject surface, densely overlapping the same tiles: the honest views-cost worst case),
+/// <see cref="Scattered"/> (spread through empty space + the floor, mostly masking out: the beam-wall control where the
+/// beam grows O(n) while views stays flat), and <see cref="Smooth"/> (clustered SmoothSubtraction — halo × mask-width
+/// pressure). The family is baked into each config's label so the table reads it back (e.g. <c>carves clustered x256</c>).</summary>
+public enum SdfBenchCarveFamily {
+    Clustered,
+    Scattered,
+    Smooth,
 }
 
 /// <summary>The op catalog the <see cref="SdfBenchWorkload.Ops"/> workload steps through — the <see cref="Baseline"/>
@@ -38,9 +51,11 @@ public enum SdfBenchOp {
 }
 
 /// <summary>One measurable configuration in a bench run: a label for its table row plus the union of parameters the
-/// three workloads need (each reads only its own). A run is an ordered list of these; the runner emits, warms, and
-/// samples each in turn.</summary>
-public readonly record struct SdfBenchConfig(string Label, SdfBenchWorkload Workload, SdfDebugShapeKind Shape, SdfBenchOp Op, int InstanceCount);
+/// workloads need (each reads only its own — Shapes reads <see cref="Shape"/>, Ops reads <see cref="Op"/>, Instances/
+/// Carves read <see cref="InstanceCount"/>, Carves also reads <see cref="CarveFamily"/>). A run is an ordered list of
+/// these; the runner emits, warms, and samples each in turn. <see cref="CarveFamily"/> defaults so the non-carve call
+/// sites stay unchanged.</summary>
+public readonly record struct SdfBenchConfig(string Label, SdfBenchWorkload Workload, SdfDebugShapeKind Shape, SdfBenchOp Op, int InstanceCount, SdfBenchCarveFamily CarveFamily = SdfBenchCarveFamily.Clustered);
 
 /// <summary>One configuration's measured timing: the median plus min/max of each per-pass GPU-ms channel over the
 /// sample window. <see cref="HasTimings"/> is false when the window collected no timing samples (PUCK_TIMING off or no
@@ -91,6 +106,11 @@ public sealed class SdfBenchScene {
 
     // The default sweep ladder.
     private static readonly int[] DefaultSweep = [64, 256, 1024, 4096];
+    // The carve ladder (per family). Tops out at 1024 = SdfDebugScene.MaxCarves (the live pool cap), so the bench and
+    // the live subject share a ceiling.
+    private static readonly int[] CarveLadder = [16, 64, 256, 1024];
+    // The single smooth-carve rung — 256 clustered SmoothSubtraction carves (halo × mask-width pressure).
+    private const int SmoothCarveRung = 256;
 
     private readonly List<SdfBenchConfig> m_configs = [];
     private readonly List<SdfBenchResult> m_results = [];
@@ -229,6 +249,27 @@ public sealed class SdfBenchScene {
         }
 
         return Begin(label: $"sweep {shape}", configs: configs);
+    }
+
+    /// <summary>Starts a <see cref="SdfBenchWorkload.Carves"/> run — a fixed ~2-unit subject + floor bitten by the carve
+    /// ladder (16/64/256/1024) in TWO families (clustered = the honest views-cost worst case; scattered = the beam-wall
+    /// control), plus ONE smooth rung (256 clustered SmoothSubtraction carves). Each rung is one table row; the family
+    /// is in the label (e.g. <c>carves clustered x256</c>). The subject only shrinks as carves bite it, so the camera
+    /// holds the fixed single-shape framing across the whole run.</summary>
+    public string StartCarves() {
+        var configs = new List<SdfBenchConfig>();
+
+        foreach (var n in CarveLadder) {
+            configs.Add(item: new SdfBenchConfig(Label: $"carves clustered x{n}", Workload: SdfBenchWorkload.Carves, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: n, CarveFamily: SdfBenchCarveFamily.Clustered));
+        }
+
+        foreach (var n in CarveLadder) {
+            configs.Add(item: new SdfBenchConfig(Label: $"carves scattered x{n}", Workload: SdfBenchWorkload.Carves, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: n, CarveFamily: SdfBenchCarveFamily.Scattered));
+        }
+
+        configs.Add(item: new SdfBenchConfig(Label: $"carves smooth x{SmoothCarveRung}", Workload: SdfBenchWorkload.Carves, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: SmoothCarveRung, CarveFamily: SdfBenchCarveFamily.Smooth));
+
+        return Begin(label: "carves", configs: configs);
     }
 
     /// <summary>The worst-case frame budget a run needs, so a script can size its <c>step</c> gates: per config,

@@ -27,6 +27,13 @@ public enum SdfDebugShapeKind {
 /// <see cref="SdfDebugScene.IsFieldOp"/>. One record covers every op; each kind reads only the fields it needs.</summary>
 public readonly record struct SdfDebugOp(SdfDebugOpKind Kind, Vector3 V0, Vector3 V1, float A, float B, int I0, int I1, bool Flag);
 
+/// <summary>One runtime carve — a sphere the emitter SUBTRACTS from the assembled subject+floor field (a hard
+/// <see cref="SdfBlendOp.Subtraction"/>, or a <see cref="SdfBlendOp.SmoothSubtraction"/> with <see cref="SmoothK"/>
+/// when <see cref="Smooth"/>). Carves are pure DATA: a console <c>sdf.carve</c> and a pad-chord carve append the same
+/// record, and the frame source rebuilds the packed program on the <see cref="SdfDebugScene.Revision"/> bump — so a
+/// scripted carve sequence IS its own deterministic replay (there is no dynamic-write path; the rebuild is the model).</summary>
+public readonly record struct SdfCarve(Vector3 Center, float Radius, bool Smooth, float SmoothK);
+
 /// <summary>The op kinds the debug stack supports (a superset spanning the point-fold and field families of
 /// <see cref="SdfProgramBuilder"/>). The wire order is irrelevant; <see cref="SdfDebugScene.IsFieldOp"/> classifies
 /// each into its emission slot.</summary>
@@ -63,7 +70,19 @@ public sealed class SdfDebugScene {
     /// so a live push can never outgrow the engine's frozen buffers.</summary>
     public const int MaxOps = 12;
 
+    /// <summary>The carve-pool cap — the frame source folds a worst-case pool of this many carves into its capacity
+    /// probe (each carve is one static subtraction instance), so a live carve can never outgrow the engine's frozen
+    /// buffers. Sized to sit comfortably under <see cref="SdfProgramBuilder.MaxInstances"/> (4096).</summary>
+    public const int MaxCarves = 1024;
+
+    /// <summary>The default carve radius when <c>sdf.carve</c> / the pad chord omit one.</summary>
+    public const float DefaultCarveRadius = 0.35f;
+
+    /// <summary>The default SmoothSubtraction radius a smooth carve uses when no <c>k</c> is given.</summary>
+    public const float DefaultCarveSmoothK = 0.15f;
+
     private readonly List<SdfDebugOp> m_ops = [];
+    private readonly List<SdfCarve> m_carves = [];
     private float[] m_params = DefaultParams(kind: SdfDebugShapeKind.Torus);
     private float[] m_params2 = [];
 
@@ -116,6 +135,10 @@ public sealed class SdfDebugScene {
 
     /// <summary>The op stack (push order; point ops emit before the shape, field ops after — both in push order).</summary>
     public IReadOnlyList<SdfDebugOp> Ops => m_ops;
+
+    /// <summary>The carve pool (append order) — each carve subtracts from the assembled subject+floor field, emitted
+    /// LAST (higher segment indices than everything it bites; see <see cref="SdfDebugRenderer.Emit"/>).</summary>
+    public IReadOnlyList<SdfCarve> Carves => m_carves;
 
     /// <summary>Bumped on every content change; the frame source rebuilds the program when it moves while the mode is up.</summary>
     public int Revision { get; private set; }
@@ -248,6 +271,54 @@ public sealed class SdfDebugScene {
 
         return count;
     }
+
+    /// <summary>Appends a carve to the pool (rejected when full). Radius is clamped to a small positive minimum and the
+    /// smooth radius to non-negative, so a bad number never packs a degenerate instance. Bumps the revision on success.</summary>
+    /// <returns>Whether the carve was appended (false = the pool is at <see cref="MaxCarves"/>).</returns>
+    public bool AddCarve(SdfCarve carve) {
+        if (m_carves.Count >= MaxCarves) {
+            return false;
+        }
+
+        m_carves.Add(item: carve with {
+            Radius = MathF.Max(0.01f, carve.Radius),
+            SmoothK = MathF.Max(0f, carve.SmoothK),
+        });
+        Bump();
+
+        return true;
+    }
+
+    /// <summary>Removes the last-appended carve (no-op when empty). Bumps the revision on success.</summary>
+    /// <returns>Whether a carve was removed.</returns>
+    public bool PopCarve() {
+        if (m_carves.Count == 0) {
+            return false;
+        }
+
+        m_carves.RemoveAt(index: (m_carves.Count - 1));
+        Bump();
+
+        return true;
+    }
+
+    /// <summary>Clears the whole carve pool (no-op when empty). Bumps the revision on success.</summary>
+    /// <returns>How many carves were cleared.</returns>
+    public int ClearCarves() {
+        var count = m_carves.Count;
+
+        if (count > 0) {
+            m_carves.Clear();
+            Bump();
+        }
+
+        return count;
+    }
+
+    /// <summary>Formats one carve as the shared echo fragment <c>@(x,y,z) r=… [smooth k=…]</c> — used by BOTH the
+    /// <c>sdf.carve</c> verb and the pad-chord echo so a scripted carve and a pad carve read (and ARE) the same data.</summary>
+    public static string FormatCarve(SdfCarve carve) =>
+        string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"@({carve.Center.X:0.##},{carve.Center.Y:0.##},{carve.Center.Z:0.##}) r={carve.Radius:0.###}{(carve.Smooth ? $" smooth k={carve.SmoothK:0.###}" : "")}");
 
     /// <summary>The per-shape default numeric params (a fresh array — the caller owns it). The count is the shape's
     /// param arity; the meanings mirror the <see cref="SdfProgramBuilder"/> signatures.</summary>

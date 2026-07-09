@@ -96,6 +96,21 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             name: "sdf.op.list"
         );
         yield return WithArgs(
+            description: "Appends a CARVE — a sphere SUBTRACTED from the assembled subject+floor field (emitted last, so it bites both): sdf.carve <x> <y> <z> [r] [smooth [k]]. Default radius ~0.35; 'smooth' makes it a SmoothSubtraction (default k ~0.15). The rebuild-on-append IS the replay model — a scripted carve sequence reproduces deterministically.",
+            handler: WithSceneArgs(handler: HandleCarve),
+            name: "sdf.carve"
+        );
+        yield return Plain(
+            description: "Removes the last-appended carve.",
+            handler: WithScene(handler: static scene => (scene.PopCarve() ? $"[sdf.carve.pop] carves={scene.Carves.Count} — {Summary(scene: scene)}" : "[sdf.carve.pop: the pool is empty]")),
+            name: "sdf.carve.pop"
+        );
+        yield return Plain(
+            description: "Clears the whole carve pool.",
+            handler: WithScene(handler: static scene => { var n = scene.ClearCarves(); return $"[sdf.carve.clear] removed {n} carve(s) — {Summary(scene: scene)}"; }),
+            name: "sdf.carve.clear"
+        );
+        yield return WithArgs(
             description: "Toggles the ground plane under the subject (default OFF — it contaminates the slice/iteration views): sdf.floor on|off.",
             handler: WithSceneArgs(handler: static (scene, args) => {
                 var on = ((args.Length > 0) && ParseOnOff(token: args[0]));
@@ -132,7 +147,7 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             name: "sdf.info"
         );
         yield return WithArgs(
-            description: "The SDF perf-bench (needs the sdf mode active + PUCK_TIMING=1): sdf.bench shapes | ops | instances <shape> <n> | sweep [shape] (ladder 64/256/1024/4096) | warm <n> | frames <n> | abort. Runs async across frames — progress + a fixed-width table print to stdout (step past it).",
+            description: "The SDF perf-bench (needs the sdf mode active + PUCK_TIMING=1): sdf.bench shapes | ops | carves | instances <shape> <n> | sweep [shape] (ladder 64/256/1024/4096) | warm <n> | frames <n> | abort. Runs async across frames — progress + a fixed-width table print to stdout (step past it).",
             handler: (context, args) => new CommandResult(HandleBench(args: args)),
             name: "sdf.bench"
         );
@@ -198,7 +213,7 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
         var bench = mode.Bench;
 
         if (args.Length == 0) {
-            return $"[sdf.bench: shapes | ops | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort — warm={bench.WarmFrames} samples={bench.SampleFrames}]";
+            return $"[sdf.bench: shapes | ops | carves | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort — warm={bench.WarmFrames} samples={bench.SampleFrames}]";
         }
 
         switch (args[0].ToLowerInvariant()) {
@@ -212,6 +227,8 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
                 return (RequireBenchMode(mode: mode) ?? bench.StartShapes());
             case "ops":
                 return (RequireBenchMode(mode: mode) ?? bench.StartOps());
+            case "carves":
+                return (RequireBenchMode(mode: mode) ?? bench.StartCarves());
             case "instances":
                 return HandleBenchInstances(mode: mode, bench: bench, args: args);
             case "sweep": {
@@ -220,7 +237,7 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
                 return (RequireBenchMode(mode: mode) ?? bench.StartSweep(shape: shape));
             }
             default:
-                return $"[sdf.bench: '{args[0]}' — shapes | ops | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort]";
+                return $"[sdf.bench: '{args[0]}' — shapes | ops | carves | instances <shape> <n> | sweep [shape] | warm <n> | frames <n> | abort]";
         }
     }
 
@@ -376,6 +393,46 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
         return $"[sdf.op {args[0]}] {Summary(scene: scene)}";
     }
 
+    // sdf.carve <x> <y> <z> [r] [smooth [k]] — the coords are required; an optional radius (a bare number after the
+    // coords) precedes an optional 'smooth' token that flips it to a SmoothSubtraction, itself taking an optional k. A
+    // pad-chord carve appends the SAME record (a hard, default-radius carve) through SdfDebugMode.AdvanceInput.
+    private static string HandleCarve(SdfDebugScene scene, string[] args) {
+        if (!TryParseFloats(args: args, count: 3, start: 0, values: out var xyz)) {
+            return "[sdf.carve: usage — sdf.carve <x> <y> <z> [r] [smooth [k]]]";
+        }
+
+        var index = 3;
+        var radius = SdfDebugScene.DefaultCarveRadius;
+
+        if ((index < args.Length) && TryParseFloat(text: args[index], value: out var parsedRadius)) {
+            radius = parsedRadius;
+            index++;
+        }
+
+        var smooth = false;
+        var smoothK = SdfDebugScene.DefaultCarveSmoothK;
+
+        if ((index < args.Length) && string.Equals(a: args[index], b: "smooth", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            smooth = true;
+            index++;
+
+            if ((index < args.Length) && TryParseFloat(text: args[index], value: out var parsedK)) {
+                smoothK = parsedK;
+            }
+        }
+
+        var carve = new SdfCarve(Center: new Vector3(xyz[0], xyz[1], xyz[2]), Radius: radius, Smooth: smooth, SmoothK: smoothK);
+
+        if (!scene.AddCarve(carve: carve)) {
+            return $"[sdf.carve: pool full — MaxCarves={SdfDebugScene.MaxCarves} reached (sdf.carve.clear to reset)]";
+        }
+
+        // Echo the CLAMPED record the scene actually stored (radius floored positive, k floored non-negative).
+        var stored = scene.Carves[scene.Carves.Count - 1];
+
+        return $"[sdf.carve {SdfDebugScene.FormatCarve(carve: stored)}] carves={scene.Carves.Count} — {Summary(scene: scene)}";
+    }
+
     // Parses one op name + its args into an SdfDebugOp, or null on a bad name / bad args (the caller returns usage).
     // Guards CellJitter's in-cell constraint here so the builder (evaluated every frame) never throws mid-render.
     private static SdfDebugOp? BuildOp(string[] args) {
@@ -520,7 +577,7 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             ? $" {scene.Blend}(k={scene.BlendSmooth:0.###}) shape2={second}({FormatParams(values: scene.Params2)})@({scene.Offset2.X:0.##},{scene.Offset2.Y:0.##},{scene.Offset2.Z:0.##})"
             : "");
 
-        return $"shape={scene.Shape}({FormatParams(values: scene.Params)}){pair}{lift} ops={scene.Ops.Count} floor={(scene.Floor ? "on" : "off")} scope={(scene.Scope ? "on" : "off")}";
+        return $"shape={scene.Shape}({FormatParams(values: scene.Params)}){pair}{lift} ops={scene.Ops.Count} carves={scene.Carves.Count} floor={(scene.Floor ? "on" : "off")} scope={(scene.Scope ? "on" : "off")}";
     }
 
     private static string FormatParams(IReadOnlyList<float> values) =>
