@@ -80,6 +80,12 @@ wiki is authoritative on coverage.
 - [materials-and-primitives.md](materials-and-primitives.md) — material blend
   factor at seams, the smin taxonomy, the hg_sdf blend/domain op library, the
   2D-primitive catalog gaps, interior distance, and MSDF text.
+- [text-and-glyphs.md](text-and-glyphs.md) — glyphs as world-geometry distance
+  fields (march / CSG / engrave): the MTSDF-alpha field-source finding (C1/C2/C3),
+  the coverage-family reject matrix (incl. Slug's 2026-03-17 public-domain flip),
+  analytic-dual world-space AA, the bake recipe, and the text-enrichment arc
+  (markup grammar, effect catalog, the determinism fix, the `sdfMsdfGlyph`
+  prototype, and the delight doctrine).
 
 ### Decisions
 - [verdict-index.md](verdict-index.md) — every deep-reviewed technique in one

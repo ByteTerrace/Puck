@@ -159,12 +159,21 @@ premises are now false).
       `ProceduralFaceFeed` pattern + `Puck.Text` CPU rasterization + the
       4 unclaimed `ScreenSlotLedger` slots.
     - **Tier 1 — the MTSDF glyph op** (engine, Post-gated): sample the
-      `Puck.Text` atlas as a DISTANCE-level field (median-of-3 is
-      ~1-Lipschitz-bounded), unlike `ScreenSlab`'s material-level sampling —
-      text becomes real world geometry: marchable, liftable, blendable,
-      ENGRAVABLE (Subtraction of a glyph field) and embossable. Serves the
-      UI, Puckton signage, cabinet marquees, and carved lettering alike.
-      `Puck.Text` finally gains its first GPU consumer.
+      `Puck.Text` atlas as a DISTANCE-level field — geometry marches the MTSDF
+      **true-distance ALPHA channel** (Lipschitz-1 by construction), NOT the
+      median-of-3 (which is coverage-only: C0-discontinuous at channel-crossover
+      "clash" lines, never a valid marchable field) — unlike `ScreenSlab`'s
+      material-level sampling. Text becomes real world geometry: marchable,
+      liftable, blendable, ENGRAVABLE (Subtraction of a glyph field) and
+      embossable. Serves the UI, Puckton signage, cabinet marquees, and carved
+      lettering alike. `Puck.Text` finally gains its first GPU consumer.
+      Field-source findings (C1/C2/C3), the bake recipe, the reject matrix, and
+      the enrichment/effects arc are in
+      [sdf-wiki/text-and-glyphs.md](sdf-wiki/text-and-glyphs.md); the sibling
+      repo's `sdfMsdfGlyph` (`…/Avatars/…/Characters/avatar-vm.glsl` ~886-933)
+      is Tier-1's working REFERENCE IMPLEMENTATION (band-cull-before-tap,
+      conservative max-combine far field, `trueSdfFlag` selecting the alpha,
+      6-tap gradient once-per-hit).
     - **Tier 2 — the action bar as camera-rig-mounted geometry**: the
       existing layout re-expressed as SDF instances riding a per-frame
       `DynamicTransform` pinned to the camera pose — a physical HUD, no
