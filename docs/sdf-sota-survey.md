@@ -78,6 +78,13 @@ warped scene is **flat** (the auto-relaxed marcher's reduced step count offsets
 the added shading cost); the two ranges overlap heavily, so read sub-ms deltas
 as noise-bound, not a verified regression or win.
 
+**Landed since (2026-07-09).** Row 15 (uniform-grid instance cull) — landed
+mask-first (the measured "beam slope" turned out to be the cone march's
+per-sample enumeration, not the binning; see docs/sdf-bench-notes.md for the
+collapse tables; MaxInstances now 16384). Row 9 (forward-mode gradients) —
+landed hit-only as analytic normals (`mapGradCore`, hero parity 51→11 px,
+gpu-budget 1.87→1.58 ms; one premise corrected, see below).
+
 ### Prerequisite graph — the interaction structure
 
 The shortlist is not independent line items; several rows share a seam or a
@@ -109,9 +116,14 @@ prerequisite, and building the shared piece once is the whole economy.
   strength silently tracks each program's Lipschitz bake instead of geometry.
 - **The gradient accumulator (9) feeds three consumers** — gradient-noise fBm
   displacement (11), analytic surface normals, and Moinet curvature stepping's
-  first-derivative term (R6, deferred). Build the forward-mode dual once; the operator norms
-  already derived as Lipschitz factors (Bend `1+a`, Twist `√((2+a²+a√(a²+4))/2)`,
-  Displace `1+amp·max|freq|`) *are* the Jacobian norms it multiplies by.
+  first-derivative term (R6, deferred). Build the forward-mode dual once.
+  ⚠CORRECTION (2026-07-09, learned by building it): the baked Lipschitz operator
+  norms (Bend `1+a`, Twist `√((2+a²+a√(a²+4))/2)`, Displace `1+amp·max|freq|`)
+  bound the STEP — they are scalar norms, not the propagation rule. Gradient
+  propagation chain-rules through each op's runtime point-Jacobian (the dual
+  carries the Jacobian COLUMNS through the walk; folds apply their actual
+  reflection/rotation, DomainWarp its full matrix transpose, Displace its exact
+  analytic derivative). Landed as `mapGradCore` (hit-only), commit ce36f80.
 - **Prefix-sum, never atomic append.** Compaction (18), hierarchical dispatch
   (16), and the uniform-grid build (15) all restructure the same indirect
   pipeline. The discipline is invariant: count → scan → scatter (the existing
@@ -523,11 +535,14 @@ more parity-stable than FD** — this alone tips adoption independent of frame t
 
 **Seam / effort.** Grow the HLSL op-switch dual path, compile-time-flagged; do NOT
 emit a separate gradient program. Two `mapCore` specializations (`MAP_DISTANCE`
-untouched, `MAP_DISTANCE_GRAD` hit-only); reuse the existing Lipschitz operator
-norms as the Jacobian norms; keep the gradient a **strictly parallel channel** to
-the distance accumulator (never tangle the PushField/PopField stacks); CPU mirror
-+ a `world-normals` Post gate. **L** (no single piece XL; the interpreter-wide
-reach + C#/HLSL/Post triple-sync sets the size).
+untouched, `MAP_DISTANCE_GRAD` hit-only); keep the gradient a **strictly parallel
+channel** to the distance accumulator (never tangle the PushField/PopField
+stacks); CPU mirror + a `world-normals` Post gate. **L** (no single piece XL; the
+interpreter-wide reach + C#/HLSL/Post triple-sync sets the size). ⚠One premise
+corrected in the build (see the prerequisite graph): propagation uses each op's
+runtime point-Jacobian, NOT the baked Lipschitz scalars — those bound the step.
+LANDED 2026-07-09 (`mapGradCore`/`calculateNormalAnalytic`, `world-analytic-normal`
+gate, hero parity 51→11 px, gpu-budget 1.87→1.58 ms; commit ce36f80).
 
 **Verdict. Pursue now** — and make it *the* design of the roadmap's reserved
 gradient accumulator. It feeds gradient-noise fBm, analytic normals, and curvature
