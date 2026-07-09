@@ -173,6 +173,42 @@ premises are now false).
   for and what's settled about it. Doubles as the visual regression walk
   after any march change.
 
+## The many-eyes arc (user-ratified 2026-07-09 — creative freedom is the mandate)
+
+**The point (user's words): creator-mode players should feel free to go a
+little wild** — many-eyed creatures, walls of monitors, TV-in-TV halls — so
+the screen/camera/viewport caps must be creative budgets, not engine walls.
+Three mechanisms, three moves (verified against code 2026-07-09:
+`MaxViewports = 5`, `MaxScreenSurfaces = 8`, feed pool = 4):
+
+- **Screen surfaces 8 → 32.** Sampling is per-covered-pixel (screens
+  partition the frame — no multiplicative cost); the work is the side table,
+  the 32-slot source binding model (derive descriptor pool sizes — the D3D12
+  heap-packing discipline), probes, and the `ScreenSlotLedger` growing from
+  "narrate a drop" toward "always room for one more." The machine fleet
+  needs this regardless (8 surfaces can't light a fleet room's CRTs).
+- **Registered feeds → 32–64 with visibility-gated uploads.** Split
+  REGISTERED from LIVE-PER-FRAME: registration is cheap state; uploads gate
+  on "is any on-camera screen showing this feed" + a per-frame refresh
+  budget. Physical webcams stay 1–2 sharing the one session; the 32–64 case
+  is procedural/emulator/viewport feeds.
+- **Diegetic in-world cameras (viewport sources) → 32 via right-sizing +
+  round-robin.** Naive scaling is NOT reasonable (32 full-grid slots ≈
+  262 MB mask buffer at the 16384 cap + mostly-dead dispatch z-slices). The
+  fix: per-viewport tile allocations sized to the REGION (a 256×192 monitor
+  = 192 tiles ≈ 0.4 MB → 32 monitors ≈ 12 MB) + a K-refreshes-per-frame
+  budget (monitors persist their last frame — diegetically honest for
+  security CRTs) + finally WIRING the dormant GPU zero-copy viewport tier
+  (built ahead for exactly this; keep-don't-delete ruling honored).
+- **Creator-facing budgets**: creations declare eyes/screens; capacity
+  probes grow accordingly; degrade by narrated refresh-rate sharing, never
+  hard rejection, so "going wild" slows gracefully instead of erroring.
+- **Measure gate**: the storm bench grows a `monitors` rung (N small
+  viewports refreshing round-robin — the aggregate of per-viewport fixed
+  costs is the honest unknown). Sequence after the adversarial-instrument
+  wave; the fleet arc and the diegetic UI (every terminal is a screen
+  surface) both inherit this.
+
 ## Verification gaps (Post stages — cheap gap-closers)
 
 22. Missing stages, confirmed against the current registry:
