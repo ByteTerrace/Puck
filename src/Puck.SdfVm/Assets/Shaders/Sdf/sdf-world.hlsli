@@ -654,6 +654,28 @@ bool worldUseTapNormals() {
 #endif
 }
 
+// De-scale a Lipschitz-CLAMPED field sample back to WORLD units — the ONE primitive genuinely shared by the three
+// shading-epilogue field walks (softShadow, calcAO, coverage-AA). mapMasked/map return the field pre-multiplied by the
+// per-program stepScale (the <= 1-Lipschitz clamp, D1 keystone); a consumer that COMPARES a sample against a world-space
+// quantity must divide that clamp back out FIRST, or its result tracks the program's stepScale bake instead of geometry
+// — the ~30%-darkening chamfer bug (stepScale = 1/sqrt(2)) a prior fix already closed. The three consumers each divide
+// it back for a DELIBERATELY DIFFERENT world-space comparison — this is the divide-back FOOT-GUN the docs warn re-fixers
+// about, so factor only the divide, never the surrounding intent:
+//   - softShadow  — the penumbra parabola's closest-approach miss distance (clearanceTrue); the RAW clamped sample is
+//                   kept for the step advance AND the `traveled` denominator (an under-step is conservative), so ONLY
+//                   the parabola's numerator/miss is de-scaled. The closest-approach parabola itself is softShadow-
+//                   EXCLUSIVE (calcAO is a fixed rung ladder, coverage a terminal ratio) — this de-scale, NOT a unified
+//                   closest-approach walk, turned out to be the real shared surface the survey (#10) hoped to factor.
+//   - calcAO      — the rung distance d in the (h - d) open-space deficit (a world-space rung minus a field sample).
+//   - coverage-AA — the open-space RISE (aheadField - terminalRadius), a world-space DIFFERENCE. It deliberately does
+//                   NOT de-scale the coverage RATIO, which stays in the SAME clamped units as the footprint termination
+//                   test it mirrors (de-scaling the absolute ratio was the wave-1 Row 3 regression — see renderView).
+// stepScale == 1.0 EXACTLY for an isometric, warp-free program and x / 1.0f == x to the bit, so those scenes stay
+// byte-identical whether the divide inlines here or is spelled at the call site.
+float sdfDeScaleField(float clampedSample, float stepScale) {
+    return (clampedSample / stepScale);
+}
+
 // A soft shadow toward the (directional) sun: an IQ-style penumbra march of the field from the surface point up toward
 // the light, tracking the closest-approach ratio (ShadowSharpness · clearance / traveled) so grazing occluders cast a
 // soft penumbra. Uses the pixel's TILE instance mask — cheap (the same cull the primary march already narrowed) and it
@@ -691,7 +713,7 @@ float softShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirectio
         // d->clearanceTrue) this reduces to the old k*clearance/(traveled*stepScale) to the bit and an isometric
         // program (stepScale == 1) stays byte-identical. Mixing a scaled clearance into y/d here resurrects the
         // ~30%-darkening chamfer bug a prior fix already closed.
-        float clearanceTrue = (clearance / stepScale);
+        float clearanceTrue = sdfDeScaleField(clearance, stepScale);
         float y = ((clearanceTrue * clearanceTrue) / (2.0 * previousTrue));
         // Closest-point-behind guard (Aaltonen): when the parabola places the estimated closest point AT OR BEYOND the
         // current sample (y >= clearanceTrue — a tight graze followed by an opening field, or the degenerate first
@@ -743,7 +765,7 @@ float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, f
     [unroll]
     for (int i = 0; (i < 5); i++) {
         float h = (0.01 + ((0.12 * float(i)) / 4.0));
-        float d = (mapMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase).distance / stepScale);
+        float d = sdfDeScaleField(mapMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase).distance, stepScale);
         occlusion += ((h - d) * scale);
         scale *= 0.95;
     }
@@ -1197,7 +1219,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
                 // The open-space rise is a world-space geometric difference, so divide the Lipschitz clamp back out
                 // (same rule as softShadow/calcAO — fault 1 was de-scaling the ABSOLUTE coverage metric, not a difference).
-                opened = smoothstep(0.0, (0.5 * probeSpan), ((aheadField - terminalRadius) / stepScale));
+                opened = smoothstep(0.0, (0.5 * probeSpan), sdfDeScaleField((aheadField - terminalRadius), stepScale));
             }
 
             color = lerp(color, skyColor(rayDirection), (edgeWeight * opened));
