@@ -236,6 +236,19 @@ SdfInstanceGridHeader sdfLoadInstanceGridHeader(uint instanceOffset, uint instan
 [[vk::binding(9, 0)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t2);
 #endif
 
+#ifdef SDF_GLYPH_ATLAS
+// The single font atlas the SDF_SHAPE_GLYPH primitive samples as a DISTANCE-level field (world-render path ONLY;
+// SetGlyphAtlas uploads it once). ONE combined-image-sampler binding APPENDED LAST in the views set — Vulkan binding
+// 20, Direct3D 12 register t15 (the first SRV free of the program/viewport/dynamicTransforms/cullBounds/screenSurfaces/
+// screenSources/instanceMasks/screenLights run, t0..t14) with its static sampler at s8 (after the eight screen samplers
+// s0..s7). KEEP IN SYNC with SdfWorldEngine's viewsBindings ORDER (the D3D12 registers follow the array order, so the
+// atlas must stay last) and GlyphAtlasBindingIndex. Sampled with EXPLICIT LOD only (SampleLevel): implicit-derivative
+// filtering is undefined inside the march's non-uniform control flow, and manual bilinear (sdfGlyphSampleField) reads
+// the true single-channel distance from ALPHA, so the nearest static sampler is all this binding needs.
+[[vk::combinedImageSampler]] [[vk::binding(20, 0)]] Texture2D<float4> sdfGlyphAtlas : register(t15);
+[[vk::combinedImageSampler]] [[vk::binding(20, 0)]] SamplerState sdfGlyphAtlasSampler : register(s8);
+#endif
+
 // --- opcodes (mirror Puck.SdfVm.SdfOp) ---
 #define SDF_OP_RESET             0u
 #define SDF_OP_TRANSLATE         1u
@@ -350,6 +363,11 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 #define SDF_SHAPE_TRAPEZOID       12u
 #define SDF_SHAPE_ELLIPSE         13u
 #define SDF_SHAPE_SCREEN_SLAB     14u
+// A glyph SAMPLED FROM A FONT ATLAS as a DISTANCE-level field (KEEP IN SYNC with SdfShapeType.Glyph). data0 =
+// (packedUvMin, packedUvMax [each host-baked unorm2x16 of an atlas UV], distanceScale, extrudeHalfDepth); data1 =
+// (smooth [ISA-wide], halfWidth, halfHeight, _). Only the world-views kernel binds the atlas (SDF_GLYPH_ATLAS); every
+// other kernel evaluates the conservative extruded-quad fallback (the glyph is strictly inside its cell). See sdfGlyph.
+#define SDF_SHAPE_GLYPH           15u
 
 // Lift mode for the 2D-primitive family (data1.y). Decoded as `> 0.5` so a float lane carries it cleanly on both
 // backends. KEEP IN SYNC with Puck.SdfVm.SdfLift.
@@ -870,6 +888,97 @@ float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
 }
 // === end 2D-primitive family =======================================================================================
 
+// === SDF_SHAPE_GLYPH: a font atlas sampled as a DISTANCE-level field =================================================
+// Text as REAL geometry: a glyph cell's exact 2D quad (the box in XY) extruded along Z, its interior refined by the
+// atlas's true signed distance so the LETTER — not the cell — is the surface. It marches, blends, extrudes, and (with
+// Subtraction) ENGRAVES into any surface. data0 = (packedUvMin, packedUvMax, distanceScale, extrudeHalfDepth); data1 =
+// (smooth, halfWidth, halfHeight, _). distanceScale = atlas distanceRange(texels) × worldPerTexel (host-baked), so the
+// encoded [0,1] distance maps to LOCAL units. Adapted from SignedDistanceTerminal's sdfMsdfGlyph.
+//
+// LIPSCHITZ: an exact-EDT single-channel atlas is 1-Lipschitz in texel space (the Eikonal property); bilinear
+// reconstruction preserves that bound; a UNIFORM worldPerTexel (the builder ties halfWidth/halfHeight to the cell's
+// texel aspect) carries it to world space at factor 1 — so the glyph shape needs NO AnalyzeLipschitz step clamp, like
+// the exact 2D-lift family. A caller authoring a non-uniform (stretched) cell owns the >1 risk, exactly as Repeat's
+// in-cell rule is the caller's.
+
+// Host-baked unorm2x16 of an atlas UV, unpacked: the low 16 bits are u, the high 16 v, each /65535. An integer bit op,
+// so it is bit-identical across DXC's SPIR-V and DXIL targets. Packing the four UV-rect components into two lanes frees
+// data1.x for the ISA-wide smooth-blend radius (the ≤0.06-texel error at 4K is sub-texel at any authoring scale).
+float2 sdfGlyphUnpackUv(float packed) {
+    uint bits = asuint(packed);
+
+    return (float2((bits & 0xFFFFu), (bits >> 16u)) * (1.0 / 65535.0));
+}
+// The extruded-quad FALLBACK: the glyph cell as a plain box, exact and 1-Lipschitz. Every kernel WITHOUT the atlas
+// bound (the beam cull, the ray-query debug marcher) evaluates this — a conservative UNDERESTIMATE of the true glyph
+// distance, since the letter is strictly inside its cell, so the cull never holes and rt-debug renders the glyph flat
+// (as ScreenSlab renders its screen as a box there). halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
+float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
+    float2 b = (abs(p.xy) - float2(data1.y, data1.z));
+    float dQuad = (length(max(b, 0.0)) + min(max(b.x, b.y), 0.0));
+    float2 w = float2(dQuad, (abs(p.z) - data0.w));
+
+    return (min(max(w.x, w.y), 0.0) + length(max(w, 0.0)));
+}
+
+#ifdef SDF_GLYPH_ATLAS
+// One texel's TRUE single-channel signed distance from the ALPHA channel (msdf-atlas-gen packs the true distance
+// there; this engine's runtime generator replicates its single channel into alpha, so alpha decodes both). The RGB
+// median MTSDF tooling reconstructs is deliberately NOT read: it is only C0 at channel-crossover lines and so kinks
+// the field a sphere tracer steps through — GEOMETRY MARCHES THE TRUE CHANNEL. Edge-clamped; SampleLevel(…, 0) because
+// implicit-derivative filtering is undefined inside the march's non-uniform control flow.
+float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
+    int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
+    float2 uv = ((float2(clamped) + 0.5) / float2(dims));
+
+    return sdfGlyphAtlas.SampleLevel(sdfGlyphAtlasSampler, uv, 0.0).a;
+}
+// Manual bilinear of the true single-channel field: four point taps + arithmetic lerp, NOT a hardware LINEAR sampler,
+// so the reconstruction is bit-stable across both DXC backends (a driver's bilinear can differ ±1 LSB — the exact
+// class WorldHighContrast is calibrated for, but manual keeps the field itself identical).
+float sdfGlyphSampleField(float2 uv) {
+    uint2 udims;
+    sdfGlyphAtlas.GetDimensions(udims.x, udims.y);
+
+    int2 dims = int2(udims);
+    float2 texelF = ((uv * float2(dims)) - 0.5);
+    float2 baseF = floor(texelF);
+    float2 f = (texelF - baseF);
+    int2 b = int2(baseF);
+    float a00 = sdfGlyphTexelAlpha((b + int2(0, 0)), dims);
+    float a10 = sdfGlyphTexelAlpha((b + int2(1, 0)), dims);
+    float a01 = sdfGlyphTexelAlpha((b + int2(0, 1)), dims);
+    float a11 = sdfGlyphTexelAlpha((b + int2(1, 1)), dims);
+
+    return lerp(lerp(a00, a10, f.x), lerp(a01, a11, f.x), f.y);
+}
+float sdfGlyph(float3 p, float4 data0, float4 data1) {
+    float2 halfSize = float2(data1.y, data1.z);
+    float2 b = (abs(p.xy) - halfSize);
+    float dQuad = (length(max(b, 0.0)) + min(max(b.x, b.y), 0.0));
+    float distanceScale = data0.z;
+    float dPlane = dQuad;
+
+    // Band cull: beyond ±distanceRange/2 of an edge the encoded field saturates, so a tap there tells us nothing the
+    // exact quad distance dQuad does not already bound — skip the texture read entirely (the whole perf trick, and the
+    // conservative far-field at once). Inside the band, refine to the letter's true distance. The max() with dQuad
+    // keeps the band→proxy seam a valid UNDERESTIMATE: the saturated atlas UNDER-reports, so the exact quad wins there.
+    if (dQuad < (0.5 * distanceScale)) {
+        float2 uvMin = sdfGlyphUnpackUv(data0.x);
+        float2 uvMax = sdfGlyphUnpackUv(data0.y);
+        float2 uv = lerp(uvMin, uvMax, clamp((((p.xy / halfSize) * 0.5) + 0.5), 0.0, 1.0));
+        float encoded = sdfGlyphSampleField(uv);   // true single-channel distance; 0.5 = edge, > 0.5 inside the glyph
+
+        dPlane = max(((0.5 - encoded) * distanceScale), dQuad);
+    }
+
+    float2 w = float2(dPlane, (abs(p.z) - data0.w));
+
+    return (min(max(w.x, w.y), 0.0) + length(max(w, 0.0)));
+}
+#endif
+// === end SDF_SHAPE_GLYPH ============================================================================================
+
 // The ONE shape dispatch. Single-return (a result variable rather than returning inside the switch) so the compiler's
 // flow analysis sees the value is always initialized. data1's .x lane is the ISA-wide smooth-blend radius; lanes .yzw
 // carry HOST-BAKED derived constants per shape (see SdfProgramBuilder). Ids that share a body FALL THROUGH: DXC inlines
@@ -899,6 +1008,16 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
         case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
         case SDF_SHAPE_ELLIPSE:         result = sdfEllipseSolid(p, data0, data1); break;
+        // A glyph is the atlas-sampled letter where the atlas is bound (the world-views kernel), else the conservative
+        // extruded quad — so the beam cull and rt-debug see a solid cell box (never a hole), and only the lit render
+        // resolves the true lettering.
+        case SDF_SHAPE_GLYPH:
+#ifdef SDF_GLYPH_ATLAS
+            result = sdfGlyph(p, data0, data1);
+#else
+            result = sdfGlyphQuad(p, data0, data1);
+#endif
+            break;
     }
 
     return result;
@@ -1025,9 +1144,11 @@ float3 sdfCylinderGradient(float3 p, float radius, float halfHeight) {
 
     return float3((n.x * radial.x), (n.y * ySign), (n.x * radial.y));
 }
-// Shape-LOCAL 4-tap tetrahedron FD for the exotic primitives (ellipsoid/vesica/roundcone/the 2D-lifted family): a tight
-// difference of just that one primitive's SDF in folded space, no transform chain — so it fixes the op-CHAIN
-// propagation (the real win) with a cheap, cancellation-light leaf. Same isotropic tetrahedron the world normal uses.
+// Shape-LOCAL 4-tap tetrahedron FD for the exotic primitives (ellipsoid/vesica/roundcone/the 2D-lifted family, and the
+// atlas-sampled Glyph): a tight difference of just that one primitive's SDF in folded space, no transform chain — so it
+// fixes the op-CHAIN propagation (the real win) with a cheap, cancellation-light leaf. The Glyph's taps re-sample the
+// atlas (band-culled), which is why the honest leaf is a shape-local FD, not an analytic gradient. Same isotropic
+// tetrahedron the world normal uses.
 float3 sdfShapeGradientFd(uint shapeType, float3 p, float4 data0, float4 data1) {
     const float2 k = float2(1.0, -1.0);
     const float e = SDF_SHAPE_GRAD_EPSILON;

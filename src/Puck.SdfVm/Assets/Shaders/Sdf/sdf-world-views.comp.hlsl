@@ -12,6 +12,9 @@
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_INSTANCE_MASKS
 #define SDF_SCREEN_SOURCES
+// The ONLY kernel that binds the glyph atlas (sdf-vm.hlsli's sdfGlyphAtlas at binding 20 / register t15, sampler s8) —
+// so SDF_SHAPE_GLYPH marches the true lettering here while every other kernel sees the conservative cell box.
+#define SDF_GLYPH_ATLAS
 #include "sdf-world.hlsli"
 
 // The program is at binding 1 (sdf-vm.hlsli, register t0), the viewport table at binding 2 (sdf-world.hlsli,

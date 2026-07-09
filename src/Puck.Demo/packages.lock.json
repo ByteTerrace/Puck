@@ -511,7 +511,8 @@
           "Puck.Capture": "[1.0.0, )",
           "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )"
+          "Puck.Shaders": "[1.0.0, )",
+          "Puck.Text": "[1.0.0, )"
         }
       },
       "puck.shaders": {

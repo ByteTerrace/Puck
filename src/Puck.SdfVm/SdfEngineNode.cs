@@ -459,6 +459,14 @@ public sealed class SdfEngineNode : IRenderNode {
             width: m_width
         );
 
+        // The glyph atlas is STATIC content — upload it ONCE here, right after the engine is (re)built, reading it
+        // straight off the frame source (the ISdfFrameSource.GlyphAtlas seam, mirroring ScreenSurfaceTransforms), NOT
+        // in the per-frame poll below. A device-loss rebuild nulls m_engine, so EnsureEngine re-runs and re-uploads the
+        // atlas automatically, exactly as UploadProgram re-runs.
+        if (m_frameSource.GlyphAtlas is SdfGlyphAtlas glyphAtlas) {
+            m_engine.SetGlyphAtlas(rgbaPixels: glyphAtlas.Rgba, width: glyphAtlas.Width, height: glyphAtlas.Height);
+        }
+
         if ((timingFactory is not null) && (timingRecorder is not null)) {
             if (m_engine.TimingEnabled) {
                 var capabilities = m_engine.TimingCapabilities;

@@ -93,7 +93,8 @@ public sealed class SdfWorldEngine : IDisposable {
     private static readonly uint[] ScreenSourceBindingIndices = [12, 13, 14, 15, 16, 17, 18, 19];
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli)
     private const uint ScreenSurfaceBindingIndex = 10; // sdf-world-views.comp (Stage 1 ONLY): screenSurfaces, register t4
-    private const uint ScreenLightBindingIndex = 11; // sdf-world-views.comp (Stage 1 ONLY): sdfScreenLights, register t14 — the LAST SRV (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
+    private const uint ScreenLightBindingIndex = 11; // sdf-world-views.comp (Stage 1 ONLY): sdfScreenLights, register t14 (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
+    private const uint GlyphAtlasBindingIndex = 20; // sdf-world-views.comp (Stage 1 ONLY): the SDF_SHAPE_GLYPH font atlas, register t15 (SRV, after screenLights t14) + static sampler s8 (after the eight screen samplers s0..s7) — APPENDED LAST in viewsBindings so the D3D12 registers land there; KEEP IN SYNC with sdf-vm.hlsli's sdfGlyphAtlas
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 5)); // float4 rgb+intensity per screen (0..7) + env (8) + FOUR grid-lock rows (9..12: world grid, object origin+pitchX, object frame quat, object pitchZ+patchRadius) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfGridObjParams
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const uint TileBindingIndex = 3; // matches sdf-world.hlsli's [[vk::binding(3, 0)]]
@@ -126,6 +127,14 @@ public sealed class SdfWorldEngine : IDisposable {
     private readonly IGpuShaderModule m_beamShaderModule;
     private readonly nint[] m_boundScreenSourceViews = new nint[MaxScreenSurfaces];
     private readonly nint[] m_boundSourceViews = new nint[MaxViewports];
+    // The SDF_SHAPE_GLYPH font atlas: a STATIC texture uploaded once via SetGlyphAtlas (a re-set re-uploads). Held as an
+    // IGpuSurfaceUpload (owns the image + staging + the returned view), the current sampleable view, and the last-bound
+    // view for the same change-detected (re)bind BindScreenSources does for the screen sources. Null/0 until set — the
+    // glyph binding then samples the neutral 1×1 filler (m_screenSourceFiller) and every SDF_SHAPE_GLYPH reads the
+    // saturated band, so a glyph-free program with no atlas is safe.
+    private IGpuSurfaceUpload? m_glyphAtlasUpload;
+    private nint m_glyphAtlasView;
+    private nint m_boundGlyphAtlasView;
     private readonly uint m_childMask;
     private readonly nint[] m_childSourceViews = new nint[MaxViewports];
     private readonly IGpuComputeCommandPool m_commandPool;
@@ -383,8 +392,12 @@ public sealed class SdfWorldEngine : IDisposable {
             new GpuComputeBinding(Binding: ScreenSourceBindingIndices[6], Kind: GpuComputeBindingKind.SampledImage),
             new GpuComputeBinding(Binding: ScreenSourceBindingIndices[7], Kind: GpuComputeBindingKind.SampledImage),
             new GpuComputeBinding(Binding: InstanceMaskBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
-            // Appended LAST so its SRV resolves to register t14 (after instanceMasks t13): the per-frame screen-light buffer.
+            // The per-frame screen-light buffer — its SRV resolves to register t14 (after instanceMasks t13).
             new GpuComputeBinding(Binding: ScreenLightBindingIndex, Kind: GpuComputeBindingKind.StorageBufferRead),
+            // The SDF_SHAPE_GLYPH font atlas, APPENDED LAST so its SRV resolves to register t15 (after screenLights
+            // t14) and its static sampler to s8 (after the eight screen samplers). A ninth SampledImage on this set,
+            // (re)bound per frame by BindScreenSources to the atlas view or the neutral 1×1 filler when none is set.
+            new GpuComputeBinding(Binding: GlyphAtlasBindingIndex, Kind: GpuComputeBindingKind.SampledImage),
         ];
 
         // Stage 2 (source-agnostic composite): output image (0) + the source array (1) + the cull buffer read (3),
@@ -570,6 +583,43 @@ public sealed class SdfWorldEngine : IDisposable {
         m_screenSourceMask = (0 != imageViewHandle)
             ? (m_screenSourceMask | (1u << screenIndex))
             : (m_screenSourceMask & ~(1u << screenIndex));
+    }
+    /// <summary>Uploads the single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples as a
+    /// distance-level field, replacing any previously set atlas. STATIC: unlike a screen source (an external per-frame
+    /// image-view handle), this copies the CPU pixels into a device image ONCE and holds the sampleable view for the
+    /// engine's lifetime; the next produced frame binds it. The atlas MUST carry the true single-channel signed
+    /// distance in the ALPHA channel (this engine's runtime generator, <c>Puck.Text.SdfCoverageAtlas</c>, replicates
+    /// its single channel into alpha; an <c>msdf-atlas-gen</c> MTSDF atlas already does). Passing an empty
+    /// <paramref name="rgbaPixels"/> clears the atlas back to the neutral 1×1 filler.</summary>
+    /// <param name="rgbaPixels">The tightly packed, row-major, top-down RGBA atlas pixels
+    /// (<paramref name="width"/> × <paramref name="height"/> × 4 bytes), or empty to clear.</param>
+    /// <param name="width">The atlas width in texels.</param>
+    /// <param name="height">The atlas height in texels.</param>
+    /// <exception cref="ObjectDisposedException">The engine has been disposed.</exception>
+    /// <exception cref="ArgumentException">The dimensions are zero, or the pixel buffer length is not
+    /// <paramref name="width"/> × <paramref name="height"/> × 4.</exception>
+    public void SetGlyphAtlas(ReadOnlyMemory<byte> rgbaPixels, uint width, uint height) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+
+        if (rgbaPixels.IsEmpty) {
+            m_glyphAtlasView = 0;
+
+            return;
+        }
+
+        if ((0 == width) || (0 == height)) {
+            throw new ArgumentException(message: "A glyph atlas must have non-zero dimensions.");
+        }
+
+        if (rgbaPixels.Length != checked((int)(width * height * 4))) {
+            throw new ArgumentException(message: $"A glyph atlas of {width}x{height} needs {(width * height * 4)} RGBA bytes; got {rgbaPixels.Length}.", paramName: nameof(rgbaPixels));
+        }
+
+        // The upload object owns the image + staging + the returned view; blocks until the copy completes and the image
+        // is sampleable. One instance held for the lifetime (a re-set re-uploads through it — Vulkan reuses the view,
+        // Direct3D 12 replaces it, so re-read the handle every time).
+        m_glyphAtlasUpload ??= m_gpu.SurfaceTransferFactory.CreateUpload(deviceContext: m_deviceContext);
+        m_glyphAtlasView = m_glyphAtlasUpload.Upload(deviceContext: m_deviceContext, pixels: rgbaPixels, format: Format, width: width, height: height);
     }
     /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the NEXT produced
     /// frame — the per-frame counterpart of the screen-surface table <see cref="UploadProgram"/> otherwise writes only
@@ -852,6 +902,7 @@ public sealed class SdfWorldEngine : IDisposable {
         }
 
         m_screenSourceFiller.Dispose();
+        m_glyphAtlasUpload?.Dispose();
         m_storageImage.Dispose();
         m_beamShaderModule.Dispose();
         m_instanceCullShaderModule.Dispose();
@@ -940,6 +991,15 @@ public sealed class SdfWorldEngine : IDisposable {
 
             m_descriptorAllocator.WriteCombinedImageSampler(arrayElement: 0, binding: ScreenSourceBindingIndices[(int)element], descriptorSetHandle: m_viewsSet, deviceHandle: m_deviceHandle, imageViewHandle: view, samplerHandle: m_screenSampler);
             m_boundScreenSourceViews[element] = view;
+        }
+
+        // The glyph atlas rides the same ShaderReadOnly filler when unset, and the same change-detected rebind. It is
+        // static, so this normally writes once (the atlas view, or the filler) and then no-ops every later frame.
+        var glyphView = (0 != m_glyphAtlasView) ? m_glyphAtlasView : fillerView;
+
+        if (glyphView != m_boundGlyphAtlasView) {
+            m_descriptorAllocator.WriteCombinedImageSampler(arrayElement: 0, binding: GlyphAtlasBindingIndex, descriptorSetHandle: m_viewsSet, deviceHandle: m_deviceHandle, imageViewHandle: glyphView, samplerHandle: m_screenSampler);
+            m_boundGlyphAtlasView = glyphView;
         }
     }
     private nint SourceViewForSlot(int slot) {

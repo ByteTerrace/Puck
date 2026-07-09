@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Text;
 
 namespace Puck.SdfVm;
 
@@ -894,6 +895,132 @@ public sealed class SdfProgramBuilder {
             shape: SdfShapeType.Ellipse,
             smooth: smooth
         );
+    }
+    /// <summary>A single glyph cell sampled from a bound font atlas (see <see cref="SdfWorldEngine.SetGlyphAtlas"/>) as
+    /// a DISTANCE-level field — text as real world geometry (marchable, liftable, blendable, and with
+    /// <see cref="SdfBlendOp.Subtraction"/> ENGRAVABLE into any surface). The glyph is the atlas letter where the atlas
+    /// is bound (the world-lit render) and the conservative extruded cell box everywhere else. Most callers use
+    /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float)"/>, which
+    /// bakes these arguments from a laid-out string; this primitive is the one-cell seam.
+    /// <para>The cell must map with UNIFORM scale — <paramref name="halfWidth"/>/<paramref name="halfHeight"/>
+    /// proportional to the atlas cell's texel width/height — for the field to stay 1-Lipschitz (factor 1, no step
+    /// clamp); a stretched cell is the caller's risk, exactly as <see cref="Repeat"/>'s in-cell rule is. The atlas UVs
+    /// are unorm2x16-packed HOST-SIDE into two lanes so the ISA-wide <paramref name="smooth"/> radius keeps its lane
+    /// (KEEP IN SYNC with SDF_SHAPE_GLYPH / sdfGlyphUnpackUv in Assets/Shaders/Sdf/sdf-vm.hlsli).</para></summary>
+    /// <param name="uvBottomLeft">The atlas UV (in <c>[0, 1]²</c>) at the cell's local <c>(-halfWidth, -halfHeight)</c> corner.</param>
+    /// <param name="uvTopRight">The atlas UV at the cell's local <c>(+halfWidth, +halfHeight)</c> corner.</param>
+    /// <param name="halfWidth">The cell's local X half-extent, in world units.</param>
+    /// <param name="halfHeight">The cell's local Y half-extent, in world units.</param>
+    /// <param name="extrudeHalfDepth">The half-depth the glyph extrudes along local Z (clamped to ≥ 0).</param>
+    /// <param name="distanceScale">The atlas distance range (in texels) times the world size of one texel: converts the
+    /// encoded <c>[0, 1]</c> distance to world units. Host-baked (foot-gun discipline).</param>
+    /// <param name="material">The material id the letter shades with.</param>
+    /// <param name="blend">The blend against the field accumulated so far (Subtraction engraves).</param>
+    /// <param name="smooth">The smooth/chamfer radius (meaningful only for a smooth/chamfer <paramref name="blend"/>).</param>
+    public SdfProgramBuilder Glyph(Vector2 uvBottomLeft, Vector2 uvTopRight, float halfWidth, float halfHeight, float extrudeHalfDepth, float distanceScale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        return Shape(
+            blend: blend,
+            derived1: MathF.Abs(halfWidth),   // Data1.y = halfWidth
+            derived2: MathF.Abs(halfHeight),  // Data1.z = halfHeight
+            dimensions: new Vector4(
+                w: MathF.Max(0f, extrudeHalfDepth),  // Data0.w = extrudeHalfDepth
+                x: PackUv(uv: uvBottomLeft),         // Data0.x = packed uvMin
+                y: PackUv(uv: uvTopRight),           // Data0.y = packed uvMax
+                z: distanceScale                     // Data0.z = distanceScale
+            ),
+            material: material,
+            shape: SdfShapeType.Glyph,
+            smooth: smooth
+        );
+    }
+    /// <summary>Lays <paramref name="text"/> out against <paramref name="atlas"/> and emits one <see cref="Glyph"/> cell
+    /// per drawn character, positioned on the plane spanned by <paramref name="right"/>/<paramref name="up"/> at
+    /// <paramref name="origin"/> (the first line's baseline pen). Each glyph is a self-contained
+    /// <see cref="ResetPoint"/> + transform + <see cref="Glyph"/> SEGMENT, so a whole string is a multi-segment run the
+    /// caller wraps in one <see cref="BeginInstance"/>/<see cref="EndInstance"/> with a bound covering the block. The
+    /// atlas must be uploaded to the engine (<see cref="SdfWorldEngine.SetGlyphAtlas"/>) for the letters to resolve;
+    /// unbound, each cell renders as its conservative box.</summary>
+    /// <param name="atlas">The font atlas providing glyph geometry, metrics, and per-glyph atlas rectangles.</param>
+    /// <param name="text">The string to lay out (line feeds break lines; unmapped code points are skipped).</param>
+    /// <param name="origin">The world-space pen origin — the first line's baseline, left edge.</param>
+    /// <param name="right">The unit world axis local +X (advance direction) maps to.</param>
+    /// <param name="up">The unit world axis local +Y (ascent direction) maps to; the glyphs extrude along right×up.</param>
+    /// <param name="worldEmHeight">The world height of one em — the text's world scale.</param>
+    /// <param name="material">The material id the letters shade with.</param>
+    /// <param name="blend">The blend against the field accumulated so far (Subtraction engraves the text).</param>
+    /// <param name="extrudeHalfDepth">The half-depth each glyph extrudes along the plane normal.</param>
+    /// <param name="smooth">The smooth/chamfer radius for a smooth/chamfer <paramref name="blend"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="text"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="worldEmHeight"/> is not greater than zero.</exception>
+    public SdfProgramBuilder Text(FontAtlas atlas, string text, Vector3 origin, Vector3 right, Vector3 up, float worldEmHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float extrudeHalfDepth = 0.1f, float smooth = 0f) {
+        ArgumentNullException.ThrowIfNull(atlas);
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (worldEmHeight <= 0f) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(worldEmHeight), message: "Text world em height must be greater than zero.");
+        }
+
+        // Uniform world-per-texel (atlas.Size = pixels per em): every glyph derives BOTH half-extents from it, so the
+        // sampled field stays 1-Lipschitz (factor 1). distanceScale rides the same factor.
+        var worldPerTexel = (worldEmHeight / atlas.Size);
+        var distanceScale = (atlas.DistanceRange * worldPerTexel);
+        // Local (right, up, forward=right×up) → world: the rotation whose rows are the basis (System.Numerics'
+        // row-vector Transform), so Rotate places each glyph's authored local XY onto the text plane.
+        var unitRight = Vector3.Normalize(value: right);
+        var unitUp = Vector3.Normalize(value: up);
+        var forward = Vector3.Normalize(value: Vector3.Cross(vector1: unitRight, vector2: unitUp));
+        var orientation = Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
+            unitRight.X, unitRight.Y, unitRight.Z, 0f,
+            unitUp.X, unitUp.Y, unitUp.Z, 0f,
+            forward.X, forward.Y, forward.Z, 0f,
+            0f, 0f, 0f, 1f
+        ));
+        var layout = new TextLayout().Layout(atlas: atlas, text: text, scale: worldEmHeight);
+        var atlasWidth = (float)atlas.Width;
+        var atlasHeight = (float)atlas.Height;
+
+        foreach (var placement in layout.Placements) {
+            var atlasBounds = placement.AtlasBounds;
+            var planeBounds = placement.PlaneBounds;
+            // Uniform half-extents from the atlas cell's texel size; the cell CENTRE from the laid-out plane bounds (the
+            // pen already placed it in the block). The two agree up to the padded margin, which is empty field.
+            var halfWidth = (0.5f * (atlasBounds.Right - atlasBounds.Left) * worldPerTexel);
+            var halfHeight = (0.5f * (atlasBounds.Bottom - atlasBounds.Top) * worldPerTexel);
+            var centre2D = new Vector2(
+                x: (0.5f * (planeBounds.Left + planeBounds.Right)),
+                y: (0.5f * (planeBounds.Bottom + planeBounds.Top))
+            );
+            var worldCentre = (origin + (unitRight * centre2D.X) + (unitUp * centre2D.Y));
+            // Local (-hw,-hh) is the cell's bottom-left → atlas (uMin, vBottom = the LARGER texel row, top-down); local
+            // (+hw,+hh) is top-right → (uMax, vTop). The lerp in the shader maps local→uv along this diagonal.
+            var uvBottomLeft = new Vector2(x: (atlasBounds.Left / atlasWidth), y: (atlasBounds.Bottom / atlasHeight));
+            var uvTopRight = new Vector2(x: (atlasBounds.Right / atlasWidth), y: (atlasBounds.Top / atlasHeight));
+
+            _ = ResetPoint()
+                .Translate(offset: worldCentre)
+                .Rotate(rotation: orientation)
+                .Glyph(
+                    blend: blend,
+                    distanceScale: distanceScale,
+                    extrudeHalfDepth: extrudeHalfDepth,
+                    halfHeight: halfHeight,
+                    halfWidth: halfWidth,
+                    material: material,
+                    smooth: smooth,
+                    uvBottomLeft: uvBottomLeft,
+                    uvTopRight: uvTopRight
+                );
+        }
+
+        return this;
+    }
+    // Host-side unorm2x16 pack of an atlas UV: 16-bit u in the low half, v in the high half, matching sdfGlyphUnpackUv
+    // (KEEP IN SYNC). An integer pack reinterpreted as float bits, so it is bit-identical across both DXC backends.
+    private static float PackUv(Vector2 uv) {
+        var u = (uint)Math.Clamp(value: (int)MathF.Round(MathF.Max(0f, uv.X) * 65535f), min: 0, max: 65535);
+        var v = (uint)Math.Clamp(value: (int)MathF.Round(MathF.Max(0f, uv.Y) * 65535f), min: 0, max: 65535);
+
+        return BitConverter.UInt32BitsToSingle(value: (u | (v << 16)));
     }
     public SdfProgramBuilder Box(Vector3 halfExtents, float round, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         return Shape(

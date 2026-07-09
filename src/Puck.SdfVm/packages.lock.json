@@ -55,6 +55,12 @@
         "dependencies": {
           "Puck.Assets": "[1.0.0, )"
         }
+      },
+      "puck.text": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )"
+        }
       }
     }
   }

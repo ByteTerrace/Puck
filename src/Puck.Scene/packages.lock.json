@@ -59,10 +59,17 @@
           "Puck.Capture": "[1.0.0, )",
           "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )"
+          "Puck.Shaders": "[1.0.0, )",
+          "Puck.Text": "[1.0.0, )"
         }
       },
       "puck.shaders": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )"
+        }
+      },
+      "puck.text": {
         "type": "Project",
         "dependencies": {
           "Puck.Assets": "[1.0.0, )"

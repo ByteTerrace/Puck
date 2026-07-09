@@ -22,4 +22,11 @@ public enum SdfShapeType : uint {
     Trapezoid = 12,       // Data0 = (bottomHalfWidth r1, topHalfWidth r2, halfHeight, lift); iq sdTrapezoid
     Ellipse = 13,         // Data0 = (semiX, semiY, _, lift); iq sdEllipse (revolve→spheroid, extrude→elliptic prism)
     ScreenSlab = 14, // Data0 = (halfX, halfY, halfZ, roundingRadius)
+    // A glyph SAMPLED FROM A FONT ATLAS as a DISTANCE-level field (not material-level like ScreenSlab): text becomes
+    // real world geometry that marches, blends, extrudes, engraves (Subtraction) and takes shadows/AO. Data0 =
+    // (packedUvMin, packedUvMax [each unorm2x16-packed atlas UV, host-baked], distanceScale, extrudeHalfDepth); Data1 =
+    // (smooth [ISA-wide, header/Data1.x], halfWidth, halfHeight, _). Evaluated only where the glyph atlas is bound (the
+    // world-views kernel, SDF_GLYPH_ATLAS); every other kernel falls back to the exact 2D quad's extruded box — a
+    // conservative underestimate, since the glyph is strictly inside its cell. KEEP IN SYNC with SDF_SHAPE_GLYPH.
+    Glyph = 15,
 }

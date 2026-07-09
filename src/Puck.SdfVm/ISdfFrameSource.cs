@@ -16,4 +16,12 @@ public interface ISdfFrameSource {
     /// frame source (rather than threading it through a separate render-spec field) keeps a host node's own type
     /// coupling from growing just to wire this seam through.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => null;
+
+    /// <summary>The single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples, or <see langword="null"/>
+    /// when the source declares no world text. STATIC: the host uploads it ONCE (<see cref="SdfWorldEngine.SetGlyphAtlas"/>)
+    /// when the engine is (re)created, not per frame — so this is polled once at engine build, not on the per-frame
+    /// path. Default null — a source with no glyphs need not override it, and the glyph binding then samples a neutral
+    /// filler. Mirrors <see cref="ScreenSurfaceTransforms"/>: read straight off the frame source so a host node's type
+    /// coupling doesn't grow to thread it.</summary>
+    SdfGlyphAtlas? GlyphAtlas => null;
 }

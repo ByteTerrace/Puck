@@ -23,6 +23,9 @@
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
+        <!-- The font-atlas model + em-space layout (render-agnostic, same engine-services layer): the SdfProgramBuilder
+             Text() helper lays a string out against a FontAtlas and emits one SDF_SHAPE_GLYPH cell per character. -->
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
 
     <ItemGroup>
