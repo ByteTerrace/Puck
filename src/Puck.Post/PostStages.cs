@@ -61,6 +61,7 @@ internal static class PostStages {
             new WorldScreenStage(),
             new WorldInstancedStage(),
             new WorldSwarmStage(),
+            new WorldGridCullStage(),
             new CameraShareStage(),
 
             // Tier C — fuzz + ray tracing (M5): the differential fuzzer's fixed deterministic seed sample, then the

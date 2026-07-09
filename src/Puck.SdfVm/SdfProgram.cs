@@ -33,6 +33,12 @@ namespace Puck.SdfVm;
 //                         ranges by ascending segment index (the flat stream's blend order), so a map() call costs
 //                         O(world segments + visible instances' segments), never O(all segments). See
 //                         PackWorldSegments.
+//   [.. + 1 + worldSegmentCount ..) = the INSTANCE GRID block (world render path only): the deterministic world-space
+//                         uniform grid the tile-cull beam prepass walks so its cost tracks instances NEAR a tile's cone,
+//                         not the total instance count. A self-contained uint block (header + CSR cellStart[] + cell
+//                         entries + always-tested list), padded to a uvec4 boundary — see SdfInstanceGrid for the full
+//                         layout. mapCore never reads it (it stops at the world-segment list), so every rendered pixel is
+//                         unchanged by its presence; only sdf-beam.comp consumes it.
 // Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
 // they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
 // SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldEngine and
@@ -82,7 +88,12 @@ public sealed class SdfProgram {
     private readonly uint[] m_screenSurfaceWords;
     private readonly uint[] m_words;
 
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null) {
+    /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (see
+    /// <see cref="SdfInstanceGrid"/>). Default (and production) is <see langword="true"/>: the beam prepass walks the
+    /// grid instead of testing every instance in every tile. Pass <see langword="false"/> to pack a DISABLED grid so
+    /// the beam falls back to the flat per-instance loop over the SAME instances — the reference path the
+    /// <c>world-grid-cull</c> Post gate compares against (grid == flat).</param>
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
 
@@ -126,13 +137,22 @@ public sealed class SdfProgram {
             }
         }
 
+        // Classify each instance ONCE (packed radius + whether the frozen grid can bin it) and build the uniform-grid
+        // block from the SAME classification PackInstances writes, so the beam's grid cull can never disagree with the
+        // bound it tests. The grid block is a self-contained uint array appended after the world-segment list; its
+        // length is known here (it depends on the instance layout), so it sizes the word stream up front. A probe
+        // program flows through this same path, so the frozen capacity envelope grows to cover the grid automatically.
+        var instanceBinning = ClassifyInstances();
+        var gridBlock = SdfInstanceGrid.Build(instances: instanceBinning, maxInstances: SdfProgramBuilder.MaxInstances, enabled: buildInstanceGrid);
+
         var dataOffsetVectors = (1 + instructionCount);
         var materialOffsetVectors = (dataOffsetVectors + (2 * instructionCount));
         var boundsOffsetVectors = (materialOffsetVectors + (2 * materialCount));
         var segmentOffsetVectors = (boundsOffsetVectors + (2 * instructionCount));
         var instanceOffsetVectors = (segmentOffsetVectors + 1 + (2 * segments.Count));
         var worldSegmentOffsetVectors = (instanceOffsetVectors + 1 + (2 * m_instances.Length));
-        var totalVectors = (worldSegmentOffsetVectors + 1 + worldSegmentCount);
+        var gridOffsetVectors = (worldSegmentOffsetVectors + 1 + worldSegmentCount);
+        var totalVectors = (gridOffsetVectors + (gridBlock.Length / WordsPerVector));
 
         InstructionCount = instructionCount;
         m_words = new uint[(totalVectors * WordsPerVector)];
@@ -200,8 +220,13 @@ public sealed class SdfProgram {
         var stepScale = AnalyzeLipschitz(instructions: m_instructions);
 
         PackBounds(boundsOffsetVectors: boundsOffsetVectors, segmentOffsetVectors: segmentOffsetVectors, segments: segments, shapeBounds: shapeBounds, stepScale: stepScale);
-        PackInstances(instanceOffsetVectors: instanceOffsetVectors, segments: segments);
+        PackInstances(binning: instanceBinning, instanceOffsetVectors: instanceOffsetVectors, segments: segments);
         PackWorldSegments(segments: segments, worldSegmentCount: worldSegmentCount, worldSegmentOffsetVectors: worldSegmentOffsetVectors);
+
+        // The uniform-grid block sits after the world-segment list (mapCore never reads past that list, so its offset
+        // chain and every rendered pixel of a scope-/instance-driven walk are unchanged — only the beam prepass reads
+        // the grid). See SdfInstanceGrid for the block layout.
+        Array.Copy(sourceArray: gridBlock, sourceIndex: 0, destinationArray: m_words, destinationIndex: (gridOffsetVectors * WordsPerVector), length: gridBlock.Length);
     }
 
     public int InstructionCount { get; }
@@ -624,7 +649,56 @@ public sealed class SdfProgram {
     // segment range is resolved here (not during AnalyzeBounds) by scanning the FINAL, POST-MERGE segment list for
     // the contiguous run whose InstanceIndex equals this instance's index — sound because splits/merges never let a
     // segment straddle an instance boundary, so that run is always contiguous and never empty.
-    private void PackInstances(int instanceOffsetVectors, List<BoundRecord> segments) {
+    // Classifies each declared instance for BOTH the bound directory and the uniform grid: its packed bound radius (the
+    // float-safety-padded live radius + any soft-blend halo + any scoped-field reach, the UnmaskableBoundRadius sentinel,
+    // or the ParkedBoundRadius sentinel) and whether the FROZEN grid can bin it (active + static + maskable → a fixed,
+    // finite world-space bound). Computed ONCE so PackInstances and SdfInstanceGrid pack from the SAME radius — a
+    // divergence would desync the beam's grid cull from the bound it tests. Also runs the parked-unmaskable validation:
+    // an op that reads the running accumulator (an intersection-family blend or an Onion/Dilate/Displace field op) cannot
+    // be parked, because a parked slot asserts "contributes nothing", which such an op violates even where its geometry
+    // is absent. See MaxSmoothBlendRadius / MaxScopedFieldReach / HasUnmaskableCompose for the margin/gate derivations.
+    private SdfInstanceGridInput[] ClassifyInstances() {
+        var result = new SdfInstanceGridInput[m_instances.Length];
+
+        for (var index = 0; (index < m_instances.Length); index++) {
+            var instance = m_instances[index];
+            var unmaskable = HasUnmaskableCompose(first: instance.First, end: instance.End);
+
+            if (unmaskable && !instance.Active) {
+                throw new ArgumentException(message: $"Instance {index} is PARKED but carries an op that reads the running accumulator (an Intersection/SmoothIntersection/ChamferIntersection blend, or an Onion/Dilate/Displace field op). A parked slot must contribute nothing to the field, but such an op changes the field even where the instance's own geometry is absent. Emit the instance active, or use a union/subtraction-family blend with no field op.", paramName: "instances");
+            }
+
+            float radius;
+            bool binnable;
+
+            if (!instance.Active) {
+                // A PARKED instance packs the negative sentinel so the beam skips its sphere-vs-cone test with one branch;
+                // it is neither binned nor placed in the always-list (a parked pool costs zero).
+                radius = ParkedBoundRadius;
+                binnable = false;
+            } else if (unmaskable) {
+                // An op that reads the accumulator has unbounded influence; no finite bound culls it, so it packs the
+                // large sentinel (every tile's cull test passes) and rides the grid's ALWAYS-tested list.
+                radius = UnmaskableBoundRadius;
+                binnable = false;
+            } else {
+                // A live, maskable instance: its geometry radius plus its soft-blend coupling halo plus any scoped-field
+                // outward reach, float-safety padded. A STATIC one has a fixed world-space bound the grid bins; a DYNAMIC
+                // one resolves its center per frame, so the frozen grid cannot bin it and it rides the always-list.
+                radius = (((instance.Radius + MaxSmoothBlendRadius(first: instance.First, end: instance.End) + MaxScopedFieldReach(first: instance.First, end: instance.End)) * BoundRadiusScale) + BoundRadiusPadding);
+                binnable = !instance.IsDynamic;
+            }
+
+            result[index] = new SdfInstanceGridInput(Center: instance.Center, Radius: radius, Binnable: binnable);
+        }
+
+        return result;
+    }
+    // Packs the instance directory: a count header, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius
+    // (the packed radius ClassifyInstances derived), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd). The segment
+    // range is resolved here by scanning the FINAL, POST-MERGE segment list for the contiguous run whose InstanceIndex
+    // equals this instance's index — sound because splits/merges never let a segment straddle an instance boundary.
+    private void PackInstances(SdfInstanceGridInput[] binning, int instanceOffsetVectors, List<BoundRecord> segments) {
         m_words[(instanceOffsetVectors * WordsPerVector)] = (uint)m_instances.Length;
 
         // Resolve every instance's contiguous [segmentFirst, segmentEnd) directory range in ONE pass over the segment
@@ -655,41 +729,12 @@ public sealed class SdfProgram {
             var instance = m_instances[instanceIndex];
             var entryBase = ((instanceOffsetVectors + 1 + (2 * instanceIndex)) * WordsPerVector);
 
-            // A PARKED instance packs the negative sentinel so the beam prepass skips its per-tile sphere test entirely
-            // (one branch, no cull math, mask bit left 0) — the slot still exists (reserved capacity preserved), it just
-            // costs nothing. A live instance packs its float-safety-padded radius as before, PLUS its smooth-blend halo:
-            // a SmoothUnion/SmoothSubtraction/Chamfer shape couples this instance to whatever it blends against within
-            // its blend radius k, so beyond radius + k the seam has saturated and the tile cull can skip the instance
-            // EXACTLY (blendSmoothUnion is far-exact). Inflating the bound by k keeps the instance evaluated across that
-            // coupling halo — a smooth instance culls with a finite bound instead of an unmaskable one
-            // (closes the SmoothUnion-vs-world cull gotcha; see the sdf-world skill and blendSmoothUnion in sdf-vm.hlsli).
-            //
-            // An instance carrying an op that READS the accumulator — an intersection-family blend, or an
-            // Onion/Dilate/Displace field op — takes the unmaskable path instead: no halo can rescue it (see
-            // HasUnmaskableCompose), and PARKING one is an authoring error, because a parked slot asserts "contributes
-            // nothing", which such an op violates even where its geometry is absent.
-            //
-            // A SCOPED field op (Onion/Dilate/Displace inside a balanced PushField/PopField) is the exception: it is
-            // maskable (HasUnmaskableCompose skips scope-nested ops), so it packs a finite bound — but the op moves the
-            // scope's surface OUTWARD past the authored geometry radius, so the bound must be inflated by that reach
-            // (MaxScopedFieldReach) exactly as the smooth halo is, or the tiles the grown shell reaches get masked out
-            // and hole at the seams. Both margins add to the geometry radius (an over-covered instance is always cull-safe).
-            var unmaskable = HasUnmaskableCompose(first: instance.First, end: instance.End);
-
-            if (unmaskable && !instance.Active) {
-                throw new ArgumentException(message: $"Instance {instanceIndex} is PARKED but carries an op that reads the running accumulator (an Intersection/SmoothIntersection/ChamferIntersection blend, or an Onion/Dilate/Displace field op). A parked slot must contribute nothing to the field, but such an op changes the field even where the instance's own geometry is absent. Emit the instance active, or use a union/subtraction-family blend with no field op.", paramName: "instances");
-            }
-
-            var smoothMargin = MaxSmoothBlendRadius(first: instance.First, end: instance.End);
-            var scopedFieldReach = MaxScopedFieldReach(first: instance.First, end: instance.End);
-            var packedRadius = instance.Active
-                ? (unmaskable ? UnmaskableBoundRadius : (((instance.Radius + smoothMargin + scopedFieldReach) * BoundRadiusScale) + BoundRadiusPadding))
-                : ParkedBoundRadius;
-
+            // The packed radius (float-safety-padded live radius + soft-blend halo + scoped-field reach, or the
+            // unmaskable/parked sentinel) is the one ClassifyInstances derived — the same value the grid binned from.
             WriteVector4(
                 words: m_words,
                 baseIndex: entryBase,
-                w: packedRadius,
+                w: binning[instanceIndex].Radius,
                 x: instance.Center.X,
                 y: instance.Center.Y,
                 z: instance.Center.Z

@@ -1090,7 +1090,11 @@ public sealed class SdfProgramBuilder {
             worldUp: Vector3.Transform(Vector3.UnitY, unit)
         );
     }
-    public SdfProgram Build() {
+    /// <summary>Compiles the authored instructions/instances/materials/screens into a packed <see cref="SdfProgram"/>.</summary>
+    /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (default
+    /// <see langword="true"/>). Pass <see langword="false"/> to force the beam's flat per-instance fallback over the same
+    /// instances — the reference the grid-cull gate compares against; see <see cref="SdfProgram"/>.</param>
+    public SdfProgram Build(bool buildInstanceGrid = true) {
         if (m_openInstanceFirst >= 0) {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
@@ -1100,6 +1104,7 @@ public sealed class SdfProgramBuilder {
         }
 
         return new SdfProgram(
+            buildInstanceGrid: buildInstanceGrid,
             instructions: m_instructions,
             instances: m_instances,
             materials: m_materials,

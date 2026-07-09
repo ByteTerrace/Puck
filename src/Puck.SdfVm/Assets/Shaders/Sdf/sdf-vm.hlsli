@@ -35,6 +35,10 @@
 // ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 128
 // words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
 #define SDF_MAX_INSTANCES 4096u
+// The most per-tile mask WORDS a program can derive (ceil(SDF_MAX_INSTANCES / 32)) — the fixed size of the beam's
+// per-thread grid-cull accumulation scratch (SDF_MAX_INSTANCES / 32 = 128). Spelled without the `u` suffix so it is a
+// legal array dimension. KEEP IN SYNC with SDF_MAX_INSTANCES.
+#define SDF_INSTANCE_MASK_MAX_WORDS 128
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still
@@ -125,6 +129,71 @@ uint sdfInstanceCount() {
 // entry's base).
 uint sdfInstanceCountClamped() {
     return min(sdfInstanceCount(), SDF_MAX_INSTANCES);
+}
+
+// The world-space UNIFORM-GRID instance cull (world render path, the beam prepass ONLY): a uint-granular block appended
+// after the world-segment list, so mapCore — which stops at that list — never reads it and every rendered pixel is
+// unchanged by its presence. The beam walks it instead of testing every instance in every tile, so its cost tracks the
+// instances NEAR a tile's cone. KEEP IN SYNC with Puck.SdfVm.SdfInstanceGrid (the host packer) — the header layout,
+// SDF_GRID_HEADER_WORDS, and SDF_GRID_MAX_DIM.
+#define SDF_GRID_HEADER_WORDS 16u
+#define SDF_GRID_MAX_DIM 64u    // per-axis cell-count cap (KEEP IN SYNC with SdfInstanceGrid.MaxDimension)
+#define SDF_GRID_CELL_RING 1    // the cone footprint's integer cell over-cover ring (float-safety margin, both sides)
+// The cone-march slab cap: the host guarantees the real slab count (grid depth / cellSize) is at most the grid's cell
+// diagonal, sqrt(3)*SDF_GRID_MAX_DIM ≈ 110.85, so 128 is a hard loop bound that never truncates a legal grid walk.
+#define SDF_GRID_MAX_SLABS 128u
+
+// One uint of the program word stream. The stream is a StructuredBuffer<uint4>; every table before the grid is
+// uint4-granular, but the grid block is uint-granular, so it reads through this component index.
+uint sdfWordAt(uint wordIndex) {
+    return sdfWords[wordIndex >> 2u][wordIndex & 3u];
+}
+// The grid block's base WORD offset (uint-granular), given the instance directory offset and the UNCLAMPED packed
+// instance count the caller already holds (mapCore and the beam both resolve them). The block sits one uint4 (the
+// world-segment header) plus the world-segment entries past the instance directory's own span.
+uint sdfGridBaseWord(uint instanceOffset, uint instanceCount) {
+    uint worldSegmentOffset = (instanceOffset + 1u + (2u * instanceCount)); // uint4 index of the world-segment header
+    uint worldSegmentCount = sdfWords[worldSegmentOffset].x;
+    uint gridBaseVector = (worldSegmentOffset + 1u + worldSegmentCount);    // uint4 index of the grid block
+
+    return (gridBaseVector << 2u); // the grid block is uint-granular from here
+}
+
+// The decoded grid header (see SdfInstanceGrid for the packed layout). All array offsets are grid-block-relative uints
+// (add `baseWord`). A DISABLED grid has enabled == false — the beam then flat-loops every instance.
+struct SdfInstanceGridHeader {
+    uint baseWord;      // absolute uint offset of the block
+    bool enabled;
+    uint3 dims;
+    float3 origin;      // grid-AABB min (world)
+    float invCellSize;  // host-baked 1/cellSize (the shader never divides)
+    float cellSize;     // world cell edge (the cone-march step)
+    float footprintPad; // host-baked world margin the cone footprint adds (the max binned bound radius)
+    uint cellStartWord; // block-relative uint offset of cellStart[]
+    uint entryWord;     // block-relative uint offset of the cell entries
+    uint alwaysWord;    // block-relative uint offset of the always-tested list
+    uint alwaysCount;
+    uint cellCount;     // dims.x * dims.y * dims.z
+};
+
+SdfInstanceGridHeader sdfLoadInstanceGridHeader(uint instanceOffset, uint instanceCount) {
+    uint base = sdfGridBaseWord(instanceOffset, instanceCount);
+
+    SdfInstanceGridHeader grid;
+    grid.baseWord = base;
+    grid.enabled = (sdfWordAt(base + 0u) != 0u);
+    grid.dims = uint3(sdfWordAt(base + 1u), sdfWordAt(base + 2u), sdfWordAt(base + 3u));
+    grid.origin = float3(asfloat(sdfWordAt(base + 4u)), asfloat(sdfWordAt(base + 5u)), asfloat(sdfWordAt(base + 6u)));
+    grid.invCellSize = asfloat(sdfWordAt(base + 7u));
+    grid.cellSize = asfloat(sdfWordAt(base + 8u));
+    grid.footprintPad = asfloat(sdfWordAt(base + 9u));
+    grid.cellStartWord = sdfWordAt(base + 10u);
+    grid.entryWord = sdfWordAt(base + 11u);
+    grid.alwaysWord = sdfWordAt(base + 12u);
+    grid.alwaysCount = sdfWordAt(base + 13u);
+    grid.cellCount = sdfWordAt(base + 14u);
+
+    return grid;
 }
 
 #ifdef SDF_DYNAMIC_TRANSFORMS

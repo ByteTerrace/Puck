@@ -104,14 +104,38 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // sphere-vs-cone loop is this kernel's cheapest win. `result != TileEmpty` is an exact test: coneMarchTile returns
     // TileEmpty or a t >= ConeNear > 0.
     if (result != TileEmpty) {
-        // The cull loop's loop-invariant instance-directory resolve, hoisted so each sdfInstanceBoundAt load skips the
-        // offset chain.
+        // The cull loop's loop-invariant instance-directory resolves, hoisted so each per-instance load skips the offset
+        // chain. The grid header sits after the world-segment list, located from the UNCLAMPED packed instance count
+        // (the offset chain's own stride); the mask enumeration below uses the CLAMPED count.
+        uint packedInstanceCount = sdfInstanceCount();
         uint instanceCount = sdfInstanceCountClamped();
         uint instanceOffset = sdfInstanceDirectoryOffset();
+        SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(instanceOffset, packedInstanceCount);
 
-        [loop]
-        for (uint word = 0u; (word < maskWordCount); word++) {
-            instanceMasks[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
+        if (grid.enabled) {
+            // GRID path: walk only the cells the tile's cone footprint overlaps plus the always-tested list, so cost
+            // tracks instances near the cone, not the total. Bits accumulate in a per-thread scratch (its live words
+            // pre-zeroed) and are written once — cheaper than a read-modify-write of the device mask buffer per entry.
+            uint scratch[SDF_INSTANCE_MASK_MAX_WORDS];
+
+            [loop]
+            for (uint word = 0u; (word < maskWordCount); word++) {
+                scratch[word] = 0u;
+            }
+
+            collectInstanceGridMask(grid, instanceOffset, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture, scratch);
+
+            [loop]
+            for (uint word = 0u; (word < maskWordCount); word++) {
+                instanceMasks[maskBase + word] = scratch[word];
+            }
+        } else {
+            // FLAT fallback (a degenerate grid — zero binnable or a single cell — or a grid-suppressed program): the
+            // pre-grid path, testing every instance per mask word. Byte-identical to the grid path's mask by construction.
+            [loop]
+            for (uint word = 0u; (word < maskWordCount); word++) {
+                instanceMasks[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
+            }
         }
     } else {
         [loop]

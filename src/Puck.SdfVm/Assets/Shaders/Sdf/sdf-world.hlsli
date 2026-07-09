@@ -548,6 +548,25 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone) {
 // 2x2 quad viewport (chord ~0.044) a sphere tangent to a corner ray at t = 60 is rejected by up to 0.0028 world units,
 // well past the host's ~0.0011 bound inflation (SdfProgram.BoundRadiusPadding/Scale). inverseAperture >= 1, so the
 // corrected test only ever ADDS bits — it can never lose an instance the old one kept.
+// The exact sphere-vs-tile-cone necessary condition (the bound derivation above), factored out so the flat per-instance
+// loop AND the uniform-grid cell walk decide a bit by the IDENTICAL arithmetic — the grid mask is then a pure
+// SUBSET-selection of the flat mask (it only ever tests FEWER instances, never by a different float rule), so with a
+// conservative cone footprint it equals the flat mask exactly. A PARKED instance (a reserved-pool slot with no live
+// content this rebuild) packs a negative-radius sentinel host-side (SdfProgram.ParkedBoundRadius): reject it with the
+// single leading branch — no sqrt, no dot, mask bit left 0. A real bound radius is always non-negative, so this never
+// misfires.
+bool sdfInstancePassesTileCone(float4 bound, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture) {
+    if (bound.w < 0.0) {
+        return false;
+    }
+
+    float3 toCenter = (bound.xyz - rayOrigin);
+    float alongRay = max(dot(toCenter, centerDirection), 0.0);
+    float axisDistance = length(toCenter - (centerDirection * alongRay));
+
+    return (axisDistance <= ((bound.w + (chord * alongRay)) * inverseAperture));
+}
+
 uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceCount, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture) {
     uint bits = 0u;
     uint first = (wordIndex << 5u);
@@ -557,24 +576,105 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
     for (uint i = first; (i < end); i++) {
         float4 bound = sdfInstanceBoundAt(instanceOffset, i);
 
-        // A PARKED instance (a reserved-pool slot carrying no live content this rebuild) packs a negative-radius
-        // sentinel host-side (SdfProgram.ParkedBoundRadius): skip its sphere-vs-cone test with this single branch —
-        // no sqrt, no dot, mask bit left 0 — so a full pool's worth of hidden slots costs one comparison each instead
-        // of the full cull. A real bound radius is always non-negative (float-safety-padded), so this never misfires.
-        if (bound.w < 0.0) {
-            continue;
-        }
-
-        float3 toCenter = (bound.xyz - rayOrigin);
-        float alongRay = max(dot(toCenter, centerDirection), 0.0);
-        float axisDistance = length(toCenter - (centerDirection * alongRay));
-
-        if (axisDistance <= ((bound.w + (chord * alongRay)) * inverseAperture)) {
+        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
             bits |= (1u << (i - first));
         }
     }
 
     return bits;
+}
+
+// Accumulates one tile's per-instance mask via the UNIFORM GRID (the beam prepass's default when the grid is enabled),
+// into `scratch` (the caller's per-thread SDF_MAX_INSTANCES/32-word accumulator, its first `maskWordCount` words
+// pre-zeroed). Two sources, each setting a bit by the SAME sdfInstancePassesTileCone test the flat loop uses:
+//   (1) the ALWAYS-tested list — dynamic, unmaskable, and sprawling instances the frozen grid cannot bin (an unmaskable
+//       instance's 1e30 bound passes every tile, so it just sets its bit; a parked one is rejected inside the test).
+//   (2) the grid cells the tile's cone FOOTPRINT overlaps — a conservative swept-cone rasterization. For each march
+//       slab [t0, t1] (step = one cell edge, from the apex to where the cone leaves the grid AABB) the cone frustum is
+//       bounded by a world AABB (the two disk centres +/- (chord*t1 + footprintPad)); that AABB is converted to a cell
+//       range, EXPANDED by SDF_GRID_CELL_RING cells (the host/GPU floor may disagree by a cell), and every entry in
+//       those cells is tested. CONSERVATIVENESS: an instance that passes the flat test touches the bare cone at some
+//       point q within its own bound; q lies in the slab covering that depth, so q's cell is walked and the instance
+//       (binned into that cell by its bound) is found. An instance in several overlapped cells sets its bit more than
+//       once — idempotent (OR). So every flat-set bit is set here; and since only cell/always members are tested by the
+//       identical rule, no extra bit is set: the grid mask equals the flat mask.
+void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture, inout uint scratch[SDF_INSTANCE_MASK_MAX_WORDS]) {
+    // (1) The always-tested list.
+    [loop]
+    for (uint a = 0u; (a < grid.alwaysCount); a++) {
+        uint index = sdfWordAt(grid.baseWord + grid.alwaysWord + a);
+        float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+
+        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
+            scratch[index >> 5u] |= (1u << (index & 31u));
+        }
+    }
+
+    // (2) The cone footprint's grid cells.
+    float3 gridMin = grid.origin;
+    float3 gridMax = (grid.origin + (float3(grid.dims) * grid.cellSize));
+    // The far bound of the march: the largest projection of the grid AABB onto the ray (0 if the grid is behind it).
+    // Past it no instance centre projects, so the cone need not be marched farther (a near-apex instance is still
+    // covered by the t0 = 0 slab). Picking the per-axis corner that maximizes the projection avoids marching all 8.
+    float3 farCorner = float3(
+        ((centerDirection.x > 0.0) ? gridMax.x : gridMin.x),
+        ((centerDirection.y > 0.0) ? gridMax.y : gridMin.y),
+        ((centerDirection.z > 0.0) ? gridMax.z : gridMin.z)
+    );
+    float tEnd = max(dot((farCorner - rayOrigin), centerDirection), 0.0);
+    int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
+
+    float t0 = 0.0;
+
+    [loop]
+    for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
+        float t1 = min((t0 + grid.cellSize), max(tEnd, t0)); // t1 >= t0; a behind-grid ray degenerates to one apex slab
+        float3 c0 = (rayOrigin + (centerDirection * t0));
+        float3 c1 = (rayOrigin + (centerDirection * t1));
+        float radius = ((chord * t1) + grid.footprintPad);
+        float3 low = (min(c0, c1) - radius);
+        float3 high = (max(c0, c1) + radius);
+
+        // Skip the slab entirely when its AABB does not overlap the grid AABB (a cone leaving the grid, or one whose
+        // apex sits outside it). clamp() would otherwise pin an off-grid AABB onto a boundary cell and test it spuriously
+        // (harmless, but wasteful).
+        if (all(high >= gridMin) && all(low <= gridMax)) {
+            int3 cellLow = (int3(floor((low - grid.origin) * grid.invCellSize)) - SDF_GRID_CELL_RING);
+            int3 cellHigh = (int3(floor((high - grid.origin) * grid.invCellSize)) + SDF_GRID_CELL_RING);
+
+            cellLow = clamp(cellLow, int3(0, 0, 0), dimensionsMinusOne);
+            cellHigh = clamp(cellHigh, int3(0, 0, 0), dimensionsMinusOne);
+
+            [loop]
+            for (int cz = cellLow.z; (cz <= cellHigh.z); cz++) {
+                [loop]
+                for (int cy = cellLow.y; (cy <= cellHigh.y); cy++) {
+                    [loop]
+                    for (int cx = cellLow.x; (cx <= cellHigh.x); cx++) {
+                        uint cell = ((((uint)cz * grid.dims.y) + (uint)cy) * grid.dims.x) + (uint)cx;
+                        uint entryStart = sdfWordAt(grid.baseWord + grid.cellStartWord + cell);
+                        uint entryEnd = sdfWordAt(grid.baseWord + grid.cellStartWord + cell + 1u);
+
+                        [loop]
+                        for (uint k = entryStart; (k < entryEnd); k++) {
+                            uint index = sdfWordAt(grid.baseWord + grid.entryWord + k);
+                            float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+
+                            if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
+                                scratch[index >> 5u] |= (1u << (index & 31u));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (t1 >= tEnd) {
+            break;
+        }
+
+        t0 = t1;
+    }
 }
 
 // March + shade one viewport's ray for a pixel at the viewport-local UV, starting the march at `marchStart` (the
