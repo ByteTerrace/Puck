@@ -32,9 +32,9 @@
 [[vk::binding(1, 0)]] StructuredBuffer<uint4> sdfWords : register(t0);
 
 // The instance CEILING — the most instances one program may declare. The per-tile mask is a DERIVED
-// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 128
+// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 512
 // words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
-#define SDF_MAX_INSTANCES 4096u
+#define SDF_MAX_INSTANCES 16384u
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still

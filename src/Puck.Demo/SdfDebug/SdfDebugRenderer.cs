@@ -202,13 +202,13 @@ public sealed class SdfDebugRenderer {
         //
         // ENVELOPE MATH. Each carve = 1 instance (BeginInstance/EndInstance) + 3 instructions (ResetPoint, Translate,
         // Sphere) + one instance-directory entry (2 vectors = 8 words). The debug subject + floor are WORLD-level (0
-        // instances), so the LIVE debug program tops out at MaxCarves = 1024 instances — well inside MaxInstances =
-        // 4096. This probe over-covers by folding the 1024 carves ON TOP OF the room's own instances (a few dozen), so
-        // the subject probe is (room + 1024) << 4096. The BENCH probe (EmitBenchProbe: 4096 lifted-Star instances) is a
-        // SEPARATE probe MAX-folded against this one (OverworldFrameSource.MeasureWorstCaseEnvelope) and DOMINATES both
-        // dimensions — 4096 > room + 1024 instances, and 4096 wordy Stars > 1024 carve spheres + the op stack — so the
-        // frozen envelope stays bench-bound and carves do not grow it. Folding them here keeps the subject probe honest
-        // regardless of which probe wins the MAX.
+        // instances), so the LIVE debug program tops out at MaxCarves = 4096 instances — well inside MaxInstances =
+        // 16384. This probe over-covers by folding the 4096 carves ON TOP OF the room's own instances (a few dozen), so
+        // the subject probe is (room + 4096) << 16384. The BENCH probe (EmitBenchProbe: 16384 lifted-Star instances) is
+        // a SEPARATE probe MAX-folded against this one (OverworldFrameSource.MeasureWorstCaseEnvelope) and DOMINATES
+        // both dimensions — 16384 > room + 4096 instances, and 16384 wordy Stars > 4096 carve spheres + the op stack —
+        // so the frozen envelope stays bench-bound and carves do not grow it. Folding them here keeps the subject probe
+        // honest regardless of which probe wins the MAX.
         var carveMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: CarveAlbedo, Specular: SubjectSpecular, Shininess: SubjectShininess));
         var worstCarves = new List<SdfCarve>(capacity: SdfDebugScene.MaxCarves);
 

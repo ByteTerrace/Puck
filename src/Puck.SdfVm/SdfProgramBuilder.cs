@@ -7,15 +7,16 @@ public sealed class SdfProgramBuilder {
     public const int ScreenMaterialId = 65535;
     /// <summary>The instance CEILING — the most instances one program may declare. The world renderer's per-tile
     /// mask is a DERIVED ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
-    /// it at 128 words per tile (4096/32). Everything downstream DERIVES from the LIVE program's instance count — the
+    /// it at 512 words per tile (16384/32). Everything downstream DERIVES from the LIVE program's instance count — the
     /// mask width, the host-pushed indexing, and the mask-buffer sizing all use
     /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring FEWER instances than this cap packs
     /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
-    /// constant tracks it. 16384 is explicitly DEFERRED pending the SDF perf-bench instrument's beam-slope measurement
-    /// (does <c>sdf-beam</c> grow linearly with instance count, and where does it dominate frame time?); the survey's
-    /// uniform-grid cull row (docs/sdf-sota-survey.md row 15) is the gate for pushing past this without a spatial
-    /// acceleration structure. KEEP IN SYNC with SDF_MAX_INSTANCES in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
-    public const int MaxInstances = 4096;
+    /// constant tracks it. The 4096→16384 raise was GATED on the uniform-grid cull (docs/sdf-sota-survey.md row 15)
+    /// flattening the measured O(instances) beam slope — the mask-first cull landed and both bench ladders collapsed
+    /// (docs/sdf-bench-notes.md), so the gate is satisfied; the raise's only static cost is the per-tile mask buffer
+    /// (~41 MB at 1280×800 × 5 viewport slots). KEEP IN SYNC with SDF_MAX_INSTANCES in
+    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    public const int MaxInstances = 16384;
     /// <summary>The most screen surfaces one program may declare (matches <see cref="SdfWorldEngine.MaxScreenSurfaces"/>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract SEPARATE from the
     /// viewport capacity <see cref="SdfWorldEngine.MaxViewports"/>).</summary>

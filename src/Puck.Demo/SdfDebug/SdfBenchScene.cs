@@ -105,10 +105,10 @@ public sealed class SdfBenchScene {
     internal const float InstanceBoundRadius = 0.6f;
 
     // The default sweep ladder.
-    private static readonly int[] DefaultSweep = [64, 256, 1024, 4096];
-    // The carve ladder (per family). Tops out at 1024 = SdfDebugScene.MaxCarves (the live pool cap), so the bench and
+    private static readonly int[] DefaultSweep = [64, 256, 1024, 4096, 16384];
+    // The carve ladder (per family). Tops out at 4096 = SdfDebugScene.MaxCarves (the live pool cap), so the bench and
     // the live subject share a ceiling.
-    private static readonly int[] CarveLadder = [16, 64, 256, 1024];
+    private static readonly int[] CarveLadder = [16, 64, 256, 1024, 4096];
     // The single smooth-carve rung — 256 clustered SmoothSubtraction carves (halo × mask-width pressure).
     private const int SmoothCarveRung = 256;
 
@@ -239,7 +239,7 @@ public sealed class SdfBenchScene {
         return Begin(label: $"instances {shape} {n}", configs: configs);
     }
 
-    /// <summary>Starts a <see cref="SdfBenchWorkload.Instances"/> SWEEP — the default ladder (64/256/1024/4096) of
+    /// <summary>Starts a <see cref="SdfBenchWorkload.Instances"/> SWEEP — the default ladder (64/256/1024/4096/16384) of
     /// <paramref name="shape"/>, one config per rung.</summary>
     public string StartSweep(SdfDebugShapeKind shape) {
         var configs = new List<SdfBenchConfig>();
