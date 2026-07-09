@@ -110,11 +110,36 @@ premises are now false).
     renderer reserves two per-shape modifier slots (twist/dilate/bend/…).
 20. **The 2D-primitive next tranche** — arc/pie, cross, moon, egg, heart:
     cheap, the `SdfLift` revolve/extrude framework exists.
-21. **UI convergence (game-studio W6)** — render the console/action bar,
-    eventually the editor, THROUGH the SDF VM: a screen-space/ortho path (2D
-    arc option B — the flat-2D kernel) + an MSDF glyph op mining `Puck.Text`
-    (option C), which remains a complete CPU-side MTSDF stack with ZERO GPU
-    consumers. Retires bespoke overlay shaders; makes screens bakeable.
+21. **The diegetic UI arc (game-studio W6 — SHAPED 2026-07-09, user-ratified).**
+    One SDF-rendered diegetic UI; the overlay console stays FOREVER as the
+    convenience/agent surface (stdin/stdout is the control plane), the
+    diegetic UI mirrors it for immersion; the action bar is not a separate
+    item — same layout and concept, ROLLED INTO the diegetic UI. The
+    staircase, in order:
+    - **Tier 0 — the diegetic console terminal** (demo-greenfield, zero
+      engine work, buildable now): an in-world terminal object whose screen
+      is a screen-source feed mirroring the console history —
+      `ProceduralFaceFeed` pattern + `Puck.Text` CPU rasterization + the
+      4 unclaimed `ScreenSlotLedger` slots.
+    - **Tier 1 — the MTSDF glyph op** (engine, Post-gated): sample the
+      `Puck.Text` atlas as a DISTANCE-level field (median-of-3 is
+      ~1-Lipschitz-bounded), unlike `ScreenSlab`'s material-level sampling —
+      text becomes real world geometry: marchable, liftable, blendable,
+      ENGRAVABLE (Subtraction of a glyph field) and embossable. Serves the
+      UI, Puckton signage, cabinet marquees, and carved lettering alike.
+      `Puck.Text` finally gains its first GPU consumer.
+    - **Tier 2 — the action bar as camera-rig-mounted geometry**: the
+      existing layout re-expressed as SDF instances riding a per-frame
+      `DynamicTransform` pinned to the camera pose — a physical HUD, no
+      ortho kernel, inherits cull/AA/normals for free; pad-first input means
+      no pointer-picking is ever needed. Widgets = scoped groups (parkable
+      when hidden, finite bounds via `MaxScopedFieldReach`).
+    - The recursion prize: UI elements become authorable creations
+      (`puck.creation.v1`) — the editor can sculpt its own chrome.
+    - 2D-arc **option B (flat-2D/ortho kernel) is DEMOTED** to
+      only-if-something-genuinely-needs-a-flat-field; the camera-rig approach
+      removes its primary consumer. Post-grid-cull instance budget makes UI
+      geometry cost ~nothing (a few hundred view-local instances).
 
 ## Verification gaps (Post stages — cheap gap-closers)
 

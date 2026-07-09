@@ -354,15 +354,21 @@ beside the creations. What remains of W5:
   through the already-implemented `CompileEffect` path, and the multi-
   channel music question (the driver plays one music voice today).
 
-### W6 · The editor through the SDF VM (the deferred convergence)
+### W6 · The editor through the SDF VM (shaped 2026-07-09 — the DIEGETIC UI arc)
 
 Author the action bar + dev console — and eventually the whole editor —
-*through the SDF VM itself*: a screen-space/ortho path, eventually an MSDF
-glyph op (mining `Puck.Text`), so ONE renderer owns all UI, the bespoke
-overlay shaders (binding-bar, console) retire, and the editor dogfoods the
-engine it authors for. The CRT screen treatment being fully view-independent
-also makes it **100% bakeable** — the deferred "cheaper screens" lever rides
-this arc.
+*through the SDF VM itself*, as DIEGETIC geometry, so ONE renderer owns all
+UI and the editor dogfoods the engine it authors for. **User rulings
+(2026-07-09, settled — don't re-litigate):** the current overlay console is
+PERMANENT as the convenience/agent-facing surface (stdin/stdout stays the
+control plane); the diegetic UI is the immersion surface that MIRRORS it.
+The action bar does not survive as a separate bespoke item: same layout,
+same concept, ROLLED INTO the diegetic UI as SDF geometry. The staircase and
+its enabling machinery (post-grid-cull instance budget, the 2D-lifted panel
+family, scoped widget groups, the MTSDF glyph op mining `Puck.Text`) live in
+[sdf-backlog.md](sdf-backlog.md) item 21. The CRT screen treatment being
+fully view-independent also makes it **100% bakeable** — the deferred
+"cheaper screens" lever rides this arc.
 
 ### W7 · The recursion (the spectacular layer)
 
