@@ -264,21 +264,46 @@ Three mechanisms, three moves (verified against code 2026-07-09:
     restructure with hero-`world` regression risk, deferred with the standing
     question whether it's worth fixing at all. Any doc still carrying the
     occluder framing is stale — this paragraph is authoritative.
-24. **`SDF_WPG_P4G` renders as `p4`** — no mirror classes survive (marked
+24. **Unbounded Droste (LogSphere) fields render with tile-granular
+    breakdown — and the gates are BLIND to it (found 2026-07-09).** Wherever
+    rays traverse many shell boundaries the frame shatters into tile-size
+    black holes: sky regions checkerboard (any upward ray crosses the
+    infinite outer shells), and with twist > 0 the shell surfaces themselves
+    shatter (the per-shell spin makes every boundary laterally
+    discontinuous). Untwisted shells render clean; the artifacts live where
+    shell-crossing density meets tile classification. THE GATES NEVER SAW
+    IT: parity passes because both backends produce IDENTICAL artifacts
+    (parity ≠ correct), and the solidity gate watches a different scene
+    (the tunnel) — the Post `world-log-sphere` render has carried these
+    artifacts unnoticed. Evidence: artifacts/rundoc-pass/world-log-sphere-v2
+    (no floor, camera in-field: worst), -v3 (twist 0.6: shells shattered),
+    -v4 (twist 0: shells clean, sky broken). REGRESSION SUSPECT: the
+    four-bound gap teleport landed AFTER D2 and gap-searches the unmasked
+    field — a discontinuous field is exactly what could make its landing
+    unsound; bisect via the SDF_STRICT_MARCH compile-time fallback before
+    assuming it's inherent. Candidate fixes, in order: (a) the teleport/
+    relax guard — bake a per-program "discontinuous field" flag (LogSphere,
+    CellJitter present) that disables the gap search and over-relaxation for
+    that program; (b) `LogSphereLimited` — a shell-count clamp, the
+    RepeatLimited analogue, bounding the field to k shells so sky rays
+    escape cleanly; (c) framing-envelope guidance in the validator (warn on
+    camera-inside-fold). Instruments: gallery exhibit #8 + the overshoot and
+    termination views were built for exactly this dissection.
+25. **`SDF_WPG_P4G` renders as `p4`** — no mirror classes survive (marked
     KNOWN DEFECT in `sdf-vm.hlsli`); recovery is a redesign of the wallpaper
     turn cocycle, not a tweak. Related deliberate roughness: the WallpaperFold
     gradient in the dual path is a shape-local FD of the fold map (no
     closed-form orthogonal extraction) — parity-safe, exact form optional.
-25. **`SurfaceChart` (reserved op id 19)** — parked: the pixel-footprint half
+26. **`SurfaceChart` (reserved op id 19)** — parked: the pixel-footprint half
     now exists (footprint-adaptive termination), the atan-determinism half
     does not.
 
 ## Cleanup seams (non-urgent, do when next in there)
 
-26. **Shared emission seam** — `CreatorSceneRenderer.EmitShape` /
+27. **Shared emission seam** — `CreatorSceneRenderer.EmitShape` /
     `CompanionRenderer.EmitShape` are admitted near-clones kept in lockstep by
     hand, and per-consumer bound-margin constants are re-picked everywhere.
-27. **Render-assembly Phase 5** (tracked in
+28. **Render-assembly Phase 5** (tracked in
     [sdf-world-render-centralization-plan.md](sdf-world-render-centralization-plan.md),
     the still-living plan-of-record): the live-camera child `IRenderNode`, the
     cross-backend `graph.produce` re-host, and hoisting the stale-bytecode

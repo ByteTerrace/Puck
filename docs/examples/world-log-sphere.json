@@ -3,36 +3,59 @@
     "version": "puck.run.v1",
     "scene": {
         "materials": [
-            { "albedo": [0.50, 0.52, 0.58] },
-            { "albedo": [0.80, 0.35, 0.25] },
-            { "albedo": [0.20, 0.70, 0.70] }
+            {
+                "albedo": [
+                    0.5,
+                    0.52,
+                    0.58
+                ]
+            },
+            {
+                "albedo": [
+                    0.8,
+                    0.35,
+                    0.25
+                ]
+            },
+            {
+                "albedo": [
+                    0.2,
+                    0.7,
+                    0.7
+                ]
+            }
         ],
         "objects": [
             {
                 "shape": "plane",
-                "normal": [0.0, 1.0, 0.0],
+                "normal": [
+                    0.0,
+                    1.0,
+                    0.0
+                ],
                 "offset": 0.0,
                 "material": 0
             },
             {
                 "shape": "torus",
                 "ops": [
-                    { "op": "translate", "offset": [-1.5, 1.4, 0.0] },
-                    { "op": "logSphere", "shellRatio": 2.0, "twist": 0.6 }
+                    {
+                        "op": "translate",
+                        "offset": [
+                            0.0,
+                            1.4,
+                            0.0
+                        ]
+                    },
+                    {
+                        "op": "logSphere",
+                        "shellRatio": 2.0,
+                        "twist": 0.0
+                    }
                 ],
                 "majorRadius": 0.7,
                 "minorRadius": 0.16,
                 "material": 1
-            },
-            {
-                "shape": "box",
-                "ops": [
-                    { "op": "translate", "offset": [1.7, 1.2, 0.2] },
-                    { "op": "logSphere", "shellRatio": 1.9, "twist": 0.0 }
-                ],
-                "halfExtents": [0.55, 0.2, 0.55],
-                "round": 0.05,
-                "material": 2
             }
         ]
     },
@@ -40,15 +63,27 @@
         {
             "source": {
                 "$type": "orbit",
-                "angularSpeed": 0.3,
-                "azimuth": 0.0,
-                "fieldOfView": 60.0,
-                "height": 1.6,
-                "radius": 5.5,
-                "target": [0.0, 1.0, 0.0]
+                "angularSpeed": 0.0,
+                "azimuth": 0.6,
+                "fieldOfView": 40.0,
+                "height": 2.0,
+                "radius": 5.0,
+                "target": [
+                    0.0,
+                    1.4,
+                    0.0
+                ]
             },
-            "region": [0.0, 0.0, 1.0, 1.0]
+            "region": [
+                0.0,
+                0.0,
+                1.0,
+                1.0
+            ]
         }
     ],
-    "graph": { "$type": "world", "produce": "vulkan" }
+    "graph": {
+        "$type": "world",
+        "produce": "vulkan"
+    }
 }
