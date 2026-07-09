@@ -141,6 +141,38 @@ premises are now false).
       removes its primary consumer. Post-grid-cull instance budget makes UI
       geometry cost ~nothing (a few hundred view-local instances).
 
+## The adversarial-instrument wave (user-ratified 2026-07-09 — all four greenlit; build after the tape-pruning wave integrates)
+
+- **The drift monolith + fuzz HUNT mode.** (a) One hand-built scene stacking
+  every known parity amplifier (transcendental-heavy LogSphere paths,
+  Droste-style field discontinuities, material-winner flips at blend seams,
+  grazing silhouettes under footprint termination) — the constructed
+  worst-case that becomes the calibration ceiling for real content. (b) Flip
+  the existing cross-backend fuzzer from gate to MAXIMIZER: search for drift
+  score, keep a ranked leaderboard, save each champion as a repro JSON + an
+  amplified diff-heatmap PNG. Infrastructure (process-pair isolation,
+  program generation, scoring) already exists. Stretch: a live
+  `debug.view.drift` (two devices in one process — the `camera-share` stage
+  proved zero-copy D3D12→Vulkan sharing) only after the offline hunter
+  proves interesting.
+- **`sdf.bench storm` — the motion/churn ladder.** N instances MOVING per
+  frame (64/256/1024/4096…): deliberately exposes the always-list cliff (the
+  host CSR bins only static instances — moving ones ride the always-tested
+  list, so beam returns O(moving-n) by design) and produces the measurement
+  the deferred GPU-built-grid fork needs before the machine-fleet arc. Plus
+  a rebuild-rate rung (`UploadProgram`s/sec at 16384 — the carve path's
+  ceiling) and a fast-camera rung.
+- **Edge-case debug views**: `debug.view` mask/cull density tint (per-tile
+  kept-instance count — cull correctness by eye, and the natural way to
+  watch the storm cliff) + an overshoot detector (clamped-vs-unclamped march
+  disagreement per pixel — the liar's-spiral class as a live view).
+- **`sdf.gallery` — the torture museum.** A cycling curated tour of every
+  known-nasty scene (the liar's spiral, the Droste tunnel, CellJitter's
+  neighbor-cell creases, the notch horizon, a deep smooth-chain, the drift
+  monolith once it exists), each with a stdout plaque saying what to look
+  for and what's settled about it. Doubles as the visual regression walk
+  after any march change.
+
 ## Verification gaps (Post stages — cheap gap-closers)
 
 22. Missing stages, confirmed against the current registry:
