@@ -250,6 +250,47 @@ way `fwidth` is.
 
 ---
 
+## Text near and on UI surfaces — the composition patterns (added 2026-07-09, user-prompted)
+
+The evaluation above centers text-as-geometry; the label-on-panel case (the
+rolled-in action bar, terminal nameplates, any dense reading text) adds three
+patterns of its own:
+
+- **The coplanar hazard (empirical, this repo).** Text placed ON a surface at
+  zero offset is two coincident zero-sets — which renders as the
+  coincident-surface speckle observed live on the 2D-family example scene
+  (2026-07-09). The rule: a label is always EMBOSSED (small positive relief,
+  ≥ a texel's worth of world depth) or ENGRAVED (recess via Subtraction) —
+  never coplanar-by-geometry. Emboss also buys the free bevel lighting from
+  the analytic normal, which is what makes physical UI text read as crafted
+  rather than painted.
+- **The contrast pattern for uncontrolled backgrounds.** A panel label has
+  authored contrast (pick the materials). Floating world text (nameplates,
+  indicators) does not — the composition recipe is a BACKING PLATE
+  (a RoundedRectangle slab behind the text, the classic tooltip shape) or an
+  ONION-SHELL OUTLINE: emit the glyph field dilated by the outline width in a
+  contrasting material BEFORE the glyph, so the union gives a rim at zero
+  extra field cost (the outline row of the effect table, applied as a
+  composition pattern). Verdict: adopt-now with the Tier-2 action bar; the
+  backing plate is the default, the shell for free-floating text.
+- **Dense text wants the DECAL flavor, not geometry — and this is where the
+  median channel earns its keep.** A paragraph on a panel as per-char
+  extruded slabs is the wrong tool (segment count, band-limit at reading
+  density, no benefit). The right tool is MATERIAL-level atlas sampling on
+  the host surface — the `ScreenSlab` precedent: a `GlyphDecal`/text-panel
+  flavor that samples the atlas at shade time and blends albedo/coverage on
+  the panel's lit face. Zero screen-surface slots, zero z-risk, zero march
+  cost — and because surface-decal text IS 2D coverage at a threshold,
+  **median-of-3 reconstruction is legitimate here** (the exact job it was
+  designed for; C2 banishes it from geometry only). Verdict: gated-on the
+  Tier-2/UI build actually needing dense text — the tier ladder becomes:
+  DECAL for dense reading text · EMBOSS/ENGRAVE for physical labels ·
+  PER-CHAR GEOMETRY for text that participates in the world (carved, lit,
+  destructible).
+- **Camera-rig text never goes sub-pixel.** Rig-mounted UI holds constant
+  apparent size by construction, so the small-size gamma/AA caveats in the
+  bake recipe apply to WORLD text at distance, not to the action bar.
+
 ## Text enrichment — markup, per-glyph effects, and the determinism fix
 
 Beyond drawing a glyph, the demo wants **animated, marked-up** text —
