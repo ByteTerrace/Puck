@@ -171,6 +171,19 @@ premises are now false).
       ortho kernel, inherits cull/AA/normals for free; pad-first input means
       no pointer-picking is ever needed. Widgets = scoped groups (parkable
       when hidden, finite bounds via `MaxScopedFieldReach`).
+    - **Prior art (user-supplied 2026-07-09): `D:\Source\ByteTerrace\Temp      SignedDistanceTerminal\src\SignedDistanceTerminal\Text\`** — the
+      same-author superset Puck.Text was extracted from. Carries the pieces
+      the extraction dropped: `RuntimeSdfFontAtlasGenerator` (coverage→SDF
+      chamfer distance transform, msdfgen `0.5 + d/range` encoding; ⚠the
+      chamfer metric overestimates Euclidean by ≤~8.2% off-axis — fold the
+      1.0824 Lipschitz factor or swap in an exact EDT),
+      `SystemDrawingFontAtlasGenerator` (full GDI+ generator incl. KERNING),
+      `FontAtlasLoader`/`SourceResolver`/`ArtifactWriter` (persistence +
+      **msdf-atlas-gen JSON compatibility** — true MTSDF becomes
+      load-a-file, not write-an-algorithm), TextEnrichmentTags (markup),
+      text effects, and a screen-space quad-batch draw stack (not for the
+      world-geometry op; possibly for later UI polish). Port with
+      provenance, adapt to Puck conventions.
     - The recursion prize: UI elements become authorable creations
       (`puck.creation.v1`) — the editor can sculpt its own chrome.
     - 2D-arc **option B (flat-2D/ortho kernel) is DEMOTED** to
