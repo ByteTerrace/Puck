@@ -334,3 +334,39 @@ views-bound, not beam-bound.
   does not touch.
 - MaxInstances 4096 → 16384 and MaxCarves 1024 → 4096 raised accordingly
   (the deferred-pending-measurement gate in the packer doc is satisfied).
+
+---
+
+## 2026-07-09 (c) — the storm ladders: the always-list cliff DOESN'T EXIST
+
+`sdf.bench storm` (motion / rebuild / camera churn; Vulkan 1280×800, snapped
+camera; beam column = beam+mask):
+
+```
+  storm x64            frame 12.7   beam+mask  1.9   views 10.7
+  storm x256           frame 29.9   beam+mask  4.1   views 25.6
+  storm x1024          frame 38.4   beam+mask  6.2   views 32.4
+  storm x4096          frame 39.1   beam+mask  8.7   views 30.4
+  storm rebuild x4096  frame 54.6   beam+mask  5.6   views 49.0
+  storm camera x1024   frame 19.0   beam+mask  2.6   views 16.3
+```
+
+- **The predicted moving-instance cliff never happens.** The prediction
+  (host CSR bins only static instances ⇒ per-frame movers ride the
+  always-list ⇒ beam returns O(moving-n), ~190 ms @4096) predated the
+  mask-first discovery and conflated two roles: the always-list is only a
+  BINNING fallback, not a MASKING fallback. Movers still get per-tile mask
+  bits (the cull tests the always-list per tile with the live transform),
+  so the cone march stays masked and 4096 fully-moving instances cost
+  **8.7 ms** of cull+march. **The GPU-built-grid fork's measure-gate did
+  NOT fire — it stays closed** until a profile appears where the per-tile
+  always-list walk itself dominates (≫4096 simultaneous movers).
+- Motion frames saturate views-bound (~30 ms past 1024 — the moving cloud
+  covers the same pixels), the same verdict as every other ladder: the
+  shading epilogue is the scale lever.
+- A moving CAMERA over a static 1024 costs the same as a still one
+  (19.0 vs 19.4 ms) — per-frame re-cull is free.
+- ⚠Instrument caveat: the rebuild ladder's numbers are GPU timestamps and
+  CANNOT see the CPU-side pack/upload cost of the per-frame rebuild — its
+  rungs are noisy/non-monotonic and only bound the GPU side. A wall-clock
+  fps column is the missing piece if the rebuild ceiling ever matters.
