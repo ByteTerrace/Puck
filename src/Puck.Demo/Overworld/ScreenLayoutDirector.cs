@@ -166,6 +166,13 @@ public sealed class ScreenLayoutDirector {
     /// for sprite intent. Eased both ways; null (or a null result) keeps the chase framing. Presentation-only.</summary>
     public Func<(Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)?>? CreatorCameraSource { get; set; }
 
+    /// <summary>Gets or sets whether the workpiece camera SNAPS to the source pose instead of easing. The perf bench
+    /// asserts this while a run is in flight: an eased pose converges on the wall-clock delta and never exactly
+    /// arrives, so fast configurations get sampled MID-EASE and two runs never measure the same framing — a snapped
+    /// pose is settled the instant the configuration starts, the same discipline as <see cref="ScenarioCameraPose"/>.
+    /// Null or false keeps the ease (entering a mode reads as a move, not a cut).</summary>
+    public Func<bool>? CreatorCameraSnapSource { get; set; }
+
     /// <summary>Gets or sets the REVEALED-room framing source — the loaded world's bounds, so the fourth-wall reveal
     /// frames the WHOLE place (a sculpted town is far larger than the default room). Null (or a null result) keeps the
     /// legacy fixed overview centred on the players — so the DEFAULT room's reveal is byte-unchanged; only a loaded
@@ -534,6 +541,15 @@ public sealed class ScreenLayoutDirector {
                 m_creatorEye = eye;
                 m_creatorTarget = target;
                 m_creatorCameraInitialized = true;
+            }
+
+            if (CreatorCameraSnapSource?.Invoke() ?? false) {
+                // The bench's measurement pose: applied VERBATIM (no smoothing), so every configuration samples an
+                // identical, fully settled framing and two runs produce comparable tables.
+                m_creatorEye = desiredEye;
+                m_creatorTarget = desiredTarget;
+
+                return (m_creatorEye, m_creatorTarget);
             }
 
             var creatorSmoothing = MathF.Min(1f, (SmoothRate * deltaSeconds));

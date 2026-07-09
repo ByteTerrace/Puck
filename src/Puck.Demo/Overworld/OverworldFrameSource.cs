@@ -344,6 +344,9 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // (the player IS the cursor — steep pitch, generous distance, so a street reads while stamping). Both ride
         // the director's one eased CreatorCameraSource seam (this source is the composition point).
         m_director.CreatorCameraSource = () => (AgbDebugCameraFrame() ?? m_sdfDebug.CameraFrame ?? m_creatorController.CameraFrame ?? WorldSculptCameraFrame());
+        // The perf bench's pose is a MEASUREMENT pose: applied verbatim (no easing) so every configuration samples an
+        // identical, fully settled framing — see SdfDebugMode.CameraSnaps.
+        m_director.CreatorCameraSnapSource = () => m_sdfDebug.CameraSnaps;
         // When a world (the town) is loaded, the fourth-wall reveal frames the WHOLE lot rather than the fixed
         // default-room overview — centred on the lot, pulled back to its bounds. Null while no world is applied, so
         // the default room's reveal framing is byte-unchanged.

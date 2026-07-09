@@ -47,6 +47,11 @@ public sealed class SdfDebugMode {
     public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame =>
         (m_active ? (m_bench.CameraFrame ?? m_controller.CameraFrame) : null);
 
+    /// <summary>Whether the camera pose must be applied VERBATIM (no easing): true while a bench run supplies the pose,
+    /// so every configuration measures an identical, fully settled framing — an eased pose converges on the wall-clock
+    /// delta, sampling fast configurations MID-EASE and making tables incomparable run-to-run.</summary>
+    public bool CameraSnaps => (m_active && m_bench.Running);
+
     /// <summary>Poses the orbit camera directly (forwards to <see cref="SdfDebugController.SetPose"/>) — the scriptable
     /// lever the <c>sdf.cam</c> verb drives so a deterministic repro can pin a grazing pitch/framing. No effect on a
     /// bench run (the bench owns a fixed deterministic pose).</summary>
