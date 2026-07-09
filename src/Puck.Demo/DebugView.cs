@@ -28,6 +28,8 @@ internal static class DebugViewModes {
         "iteration-count",
         "termination",
         "slice",
+        "mask",
+        "overshoot",
     ];
 
     /// <summary>Gets the number of debug view modes.</summary>

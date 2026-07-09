@@ -625,13 +625,21 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
 // The debug-view-mode wire contract: viewport forward.w carries the mode index into DebugViewModes.Names
 // (src/Puck.Demo/DebugView.cs — the list's ORDER is the wire value; KEEP IN SYNC, including the switch below).
 // Mode 0 / >= DebugViewModeCount render final shading.
-static const int DebugViewModeCount = 8;
+static const int DebugViewModeCount = 10;
 static const int DebugViewModeNormals = 2;
 // Mode 7 (slice) is special-cased in TWO other places: renderView SKIPS the march for it (the slice never needs a
 // hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
 // and Stage 2's empty-tile flatten cannot truncate the field picture — the slice must show the IDEAL field wall to
 // wall. KEEP IN SYNC with DebugViewModes.Names in src/Puck.Demo/DebugView.cs.
 static const int DebugViewModeSlice = 7;
+// Mode 8 (mask density) tints each pixel by its tile's kept-instance count — cull correctness by eye, and the way the
+// lead WATCHES the storm cliff. Mode 9 (overshoot detector) marches the pixel TWICE — the production Lipschitz-clamped
+// field and the same field with the clamp forced to 1.0 — and colors their depth disagreement (the liar's-spiral class
+// as a live view). BOTH skip the primary march (mask reads the mask buffer directly; overshoot runs its own two
+// marches), so neither needs the slice's beam force-survive: like the termination view they show what the PIPELINE
+// dispatched (a beam-culled tile reads as background). KEEP IN SYNC with DebugViewModes.Names in DebugView.cs.
+static const int DebugViewModeMask = 8;
+static const int DebugViewModeOvershoot = 9;
 
 // The analytic-normal A/B toggle (the forward-mode dual's debug lever). Rides a reserved lane of the grid-object-params
 // screen-light row (SdfGridObjParams.z): 0 (the DEFAULT) selects the analytic dual normal (calculateNormalAnalytic),
@@ -828,6 +836,52 @@ float3 applyObjectGrid(float3 color, float3 surfacePoint, float3 rayDirection, f
 }
 #endif
 
+// The overshoot detector's plain sphere march (DEBUG VIEW ONLY — never on the shipped shading path). Returns the
+// terminal depth for a footprint-adaptive sphere trace of the tile-masked field, stepping by (radius * stepMultiplier):
+// stepMultiplier = 1 marches the PRODUCTION Lipschitz-clamped field (mapMasked already bakes stepScale, so radius is the
+// safe clamped distance), while 1/stepScale FORCES the clamp back to 1.0 — the step then rides the raw, possibly-non-1-
+// Lipschitz field, so a twisted/warped program TUNNELS the thin geometry the clamp exists to hold. debug.view.overshoot
+// colors the two terminals' disagreement. Plain omega=1 (no auto-relaxation) so the ONLY variable between the two
+// marches is the clamp; the four-bound teleport rides both (bound-proven on either). The hit ACCEPT compares the clamped
+// radius against the same footprint threshold the production march uses — only the STEP is enlarged, so the enlarged
+// step can jump PAST a surface before the sample reads a hit (the overshoot). Two full marches per pixel is the
+// documented debug cost — the overshoot case gates the primary march OFF, so a pixel runs this twice and the production
+// marcher zero times.
+float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStart, float firstExit, float secondEntry, uint instanceMaskBase, float pixelFootprint, float stepMultiplier) {
+    if (marchStart < 0.0) {
+        return MaxDistance; // a beam-culled tile — nothing to march; both marches agree at the far plane
+    }
+
+    float traveled = max(marchStart, 0.0);
+
+    [loop]
+    for (int step = 0; (step < MaxSteps); step++) {
+        float radius = mapMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase).distance;
+        float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
+
+        // Accept on the CLAMPED field (production-consistent), so a landed-inside sample (radius < threshold, incl.
+        // negative) ends the march before any backward step. Tunneling happens when the enlarged step below clears the
+        // thin band so no sample ever lands within the threshold inside it.
+        if (radius < hitThreshold) {
+            break;
+        }
+
+        traveled += (radius * stepMultiplier);
+
+        // The four-bound teleport (bound-proven for either march): jump the proven-empty gap once.
+        if ((traveled >= firstExit) && (traveled < secondEntry)) {
+            traveled = secondEntry;
+        }
+
+        if (traveled > MaxDistance) {
+            traveled = MaxDistance;
+            break;
+        }
+    }
+
+    return traveled;
+}
+
 float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, uint instanceMaskBase, float pixelFootprint) {
     float3 rayOrigin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, localUv);
@@ -858,7 +912,10 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
     // The SLICE view never marches: it evaluates the field on a plane instead (its case below), and the beam prepass
     // force-survives every tile for it — marching those would be pure waste (sky pixels would run the full MaxSteps).
-    if ((marchStart >= 0.0) && (viewMode != DebugViewModeSlice)) {
+    // MASK (reads the tile mask buffer directly) and OVERSHOOT (runs its OWN two marches in its case) skip the primary
+    // march too — for MASK it is unused work, for OVERSHOOT running it AS WELL would be a third march. Every non-debug
+    // and every OTHER debug mode still marches exactly as before (the added compares are false for them).
+    if ((marchStart >= 0.0) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
         // Sphere-trace to the surface with a footprint-ADAPTIVE hit threshold. The field mapMasked returns is already
         // Lipschitz-clamped (SdfProgram stepScale, D1 keystone; <= 1-Lipschitz along the ray), so over-relaxing stays
         // safe. DEFAULT: Bán & Valasek 2023 AUTO-RELAXED tracing — a per-ray slope EMA `slopeM` drives an adaptive
@@ -1263,6 +1320,47 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             }
 
             viewColor = sliceColor;
+            break;
+        }
+        case 8: { // MASK DENSITY — tint by the kept-instance count in this pixel's tile (popcount over the tile's mask
+                  // words), normalized by the live instance count. The counts are ALREADY in the mask buffer the views
+                  // kernel binds (the beam prepass wrote them), so this is one popcount loop — no march, no field eval.
+                  // Cull behaviour and tile-boundary artifacts become visible BY CONSTRUCTION: each tile's density is a
+                  // single value, so adjacent tiles that kept different counts show a hard colour step. A world-only
+                  // program (0 instances) reads 0 → the floor colour. This is how the lead WATCHES the storm cliff — a
+                  // dense red field over the swarm means many instances survive the cull into each tile.
+            uint liveInstances = sdfInstanceCount();
+            uint keptInstances = 0u;
+
+            [loop]
+            for (uint maskWord = 0u; (maskWord < params.instanceMaskWordCount); maskWord++) {
+                keptInstances += countbits(sdfInstanceMaskWord(instanceMaskBase, maskWord, liveInstances));
+            }
+
+            // Fraction of the live instances this tile keeps. The sqrt lifts the low end so a handful of survivors out of
+            // thousands still registers as green rather than washing to the floor blue — the ramp stays perceptible
+            // across the whole range while the NORMALIZATION base stays the live count (as specified).
+            float density = ((liveInstances > 0u) ? (float(keptInstances) / float(liveInstances)) : 0.0);
+            float ramp = sqrt(saturate(density));
+            // dark blue (0) -> green (low) -> red (high).
+            float3 lowBand = lerp(float3(0.04, 0.07, 0.32), float3(0.14, 0.85, 0.30), saturate(ramp * 2.0));
+            viewColor = lerp(lowBand, float3(0.95, 0.16, 0.10), saturate((ramp - 0.5) * 2.0));
+            break;
+        }
+        case 9: { // OVERSHOOT DETECTOR — march the pixel TWICE and colour the depth disagreement. The first march is the
+                  // production Lipschitz-CLAMPED field (stepMultiplier 1); the second forces the clamp to 1.0
+                  // (stepMultiplier 1/stepScale) so the step rides the raw, possibly-non-1-Lipschitz field and TUNNELS
+                  // thin geometry the clamp holds. Where they agree the clamp was not load-bearing (green); where the
+                  // unclamped march tunneled past a surface the terminals diverge (hot) — the liar's-spiral class made
+                  // live. This is a DEBUG-ONLY two-marches-per-pixel cost; the primary march was gated OFF above for it.
+            float clampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, instanceMaskBase, pixelFootprint, 1.0);
+            float unclampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, instanceMaskBase, pixelFootprint, (1.0 / stepScale));
+            float disagreement = abs(clampedDepth - unclampedDepth);
+            // Log-scaled against the march reach so a sub-unit tunnel still reads while a full escape saturates.
+            float hot = saturate(log2(1.0 + disagreement) / log2(1.0 + MaxDistance));
+            // green (agree) -> yellow -> red (the unclamped march tunneled far).
+            float3 warmBand = lerp(float3(0.10, 0.70, 0.22), float3(0.98, 0.85, 0.12), saturate(hot * 2.0));
+            viewColor = lerp(warmBand, float3(0.96, 0.12, 0.05), saturate((hot - 0.5) * 2.0));
             break;
         }
     }
