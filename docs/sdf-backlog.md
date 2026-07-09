@@ -63,9 +63,14 @@ premises are now false).
    register-footprint premise now has measured evidence (the fused grid
    attempt's 512 B/thread scratch taxed the co-resident cone march +12%).
    Builds when a divergent shade stage or per-tile tapes arrive.
-4. **Compute shadow-cull** — the soft-shadow march has no acceleration; port
-   the rt path's occluder fast-forward idea to the compute march (natural
-   rider on the grid structure).
+4. **Compute shadow-cull — BUILT (2026-07-09, `747a4e9`, stage 59).** The
+   grid-along-the-sun-ray gather with a penumbra-cone superset argument;
+   fixed a latent UNSOUNDNESS en route (the old march used the camera-tile
+   mask — off-frustum occluders never cast). Town views 133.8→116.1 ms
+   (and 254.5 for correct-flat: the honest 54% win); dense clustered
+   scenes now pay what correct shadows cost (gather ≈ flat there). Open
+   residual: dense-scene shadow cost wants a step-acceleration class of
+   fix, not mask games. Tables: sdf-bench-notes.md §2026-07-09 (d).
 5. **Per-tile / per-segment Lipschitz refinement** — fold each visible warped
    instance's baked `L` into a per-tile max-L so only warp-bearing tiles slow.
    Eventually superseded by #2.
@@ -95,11 +100,11 @@ premises are now false).
    `SampleGrad` from closed-form footprint derivatives on the screen-slab hit;
    kills CRT shimmer/moire. Prerequisite: mip chains on screen-source
    textures.
-10. **Factor `closestApproach()`** — AO / soft shadows / coverage-AA all
-    landed sharing the hoisted `stepScale` clamp but the survey's unified
-    helper was never factored; three separate walks remain. Do it BEFORE
-    adding any fourth epilogue tap (cone-AO). Mind the divide-back foot-gun
-    (each consumer handles `stepScale` deliberately differently).
+10. **`closestApproach` factoring — RESOLVED (2026-07-09, `b020b17`) at its
+    honest size:** the genuinely shared surface is only the field de-scale
+    (`sdfDeScaleField`, divide-back intents documented per consumer); the
+    closest-approach parabola is softShadow-exclusive, so the survey's full
+    unification was declined with evidence. Bytecode proven byte-identical.
 11. **Cone-AO / bent-normal quality tier** (R1 tier-1) + hero analytic
     occluders — pursue when GPU-bound; rides #10.
 12. **Bound-preserving fBm ISA op** (survey row 11) — still blocked on the

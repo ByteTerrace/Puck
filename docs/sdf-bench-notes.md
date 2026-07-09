@@ -370,3 +370,44 @@ camera; beam column = beam+mask):
   CANNOT see the CPU-side pack/upload cost of the per-frame rebuild — its
   rungs are noisy/non-monotonic and only bound the GPU side. A wall-clock
   fps column is the missing piece if the rebuild ceiling ever matters.
+
+---
+
+## 2026-07-09 (d) — the shadow-cull: correct shadows, and what they cost
+
+Commit `747a4e9`: `sdfShadowGather` walks the view-independent instance grid
+along the sun ray into a per-lit-pixel local mask (32 words / 128 B static,
+≤1024 addressable; 3-way fallback gather → camera-tile (>1024) → flat).
+The gather cone is the PENUMBRA cone (`3/ShadowSharpness` — measured to
+bit-identity: 1/k leaves 840 penumbra-edge px, 2/k 125, 3/k 0): a bare-ray
+gather is unsound because Aaltonen's refinement couples samples to the
+previous sample's clearance — the influence-corridor class again.
+
+**The correctness finding that reframes the numbers:** the OLD shadow march
+consumed the camera-tile mask — off-frustum occluders never cast into frame.
+Every pre-existing shadow number was wrong-fast. The new `world-shadow-cull`
+stage (59th) proves gather == flat BIT-IDENTICAL on Vulkan, including an
+off-frustum corridor caster and a dynamic always-list occluder.
+
+Views ms, by scene (old = the unsound camera-tile path):
+
+```
+  town reveal overview   old 133.8   gather 116.1   correct-flat 254.5
+  carves clustered x256  old  14.5   gather  21.3   flat ~21
+  carves clustered x1024 old  46.0   gather 101.2   flat ~101
+  carves clustered x4096 old ~213    camera-tile fallback 210 (>1024 cap)
+```
+
+- **Spread scenes (real content) win twice**: the town gets CORRECT shadows
+  13% faster than the old incorrect path, 54% faster than correct-flat.
+- **Dense clustering pays the price of correctness**: gather ≈ flat when
+  everything stacks in one spot (nothing to narrow) + the static-mask
+  occupancy tax. This is not a regression vs a correct baseline — the old
+  46 ms bought speed with missing shadows. A density-adaptive fallback to
+  camera-tile would re-buy the speed only by re-buying the unsoundness; the
+  honest future lever for dense-scene shadows is a different class
+  (shadow-march step acceleration), not mask games.
+- Commit `b020b17` (the closestApproach factoring) resolved to the honest
+  shared surface — one `sdfDeScaleField` helper (the parabola is
+  softShadow-exclusive; coverage's ratio must NOT be de-scaled) — proven
+  byte-identical: the recompiled kernels match their committed bytecode.
