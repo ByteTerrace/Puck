@@ -248,6 +248,28 @@ Three mechanisms, three moves (verified against code 2026-07-09:
   wave; the fleet arc and the diegetic UI (every terminal is a screen
   surface) both inherit this.
 
+## The town-reveal "lag spike" — DIAGNOSED (2026-07-09 per-frame trace)
+
+The spike is neither of the suspected one-frame walls. The trace (per-frame
+world-timing across a town reveal, post-shadow-cull): **no upload/pipeline-warm
+spike** (the world view already renders every frame while IMMERSED, so
+everything is warm at reveal) and **no rebuild sawtooth** (mask/beam smooth
+throughout). What remains is a smooth **cost step 57 → 130 ms over ~6 frames**
+as the reveal camera widens to the overview — the eased transition then plays
+at ~7.5 fps, which reads as a lag spike. Bonus find: while immersed (playing
+the intro pane) the town renders at **~57 ms every frame** behind/around the
+pane — hidden GPU spend that is also why there's no warm spike.
+
+Shaped fixes (presentation-only, unpicked):
+1. **Transition render-scale** — render the world view at reduced internal
+   resolution during the reveal blend (motion hides it), snap to full at
+   settle. Directly targets the perceived chunkiness regardless of scene cost.
+2. **Immersed-mode economization** — downscale (not skip — skipping would
+   re-introduce the warm spike) the mostly-hidden room view while a pane is
+   fullscreen; recovers the hidden ~57 ms during normal play.
+3. Long-term: every views lever (the shadow-cull already took the reveal
+   147.5 → 130.7 ms) shrinks the step itself.
+
 ## Verification gaps (Post stages — cheap gap-closers)
 
 22. Missing stages, confirmed against the current registry:
