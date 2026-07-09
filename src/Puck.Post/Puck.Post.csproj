@@ -19,6 +19,9 @@
         <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
         <ProjectReference Include="..\Puck.Scene\Puck.Scene.csproj" />
         <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <!-- The font-atlas model + the SDF coverage generator: the world-glyph stage bakes a deterministic fixture
+             atlas (no font-availability dependency) and lays text out through SdfProgramBuilder.Text. -->
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
         <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
     </ItemGroup>
 

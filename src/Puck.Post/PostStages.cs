@@ -87,6 +87,7 @@ internal static class PostStages {
             new WorldLogSphereSolidityStage(),
             new WorldChildStage(),
             new WorldScreenStage(),
+            new WorldGlyphStage(),
             new WorldInstancedStage(),
             new WorldSwarmStage(),
             new WorldGridCullStage(),

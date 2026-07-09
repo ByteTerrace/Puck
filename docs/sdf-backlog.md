@@ -158,6 +158,24 @@ premises are now false).
       is a screen-source feed mirroring the console history —
       `ProceduralFaceFeed` pattern + `Puck.Text` CPU rasterization + the
       4 unclaimed `ScreenSlotLedger` slots.
+    - **Tier 1 — the glyph op — ★LANDED** (`SdfShapeType.Glyph`=15, Post stage
+      `world-glyph`, battery 60/60). Ships: the op (band-cull-before-tap,
+      `max((0.5−encoded)·distanceScale, dQuad)` conservative combine, alpha-only
+      marchable channel, manual bilinear, extruded-quad fallback in every
+      non-atlas kernel), the `SetGlyphAtlas`/`ISdfFrameSource.GlyphAtlas` binding
+      (t15/s8, appended last), `SdfProgramBuilder.Glyph`/`Text`, and the missing
+      generator (`Puck.Text.SdfCoverageAtlas` — an EXACT separable EDT, so Glyph
+      is factor-1 with no `AnalyzeLipschitz` case, unlike the chamfer transform's
+      1/1.0824 penalty). Reconstruction contract: geometry ALWAYS marches the
+      true single channel (alpha); median-of-3 is left UNBUILT (C0-only at clash
+      lines). Deferred/next: a demo consumer (signage/UI — Tier 2, kept out of
+      the ceilinged `OverworldFrameSource`; `GlyphAtlasBuilder` is built and
+      ready), true-MSDF GENERATION (load a pre-baked `msdf-atlas-gen` atlas via
+      the designed-to-slot-in seam — the op already marches its alpha), a
+      material-level `GlyphDecal` flavor for dense reading text (where median-of-3
+      is finally legitimate — ScreenSlab-style sampling), and perspective-correct
+      AA from the `mapGradCore` dual projected to screen (the deterministic
+      fwidth/screenPxRange analogue). Original shaping below.
     - **Tier 1 — the MTSDF glyph op** (engine, Post-gated): sample the
       `Puck.Text` atlas as a DISTANCE-level field — geometry marches the MTSDF
       **true-distance ALPHA channel** (Lipschitz-1 by construction), NOT the
