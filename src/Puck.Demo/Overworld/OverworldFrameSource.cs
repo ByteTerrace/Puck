@@ -121,6 +121,30 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private const float WorkbenchGlowRate = 1.45f;
     private const int WorkbenchGlowBuckets = 12;
 
+    // ---- The diegetic console terminal (diegetic-UI Tier 0) ---------------------------------------------------------
+    // A physical terminal object whose CRT screen live-mirrors the developer console (the same lines the overlay shows /
+    // stdout echoes) — the control plane made flesh. Its screen SOURCE rides the generic dynamic-claimant seam
+    // (RegisterScreenClaimant) at one HEADROOM slot, resolving the console named feed the diegetic-feed director
+    // publishes; the geometry is a modest desk + a room-facing CRT slab emitted with the room (EmitTerminal). Display-
+    // only this tier: input stays pad + overlay console + stdin.
+    //
+    // Placed against the +Z (near) wall — the only wall free of cabinets (−Z), the shelf (−X), and the workbench (+X) —
+    // offset toward −X so it sits off-center, its CRT facing −Z back into the room (across from the cabinet row). The
+    // face uses the +Z cabinet convention mirrored 180° about Y (worldRight −X, worldUp +Y, front face on −Z), so the
+    // console image reads un-mirrored exactly as a cabinet's does from its own front. Visual-only (no collision entry —
+    // the sim's FixedRoom never learns it exists), like the workbench.
+    private const int TerminalScreenSlot = 5;             // a free ScreenSlotLedger headroom slot (4-7; 4 is the AGB debug slot)
+    private const float TerminalInsetX = 3.0f;            // the terminal center's inset from the −X wall (clear of a full shelf)
+    private const float TerminalInsetZ = 1.15f;           // its inset from the +Z (near) wall
+    private const float TerminalPedestalHalfWidth = 0.42f;
+    private const float TerminalPedestalHalfHeight = 0.46f;
+    private const float TerminalPedestalHalfDepth = 0.34f;
+    private const float TerminalScreenHalfWidth = 0.44f;  // the CRT slab half-width; height derives from the 4:3 CRT aspect
+    private const float TerminalScreenHalfDepth = 0.06f;  // the slab thickness
+    private const float TerminalScreenGap = 0.06f;        // the gap between the pedestal top and the slab's bottom edge
+    private const float TerminalInstanceRadius = 1.3f;    // covers the pedestal + hood + CRT slab in one bound
+    private const float TerminalCrtAspect = (4f / 3f);    // matches ConsoleFeed's 256x192 (4:3) CRT so the slab samples undistorted
+
     /// <summary>The engine's screen-surface slot capacity (mirrors <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>
     /// as a primitive) — exposed so the render node, at its analyzer coupling ceiling, never needs to name
     /// <see cref="SdfProgramBuilder"/> itself just to bound its generic headroom loop.</summary>
@@ -243,6 +267,13 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // camera feeds this source publishes — they share the headroom band, and the render node reads their handles by
     // name, not by which slot each landed on). Reference-stable (boxed once).
     private readonly object m_cameraFeedClaimToken = new();
+    // The diegetic console terminal's ledger owner token (one reference-stable claim on its headroom screen slot) and
+    // its visibility latch (default ON — a permanent revealed-room fixture; the `terminal on|off` verb flips it as a dev
+    // assist). m_builtTerminalVisible joins the rebuild trigger: hiding/showing swaps the CRT slab for a dark box (a
+    // program-instruction change), exactly like a cabinet boot.
+    private readonly object m_terminalClaimToken = new();
+    private bool m_terminalVisible = true;
+    private bool m_builtTerminalVisible = true;
     // The screen indices a world.wire / creation-face wired to a camera feed or named feed this frame (screen index ->
     // feed name). Recomputed each CaptureFrame; the render node's per-slot override consults it (a wired slot samples
     // the named-feed registry instead of its cabinet brick / flat material).
@@ -500,13 +531,14 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         var bootedMask = m_world.BootedMask;
         var activePlayerMask = ActivePlayerMask();
         var workbenchBucket = WorkbenchGlowBucket();
-        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (workbenchBucket != m_builtWorkbenchBucket) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair) || (m_sdfDebug.Active && (m_sdfDebug.Revision != m_builtSdfDebugRevision)));
+        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (workbenchBucket != m_builtWorkbenchBucket) || (m_terminalVisible != m_builtTerminalVisible) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair) || (m_sdfDebug.Active && (m_sdfDebug.Revision != m_builtSdfDebugRevision)));
 
         if (programChanged) {
             m_program = BuildProgram(bootedMask: bootedMask);
             m_programBootedMask = bootedMask;
             m_builtActivePlayerMask = activePlayerMask;
             m_builtWorkbenchBucket = workbenchBucket;
+            m_builtTerminalVisible = m_terminalVisible;
             m_builtProgramRevision = m_creator.ProgramRevision;
             m_builtWorldRevision = m_worldScene.ProgramRevision;
             m_builtCompanionCount = m_companions.Companions.Count;
@@ -777,6 +809,19 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             programWordCapacity: WorstCaseProgramWordCapacity,
             services: services
         );
+
+        // The diegetic console terminal claims its headroom screen slot through the SAME generic seam a placeable
+        // diegetic camera would — an Anchored preferred-slot claim (a permanent fixture, like a cabinet, so it always
+        // seats its own slot); its source/light resolve the console named feed the director publishes. No transform
+        // provider: the CRT slab is STATIC geometry (EmitTerminal bakes its world frame directly). Registered once here
+        // (persistent across passes); the `terminal on|off` verb gates only its EMISSION, never this claim.
+        RegisterScreenClaimant(
+            light: () => (m_feeds?.ResolveNamedFeedLight(name: CameraFeedPool.ConsoleFeedName) ?? Vector3.Zero),
+            ownerToken: m_terminalClaimToken,
+            preferredSlot: TerminalScreenSlot,
+            priority: ScreenSlotPriority.Anchored,
+            source: () => (m_feeds?.ResolveNamedFeedHandle(name: CameraFeedPool.ConsoleFeedName) ?? 0)
+        );
     }
 
     /// <summary>Renders this frame's planned camera feeds + ticks the procedural face feed (the render-thread half of
@@ -790,6 +835,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         }
 
         feeds.TickFeeds(
+            consoleFeedNeeded: m_terminalVisible,
             context: in context,
             dynamicTransforms: m_dynamicTransforms,
             faceFeedNeeded: FaceFeedNeeded(),
@@ -1777,6 +1823,12 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // form, so its one static instance + words join the worst-case envelope — MeasureWorstCaseEnvelope's binding
         // rule for any new emission. Its panel's emissive is proportional to the eased glow (0 dark → peak lit).
         EmitWorkbench(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
+
+        // THE DIEGETIC CONSOLE TERMINAL (diegetic-UI Tier 0): a room-only prop whose CRT slab live-mirrors the developer
+        // console. Emitted with the room content; the probe always emits it in its LIT (screen-slab) form, so its one
+        // static instance + the extra screen surface join the worst-case envelope (the terminal is the eighth and last
+        // screen surface at a full house — 4 cabinets + 3 companion faces + it — exactly the engine's cap).
+        EmitTerminal(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
         }
 
         // The CREATOR pool: the scene's palette + ghost + one instance per placed-shape slot, emitted by the
@@ -1868,6 +1920,64 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // points up-and-toward the room — visible from a floor-level approach AND the high iso reveal camera. Emissive
         // lifts every visible face uniformly, so the whole panel reads as powered-on.
         _ = builder.ResetPoint().Translate(offset: (monitorCenter - origin)).Rotate(rotation: panelTilt).Box(halfExtents: new Vector3(WorkbenchPanelHalfWidth, WorkbenchPanelHalfHeight, WorkbenchPanelHalfDepth), round: 0.02f, material: panelMaterial);
+        _ = builder.EndInstance();
+    }
+
+    // THE DIEGETIC CONSOLE TERMINAL (diegetic-UI Tier 0): a modest pedestal + a room-facing CRT slab that samples the
+    // console named feed at the terminal's headroom screen slot — the control plane made flesh. ONE static instance
+    // bounded on the pedestal (TerminalInstanceRadius). Placed against the +Z (near) wall, offset toward −X, its CRT
+    // facing −Z back into the room; the sampling frame is the +Z cabinet convention mirrored 180° about Y (worldRight
+    // −X, worldUp +Y, front face on −Z) so the console reads un-mirrored exactly as a cabinet does from its own front.
+    // Visual-only (no collision — the sim's FixedRoom never learns it exists), like the workbench. HIDDEN (the `terminal
+    // off` verb) swaps the CRT slab for a dark box — the same instruction-count-neutral boot/unboot swap the cabinets
+    // use, so the eased rebuilds never resize a buffer. The probe emits the LIT (slab) form unconditionally so the
+    // worst-case envelope reserves the extra screen surface — MeasureWorstCaseEnvelope's binding rule for any new
+    // emission; the terminal is the eighth (last) screen surface at a full house (4 cabinets + 3 companion faces + it).
+    private void EmitTerminal(SdfProgramBuilder builder, Vector3 origin, bool probeWorstCase) {
+        var floorY = m_room.FloorY;
+        var centerX = (m_room.BoundsMin.X + TerminalInsetX);
+        var centerZ = (m_room.BoundsMax.Y - TerminalInsetZ);
+        var bodyMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.26f, 0.29f, 0.34f)));
+        var hoodMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.10f, 0.11f, 0.13f)));
+        var screenOffMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.05f, 0.07f, 0.06f)));
+
+        var pedestalCenter = new Vector3(centerX, (floorY + TerminalPedestalHalfHeight), centerZ);
+        var screenHalfHeight = (TerminalScreenHalfWidth / TerminalCrtAspect);
+        var screenHalfExtents = new Vector3(TerminalScreenHalfWidth, screenHalfHeight, TerminalScreenHalfDepth);
+        var screenCenter = new Vector3(centerX, (floorY + (2f * TerminalPedestalHalfHeight) + TerminalScreenGap + screenHalfHeight), centerZ);
+        // The CRT front face is on −Z (toward the room); its world-space sampling frame is the +Z cabinet frame turned
+        // 180° about Y — worldRight −X, worldUp +Y — so the sampled image is un-mirrored from the −Z viewing side.
+        var screenFaceOrigin = (screenCenter + new Vector3(0f, 0f, -TerminalScreenHalfDepth) - origin);
+        // The pedestal is always present (like the workbench); only the CRT face toggles between the live screen slab
+        // and a powered-off dark box. The probe always takes the slab form so the worst-case envelope covers the extra
+        // screen surface.
+        var showScreen = (probeWorstCase || m_terminalVisible);
+
+        _ = builder.BeginInstance(boundCenter: pedestalCenter, boundRadius: TerminalInstanceRadius);
+        // The pedestal body.
+        _ = builder.ResetPoint().Translate(offset: (pedestalCenter - origin)).Box(halfExtents: new Vector3(TerminalPedestalHalfWidth, TerminalPedestalHalfHeight, TerminalPedestalHalfDepth), round: 0.05f, material: bodyMaterial);
+        // The dark hood/bezel sits directly BEHIND (+Z) the CRT face, a hair larger, so the terminal has a solid body
+        // without ever occluding the −Z-facing screen the player and camera see (the sliver-behind-a-frame bug).
+        _ = builder.ResetPoint().Translate(offset: (screenCenter + new Vector3(0f, 0f, (TerminalScreenHalfDepth * 0.9f)) - origin)).Box(halfExtents: new Vector3((TerminalScreenHalfWidth + 0.05f), (screenHalfHeight + 0.05f), (TerminalScreenHalfDepth * 0.8f)), round: 0.03f, material: hoodMaterial);
+
+        if (showScreen) {
+            // The CRT slab: samples the console named feed at TerminalScreenSlot (0 = unbound → the flat screen material,
+            // a blank dark CRT, e.g. on a host with no glyph atlas). The Anchored ledger claim (InstallFeeds) guarantees
+            // the terminal seats THIS exact slot, so the baked screenIndex and the resolved source always agree.
+            _ = builder.ResetPoint().Translate(offset: (screenCenter - origin)).ScreenSlab(
+                halfExtents: screenHalfExtents,
+                round: 0.03f,
+                worldOrigin: screenFaceOrigin,
+                worldRight: -Vector3.UnitX,
+                worldUp: Vector3.UnitY,
+                screenIndex: TerminalScreenSlot
+            );
+        } else {
+            // Hidden (the `terminal off` dev toggle): the powered-off dark CRT box, an instruction-count-neutral swap for
+            // the slab above (mirrors a cabinet's unbooted screen).
+            _ = builder.ResetPoint().Translate(offset: (screenCenter - origin)).Box(halfExtents: screenHalfExtents, round: 0.03f, material: screenOffMaterial);
+        }
+
         _ = builder.EndInstance();
     }
 

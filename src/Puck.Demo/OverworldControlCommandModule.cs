@@ -118,6 +118,15 @@ internal sealed class OverworldControlCommandModule : ICommandModule {
             name: "state"
         );
         yield return WithArgs(
+            description: "Shows or hides the diegetic console terminal — the in-room CRT that mirrors this console: terminal on|off (default on; a dev assist — display only this tier).",
+            handler: (_, args) => new CommandResult((Host is not { } host)
+                ? Unavailable(verb: "terminal")
+                : (TryParseOnOff(args: args, value: out var visible)
+                    ? host.SetTerminalVisible(visible: visible)
+                    : "[terminal: usage — terminal on|off]")),
+            name: "terminal"
+        );
+        yield return WithArgs(
             description: "Captures the next frame to a path: capture <png> (the directory is created; the shot lands next frame).",
             handler: (_, args) => new CommandResult((Host is not { } host)
                 ? Unavailable(verb: "capture")
@@ -252,6 +261,23 @@ internal sealed class OverworldControlCommandModule : ICommandModule {
         }
 
         return false;
+    }
+
+    // Parses a required on/off token (case-insensitive) — the terminal show/hide toggle.
+    private static bool TryParseOnOff(string[] args, out bool value) {
+        value = false;
+
+        if (args.Length == 0) {
+            return false;
+        }
+
+        if (string.Equals(a: args[0], b: "on", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            value = true;
+
+            return true;
+        }
+
+        return string.Equals(a: args[0], b: "off", comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
     // Parses a required positive step count (>= 1).

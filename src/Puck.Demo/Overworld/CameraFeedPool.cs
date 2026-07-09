@@ -3,6 +3,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Cameras;
 using Puck.Compositing;
 using Puck.Demo.Creator;
+using Puck.Demo.DevConsole;
 using Puck.Demo.World;
 using Puck.SdfVm;
 
@@ -50,6 +51,11 @@ internal sealed class CameraFeedPool : IDisposable {
     /// primitive can ever add. More wired eyes than this narrate a degrade (see <see cref="PlanFeeds"/>).</summary>
     public const int MaxCameraFeeds = 4;
 
+    /// <summary>The diegetic console terminal's named-feed handle, re-exported from <see cref="ConsoleFeed.FeedName"/>
+    /// so the frame source resolves it WITHOUT naming <see cref="ConsoleFeed"/> itself (its class-coupling ceiling has
+    /// no headroom for a new type; the director it already owns is the one composition seam).</summary>
+    public const string ConsoleFeedName = ConsoleFeed.FeedName;
+
     /// <summary>A feed's fixed render width — the native brick panel size, matching every other diegetic screen source
     /// in the overworld (KEEP IN SYNC with the overworld's 160:144 screen authoring).</summary>
     public const uint FeedWidth = 160;
@@ -61,6 +67,10 @@ internal sealed class CameraFeedPool : IDisposable {
     private readonly record struct PlannedFeed(int PoolSlot, CameraEye Eye, float AnchorYaw, Vector3 AnchorPosition, string Name, IReadOnlySet<int> WiredScreens);
 
     private readonly ProceduralFeed m_faceFeed = new();
+    // The diegetic console terminal's screen feed (the CRT that mirrors the developer console) — another presentation-
+    // only named feed the director owns beside the face feed, resolved through the SAME named-feed registry (a screen
+    // wired to named:console reads it exactly as one wired to named:emotes). Taps the console store's read seam.
+    private readonly ConsoleFeed m_consoleFeed;
     private readonly IServiceProvider m_services;
     private readonly bool m_hostsOnDirectX;
     private readonly int m_programWordCapacity;
@@ -99,6 +109,9 @@ internal sealed class CameraFeedPool : IDisposable {
         m_programWordCapacity = programWordCapacity;
         m_instanceCapacity = instanceCapacity;
         m_dynamicTransformCapacity = dynamicTransformCapacity;
+        // The console feed taps the overlay's own read seam (the store, when one is registered) — resolved here so the
+        // frame source never names the console-source type (its coupling ceiling has no headroom for a new one).
+        m_consoleFeed = new ConsoleFeed(source: (services.GetService(serviceType: typeof(ConsoleTextStore)) as IConsoleTextSource));
     }
 
     /// <summary>How many camera feeds are live this frame (the pool's occupancy) — 0 until the first wired feed is
@@ -146,6 +159,10 @@ internal sealed class CameraFeedPool : IDisposable {
         m_namedLights.Clear();
         m_namedHandles[CompanionState.DefaultFaceFeed] = m_faceFeed.CurrentImageViewHandle;
         m_namedLights[CompanionState.DefaultFaceFeed] = m_faceFeed.CurrentImageViewHandle != 0 ? FaceFeedGlow : Vector3.Zero;
+        // The diegetic console terminal's CRT: its last-published image (the console mirror) under named:console, plus a
+        // faint phosphor glow into the room-light seam while it is producing.
+        m_namedHandles[ConsoleFeed.FeedName] = m_consoleFeed.CurrentImageViewHandle;
+        m_namedLights[ConsoleFeed.FeedName] = m_consoleFeed.CurrentImageViewHandle != 0 ? ConsoleFeedGlow : Vector3.Zero;
 
         var granted = Math.Min(val1: requestedFeeds.Count, val2: MaxCameraFeeds);
 
@@ -182,21 +199,30 @@ internal sealed class CameraFeedPool : IDisposable {
     /// <param name="faceFeedNeeded">Whether any consumer wants the default (procedural) face feed this frame (a
     /// screen-faced creation, or a screen wired to it) — the face feed only ticks/uploads when needed, so a plain room
     /// with no companions pays nothing (and no GPU upload leaks into a feed-free run).</param>
-    public void TickFeeds(in Puck.Hosting.FrameContext context, SdfProgram program, int revision, float time, IReadOnlyList<DynamicTransform> dynamicTransforms, Func<int, nint> resolveScreenSource, bool faceFeedNeeded) {
+    /// <param name="consoleFeedNeeded">Whether the diegetic console terminal is present this frame (its CRT mirrors the
+    /// developer console) — the console feed only ticks/uploads when needed, and even then re-uploads only when the
+    /// shown console lines actually changed (its own dirty gate).</param>
+    public void TickFeeds(in Puck.Hosting.FrameContext context, SdfProgram program, int revision, float time, IReadOnlyList<DynamicTransform> dynamicTransforms, Func<int, nint> resolveScreenSource, bool faceFeedNeeded, bool consoleFeedNeeded) {
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(dynamicTransforms);
         ArgumentNullException.ThrowIfNull(resolveScreenSource);
 
-        if ((!faceFeedNeeded && (m_plan.Count == 0)) ||
+        if ((!faceFeedNeeded && !consoleFeedNeeded && (m_plan.Count == 0)) ||
             m_services.GetService(serviceType: typeof(IGpuComputeServices)) is not IGpuComputeServices gpu ||
             !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)) {
-            return; // Nothing to do this frame (no face feed needed, no camera feed wired), or the device isn't ready.
+            return; // Nothing to do this frame (no feed needed, no camera feed wired), or the device isn't ready.
         }
 
         // The procedural face feed publishes its default-face image (blink cadence + expression changes) only while a
         // consumer wants it — a room with no screen-faced creation never uploads it.
         if (faceFeedNeeded) {
             m_faceFeed.Tick(deltaSeconds: (float)context.DeltaSeconds, device: device, gpu: gpu);
+        }
+
+        // The console terminal's CRT re-rasterizes/re-uploads only when the mirrored console lines changed (its dirty
+        // gate), so an idle terminal costs one snapshot compare per frame and no GPU work.
+        if (consoleFeedNeeded) {
+            m_consoleFeed.Tick(device: device, gpu: gpu);
         }
 
         if (m_plan.Count == 0) {
@@ -230,6 +256,7 @@ internal sealed class CameraFeedPool : IDisposable {
 
         m_disposed = true;
         m_faceFeed.Dispose();
+        m_consoleFeed.Dispose();
 
         for (var index = 0; (index < m_feeds.Length); index++) {
             m_feeds[index]?.Dispose();
@@ -240,6 +267,10 @@ internal sealed class CameraFeedPool : IDisposable {
     // A soft neutral glow for the default face feed's room-light contribution (the CRT face casts a faint light) —
     // the camera feeds report no light of their own (they film an already-lit world).
     private static readonly Vector3 FaceFeedGlow = new(0.10f, 0.16f, 0.12f);
+
+    // A soft green phosphor glow for the console terminal's room-light contribution (the CRT casts a faint green wash),
+    // in the same spirit as the face feed's glow.
+    private static readonly Vector3 ConsoleFeedGlow = new(0.08f, 0.15f, 0.10f);
 
     // The output image view for pool slot `feedIndex` — 0 for a feed index that is not currently active (unbuilt or
     // beyond the active count); the caller's wiring resolver treats a zero handle as "no signal" (the flat/procedural

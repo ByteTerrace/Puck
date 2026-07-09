@@ -99,6 +99,13 @@ internal interface IOverworldControlHost {
     /// <param name="index">The cabinet index.</param>
     /// <param name="which">Either <c>exit</c> or <c>victory</c>.</param>
     string ClearCondition(int index, string which);
+
+    /// <summary>Shows or hides the diegetic console terminal — the physical CRT in the revealed room that mirrors this
+    /// console (a dev assist; the terminal is ON by default, a permanent fixture). Hiding darkens its CRT to a
+    /// powered-off box (an instruction-neutral rebuild, like a cabinet unboot) and stops its feed uploading. Display-
+    /// only this tier; input stays pad + this console + stdin. Returns a status line.</summary>
+    /// <param name="visible">True to show (power on) the terminal, false to hide (power off) it.</param>
+    string SetTerminalVisible(bool visible);
 }
 
 public sealed partial class OverworldFrameSource {
@@ -400,6 +407,20 @@ public sealed partial class OverworldFrameSource {
         return (swapped
             ? Format($"[cart: console {index} live-swapped to cart {type}]")
             : Format($"[cart: console {index} will insert cart {type} on boot]"));
+    }
+
+    /// <inheritdoc/>
+    public string SetTerminalVisible(bool visible) {
+        // Flip the presentation-only latch; the next CaptureFrame's rebuild trigger swaps the CRT slab for a dark box
+        // (or back) and TickFeeds starts/stops the console feed's uploads. The Anchored ledger claim stays registered
+        // either way (a permanent fixture) — this gates only the CRT's emission, never the claim.
+        if (m_terminalVisible == visible) {
+            return Format($"[terminal: already {(visible ? "on" : "off")}]");
+        }
+
+        m_terminalVisible = visible;
+
+        return Format($"[terminal: {(visible ? "on" : "off")}]");
     }
 
     /// <inheritdoc/>
