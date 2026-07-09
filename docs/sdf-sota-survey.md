@@ -6,8 +6,7 @@ signed-distance-field rendering: **which techniques not yet in the Puck SDF VM
 could improve its visuals or performance**, judged against what the engine
 actually ships, its determinism contract, and its two-backend (SPIR-V + DXIL)
 parity discipline. It is a delta, not a tutorial — it assumes the reader knows
-the pipeline from [sdf-vm-briefing.md](sdf-vm-briefing.md) and the settled
-contract from the `sdf-world` skill.*
+the pipeline and the settled contract from the `sdf-world` skill.*
 
 *Method. Seven parallel web sweeps, each from a different angle (sphere-tracing
 acceleration; acceleration structures & baked representations; iq/Shadertoy
@@ -43,25 +42,28 @@ now** · **pursue when GPU-bound** · **pursue with the named prerequisite** ·
 
 | # | Technique (review) | Seam | Expected win | Effort | Determinism fit | Verdict |
 |---|---|---|---|---|---|---|
-| 1 | iq 5-tap normal-ladder AO (R1) | shading epilogue | first-ever AO — grounds geometry; largest perceptual gain per effort | S | clean (de-scale `d` by `L`) | **pursue now** |
-| 2 | Curvature shading + gradient outlines (R1) | shading epilogue, reuses normal taps | cavity/rim/ink legibility, ~free | S | clean | **pursue now** |
-| 3 | Tier-0 coverage AA (R9) | march epilogue + composite | kills silhouette crawl dither can't hide | S | relaxed-clean; STRICT → quantize coverage | **pursue now** |
-| 4 | Four-bound teleport + 1.5× aggressive march (R3) | beam + march loop | skip empty space; 6.6→4.0 ms attested on a shipped title | S–M | clean, per-tile independent | **pursue now** |
-| 5 | iq bounding-volume early-out (R8) | `mapCore` walk | per-segment cull under the tile cull; de-risks the far-field arc | S–M | bit-exact, strict-parity-safe | **pursue now** |
+| 1 | iq 5-tap normal-ladder AO (R1) | shading epilogue | first-ever AO — grounds geometry; largest perceptual gain per effort | S | clean (de-scale `d` by `L`) | **LANDED** (wave 1) |
+| 2 | Curvature shading + gradient outlines (R1) | shading epilogue, reuses normal taps | cavity/rim/ink legibility, ~free | S | clean | **LANDED** (wave 1; off by default) |
+| 3 | Tier-0 coverage AA (R9) | march epilogue + composite | kills silhouette crawl dither can't hide | S | relaxed-clean; STRICT → quantize coverage | **LANDED** (wave 1, premise corrected — see R9 fold) |
+| 4 | Four-bound teleport + 1.5× aggressive march (R3) | beam + march loop | skip empty space; 6.6→4.0 ms attested on a shipped title | S–M | clean, per-tile independent | **LANDED** (wave 1) |
+| 5 | iq bounding-volume early-out (R8) | `mapCore` walk | per-segment cull under the tile cull; de-risks the far-field arc | S–M | bit-exact, strict-parity-safe | **LANDED** (pre-survey, 1a8330f) |
 | 6 | Material blend factor at seams (R5) | shade funnel + `parityMaterialDelta` | removes the hard material edge inside every smooth blend | M | relaxed-clean, far-exact endpoints untouched | **pursue now** |
-| 7 | Soft-shadow penumbra refinement (R5) | shadow march loop | removes step-frequency banding at sharp occluders | S | clean (unscaled `y`/`d`) | **pursue now** (verify-first) |
-| 8 | Bán 2023 auto-relaxed marcher (R6) | march loop | fewer robustness fallbacks, no per-scene knob, +8–15% on smooth content | S–M | clean iff fp-contraction pinned; keep ω=1.2 as strict fallback | **pursue now** |
-| 9 | Forward-mode analytic gradients (R7) | HLSL op-switch dual path (hit-only) | kills FD catastrophic cancellation (parity win), exact noise normals; **is** the planned gradient accumulator | L | *more* parity-stable than FD | **pursue now** |
-| 10 | Per-region tape pruning / Barbier Lipschitz (R2) | beam + program encoding | shorter per-tile tapes on the expensive onion/intersection chains | M (staged) | CPU-baked at build → zero new parity surface | **pursue with** `PushField`/`PopField` (scoped accumulator) |
+| 7 | Soft-shadow penumbra refinement (R5) | shadow march loop | removes step-frequency banding at sharp occluders | S | clean (unscaled `y`/`d`) | **LANDED** (wave 1) |
+| 8 | Bán 2023 auto-relaxed marcher (R6) | march loop | fewer robustness fallbacks, no per-scene knob, +8–15% on smooth content | S–M | clean iff fp-contraction pinned; keep ω=1.2 as strict fallback | **LANDED** (wave 1) |
+| 9 | Forward-mode analytic gradients (R7) | HLSL op-switch dual path (hit-only) | kills FD catastrophic cancellation (parity win), exact noise normals; **is** the planned gradient accumulator | L | *more* parity-stable than FD | **LANDED** (2026-07-09, ce36f80 — hit-only analytic normals; fBm/curvature consumers still open) |
+| 10 | Per-region tape pruning / Barbier Lipschitz (R2) | beam + program encoding | shorter per-tile tapes on the expensive onion/intersection chains | M (staged) | CPU-baked at build → zero new parity surface | **UNBLOCKED — pursue now** (accumulator landed AND the grid cell lists exist; views is the new bottleneck) |
 | 11 | Bound-preserving fBm ISA op (R6) | ISA (FBM op) + `AnalyzeLipschitz` + `distanceScale` | the correct realization of the roadmap fBm item | L | excellent (integer hash, no per-ray state) | **pursue with** the PCG3D noise-op basis |
 | 12 | Ray-differential CRT texture filtering (R9) | screen-sampling path (`SampleGrad`) | kills CRT/screen-slab shimmer & moire on the hero asset | M | benign LOD-quantized | **pursue with** mip chains on screen-source textures |
 | 13 | Tile-level IA inclusion evaluator (R10) | beam/tile kernel + compiler | tighter cull + provable per-tile `marchStart` + shared tape prune; grazing robustness | M–L | IA subset parity-safe (no FMA contraction, no transcendentals) | **pursue with** segment tracing (shares the prune evaluator with R2) |
-| 14 | Proxy/LOD far-field nodes + Sphere Carving (R8) | compiler bounds channel + ISA | non-baking answer to the town render-range ceiling | M–L → XL | proxy relaxed-parity; LOD behind a run-doc knob | **pursue when GPU-bound** |
-| 15 | Uniform-grid / spatial-hash instance cull (R3) | host packer + beam | O(instances)→cell-walk cull | M | deterministic CSR scatter, no atomic append | **pursue when GPU-bound** (measure-gate) |
-| 16 | Third pyramid level / 64×64 pre-beam (R3) | beam + second `cull-args` scan | wide-cone overview only | M–L | prefix-sum, static dispatch | **pursue when GPU-bound** |
+| 14 | Proxy/LOD far-field nodes + Sphere Carving (R8) | compiler bounds channel + ISA | non-baking answer to the town render-range ceiling | M–L → XL | proxy relaxed-parity; LOD behind a run-doc knob | **pursue when GPU-bound — DEMOTED** (far field is views-bound post-grid) |
+| 15 | Uniform-grid / spatial-hash instance cull (R3) | host packer + beam | O(instances)→cell-walk cull | M | deterministic CSR scatter, no atomic append | **LANDED** (2026-07-09, mask-first — f08add1/1931d3c; cap 16384) |
+| 16 | Third pyramid level / 64×64 pre-beam (R3) | beam + second `cull-args` scan | wide-cone overview only | M–L | prefix-sum, static dispatch | **DEMOTED, near-moot** (beam no longer dominates post-grid) |
 | 17 | March/shade split (R4) | kernel structure | latent enabler; protects march occupancy from a future divergent shade | M | pixel-local, deterministic | **pursue with** a divergent shade stage (or per-tile tapes) |
 | 18 | Wavefront/compaction of the march loop (R4) | kernel structure | reclaim wave tails | M+ | prefix-sum compaction only | **pursue with** per-tile specialized tapes |
 | 19 | Persistent-threads work-stealing (R4) | kernel structure | — | — | nondeterministic ordering; no SM6 cross-group forward-progress | **incompatible** |
+
+**Open work is consolidated in [sdf-backlog.md](sdf-backlog.md)** — the table's
+LANDED/DEMOTED annotations above are the per-row status of record.
 
 **Wave 1 landed (2026-07-08).** Rows 1, 2, 4, 7, 8 landed as specified (see
 `git log --oneline 7b23263..HEAD` for exact SHAs: iq 5-tap AO + curvature/ink

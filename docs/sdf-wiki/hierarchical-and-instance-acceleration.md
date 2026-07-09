@@ -5,8 +5,17 @@ collapses each tile to an instance bitmask for the indirect-dispatch fine
 march (`sdf-world-views`). Every technique on this page is a candidate
 refinement of that one seam: deepen the beam into a coarse-to-fine pyramid,
 teleport the fine march across the empty space the beam already sees, or
-replace the beam's O(instances) inner loop with a real acceleration
-structure once instance counts make that loop hot.
+accelerate the O(instances) cost once instance counts make it hot.
+
+**Discovery note (2026-07-09):** that O(instances) cost was framed below as
+"the beam's inner loop" — a binning loop over instances per tile. Measurement
+found otherwise: the hot cost was the cone march's own per-sample field
+enumeration (~96 steps × 4000 tiles, each step bounding against every
+per-instance candidate before early-out), not the tile-to-instance binning
+loop itself. The landed fix (see the uniform-grid entry below) is therefore a
+mask-first pre-pass: a new kernel computes the tile-instance mask *before* the
+cone march runs, so the march consumes an already-masked field instead of
+enumerating instances per sample.
 
 ### Hierarchical cone pre-pass / four-bound teleport
 
@@ -102,6 +111,12 @@ structure once instance counts make that loop hot.
   only once the instance cull is itself accelerated (rides the uniform-grid
   leg below), because past ~3 levels the returns fall off: each extra level
   costs a full dispatch and a bound read.
+- **Demoted / near-moot (2026-07-09).** The uniform grid landed
+  (mask-first pre-pass, see below) and the beam no longer dominates —
+  the O(instances) cost this entry's gating condition depended on turned out
+  to be the cone march's per-sample enumeration, which the grid's pre-pass
+  already fixes. A third pyramid level would only pay for itself if the beam
+  became dominant again post-grid, which has not been shown.
 - **See also:** [marching-acceleration.md](marching-acceleration.md),
   [march-loop-scheduling.md](march-loop-scheduling.md),
   [verdict-index.md](verdict-index.md).
@@ -129,14 +144,15 @@ structure once instance counts make that loop hot.
 - **Puck verdict:** reject (in favor of the uniform grid below) for Puck's
   actual instance shape, effort L for a real BVH / L–XL for the two-level
   structure in full generality. The review's read: for ≤1024 dynamic
-  analytic instances, Puck's per-*segment* object-space bounds already ARE
+  analytic instances (the cap has since been raised to 16384 — the rejection
+  verdict is unchanged), Puck's per-*segment* object-space bounds already ARE
   the "BLAS" (computed once at `UploadProgram`), but because each instance is
   a single analytic shape, "we have no deep BLAS to traverse — the 'BLAS hit
   test' is one sphere-vs-cone. That collapses the two-level structure's
   value: we need only the top level (the instance grid); there is no
   per-model sub-tree worth reusing." So the honest read is "TLAS-only," and
-  "the cheapest correct TLAS for 1024 dynamic analytic instances is a uniform
-  grid / spatial hash, not a BVH." The review states outright: "A real
+  "the cheapest correct TLAS for 1024 (now 16384) dynamic analytic instances
+  is a uniform grid / spatial hash, not a BVH." The review states outright: "A real
   per-frame BVH is the one option this review recommends against" for
   Puck's instance counts — its BLAS-reuse value is near-zero and its
   per-frame deterministic sort cuts against the honor rules the grid
@@ -187,10 +203,22 @@ structure once instance counts make that loop hot.
   proportional to how hot the O(instances) cull actually is, which nothing
   has yet measured: promote it only if `PUCK_TIMING=1` on the full-extent
   Puckton town overview shows `sdf-beam` (not `sdf-world-views`) dominating
-  GPU-ms, rising roughly linearly with instance count toward the 1024 cap. If
-  the fine march dominates instead, the review says the hierarchical-cone
-  teleport and the 1.5× aggressive march (adopted unconditionally) likely
-  lift the ceiling without needing this at all.
+  GPU-ms, rising roughly linearly with instance count toward the (then-)1024
+  cap. If the fine march dominates instead, the review says the
+  hierarchical-cone teleport and the 1.5× aggressive march (adopted
+  unconditionally) likely lift the ceiling without needing this at all.
+- **Landed, mask-first (2026-07-09, commits `f08add1`, `1931d3c`).** Shipped
+  as a NEW pre-pass kernel (`sdf-instance-cull.comp`), not the beam
+  inner-loop rewrite predicted above: a fused variant (cull folded into the
+  cone march) was tried first and rejected — its 512 B/thread scratch cost the
+  co-resident cone march ~+12% occupancy (measured). The mask-first pre-pass
+  computes the tile-instance mask before the march runs, so the march
+  consumes an already-masked field instead of enumerating instances per
+  sample — see this page's discovery note above: the measured O(instances)
+  cost was the cone march's per-sample enumeration, not the binning loop the
+  original prediction assumed it would replace. `world-grid-cull` is the new
+  Post gate; grid and flat paths are bit-identical. `MaxInstances` raised to
+  16384, `MaxCarves` to 4096 (commit `1e389db`).
 - **See also:** [lod-and-bounds.md](lod-and-bounds.md),
   [verdict-index.md](verdict-index.md).
 
@@ -251,16 +279,21 @@ or wait for GPU-bound" into two different triggers rather than one verdict:
    the notch geometry was not isolated in a single frame; the refutation rests
    on ground-never-red across all captures.) Full record:
    [verdict-index.md](verdict-index.md#empirical-status-in-puck).
-2. **Measure-first:** the uniform-grid instance cull (Leg 2) and the third
-   pyramid level (Leg 3b). Their value is proportional to how hot the
-   O(instances) beam cull actually is, which nothing has yet shown. The
-   decision instrument is `PUCK_TIMING=1` on the Puckton town overview at its
-   intended (non-compact) extent, read via the Post `gpu-budget` stage: if
-   `sdf-world-views` dominates, Legs 1+3a alone likely suffice and the grid
-   should wait; if `sdf-beam` is a large and growing fraction scaling with
-   instance count, promote the grid; if both are large after Legs 1/3a,
-   build the grid first (so the third pyramid level has cheap per-cell
-   candidate sets), then the third level.
+2. **Measure-first (resolved 2026-07-09):** the uniform-grid instance cull
+   (Leg 2) and the third pyramid level (Leg 3b). Their value was proportional
+   to how hot the O(instances) beam cull actually was — which nothing had yet
+   shown when this was written; `sdf-bench-notes` (2026-07-09) has since shown
+   it, and Leg 2 is built: the hot cost was the cone march's per-sample
+   enumeration, and the mask-first grid pre-pass fixes it directly, which is
+   why the third pyramid level (Leg 3b) is now demoted/near-moot rather than
+   promoted alongside it. The decision instrument as originally specified was
+   `PUCK_TIMING=1` on the Puckton town overview at its intended (non-compact)
+   extent, read via the Post `gpu-budget` stage: if `sdf-world-views`
+   dominates, Legs 1+3a alone likely suffice and the grid should wait; if
+   `sdf-beam` is a large and growing fraction scaling with instance count,
+   promote the grid; if both are large after Legs 1/3a, build the grid first
+   (so the third pyramid level has cheap per-cell candidate sets), then the
+   third level.
 
 All four legs pass the discipline scorecard the review runs against them:
 prefix-sum-not-atomic-append, no output-altering wave-vote, identical tile

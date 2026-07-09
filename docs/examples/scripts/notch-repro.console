@@ -1,4 +1,4 @@
-# Puck.Demo — deliberate repro of the SDF "ground-notch" defect (docs/sdf-vm-briefing.md, Live defects).
+# Puck.Demo — deliberate repro of the SDF "ground-notch" defect (docs/sdf-backlog.md, Live defects).
 # Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 60 < docs/examples/scripts/notch-repro.console
 # Run (PowerShell): Get-Content docs/examples/scripts/notch-repro.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 60
 # Captures land in artifacts/notch-repro/ (gitignored). Deterministic: no pad, the camera is posed by sdf.cam.

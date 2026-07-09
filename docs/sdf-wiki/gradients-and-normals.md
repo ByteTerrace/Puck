@@ -10,6 +10,13 @@ tangent alongside the scalar, reusing whatever subexpressions the distance
 computation already produced, composed at runtime by the interpreter's own
 loop rather than by a build-time codegen pass.
 
+**LANDED — 2026-07-09** (commit `ce36f80`), as `mapGradCore`, a hit-only dual
+specialization of the map switch. Analytic normals are now the default
+(the FD tetrahedron tap described above is the pre-landing baseline this page
+argued against); the cross-backend gate is the new `world-analytic-normal`
+Post stage. Hero-scene parity improved 51→11 px and `gpu-budget` moved
+1.87→1.58 ms.
+
 ### Forward-mode dual gradient accumulator (design synthesis)
 
 - **Source:** Puck internal design review — `review-07-gradients.md`,
@@ -24,10 +31,13 @@ loop rather than by a build-time codegen pass.
   tangent alongside the scalar distance through every op, updated by
   op-specific micro-code that is cheap for isometries/CSG-select (identity,
   orthonormal multiply, branch-select), moderate for warps with a near-diagonal
-  or similarity Jacobian (DomainWarp, LogSphere), and reuses already-derived
-  Lipschitz operator norms (Bend `1+a`, Twist `√((2+a²+a√(a²+4))/2)`,
-  Displace `1 + amp·max|freq|`) as the actual Jacobian norms for the expensive
-  ops. At the hit this becomes a **single wide walk** that fetches and decodes
+  or similarity Jacobian (DomainWarp, LogSphere). The already-derived Lipschitz
+  operator norms (Bend `1+a`, Twist `√((2+a²+a√(a²+4))/2)`, Displace
+  `1 + amp·max|freq|`) bound the march **step**, not the gradient — gradient
+  propagation instead chain-rules through each op's runtime point-Jacobian
+  (folds apply their own actual reflection/rotation, DomainWarp its matrix
+  transpose, Displace its exact analytic derivative), hand-written per op. At
+  the hit this becomes a **single wide walk** that fetches and decodes
   each program word once and updates all four accumulator components
   (distance + 3 tangent components), versus the FD scheme's four separate
   narrow walks that each re-fetch and re-decode the whole program — the
@@ -78,9 +88,12 @@ loop rather than by a build-time codegen pass.
   march occupancy for a normal computed once per pixel; keep the gradient
   channel **strictly parallel** to the `PushField`/`PopField` distance
   accumulator (separate storage, matching push/pop lifetime, never tangled
-  into the same stack); and reuse the existing Lipschitz operator norms as the
-  Jacobian norms for Bend/Twist/Displace rather than re-deriving them — the
-  hard math is already done. Watch smooth-blend liveness (both branches'
+  into the same stack); the existing Lipschitz operator norms stay in their
+  step-bound role only — gradient propagation chain-rules through each op's
+  runtime point-Jacobian instead (folds' actual reflection/rotation,
+  DomainWarp's matrix transpose, Displace's exact analytic derivative), each
+  hand-derived per op rather than reused from the norms. Watch smooth-blend
+  liveness (both branches'
   `float3` gradients alive at once at a blend) as the real register cost, not
   FLOPs. The CPU reference marcher needs the same dual path (the C#↔HLSL
   sync-pair discipline) so a new Post stage can gate distance+gradient

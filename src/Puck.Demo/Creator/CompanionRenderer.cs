@@ -385,7 +385,8 @@ public sealed class CompanionRenderer {
     // companion's shape is byte-for-byte the geometry the creator previewed and the forge could bake).
     // probeWorstCase emits ALL per-shape modifier ops unconditionally, matching CreatorSceneRenderer's binding rule.
     //
-    // SCOPING mirrors CreatorSceneRenderer.EmitShape exactly (see its remarks + docs/sdf-accumulator-plan.md): a
+    // SCOPING mirrors CreatorSceneRenderer.EmitShape exactly (see its remarks + the accumulator rule on SdfBlendOp
+    // + the sdf-world skill): a
     // non-group shape (Pass 1 — always plain Union) wraps its onion field op in a PushField(Union)/PopField scope so
     // the shell hollows THIS shape, not the whole scene; a no-onion shape stays flat (byte-identical). A group member
     // passes inGroupScope: true and emits flat — it already sits inside its group's single PushField scope
@@ -421,7 +422,7 @@ public sealed class CompanionRenderer {
     // Whether a companion's composition group must emit inside a PushField/PopField field scope — mirrors
     // CreatorSceneRenderer.GroupNeedsScope: true when any member carries a non-Union blend (the Intersection family
     // wipes the whole accumulated scene otherwise) or an onion field op. A pure-Union, no-onion group stays flat, so
-    // a union-only creation loads byte-identically. See docs/sdf-accumulator-plan.md.
+    // a union-only creation loads byte-identically. See the accumulator rule on SdfBlendOp + the sdf-world skill.
     private static bool GroupNeedsScope(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex) {
         for (var member = fromIndex; (member < shapes.Count); member++) {
             var shape = shapes[member];

@@ -1,0 +1,168 @@
+# The SDF backlog — open work, consolidated
+
+*Created 2026-07-09 by the plan-doc consolidation (audited at `features/sdf-boom`
+tip `5624161`, Post 51/51). This is the ONE living ledger of open SDF work,
+distilled from the retired `sdf-accumulator-plan.md`, `sdf-vm-briefing.md`, and
+`sdf-vm-evolution-plan.md` (all fully audited item-by-item before retirement —
+git history keeps the full texts). The division of labor:
+[sdf-sota-survey.md](sdf-sota-survey.md) is the ranked RESEARCH record,
+[capability-catalog.md](capability-catalog.md) is what IS,
+[sdf-bench-notes.md](sdf-bench-notes.md) is what was MEASURED — this doc is
+what's NEXT. Items are orientation, not a work breakdown; re-negotiate shape at
+arc start, leave room for whimsy.*
+
+**The post-mask-first reality (reranks everything).** The O(instances) beam
+wall fell 2026-07-09 (the mask-first instance cull; the O(n) was the cone
+march's per-sample field enumeration, never the binning — see
+sdf-bench-notes.md). Frames past ~1024 on-screen instances are now
+**views-bound**: the per-pixel tape walk is the bottleneck. That PROMOTES
+tape pruning (shorter per-tile tapes attack views directly) and DEMOTES the
+pre-beam pyramid and proxy/LOD far-field (their "beam still dominates"
+premises are now false).
+
+## Performance levers (engine, Post-gated)
+
+1. **Per-region tape pruning** (survey row 10, R2) — Barbier Lipschitz
+   criterion, CPU-baked per-cell active-segment subsets. **Doubly unblocked**:
+   the scoped accumulator landed (restores maskability/eligibility to the
+   onion/intersection chains) AND the grid's CSR cell lists exist
+   (`SdfInstanceGrid` — the per-cell instance membership a pruner hangs off).
+   Now the front of the perf queue: it attacks the views term, which is the
+   new bottleneck.
+2. **Segment tracing** (Galin 2020 — the D-series' deferred "D"; survey row 13
+   prerequisite) — per-segment directional Lipschitz bounds baked alongside
+   the per-shape bounds → larger safe steps. The linear member of the
+   forward-inclusion family; ships before any quadratic/IA case. Additive to
+   the segment directory as always scoped.
+3. **March/shade split** (survey row 17) — latent enabler; its
+   register-footprint premise now has measured evidence (the fused grid
+   attempt's 512 B/thread scratch taxed the co-resident cone march +12%).
+   Builds when a divergent shade stage or per-tile tapes arrive.
+4. **Compute shadow-cull** — the soft-shadow march has no acceleration; port
+   the rt path's occluder fast-forward idea to the compute march (natural
+   rider on the grid structure).
+5. **Per-tile / per-segment Lipschitz refinement** — fold each visible warped
+   instance's baked `L` into a per-tile max-L so only warp-bearing tiles slow.
+   Eventually superseded by #2.
+6. **Confirm the Puckton town ceiling** — the catalog's "far geometry exceeds
+   the reveal overview's SDF render range" was never reconciled as
+   camera/content-vs-producer. Measure with the grid cull in place and record
+   the verdict.
+7. *Demoted, revisit only if a new beam-dominant regime appears*: the 64×64
+   pre-beam pyramid (row 16 — near-moot post-grid); proxy/LOD far-field +
+   Sphere Carving (row 14 — the far-field ceiling is views-bound now).
+   Wavefront/compaction (row 18) stays gated on per-tile tapes. TLAS-over-
+   instances stays REJECTED (nondeterministic build).
+
+## Quality / visual (engine, Post-gated)
+
+8. **Material blend factor at seams** (survey row 6, R5) — re-evaluate the
+   top-of-tree blend at the confirmed hit, lerp operand albedos by the clamped
+   `h`, route through `parityMaterialDelta`. The top unbuilt pursue-now.
+9. **Ray-differential CRT texture filtering** (survey row 12, R9) —
+   `SampleGrad` from closed-form footprint derivatives on the screen-slab hit;
+   kills CRT shimmer/moire. Prerequisite: mip chains on screen-source
+   textures.
+10. **Factor `closestApproach()`** — AO / soft shadows / coverage-AA all
+    landed sharing the hoisted `stepScale` clamp but the survey's unified
+    helper was never factored; three separate walks remain. Do it BEFORE
+    adding any fourth epilogue tap (cone-AO). Mind the divide-back foot-gun
+    (each consumer handles `stepScale` deliberately differently).
+11. **Cone-AO / bent-normal quality tier** (R1 tier-1) + hero analytic
+    occluders — pursue when GPU-bound; rides #10.
+12. **Bound-preserving fBm ISA op** (survey row 11) — still blocked on the
+    PCG3D integer-hash noise-op basis; the gradient dual (landed) de-risks its
+    analytic normals.
+13. **Tier-1 coverage-AA continuation** — only if silhouette aliasing stays
+    objectionable after the landed Tier-0.
+14. **Moinet curvature stepping** (R6) — its first-derivative prerequisite now
+    exists (`mapGradCore`); still needs the second directional derivative;
+    payoff is volumetric-noise content we don't have yet.
+
+## Destruction, tier 2 (deferred by explicit decision 2026-07-09)
+
+15. **Carve consolidation** — Dreams-style incremental re-bake of accumulated
+    carves into the base field (wiki notes) rides tape pruning (#1). Design
+    notes welcome; the tier-1 budget (measured: ~1024 in-frame scattered
+    carves at 60 fps; off-screen ~free; dense per-tile stacking is the real
+    ceiling) is in sdf-bench-notes.md.
+
+## Authoring surface (demo/run-doc side — greenfield, verify by running)
+
+16. **The run-document op gap** — unauthorable from a data file: LogSphere,
+    RepeatPolar, DomainWarp, Displace, SymmetryPlane (general normal), Vesica,
+    and the entire 2D family (RoundedRectangle/RegularPolygon/Star/Trapezoid/
+    Ellipse). `TransformOp`/`SceneObject` stop at cellJitter/bendY/bendZ and
+    the legacy shapes. (The briefing's "a renderer that outgrew its authors,"
+    narrowed but standing.)
+17. **Run-document nesting / explicit field scopes** — per-object field-op
+    scoping landed; a general grouping/nesting construct (PushField/PopField
+    in JSON) has not. The VM primitive exists; this is pure surface. Includes
+    dropping `WorldChamferStage`'s emit-intersections-first trick for a real
+    scope.
+18. **Depth > 1 field scopes** — grow the shader's `SdfFieldSave` save slot
+    (already a `{distance, material, gradient}` struct — one migration) into
+    an indexed stack + bump `MaxFieldScopeDepth` + a validator rule. Measured
+    cost basis (preserved from the retired accumulator plan): +7 DXIL
+    instructions at depth 1, +8 at depth 2 and 4, flat because HLSL vectors
+    cap at 4 components — depth 4 is the natural ceiling.
+19. **Creator modifier verbs** — the editor exposes `creator.onion` only; the
+    renderer reserves two per-shape modifier slots (twist/dilate/bend/…).
+20. **The 2D-primitive next tranche** — arc/pie, cross, moon, egg, heart:
+    cheap, the `SdfLift` revolve/extrude framework exists.
+21. **UI convergence (game-studio W6)** — render the console/action bar,
+    eventually the editor, THROUGH the SDF VM: a screen-space/ortho path (2D
+    arc option B — the flat-2D kernel) + an MSDF glyph op mining `Puck.Text`
+    (option C), which remains a complete CPU-side MTSDF stack with ZERO GPU
+    consumers. Retires bespoke overlay shaders; makes screens bakeable.
+
+## Verification gaps (Post stages — cheap gap-closers)
+
+22. Missing stages, confirmed against the current registry:
+    **SmoothIntersection** (appears nowhere in Post), **BendY/BendZ** (only
+    BendX+TwistY gated), **Scale**, **RepeatLimited**, **Dilate** (only
+    incidental via the scoped-reach margin test), a **chamfer √2 GPU solidity**
+    gate (CPU pin only — minor asymmetry). CellJitter's Gaussian flavor is
+    consciously argument-covered (Blue is gated); escalate only if a real
+    Gaussian consumer appears. Per-stage enclosed-hole caps are individually
+    calibrated — never harmonize without re-measuring.
+
+## Live defects (preserved from the retired briefing — the authoritative wording)
+
+23. **The ground-plane horizon notch — grazing-horizon TILE-QUANTIZATION, fix
+    deferred.** Reproduced deterministically:
+    [examples/scripts/notch-repro.console](examples/scripts/notch-repro.console)
+    (drive with the `sdf.cam` pose verb). The far-ground silhouette against the
+    sky steps in EXACT 16 px (one-tile) increments near `MaxDistance` instead
+    of a smooth perspective curve. What the hunt SETTLED: `MaxSteps`
+    exhaustion is REFUTED (every ground pixel terminates footprint-cyan, zero
+    red); the "dips behind foreground objects" occluder framing is REFUTED
+    (occluder-behind depth diffs are byte-identical; a grounded wall proves no
+    gap for the four-bound teleport; a floating slab that DOES fire the
+    teleport still leaves the ground unchanged); footprint-adaptive
+    termination itself renders smooth depth in controlled scenes. The
+    mechanism is the per-tile `marchStart`/beam-cull GRANULARITY leaking into
+    the horizon — the fix is a per-pixel-marchStart / sub-tile-beam
+    restructure with hero-`world` regression risk, deferred with the standing
+    question whether it's worth fixing at all. Any doc still carrying the
+    occluder framing is stale — this paragraph is authoritative.
+24. **`SDF_WPG_P4G` renders as `p4`** — no mirror classes survive (marked
+    KNOWN DEFECT in `sdf-vm.hlsli`); recovery is a redesign of the wallpaper
+    turn cocycle, not a tweak. Related deliberate roughness: the WallpaperFold
+    gradient in the dual path is a shape-local FD of the fold map (no
+    closed-form orthogonal extraction) — parity-safe, exact form optional.
+25. **`SurfaceChart` (reserved op id 19)** — parked: the pixel-footprint half
+    now exists (footprint-adaptive termination), the atan-determinism half
+    does not.
+
+## Cleanup seams (non-urgent, do when next in there)
+
+26. **Shared emission seam** — `CreatorSceneRenderer.EmitShape` /
+    `CompanionRenderer.EmitShape` are admitted near-clones kept in lockstep by
+    hand, and per-consumer bound-margin constants are re-picked everywhere.
+27. **Render-assembly Phase 5** (tracked in
+    [sdf-world-render-centralization-plan.md](sdf-world-render-centralization-plan.md),
+    the still-living plan-of-record): the live-camera child `IRenderNode`, the
+    cross-backend `graph.produce` re-host, and hoisting the stale-bytecode
+    guard + DXC compile pattern into a shared `.targets` for other
+    shader-shipping projects.

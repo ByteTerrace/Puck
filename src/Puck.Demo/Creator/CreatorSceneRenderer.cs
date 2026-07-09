@@ -344,7 +344,7 @@ public sealed class CreatorSceneRenderer {
     // SHARED canonical source (AvatarDefinition), so the shape the player previews is byte-for-byte the geometry
     // the forge later bakes.
     //
-    // SCOPING (the accumulator fix — see docs/sdf-accumulator-plan.md + the accumulator rule on SdfBlendOp): a
+    // SCOPING (the accumulator fix — see the accumulator rule on SdfBlendOp + the sdf-world skill): a
     // shape's onion is a FIELD op, so in the flat accumulator it shells EVERY shape emitted before it (the floor and
     // every earlier shape), not this shape. A NON-GROUP shape (Pass 1 + the ghost — always plain Union) therefore
     // wraps its shape + onion in a one-deep PushField(Union)/PopField scope, so the shell hollows THIS shape alone
@@ -392,7 +392,7 @@ public sealed class CreatorSceneRenderer {
     // Whether a composition group must be emitted inside a PushField/PopField field scope: true when any member
     // carries a non-Union blend (the Intersection family wipes the whole accumulated workbench otherwise — the
     // documented creator defect) or an onion field op. A pure-Union, no-onion group stays flat (byte-identical), so
-    // a union-only creation loads bit-for-bit. See the accumulator rule on SdfBlendOp / docs/sdf-accumulator-plan.md.
+    // a union-only creation loads bit-for-bit. See the accumulator rule on SdfBlendOp / the sdf-world skill.
     private static bool GroupNeedsScope(IReadOnlyList<CreatorShapeState> shapes, int groupId, int fromIndex) {
         for (var member = fromIndex; (member < shapes.Count); member++) {
             var shape = shapes[member];
