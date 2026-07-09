@@ -23,6 +23,14 @@ var fuzzSeedValue = ArgValue(args: args, name: "--fuzz-seed");
 var fuzzSeed = ((fuzzSeedValue is null) ? ((int?)null) : int.Parse(s: fuzzSeedValue));
 var probeMode = ArgValue(args: args, name: "--probe");
 
+// The drift-HUNT surface (the differential fuzzer flipped from gate to MAXIMIZER — see DriftHuntCli/DriftHunt). The
+// PARENT `--hunt-drift` orchestrator spawns one isolated child per candidate and needs no GPU host, so it runs and
+// returns BEFORE the battery's composition root is built. The CHILD `--hunt-render` mode is handled at node selection
+// below. Both funnel through DriftHuntCli so the composition root's class-coupling stays under its ceiling.
+if (DriftHuntCli.TryRunOrchestrator(args: args, exitCode: out var huntExitCode)) {
+    return huntExitCode;
+}
+
 var stages = PostStages.Create(fuzzSeed: fuzzSeed)
     .Where(predicate: stage => TierMatches(stage: stage, tierFilter: tierFilter))
     .Where(predicate: stage => NameMatches(stage: stage, nameFilter: nameFilter))
@@ -88,6 +96,10 @@ if (probeMode is not null) {
         runResult: runResult,
         services: sp
     ));
+} else if (DriftHuntCli.IsRenderMode(args: args)) {
+    // A drift-hunt child (--hunt-render --hunt-seed N [--hunt-artifacts DIR --hunt-rank R]): host the one-shot render
+    // node that scores this ONE candidate on both backends and prints its structured HUNT line (see DriftHunt).
+    services.AddSingleton<IRenderNode>(implementationFactory: sp => DriftHuntCli.CreateRenderNode(services: sp, args: args, runResult: runResult));
 } else {
     var battery = new PostBattery(stages: stages);
 

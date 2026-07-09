@@ -91,6 +91,7 @@ internal static class PostStages {
             new WorldSwarmStage(),
             new WorldGridCullStage(),
             new CameraShareStage(),
+            new WorldDriftMonolithStage(),
             (fuzzSeed is int seed ? new FuzzStage(seeds: [seed]) : new FuzzStage()),
             new RtStage(),
         ];
