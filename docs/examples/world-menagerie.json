@@ -36,6 +36,13 @@
                 "material": 3,
                 "blend": "SmoothUnion",
                 "smooth": 0.3
+            },
+            {
+                "shape": "vesica",
+                "ops": [{ "op": "translate", "offset": [-0.8, 0.7, -0.9] }],
+                "radius": 0.45,
+                "halfSeparation": 0.28,
+                "material": 2
             }
         ]
     },

@@ -386,6 +386,78 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "logSphere"
+                            },
+                            "shellRatio": {
+                              "type": "number"
+                            },
+                            "twist": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "repeatPolar"
+                            },
+                            "sectors": {
+                              "type": "integer"
+                            },
+                            "axis": {
+                              "enum": [
+                                "X",
+                                "Y",
+                                "Z"
+                              ]
+                            },
+                            "mirror": {
+                              "type": "boolean"
+                            },
+                            "materialStride": {
+                              "type": "integer"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "symmetryPlane"
+                            },
+                            "normal": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "properties": {
+                            "op": {
+                              "const": "domainWarp"
+                            },
+                            "frequency": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "amplitude": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       ]
                     }
@@ -415,6 +487,24 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -464,6 +554,21 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -510,6 +615,21 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -559,6 +679,21 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -608,6 +743,21 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -657,6 +807,21 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -703,6 +868,21 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -749,6 +929,21 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -831,6 +1026,441 @@
                   },
                   "onion": {
                     "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "vesica"
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "halfSeparation": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction",
+                      "ChamferUnion",
+                      "ChamferIntersection",
+                      "ChamferSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "roundedRectangle"
+                  },
+                  "halfWidth": {
+                    "type": "number"
+                  },
+                  "halfHeight": {
+                    "type": "number"
+                  },
+                  "cornerRadius": {
+                    "type": "number"
+                  },
+                  "lift": {
+                    "enum": [
+                      "Revolve",
+                      "Extrude"
+                    ]
+                  },
+                  "liftAmount": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction",
+                      "ChamferUnion",
+                      "ChamferIntersection",
+                      "ChamferSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "regularPolygon"
+                  },
+                  "sides": {
+                    "type": "integer"
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "lift": {
+                    "enum": [
+                      "Revolve",
+                      "Extrude"
+                    ]
+                  },
+                  "liftAmount": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction",
+                      "ChamferUnion",
+                      "ChamferIntersection",
+                      "ChamferSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "star"
+                  },
+                  "points": {
+                    "type": "integer"
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "sharpness": {
+                    "type": "number"
+                  },
+                  "lift": {
+                    "enum": [
+                      "Revolve",
+                      "Extrude"
+                    ]
+                  },
+                  "liftAmount": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction",
+                      "ChamferUnion",
+                      "ChamferIntersection",
+                      "ChamferSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "trapezoid"
+                  },
+                  "bottomHalfWidth": {
+                    "type": "number"
+                  },
+                  "topHalfWidth": {
+                    "type": "number"
+                  },
+                  "halfHeight": {
+                    "type": "number"
+                  },
+                  "lift": {
+                    "enum": [
+                      "Revolve",
+                      "Extrude"
+                    ]
+                  },
+                  "liftAmount": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction",
+                      "ChamferUnion",
+                      "ChamferIntersection",
+                      "ChamferSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "properties": {
+                  "shape": {
+                    "const": "ellipse"
+                  },
+                  "semiX": {
+                    "type": "number"
+                  },
+                  "semiY": {
+                    "type": "number"
+                  },
+                  "lift": {
+                    "enum": [
+                      "Revolve",
+                      "Extrude"
+                    ]
+                  },
+                  "liftAmount": {
+                    "type": "number"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/ops/items"
+                    }
+                  },
+                  "material": {
+                    "type": "integer"
+                  },
+                  "blend": {
+                    "enum": [
+                      "Union",
+                      "SmoothUnion",
+                      "Subtraction",
+                      "Intersection",
+                      "Xor",
+                      "SmoothIntersection",
+                      "SmoothSubtraction",
+                      "ChamferUnion",
+                      "ChamferIntersection",
+                      "ChamferSubtraction"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "number"
+                  },
+                  "dilate": {
+                    "type": "number"
+                  },
+                  "onion": {
+                    "type": "number"
+                  },
+                  "displace": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "frequency": {
+                        "$ref": "#/properties/scene/properties/objects/items/anyOf/0/properties/displace/properties/frequency"
+                      },
+                      "amplitude": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false

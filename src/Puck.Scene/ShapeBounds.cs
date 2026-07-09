@@ -65,4 +65,23 @@ public sealed record ShapeBounds {
     public FloatRange ScreenSlabHalfExtent { get; init; } = new(Maximum: 1.0f, Minimum: 0.01f);
     /// <summary>The allowed screen-slab rounding-radius range.</summary>
     public FloatRange ScreenSlabRound { get; init; } = new(Maximum: 0.5f, Minimum: 0f);
+    /// <summary>The allowed vesica radius range.</summary>
+    public FloatRange VesicaRadius { get; init; } = new(Maximum: 1.0f, Minimum: 0.2f);
+    /// <summary>The allowed vesica half-separation range (a precondition additionally requires it below the radius —
+    /// see <c>VesicaObject.ValidateShape</c>).</summary>
+    public FloatRange VesicaHalfSeparation { get; init; } = new(Maximum: 0.9f, Minimum: 0f);
+    /// <summary>The allowed per-axis half-extent range shared by the 2D-lifted rectangle/trapezoid family
+    /// (<c>RoundedRectangle</c>/<c>Trapezoid</c> half-width/half-height).</summary>
+    public FloatRange Lifted2DHalfExtent { get; init; } = new(Maximum: 0.9f, Minimum: 0.1f);
+    /// <summary>The allowed rounded-rectangle corner-radius range (the builder separately clamps it to
+    /// <c>min(halfWidth, halfHeight)</c>, mirroring <see cref="BoxRound"/>'s independence from its half-extents).</summary>
+    public FloatRange RoundedRectangleCornerRadius { get; init; } = new(Maximum: 0.4f, Minimum: 0f);
+    /// <summary>The allowed circumradius range for a regular polygon / star.</summary>
+    public FloatRange PolygonRadius { get; init; } = new(Maximum: 1.0f, Minimum: 0.2f);
+    /// <summary>The allowed per-axis ellipse semi-axis range (the 2D-lifted exact ellipse, not the approximate
+    /// <see cref="EllipsoidRadius"/>).</summary>
+    public FloatRange EllipseSemiAxis { get; init; } = new(Maximum: 1.0f, Minimum: 0.2f);
+    /// <summary>The allowed lift amount range shared by the whole 2D-lifted family — the revolve radial offset or the
+    /// extrude half-height (<see cref="Puck.SdfVm.SdfLift"/>).</summary>
+    public FloatRange LiftAmount { get; init; } = new(Maximum: 1.2f, Minimum: 0f);
 }

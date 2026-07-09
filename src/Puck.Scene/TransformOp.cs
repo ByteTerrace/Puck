@@ -24,6 +24,10 @@ namespace Puck.Scene;
 [JsonDerivedType(typeof(BendZOp), typeDiscriminator: "bendZ")]
 [JsonDerivedType(typeof(ElongateOp), typeDiscriminator: "elongate")]
 [JsonDerivedType(typeof(CellJitterOp), typeDiscriminator: "cellJitter")]
+[JsonDerivedType(typeof(LogSphereOp), typeDiscriminator: "logSphere")]
+[JsonDerivedType(typeof(RepeatPolarOp), typeDiscriminator: "repeatPolar")]
+[JsonDerivedType(typeof(SymmetryPlaneOp), typeDiscriminator: "symmetryPlane")]
+[JsonDerivedType(typeof(DomainWarpOp), typeDiscriminator: "domainWarp")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "op")]
 public abstract record TransformOp {
     // Applies this transform's builder verb. The point reset + every preceding op have already run.
@@ -38,6 +42,32 @@ public abstract record TransformOp {
 
         if (float.IsFinite(f: rate) && (MathF.Abs(x: rate) > maximum)) {
             errors.Add(path: $"{path}.rate", message: $"rate {rate} is outside the allowed range [-{maximum}, {maximum}]");
+        }
+    }
+
+    // The shared budget guard of the sinusoidal warp ops (SceneObject's Displace FIELD op / DomainWarpOp's POINT op):
+    // frequency must be a finite 3-vector, amplitude finite, and their product (the warp's peak metric stretch — see
+    // each op's doc) bounded, or a large product clamps the march to tiny steps (matching RequireRate's "not an
+    // isometry" rationale for twist/bend). Internal (not private protected) because SceneObject.Displace — a scoped
+    // FIELD op like Dilate/Onion, not a point op in the Ops chain — reuses it too; see the note on SceneObject.Displace.
+    internal static void RequireWarpBudget(string path, IReadOnlyList<float> frequency, float amplitude, float maximum, ValidationErrors errors) {
+        errors.RequireFinite(path: $"{path}.amplitude", name: "amplitude", value: amplitude);
+
+        if (!JsonVector.IsValid(components: frequency, length: 3)) {
+            errors.RequireVector(path: $"{path}.frequency", components: frequency, length: 3);
+
+            return;
+        }
+
+        if (!float.IsFinite(f: amplitude)) {
+            return;
+        }
+
+        var norm = MathF.Sqrt((frequency[0] * frequency[0]) + (frequency[1] * frequency[1]) + (frequency[2] * frequency[2]));
+        var budget = (MathF.Abs(amplitude) * norm);
+
+        if (budget > maximum) {
+            errors.Add(path: path, message: $"amplitude * |frequency| ({budget}) exceeds {maximum} — the warp is not 1-Lipschitz and a large product clamps the march to tiny steps; reduce amplitude or frequency");
         }
     }
 }
@@ -367,5 +397,117 @@ public sealed record SymmetryZOp : TransformOp {
         builder.SymmetryZ();
     }
     internal override void Validate(string path, ValidationErrors errors) {
+    }
+}
+
+/// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells (mirrors
+/// <see cref="SdfProgramBuilder.LogSphere"/>). NOT an isometry — the march stays hole-free via a baked conservative
+/// step clamp, so (unlike the bend/twist rate guard) there is no hard amplitude ceiling here; the one hard invariant
+/// is the shell ratio itself, which the builder would otherwise silently re-clamp.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record LogSphereOp : TransformOp {
+    /// <summary>The Cartesian scale factor between consecutive shells; must be greater than 1 (a ratio at or below 1
+    /// collapses the shells / divides by zero, and the builder would silently clamp it to 1.0001).</summary>
+    public float ShellRatio { get; init; }
+    /// <summary>Radians of Z-spin added per shell (the Droste spiral). 0 = concentric, un-spun shells.</summary>
+    public float Twist { get; init; }
+
+    internal override void Apply(SdfProgramBuilder builder) {
+        _ = builder.LogSphere(shellRatio: ShellRatio, twist: Twist);
+    }
+    internal override void Validate(string path, ValidationErrors errors) {
+        errors.RequireFinite(path: $"{path}.shellRatio", name: "shellRatio", value: ShellRatio);
+        errors.RequireFinite(path: $"{path}.twist", name: "twist", value: Twist);
+
+        if (float.IsFinite(f: ShellRatio) && (ShellRatio <= 1.0001f)) {
+            errors.Add(path: $"{path}.shellRatio", message: $"shellRatio {ShellRatio} must be greater than 1.0001 (a ratio at or below it collapses the shells / divides by zero; the builder would silently clamp it)");
+        }
+    }
+}
+
+/// <summary>Angular domain-repeat fold: folds the plane perpendicular to <see cref="Axis"/> into <see cref="Sectors"/>
+/// equal wedges, so the shapes that follow repeat rotationally around the axis (mirrors
+/// <see cref="SdfProgramBuilder.RepeatPolar"/>). Both the fold and its optional mirror are isometries — 1-Lipschitz,
+/// no step clamp.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record RepeatPolarOp : TransformOp {
+    /// <summary>The number of sectors around the axis; must be at least 1 (the builder would otherwise silently
+    /// clamp it — 1 is itself a valid single-full-circle no-op).</summary>
+    public int Sectors { get; init; }
+    /// <summary>The rotation axis — the fold acts in the plane perpendicular to it. Defaults to <see cref="SdfPolarAxis.Y"/>
+    /// (the XZ ground plane).</summary>
+    public SdfPolarAxis Axis { get; init; } = SdfPolarAxis.Y;
+    /// <summary>When true, reflects each sector across its bisector for kaleidoscope symmetry (still an isometry).</summary>
+    public bool Mirror { get; init; }
+    /// <summary>The per-sector palette stride: the sector index (0..sectors-1) times this strides the material id of a
+    /// later shape win, so each sector can select its own palette row. 0 (the default) keeps the fold purely geometric.
+    /// The strided ids must stay inside the palette — the validator checks <c>material + stride * (sectors - 1)</c>,
+    /// the same cross-cutting rule <see cref="WallpaperFoldOp"/> applies for its cell key.</summary>
+    public int MaterialStride { get; init; }
+
+    internal override void Apply(SdfProgramBuilder builder) {
+        _ = builder.RepeatPolar(axis: Axis, count: Sectors, materialStride: MaterialStride, mirror: Mirror);
+    }
+    internal override void Validate(string path, ValidationErrors errors) {
+        if (!Enum.IsDefined(value: Axis)) {
+            errors.Add(path: $"{path}.axis", message: $"'{Axis}' is not a defined SdfPolarAxis");
+        }
+
+        if (Sectors < 1) {
+            errors.Add(path: $"{path}.sectors", message: $"sectors {Sectors} must be at least 1 (the builder would silently clamp it)");
+        }
+
+        if (MaterialStride < 0) {
+            errors.Add(path: $"{path}.materialStride", message: "materialStride must be non-negative (0 = geometric only)");
+        }
+    }
+
+    // The highest sector index the fold produces — the palette-overflow cross-check in SceneObject.Validate multiplies
+    // it by MaterialStride, mirroring WallpaperFoldOp.MaxCellKey.
+    internal int MaxSectorIndex => Math.Max(0, (Sectors - 1));
+}
+
+/// <summary>Reflection fold across an arbitrary plane (mirrors <see cref="SdfProgramBuilder.SymmetryPlane"/>) — the
+/// general-normal superset of the axis-aligned <see cref="SymmetryXOp"/>/<see cref="SymmetryYOp"/>/<see cref="SymmetryZOp"/>.
+/// A reflection is an isometry — 1-Lipschitz, no step clamp.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SymmetryPlaneOp : TransformOp {
+    /// <summary>The plane normal (need not be unit length — normalized at build time), as a 3-element <c>[x, y, z]</c>
+    /// array. Everything on the negative side is mirrored onto the positive (kept) side.</summary>
+    public IReadOnlyList<float> Normal { get; init; } = [];
+    /// <summary>The plane's constant term: the mirror plane is <c>dot(p, normal) + offset = 0</c>. 0 puts it through
+    /// the local origin.</summary>
+    public float Offset { get; init; }
+
+    internal override void Apply(SdfProgramBuilder builder) {
+        builder.SymmetryPlane(normal: JsonVector.ToVector3(components: Normal), offset: Offset);
+    }
+    internal override void Validate(string path, ValidationErrors errors) {
+        errors.RequireFinite(path: $"{path}.offset", name: "offset", value: Offset);
+
+        if (!JsonVector.IsValid(components: Normal, length: 3)) {
+            errors.RequireVector(path: $"{path}.normal", components: Normal, length: 3);
+        } else if ((Normal[0] == 0f) && (Normal[1] == 0f) && (Normal[2] == 0f)) {
+            errors.Add(path: $"{path}.normal", message: "the symmetry-plane normal must be non-zero");
+        }
+    }
+}
+
+/// <summary>Warps the sample point by a bounded, cross-coupled sinusoidal field before the shapes evaluate — organic
+/// bulging/wobble/terrain (mirrors <see cref="SdfProgramBuilder.DomainWarp"/>). A POINT op: order it before the shapes
+/// it should warp, like the fold ops. NOT an isometry — <c>amplitude·‖frequency‖</c> is bounded, same rationale as
+/// <see cref="SceneObject.Displace"/>.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record DomainWarpOp : TransformOp {
+    /// <summary>Per-axis angular frequency of the warp (radians per world unit), as a 3-element <c>[x, y, z]</c> array.</summary>
+    public IReadOnlyList<float> Frequency { get; init; } = [];
+    /// <summary>Peak point displacement (world units; 0 = an exact identity).</summary>
+    public float Amplitude { get; init; }
+
+    internal override void Apply(SdfProgramBuilder builder) {
+        _ = builder.DomainWarp(amplitude: Amplitude, frequency: JsonVector.ToVector3(components: Frequency));
+    }
+    internal override void Validate(string path, ValidationErrors errors) {
+        RequireWarpBudget(amplitude: Amplitude, errors: errors, frequency: Frequency, maximum: 3f, path: path);
     }
 }

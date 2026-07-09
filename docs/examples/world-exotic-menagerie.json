@@ -1,0 +1,93 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "scene": {
+        "materials": [
+            { "albedo": [0.42, 0.46, 0.52] },
+            { "albedo": [0.90, 0.30, 0.40], "emissive": 0.3 },
+            { "albedo": [0.90, 0.75, 0.20], "emissive": 0.3 },
+            { "albedo": [0.25, 0.80, 0.75], "emissive": 0.3 }
+        ],
+        "objects": [
+            {
+                "shape": "plane",
+                "normal": [0.0, 1.0, 0.0],
+                "offset": 0.0,
+                "material": 0
+            },
+            {
+                "shape": "vesica",
+                "ops": [{ "op": "translate", "offset": [-3.6, 0.6, 0.0] }],
+                "radius": 0.4,
+                "halfSeparation": 0.25,
+                "material": 1
+            },
+            {
+                "shape": "star",
+                "ops": [{ "op": "translate", "offset": [-2.4, 0.5, 0.0] }],
+                "points": 5,
+                "radius": 0.35,
+                "sharpness": 2.6,
+                "lift": "Extrude",
+                "liftAmount": 0.18,
+                "material": 2
+            },
+            {
+                "shape": "box",
+                "ops": [
+                    { "op": "translate", "offset": [-1.0, 0.25, 0.0] },
+                    { "op": "repeatPolar", "sectors": 5, "axis": "Y", "mirror": false, "materialStride": 0 },
+                    { "op": "translate", "offset": [0.55, 0.0, 0.0] }
+                ],
+                "halfExtents": [0.20, 0.20, 0.20],
+                "round": 0.03,
+                "material": 3
+            },
+            {
+                "shape": "sphere",
+                "ops": [
+                    { "op": "translate", "offset": [0.6, 0.9, 0.0] },
+                    { "op": "logSphere", "shellRatio": 1.8, "twist": 0.4 }
+                ],
+                "radius": 0.22,
+                "material": 1
+            },
+            {
+                "shape": "roundCone",
+                "ops": [
+                    { "op": "symmetryPlane", "normal": [1.0, 0.0, 1.0], "offset": 0.15 },
+                    { "op": "translate", "offset": [1.9, 0.25, 1.6] }
+                ],
+                "lowerRadius": 0.22,
+                "upperRadius": 0.12,
+                "height": 0.45,
+                "material": 2
+            },
+            {
+                "shape": "sphere",
+                "ops": [
+                    { "op": "translate", "offset": [3.2, 0.9, 0.0] },
+                    { "op": "domainWarp", "frequency": [2.0, 2.0, 2.0], "amplitude": 0.1 }
+                ],
+                "radius": 0.5,
+                "material": 3,
+                "displace": { "frequency": [2.5, 2.5, 2.5], "amplitude": 0.12 }
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.2,
+                "azimuth": 0.0,
+                "fieldOfView": 65.0,
+                "height": 2.2,
+                "radius": 10.0,
+                "target": [0.0, 0.6, 0.0]
+            },
+            "region": [0.0, 0.0, 1.0, 1.0]
+        }
+    ],
+    "graph": { "$type": "world", "produce": "vulkan" }
+}
