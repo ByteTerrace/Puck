@@ -111,6 +111,24 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             name: "sdf.carve.clear"
         );
         yield return WithArgs(
+            description: "Rains a METEOR SHOWER on the subject: sdf.meteors [n|off]. One impact lands per produced frame (default 128) — each an ordinary pool carve at a deterministic low-discrepancy point (floor craters around the subject, every 3rd biting the subject, every 7th a smooth molten hit), so a scripted shower replays bit-for-bit and the craters persist as carve-pool data (sdf.carve.clear resets the field).",
+            handler: WithSceneArgs(handler: static (scene, args) => {
+                if ((args.Length > 0) && string.Equals(args[0], "off", StringComparison.OrdinalIgnoreCase)) {
+                    var cancelled = scene.StopMeteors();
+
+                    return $"[sdf.meteors off — {cancelled} unfallen impact(s) cancelled; {scene.Carves.Count} crater(s) stay]";
+                }
+
+                var requested = (((args.Length > 0) && int.TryParse(s: args[0], style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var n)) ? n : 128);
+                var scheduled = scene.StartMeteors(count: requested);
+
+                return ((scheduled > 0)
+                    ? $"[sdf.meteors {scheduled} — the sky darkens (one impact per frame; sdf.meteors off to stop; carves={scene.Carves.Count}/{SdfDebugScene.MaxCarves})]"
+                    : $"[sdf.meteors: no room — the pool holds {scene.Carves.Count}/{SdfDebugScene.MaxCarves} (sdf.carve.clear first)]");
+            }),
+            name: "sdf.meteors"
+        );
+        yield return WithArgs(
             description: "Toggles the ground plane under the subject (default OFF — it contaminates the slice/iteration views): sdf.floor on|off.",
             handler: WithSceneArgs(handler: static (scene, args) => {
                 var on = ((args.Length > 0) && ParseOnOff(token: args[0]));

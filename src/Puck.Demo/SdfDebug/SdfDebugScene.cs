@@ -84,6 +84,10 @@ public sealed class SdfDebugScene {
 
     private readonly List<SdfDebugOp> m_ops = [];
     private readonly List<SdfCarve> m_carves = [];
+    // The meteor shower: impacts still owed (drained one per produced frame) + the PERSISTENT impact index driving the
+    // deterministic low-discrepancy placement sequence (never reset — consecutive showers continue the pattern).
+    private int m_meteorsRemaining;
+    private int m_meteorIndex;
     private float[] m_params = DefaultParams(kind: SdfDebugShapeKind.Torus);
     private float[] m_params2 = [];
 
@@ -314,6 +318,75 @@ public sealed class SdfDebugScene {
         }
 
         return count;
+    }
+
+    /// <summary>How many meteor impacts are still owed (0 = no shower in flight). One lands per produced frame — the
+    /// mode's per-frame advance drains them through <see cref="TickMeteor"/> into the ordinary carve pool.</summary>
+    public int MeteorsRemaining => m_meteorsRemaining;
+
+    /// <summary>Starts (or extends) a METEOR SHOWER: <paramref name="count"/> impacts land one per produced frame, each
+    /// an ordinary pool carve at a deterministic low-discrepancy point — mostly floor craters around the subject, every
+    /// third biting the subject itself, every seventh a smooth "molten" impact. The impact sequence rides a PERSISTENT
+    /// index (never reset), so consecutive showers continue the pattern instead of restacking the same craters, and a
+    /// scripted <c>sdf.meteors</c> replays bit-for-bit (no RNG, no wall clock — the whole shower is pool data).</summary>
+    /// <returns>How many impacts were scheduled (clamped to the pool capacity left).</returns>
+    public int StartMeteors(int count) {
+        var room = (MaxCarves - m_carves.Count - m_meteorsRemaining);
+        var scheduled = Math.Clamp(value: count, min: 0, max: Math.Max(0, room));
+
+        m_meteorsRemaining += scheduled;
+
+        return scheduled;
+    }
+
+    /// <summary>Cancels the in-flight shower (already-landed craters stay — they are ordinary pool carves).</summary>
+    /// <returns>How many scheduled impacts were cancelled.</returns>
+    public int StopMeteors() {
+        var cancelled = m_meteorsRemaining;
+
+        m_meteorsRemaining = 0;
+
+        return cancelled;
+    }
+
+    /// <summary>Lands the next meteor (called once per produced frame while a shower is in flight): appends one carve
+    /// to the pool and advances the persistent impact index. Returns the landed carve, or null when no shower is in
+    /// flight or the pool filled.</summary>
+    public SdfCarve? TickMeteor() {
+        if (m_meteorsRemaining <= 0) {
+            return null;
+        }
+
+        m_meteorsRemaining--;
+
+        var i = m_meteorIndex++;
+        // R2 low-discrepancy fractions (plastic-number alphas, the carve bench's discipline) + the golden angle.
+        var u = ((i * 0.7548776662466927f) % 1f);
+        var v = ((i * 0.5698402909980532f) % 1f);
+        var angle = (i * 2.3999632297286533f);
+        var smooth = ((i % 7) == 3);
+        var carve = ((i % 3) == 2)
+            // Every third impact bites the SUBJECT: a golden-angle point on its ~unit envelope.
+            ? new SdfCarve(
+                Center: new Vector3(
+                    x: (MathF.Cos(x: angle) * MathF.Sqrt(x: MathF.Max(0f, (1f - ((1f - (2f * u)) * (1f - (2f * u)))))) * 1.05f),
+                    y: ((1f - (2f * u)) * 0.9f),
+                    z: (MathF.Sin(x: angle) * MathF.Sqrt(x: MathF.Max(0f, (1f - ((1f - (2f * u)) * (1f - (2f * u)))))) * 1.05f)),
+                Radius: (0.18f + (0.2f * v)),
+                Smooth: smooth,
+                SmoothK: (0.12f + (0.08f * v)))
+            // Otherwise a FLOOR crater on a widening disc around the subject (the floor surface sits at
+            // y = -SdfDebugRenderer.FloorDrop; the impact centre sits slightly above it so the crater reads as a bowl).
+            : new SdfCarve(
+                Center: new Vector3(
+                    x: (MathF.Cos(x: angle) * (0.9f + (4.1f * MathF.Sqrt(x: u)))),
+                    y: (-SdfDebugRenderer.FloorDrop + 0.05f),
+                    z: (MathF.Sin(x: angle) * (0.9f + (4.1f * MathF.Sqrt(x: u))))),
+                Radius: (0.22f + (0.3f * v)),
+                Smooth: smooth,
+                SmoothK: (0.12f + (0.1f * v)));
+
+        return (AddCarve(carve: carve) ? carve : null);
     }
 
     /// <summary>Formats one carve as the shared echo fragment <c>@(x,y,z) r=… [smooth k=…]</c> — used by BOTH the

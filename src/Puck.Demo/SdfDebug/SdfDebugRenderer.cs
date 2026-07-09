@@ -48,7 +48,8 @@ public sealed class SdfDebugRenderer {
     // off-white subject (the carve sphere is the cutter — its material shades the newly-exposed inner surface).
     private static readonly Vector3 CarveAlbedo = new(0.20f, 0.18f, 0.22f);
     // The ground plane sits a little below the subject (its surface at y = -FloorDrop), so a ~1-unit shape rests on it.
-    private const float FloorDrop = 1.3f;
+    // Internal: the meteor shower (SdfDebugScene.TickMeteor) lands floor craters relative to this surface height.
+    internal const float FloorDrop = 1.3f;
 
     /// <summary>Emits the debug subject (+ optional floor) for a LIVE render.</summary>
     /// <param name="builder">The program builder (the program is only this subject while the mode is up).</param>

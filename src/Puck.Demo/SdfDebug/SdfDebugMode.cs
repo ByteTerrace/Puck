@@ -158,6 +158,19 @@ public sealed class SdfDebugMode {
                 ? $"[sdf.carve (pad) {SdfDebugScene.FormatCarve(carve: carve)}] carves={m_scene.Carves.Count}"
                 : $"[sdf.carve (pad): pool full — MaxCarves={SdfDebugScene.MaxCarves} reached (sdf.carve.clear to reset)]");
         }
+
+        // The METEOR SHOWER: one impact lands per produced frame while a shower is in flight — each an ordinary pool
+        // carve accumulating through the same rebuild-per-frame path a scripted carve uses. A progress line every 64
+        // impacts keeps the console readable; the landing itself is the on-screen show.
+        if (m_scene.TickMeteor() is { } impact) {
+            var landed = m_scene.Carves.Count;
+
+            if ((m_scene.MeteorsRemaining == 0) || ((landed % 64) == 0)) {
+                Console.Out.WriteLine(value: (m_scene.MeteorsRemaining == 0)
+                    ? $"[sdf.meteors: the sky clears — {landed} carve(s) in the pool, last {SdfDebugScene.FormatCarve(carve: impact)}]"
+                    : $"[sdf.meteors: …{m_scene.MeteorsRemaining} still falling — carves={landed}]");
+            }
+        }
     }
 
     /// <summary>Whether the orbit controller's EXIT (North) fired since the last consume (clears it).</summary>
