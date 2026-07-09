@@ -161,6 +161,40 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
             handler: (context, args) => new CommandResult(HandleBench(args: args)),
             name: "sdf.bench"
         );
+        yield return WithArgs(
+            description: "The SDF torture museum — a curated tour of known-nasty scenes INSIDE the sdf debug mode, each printing a stdout PLAQUE (what to look for, what's settled, which gate/doc owns it). sdf.gallery enters then advances; sdf.gallery <name|index> jumps; sdf.gallery off exits to the plain subject; sdf.gallery list names them. Exhibits: liar-spiral, droste, celljitter, notch, smooth-chain, wallpaper-p4g, carve-ceiling, logsphere-rundoc.",
+            handler: (context, args) => new CommandResult(HandleGallery(args: args)),
+            name: "sdf.gallery"
+        );
+    }
+
+    // The torture museum's control plane (SdfDebugMode.Gallery). Like sdf.shape, the gallery state configures freely and
+    // renders only while the sdf mode is up — a nudge is appended when the tour is armed but the mode is down.
+    private string HandleGallery(string[] args) {
+        if (Mode is not { } mode) {
+            return "[sdf.gallery: unavailable — the overworld is not the active root]";
+        }
+
+        var gallery = mode.Gallery;
+        string status;
+
+        if (args.Length == 0) {
+            status = gallery.EnterOrAdvance();
+        }
+        else {
+            switch (args[0].ToLowerInvariant()) {
+                case "off":
+                    return gallery.Off();
+                case "list":
+                    return gallery.List();
+                default:
+                    status = (TryParseInt(text: args[0], value: out var index) ? gallery.Jump(index: index) : gallery.JumpByName(name: args[0]));
+
+                    break;
+            }
+        }
+
+        return ((!mode.Active && gallery.Active) ? $"{status} (run `sdf` to view)" : status);
     }
 
     // The uniform-grid instance cull's live A/B toggle (SdfDebugMode.SetGridCull → the frame source's Build(

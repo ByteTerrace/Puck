@@ -162,7 +162,11 @@ public sealed class SdfDebugRenderer {
 
     /// <summary>Emits the WORST-CASE debug program (a full <see cref="SdfDebugScene.MaxOps"/> stack of single-word ops
     /// plus the wordiest shapes, the floor, AND the scoped Push/Pop pair — the wordier of the two emission orders) so
-    /// the frame source's capacity probe reserves an envelope every live push fits inside. Never rendered.</summary>
+    /// the frame source's capacity probe reserves an envelope every live push fits inside. Never rendered.
+    /// <para>This probe ALSO bounds every GALLERY exhibit (<see cref="EmitGallery"/>): the largest exhibit is the
+    /// carve-ceiling (a subject sphere + floor + 256 carve instances), and 256 &lt; the full <see cref="SdfDebugScene.MaxCarves"/>
+    /// (4096) carve pool this probe already reserves, with fewer words than the 12-op stack + two lifted Stars + scope
+    /// below — so no exhibit can outgrow the frozen envelope and none needs its own probe.</para></summary>
     /// <param name="builder">The probe builder (already carrying the room's own worst case).</param>
     public void EmitProbe(SdfProgramBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
@@ -272,6 +276,96 @@ public sealed class SdfDebugRenderer {
             SdfDebugShapeKind.Ellipse => builder.Ellipse(semiX: At(0, 0.9f), semiY: At(1, 0.6f), lift: lift, liftAmount: liftAmount, material: material, blend: blend, smooth: smooth),
             _ => builder.Sphere(radius: 1f, material: material, blend: blend, smooth: smooth),
         };
+    }
+
+    // ── SDF gallery (the torture museum) exhibit emitters ───────────────────────────────────────────────────────────
+    // Each emits ONE hand-authored known-nasty scene (a takeover, like the debug subject / bench workload), reusing the
+    // shared shape/carve emitters where it can. Deterministic and parameterized — no wall clock, no RNG — so every
+    // exhibit's breakdown reproduces run to run. The camera pose + plaque live in SdfGalleryScene.
+
+    /// <summary>Emits one gallery exhibit's scene into <paramref name="builder"/>. Dispatched by <see cref="SdfGalleryExhibit"/>.
+    /// Every exhibit is small (well inside the debug subject's worst-case envelope — see <see cref="EmitProbe"/>).</summary>
+    public void EmitGallery(SdfProgramBuilder builder, SdfGalleryExhibit exhibit) {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: SubjectAlbedo, Specular: SubjectSpecular, Shininess: SubjectShininess));
+
+        switch (exhibit) {
+            case SdfGalleryExhibit.LiarSpiral:
+                // A thin blade twisted HARD (rate 3): the field over-estimates distance where the twist shears space, so
+                // it breaks 1-Lipschitz — the Lipschitz clamp's whole reason. Pairs with debug.view.overshoot.
+                _ = builder.ResetPoint().TwistY(rate: 3f).Box(halfExtents: new Vector3(0.18f, 1.4f, 0.9f), round: 0.02f, material: material);
+
+                break;
+            case SdfGalleryExhibit.DrosteTunnel:
+                // LogSphere shellRatio 2 — the discontinuous log-polar fold, the worst historical cross-backend parity.
+                _ = builder.ResetPoint().LogSphere(shellRatio: 2f).Sphere(radius: 1f, material: material);
+
+                break;
+            case SdfGalleryExhibit.CellJitterCreases:
+                // A CONTAINED jittered prototype (jitter/2 + radius = 0.4 + 0.5 <= spacing/2 = 1.0) that STILL seams: the
+                // round fold picks each point's own cell, not the nearest copy.
+                _ = builder.ResetPoint().CellJitter(spacing: new Vector3(2f, 2f, 2f), jitter: 0.8f, seed: 1u, tumble: 0f).Sphere(radius: 0.5f, material: material);
+
+                break;
+            case SdfGalleryExhibit.NotchHorizon:
+                // A ground plane stretching to the horizon plus two grounded reference boxes — the far-ground silhouette
+                // against the sky is the notch (grazed by the exhibit's low-pitch pose).
+                EmitGalleryFloor(builder: builder);
+                _ = builder.ResetPoint().Translate(offset: new Vector3(-1.2f, (0.4f - FloorDrop), -2.5f)).Box(halfExtents: new Vector3(0.4f, 0.4f, 0.4f), round: 0.03f, material: material);
+                _ = builder.ResetPoint().Translate(offset: new Vector3(1.4f, (0.6f - FloorDrop), -4f)).Box(halfExtents: new Vector3(0.5f, 0.6f, 0.5f), round: 0.03f, material: material);
+
+                break;
+            case SdfGalleryExhibit.SmoothChain:
+                EmitSmoothChain(builder: builder, material: material);
+
+                break;
+            case SdfGalleryExhibit.WallpaperP4G:
+                // P4G renders as p4 (KNOWN DEFECT) — an ASYMMETRIC tile reveals the dropped mirror classes. Tiles XZ.
+                _ = builder.ResetPoint().WallpaperFold(group: SdfWallpaperGroup.P4G, cell: new Vector2(2f, 2f), limit: new Vector2(3f, 3f), plane: SdfWallpaperPlane.XZ).Box(halfExtents: new Vector3(0.55f, 0.3f, 0.22f), round: 0.03f, material: material);
+
+                break;
+            case SdfGalleryExhibit.CarveCeiling:
+                // ~256 clustered hard carves on a subject sphere + floor — the honest destruction budget made visible
+                // (reuses the carve bench emitter). Watch with debug.view.mask.
+                EmitBenchCarves(builder: builder, family: SdfBenchCarveFamily.Clustered, count: 256, material: material);
+
+                break;
+            case SdfGalleryExhibit.LogSphereRunDoc:
+                // Aggressive LogSphere (shellRatio 2.8 + twist) over a floor — validator-legal, marcher-breaking when the
+                // camera sits DOWN INSIDE the fold (the pose the scene supplies). Pairs with overshoot + termination.
+                _ = builder.ResetPoint().LogSphere(shellRatio: 2.8f, twist: 0.6f).Sphere(radius: 1.2f, material: material);
+                EmitGalleryFloor(builder: builder);
+
+                break;
+            default:
+                _ = builder.ResetPoint().Sphere(radius: 1f, material: material);
+
+                break;
+        }
+    }
+
+    // The gallery's ground plane (its own dimmer neutral material), at the same drop the debug subject's floor uses.
+    private void EmitGalleryFloor(SdfProgramBuilder builder) {
+        var floorMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: FloorAlbedo));
+
+        _ = builder.ResetPoint().Plane(normal: Vector3.UnitY, offset: FloorDrop, material: floorMaterial);
+    }
+
+    // Eight spheres in a row, each folded into the accumulator with an ALTERNATING SmoothUnion/ChamferUnion blend — a
+    // long chain whose per-blend LSB rounding accumulates down its length (the scoped accumulator bounds its reach).
+    private static void EmitSmoothChain(SdfProgramBuilder builder, int material) {
+        const int links = 8;
+
+        var chain = builder.ResetPoint().Translate(offset: new Vector3(-2.1f, 0f, 0f)).Sphere(radius: 0.45f, material: material);
+
+        for (var index = 1; (index < links); index++) {
+            var blend = (((index & 1) == 0) ? SdfBlendOp.SmoothUnion : SdfBlendOp.ChamferUnion);
+            var x = (-2.1f + (index * 0.6f));
+            var y = (0.15f * MathF.Sin(x: (index * 1.1f)));
+
+            chain = chain.ResetPoint().Translate(offset: new Vector3(x, y, 0f)).Sphere(radius: 0.45f, material: material, blend: blend, smooth: 0.3f);
+        }
     }
 
     // ── SDF perf-bench workload emitters ────────────────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ namespace Puck.Demo.SdfDebug;
 public sealed class SdfDebugMode {
     private readonly SdfDebugScene m_scene = new();
     private readonly SdfBenchScene m_bench = new();
+    private readonly SdfGalleryScene m_gallery = new();
     private readonly SdfDebugRenderer m_renderer = new();
     private readonly SdfDebugController m_controller = new();
     private bool m_active;
@@ -26,6 +27,10 @@ public sealed class SdfDebugMode {
 
     /// <summary>The performance-bench runner the <c>sdf.bench.*</c> verbs drive (an async per-frame state machine).</summary>
     public SdfBenchScene Bench => m_bench;
+
+    /// <summary>The torture-museum tour the <c>sdf.gallery</c> verb drives (a curated cycle of known-nasty scenes). While
+    /// an exhibit is active the mode renders it in place of the debug subject.</summary>
+    public SdfGalleryScene Gallery => m_gallery;
 
     /// <summary>Whether the mode is active (the fullscreen debug subject — or a bench workload — replaces the room).</summary>
     public bool Active => m_active;
@@ -57,8 +62,9 @@ public sealed class SdfDebugMode {
     }
 
     /// <summary>The content revision the frame source rebuilds on — the debug scene's revision plus the bench's (so a
-    /// bench config change forces a program rebuild exactly as a scene edit does) plus the grid-cull toggle's.</summary>
-    public int Revision => (m_scene.Revision + m_bench.Revision + m_gridRevision);
+    /// bench config change forces a program rebuild exactly as a scene edit does) plus the gallery's (an exhibit
+    /// enter/advance/jump/off rebuilds the program to that exhibit) plus the grid-cull toggle's.</summary>
+    public int Revision => (m_scene.Revision + m_bench.Revision + m_gallery.Revision + m_gridRevision);
 
     /// <summary>Whether the mode's takeover programs pack the uniform-grid instance cull (default ON — the production
     /// path). OFF packs a DISABLED grid so the beam takes the flat per-instance fallback over the same instances — the
@@ -100,12 +106,13 @@ public sealed class SdfDebugMode {
     /// <summary>The camera frame while active — the bench's FIXED deterministic pose when a run is in flight, otherwise
     /// the pad orbit (object-intent). Null when the mode is down.</summary>
     public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame =>
-        (m_active ? (m_bench.CameraFrame ?? m_controller.CameraFrame) : null);
+        (m_active ? (m_bench.CameraFrame ?? m_gallery.CameraFrame ?? m_controller.CameraFrame) : null);
 
-    /// <summary>Whether the camera pose must be applied VERBATIM (no easing): true while a bench run supplies the pose,
-    /// so every configuration measures an identical, fully settled framing — an eased pose converges on the wall-clock
-    /// delta, sampling fast configurations MID-EASE and making tables incomparable run-to-run.</summary>
-    public bool CameraSnaps => (m_active && m_bench.Running);
+    /// <summary>Whether the camera pose must be applied VERBATIM (no easing): true while a bench run supplies the pose
+    /// (so every configuration measures an identical, fully settled framing — an eased pose converges on the wall-clock
+    /// delta, sampling fast configurations MID-EASE and making tables incomparable run-to-run), OR while a gallery
+    /// exhibit is active (each exhibit's defect wants its authored framing held exactly, not eased into).</summary>
+    public bool CameraSnaps => (m_active && (m_bench.Running || m_gallery.Active));
 
     /// <summary>Poses the orbit camera directly (forwards to <see cref="SdfDebugController.SetPose"/>) — the scriptable
     /// lever the <c>sdf.cam</c> verb drives so a deterministic repro can pin a grazing pitch/framing. No effect on a
@@ -157,12 +164,19 @@ public sealed class SdfDebugMode {
     public bool ConsumeExitRequest() =>
         m_controller.ConsumeExitRequest();
 
-    /// <summary>Emits the LIVE takeover program: the current BENCH workload while a run is in flight, otherwise the
-    /// debug subject (+ optional floor).</summary>
+    /// <summary>Emits the LIVE takeover program: the current BENCH workload while a run is in flight, else the current
+    /// GALLERY exhibit while the tour is active, otherwise the debug subject (+ optional floor). All three are within
+    /// the frozen worst-case envelope (the gallery's exhibits are small — see <see cref="SdfDebugRenderer.EmitProbe"/>).</summary>
     /// <param name="builder">The program builder.</param>
     public void Emit(SdfProgramBuilder builder) {
         if (m_bench.Running) {
             m_renderer.EmitBench(builder: builder, config: m_bench.ActiveConfig);
+
+            return;
+        }
+
+        if (m_gallery.Active) {
+            m_renderer.EmitGallery(builder: builder, exhibit: m_gallery.Exhibit);
 
             return;
         }
