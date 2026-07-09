@@ -31,21 +31,18 @@ internal sealed class WorldChamferSolidityStage : IPostStage {
     private const float FieldOfViewRadians = (50f * (MathF.PI / 180f));
     private const uint Height = 600;
     private const uint Width = 960;
-    // CALIBRATION OWED — these three coverage/hole constants are PLACEHOLDERS set LOOSE (biased to pass a healthy render
-    // rather than fail spuriously), pending the lead's live clamped-vs-unclamped differential on the calibration hardware
-    // (force stepScale to 1.0 by reflection for the unclamped measurement, exactly as WorldDisplaceSolidityStage was
-    // calibrated). The STRUCTURE is final; only the numbers below need pinning to the measured gap between the clamped
-    // blade-pixel count and the unclamped (eroded) count.
-    //
-    // VacuityFloor: a truly broken / unframed / black render (below even the eroded count) is INFRA, not a holing FAIL.
     private const int VacuityFloor = 20000;
     // The PRIMARY tooth: coverage below this means the silhouette eroded — the chamfer bevel overstepped as grazing rays
     // approached an acute weld. Set to the low end pending calibration; the lead should move it into the measured
     // clamped..unclamped gap so a clamp regression (stepScale back to 1.0) FAILS loudly and a benign edge shift does not.
-    private const int MinBladeCoverage = 40000;
+    // CALIBRATED 2026-07-09 against the first live run: a healthy render measures 274,081 blade pixels with 3,000
+    // enclosed (1.095%). The floor sits at ~0.8x healthy so a real erosion class (the unclamped field erodes blades
+    // roughly in half, per the liar's-spiral precedent) fails decisively while thermal/framing noise cannot.
+    private const int MinBladeCoverage = 219000;
     // SECONDARY net (deliberately loose, top of the neighbours' 0.006–0.03 band): interior sky the border flood-fill
     // can't reach. The crossed-blade creases leave a small enclosed-gap floor even when solid; this only trips on GROSS
     // holing. CALIBRATE against the measured clamped enclosed fraction — COVERAGE is the real regression catch.
+    // Healthy measures 1.095% enclosed; 3% keeps ~2.7x headroom — inside the neighbors' calibrated 0.006-0.03 band.
     private const double MaxEnclosedHoleFraction = 0.03;
     // A background (sky) pixel has a LOW red channel (skyColor tops out ~26/255 in red). 40 (14 above the sky ceiling)
     // re-counts shading-darkened blade edges/creases as blade on this HIGH-perimeter thin-blade row while a real march
