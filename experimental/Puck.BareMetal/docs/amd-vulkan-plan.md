@@ -3,6 +3,13 @@
 > **Continuing this work (esp. on a new machine)? Start with
 > [`deck-bringup-handoff.md`](deck-bringup-handoff.md)** — it has the live stage-(e) state, the
 > hardware facts, the debug trail, how to get logs off the Deck, and the machine-local rebuild steps.
+>
+> **Update 2026-07-09:** a deep-research pass produced
+> [`deck-demo-research.md`](deck-demo-research.md) (consolidated gap map + verified claims) and
+> [`deck-demo-session-plan.md`](deck-demo-session-plan.md) (the next session's plan). Strategic
+> pivot: the demo path is now **compute-queue (MEC) + GOP-framebuffer present** — the gfx ring
+> (and this roadmap's stage-(h) offscreen triangle) is demoted to a diagnostic sideshow until
+> the compute path proves out. Read stages f–h below compute-first.
 
 Goal: run **real GPU-accelerated Vulkan** on the bare-metal fake-Linux host, by hosting the open
 AMD GPU driver stack and testing on a **Steam Deck**. This is the renderer half of "run the engine

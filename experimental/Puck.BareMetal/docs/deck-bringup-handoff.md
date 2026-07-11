@@ -7,18 +7,30 @@ roadmap a–h + per-stage progress) and [`gfx103-bringup-spec.md`](gfx103-bringu
 clean-room register/protocol spec). Vendored assets: [`../amdgpu/`](../amdgpu) (Van Gogh firmware +
 MIT register headers).
 
+> **2026-07-09 deep-research pass:** [`deck-demo-research.md`](deck-demo-research.md) is the
+> consolidated state-of-the-world for "boot the Puck Demo on the Deck" (subsystem gap map,
+> verified/falsified claims — including that the plan-item-(d) emission-bug suspect is now
+> REFUTED by desk-check), and [`deck-demo-session-plan.md`](deck-demo-session-plan.md) is the
+> next session's executable plan (builds 13/14, the MEC-compute pivot, decision tree). **Start
+> the next hardware session from the session plan**, which supersedes the "Next session, in
+> order" list below (items a–c are folded in; item d is redirected to fetch instrumentation).
+
 ## Where we are (2026-07-04)
 
 Stages **(a) substrate, (b) probe, (c) GMC/GART, (d) PSP firmware load are DONE and clean** on real
 hardware (boot 4 onward: the RLC restore-list fw-type fix took; all `rlc.srlc_*` loads return `ok`
 every boot since).
 
-Stage **(e): FIRST SILICON EXECUTION is achieved and the ring test fully passes.** Boot 6 landed
-the first-ever executed packet (`SET_UCONFIG_REG` → `SCRATCH_REG0=0xDEADBEEF`); boot 7 landed a
-full ring-test pass (`reg=Y mem=Y`, CACHE_POLICY=BYPASS for CPU-visible memory writes). The proven
-recipe to get there is captured in full below.
+Stage **(e): COMPLETE — the gfx ring, indirect buffer, and RELEASE_MEM fence all execute
+(build 17, 2026-07-10).** The full path works: ring test `reg=Y mem=Y`, IB `WRITE_DATA` lands, and
+the `RELEASE_MEM` fence signals (`0xF00D0001`) with the CP going idle. See the **"Boots 13–17"**
+section immediately below for how we got here and the load-bearing root cause (CP data ops are
+VMID0-translated and need mapped VAs). The historical stage-(e) recipe (boots 6–12) is retained
+further down for provenance, but the "Still open, as of boot 12" list that follows is **superseded**
+— read "Boots 13–17" first.
 
-**Still open, as of boot 12 (2026-07-04):**
+**Still open, as of boot 12 (2026-07-04) — ⚠️ SUPERSEDED by "Boots 13–17" below; items 1 and 2 are
+RESOLVED, item 3 is moot:**
 
 1. **The IB+`RELEASE_MEM` fence has never signalled.** Every attempt beyond the plain ring test
    (i.e. anything that engages an `INDIRECT_BUFFER`) stalls the CE on `DE_COUNTER_UNDERFLOW`.
@@ -32,6 +44,121 @@ See "Open mystery #1," "Open mystery #2," and "Next session, in order" below for
 of each and the ordered plan. "Boot history" compresses all 12 boots into one table; several
 theories that were presented as live hypotheses in earlier boots are now confirmed FALSIFIED — do
 not re-derive them.
+
+### Boots 13–17 (2026-07-10) — the "wedge" was GART contamination; the real blocker is GPUVM addressing
+
+A five-build session (builds 13–17, driven from
+[`deck-demo-session-plan.md`](deck-demo-session-plan.md)) overturned the boot-12 picture. **All
+three "Still open, as of boot 12" items above are now reframed or dead** — trust this section over
+them:
+
+- **Boot 13 (carveout-first): the gfx CP executes the ENTIRE 961-dword CSB cleanly.** Running the
+  ring test from the carveout block as attempt #1 (fresh KIQ, no prior attempt) gives `reg=Y`
+  (`SCRATCH_REG0=0xDEADBEEF` landed) and launches the `INDIRECT_BUFFER` — **none of the boot-11/12
+  wedge signatures appear** (`CP_STAT=0x80008600`, not `0x94008200`; `CP_CPF_STALLED1=0`, not the
+  `RING_FETCHING_DATA` wait-loop). **The boot-11 "mid-CSB stall at dword 222" and the whole
+  `0x94008200`/`DE_COUNTER_UNDERFLOW` "wedge" were GART-block contamination + eraser artifacts, NOT
+  a real CP fault. DEAD — do not chase them.** The eraser is re-confirmed **GART-block-only**: the
+  carveout ring reads back intact on every boot.
+- **The remaining blocker is `mem=N` / `fence=N`:** the ring's `WRITE_DATA` (`0x600DF00D`) and the
+  IB's `RELEASE_MEM` fence (`0xF00D0001`) are not visible to the CPU, and the ME freezes at
+  `ME_PC=0x0ea3` (waiting on IB data). Eliminations: **boot 14 — a full GL2 write-back
+  (`ACQUIRE_MEM GCR_CNTL=0xC3B1`) does NOT fix it** (DEAD: not a cache-residency problem). **Boot 15
+  — reading via the BAR0/HDP aperture does NOT help either** (both direct-DRAM-phys and aperture read
+  `0`; DEAD: not a CPU-read-path problem; also HDP flush is a verified no-op on APUs).
+- **CONFIRMED ROOT CAUSE (boot-16 research, VERIFIED vs upstream `gfx_v10_0.c`):** every CP
+  *data*-referencing operand — `WRITE_DATA` dst, `INDIRECT_BUFFER` IB base, `RELEASE_MEM` dst — is a
+  **GPU virtual address translated by VMID0**. Our code fed them the raw carveout MC address
+  (`0xf405…`), which is **not mapped in VMID0's page table** (it maps only VA `[0, 2 MiB)`), so the
+  writes silently drop (VMID0 is configured non-faulting → `VM_L2_FAULT=0`) and the IB fetch never
+  lands. The stale comment at `puck-efi.c:~4626` ("CP_RB0_BASE etc. take MC addresses… once VMID0 is
+  bypassed") **is the bug — there is no such bypass on gfx10.**
+- **KEY fact-check nuance (the address space splits in two):** the ring PQ *fetch* and the
+  **`RPTR`/`WPTR` writeback work with the raw carveout MC** — proven by `RPTR_WB` reading back the
+  stream length (`0x3c9`) from carveout memory on the failing attempts. So the CP has a
+  **physical/ring-engine path (PQ, RPTR, WPTR — MC works)** and a **GPUVM path (data ops — needs a
+  mapped VA)**. The fix must therefore be **surgical**: map the carveout into VMID0 and use the VA
+  for the data ops ONLY, leaving PQ/RPTR/WPTR on the working MC path (changing them to VAs risks
+  regressing the ring fetch).
+- **Build 17 — ✅ WORKING GFX RING (boot landed 2026-07-10).** `PuckGpuGartBringUp` maps VA
+  `[0x400000, 0x800000)` → the carveout block physical; `g_rtDataBase` routes `WRITE_DATA`/IB/
+  `RELEASE_MEM` (and the IB's own `WRITE_DATA`) through that VA, while ring PQ / `RPTR` / `WPTR` keep
+  the carveout MC. **Result: the full ring test + IB + fence all execute.** `mem=Y`
+  (`direct=aperture=0x600DF00D`), the IB's `WRITE_DATA` landed (`0xDEADBEEF`), the `RELEASE_MEM`
+  fence signalled (`direct=aperture fence=0xF00D0001`), and `CP_STAT=0x00000000` (CP idle — the ME
+  freeze at `0x0ea3` is gone). Log: `MILESTONE: FIRST SILICON EXECUTES -- CP ran IB, RELEASE_MEM
+  fence signalled`. **This is the first GPU fence ever signalled on this silicon and the first fully
+  working gfx ring.** The addressing fix (CP data ops need VMID0-mapped VAs; ring-engine ops work on
+  raw MC) is the crux and **applies to compute (MEC) queues too**, so it unblocks the RADV/DRM-shim
+  path (M3) directly. Open Blockers 1 (IB fence) and 2 (mid-CSB stall) are **RESOLVED**; Blocker 3
+  (GART eraser) is moot as long as everything stays carveout-resident.
+- **Also settled this session:** GOP `PixelFormat` = `0x1` (BGR); BAR0 aperture offset = 0 (fb at
+  aperture base); a full 800×1280 CPU blit through the WC framebuffer is **~2 ms** (HDP poke makes no
+  difference — it's a no-op on this APU), so **M1 (CPU-blit present) is validated as fast enough**.
+  Builds 13/14 also fixed the log buffer to keep the TAIL and persist on every `PuckHang` (not just
+  `exit_group`).
+
+### Boots 18–23 (2026-07-10) — compute dispatch: state applies, a wave likely runs, but stores never reach DRAM ⚠️ OPEN
+
+After the working gfx ring, builds 18–23 pursued a hand-authored compute `DISPATCH_DIRECT` on the
+gfx ring (the render primitive the SDF compositor needs). **Status: the dispatch is correctly
+configured and cleanly retires, but no shader store reaches CPU-readable memory. UNRESOLVED — this
+is the next session's frontier.** The implementation lives in `PuckGpuComputeDispatch` (grep) and is
+gated to the carveout attempt (`g_rtDataBase == VGH_RT_CARVEOUT_VA_BASE`). What's established:
+
+- **Compute state APPLIES on the gfx ring (build 19).** `SET_SH_REG` with the PM4 `SHADER_TYPE` bit
+  (`1<<1`) writes `COMPUTE_PGM_LO`/`NUM_THREAD_X`/`USER_DATA_0` and they read back correct via MMIO
+  (`0x5080`/`0x1`/`0x509000`). SET_SH_REG packet offset = `mm − 0x19A0` (`VGH_SH_REG_OFS`). So the
+  implementation faithfully issues the dispatch (independently code-audited — no encoding bug). The
+  shader ISA is LLVM-gfx1030-verified.
+- **All gating is OFF and refuted (builds 19–21):** `RLC_PG_CNTL=0` (power-gating off);
+  `RLC_CGCG_CGLS_CTRL=0x0001003c` has `CGCG_EN`/`CGLS_EN` (bits 0/1) **both 0** — clock-gating is off
+  (that value is inert delay/threshold fields, NOT enables — do not re-chase it). No CU reservation
+  (`SPI_RESOURCE_RESERVE_CU_0=0`). No VM fault. `CPC: STATUS=0`, `MEC_HDR=fill pattern` → the gfx-ring
+  dispatch does **not** engage the MEC/CPC (MEC is NOT required — proven vs RADV, which dispatches on
+  the universal queue).
+- **A wave almost certainly RUNS (cross-build GUI_ACTIVE evidence, builds 21 vs 22/23).** The
+  2M-iteration loop shader (build 21) held `GRBM_STATUS.GUI_ACTIVE` high for the full ~30 ms poll
+  (`gui_samples=2613/2613`); the no-loop shaders (22/23) held it high only ~2/1700 samples. The
+  dispatch config is identical between builds — only the shader *content* differs, and only a wave on
+  a CU reads the shader — so the shader's runtime drove pipe-active duration ⇒ **a wave executes.**
+  **`SPI_CSQ_WF_ACTIVE_STATUS`/`_COUNT_0` read 0 throughout — they are the WRONG occupancy register
+  for a gfx-pipe dispatch (MEC-queue-specific). Do not trust them for wave-launch on this path.**
+- **The store does NOT reach DRAM (builds 22–23).** A dual-store test: STORE-A → a HARDCODED VA
+  `0x509040` via scalar regs `s[2:3]` (no user-data dependency), STORE-B → the `USER_DATA` VA
+  `0x509000` — **both read back 0**. Adding `CS_PARTIAL_FLUSH` after `DISPATCH_DIRECT` (build 23, to
+  make the CP wait for the wave before the `ACQUIRE_MEM` GL2→DRAM flush) did **not** help — so it is
+  **not** a simple flush-before-store race.
+- **CONTRAST:** the CP's own `WRITE_DATA` (ring data op) reaches the same VMID0-mapped carveout DRAM
+  fine (`mem=Y`). Only the shader's VMEM `global_store` fails. The distinguishing factor is the
+  shader-array memory path vs the CP memory path.
+
+**Leading hypotheses for next session (ranked):**
+1. **Wrong VMID / SH_MEM aperture for the wave.** The wave may execute under a VMID ≠ 0 (or a wrong
+   `SH_MEM_CONFIG`/`SH_MEM_BASES`), so its `global_store` VA isn't mapped like the ring's VMID0 data
+   ops. `amdgpu`'s `gfx_v10_0_init_compute_vmid` was NOT ported. Check the dispatch's effective VMID
+   and the compute SH_MEM setup.
+2. **Carveout/VRAM VMEM-store coherency.** The store lands in GL2 but the VMEM→GL2→DRAM path to the
+   carveout has an MTYPE/coherency issue distinct from the CP `WRITE_DATA` path. **Cheap test: store
+   to a GTT/system-RAM VA (VA 0, the GART test buffer) instead of the carveout — if that lands, it's
+   carveout-VRAM-specific.**
+3. (Least likely, given GUI_ACTIVE) no wave runs → shader-array in GFXOFF (SMU-owned). Would need the
+   MP1/SMU C2PMSG mailbox.
+
+**Next-session decisive experiments:**
+- **(a)** Confirm wave-launch with a signal that isn't a memory store: a longer loop while polling
+  `GRBM_STATUS.SPI_BUSY` / `GRBM_STATUS_SE0` / an `SQ_WAVE` counter (NOT `SPI_CSQ_WF`), or a GDS write.
+- **(b)** Store to a GTT/system-RAM VA (hypothesis 2) — isolates carveout-VRAM in one boot.
+- **(c)** Audit/port the compute VMID + SH_MEM setup (hypothesis 1).
+- **(d) STRATEGIC (standing recommendation from the research + reasoning audit): bring up a real MEC
+  compute queue** — clone the proven KIQ direct-MMIO MQD-commit to `me=1/pipe=0/queue=0`, where
+  VMID/SH_MEM/dispatch are configured the normal amdgpu way (and RADV's CS ioctl targets the compute
+  IP anyway). This may sidestep the gfx-ring-dispatch quirk entirely and is the demo path.
+
+**Diagnostic scaffolding already in the code (reuse it):** `PuckGpuComputeDispatch` has the occ-poll
+(`g_csWaveResident`), the SH-bank readback, RLC/CPC/SPI-resource dumps, the dual-store test
+(`g_csDiagShader`, `STORE-A`/`STORE-B`, `g_csWaveRan`), and it latches a three-way verdict into
+`g_gpuBringUpNote` (parked-screen line): PASS / "WAVE RAN but user-data store failed" / "NO wave ran".
 
 **The in-hand unit is a Steam Deck OLED (Sephiroth), NOT the LCD the plan originally targeted.** Same
 gfx10.3.1 / PSP 11.5 silicon, so all vendored assets and register math apply unchanged. Hardware facts

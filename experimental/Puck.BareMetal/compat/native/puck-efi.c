@@ -35,8 +35,11 @@ void RhpPInvoke(void *frame) { (void)frame; }
 void RhpPInvokeReturn(void *frame) { (void)frame; }
 void RhpGcPoll(void) { }
 
+static void PuckLogPersist(void); /* defined far below; PuckHang persists the RAM log before parking */
+
 static void PuckHang(void)
 {
+    PuckLogPersist(); /* stash the whole log to NVRAM; next boot writes it to \PuckLog.txt */
     for (;;)
         ;
 }
@@ -87,6 +90,7 @@ static void FbWriteByte(unsigned char b); /* the GOP framebuffer console (no-op 
  * UEFI variable at the end and written to \PuckLog.txt on the ESP at the NEXT boot (see PuckLog*).
  * The Deck has no serial port and its panel scrolls past one screen, so this is how the log reaches
  * a dev box as exact text instead of photographs. */
+#define PUCK_BUILD_ID "b23"
 static char g_logBuf[24576];
 static unsigned int g_logLen;
 
@@ -99,7 +103,18 @@ static void SerialWriteByte(unsigned char b)
             ;
         __outbyte(COM1, b);
     }
-    if (g_logLen < sizeof(g_logBuf)) g_logBuf[g_logLen++] = (char)b; /* tee to the RAM log */
+    /* tee to the RAM log */
+    if (g_logLen >= sizeof(g_logBuf))
+    {
+        /* buffer full: drop the oldest quarter so the recent TAIL (verdicts land late) survives.
+           amortized O(1); a plain forward copy is correct since dst < src. */
+        unsigned int keep = (sizeof(g_logBuf) / 4u) * 3u;
+        unsigned int drop = g_logLen - keep;
+        unsigned int i;
+        for (i = 0; i < keep; i++) g_logBuf[i] = g_logBuf[i + drop];
+        g_logLen = keep;
+    }
+    g_logBuf[g_logLen++] = (char)b;
     FbWriteByte(b); /* mirror to the framebuffer: the Steam Deck has no serial port */
 }
 
@@ -1122,6 +1137,8 @@ static void PuckLogPersist(void);
 /* One-line summary of how far stages (c)/(d) got, latched by PuckGpuBringUp and restated at the
  * end of the parked health dump (the per-step progress scrolls off the Deck panel). */
 static const char *g_gpuBringUpNote = "not reached";
+static int g_csWaveResident = 0; /* build 21: did a compute wave ever become resident during the dispatch? */
+static int g_csWaveRan = 0; /* build 22: did the HARDCODED-VA store (STORE A) land, proving a wave executed? */
 
 /* Stage-(e) ring-test diagnostics, latched during the test and reprinted on the parked health
  * screen (the failure dump at the point of failure scrolls off the Deck panel). g_rtRan gates it. */
@@ -2130,8 +2147,7 @@ long long PuckSyscallDispatch(long long num, long long a1, long long a2, long lo
             /* The kernel parks here (managed Main never resumes), so this IS the final screen:
              * re-read the GPU health set onto it -- the early dump scrolls past the Deck panel. */
             PuckGpuHealthDump();
-            PuckLogPersist(); /* stash the whole log to NVRAM; next boot writes it to \PuckLog.txt */
-            PuckHang();
+            PuckHang(); /* persists the whole log to NVRAM before parking; next boot writes \PuckLog.txt */
             return 0;
 
         default:
@@ -2865,6 +2881,7 @@ static struct {
     unsigned long long phys;     /* framebuffer physical base, captured pre-ExitBootServices */
     unsigned int width, height;  /* framebuffer pixel dimensions */
     unsigned int pitch;          /* pixels per scan line (>= width) */
+    unsigned int pixelFormat;    /* EFI_GRAPHICS_PIXEL_FORMAT (Mode.Info+12) */
     unsigned int cols, rows;     /* text grid, logical (post-rotation) */
     unsigned int cx, cy;         /* cursor, in character cells */
 } g_fb;
@@ -2887,9 +2904,12 @@ static void PuckGopCapture(void *bs)
     g_fb.width  = *(unsigned int *)((unsigned char *)info + 4);        /* HorizontalResolution */
     g_fb.height = *(unsigned int *)((unsigned char *)info + 8);        /* VerticalResolution   */
     g_fb.pitch  = *(unsigned int *)((unsigned char *)info + 32);       /* PixelsPerScanLine    */
+    g_fb.pixelFormat = *(unsigned int *)((unsigned char *)info + 12);  /* PixelFormat          */
     SerialPuts("[fb] GOP framebuffer base="); SerialPutHex64(g_fb.phys);
     SerialPuts(" w="); SerialPutHex64(g_fb.width); SerialPuts(" h="); SerialPutHex64(g_fb.height);
-    SerialPuts(" pitch="); SerialPutHex64(g_fb.pitch); SerialPuts("\r\n");
+    SerialPuts(" pitch="); SerialPutHex64(g_fb.pitch);
+    SerialPuts(" fmt="); SerialPutHex64(g_fb.pixelFormat);
+    SerialPuts(" bar0off="); SerialPutHex64(g_fb.phys - 0xF8E0000000ull); SerialPuts("\r\n");
 }
 
 static void PuckFbInit(void)
@@ -3187,8 +3207,10 @@ static const unsigned short g_puckLogVar[] = { 'P','u','c','k','L','o','g',0 };
  * the panel already showed everything, so a failure here loses nothing. */
 static void PuckLogPersist(void)
 {
-    void *rt = EfiField(g_puckEfiSystemTable, EFI_ST_RUNTIMESERVICES_OFFSET);
+    void *rt;
     efi_set_variable_t setVar;
+    if (!g_puckEfiSystemTable) return; /* PuckHang can fire before EfiEntry sets the table (early failfast) */
+    rt = EfiField(g_puckEfiSystemTable, EFI_ST_RUNTIMESERVICES_OFFSET);
     if (!rt || g_logLen == 0) return;
     setVar = (efi_set_variable_t)EfiField(rt, EFI_RT_SETVARIABLE_OFFSET);
     setVar(g_puckLogVar, g_puckLogGuid, EFI_VAR_NV_BS_RT, (unsigned long long)g_logLen, g_logBuf);
@@ -3361,6 +3383,8 @@ static const PuckGpuFw *PuckGpuFwFind(const char *name)
 #define VGH_NBIO_SEG2                  0x0D20u
 #define VGH_GRBM_STATUS                (VGH_GC_SEG0 + 0x0da4u)
 #define VGH_GRBM_STATUS2               (VGH_GC_SEG0 + 0x0da2u)
+#define VGH_GRBM_SOFT_RESET            (VGH_GC_SEG0 + 0x0da8u) /* mmGRBM_SOFT_RESET (idx0) */
+#define VGH_GRBM_SOFT_RESET_SOFT_RESET_CP_MASK 0x00000001u
 #define VGH_CP_STAT                    (VGH_GC_SEG0 + 0x0f40u)
 #define VGH_CP_MEC_CNTL                (VGH_GC_SEG0 + 0x0f55u)
 #define VGH_CP_ME_CNTL                 (VGH_GC_SEG0 + 0x0f56u)
@@ -3482,9 +3506,35 @@ static const PuckGpuFw *PuckGpuFwFind(const char *name)
 #define VGH_CP_STALLED_STAT3           (VGH_GC_SEG0 + 0x0f3cu)  /* mmCP_STALLED_STAT3     (idx0) */
 #define VGH_CP_CPF_STALLED_STAT1       (VGH_GC_SEG0 + 0x0e29u)  /* mmCP_CPF_STALLED_STAT1 (idx0) */
 #define VGH_CP_CPC_STALLED_STAT1       (VGH_GC_SEG0 + 0x0e26u)  /* mmCP_CPC_STALLED_STAT1 (idx0) */
+#define VGH_CP_CPC_STATUS             (VGH_GC_SEG0 + 0x0e24u) /* mmCP_CPC_STATUS (idx0) */
+#define VGH_CP_MEC_ME1_HEADER_DUMP    (VGH_GC_SEG0 + 0x0e2eu) /* mmCP_MEC_ME1_HEADER_DUMP (idx0) */
 #define VGH_RLC_STAT                   (VGH_GC_SEG1 + 0x4c04u)  /* mmRLC_STAT             (idx1) */
 #define VGH_RLC_SAFE_MODE              (VGH_GC_SEG1 + 0x4ca0u)  /* mmRLC_SAFE_MODE        (idx1) */
 #define VGH_RLC_CP_SCHEDULERS          (VGH_GC_SEG1 + 0x4ca1u)  /* mmRLC_CP_SCHEDULERS    (idx1) */
+
+/* Build 19 (cs-diag): PURE READ-ONLY compute-dispatch diagnostics -- direct-MMIO readback of the compute
+ * SH state (to check whether the dispatch IB's SET_SH_REG actually landed in the gfx-pipe dispatcher's
+ * bank), RLC gating state, and wave occupancy. All offsets grep-verified against gc_10_3_0_offset.h; note
+ * the BASE_IDX -> segment split: COMPUTE regs, SPI_CSQ_WF_ACTIVE_STATUS, GRBM_STATUS_SE0 are BASE_IDX 0 (SEG0),
+ * while RLC_PG_CNTL/RLC_CGCG_CGLS_CTRL are BASE_IDX 1 (SEG1, same aperture as VGH_RLC_STAT/RLC_GPM_STAT
+ * above -- the offset.h header lists mmRLC_PG_CNTL/mmRLC_CGCG_CGLS_CTRL with _BASE_IDX 1, not 0). */
+#define VGH_COMPUTE_PGM_LO_MM          (VGH_GC_SEG0 + 0x1bacu)  /* mmCOMPUTE_PGM_LO           (idx0) */
+#define VGH_COMPUTE_NUM_THREAD_X_MM    (VGH_GC_SEG0 + 0x1ba7u)  /* mmCOMPUTE_NUM_THREAD_X     (idx0) */
+#define VGH_COMPUTE_USER_DATA_0_MM     (VGH_GC_SEG0 + 0x1be0u)  /* mmCOMPUTE_USER_DATA_0      (idx0) */
+#define VGH_COMPUTE_DISPATCH_ID_MM     (VGH_GC_SEG0 + 0x1bc0u)  /* mmCOMPUTE_DISPATCH_ID      (idx0) */
+#define VGH_RLC_PG_CNTL_MM             (VGH_GC_SEG1 + 0x4c43u)  /* mmRLC_PG_CNTL              (idx1) */
+#define VGH_RLC_CGCG_CGLS_CTRL_MM      (VGH_GC_SEG1 + 0x4c49u)  /* mmRLC_CGCG_CGLS_CTRL       (idx1) */
+#define VGH_SPI_CSQ_WF_ACTIVE_STATUS_MM (VGH_GC_SEG0 + 0x127bu) /* mmSPI_CSQ_WF_ACTIVE_STATUS (idx0) */
+#define VGH_GRBM_STATUS_SE0_MM         (VGH_GC_SEG0 + 0x0da5u)  /* mmGRBM_STATUS_SE0 (SPI_BUSY bit) (idx0) */
+
+/* Build 20 (cs-diag): loop-detector occupancy poll + never-read CPC block. All offsets grep-verified
+ * against gc_10_3_0_offset.h (ACTIVE_COUNT_0/RESOURCE_RESERVE_* are BASE_IDX 0 -> SEG0; GRBM_GFX_INDEX
+ * is BASE_IDX 1 -> SEG1). SPI_CSQ_WF_ACTIVE_COUNT_0 is the wavefront count register that sits one dword
+ * past SPI_CSQ_WF_ACTIVE_STATUS -- a resident single-wave loop shader reads ~1 here. */
+#define VGH_SPI_CSQ_WF_ACTIVE_COUNT_0_MM (VGH_GC_SEG0 + 0x127cu) /* mmSPI_CSQ_WF_ACTIVE_COUNT_0 (idx0) */
+#define VGH_SPI_RESOURCE_RESERVE_CU_0    (VGH_GC_SEG0 + 0x1f7cu) /* mmSPI_RESOURCE_RESERVE_CU_0 (idx0) */
+#define VGH_SPI_RESOURCE_RESERVE_EN_CU_0 (VGH_GC_SEG0 + 0x1f86u) /* mmSPI_RESOURCE_RESERVE_EN_CU_0 (idx0) */
+#define VGH_GRBM_GFX_INDEX_MM            (VGH_GC_SEG1 + 0x2200u) /* mmGRBM_GFX_INDEX (idx1) */
 
 /* Stage (e) 2026-07-03: modern gfx10.3 firmware does not serve the legacy CP_RB0_* ring interface
  * at all -- amdgpu ships amdgpu_async_gfx_ring=1, so the gfx ring is ALWAYS a queue (an MQD +
@@ -3707,6 +3757,17 @@ static const PuckGpuFw *PuckGpuFwFind(const char *name)
 #define VGH_CP_MEC_DOORBELL_RANGE_LOWER       (VGH_GC_SEG0 + 0x1dfcu)  /* mmCP_MEC_DOORBELL_RANGE_LOWER      (idx0) */
 #define VGH_CP_MEC_DOORBELL_RANGE_UPPER       (VGH_GC_SEG0 + 0x1dfdu)  /* mmCP_MEC_DOORBELL_RANGE_UPPER      (idx0) */
 
+/* Build 18: compute dispatch (SH-space) register mm-offsets (gc_10_3_0_offset.h, BASE_IDX 0). Written
+ * via PM4 SET_SH_REG (offset = mm - VGH_PM4_SET_SH_REG_START), NOT direct MMIO -- SET_SH_REG regs live
+ * in the SH register space the CP owns per-queue, so a raw g_gpuRegs[] MMIO write would not target the
+ * compute pipe's live state. */
+#define VGH_MM_COMPUTE_START_X                0x1ba4u
+#define VGH_MM_COMPUTE_NUM_THREAD_X           0x1ba7u
+#define VGH_MM_COMPUTE_PGM_LO                 0x1bacu
+#define VGH_MM_COMPUTE_PGM_RSRC1              0x1bb2u
+#define VGH_MM_COMPUTE_USER_DATA_0            0x1be0u
+#define VGH_SH_REG_OFS(mm)  ((VGH_GC_SEG0 + (mm)) - VGH_PM4_SET_SH_REG_START)
+
 /* CP_HQD_* field masks/shifts (gc_10_3_0_sh_mask.h) needed to build the compute MQD image faithfully
  * to gfx_v10_0_compute_mqd_init. */
 #define VGH_CP_HQD_EOP_CONTROL_EOP_SIZE_SHIFT             0x0u
@@ -3909,6 +3970,7 @@ static void PuckGpuProbe(void)
  * mid-scroll). */
 static void PuckGpuHealthDump(void)
 {
+    SerialPuts("[build] " PUCK_BUILD_ID "\r\n");
     if (!g_gpuRegs) return;
     GpuPutReg("GRBM_STATUS ", VGH_GRBM_STATUS);
     GpuPutReg("GRBM_STATUS2", VGH_GRBM_STATUS2);
@@ -3949,7 +4011,55 @@ static void PuckGpuHealthDump(void)
     }
     /* The bring-up outcome, latched by PuckGpuBringUp, restated on this parked final screen so a
      * single photo tells the whole story (the (c)/(d) progress lines scroll off the Deck panel). */
-    SerialPuts("[gpu]   bring-up: "); SerialPuts(g_gpuBringUpNote); SerialPuts("\r\n");
+    SerialPuts("[gpu]   bring-up: " PUCK_BUILD_ID " "); SerialPuts(g_gpuBringUpNote); SerialPuts("\r\n");
+}
+
+/* Build 13 (item 6): framebuffer blit micro-bench. Two full-screen fills, each rdtsc-bracketed, expose
+ * the WC-drain cost of the panel aperture: fill A drains with a bare mfence; fill B additionally pokes
+ * the HDP memory-coherency flush. The final fill paints BLACK, then draws FOUR asymmetric corner markers
+ * (distinct size + color per corner) in logical/post-rotation space so the parked health screen rendered
+ * over it makes panel extent + rotation unmistakable at a glance. Called once from EfiEntry after
+ * PuckGpuBringUp + PuckInitClock (the derived-ms math needs the calibrated g_tscFreqHz). */
+static void PuckGopBlitBench(void)
+{
+    unsigned long long n, i, t0, t1, dA, dB;
+    unsigned int x, y, LW, LH;
+
+    if (!g_gpuRegs || !g_fb.base) return;
+
+    SerialPuts("[fb] blit-bench\r\n");
+    n = (unsigned long long)g_fb.pitch * g_fb.height;
+
+    /* Fill A: solid color, drained with a bare mfence. */
+    t0 = __rdtsc();
+    for (i = 0; i < n; i++) g_fb.base[i] = 0x00202080u;
+    PuckMfence();
+    t1 = __rdtsc();
+    dA = t1 - t0;
+    SerialPuts("[fb]   fillA (mfence): "); SerialPutHex64(dA);
+    SerialPuts(" cyc ~"); EcamPutDec((unsigned int)(dA * 1000ull / g_tscFreqHz)); SerialPuts(" ms\r\n");
+
+    /* Fill B: solid color, drained with an mfence AND an HDP memory-flush poke. */
+    t0 = __rdtsc();
+    for (i = 0; i < n; i++) g_fb.base[i] = 0x00208020u;
+    PuckMfence();
+    g_gpuRegs[VGH_HDP_MEM_FLUSH] = 0;
+    t1 = __rdtsc();
+    dB = t1 - t0;
+    SerialPuts("[fb]   fillB (mfence+hdp): "); SerialPutHex64(dB);
+    SerialPuts(" cyc ~"); EcamPutDec((unsigned int)(dB * 1000ull / g_tscFreqHz)); SerialPuts(" ms\r\n");
+
+    /* Final fill: BLACK + four asymmetric corner markers. Logical (post-rotation) extents match the
+     * text grid's own cols/rows derivation, so the markers land at the corners the upright console sees. */
+    for (i = 0; i < n; i++) g_fb.base[i] = 0u;
+    PuckMfence();
+    if ((PUCK_FB_ROTATION % 180) == 0) { LW = g_fb.width; LH = g_fb.height; }
+    else { LW = g_fb.height; LH = g_fb.width; }
+    for (y = 0; y < 16u; y++) for (x = 0; x < 16u; x++) FbPutPixel(x, y, 0x00FF0000u);                    /* top-left    16x16 red    */
+    for (y = 0; y < 8u;  y++) for (x = 0; x < 8u;  x++) FbPutPixel(LW - 1u - x, y, 0x0000FF00u);          /* top-right    8x8  green  */
+    for (y = 0; y < 8u;  y++) for (x = 0; x < 24u; x++) FbPutPixel(x, LH - 1u - y, 0x000000FFu);          /* bottom-left 24x8  blue   */
+    for (y = 0; y < 24u; y++) for (x = 0; x < 8u;  x++) FbPutPixel(LW - 1u - x, LH - 1u - y, 0x00FFFF00u);/* bottom-right 8x24 yellow */
+    PuckMfence();
 }
 
 /* ---------------------------------------------------------------------------------------
@@ -4038,6 +4148,18 @@ static void PuckGpuHealthDump(void)
 #define VGH_RT_IB_OFF            0x00103000ull /* IB buffer, 4 KiB, at +1 MiB + 12 KiB */
 #define VGH_RT_MQD_OFF           0x00104000ull /* GFX HQD MQD image, 4 KiB, at +1 MiB + 16 KiB */
 
+/* Build 18: compute-dispatch buffers, past the existing block (which ends ~+0x108000). All three sit
+ * inside the VA-mapped 4 MiB carveout window ([0x400000, 0x800000) -> block; the block base is
+ * window+0x1800000, so these land at window+0x1908000..+0x190B000, still < the 32 MiB window end). */
+#define VGH_RT_CS_SHADER_OFF   0x00108000ull /* compute shader code (256-byte aligned; PGM_LO = VA>>8) */
+#define VGH_RT_CS_OUTPUT_OFF   0x00109000ull /* shader output dword */
+#define VGH_RT_CS_OUTPUT2_OFF  0x00109040ull /* build 22: hardcoded-store target (same 4 KiB page as OUTPUT) */
+#define VGH_RT_CS_IB_OFF       0x0010A000ull /* dispatch IB */
+
+#define VGH_RT_CARVEOUT_VA_BASE  0x00400000ull  /* GPUVM VA (in VMID0's 256 MiB window, clear of the
+                                                  * [0,2MiB) system-RAM test map) that we map to the
+                                                  * carveout ring-test block, so CP data ops resolve. */
+
 /* PM4 (nvd.h / soc15d.h are NOT vendored -> these opcodes/encodings are from the task + spec 5.4/5.5;
  * anything not confirmable against a vendored header is tagged UNVERIFIED). */
 #define VGH_PM4_TYPE3(op, n)     ((3u << 30) | (((n) & 0x3FFFu) << 16) | (((op) & 0xFFu) << 8))
@@ -4045,6 +4167,8 @@ static void PuckGpuHealthDump(void)
 #define VGH_PM4_WRITE_DATA       0x37u   /* PACKET3_WRITE_DATA */
 #define VGH_PM4_INDIRECT_BUFFER  0x3Fu   /* PACKET3_INDIRECT_BUFFER */
 #define VGH_PM4_RELEASE_MEM      0x49u   /* PACKET3_RELEASE_MEM */
+#define VGH_PM4_ACQUIRE_MEM      0x58u   /* PACKET3_ACQUIRE_MEM (nvd.h) */
+#define VGH_PM4_EVENT_WRITE      0x46u   /* PACKET3_EVENT_WRITE (CS_PARTIAL_FLUSH etc.) */
 /* CP-start preamble ops (amdgpu cp_gfx_start). The CP won't process a bare register write as its
  * first-ever packet after autoload; CONTEXT_CONTROL primes its state tracking. UNVERIFIED opcodes
  * (nvd.h not vendored). */
@@ -4071,6 +4195,14 @@ static void PuckGpuHealthDump(void)
                                            * at the first INDIRECT_BUFFER (boot 7 IB/fence stall) */
 #define VGH_PM4_SET_CONTEXT_REG       0x69u     /* nvd.h PACKET3_SET_CONTEXT_REG (line 321) */
 #define VGH_PM4_SET_CONTEXT_REG_START 0x0000a000u /* nvd.h PACKET3_SET_CONTEXT_REG_START (line 322) */
+
+/* Build 18: compute-dispatch PM4 (nvd.h). SET_SH_REG writes the compute pipe's SH-space state; its
+ * offset field is (mm - SET_SH_REG_START). DISPATCH_DIRECT launches the wave grid. Both packets (and
+ * ONLY those two -- not ACQUIRE_MEM) carry the SHADER_TYPE=compute bit OR'd into their TYPE3 header. */
+#define VGH_PM4_SET_SH_REG          0x76u   /* nvd.h PACKET3_SET_SH_REG */
+#define VGH_PM4_SET_SH_REG_START    0x2c00u /* nvd.h PACKET3_SET_SH_REG_START */
+#define VGH_PM4_DISPATCH_DIRECT     0x15u   /* nvd.h PACKET3_DISPATCH_DIRECT */
+#define VGH_PM4_SHADER_TYPE_COMPUTE (1u << 1)   /* OR into the TYPE3 header of SET_SH_REG + DISPATCH_DIRECT */
 
 /* Boot 10 (2026-07-04) full-CSB pivot: amdgpu's recorded clear-state preamble (gfx10_cs_data, the
  * SECT_CONTEXT register blocks gfx_v10_0_get_csb_buffer emits between CONTEXT_CONTROL and
@@ -4108,6 +4240,58 @@ static void PuckGpuHealthDump(void)
 #define VGH_MQD_DW_CP_GFX_HQD_WPTR_HI         150u /* 0x96 */
 #define VGH_MQD_DW_CP_GFX_MQD_CONTROL         162u /* 0xA2 */
 
+/* Minimal RDNA2 (gfx10.3, wave32) compute shader: store 0xC0DE0001 to the buffer whose 64-bit GPU VA
+ * arrives in user SGPRs s[0:1] (COMPUTE_USER_DATA_0/1). Encodings derived bit-exact from LLVM AMDGPU
+ * gfx1030 (SOPP/VOP1/FLAT-global formats). 256-byte-aligned placement required (COMPUTE_PGM_LO=VA>>8).
+ *
+ * FALLBACK NOTE (not implemented -- try only if the SADDR-mode global_store below faults): the fallback
+ * is flat-64-in-VADDR. Replace the two v_mov (v0,0 / v1,lit) with v_mov_b32 v0,s0 (0x7E000200) +
+ * v_mov_b32 v1,s1 (0x7E000201) + v_mov_b32 v2,lit (0x7E0404FF, then the literal dword) and set the
+ * global_store DWORD1 saddr field to 0x7f (0x007F0400 = vaddr v[0:1], vdata v2, saddr off). */
+static const unsigned int g_csDispatchShader[] = {
+    0x7E000280u, /* v_mov_b32 v0, 0            ; store VADDR offset = 0            */
+    0x7E0202FFu, /* v_mov_b32 v1, <literal>    ; store data (opcode dword)        */
+    0xC0DE0001u, /*   literal for the v_mov above                                 */
+    0xDC708000u, /* global_store_dword DWORD0  ; seg=GLOBAL op=0x1c offset=0       */
+    0x00000100u, /* global_store_dword DWORD1  ; vaddr=v0 vdata=v1 saddr=s[0:1]    */
+    0xBF8C3F70u, /* s_waitcnt vmcnt(0)                                             */
+    0xBF810000u, /* s_endpgm                                                       */
+};
+
+/* Build 20 launch detector: spin a scalar countdown (~ms residency) THEN store the sentinel to
+ * s[0:1]=USER_DATA and endpgm. If a wave launches, it stays resident long enough for the CPU
+ * occupancy poll to catch it. Encodings LLVM-gfx10-verified (SOP1 s_mov=0x03, SOP2 s_sub_u32=0x01,
+ * SOPP s_cbranch_scc0=0x04). s_cbranch simm16=-2 dwords -> back to the s_sub. */
+static const unsigned int g_csLoopDetectorShader[] = {
+    0xBE8203FFu, /* s_mov_b32 s2, 0x1E8480 (2,000,000) */
+    0x001E8480u, /*   literal */
+    0x80828102u, /* LOOP: s_sub_u32 s2, s2, 1 */
+    0xBF84FFFEu, /* s_cbranch_scc0 LOOP (simm16 -2) */
+    0x7E000280u, /* v_mov_b32 v0, 0 */
+    0x7E0202FFu, /* v_mov_b32 v1, 0xC0DE0001 */
+    0xC0DE0001u, /*   literal */
+    0xDC708000u, /* global_store_dword DWORD0 (seg=GLOBAL op=0x1c) */
+    0x00000100u, /* global_store_dword DWORD1 (vaddr=v0 vdata=v1 saddr=s[0:1]) */
+    0xBF8C3F70u, /* s_waitcnt vmcnt(0) */
+    0xBF810000u, /* s_endpgm */
+};
+
+/* Build 22 decisive test: STORE A writes 0xC0DE0002 to hardcoded VA 0x509040 (s[2:3], no USER_DATA),
+ * STORE B writes 0xC0DE0001 to the USER_DATA VA (s[0:1]). If A lands, a wave definitely ran (independent
+ * of occupancy regs and the user-data path). If A lands but B does not, the USER_DATA to s[0:1] path is
+ * the fault. If neither lands (encoding is LLVM-verified), no wave launched. No loop -- immediate stores. */
+static const unsigned int g_csDiagShader[] = {
+    0xBE8203FFu, 0x00509040u, /* s_mov_b32 s2, 0x00509040  (hardcoded addr lo) */
+    0xBE830380u,              /* s_mov_b32 s3, 0           (addr hi)          */
+    0x7E000280u,              /* v_mov_b32 v0, 0           (store offset = 0) */
+    0x7E0202FFu, 0xC0DE0002u, /* v_mov_b32 v1, 0xC0DE0002  (marker A)         */
+    0xDC708000u, 0x00020100u, /* global_store_dword v0, v1, s[2:3]  (STORE A) */
+    0x7E0402FFu, 0xC0DE0001u, /* v_mov_b32 v2, 0xC0DE0001  (marker B)         */
+    0xDC708000u, 0x00000200u, /* global_store_dword v0, v2, s[0:1]  (STORE B) */
+    0xBF8C3F70u,              /* s_waitcnt vmcnt(0)                           */
+    0xBF810000u,              /* s_endpgm                                     */
+};
+
 static volatile unsigned char *g_pspWin;   /* CPU pointer to the UC-mapped carveout window */
 static unsigned long long g_pspWinMc;      /* the same window as a GPU/MC address (FB_LOCATION-based) */
 static unsigned int g_pspFenceSeq;         /* monotonically increasing PSP command fence value */
@@ -4124,6 +4308,12 @@ static int                     g_gartTestReady;  /* 1 after stage (c) mapped + v
 static void GpuDelayMs(unsigned int ms)
 {
     unsigned long long end = __rdtsc() + (g_tscFreqHz / 1000ull) * ms;
+    while (__rdtsc() < end) { }
+}
+
+static void GpuDelayUs(unsigned int us)
+{
+    unsigned long long end = __rdtsc() + (g_tscFreqHz / 1000000ull) * us;
     while (__rdtsc() < end) { }
 }
 
@@ -4323,6 +4513,16 @@ static int PuckGpuGartBringUp(void)
         ptes[i] = (dummy & 0x0000FFFFFFFFF000ull) | VGH_GART_PTE_FLAGS;
     for (i = 0; i < 0x200000ull / 4096ull; i++) /* GPU VA [0, 2 MiB) -> the test buffer, 1:1 */
         ptes[i] = ((test.phys + i * 4096ull) & 0x0000FFFFFFFFF000ull) | VGH_GART_PTE_FLAGS;
+    /* Build 16: map the carveout ring-test block into VMID0 so the CP's VMID0-translated data ops
+     * (WRITE_DATA/IB/RELEASE_MEM) reach it. Physical = the same pages g_pspWin+0x1800000 maps. */
+    {
+        unsigned long long carveoutPhys = winPhys + 0x01800000ull;
+        unsigned long long j;
+        for (j = 0; j < 0x00400000ull / 4096ull; j++)
+            ptes[VGH_RT_CARVEOUT_VA_BASE / 4096ull + j] =
+                ((carveoutPhys + j * 4096ull) & 0x0000FFFFFFFFF000ull) | VGH_GART_PTE_FLAGS;
+        SerialPuts("[gpu] (c) mapped carveout block -> VMID0 VA 0x400000 (4 MiB)\r\n");
+    }
     PuckMfence();
 
     /* (a) context-0 page-table root + VA range (spec 3.3a). GART VA = [0, 256 MiB). */
@@ -4549,6 +4749,11 @@ static int PuckGpuPspLoad(void)
  * attempt comment in RingAttempt). g_rtCurCpu/g_rtCurMc are set once per attempt, not per-call. */
 static volatile unsigned char *g_rtCurCpu;   /* CPU base for the in-flight attempt */
 static unsigned long long      g_rtCurMc;    /* MC base for the in-flight attempt */
+static unsigned long long      g_rtDataBase; /* GPU-VA base for VMID0-translated data ops (WRITE_DATA/IB/
+                                              * RELEASE_MEM). == g_rtCurMc for the GART attempt; for the
+                                              * carveout attempt the ring PQ / RPTR / WPTR stay physical MC
+                                              * (proven: the RPTR writeback lands in carveout memory), but
+                                              * the data ops need a page-table-mapped VA (build 17). */
 static unsigned int            g_rtRingW;    /* ring dword index after the last kicked packet */
 
 /* Which MMIO wptr register(s) RtKick writes before the doorbell (or instead of it, for "rb0-mmio").
@@ -4562,6 +4767,17 @@ static int g_rtKickMode = VGH_RT_KICK_LEGACY;
  * hardware boots proved the legacy+doorbell combination dead, so this attempt isolates the pure MMIO
  * path with DOORBELL_EN=0, matching a non-doorbell amdgpu ring). */
 static int g_rtKickNoDoorbell = 0;
+
+/* BAR0-aperture CPU-physical address that aliases a carveout MC address (the HDP-routed path amdgpu
+ * uses to read VRAM). Returns 0 if the FB aperture/regs aren't up. */
+static unsigned long long GpuMcToAperturePhys(unsigned long long mc)
+{
+    unsigned long long fbBaseMc;
+    if (!g_fb.phys || !g_gpuRegs) return 0;
+    fbBaseMc = ((unsigned long long)(g_gpuRegs[VGH_GCMC_VM_FB_LOCATION_BASE] & 0xFFFFFFu)) << 24;
+    if (!fbBaseMc || mc < fbBaseMc) return 0;
+    return mc + (g_fb.phys - fbBaseMc);
+}
 
 static volatile unsigned int *RtCpu(unsigned long long off)
 {
@@ -4625,6 +4841,7 @@ static void RingStallDump(const char *tag)
     GpuPutReg("CP_STALLED_STAT3", VGH_CP_STALLED_STAT3);
     GpuPutReg("CP_CPF_STALLED1 ", VGH_CP_CPF_STALLED_STAT1);
     GpuPutReg("CP_CPC_STALLED1 ", VGH_CP_CPC_STALLED_STAT1);
+    GpuPutReg("CP_CPC_STATUS   ", VGH_CP_CPC_STATUS);
     GpuPutReg("RLC_STAT        ", VGH_RLC_STAT);
     GpuPutReg("RLC_SAFE_MODE   ", VGH_RLC_SAFE_MODE);
     GpuPutReg("RLC_CP_SCHED    ", VGH_RLC_CP_SCHEDULERS);
@@ -4705,6 +4922,11 @@ static void RingDiagDump(volatile unsigned char *cpuBase)
     {
         SerialPuts("[gpu]   ME_HDR["); EcamPutDec(i); SerialPuts("] =");
         EcamPutHex((unsigned long long)g_gpuRegs[VGH_CP_ME_HEADER_DUMP], 8); SerialPuts("\r\n");
+    }
+    for (i = 0; i < 8u; i++)
+    {
+        SerialPuts("[gpu]   MEC_HDR["); EcamPutDec(i); SerialPuts("]=");
+        EcamPutHex((unsigned long long)g_gpuRegs[VGH_CP_MEC_ME1_HEADER_DUMP], 8); SerialPuts("\r\n");
     }
 
     /* PFP/ME program counters: a moving value across the 4 reads = microcode alive and spinning; a
@@ -4927,6 +5149,23 @@ static int RingAttempt(const char *label, volatile unsigned char *cpuBase, unsig
     return 1;
 }
 
+/* Append PACKET3_ACQUIRE_MEM: force a GL2 (+GLM/GLK/GL1) write-back+invalidate so prior GPU writes
+ * to VRAM/local memory reach DRAM and become visible to a direct UC CPU read. GCR_CNTL 0xC3B1 =
+ * GLI_INV(1)|GLM_WB(1)|GLM_INV(1)|GLK_INV(1)|GLV_INV(1)|GL1_INV(1)|GL2_INV(1)|GL2_WB(1). Matches
+ * amdgpu gfx_v10_0_emit_mem_sync's full barrier. Whole-address-space (COHER_SIZE=~0). */
+static unsigned int EmitAcquireMemGl2Wb(volatile unsigned int *buf, unsigned int w)
+{
+    buf[w++] = VGH_PM4_TYPE3(VGH_PM4_ACQUIRE_MEM, 6);
+    buf[w++] = 0u;            /* COHER_CNTL / ENGINE_SEL = ME */
+    buf[w++] = 0xFFFFFFFFu;   /* COHER_SIZE */
+    buf[w++] = 0x00FFFFFFu;   /* COHER_SIZE_HI */
+    buf[w++] = 0u;            /* COHER_BASE_LO */
+    buf[w++] = 0u;            /* COHER_BASE_HI */
+    buf[w++] = 0x0000000Au;   /* POLL_INTERVAL */
+    buf[w++] = 0x0000C3B1u;   /* GCR_CNTL */
+    return w;
+}
+
 /* One ring-test attempt through the GFX HQD/MQD interface instead of legacy CP_RB0_* -- the flow
  * modern gfx10.3 firmware actually expects (see the VGH_CP_GFX_HQD_* comment above): build an MQD
  * IMAGE in memory (struct v10_gfx_mqd layout, MIT-licensed amdgpu/include/v10_structs.h; only the
@@ -4972,9 +5211,16 @@ static int RingAttemptHqd(const char *label, volatile unsigned char *cpuBase, un
     const struct cs_section_def *sect;
     const struct cs_extent_def *ext;
     int regPass, memPass;
+    volatile unsigned int *apScratch = 0; /* BAR0-aperture (HDP path) alias of the ring scratch dword */
+    unsigned int gotA = 0xFFFFFFFFu;       /* last aperture read of the scratch dword */
+    int memViaAperture = 0;                /* 1 if the mem write was seen ONLY through the aperture */
 
     g_rtCurCpu = cpuBase;
     g_rtCurMc = mcBase;
+    /* Build 17: data ops (WRITE_DATA/IB/RELEASE_MEM) are VMID0-translated -- the raw carveout MC is not a
+     * mapped VA, so route them through the page-table VA that PuckGpuGartBringUp mapped to the carveout
+     * block; the GART attempt's mcBase is already a valid VA (0). Ring PQ/RPTR/WPTR keep mcBase (physical). */
+    g_rtDataBase = (g_pspWinMc && mcBase == g_pspWinMc + 0x01800000ull) ? VGH_RT_CARVEOUT_VA_BASE : mcBase;
     g_rtKickMode = VGH_RT_KICK_HQD;
     g_rtKickNoDoorbell = 0;
 
@@ -4991,7 +5237,7 @@ static int RingAttemptHqd(const char *label, volatile unsigned char *cpuBase, un
     rptrMc    = RtVa(VGH_RT_RPTR_OFF);
     wptrMc    = RtVa(VGH_RT_WPTR_OFF);
     mqdMc     = RtVa(VGH_RT_MQD_OFF);
-    scratchMc = RtVa(VGH_RT_SCRATCH_OFF);
+    scratchMc = g_rtDataBase + VGH_RT_SCRATCH_OFF; /* data op: VMID0 VA (carveout -> 0x400000+) */
     ring      = RtCpu(VGH_RT_RING_OFF);
     ib        = RtCpu(VGH_RT_IB_OFF);
     mqd       = RtCpu(VGH_RT_MQD_OFF);
@@ -5185,6 +5431,13 @@ static int RingAttemptHqd(const char *label, volatile unsigned char *cpuBase, un
     ring[w++] = (unsigned int)(scratchMc >> 32);
     ring[w++] = 0x600DF00Du;
 
+    /* Build 14: force the ring WRITE_DATA out of GL2 to DRAM before the CPU polls it (fixes mem=N --
+     * boot 13 proved reg=Y/mem=N: the write retired but a direct UC DRAM read missed the GL2-resident
+     * value). The stream-length / WPTR accounting below reads `w`, so it picks up the +8 dwords. */
+    SerialPuts("[gpu] (e:"); SerialPuts(label);
+    SerialPuts(") +ACQUIRE_MEM(GL2 wb) after ring WRITE_DATA\r\n");
+    w = EmitAcquireMemGl2Wb(ring, w);
+
     /* Headroom guard: gfx10's recorded CSB is ~953 dwords (937 SECT_CONTEXT + 16 fixed packets, this
      * build's computed total) + 8 test-packet dwords = 961, comfortably under the 2048-dword ring; this
      * check exists so a future header update (or a bug in the emission loop above) fails loudly instead
@@ -5261,18 +5514,57 @@ static int RingAttemptHqd(const char *label, volatile unsigned char *cpuBase, un
     g_rtScratch = g_gpuRegs[VGH_SCRATCH_REG0]; g_rtRptr = g_gpuRegs[VGH_CP_GFX_HQD_RPTR];
     g_rtCpStat = g_gpuRegs[VGH_CP_STAT];
 
+    /* Build 15: map the ring scratch dword through the BAR0 FB aperture (the HDP-routed path amdgpu
+     * uses to read VRAM) so the poll below reads BOTH the direct DRAM phys AND the aperture window. */
+    {
+        /* Build 16: scratchMc is now a GPUVM VA (the carveout attempt bases at VGH_RT_CARVEOUT_VA_BASE),
+         * so it no longer aliases a carveout MC. Recompute the scratch dword's carveout MC directly for
+         * the aperture read; only the carveout attempt has a carveout MC to alias. */
+        unsigned long long carveoutMc = g_pspWinMc + 0x01800000ull + VGH_RT_SCRATCH_OFF;
+        unsigned long long apPhys = (g_pspWinMc && g_rtDataBase == VGH_RT_CARVEOUT_VA_BASE)
+                                        ? GpuMcToAperturePhys(carveoutMc & ~0xFFFull) : 0;
+        if (apPhys)
+        {
+            void *apPage = PuckMapMmio(apPhys, 0x1000u, PUCK_MT_UC);
+            if (apPage) apScratch = (volatile unsigned int *)((unsigned char *)apPage + (unsigned int)(carveoutMc & 0xFFFu));
+            SerialPuts("[gpu] (e:"); SerialPuts(label); SerialPuts(") aperture scratch @phys=");
+            SerialPutHex64(apPhys); SerialPuts("\r\n");
+        }
+    }
+
     {
         unsigned long long end = __rdtsc() + (g_tscFreqHz / 1000ull) * 1000ull; /* 1 s, independent of regPass */
-        unsigned int mv = 0;
+        unsigned int mv = 0, mva = 0xFFFFFFFFu;
+        unsigned int lastRptr = g_gpuRegs[VGH_CP_GFX_HQD_RPTR]; /* eraser-timing (build 13, item 5) */
+        unsigned int lastRing0 = ring[0];                       /* first CSB dword, non-zero pre-kick */
         for (;;)
         {
+            unsigned int rptr, ring0;
             g_gpuRegs[VGH_HDP_MEM_FLUSH] = 0;
             PuckMfence();
             mv = *RtCpu(VGH_RT_SCRATCH_OFF);
-            if (mv == 0x600DF00Du) { memPass = 1; break; }
+            mva = apScratch ? *apScratch : 0xFFFFFFFFu; /* build 15: aperture (HDP path) read of the same dword */
+            /* Timestamp the first moment the CP moves the ring RPTR or erases ring[0] (the CSB head).
+               Log ONLY on transition -- every-iteration logging would flood the 24 KB tail buffer. */
+            rptr = g_gpuRegs[VGH_CP_GFX_HQD_RPTR];
+            ring0 = ring[0];
+            if (rptr != lastRptr || ring0 != lastRing0)
+            {
+                SerialPuts("[gpu] (e:"); SerialPuts(label); SerialPuts(") poll t="); SerialPutHex64(__rdtsc());
+                SerialPuts(" RPTR="); EcamPutHex((unsigned long long)rptr, 4);
+                SerialPuts(" ring0="); EcamPutHex((unsigned long long)ring0, 8); SerialPuts("\r\n");
+                lastRptr = rptr;
+                lastRing0 = ring0;
+            }
+            if (mv == 0x600DF00Du || mva == 0x600DF00Du) { memPass = 1; break; }
             if (__rdtsc() > end) { memPass = 0; break; }
         }
         got = mv;
+        gotA = mva;
+        memViaAperture = (mv != 0x600DF00Du && mva == 0x600DF00Du);
+        SerialPuts("[gpu] (e:"); SerialPuts(label); SerialPuts(") mem: direct=");
+        EcamPutHex((unsigned long long)mv, 8); SerialPuts(" aperture=");
+        EcamPutHex((unsigned long long)mva, 8); SerialPuts("\r\n");
     }
 
     g_rtRegPass = regPass;
@@ -5280,8 +5572,10 @@ static int RingAttemptHqd(const char *label, volatile unsigned char *cpuBase, un
 
     SerialPuts("[gpu] (e:"); SerialPuts(label); SerialPuts(") verdict: reg=");
     SerialPuts(regPass ? "Y" : "N"); SerialPuts(" mem="); SerialPuts(memPass ? "Y" : "N");
+    if (memViaAperture) SerialPuts(" (via aperture)");
     SerialPuts(" (SCRATCH_REG0="); EcamPutHex((unsigned long long)g_rtScratch, 8);
-    SerialPuts(" mem_dword="); EcamPutHex((unsigned long long)got, 8); SerialPuts(")\r\n");
+    SerialPuts(" mem_dword="); EcamPutHex((unsigned long long)got, 8);
+    SerialPuts(" mem_aperture="); EcamPutHex((unsigned long long)gotA, 8); SerialPuts(")\r\n");
     if (regPass != memPass)
         SerialPuts(memPass
             ? "[gpu] (e) NOTE: reg/mem DISAGREE -- memory write executed, SET_UCONFIG_REG path needs fixing\r\n"
@@ -5296,8 +5590,11 @@ static int RingAttemptHqd(const char *label, volatile unsigned char *cpuBase, un
     }
     g_rtRingW = w;
     SerialPuts("[gpu] (e) RING TEST PASS ("); SerialPuts(label);
-    SerialPuts(memPass ? "): CP executed (mem write landed)\r\n"
-                       : "): CP executed (SET_UCONFIG_REG landed; mem write pending GL2 visibility)\r\n");
+    if (memViaAperture)
+        SerialPuts("): CP executed (mem write landed, via aperture)\r\n");
+    else
+        SerialPuts(memPass ? "): CP executed (mem write landed)\r\n"
+                           : "): CP executed (SET_UCONFIG_REG landed; mem write pending GL2 visibility)\r\n");
     return 1;
 }
 
@@ -5311,10 +5608,12 @@ static int RingIbFence(const char *label, volatile unsigned char *cpuBase)
     unsigned long long ibMc, fenceMc, scratchMc;
     volatile unsigned int *ring, *ib;
     unsigned int w, seq, got, ibLen;
+    volatile unsigned int *apFence = 0, *apScratch = 0; /* BAR0-aperture (HDP path) aliases; same 4 KiB page */
+    unsigned int gotA = 0xFFFFFFFFu;                     /* aperture read of the IB WRITE_DATA target */
 
-    ibMc      = RtVa(VGH_RT_IB_OFF);
-    fenceMc   = RtVa(VGH_RT_FENCE_OFF);
-    scratchMc = RtVa(VGH_RT_SCRATCH_OFF);
+    ibMc      = g_rtDataBase + VGH_RT_IB_OFF;      /* data ops: VMID0 VA (build 17) */
+    fenceMc   = g_rtDataBase + VGH_RT_FENCE_OFF;
+    scratchMc = g_rtDataBase + VGH_RT_SCRATCH_OFF;
     ring      = RtCpu(VGH_RT_RING_OFF);
     ib        = RtCpu(VGH_RT_IB_OFF);
 
@@ -5328,6 +5627,9 @@ static int RingIbFence(const char *label, volatile unsigned char *cpuBase)
     ib[3] = (unsigned int)(scratchMc >> 32);
     ib[4] = 0xDEADBEEFu;
     ibLen = 5u;                               /* IB length in dwords */
+    /* Build 14: append a GL2 write-back+invalidate inside the IB so its WRITE_DATA reaches DRAM; the
+     * INDIRECT_BUFFER control dword below reads ibLen, so the IB grows by 8 dwords to reflect it. */
+    ibLen = EmitAcquireMemGl2Wb(ib, ibLen);
     PuckMfence();
 
     /* Ring: INDIRECT_BUFFER (op 0x3F, count 2) then RELEASE_MEM (op 0x49, count 6). The ring's
@@ -5361,43 +5663,455 @@ static int RingIbFence(const char *label, volatile unsigned char *cpuBase)
 
     RtKick(w);                                /* ring the doorbell for the IB + fence packets */
 
+    /* Build 15: map the fence (and scratch -- same 4 KiB page 0x102000) through the BAR0 FB aperture,
+     * the HDP-routed path amdgpu uses to read VRAM, so the fence-wait below reads BOTH windows. */
+    {
+        /* Build 16: fenceMc/scratchMc are now GPUVM VAs (the carveout attempt bases at
+         * VGH_RT_CARVEOUT_VA_BASE), so recompute the fence/scratch dwords' carveout MC directly for the
+         * aperture read. Both dwords share one 4 KiB carveout page, so one apPhys covers both; only the
+         * carveout attempt has a carveout MC to alias. */
+        unsigned long long carveoutFenceMc   = g_pspWinMc + 0x01800000ull + VGH_RT_FENCE_OFF;
+        unsigned long long carveoutScratchMc = g_pspWinMc + 0x01800000ull + VGH_RT_SCRATCH_OFF;
+        unsigned long long apPhys = (g_pspWinMc && g_rtDataBase == VGH_RT_CARVEOUT_VA_BASE)
+                                        ? GpuMcToAperturePhys(carveoutFenceMc & ~0xFFFull) : 0;
+        if (apPhys)
+        {
+            void *apPage = PuckMapMmio(apPhys, 0x1000u, PUCK_MT_UC);
+            if (apPage)
+            {
+                apFence   = (volatile unsigned int *)((unsigned char *)apPage + (unsigned int)(carveoutFenceMc   & 0xFFFu));
+                apScratch = (volatile unsigned int *)((unsigned char *)apPage + (unsigned int)(carveoutScratchMc & 0xFFFu));
+            }
+            SerialPuts("[gpu] (fence) aperture @phys="); SerialPutHex64(apPhys); SerialPuts("\r\n");
+        }
+    }
+
     /* Poll the fence dword (HDP flush/invalidate between reads so the CPU sees the GPU write; spec 6.
      * The NBIO HDP flush register doubles as invalidate here -- there is no separate remap constant
      * vendored, and it is the same physical HDP path stage (c)/(d) used to read PSP fences). */
     {
         unsigned long long end = __rdtsc() + (g_tscFreqHz / 1000ull) * 1000ull; /* 1 s */
-        unsigned int fv = 0;
+        unsigned int fv = 0, fva = 0u;
+        /* Build 14: fence-wait ME-progress diag. Snapshot the ME PC and the IB WRITE_DATA target dword
+         * (VGH_RT_SCRATCH_OFF, which the IB writes 0xDEADBEEF into) before the loop; inside, log ONLY when
+         * one of them transitions -- a scratch change proves the ME executed the IB's WRITE_DATA (GL2
+         * write-back worked / IB ran) before it settles, and the ME PC shows where it stalls. */
+        unsigned int lastMePc = g_gpuRegs[VGH_CP_ME_INSTR_PNTR];
+        unsigned int lastScratch = *RtCpu(VGH_RT_SCRATCH_OFF);
         for (;;)
         {
+            unsigned int curMePc, curScratch;
             g_gpuRegs[VGH_HDP_MEM_FLUSH] = 0;
             PuckMfence();
             fv = *RtCpu(VGH_RT_FENCE_OFF);
-            if (fv == seq) break;
+            fva = apFence ? *apFence : 0u; /* build 15: aperture (HDP path) read of the fence dword */
+            curMePc = g_gpuRegs[VGH_CP_ME_INSTR_PNTR];
+            curScratch = *RtCpu(VGH_RT_SCRATCH_OFF);
+            if (curMePc != lastMePc || curScratch != lastScratch)
+            {
+                SerialPuts("[gpu] (fence-poll) t="); SerialPutHex64(__rdtsc());
+                SerialPuts(" fence="); EcamPutHex((unsigned long long)fv, 8);
+                SerialPuts(" fence_ap="); EcamPutHex((unsigned long long)fva, 8);
+                SerialPuts(" scratch="); EcamPutHex((unsigned long long)curScratch, 8);
+                SerialPuts(" scratch_ap="); EcamPutHex((unsigned long long)(apScratch ? *apScratch : 0u), 8);
+                SerialPuts(" ME_PC="); EcamPutHex((unsigned long long)curMePc, 8);
+                SerialPuts(" CP_STAT="); EcamPutHex((unsigned long long)g_gpuRegs[VGH_CP_STAT], 8); SerialPuts("\r\n");
+                lastMePc = curMePc;
+                lastScratch = curScratch;
+            }
+            if (fv == seq || fva == seq) break;
             if (__rdtsc() > end)
             {
                 SerialPuts("[gpu] (e:"); SerialPuts(label); SerialPuts(") IB/FENCE FAIL: fence=");
                 EcamPutHex((unsigned long long)fv, 8);
+                SerialPuts(" fence_ap="); EcamPutHex((unsigned long long)fva, 8);
                 SerialPuts(" want="); EcamPutHex((unsigned long long)seq, 8); SerialPuts("\r\n");
                 RingDiagDump(cpuBase);
                 return 0;
             }
         }
+        /* Build 15: final, unambiguous summary of BOTH read windows for fence + IB scratch. */
+        SerialPuts("[gpu] (fence) direct fence="); EcamPutHex((unsigned long long)fv, 8);
+        SerialPuts(" aperture fence="); EcamPutHex((unsigned long long)fva, 8);
+        SerialPuts(" | direct scratch="); EcamPutHex((unsigned long long)*RtCpu(VGH_RT_SCRATCH_OFF), 8);
+        SerialPuts(" aperture scratch="); EcamPutHex((unsigned long long)(apScratch ? *apScratch : 0u), 8);
+        SerialPuts("\r\n");
     }
 
-    /* Fence signalled -> read back the IB's WRITE_DATA target (HDP flush already current above). */
-    got = *RtCpu(VGH_RT_SCRATCH_OFF);
-    if (got != 0xDEADBEEFu)
+    /* Fence signalled -> read back the IB's WRITE_DATA target on BOTH paths (HDP flush already current
+     * above). Build 15: a direct-DRAM read may miss the GL2/HDP-resident write the aperture window sees. */
+    got  = *RtCpu(VGH_RT_SCRATCH_OFF);
+    gotA = apScratch ? *apScratch : 0xFFFFFFFFu;
+    if (got != 0xDEADBEEFu && gotA != 0xDEADBEEFu)
     {
-        SerialPuts("[gpu] (e:"); SerialPuts(label); SerialPuts(") IB target MISMATCH: ");
-        EcamPutHex((unsigned long long)got, 8); SerialPuts(" (fence signalled but WRITE_DATA did not land)\r\n");
+        SerialPuts("[gpu] (e:"); SerialPuts(label); SerialPuts(") IB target MISMATCH: direct=");
+        EcamPutHex((unsigned long long)got, 8); SerialPuts(" aperture=");
+        EcamPutHex((unsigned long long)gotA, 8);
+        SerialPuts(" (fence signalled but WRITE_DATA did not land on either path)\r\n");
         return 0;
     }
 
     SerialPuts("[gpu] (e:"); SerialPuts(label);
-    SerialPuts(") MILESTONE: FIRST SILICON EXECUTES -- CP ran IB, RELEASE_MEM fence signalled\r\n");
+    SerialPuts(") MILESTONE: FIRST SILICON EXECUTES -- CP ran IB, RELEASE_MEM fence signalled");
+    if (got != 0xDEADBEEFu && gotA == 0xDEADBEEFu) SerialPuts(" (via aperture)");
+    SerialPuts("\r\n");
     GpuPutReg("CP_RB0_RPTR ", VGH_CP_RB0_RPTR);
     GpuPutReg("CP_STAT     ", VGH_CP_STAT);
+    /* Build 18: hand off the ring position so PuckGpuComputeDispatch can append its packets past these
+     * (same chain as RingAttemptHqd's "RingIbFence continues from here" at its own PASS). The ring
+     * rptr/wptr both now sit at w; restarting the next emitter at the stale g_rtRingW would rewrite
+     * these dwords and kick a wptr that does not advance past rptr -- the CP would fetch nothing. */
+    g_rtRingW = w;
     return 1;
+}
+
+/* Build 18: the FIRST COMPUTE DISPATCH. RingIbFence proved the CP executes an IB and RELEASE_MEM
+ * signals; this goes one layer up -- an IB that DISPATCHes a hand-authored RDNA2 wave32 compute kernel
+ * (g_csDispatchShader) which stores 0xC0DE0001 to a buffer whose 64-bit VA it receives in USER_DATA_0/1.
+ * Mirrors RingIbFence exactly (identical INDIRECT_BUFFER + RELEASE_MEM ring tail, identical dual
+ * direct/aperture read of the target dword) but the IB body is SET_SH_REG(compute state) +
+ * DISPATCH_DIRECT instead of a WRITE_DATA. Carveout attempt ONLY (guarded at the call site): the
+ * shader fetch and its global_store are VMID0-translated, so both need the page-table VA mapping
+ * PuckGpuGartBringUp laid down over the carveout block. Uses the globals the passing carveout attempt
+ * left set: g_rtCurCpu (block CPU base, via RtCpu), g_rtDataBase (VA base = VGH_RT_CARVEOUT_VA_BASE),
+ * g_rtRingW (current ring write index, handed off by RingIbFence above). */
+static int PuckGpuComputeDispatch(const char *label)
+{
+    unsigned long long shaderVa, outVa, ibVa, fenceMc, carveoutOutMc, apPhys;
+    volatile unsigned int *ring, *ib, *shaderCpu, *outCpu, *out2Cpu, *fenceCpu;
+    unsigned int w, seq, ibLen, i, fv, outD;
+    volatile unsigned int *apOut = 0;  /* BAR0-aperture (HDP path) alias of the output dword */
+    volatile unsigned int *apOut2 = 0; /* build 22: aperture alias of the hardcoded-store target (STORE A) */
+    unsigned int outA = 0xFFFFFFFFu;
+    unsigned int out2D = 0xFFFFFFFFu, out2A = 0xFFFFFFFFu; /* build 22: STORE-A (hardcoded VA) reads */
+    int storeB = 0, waveRan = 0; /* build 22: did the user-data / hardcoded store land? */
+    unsigned int grbm2_pre = 0u; /* Build 19 (cs-diag): GRBM_STATUS2 snapshot captured just before the kick. */
+
+    /* (1) Addresses. Data ops (shader fetch + the shader's stores + IB fetch) are VMID0-translated ->
+     * GPU VAs off g_rtDataBase; the CPU-side pointers ride the current attempt's block base via RtCpu. */
+    shaderVa  = g_rtDataBase + VGH_RT_CS_SHADER_OFF;
+    outVa     = g_rtDataBase + VGH_RT_CS_OUTPUT_OFF;
+    ibVa      = g_rtDataBase + VGH_RT_CS_IB_OFF;
+    fenceMc   = g_rtDataBase + VGH_RT_FENCE_OFF;
+    ring      = RtCpu(VGH_RT_RING_OFF);
+    ib        = RtCpu(VGH_RT_CS_IB_OFF);
+    shaderCpu = RtCpu(VGH_RT_CS_SHADER_OFF);
+    outCpu    = RtCpu(VGH_RT_CS_OUTPUT_OFF);
+    out2Cpu   = RtCpu(VGH_RT_CS_OUTPUT2_OFF); /* build 22: hardcoded-store target (STORE A) */
+    fenceCpu  = RtCpu(VGH_RT_FENCE_OFF);
+
+    /* (2) Stage the shader, clear the output (so a stale value can't masquerade as a PASS) + the fence.
+     * Build 22: stage the DECISIVE DUAL-STORE shader (STORE A -> hardcoded VA 0x509040 with the address in
+     * s[2:3], no user-data; STORE B -> the USER_DATA VA in s[0:1]). RSRC1=0x600C0000 still covers it -- it
+     * uses s0..s3 + v0..v2, within the granule -- so the SET_SH_REG/DISPATCH IB is byte-identical to build 21. */
+    for (i = 0; i < sizeof(g_csDiagShader) / sizeof(g_csDiagShader[0]); i++)
+        shaderCpu[i] = g_csDiagShader[i];
+    *outCpu = 0u;
+    *out2Cpu = 0u; /* build 22: clear the hardcoded-store slot too, so a stale value can't fake a wave */
+    *fenceCpu = 0u;
+    PuckMfence();
+    SerialPuts("[gpu] (cs) shaderVa="); SerialPutHex64(shaderVa);
+    SerialPuts(" outVa="); SerialPutHex64(outVa); SerialPuts("\r\n");
+
+    /* (3) Build the dispatch IB. SET_SH_REG headers AND the DISPATCH_DIRECT header carry SHADER_TYPE
+     * (compute); ACQUIRE_MEM must NOT. Each SET_SH_REG count field = number of value dwords that follow
+     * the offset dword (6, 2, 9, 2). */
+    ibLen = 0u;
+    /* START_X/Y/Z + NUM_THREAD_X/Y/Z (6 regs @ 0x204). */
+    ib[ibLen++] = VGH_PM4_TYPE3(VGH_PM4_SET_SH_REG, 6) | VGH_PM4_SHADER_TYPE_COMPUTE;
+    ib[ibLen++] = VGH_SH_REG_OFS(VGH_MM_COMPUTE_START_X);
+    ib[ibLen++] = 0u; ib[ibLen++] = 0u; ib[ibLen++] = 0u; /* START_X/Y/Z */
+    ib[ibLen++] = 1u; ib[ibLen++] = 1u; ib[ibLen++] = 1u; /* NUM_THREAD_X/Y/Z */
+    /* PGM_LO/HI (2 regs @ 0x20c) = shader VA >> 8. */
+    ib[ibLen++] = VGH_PM4_TYPE3(VGH_PM4_SET_SH_REG, 2) | VGH_PM4_SHADER_TYPE_COMPUTE;
+    ib[ibLen++] = VGH_SH_REG_OFS(VGH_MM_COMPUTE_PGM_LO);
+    ib[ibLen++] = (unsigned int)(shaderVa >> 8);   /* PGM_LO */
+    ib[ibLen++] = (unsigned int)(shaderVa >> 40);  /* PGM_HI */
+    /* PGM_RSRC1/2, VMID, RESOURCE_LIMITS, STATIC_THREAD_MGMT_SE0/1, TMPRING_SIZE, SE2/3 -- a contiguous
+     * 9-reg run mm 0x1bb2..0x1bba (RSRC1..SE3), values in that mm order. */
+    ib[ibLen++] = VGH_PM4_TYPE3(VGH_PM4_SET_SH_REG, 9) | VGH_PM4_SHADER_TYPE_COMPUTE;
+    ib[ibLen++] = VGH_SH_REG_OFS(VGH_MM_COMPUTE_PGM_RSRC1);
+    ib[ibLen++] = 0x600C0000u; /* PGM_RSRC1 */
+    ib[ibLen++] = 0x00000004u; /* PGM_RSRC2 (USER_SGPR count etc.) */
+    ib[ibLen++] = 0u;          /* VMID (0x1bb4) */
+    ib[ibLen++] = 0u;          /* RESOURCE_LIMITS (0x1bb5) */
+    ib[ibLen++] = 0xFFFFFFFFu; /* STATIC_THREAD_MGMT_SE0 (0x1bb6) */
+    ib[ibLen++] = 0xFFFFFFFFu; /* STATIC_THREAD_MGMT_SE1 (0x1bb7) */
+    ib[ibLen++] = 0u;          /* TMPRING_SIZE (0x1bb8) */
+    ib[ibLen++] = 0xFFFFFFFFu; /* STATIC_THREAD_MGMT_SE2 (0x1bb9) */
+    ib[ibLen++] = 0xFFFFFFFFu; /* STATIC_THREAD_MGMT_SE3 (0x1bba) */
+    /* USER_DATA_0/1 (2 regs @ 0x240) = output VA lo/hi (the shader reads these as SGPRs s[0:1]). */
+    ib[ibLen++] = VGH_PM4_TYPE3(VGH_PM4_SET_SH_REG, 2) | VGH_PM4_SHADER_TYPE_COMPUTE;
+    ib[ibLen++] = VGH_SH_REG_OFS(VGH_MM_COMPUTE_USER_DATA_0);
+    ib[ibLen++] = (unsigned int)(outVa & 0xFFFFFFFFu); /* USER_DATA_0 */
+    ib[ibLen++] = (unsigned int)(outVa >> 32);         /* USER_DATA_1 */
+    /* DISPATCH_DIRECT: dim x/y/z + DISPATCH_INITIATOR (COMPUTE_SHADER_EN|FORCE_START_AT_000|CS_W32_EN). */
+    ib[ibLen++] = VGH_PM4_TYPE3(VGH_PM4_DISPATCH_DIRECT, 3) | VGH_PM4_SHADER_TYPE_COMPUTE;
+    ib[ibLen++] = 1u; ib[ibLen++] = 1u; ib[ibLen++] = 1u;
+    ib[ibLen++] = 0x00008005u;
+    /* Build 23: CS_PARTIAL_FLUSH -- make the CP WAIT for the async dispatch's waves (and their
+     * global_store landing in GL2) to finish BEFORE ACQUIRE_MEM flushes GL2 to DRAM. Build 22 evidence:
+     * a wave DOES run (GUI_ACTIVE tracked the shader runtime across builds) but no store reached DRAM --
+     * DISPATCH_DIRECT is async, so the flush was racing ahead of the store. EVENT_TYPE=CS_PARTIAL_FLUSH(7),
+     * EVENT_INDEX(4); no shader-type bit (matches RADV's EVENT_WRITE emission). */
+    ib[ibLen++] = VGH_PM4_TYPE3(VGH_PM4_EVENT_WRITE, 0);
+    ib[ibLen++] = (0x07u << 0) | (0x4u << 8); /* CS_PARTIAL_FLUSH | EVENT_INDEX(4) */
+    /* GL2 write-back so the shader's global_store retires to DRAM (same barrier RingIbFence appends). */
+    ibLen = EmitAcquireMemGl2Wb(ib, ibLen);
+    PuckMfence();
+
+    /* (4) Emit on the ring, mirroring RingIbFence's tail exactly: INDIRECT_BUFFER then RELEASE_MEM. The
+     * ring rptr/wptr both sit at g_rtRingW (RingIbFence handed off after its fence); write here + kick. */
+    w = g_rtRingW;
+    seq = 0xCD15D010u;
+    ring[w++] = VGH_PM4_TYPE3(VGH_PM4_INDIRECT_BUFFER, 2);
+    ring[w++] = (unsigned int)(ibVa & 0xFFFFFFFCu);   /* dword-aligned IB GPU-VA lo */
+    ring[w++] = (unsigned int)(ibVa >> 32);
+    ring[w++] = ibLen | (0u << 24);           /* control: ib_length_dw | (vmid=0 << 24) */
+
+    ring[w++] = VGH_PM4_TYPE3(VGH_PM4_RELEASE_MEM, 6);
+    ring[w++] = (1u << 22) | (1u << 21) | (1u << 13) | (1u << 12) /* GCR_SEQ|GL2_WB|GLM_INV|GLM_WB */
+            | (3u << 25)                                        /* CACHE_POLICY(3) */
+            | (0x14u << 0)                                      /* EVENT_TYPE = CACHE_FLUSH_AND_INV_TS */
+            | (5u << 8);                                        /* EVENT_INDEX(5) */
+    ring[w++] = (1u << 29) | (0u << 24);      /* dw2: DATA_SEL(1) 32-bit | INT_SEL(0) poll */
+    ring[w++] = (unsigned int)(fenceMc & 0xFFFFFFFFu); /* dw3: fence addr lo */
+    ring[w++] = (unsigned int)(fenceMc >> 32);         /* dw4: fence addr hi */
+    ring[w++] = seq;                          /* dw5: seq lo */
+    ring[w++] = 0u;                           /* dw6: seq hi (32-bit fence) */
+    ring[w++] = 0u;                           /* dw7: padding (count 6 -> body dw1..dw7 = 7 dwords) */
+    PuckMfence();
+
+    /* Build 19 (cs-diag): snapshot GRBM_STATUS2 (RLC_BUSY = bit26) the instant BEFORE the kick, so the
+     * post/late reads in the diagnostic block below localize whether/when RLC_BUSY latches. Pure MMIO
+     * read -- does not touch ring/GPU state, so the dispatch/fence path is unchanged from build 18. */
+    grbm2_pre = g_gpuRegs[VGH_GRBM_STATUS2];
+
+    RtKick(w);                                /* ring the doorbell for the dispatch IB + fence packets */
+    g_rtRingW = w;                            /* keep the chain consistent if anything runs after */
+
+    /* Build 20 (cs-diag): occupancy poll -- THE decisive read. Immediately after the doorbell (before the
+     * aperture map + fence poll), spin a tight CPU loop (~20 ms TSC deadline, no sleep) reading
+     * SPI_CSQ_WF_ACTIVE_STATUS, SPI_CSQ_WF_ACTIVE_COUNT_0 and GRBM_STATUS every iteration. Capture the
+     * FIRST sample where any shows activity (WF status or count nonzero, or GRBM_STATUS GUI_ACTIVE|SPI_BUSY).
+     * The loop-detector shader stays resident ~ms, so if a wave reaches a CU this catches WF_COUNT ~1;
+     * wave_seen=N across the whole window => no wave ever launched. Pure MMIO reads -- GPU state untouched. */
+    {
+        /* Build 21: track the MAX wave occupancy over the FULL ~30 ms window. Build 20's poll stopped
+         * after the first GRBM.GUI_ACTIVE hit -- but that is just the CP being busy right after the kick,
+         * which fires BEFORE the loop shader can become resident, so it never actually looked for a wave.
+         * Now: sample SPI_CSQ_WF_ACTIVE_STATUS/_COUNT_0 for the whole window and never stop early;
+         * wave_resident=Y iff a compute wave ever showed there -- the decisive launched-vs-not answer. */
+        unsigned int maxStatus = 0u, maxCount = 0u, guiSamples = 0u, samples = 0u;
+        unsigned long long occEnd = __rdtsc() + (g_tscFreqHz / 1000ull) * 30ull; /* ~30 ms > loop residency */
+        for (;;)
+        {
+            unsigned int s = g_gpuRegs[VGH_SPI_CSQ_WF_ACTIVE_STATUS_MM];
+            unsigned int c = g_gpuRegs[VGH_SPI_CSQ_WF_ACTIVE_COUNT_0_MM];
+            if (s > maxStatus) maxStatus = s;
+            if (c > maxCount) maxCount = c;
+            if (g_gpuRegs[VGH_GRBM_STATUS] & 0x80000000u) guiSamples++; /* GUI_ACTIVE, informational */
+            samples++;
+            if (__rdtsc() > occEnd) break; /* poll the WHOLE window -- do NOT stop early */
+        }
+        g_csWaveResident = (maxStatus != 0u || maxCount != 0u);
+        SerialPuts("[gpu] (cs-diag) occ-poll: wave_resident="); SerialPuts(g_csWaveResident ? "Y" : "N");
+        SerialPuts(" max_wf_status="); EcamPutHex((unsigned long long)maxStatus, 8);
+        SerialPuts(" max_wf_count="); EcamPutHex((unsigned long long)maxCount, 8);
+        SerialPuts(" gui_samples="); EcamPutDec(guiSamples); SerialPuts("/"); EcamPutDec(samples);
+        SerialPuts("\r\n");
+    }
+
+    /* Map the output dword through the BAR0 FB aperture (HDP path) too, exactly as RingIbFence does the
+     * fence -- carveout attempt only, and the output page is 4 KiB-aligned so offset-in-page is 0. Build 22:
+     * the hardcoded-store target (OUTPUT2) sits 0x40 bytes further in the SAME 4 KiB page, so its aperture
+     * alias is apOut + 0x40 (16 dwords) -- no second map needed. */
+    carveoutOutMc = g_pspWinMc + 0x01800000ull + VGH_RT_CS_OUTPUT_OFF;
+    apPhys = (g_pspWinMc && g_rtDataBase == VGH_RT_CARVEOUT_VA_BASE)
+                 ? GpuMcToAperturePhys(carveoutOutMc & ~0xFFFull) : 0;
+    if (apPhys)
+    {
+        void *apPage = PuckMapMmio(apPhys, 0x1000u, PUCK_MT_UC);
+        if (apPage)
+        {
+            apOut  = (volatile unsigned int *)((unsigned char *)apPage + (unsigned int)(carveoutOutMc & 0xFFFu));
+            apOut2 = (volatile unsigned int *)((unsigned char *)apPage
+                        + (unsigned int)((carveoutOutMc & 0xFFFull) + (VGH_RT_CS_OUTPUT2_OFF - VGH_RT_CS_OUTPUT_OFF)));
+        }
+        SerialPuts("[gpu] (cs) aperture @phys="); SerialPutHex64(apPhys); SerialPuts("\r\n");
+    }
+
+    /* (5) Poll the fence (1 s TSC deadline; HDP flush/invalidate before each read). Break when it signals. */
+    {
+        unsigned long long end = __rdtsc() + (g_tscFreqHz / 1000ull) * 1000ull; /* 1 s */
+        fv = 0u;
+        for (;;)
+        {
+            g_gpuRegs[VGH_HDP_MEM_FLUSH] = 0;
+            PuckMfence();
+            fv = *fenceCpu;
+            if (fv == seq) break;
+            if (__rdtsc() > end) break;
+        }
+    }
+
+    /* (6) Verdict. Read BOTH output dwords on BOTH paths (HDP flush current from the poll). STORE B is the
+     * USER_DATA slot (0x509000); STORE A is the hardcoded-VA slot (0x509040). */
+    outD  = *outCpu;
+    outA  = apOut ? *apOut : 0xFFFFFFFFu;
+    out2D = *out2Cpu;
+    out2A = apOut2 ? *apOut2 : 0xFFFFFFFFu;
+    SerialPuts("[gpu] (cs) out: direct="); EcamPutHex((unsigned long long)outD, 8);
+    SerialPuts(" aperture="); EcamPutHex((unsigned long long)outA, 8);
+    SerialPuts(" fence="); EcamPutHex((unsigned long long)fv, 8); SerialPuts("\r\n");
+    /* Build 22 (cs-diag): the decisive pair -- STORE A proves a wave ran, STORE B proves the user-data path. */
+    SerialPuts("[gpu] (cs-diag) STORE-A(hardcoded 0x509040)="); EcamPutHex((unsigned long long)out2D, 8);
+    SerialPuts("(expect 0xC0DE0002)  STORE-B(userdata 0x509000)="); EcamPutHex((unsigned long long)outD, 8);
+    SerialPuts("(expect 0xC0DE0001)\r\n");
+
+    /* ==================================================================================================
+     * Build 19 (cs-diag): PURE READ-ONLY diagnostics. The fence signalled but output stayed 0 and
+     * GRBM_STATUS showed SPI_BUSY=0/GUI_ACTIVE=0 (no wave ever launched). Two hypotheses: (A) the
+     * SET_SH_REG compute state never took effect in the gfx-pipe dispatcher's bank -> DISPATCH_DIRECT
+     * launched a zero-thread no-op (clean retire, no wave); (B) RLC power-gating left the CU rail down.
+     * This block ONLY reads registers + logs. The single state touch is the GRBM_GFX_CNTL me/pipe/queue
+     * select in step (2), mirrored exactly from PuckGpuKiqBringUp and restored to 0 immediately, and it
+     * runs AFTER the ring/IB/fence milestone -- nothing above is altered. Runs on BOTH pass and fail.
+     * ================================================================================================== */
+    {
+        unsigned int grbm2_post, grbm2_late;
+        int rlcBusyCleared = 0;
+        unsigned int shPgmLo_b, shNumX_b, shUser0_b, shDispId_b;   /* current/broadcast select */
+        unsigned int shPgmLo_s, shNumX_s, shUser0_s, shDispId_s;   /* me0/pipe0/queue0 select */
+        unsigned int rlcPgCntl, rlcCgcg, rlcGpmStat, rlcStat;
+        unsigned int spiCsqWf, grbmSe0;
+        unsigned int cpcStatus, cpcStalled1, spiRsrvCu0, spiRsrvEnCu0, grbmGfxIdx; /* Build 20 CPC/resource */
+        unsigned int di; /* Build 20 MEC_HDR FIFO-pop index */
+
+        /* (1) GRBM_STATUS2 bracketing: grbm2_pre was captured before the kick; read post now, then
+         * busy-wait ~200 ms watching RLC_BUSY (bit26, mask 0x04000000) to see if it is transient. */
+        grbm2_post = g_gpuRegs[VGH_GRBM_STATUS2];
+        grbm2_late = grbm2_post;
+        if ((grbm2_late & 0x04000000u) == 0u)
+            rlcBusyCleared = 1;
+        {
+            unsigned long long end2 = __rdtsc() + (g_tscFreqHz / 1000ull) * 200ull; /* ~200 ms */
+            while (!rlcBusyCleared)
+            {
+                grbm2_late = g_gpuRegs[VGH_GRBM_STATUS2];
+                if ((grbm2_late & 0x04000000u) == 0u) { rlcBusyCleared = 1; break; }
+                if (__rdtsc() > end2) break;
+            }
+        }
+        SerialPuts("[gpu] (cs-diag) grbm2_pre="); EcamPutHex((unsigned long long)grbm2_pre, 8);
+        SerialPuts(" grbm2_post="); EcamPutHex((unsigned long long)grbm2_post, 8);
+        SerialPuts(" grbm2_late="); EcamPutHex((unsigned long long)grbm2_late, 8);
+        SerialPuts(" rlc_busy_cleared="); SerialPuts(rlcBusyCleared ? "Y" : "N"); SerialPuts("\r\n");
+
+        /* (2) SH-bank readback -- THE decisive test. First the current/broadcast select (no state change);
+         * a nonzero PGM_LO/NUM_THREAD_X here kills hypothesis (A). */
+        shPgmLo_b  = g_gpuRegs[VGH_COMPUTE_PGM_LO_MM];
+        shNumX_b   = g_gpuRegs[VGH_COMPUTE_NUM_THREAD_X_MM];
+        shUser0_b  = g_gpuRegs[VGH_COMPUTE_USER_DATA_0_MM];
+        shDispId_b = g_gpuRegs[VGH_COMPUTE_DISPATCH_ID_MM];
+        /* Then select me0/pipe0/queue0 via the same GRBM_GFX_CNTL write PuckGpuKiqBringUp uses, read the
+         * banked SH state, and restore GRBM_GFX_CNTL=0 (broadcast/default) exactly as KiqBringUp does. On
+         * this select register me0/pipe0/queue0 encodes to 0 == the restore value, so this bank coincides
+         * with the broadcast read above; logged separately per spec in case the compute state is not in
+         * the me0/pipe0 bank. */
+        g_gpuRegs[VGH_GRBM_GFX_CNTL] = (0u << VGH_GRBM_GFX_CNTL_MEID_SHIFT)
+                                     | (0u << VGH_GRBM_GFX_CNTL_PIPEID_SHIFT)
+                                     | (0u << VGH_GRBM_GFX_CNTL_QUEUEID_SHIFT);
+        PuckMfence();
+        shPgmLo_s  = g_gpuRegs[VGH_COMPUTE_PGM_LO_MM];
+        shNumX_s   = g_gpuRegs[VGH_COMPUTE_NUM_THREAD_X_MM];
+        shUser0_s  = g_gpuRegs[VGH_COMPUTE_USER_DATA_0_MM];
+        shDispId_s = g_gpuRegs[VGH_COMPUTE_DISPATCH_ID_MM];
+        g_gpuRegs[VGH_GRBM_GFX_CNTL] = 0u; /* restore broadcast (VMID0/ME0/PIPE0/QUEUE0), as KiqBringUp does */
+        PuckMfence();
+        SerialPuts("[gpu] (cs-diag) SH-bank(bcast): PGM_LO="); EcamPutHex((unsigned long long)shPgmLo_b, 8);
+        SerialPuts("(expect 0x5080) NUM_THREAD_X="); EcamPutHex((unsigned long long)shNumX_b, 8);
+        SerialPuts("(expect 0x1) USER_DATA_0="); EcamPutHex((unsigned long long)shUser0_b, 8);
+        SerialPuts("(expect 0x509000) DISPATCH_ID="); EcamPutHex((unsigned long long)shDispId_b, 8);
+        SerialPuts("\r\n");
+        SerialPuts("[gpu] (cs-diag) SH-bank(me0p0q0): PGM_LO="); EcamPutHex((unsigned long long)shPgmLo_s, 8);
+        SerialPuts("(expect 0x5080) NUM_THREAD_X="); EcamPutHex((unsigned long long)shNumX_s, 8);
+        SerialPuts("(expect 0x1) USER_DATA_0="); EcamPutHex((unsigned long long)shUser0_s, 8);
+        SerialPuts("(expect 0x509000) DISPATCH_ID="); EcamPutHex((unsigned long long)shDispId_s, 8);
+        SerialPuts("\r\n");
+
+        /* (3) RLC gating state (READ ONLY -- never written here). */
+        rlcPgCntl  = g_gpuRegs[VGH_RLC_PG_CNTL_MM];
+        rlcCgcg    = g_gpuRegs[VGH_RLC_CGCG_CGLS_CTRL_MM];
+        rlcGpmStat = g_gpuRegs[VGH_RLC_GPM_STAT];
+        rlcStat    = g_gpuRegs[VGH_RLC_STAT];
+        SerialPuts("[gpu] (cs-diag) RLC: PG_CNTL="); EcamPutHex((unsigned long long)rlcPgCntl, 8);
+        SerialPuts(" CGCG="); EcamPutHex((unsigned long long)rlcCgcg, 8);
+        SerialPuts(" GPM_STAT="); EcamPutHex((unsigned long long)rlcGpmStat, 8);
+        SerialPuts(" STAT="); EcamPutHex((unsigned long long)rlcStat, 8); SerialPuts("\r\n");
+
+        /* (4) Occupancy: any active CS wavefronts, and SE0's SPI_BUSY bit. */
+        spiCsqWf = g_gpuRegs[VGH_SPI_CSQ_WF_ACTIVE_STATUS_MM];
+        grbmSe0  = g_gpuRegs[VGH_GRBM_STATUS_SE0_MM];
+        SerialPuts("[gpu] (cs-diag) occupancy: SPI_CSQ_WF="); EcamPutHex((unsigned long long)spiCsqWf, 8);
+        SerialPuts(" GRBM_SE0="); EcamPutHex((unsigned long long)grbmSe0, 8); SerialPuts("\r\n");
+
+        /* (5) Build 20 -- CPC (compute-pipe controller) + resource-reserve block, never examined before.
+         * All READS. CP_MEC_ME1_HEADER_DUMP is a FIFO: 8 back-to-back reads pop the headers the MEC/ME1
+         * front end fetched (mirrors the CP_PFP_HEADER_DUMP x8 pattern in RingDiagDump) -- nonzero => the
+         * MEC fetched packets, all-zero => it never did. SPI_RESOURCE_RESERVE_CU_0/EN_CU_0 + GRBM_GFX_INDEX
+         * are one-shot reads (the CU-reserve masks + the current GRBM SE/SH/instance broadcast select). */
+        cpcStatus   = g_gpuRegs[VGH_CP_CPC_STATUS];
+        cpcStalled1 = g_gpuRegs[VGH_CP_CPC_STALLED_STAT1];
+        SerialPuts("[gpu] (cs-diag) CPC: STATUS="); EcamPutHex((unsigned long long)cpcStatus, 8);
+        SerialPuts(" STALLED1="); EcamPutHex((unsigned long long)cpcStalled1, 8); SerialPuts("\r\n");
+        for (di = 0; di < 8u; di++)
+        {
+            SerialPuts("[gpu] (cs-diag) MEC_HDR["); EcamPutDec(di); SerialPuts("]=");
+            EcamPutHex((unsigned long long)g_gpuRegs[VGH_CP_MEC_ME1_HEADER_DUMP], 8); SerialPuts("\r\n");
+        }
+        spiRsrvCu0   = g_gpuRegs[VGH_SPI_RESOURCE_RESERVE_CU_0];
+        spiRsrvEnCu0 = g_gpuRegs[VGH_SPI_RESOURCE_RESERVE_EN_CU_0];
+        grbmGfxIdx   = g_gpuRegs[VGH_GRBM_GFX_INDEX_MM];
+        SerialPuts("[gpu] (cs-diag) spi-rsrv: CU_0="); EcamPutHex((unsigned long long)spiRsrvCu0, 8);
+        SerialPuts(" EN_CU_0="); EcamPutHex((unsigned long long)spiRsrvEnCu0, 8);
+        SerialPuts(" GRBM_GFX_INDEX="); EcamPutHex((unsigned long long)grbmGfxIdx, 8); SerialPuts("\r\n");
+    }
+
+    /* Build 22 verdict + parked-screen latch. waveRan = STORE A (hardcoded VA) landed -> a wave definitely
+     * executed a store, independent of the occupancy registers and the USER_DATA path. storeB = STORE B
+     * (USER_DATA VA) landed. This function is the SINGLE authority for the compute bring-up note; the call
+     * site does not overwrite it. */
+    storeB  = (outD  == 0xC0DE0001u || outA  == 0xC0DE0001u);
+    waveRan = (out2D == 0xC0DE0002u || out2A == 0xC0DE0002u);
+    g_csWaveRan = waveRan;
+
+    if (storeB)
+        g_gpuBringUpNote = "(e) RING+IB LIVE + compute dispatch PASS: GPU ran a compute kernel (user-data store)";
+    else if (waveRan)
+        g_gpuBringUpNote = "(e) RING+IB LIVE + compute FAIL: WAVE RAN (hardcoded store OK) but USER_DATA store did not land";
+    else
+        g_gpuBringUpNote = "(e) RING+IB LIVE + compute FAIL: NO wave ran (hardcoded store absent -> shader-array power/GFXOFF)";
+
+    if (storeB || waveRan)
+    {
+        SerialPuts("[gpu] ("); SerialPuts(label);
+        SerialPuts(storeB
+            ? ") COMPUTE DISPATCH PASS: user-data store (0xC0DE0001) landed -- GPU RAN A COMPUTE KERNEL\r\n"
+            : ") COMPUTE FAIL: hardcoded store (0xC0DE0002) landed -- WAVE RAN, but USER_DATA store did not\r\n");
+        return 1;
+    }
+
+    /* FAIL: neither store landed. Dump the CP/GPUVM state that explains a stall or a fault. */
+    GpuPutReg("GRBM_STATUS ", VGH_GRBM_STATUS);   /* CP_BUSY/SPI_BUSY bits */
+    GpuPutReg("GRBM_STATUS2", VGH_GRBM_STATUS2);
+    GpuPutReg("VM_L2_FAULT ", VGH_GCVM_L2_FAULT_STATUS); /* 0 = no GPUVM faults */
+    GpuPutReg("CP_STAT     ", VGH_CP_STAT);
+    SerialPuts("[gpu] ("); SerialPuts(label); SerialPuts(") COMPUTE DISPATCH FAIL: NO wave ran; out=");
+    EcamPutHex((unsigned long long)outD, 8); SerialPuts(" out2=");
+    EcamPutHex((unsigned long long)out2D, 8); SerialPuts(" fence=");
+    EcamPutHex((unsigned long long)fv, 8); SerialPuts("\r\n");
+    return 0;
 }
 
 /* Boot-4 (2026-07-03) stage (e) constants+golden init: gfx_v10_0_constants_init (GRBM_CNTL read
@@ -5566,13 +6280,14 @@ static void PuckGpuKiqPoke(void)
  * treated as a diagnostic, not a hang condition. */
 static void PuckGpuKiqBringUp(void)
 {
-    volatile unsigned char *cpuBase = g_gartTestCpu;
-    unsigned long long mcBase = g_gartTestVa;
+    volatile unsigned char *cpuBase = (g_pspWin && g_pspWinMc) ? (volatile unsigned char *)(g_pspWin + 0x01800000ull) : g_gartTestCpu;
+    unsigned long long mcBase = (g_pspWin && g_pspWinMc) ? (g_pspWinMc + 0x01800000ull) : g_gartTestVa;
     unsigned long long eopMc, mqdMc, pqMc, rptrMc, wptrMc;
     volatile unsigned int *mqd;
     unsigned int tmp, pqControl, eopControl, persistentState, doorbellControl;
 
     SerialPuts("[gpu] (e:kiq) starting direct-MMIO KIQ bring-up (unconditional)\r\n");
+    SerialPuts("[gpu] (e:kiq) buffers in "); SerialPuts((g_pspWin && g_pspWinMc) ? "carveout\r\n" : "gart\r\n");
 
     /* (a) Un-halt MEC. CP_MEC_CNTL was left at its post-autoload halted value; clear both ME1/ME2 halt
      * bits. This is new territory: there is no MEC ring traffic to poll for afterward, so just clear
@@ -5733,94 +6448,6 @@ static void PuckGpuKiqBringUp(void)
                    " attempt anyway (diagnostic only)\r\n");
 }
 
-/* Boot-12 (2026-07-04) CE icache fix. ROOT-CAUSE HYPOTHESIS: Vangogh uses amdgpu's
- * AMDGPU_FW_LOAD_RLC_BACKDOOR_AUTO path, whose gfx_v10_0_wait_for_rlc_autoload_complete (scratchpad
- * gfx_v10_0.c ~5617-5658) calls gfx_v10_0_rlc_backdoor_autoload_config_{me,ce,pfp,mec}_cache in that
- * exact order right after the RLC autoload-complete poll -- each one invalidates + reprograms ONE
- * front end's instruction-cache base to point at that front end's ucode inside the RLC's own
- * autoload GPU buffer (adev->gfx.rlc.rlc_autoload_gpu_addr + rlc_autoload_info[...].offset). Puck's
- * PSP-hybrid stage (d) authenticates PFP/ME/CE ucode via LOAD_IP_FW (which the PSP consumes and
- * presumably wires into ITS OWN idea of the icache, since PFP/ME visibly execute) but never calls the
- * *_IC_BASE-programming step at all -- for any of the three. The fact that PFP/ME run while CE has
- * been wedged identically across all 11 boots to date is consistent with the CE specifically lacking
- * a valid icache base (PFP/ME got themselves wired some other way this port doesn't yet understand;
- * this fix deliberately does NOT touch their IC_BASE registers -- see (c) below).
- *
- * This function mirrors gfx_v10_0_rlc_backdoor_autoload_config_ce_cache (scratchpad gfx_v10_0.c
- * 5506-5541) exactly for the CE only: invalidate, poll INVALIDATE_CACHE_COMPLETE (TSC-deadlined, log
- * timeout but continue -- never hang), write IC_BASE_LO/HI. The reference writes
- * `lower_32_bits(addr) & 0xFFFFF000` / `upper_32_bits(addr)` -- i.e. the FULL byte address, page-
- * masked, NOT addr>>12; IC_BASE_LO/HI are 32-bit halves of a byte address, not a page-number field
- * (confirmed by the reference doing a plain `&` mask, never a shift, and by CP_*_IC_BASE_CNTL being
- * the SEPARATE register that carries VMID/CACHE_POLICY -- the address itself has no room for a
- * shifted encoding). The reference never touches IC_BASE_CNTL in this sequence (no PRIME_ICACHE step
- * either) -- see the VGH_CP_CE_IC_BASE_CNTL comment; this port matches that silence exactly by also
- * not writing IC_BASE_CNTL, so there is nothing to log for it beyond the diagnostic dump.
- *
- * Called unconditionally from PuckGpuRingTest, right after PuckGpuKiqBringUp() and before the first
- * ring attempt -- reprogramming a working icache base to a fresh valid copy is exactly what the
- * backdoor-autoload path itself does on every real boot, so doing it unconditionally here carries no
- * regression risk if CE_IC_BASE was already fine. ORDERING: the CP front ends are HALTED at this
- * point -- PuckGpuBringUp (stage (d)) leaves CP_ME_CNTL at its post-autoload halted value and never
- * un-halts; RingAttemptHqd's own halt (its step (a)) only happens later, per-attempt -- so this fix
- * runs squarely inside that stage-(d)-halted window, matching the reference (which itself runs the
- * *_cache config helpers before gfx_v10_0_cp_gfx_start ever un-halts anything). */
-static void PuckGpuCeIcacheFix(void)
-{
-    const PuckGpuFw *fw;
-    const unsigned char *payload;
-    unsigned int size, tmp;
-    unsigned long long stageMc, addr;
-    unsigned long long end;
-
-    fw = PuckGpuFwFind("vangogh_ce.bin");
-    payload = FwPayload(fw, &size);
-    if (!payload || !g_pspWin || !g_pspWinMc)
-    {
-        SerialPuts("[icache] CE ucode payload/window unavailable; skipping CE icache reprogram\r\n");
-        return;
-    }
-
-    /* (a) Stage the CE ucode payload into the dedicated window offset (clear of the KIQ/gfx-ring
-     * VGH_RT_* block, which on the carveout base ends at +0x1908000 -- see VGH_PSPWIN_CE_IC). */
-    GpuUcWrite(VGH_PSPWIN_CE_IC, payload, size);
-    stageMc = g_pspWinMc + VGH_PSPWIN_CE_IC; /* already 1 MiB-aligned -> page-aligned */
-
-    /* (b) Invalidate the CE L1 instruction cache (CP_CE_IC_OP_CNTL.INVALIDATE_CACHE, gc_10_3_0_offset.h
-     * mmCP_CE_IC_OP_CNTL=0x584b idx1), poll INVALIDATE_CACHE_COMPLETE (gc_10_3_0_sh_mask.h
-     * CP_CE_IC_OP_CNTL__INVALIDATE_CACHE_COMPLETE_MASK=0x2), mirroring
-     * gfx_v10_0_rlc_backdoor_autoload_config_ce_cache's 50 ms/1 us-step poll with a TSC deadline
-     * instead of udelay(1) spin-counting. Timeout: log and continue -- never hang. */
-    tmp = g_gpuRegs[VGH_CP_CE_IC_OP_CNTL];
-    tmp |= VGH_CP_CE_IC_OP_CNTL_INVALIDATE_CACHE_MASK;
-    g_gpuRegs[VGH_CP_CE_IC_OP_CNTL] = tmp;
-    PuckMfence();
-
-    end = __rdtsc() + (g_tscFreqHz / 1000ull) * 10ull; /* ~10 ms */
-    for (;;)
-    {
-        tmp = g_gpuRegs[VGH_CP_CE_IC_OP_CNTL];
-        if ((tmp & VGH_CP_CE_IC_OP_CNTL_INVALIDATE_CACHE_COMPLETE_MASK) != 0u) break;
-        if (__rdtsc() > end)
-        {
-            SerialPuts("[icache] CE icache invalidate TIMEOUT (op_cntl=");
-            EcamPutHex((unsigned long long)tmp, 8); SerialPuts(") -- continuing anyway\r\n");
-            break;
-        }
-    }
-
-    /* (c) Program CP_CE_IC_BASE_LO/HI with the staged blob's MC address -- the full byte address,
-     * page-masked (see the function comment for why this is not addr>>12). IC_BASE_CNTL is
-     * deliberately left untouched: the reference sequence never writes it either. */
-    addr = stageMc & 0xFFFFFFFFFFFFF000ull;
-    g_gpuRegs[VGH_CP_CE_IC_BASE_LO] = (unsigned int)(addr & 0xFFFFF000u);
-    g_gpuRegs[VGH_CP_CE_IC_BASE_HI] = (unsigned int)(addr >> 32);
-    PuckMfence();
-
-    SerialPuts("[icache] CE IC_BASE reprogrammed -> "); EcamPutHex(stageMc, 10);
-    SerialPuts(" (size="); EcamPutDec(size); SerialPuts(" bytes)\r\n");
-}
-
 static void PuckGpuRingTest(void)
 {
     int passCe;
@@ -5842,13 +6469,11 @@ static void PuckGpuRingTest(void)
      * first. PuckGpuKiqBringUp() calls PuckGpuKiqPoke() internally as one of its steps. */
     PuckGpuKiqBringUp();
 
-    /* Boot-12 (2026-07-04): icache diagnostic dump (tagged "[icache]") right after KIQ bring-up, then
-     * the unconditional CE icache reprogram, both BEFORE the first ring attempt -- see
-     * PuckGpuCeIcacheFix's comment for the root-cause hypothesis and why "unconditional" is safe. The
-     * CP front ends are still HALTED here (stage (d) never un-halted; RingAttemptHqd's own halt is
-     * later, per-attempt), matching the reference sequence's own timing. */
+    /* Boot-12 (2026-07-04): icache diagnostic dump (tagged "[icache]") right after KIQ bring-up,
+     * BEFORE the first ring attempt. The CP front ends are still HALTED here (stage (d) never
+     * un-halted; RingAttemptHqd's own halt is later, per-attempt). (Build 13 item 2: the CE icache
+     * reprogram that used to run here was retired.) */
     GpuIcacheDump("icache");
-    PuckGpuCeIcacheFix();
 
     /* "hqd-ce": THE proven configuration (boot 6, 2026-07-03): CE un-halted (CP_ME_CNTL=0) + the
      * SET_BASE CE_PARTITION tail. Boot 6's B2 executed the whole stream -- SCRATCH_REG0=0xDEADBEEF,
@@ -5857,26 +6482,63 @@ static void PuckGpuRingTest(void)
      * without consuming anything -- the CE must run and must get its partition base on gfx10.3,
      * even though drivers never feed it CE IBs. Boot 10: RingAttemptHqd's `emitCePartitionTail`
      * parameter is gone -- the full clear-state CSB (+ CE_PARTITION tail) it used to gate is now
-     * unconditional, so both call sites below dropped their trailing `1` argument. */
-    passCe = RingAttemptHqd("hqd-ce", g_gartTestCpu, g_gartTestVa, 0u);
-    passLabel = "hqd-ce";
+     * unconditional, so both call sites below dropped their trailing `1` argument.
+     *
+     * Build 13 (item 1): CARVEOUT-FIRST attempt order. A cold boot read the GART block's ring back as
+     * ALL ZEROS from the CPU (either the low-RAM [0,2MiB) identity block is unreliable across firmware
+     * boots or a GPU agent scribbled it); the carveout block (+0x1800000, UC CPU mapping, FB-direct MC
+     * addresses, no GART and no low RAM anywhere in the path) sidesteps both suspects, so it is now
+     * attempt #1 (and the KIQ bring-up lands its buffers there too). The GART block is the fallback,
+     * tried only after a CP soft-reset (item 4). If the carveout is unavailable, GART runs as attempt
+     * #1 as before -- with nothing else to fall back to. */
+    if (g_pspWin && g_pspWinMc)
+    {
+        SerialPuts("[gpu] (e) attempt #1 on the carveout block (e:hqd-ce-vram) (ring/rptr=MC, data ops=VA 0x400000)\r\n");
+        passCe = RingAttemptHqd("hqd-ce-vram", g_pspWin + 0x01800000ull, g_pspWinMc + 0x01800000ull, 0u);
+        passLabel = "hqd-ce-vram";
+        if (passCe)
+            cpuBase = (volatile unsigned char *)(g_pspWin + 0x01800000ull);
+    }
+    else
+    {
+        SerialPuts("[gpu] (e) attempt #1 on the GART block (e:hqd-ce); carveout unavailable\r\n");
+        passCe = RingAttemptHqd("hqd-ce", g_gartTestCpu, g_gartTestVa, 0u);
+        passLabel = "hqd-ce";
+    }
 
     if (!passCe && g_pspWin && g_pspWinMc)
     {
-        /* Boot-8 fallback: a cold boot read the GART block's ring back as ALL ZEROS from the CPU --
-         * either the low-RAM [0,2MiB) identity block is unreliable across firmware boots or a GPU
-         * agent scribbled it. The carveout block (+0x1800000, UC CPU mapping, FB-direct MC addresses,
-         * no GART and no low RAM anywhere in the path) sidesteps both suspects. Boot 10 CAUTION (boot-10
-         * live finding): a CE wedged on DE_COUNTER_UNDERFLOW from attempt A survives halt->un-halt --
-         * this fallback attempt's own post-un-halt CP_STAT poll can read a CE that is still stuck from
-         * attempt A, not freshly wedged by attempt B itself. Treat a second-attempt CE wedge signature
-         * as inconclusive about attempt B specifically unless attempt A's stall dump showed a clean CE. */
-        SerialPuts("[gpu] (e:hqd-ce) FAILED; retrying on the carveout block (e:hqd-ce-vram)\r\n");
-        passCe = RingAttemptHqd("hqd-ce-vram", g_pspWin + 0x01800000ull, g_pspWinMc + 0x01800000ull, 0u);
+        /* Boot 10 CAUTION (live finding): a CE wedged on DE_COUNTER_UNDERFLOW from attempt A survives
+         * halt->un-halt -- this fallback attempt's own post-un-halt CP_STAT poll can read a CE that is
+         * still stuck from attempt A, not freshly wedged by attempt B itself. Treat a second-attempt CE
+         * wedge signature as inconclusive about attempt B specifically unless attempt A's stall dump
+         * showed a clean CE. */
+        SerialPuts("[gpu] (e:hqd-ce-vram) FAILED; retrying on the GART block (e:hqd-ce)\r\n");
+
+        /* CP wedged? soft-reset the CP block before the fallback attempt. halt/unhalt does NOT drain a
+           stalled fetch (contamination); GRBM_SOFT_RESET.SOFT_RESET_CP is amdgpu's remedy (gfx_v10_0_soft_reset).
+           NOTE: this also perturbs the KIQ HQD -- acceptable, attempt #1 (carveout, fresh KIQ) is the clean data point. */
+        {
+            unsigned int before = g_gpuRegs[VGH_CP_STAT];
+            g_gpuRegs[VGH_GRBM_SOFT_RESET] |= VGH_GRBM_SOFT_RESET_SOFT_RESET_CP_MASK;
+            PuckMfence();
+            GpuDelayUs(50);
+            g_gpuRegs[VGH_GRBM_SOFT_RESET] &= ~VGH_GRBM_SOFT_RESET_SOFT_RESET_CP_MASK;
+            PuckMfence();
+            GpuDelayUs(50);
+            {
+                int cleared = (GpuWaitReg(VGH_CP_STAT, 0xFFFFFFFFu, 0u, 100u, "CP_STAT after SOFT_RESET_CP") == 0);
+                SerialPuts("[gpu] SOFT_RESET_CP: before="); EcamPutHex((unsigned long long)before, 8);
+                SerialPuts(" after="); EcamPutHex((unsigned long long)g_gpuRegs[VGH_CP_STAT], 8);
+                SerialPuts(cleared ? " CLEARED\r\n" : " STILL-BUSY\r\n");
+            }
+        }
+
+        passCe = RingAttemptHqd("hqd-ce", g_gartTestCpu, g_gartTestVa, 0u);
         if (passCe)
         {
-            cpuBase = (volatile unsigned char *)(g_pspWin + 0x01800000ull);
-            passLabel = "hqd-ce-vram";
+            cpuBase = g_gartTestCpu;
+            passLabel = "hqd-ce";
         }
     }
 
@@ -5890,9 +6552,24 @@ static void PuckGpuRingTest(void)
      * CACHE_POLICY=BYPASS fix (mem=N with reg=Y means GL2 write-back visibility still needs work,
      * but execution itself is proven either way). */
     if (RingIbFence(passLabel, cpuBase))
+    {
         g_gpuBringUpNote = g_rtMemPass
             ? "(e) RING+IB LIVE (hqd-ce, full-CSB): reg+mem executed, fence signalled -- FIRST SILICON COMPLETE"
             : "(e) RING+IB LIVE (hqd-ce, full-CSB): reg executed (mem GL2-invisible), fence signalled";
+
+        /* Build 18: the IB+fence milestone passed -- go one layer up and attempt the first COMPUTE
+         * DISPATCH. Carveout path ONLY: the shader fetch and its global_store are VMID0-translated and
+         * need the page-table VA mapping PuckGpuGartBringUp laid over the carveout block; the GART
+         * attempt's data base is a bare VA=0 identity map that does not cover the compute buffers. */
+        if (g_rtDataBase == VGH_RT_CARVEOUT_VA_BASE)
+        {
+            /* Build 22: PuckGpuComputeDispatch is now the SINGLE authority for the compute bring-up note --
+             * it latches g_gpuBringUpNote from the decisive STORE-A/STORE-B evidence (wave-ran vs not), so
+             * do NOT re-fold it here (that would overwrite the wave-ran verdict). The return value (1 iff
+             * either store landed) and g_csWaveResident/g_csWaveRan remain available as cross-checks. */
+            (void)PuckGpuComputeDispatch("cs");
+        }
+    }
     else
         g_gpuBringUpNote = g_rtMemPass
             ? "(e) ring test PASS (hqd-ce, full-CSB, reg+mem); IB/fence FAIL"
@@ -5976,7 +6653,7 @@ unsigned long long EfiEntry(void *imageHandle, void *systemTable)
     PuckGopCapture(bs);
     PuckFbInitEarly();
 
-    SerialPuts("[boot] Puck.BareMetal UEFI image entered; firmware boot services are up.\r\n");
+    SerialPuts("[boot] Puck.BareMetal " PUCK_BUILD_ID " UEFI image entered; firmware boot services are up.\r\n");
 
     /* Capture the ACPI RSDP from the UEFI configuration table while it is still valid (the ECAM base
      * is parsed out of MCFG later, after paging). Must happen before ExitBootServices. */
@@ -6104,6 +6781,9 @@ unsigned long long EfiEntry(void *imageHandle, void *systemTable)
 
     PuckGpuBringUp();   /* stages (c) GMC/GART + (d) PSP fw load; needs the calibrated TSC for its
                          * poll deadlines. One skip line under QEMU (no GPU found by stage (b)). */
+
+    PuckGopBlitBench(); /* build 13 (item 6): time two panel fills + paint corner markers (no-op
+                         * without a GPU BAR + live framebuffer, so QEMU/headless just skips it). */
 
     PuckInitTimer();
     SerialPuts("[kernel] preemptive timer armed (PIT ~100 Hz, IRQ0 -> vector 0x20).\r\n");
