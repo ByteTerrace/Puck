@@ -158,18 +158,25 @@ hardcoded legend — the product doctrine already demands this
 (`docs/overworld-demo-plan.md:203-205`); Demo's `PublishCreator`/
 `PublishWorld` hardcoded legends are the anti-pattern and die with Demo.
 
-**Owner refinement (post-P2): modes are page GROUPS, chords are a pure
-selector.** P2 first shipped editor mode as a fifth compose layer, which
+**Owner refinement (post-P2): modes are page GROUPS, and a chord's meaning
+is DATA.** P2 first shipped editor mode as a fifth compose layer, which
 forced the editor's resting page to impersonate `base` (one empty-chord page
 per profile) and let unmentioned lower-layer entries leak through (masked by
-the idle diversion). The settled design separates the two questions: layers
+the idle diversion). The settled design separates the questions: layers
 answer *authoring* (who overrides what a binding means); a per-seat **active
-page group** answers *runtime mode* (which page family is live). Pages carry
-a group as data; resolution is (active group, held chord) → page; one
-resting page *per group*; the merge key gains the group. Mode flips become
-pointer-level switches on the compiled profile — no recompose. This is the
-P3.5 rework (a flagged `Puck.Commands` seam); the diversion remains as
-intent routing, no longer a leak backstop.
+page group** answers *runtime mode* (which family is live); and a **chord
+row** answers what a chord does — `(group, ordered chord) → meaning`, where
+meaning is a discriminated union: **page** (an entry table — the selector
+case) or **command** (a direct binding with full entry semantics:
+HoldRelease, CommandValue, Label/Icon). Page switching is not privileged —
+it is one meaning a chord can carry, and players/authors declare meanings
+through the same four layers (the merge key gains the group; chord rows key
+on `(group, chord)`). One resting page per group; one meaning per
+`(group, chord)`, rejected loudly otherwise; deepest-held prefix resolution
+and the press latch are reused unchanged. Mode flips become pointer-level
+switches on the compiled profile — no recompose. This is the P3.5 rework (a
+flagged `Puck.Commands` seam); the diversion remains as intent routing, no
+longer a leak backstop.
 
 ### D4 — Selection is client state: proximity + cycle now, field-ray later
 
