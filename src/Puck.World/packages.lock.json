@@ -499,11 +499,11 @@
         "type": "Project",
         "dependencies": {
           "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Capture": "[1.0.0, )",
           "Puck.Commands": "[1.0.0, )",
           "Puck.Compositing": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Input": "[1.0.0, )",
-          "Puck.SdfVm": "[1.0.0, )",
           "Puck.Text": "[1.0.0, )"
         }
       },

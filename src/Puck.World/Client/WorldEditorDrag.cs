@@ -14,10 +14,13 @@ namespace Puck.World.Client;
 /// drag is one journal entry, one undo step). Cancel clears the pending row: the drag never existed.
 /// </summary>
 /// <remarks>Release FREEZES the overlay instead of clearing it: the screen already shows the committed pose, so no
-/// rebuild fires until the applied definition delivers (the overlay then retires against identical document truth — no
-/// pixel pop), or a short frame deadline passes without a delivery (the rejection case — the row snaps honestly back
-/// to the unedited document while the rejection toast narrates why). Single-threaded on the window-pump thread, like
-/// every editor type here.</remarks>
+/// rebuild fires until the released act's OWN result retires it — an APPLY (the delivered definition's keyed row
+/// equals the frozen expected row: identical document truth, no pixel pop) or a REJECTION (the server's edit echo
+/// correlates back through <see cref="NoteRejected"/>: the row snaps honestly back while the rejection toast narrates
+/// why). An UNRELATED delivery — another principal's mutation advancing the definition revision — leaves the frozen
+/// preview standing (UIE-3: the old global revision watch retired it early, snapping the row back before the released
+/// act resolved). The frame deadline stays as the honest fallback for a missing response. Single-threaded on the
+/// window-pump thread, like every editor type here.</remarks>
 internal sealed class WorldEditorDrag {
     // The rejection deadline: a released overlay with no definition delivery after this many produced frames drops.
     private const int FreezeFrameDeadline = 12;
@@ -32,6 +35,10 @@ internal sealed class WorldEditorDrag {
         public int FreezeFrames;
         public WorldSceneRow? SceneRow;
         public WorldScreen? Screen;
+        // The whole row the release-edge mutation submitted — the frozen preview's retirement correlator: an apply
+        // delivers exactly this row (record equality); a rejection names it through NoteRejected.
+        public WorldSceneRow? ExpectedRow;
+        public WorldScreen? ExpectedScreen;
         public Vector3 Origin;
         public Vector3 Intent;
         public Vector3 Snapped;
@@ -95,9 +102,13 @@ internal sealed class WorldEditorDrag {
 
     /// <summary>Sets the seat's planar snap pitch (X/Z lattice; Y stays free) and enables snapping.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    /// <param name="pitch">The lattice pitch, world units.</param>
+    /// <param name="pitch">The lattice pitch, world units (finite, positive).</param>
     /// <returns>The applied config.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="pitch"/> is not finite or not positive.</exception>
     public SnapConfig SetSnapPitch(int slot, float pitch) {
+        FiniteGuard.ThrowIfNonFinite(value: pitch);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: pitch);
+
         var channel = m_channels[SlotOrFirst(slot: slot)];
 
         channel.Snap = (SnapConfig.Planar(pitch: pitch) with { Enabled = true });
@@ -110,19 +121,25 @@ internal sealed class WorldEditorDrag {
     public Vector3? PendingPosition(int slot) =>
         (IsDragging(slot: slot) ? m_channels[slot].Snapped : null);
 
-    /// <summary>A one-line drag description for the HUD/status echoes, or <see langword="null"/> when idle.</summary>
+    /// <summary>A one-line drag description for the HUD/status echoes — a live drag, a FROZEN released preview
+    /// (awaiting its own apply/rejection — the pipe-observable freeze window), or <see langword="null"/> when idle.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public string? Describe(int slot) {
-        if (!IsDragging(slot: slot)) {
+        if ((uint)slot >= (uint)m_channels.Length) {
             return null;
         }
 
         var channel = m_channels[slot];
+
+        if (!channel.Active && !channel.Frozen) {
+            return null;
+        }
+
         var subject = ((channel.SceneRow is { } row) ? $"scene '{row.Id}'" : $"screen {channel.Screen!.Index}");
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{(channel.IsGhost ? "ghost " : string.Empty)}{subject} at ({channel.Snapped.X:0.00}, {channel.Snapped.Y:0.00}, {channel.Snapped.Z:0.00})"
+            handler: $"{(channel.Frozen ? "frozen " : string.Empty)}{(channel.IsGhost ? "ghost " : string.Empty)}{subject} at ({channel.Snapped.X:0.00}, {channel.Snapped.Y:0.00}, {channel.Snapped.Z:0.00})"
         );
     }
 
@@ -209,8 +226,11 @@ internal sealed class WorldEditorDrag {
     /// <summary>Moves the pending row by a delta (the <c>editor.drag</c> console twin of stick motion). Client-local
     /// only — nothing crosses the wire.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    /// <param name="delta">The world-space delta.</param>
+    /// <param name="delta">The world-space delta (finite).</param>
+    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="delta"/> is not finite.</exception>
     public void Move(int slot, Vector3 delta) {
+        FiniteGuard.ThrowIfNonFinite(value: delta);
+
         if (!IsDragging(slot: slot)) {
             return;
         }
@@ -262,17 +282,23 @@ internal sealed class WorldEditorDrag {
         string subject;
 
         if (channel.SceneRow is { } row) {
-            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSceneRow(Principal: principal, Row: row.WithCenter(center: channel.Snapped)));
+            var moved = row.WithCenter(center: channel.Snapped);
+
+            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSceneRow(Principal: principal, Row: moved));
+            channel.ExpectedRow = moved;
             subject = $"scene '{row.Id}'";
         } else {
             var screen = channel.Screen!;
+            var moved = (screen with { Origin = channel.Snapped });
 
-            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertScreen(Principal: principal, Screen: (screen with { Origin = channel.Snapped })));
+            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertScreen(Principal: principal, Screen: moved));
+            channel.ExpectedScreen = moved;
             subject = $"screen {screen.Index}";
         }
 
-        // Freeze: the pending row stays composed (the screen already shows the committed pose) until Reconcile
-        // retires it against the delivered definition or drops it on the rejection deadline.
+        // Freeze: the pending row stays composed (the screen already shows the committed pose) until the released
+        // act's own APPLY (Reconcile finds the expected row delivered) or REJECTION (NoteRejected) retires it, or
+        // the deadline drops it (the missing-response fallback).
         channel.Active = false;
         channel.Frozen = true;
         channel.FreezeRevision = m_client.DefinitionRevision;
@@ -301,19 +327,117 @@ internal sealed class WorldEditorDrag {
         return (wasGhost ? $"ghost {subject} discarded" : $"{subject} back at its document pose");
     }
 
-    /// <summary>Retires frozen overlays: called once per produced frame (before the compose reads) with the client's
-    /// current definition revision. See the type remarks for the two retirement edges.</summary>
-    /// <param name="definitionRevision">The client's current definition-delivery revision.</param>
-    public void Reconcile(int definitionRevision) {
-        foreach (var channel in m_channels) {
+    /// <summary>Drops the seat's pending-row channel unconditionally — live drag AND frozen released preview — the
+    /// editor-deactivation teardown (explicit exit, controller departure). The command guards refuse cancel/release
+    /// for a non-editing seat, so without this a re-entering or reused slot would inherit and commit the old pending
+    /// row.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public void Drop(int slot) {
+        if ((uint)slot >= (uint)m_channels.Length) {
+            return;
+        }
+
+        var channel = m_channels[slot];
+
+        if (channel.Active || channel.Frozen) {
+            Clear(channel: channel);
+        }
+    }
+
+    /// <summary>Retires frozen overlays: called once per produced frame (before the compose reads). A frozen preview
+    /// retires ONLY on its own act's result — a delivery whose keyed row equals the submitted expected row (the
+    /// apply), or the frame deadline (the missing-response fallback; rejections retire through
+    /// <see cref="NoteRejected"/>). An unrelated delivery re-arms nothing and retires nothing.</summary>
+    public void Reconcile() {
+        var definitionRevision = m_client.DefinitionRevision;
+
+        for (var slot = 0; (slot < m_channels.Length); slot++) {
+            var channel = m_channels[slot];
+
             if (!channel.Frozen) {
                 continue;
             }
 
-            if ((definitionRevision != channel.FreezeRevision) || (++channel.FreezeFrames > FreezeFrameDeadline)) {
-                Clear(channel: channel);
+            if (definitionRevision != channel.FreezeRevision) {
+                channel.FreezeRevision = definitionRevision;
+
+                if (DeliveredExpected(channel: channel)) {
+                    Retire(slot: slot, channel: channel, reason: "applied");
+
+                    continue;
+                }
+            }
+
+            if (++channel.FreezeFrames > FreezeFrameDeadline) {
+                Retire(slot: slot, channel: channel, reason: "deadline (no response)");
             }
         }
+    }
+
+    /// <summary>Correlates a server-rejected mutation back to the frozen preview that submitted it (the
+    /// <c>WorldServer.EchoTap</c> wiring calls this beside the rejection toast): the matched seat's overlay retires
+    /// and the row snaps honestly back to the unedited document. A rejection of anything else is ignored.</summary>
+    /// <param name="mutation">The rejected mutation.</param>
+    public void NoteRejected(WorldMutation mutation) {
+        if (mutation is not { Principal.Kind: PrincipalKind.Seat }) {
+            return;
+        }
+
+        var slot = mutation.Principal.Index;
+
+        if ((uint)slot >= (uint)m_channels.Length) {
+            return;
+        }
+
+        var channel = m_channels[slot];
+
+        if (!channel.Frozen) {
+            return;
+        }
+
+        var matches = (mutation switch {
+            WorldMutation.UpsertSceneRow upsert => ((channel.ExpectedRow is { } expected) && expected.Equals(other: upsert.Row)),
+            WorldMutation.UpsertScreen upsert => ((channel.ExpectedScreen is { } expected) && expected.Equals(other: upsert.Screen)),
+            _ => false,
+        });
+
+        if (matches) {
+            Retire(slot: slot, channel: channel, reason: "rejected");
+        }
+    }
+
+    // Whether the client's live definition carries the frozen channel's expected row verbatim — the apply witness.
+    private bool DeliveredExpected(Channel channel) {
+        var definition = m_client.Definition;
+
+        if (channel.ExpectedRow is { } expectedRow) {
+            foreach (var row in definition.Scene.Rows) {
+                if (row.Equals(other: expectedRow)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (channel.ExpectedScreen is { } expectedScreen) {
+            foreach (var screen in definition.Screens) {
+                if (screen.Equals(other: expectedScreen)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // Retire a frozen overlay with its honest reason narrated once (act-scale, never per frame) — the proof's
+    // observable retire edge.
+    private void Retire(int slot, Channel channel, string reason) {
+        var subject = ((channel.SceneRow is { } row) ? $"scene '{row.Id}'" : $"screen {channel.Screen!.Index}");
+
+        Console.Error.WriteLine(value: $"[editor.drag] seat {PlayerRoster.DisplayNumber(slot: slot)} frozen {subject} retired: {reason}");
+        Clear(channel: channel);
     }
 
     /// <summary>Composes the pending scene rows over the live scene — the frame source's rebuild read. Returns the
@@ -415,6 +539,8 @@ internal sealed class WorldEditorDrag {
         channel.IsGhost = isGhost;
         channel.SceneRow = sceneRow;
         channel.Screen = screen;
+        channel.ExpectedRow = null;
+        channel.ExpectedScreen = null;
         channel.Origin = origin;
         channel.Intent = origin;
         channel.Snapped = origin;
@@ -427,6 +553,8 @@ internal sealed class WorldEditorDrag {
         channel.IsGhost = false;
         channel.SceneRow = null;
         channel.Screen = null;
+        channel.ExpectedRow = null;
+        channel.ExpectedScreen = null;
         m_revision++;
     }
 

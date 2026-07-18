@@ -171,9 +171,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // still reads the authoritative sim pose server-side.
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
 
-        // Retire released drag overlays first (they freeze until the applied definition delivers or the rejection
-        // deadline passes — see WorldEditorDrag), so the revision read below already reflects any retirement.
-        m_drag.Reconcile(definitionRevision: m_client.DefinitionRevision);
+        // Retire released drag overlays first (they freeze until their OWN act's apply/rejection resolves, or the
+        // missing-response deadline — see WorldEditorDrag), so the revision read below already reflects any retirement.
+        m_drag.Reconcile();
 
         // A declared-set or palette change since the last frame (a seat join/leave/recolor or a simulated-count
         // change), a selection change (the highlight tint), or a drag-overlay move rebuilds the program and marks

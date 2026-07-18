@@ -18,12 +18,14 @@ internal enum WorldEditEchoKind {
 }
 
 /// <summary>One edit-boundary outcome echoed beside the loud stderr line — the payload of
-/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the editor HUD's act-class tag) narrates
-/// outcomes without scraping stderr.</summary>
+/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the editor HUD's act-class tag, the drag
+/// channel's frozen-preview retirement) narrates outcomes without scraping stderr.</summary>
 /// <param name="Message">The human-readable outcome line (no brackets).</param>
 /// <param name="Rejected">Whether the outcome is a rejection/denial.</param>
 /// <param name="Kind">The edit-boundary class the outcome belongs to.</param>
-internal readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind);
+/// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the correlation key a
+/// released drag preview retires against (<c>WorldEditorDrag.NoteRejected</c>); <see langword="null"/> otherwise.</param>
+internal readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null);
 
 /// <summary>
 /// The authoritative world server — one logical instance owning the LIVE <see cref="WorldDefinition"/>, the entity
@@ -404,7 +406,7 @@ internal sealed class WorldServer {
 
         if (!m_grants.Allows(principal: mutation.Principal, capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: section))) {
             Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} cannot mutate section:{section.ToString().ToLowerInvariant()} — {Describe(mutation: mutation)} dropped]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} denied: no mutate grant", Rejected: true, Kind: WorldEditEchoKind.Mutation));
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} denied: no mutate grant", Rejected: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation));
 
             return false;
         }
@@ -530,7 +532,7 @@ internal sealed class WorldServer {
 
     private void Reject(WorldMutation mutation, string reason) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
-        EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation));
     }
 
     // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now" —

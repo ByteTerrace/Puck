@@ -217,7 +217,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} group={view.Group} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection}{dragState}]"
+            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} group={view.Group} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection} cand={m_targeting.CandidateCount(slot: slot)} (r {WorldEditorTargeting.CandidateRadius:0}u, cap {WorldEditorTargeting.CandidateCap}){dragState}]"
         ));
     }
 
@@ -244,8 +244,8 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             };
         }
 
-        if (!float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var speed)) {
-            return new CommandResult(Output: "[editor.cam.speed: could not parse <unitsPerSecond> as a number]") {
+        if (!TryFloat(args: args, at: 0, value: out var speed)) {
+            return new CommandResult(Output: "[editor.cam.speed: could not parse <unitsPerSecond> as a finite number]") {
                 IsError = true,
             };
         }
@@ -282,7 +282,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         if (!TryFloat(args: args, at: 0, value: out var x) ||
             !TryFloat(args: args, at: 1, value: out var y) ||
             !TryFloat(args: args, at: 2, value: out var z)) {
-            return new CommandResult(Output: "[editor.cam.pose: could not parse <x> <y> <z> as numbers]") {
+            return new CommandResult(Output: "[editor.cam.pose: could not parse <x> <y> <z> as finite numbers]") {
                 IsError = true,
             };
         }
@@ -291,7 +291,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         var pitchDegrees = 0f;
 
         if (hasAngles && (!TryFloat(args: args, at: 3, value: out yawDegrees) || !TryFloat(args: args, at: 4, value: out pitchDegrees))) {
-            return new CommandResult(Output: "[editor.cam.pose: could not parse <yawDeg> <pitchDeg> as numbers]") {
+            return new CommandResult(Output: "[editor.cam.pose: could not parse <yawDeg> <pitchDeg> as finite numbers]") {
                 IsError = true,
             };
         }
@@ -400,7 +400,9 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private static string ModeWord(EditorCameraMode mode) => ((mode == EditorCameraMode.Orbit) ? "orbit" : "fly");
 
-    private static bool TryFloat(string[] args, int at, out float value) {
-        return float.TryParse(s: args[at], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value);
+    // The shared FINITE parse boundary (UIE-2): NaN/infinity never enters camera, snap, or preview state — a
+    // non-finite center would poison the SDF rebuild and a NaN pitch slides past ordinary range guards.
+    internal static bool TryFloat(string[] args, int at, out float value) {
+        return (float.TryParse(s: args[at], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
     }
 }

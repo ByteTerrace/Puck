@@ -328,8 +328,10 @@ internal sealed class WorldOverlayFeed {
 
         cache.ContextLine = string.Create(
             provider: System.Globalization.CultureInfo.InvariantCulture,
-            // ASCII only — the overlay glyph pack is ASCII-95 (a non-ASCII rune renders as the blank cell).
-            handler: $"targets {m_targeting.TargetCount} | snap {(snap.Enabled ? "on" : "off")} {snap.Pitch.X:0.##}"
+            // ASCII only — the overlay glyph pack is ASCII-95 (a non-ASCII rune renders as the blank cell). "rows" is
+            // the definition's total selectable-row count (revision-keyed, so the cache stays honest); the live
+            // in-radius candidate ring is a camera-relative fact editor.status narrates on demand.
+            handler: $"rows {m_targeting.TargetCount} | snap {(snap.Enabled ? "on" : "off")} {snap.Pitch.X:0.##}"
         );
         cache.SessionLine = ComposeSessionLine(slot: slot);
         cache.DragLine = (m_drag.Describe(slot: slot) ?? string.Empty);

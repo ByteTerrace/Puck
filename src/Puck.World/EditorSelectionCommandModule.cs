@@ -71,7 +71,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: NextCommand,
-            description: "Cycles the selection to the next proximity candidate around the editor focus point (nearest-first, wraps): editor.next [seat]. The chord twin is D-pad Right on the select page.",
+            description: "Cycles the selection to the next proximity candidate around the editor focus point (nearest-first, wraps; the ring is BOUNDED — the nearest 16 rows within 32u): editor.next [seat]. The chord twin is D-pad Right on the select page.",
             handler: (context, args) => CycleHandler(context: context, args: args, direction: 1, verb: NextCommand)
         );
         yield return CommandDefinition.WithTrailingArgs(
@@ -205,12 +205,15 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         }
 
         if (m_targeting.Cycle(slot: slot, direction: direction) is not { } cycled) {
-            return Echo(slot: slot, verb: verb, detail: "no candidates");
+            return Echo(slot: slot, verb: verb, detail: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"no candidates within {WorldEditorTargeting.CandidateRadius:0}u — fly closer, or editor.select by id"
+            ));
         }
 
         return Echo(slot: slot, verb: verb, detail: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{cycled.Selection.Describe()} {cycled.Distance:0.0}u of {m_targeting.TargetCount}"
+            handler: $"{cycled.Selection.Describe()} {cycled.Distance:0.0}u of {cycled.Count} candidates (r {WorldEditorTargeting.CandidateRadius:0}u, cap {WorldEditorTargeting.CandidateCap})"
         ));
     }
 
@@ -351,7 +354,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         }
 
         if (!TryVector(args: args, at: 0, value: out var delta)) {
-            return Error(text: "[editor.drag: could not parse <dx> <dy> <dz> as numbers]");
+            return Error(text: "[editor.drag: could not parse <dx> <dy> <dz> as finite numbers]");
         }
 
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 3, verb: "editor.drag");
@@ -379,7 +382,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         }
 
         if (!TryVector(args: args, at: 0, value: out var value)) {
-            return Error(text: $"[{verb}: could not parse <x> <y> <z> as numbers]");
+            return Error(text: $"[{verb}: could not parse <x> <y> <z> as finite numbers]");
         }
 
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 3, verb: verb);
@@ -666,8 +669,9 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         _ => null,
     };
 
+    // The shared FINITE parse boundary (UIE-2) — the drag/move/place/snap twins of EditorCommandModule.TryFloat.
     private static bool TryFloat(string token, out float value) =>
-        float.TryParse(s: token, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value);
+        (float.TryParse(s: token, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
 
     private static bool TryVector(string[] args, int at, out Vector3 value) {
         value = default;

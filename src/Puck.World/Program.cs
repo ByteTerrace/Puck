@@ -200,7 +200,11 @@ services.AddSingleton(implementationFactory: static sp => {
         session: sp.GetRequiredService<WorldEditorSession>()
     );
 
-    sp.GetRequiredService<WorldEditorSession>().OrbitPivotSource = targeting.SelectionPosition;
+    var session = sp.GetRequiredService<WorldEditorSession>();
+
+    session.OrbitPivotSource = targeting.SelectionPosition;
+    // Deactivation (exit / departed seat) clears the seat's selection with its drag — the UIE-1 teardown contract.
+    session.SelectionReset = slot => targeting.Deselect(slot: slot);
 
     return targeting;
 });
@@ -421,6 +425,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     // grown to grant/revoke outcomes), and applied mutations stamp the HUD's act-class tag (the D7 asymmetry surface).
     var toasts = sp.GetRequiredService<OverlayToastStore>();
     var overlayFeed = sp.GetRequiredService<WorldOverlayFeed>();
+    var editorDrag = sp.GetRequiredService<WorldEditorDrag>();
 
     sp.GetRequiredService<WorldServer>().EchoTap = echo => {
         toasts.Publish(message: echo.Message, isError: echo.Rejected);
@@ -428,6 +433,12 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
         if (!echo.Rejected && (echo.Kind != WorldEditEchoKind.GrantTable)) {
             overlayFeed.NoteMutationApplied(documentOnly: (echo.Kind == WorldEditEchoKind.DocumentDefaults));
+        }
+
+        // A rejected mutation correlates back to the frozen released drag preview that submitted it (UIE-3): the
+        // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the deadline.
+        if (echo.Rejected && (echo.Mutation is { } rejectedMutation)) {
+            editorDrag.NoteRejected(mutation: rejectedMutation);
         }
     };
 

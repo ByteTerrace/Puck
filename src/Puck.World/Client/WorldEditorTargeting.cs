@@ -26,6 +26,15 @@ internal readonly record struct EditorSelection(WorldSection Section, string Id,
 /// window and the render-path reads (<see cref="IsSceneRowSelected"/>, the HUD feed) run during frame produce, all on
 /// the launcher's window-pump thread.</remarks>
 internal sealed class WorldEditorTargeting {
+    /// <summary>The proximity-candidate radius around the seat's editor focus point, world units — the EXPLICIT
+    /// candidate policy (UIE-10): cycling never walks the whole world. Rows beyond this reach are selected by pick
+    /// or by the <c>editor.select</c> console twin.</summary>
+    internal const float CandidateRadius = 32f;
+    /// <summary>The candidate-count cap: at most this many nearest in-radius rows enter the cycle ring, so the
+    /// chord stays usable against large placement catalogs.</summary>
+    internal const int CandidateCap = 16;
+    private const float CandidateRadiusSquared = (CandidateRadius * CandidateRadius);
+
     private readonly WorldClient m_client;
     private readonly WorldEditorPicker m_picker;
     private readonly WorldEditorSession m_session;
@@ -123,33 +132,23 @@ internal sealed class WorldEditorTargeting {
         return true;
     }
 
-    /// <summary>Cycles the selection through the proximity candidates around the seat's editor focus point, sorted
-    /// nearest-first (the chord cycle). With no current selection the nearest candidate is taken regardless of
-    /// direction.</summary>
+    /// <summary>Cycles the selection through the BOUNDED proximity-candidate ring around the seat's editor focus
+    /// point: the nearest at most <see cref="CandidateCap"/> rows within <see cref="CandidateRadius"/>, sorted
+    /// nearest-first (the chord cycle; UIE-10's explicit policy). With no current selection — or a selection outside
+    /// the ring — the nearest candidate is taken regardless of direction.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    /// <param name="direction">+1 next (farther), -1 previous (nearer); wraps.</param>
-    /// <returns>The new selection and its distance from the focus point, or <see langword="null"/> with no candidates.</returns>
-    public (EditorSelection Selection, float Distance)? Cycle(int slot, int direction) {
-        var targets = m_picker.Targets;
+    /// <param name="direction">+1 next (farther), -1 previous (nearer); wraps within the ring.</param>
+    /// <returns>The new selection, its distance from the focus point, and the ring size, or <see langword="null"/>
+    /// with no in-radius candidates.</returns>
+    public (EditorSelection Selection, float Distance, int Count)? Cycle(int slot, int direction) {
+        var count = GatherCandidates(slot: slot);
 
-        if (targets.Length == 0) {
+        if (count == 0) {
             return null;
         }
 
-        if (m_sortScratch.Length < targets.Length) {
-            m_sortScratch = new (float, int)[targets.Length];
-        }
-
-        var focus = m_session.Focus(slot: slot);
-
-        for (var index = 0; (index < targets.Length); index++) {
-            m_sortScratch[index] = (Vector3.DistanceSquared(value1: targets[index].Focus, value2: focus), index);
-        }
-
-        var span = m_sortScratch.AsSpan(start: 0, length: targets.Length);
-
-        span.Sort(comparison: static (a, b) => a.DistanceSquared.CompareTo(value: b.DistanceSquared));
-
+        var targets = m_picker.Targets;
+        var span = m_sortScratch.AsSpan(start: 0, length: count);
         var position = 0;
 
         if (Selected(slot: slot) is { } current) {
@@ -167,7 +166,45 @@ internal sealed class WorldEditorTargeting {
 
         Apply(slot: slot, selection: selection);
 
-        return (selection, MathF.Sqrt(x: span[position].DistanceSquared));
+        return (selection, MathF.Sqrt(x: span[position].DistanceSquared), count);
+    }
+
+    /// <summary>The seat's current candidate-ring size — the in-radius, capped count the cycle chord walks (the
+    /// <c>editor.status</c> narration).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public int CandidateCount(int slot) => GatherCandidates(slot: slot);
+
+    // Fill the sort scratch with the in-radius candidates around the seat's focus, sorted nearest-first and capped
+    // (the ONE candidate-policy implementation both the cycle and the narration read). Returns the ring size.
+    private int GatherCandidates(int slot) {
+        var targets = m_picker.Targets;
+
+        if (targets.Length == 0) {
+            return 0;
+        }
+
+        if (m_sortScratch.Length < targets.Length) {
+            m_sortScratch = new (float, int)[targets.Length];
+        }
+
+        var focus = m_session.Focus(slot: slot);
+        var count = 0;
+
+        for (var index = 0; (index < targets.Length); index++) {
+            var distanceSquared = Vector3.DistanceSquared(value1: targets[index].Focus, value2: focus);
+
+            if (distanceSquared <= CandidateRadiusSquared) {
+                m_sortScratch[count++] = (distanceSquared, index);
+            }
+        }
+
+        if (count == 0) {
+            return 0;
+        }
+
+        m_sortScratch.AsSpan(start: 0, length: count).Sort(comparison: static (a, b) => a.DistanceSquared.CompareTo(value: b.DistanceSquared));
+
+        return Math.Min(val1: count, val2: CandidateCap);
     }
 
     /// <summary>Picks the row under the seat's look ray (the crosshair pick — the precision path).</summary>

@@ -146,6 +146,11 @@ internal sealed class WorldEditorSession {
     /// after this session).</summary>
     public Func<int, Vector3?>? OrbitPivotSource { get; set; }
 
+    /// <summary>The selection-clear sink deactivation invokes (the targeting state's <c>Deselect</c>) so a departed or
+    /// exited seat never leaves a stale selection for the next occupant. Property-injected like
+    /// <see cref="OrbitPivotSource"/> (targeting composes after this session).</summary>
+    public Action<int>? SelectionReset { get; set; }
+
     /// <summary>Enters editor mode for a seat: captures its intent source, diverts it to Idle on BOTH halves (the
     /// client mask and the server body over <c>SetControl</c>), flips the seat's active binding group to the editor
     /// group, and arms the camera to seed from the seat's current chase framing on the next produced frame (no pose
@@ -239,7 +244,10 @@ internal sealed class WorldEditorSession {
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="unitsPerSecond">The speed, world units per second.</param>
     /// <returns>The clamped applied speed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="unitsPerSecond"/> is not finite.</exception>
     public float SetSpeed(int slot, float unitsPerSecond) {
+        FiniteGuard.ThrowIfNonFinite(value: unitsPerSecond);
+
         var seat = m_seats[SlotOrFirst(slot: slot)];
 
         seat.Speed = Math.Clamp(value: unitsPerSecond, min: MinFlySpeed, max: MaxFlySpeed);
@@ -298,7 +306,12 @@ internal sealed class WorldEditorSession {
     /// <param name="eye">The eye position, world space.</param>
     /// <param name="yawRadians">The look heading (0 looks down +Z).</param>
     /// <param name="pitchRadians">The look tilt (positive looks up; clamped).</param>
+    /// <exception cref="ArgumentOutOfRangeException">An argument is not finite.</exception>
     public void SetPose(int slot, Vector3 eye, float yawRadians, float pitchRadians) {
+        FiniteGuard.ThrowIfNonFinite(value: eye);
+        FiniteGuard.ThrowIfNonFinite(value: yawRadians);
+        FiniteGuard.ThrowIfNonFinite(value: pitchRadians);
+
         var seat = m_seats[SlotOrFirst(slot: slot)];
 
         seat.Mode = EditorCameraMode.Fly;
@@ -325,7 +338,8 @@ internal sealed class WorldEditorSession {
     }
 
     /// <summary>Self-heals a departed seat: a slot that left the roster while editing is force-exited (group flipped
-    /// back, camera dropped) so a later join never inherits editor bindings. Called once per produced frame.</summary>
+    /// back, camera dropped, drag/frozen preview and selection cleared) so a later join never inherits editor
+    /// bindings or a stale pending row. Called once per produced frame.</summary>
     public void PruneDeparted() {
         for (var slot = 0; (slot < m_seats.Length); slot++) {
             if (m_seats[slot].Active && !m_roster.IsJoined(slot: slot)) {
@@ -495,10 +509,13 @@ internal sealed class WorldEditorSession {
         return (((editors == 1) && (viewIndex >= 2)) ? editorViewIndex : -1);
     }
 
-    // Unwind a seat's mode state without touching the (possibly departed) body: flip the binding group back, drop
-    // the camera, forget the sticks.
+    // Unwind a seat's COMPLETE client editor session without touching the (possibly departed) body: flip the binding
+    // group back, drop the camera, forget the sticks, drop any live drag AND frozen released preview, and clear the
+    // selection — so explicit exit, controller departure, and slot reuse all start clean (UIE-1).
     private void Deactivate(int slot, Seat seat) {
         _ = m_bindings.SetActiveGroup(slot: slot, group: null);
+        m_drag.Drop(slot: slot);
+        SelectionReset?.Invoke(obj: slot);
         seat.Active = false;
         seat.SeedPending = false;
         seat.StagedMove = Vector2.Zero;
