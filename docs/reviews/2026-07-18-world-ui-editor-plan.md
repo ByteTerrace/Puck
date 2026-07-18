@@ -24,6 +24,17 @@ Doctrine that governs the whole arc:
   verbs are the assist/automation layer; the overlay is the reliable
   accessibility surface, diegetic mirrors come later
   (`docs/game-studio-plan.md:118-130`, `docs/overworld-demo-plan.md:203-205`).
+- **A constant must justify not being data (owner-ruled, post-P4.5).** Every
+  literal the arc introduces is one of three kinds, and the kind decides its
+  home: *contract invariants* (buffer word layouts, probe-math
+  relationships) stay constants and document WHY they are contracts;
+  *design-feel values* (tints, pulse timings, blends) live in the buffer-fed
+  token block; *world-varying policy* (headroom, candidate radius/cap,
+  layout splits, deadlines) lives in a validator-gated `WorldDefinition`
+  editor-defaults section — whole-row mutable, journal-editable, with the
+  former constants as documented defaults. The P5.5 sweep executes the
+  triage; scattered per-file policy literals are a review-rejectable smell
+  from here on.
 - **Vocabulary names the primitive, and calcified names are renamed on
   contact.** A concept's name must describe the mechanism, never one use of
   it — supergreen makes renames free, so every phase renames what it
