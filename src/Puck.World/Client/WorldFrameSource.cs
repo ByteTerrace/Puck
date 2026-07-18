@@ -27,6 +27,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <summary>The extra screen slots the probe reserves (same rationale: <c>UpsertScreen</c> of a NEW index must fit
     /// at runtime), bounded by the engine's screen-surface ceiling.</summary>
     internal const int AuthoringHeadroomScreens = 4;
+    // The change shimmer: rows a delivery changed pulse toward this cool cyan — mutation feedback, and the undo
+    // spectacle (history flowing backward through the world). Distinct from the amber selection and the danger red.
+    private static readonly Vector3 s_shimmerTint = new(x: 0.35f, y: 0.85f, z: 1.0f);
+    private const float ShimmerBlendMax = 0.6f;
     // The selection tint: the selected scene row's albedo pulls toward this amber so a selection reads at a glance
     // (and a proof can count its hue). A material swap, not a new material system.
     private static readonly Vector3 s_selectionTint = new(x: 1.0f, y: 0.72f, z: 0.15f);
@@ -39,6 +43,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // The editor's client-side render seams: the drag channel's pending-row overlay (composed over the delivered
     // definition each rebuild) and the targeting state's selection highlight. Both fold into the rebuild watch.
     private readonly WorldEditorTargeting m_targeting;
+    private readonly WorldChangeShimmer m_shimmer = new();
     private readonly WorldEditorDrag m_drag;
     // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
     // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
@@ -136,6 +141,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_builtRevision = RebuildRevision();
         m_builtDefinitionRevision = m_client.DefinitionRevision;
         m_program = BuildWorld(client: client, scene: scene, screens: screens, probeWorstCase: false, highlight: m_targeting);
+        // The boot scene is the shimmer baseline — the first delivery pulses only what it actually changed.
+        m_shimmer.Observe(scene: scene, now: 0d);
     }
 
     /// <summary>The worst-case (all avatars active) program word count — the spec's <c>ProgramWordCapacity</c> floor.</summary>
@@ -173,15 +180,19 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // ProgramChanged so the engine re-uploads it, always within the frozen capacities. The first frame also
         // uploads (the initial program is not yet on the GPU).
         var revision = RebuildRevision();
-        var programChanged = (!m_uploaded || (revision != m_builtRevision));
+        // A live shimmer pulse keeps the rebuild running so its decay animates — a bounded window at the proven
+        // drag-cadence rebuild cost, entered only when a delivery changed rows.
+        var shimmering = m_shimmer.HasLivePulse(now: m_elapsedSeconds);
+        var programChanged = (!m_uploaded || shimmering || (revision != m_builtRevision));
 
-        if (revision != m_builtRevision) {
+        if (shimmering || (revision != m_builtRevision)) {
             // A definition delivery (scene/screen mutation, swap, or undo) landed since the last build: reconcile the
             // binder's runtime source machinery to the new screens BEFORE rebuilding the program off the live geometry.
             var definitionRevision = m_client.DefinitionRevision;
 
             if (definitionRevision != m_builtDefinitionRevision) {
                 m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
+                m_shimmer.Observe(scene: m_client.Definition.Scene, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;
             }
 
@@ -193,7 +204,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 scene: m_drag.ComposeScene(live: m_client.Definition.Scene),
                 screens: m_drag.ComposeScreens(live: m_client.Definition.Screens),
                 probeWorstCase: false,
-                highlight: m_targeting
+                highlight: m_targeting,
+                shimmer: m_shimmer,
+                shimmerNow: m_elapsedSeconds
             );
             m_builtRevision = revision;
         }
@@ -469,7 +482,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // by the spec's capacity floors (ProgramWordCapacity / InstanceCapacity / DynamicTransformCapacity), probed at
     // construction. Every avatar keeps its own body + accent material (cheap constant words), so a recolor is data,
     // not a resize. Unions only, so the accumulator stays additive.
-    private static SdfProgram BuildWorld(WorldClient client, WorldScene scene, IReadOnlyList<WorldScreen> screens, bool probeWorstCase, WorldEditorTargeting? highlight) {
+    private static SdfProgram BuildWorld(WorldClient client, WorldScene scene, IReadOnlyList<WorldScreen> screens, bool probeWorstCase, WorldEditorTargeting? highlight, WorldChangeShimmer? shimmer = null, double shimmerNow = 0d) {
         var builder = new SdfProgramBuilder();
         var grass = builder.AddMaterial(material: new SdfMaterial(Albedo: scene.GroundAlbedo));
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
@@ -496,6 +509,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
             if ((highlight is { } targeting) && targeting.IsSceneRowSelected(id: row.Id)) {
                 albedo = Vector3.Lerp(value1: albedo, value2: s_selectionTint, amount: SelectionTintBlend);
+            }
+
+            if ((shimmer is { } pulses) && (pulses.Intensity(id: row.Id, now: shimmerNow) is > 0f and var pulse)) {
+                albedo = Vector3.Lerp(value1: albedo, value2: s_shimmerTint, amount: (pulse * ShimmerBlendMax));
             }
 
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: albedo));
