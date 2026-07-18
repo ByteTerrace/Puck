@@ -105,6 +105,20 @@
 //       policy is asserted positively: a second seat joins, seat 1 enters the editor, and the 50%→70% split seam
 //       band must repaint. The roster is pinned to seat 1 first (dev-machine pads auto-seat extra players). Decodes
 //       the engine's own PNGs inline like ui-floor.
+//   editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The P3 selection/manipulation proof, run on BOTH backends like editor-mode. Each session pins the roster
+//       (player.leave 2..4) AND the census (world.population 0 — a static world so pixel diffs read the highlight,
+//       not the crowd), enters the editor, and asserts: (a) editor.place authors one scene row = EXACTLY one
+//       world.status dirty increment; (b) THE HEADLINE — a grab + multi-step drag produces ZERO wire traffic (dirty
+//       unchanged mid-drag) and release commits EXACTLY one more journal entry with the position moved (editor.status
+//       echoes the committed center); the coalescing is driven over editor.drag, the typed twin of stick motion (the
+//       same pending-row channel the analog latch feeds — the latch itself needs a physical pad and is hand-verified);
+//       (c) world.undo restores the pre-drag position; (d) the look-ray pick names the aimed row (camera posed at
+//       boulder-2, editor.pick echoes it); (e) the selection highlight is VISIBLE — select/deselect screenshots over a
+//       static central band differ decisively while a deselected control pair does not; (f) capacity honesty —
+//       flooding placements past the authoring headroom hits the loud '[world.mutation rejected: ...]' envelope line,
+//       a further placement leaves dirty UNCHANGED, and the rejection surfaces as the danger-hued toast. Decodes the
+//       engine's own PNGs inline like ui-floor.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -170,8 +184,9 @@ static class ProofApp {
                 "record" => RecordProof.RunRecord(opts: opts),
                 "ui-floor" => UiFloorProof.RunUiFloor(opts: opts),
                 "editor-mode" => EditorModeProof.RunEditorMode(opts: opts),
+                "editor-edit" => EditorEditProof.RunEditorEdit(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit)"),
             };
         }
         catch (ArgException ex) {
@@ -199,6 +214,7 @@ static class ProofApp {
         Console.WriteLine(value: "  record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]");
         Console.WriteLine(value: "  ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -7193,5 +7209,255 @@ static class EditorModeProof {
         }
 
         return ((double)sum / ((long)w * h * 3));
+    }
+}
+
+// ============================================================================================
+// EDITOR-EDIT — the P3 selection/manipulation proof (see the header's subcommand block for the
+// full assertion list). The wire-coalescing headline rides world.status's dirty counter: motion
+// inside a grab must not move it, release must move it by EXACTLY one. The world is pinned
+// static (roster to seat 1, census to 0) so the select/deselect pixel pair reads the amber
+// selection tint, not crowd motion. Runs on BOTH backends like editor-mode.
+// ============================================================================================
+static class EditorEditProof {
+    static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
+
+    public static int RunEditorEdit(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === editor-edit (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-edit (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] editor-edit proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = (backend ?? "directx");
+        var deselectAPath = ShotPath(pid: pid, tag: tag, name: "deselect-a");
+        var selectedPath = ShotPath(pid: pid, tag: tag, name: "selected");
+        var deselectBPath = ShotPath(pid: pid, tag: tag, name: "deselect-b");
+        var rejectPath = ShotPath(pid: pid, tag: tag, name: "reject");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off (the pixel band must read the WORLD), roster to seat 1 (dev-machine
+            // pads auto-seat extras), census to 0 (a static world — the highlight diff's noise floor).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-roster-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "pin-census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-editor");
+
+            // (a) A discrete place is EXACTLY one journal entry.
+            var dirty0 = ReadDirty(ctx: ctx, name: "dirty-baseline");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place boulder 0.5 0.3", expect: "one mutation submitted", name: "place-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 1)} ", name: "place-is-one-entry");
+
+            // (b) THE HEADLINE — drag coalescing at the wire: grab, move THREE times (client-local; dirty must not
+            // move), release = exactly ONE more entry, position committed.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-1", expect: "[editor.select: seat 1 scene 'boulder-1'", name: "select-drag-subject");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "grab-begins");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 2 0 0", expect: "[editor.drag: seat 1 scene 'boulder-1' at (0.80, 0.72, -0.30)]", name: "drag-step-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1.5 0 0", expect: "[editor.drag: seat 1 scene 'boulder-1' at (2.30, 0.72, -0.30)]", name: "drag-step-2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 0.5 0 1", expect: "[editor.drag: seat 1 scene 'boulder-1' at (2.80, 0.72, 0.70)]", name: "drag-step-3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 1)} ", name: "drag-moves-no-wire");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "(-1.20, 0.72, -0.30) -> (2.80, 0.72, 0.70)", name: "release-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 2)} ", name: "release-is-one-entry");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "sel=scene 'boulder-1' at (2.80, 0.72, 0.70)", name: "position-committed");
+
+            // (c) Undo restores the pre-drag position (the journal replay) and the dirty count steps back.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1,", name: "undo-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "sel=scene 'boulder-1' at (-1.20, 0.72, -0.30)", name: "undo-restores-position");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {(dirty0 + 1)} ", name: "undo-steps-dirty-back");
+
+            // (d) The look-ray pick: pose the camera 5.5u in front of boulder-2 (center (0.6, 0.88, 0.5), r 1.1),
+            // looking straight down +Z — the crosshair ray must name that row.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-for-pick");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.pick", expect: "selected scene 'boulder-2'", name: "look-ray-picks-aimed-row");
+
+            // (e) The highlight in pixels: from the same vantage, a deselected control pair bounds the static noise
+            // floor and the selected shot must clear it decisively (the amber tint on boulder-2). Let the last
+            // mutation toast expire first so the band reads geometry only.
+            Thread.Sleep(millisecondsTimeout: 3400);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.deselect", expect: "[editor.deselect: seat 1 cleared]", name: "deselect-for-control");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "deselect-shot-a", path: deselectAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "deselect-shot-b", path: deselectBPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-2", expect: "[editor.select: seat 1 scene 'boulder-2'", name: "select-for-highlight");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "selected-shot", path: selectedPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: deselectAPath);
+            var controlB = ComposedShotKit.DecodePng(path: deselectBPath);
+            var selected = ComposedShotKit.DecodePng(path: selectedPath);
+            var bandX = (int)(width * 0.25);
+            var bandY = (int)(height * 0.25);
+            var bandW = (int)(width * 0.35);
+            var bandH = (int)(height * 0.50);
+            var noiseDiff = MeanAbsDiff(a: controlB, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var highlightDiff = MeanAbsDiff(a: selected, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "selection-highlight-visible",
+                ok: ((highlightDiff > 0.8) && (highlightDiff > ((noiseDiff * 4.0) + 0.4))),
+                detail: $"selected-vs-control band diff {highlightDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs static noise {noiseDiff.ToString(format: "F2", provider: ProofApp.Inv)}"
+            );
+
+            // (f) Capacity honesty: flood placements past the authoring headroom. The envelope must reject loudly,
+            // a further placement must leave dirty unchanged, and the rejection must surface as the danger toast.
+            var floodMark = ctx.Collector.Count;
+
+            for (var index = 0; (index < 40); index++) {
+                ComposedShotKit.Send(ctx: ctx, line: "editor.place slab");
+            }
+
+            var rejection = ComposedShotKit.Await(
+                collector: ctx.Collector,
+                mark: floodMark,
+                predicate: line => (line.Contains(value: "[world.mutation rejected: UpsertSceneRow") && line.Contains(value: "render envelope")),
+                deadlineSeconds: 60.0
+            );
+
+            passed &= ComposedShotKit.Check(name: "capacity-rejects-loudly", ok: (rejection is not null), detail: (rejection?.Trim() ?? "(no envelope rejection line)"));
+
+            var dirtyAtCeiling = ReadDirty(ctx: ctx, name: "dirty-at-ceiling");
+            var extraMark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "editor.place slab");
+            passed &= ComposedShotKit.Check(
+                name: "over-ceiling-place-rejected",
+                ok: (ComposedShotKit.Await(collector: ctx.Collector, mark: extraMark, predicate: line => line.Contains(value: "[world.mutation rejected: UpsertSceneRow"), deadlineSeconds: 20.0) is not null),
+                detail: "the placement past the ceiling rejected"
+            );
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "reject-toast-shot", path: rejectPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyAtCeiling} ", name: "rejection-leaves-dirty-unchanged");
+
+            var reject = ComposedShotKit.DecodePng(path: rejectPath);
+            var stripX = (int)(width * 0.55);
+            var stripY = ((height / 2) - 16);
+            var stripW = ((width - 40) - stripX);
+            var stripH = 32;
+            var rejectRed = CountDangerRed(image: reject, x: stripX, y: stripY, w: stripW, h: stripH);
+            var controlRed = CountDangerRed(image: controlA, x: stripX, y: stripY, w: stripW, h: stripH);
+
+            passed &= ComposedShotKit.Check(
+                name: "capacity-rejection-surfaces-as-toast",
+                ok: ((rejectRed > (controlRed + 100)) && (rejectRed > 120)),
+                detail: $"danger-red pixels in the toast strip: reject {rejectRed} vs control {controlRed}"
+            );
+
+            // (g) No loud GPU/runtime faults anywhere in the session (both streams).
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: deselectAPath);
+            ComposedShotKit.TryDelete(path: selectedPath);
+            ComposedShotKit.TryDelete(path: deselectBPath);
+            ComposedShotKit.TryDelete(path: rejectPath);
+        }
+
+        return passed;
+    }
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-editor-edit-{pid}-{tag}-{name}.png");
+    }
+
+    // Sends world.status and parses the journal dirty counter (the read-after-write barrier makes it settled).
+    static int ReadDirty(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => DirtyEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no world.status dirty echo)");
+
+            return -1;
+        }
+
+        var dirty = int.Parse(s: DirtyEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv);
+
+        _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
+
+        return dirty;
+    }
+
+    // Mean absolute per-channel difference over a region (the highlight witness; the world is pinned static).
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // The danger-hue population (the ui-floor discriminator): red clearly dominating BOTH other channels.
+    static int CountDangerRed((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var count = 0;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+                int r = image.Rgba[i];
+                int g = image.Rgba[(i + 1)];
+                int b = image.Rgba[(i + 2)];
+
+                if ((r > (g + 40)) && (r > (b + 40))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
     }
 }

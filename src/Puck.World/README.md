@@ -524,9 +524,9 @@ East / Back / Tab or `editor.exit [seat]`. Entering installs
 `WorldEditorBindings` as the seat's mode layer — the merged no-modifier
 **Editor** page (sticks fly, shoulders rise/sink, South toggles fly⇄orbit,
 D-pad steps speed, West echoes status) plus the **LT camera page** (explicit
-fly/orbit + speed; RT and LT+RT page ids are reserved for P3
-selection/placement) — so the binding bar flips to the editor pages with zero
-bar-side work. The seat's intent diverts through the existing `player.control
+fly/orbit + speed; North picks the row under the crosshair so orbit has a
+pivot), the **RT select page**, and the **LT+RT place page** — so the binding
+bar flips to the editor pages with zero bar-side work. The seat's intent diverts through the existing `player.control
 idle` contract on both halves (live devices mask; tapes and `player.press`
 still drive — script outranks idle), its camera swaps from the chase rig to
 the session's free-fly/orbit rig (seeded from the chase framing, restored by
@@ -539,6 +539,42 @@ The console twins (`editor.status`, `editor.fly`/`editor.orbit`,
 script every chord act, and every discrete chord act echoes a console line.
 Proven on both backends by `proof.cs editor-mode` (mode round trip, camera in
 pixels, diversion honesty, the layout seam).
+
+**Selection and manipulation (P3)** builds the targeting and drag layers over
+the mode. A selection is `(section, id-or-index)` — pure client state in
+`WorldEditorTargeting`, never protocol — over scene rows, screens, spawns, and
+cameras; it self-heals against every delivered definition, tints the selected
+scene row amber in the render (a material swap at rebuild cadence), and
+retargets the orbit pivot. Targeting is proximity (`editor.next`/`prev` cycle
+candidates nearest-first around the camera focus) or the look ray:
+`WorldEditorPicker` builds a fixed-point picking program from the DOCUMENT
+(one material per row, proxy spheres for spawns/fixed cameras) behind the
+existing `SdfFieldEvaluator`, rebuilt only on a definition delivery —
+`editor.pick` names the row under the crosshair in microseconds. The static
+scene itself generalized for this: `WorldScene.Rows` is a `$type`-discriminated
+row vocabulary (`boulder` | `slab` — a slab carries its material as data),
+addressed per-row by the `UpsertSceneRow`/`RemoveSceneRow` mutations, with the
+render-envelope probe reserving documented authoring headroom (32 rows + 4
+screen slots) so live placement works until the ceiling rejects loudly.
+
+Continuous edits ride `WorldEditorDrag`'s pending-row preview channel:
+`editor.grab` copies the selected scene row or screen client-side, the sticks
+(re-routed from flight while the drag lives) or `editor.drag <dx dy dz>` move
+it through `Puck.Authoring.GridSnap` (`editor.snap [on|off|<pitch>]`), the
+frame source composes the pending row over the delivered definition so the
+EXISTING rebuild path renders the preview, and release (`editor.grab` again /
+`editor.release`) submits exactly ONE whole-row mutation — a whole drag is one
+journal entry, one undo step; `editor.cancel` never existed. Ghost spawns
+(`editor.spawn.boulder`/`.slab`, D-pad on the place page) preview a NEW row the
+same way and enter the document only on commit. The discrete twins
+(`editor.select <section> <key>`, `editor.move`/`editor.nudge <x y z>`,
+`editor.place boulder|slab […]`, `editor.delete`) submit one mutation per act
+with the ACTING SEAT's principal, so grant denials land on the seat that asked
+and surface as toasts. The editor HUD (selection readout, candidate/snap
+context, drag line) is a new writer on the unified overlay — per-seat, scoped
+to each seat's viewport. Proven on both backends by `proof.cs editor-edit`
+(place = one journal entry, drag coalescing at the wire, undo restores the
+position, the look-ray pick, the highlight in pixels, capacity honesty).
 
 ## Storage (cloud-ready, local-proven)
 
