@@ -23,6 +23,10 @@
              receives them in its own output directory with zero fonts of its own. Rebake via tools/font-atlas. -->
         <Content Include="Assets\Fonts\**\*.png" CopyToOutputDirectory="PreserveNewest" />
         <Content Include="Assets\Fonts\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The prepacked overlay glyph artifact (OverlayGlyphSdfPack) — committed so every consumer's FIRST run
+             takes the ~19 ms warm path instead of the ~2 s full-atlas decode. Keyed to the PNG+JSON hashes: a rebake
+             invalidates it and the next run rebuilds+rewrites it in place (commit the refreshed file with the bake). -->
+        <Content Include="Assets\Fonts\**\*.pack" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
