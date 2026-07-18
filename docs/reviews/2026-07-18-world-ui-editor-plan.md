@@ -24,6 +24,16 @@ Doctrine that governs the whole arc:
   verbs are the assist/automation layer; the overlay is the reliable
   accessibility surface, diegetic mirrors come later
   (`docs/game-studio-plan.md:118-130`, `docs/overworld-demo-plan.md:203-205`).
+- **Mechanisms port; content does not (owner-ruled, post-P5 launch).** The
+  copy-in-spirit carve-out ("hard-won behavior is preserved deliberately")
+  covers math, semantics, and wire shapes — NEVER artwork, fixtures, or
+  dressing. Demo's prototype icon drawings, example creatures, and scene
+  content are not World's identity: World's icon language is designed fresh
+  from the design-token identity, World proofs author their own content
+  through the canonical pipeline, and no Demo fixture ships on a World
+  surface. Inheriting prototype content through a behavior carve-out is a
+  review-rejectable violation; the P5.6 sovereignty pass executes the
+  remediation.
 - **A constant must justify not being data (owner-ruled, post-P4.5).** Every
   literal the arc introduces is one of three kinds, and the kind decides its
   home: *contract invariants* (buffer word layouts, probe-math
