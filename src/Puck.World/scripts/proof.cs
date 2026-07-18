@@ -156,16 +156,16 @@
 //       The P5 creations/placements proof (§D6), run on BOTH backends like editor-mode. Each session pins the roster
 //       (player.leave 2..4) and census (world.population 0), aims the editor camera at empty grass (so the ONLY pixel
 //       motion in the asserted band is the placement under test), and asserts: (a) editor.import of a committed
-//       docs/examples/creations fixture crosses the strict canonicalizer and lands as EXACTLY one UpsertCreation
-//       journal entry; (b) the STAMP is visible — editor.place'ing the imported creation repaints a static central
+//       PROOF-AUTHORED probe creation (owner ruling: Demo content never ships as World content — the proof owns
+//       its art) crosses the strict canonicalizer and lands as EXACTLY one UpsertCreation journal entry; (b) the STAMP is visible — editor.place'ing the imported creation repaints a static central
 //       band decisively versus a control pair's noise floor; (c) THE HASH PIN — world.creation.set with a corrupted
 //       hash rejects loudly naming the canonical sha256, dirty unchanged (and the load-time half is covered by the
 //       validator: a tampered saved file falls back loudly at boot); (d) the P3 drag channel works on placements —
 //       grab + multi-step editor.drag moves the dirty counter NOT AT ALL mid-drag and release commits EXACTLY one
 //       more journal entry ('retired: applied'); (e) world.undo restores the pre-drag position (editor.select echoes
 //       the original coordinates); (f) RemoveCreation with live placements rejects loudly (the no-cascade ruling);
-//       (g) the ANIMATED fixture (lantern-fish, 8 frames) walks its timeline — two shots 0.7 s apart over the fish
-//       band differ decisively while a static-control pair does not; (h) capacity honesty — flooding placements past
+//       (g) the proof-authored ANIMATED probe (4 frames) walks its timeline — two shots 0.7 s apart over its band
+//       differ decisively while a static-control pair does not; (h) capacity honesty — flooding placements past
 //       the reserved headroom hits the loud '[world.mutation rejected: ...] ... exceed the probed render envelope'
 //       ceiling and a further placement leaves dirty unchanged; (i) THE OUROBOROS WITH CREATIONS — world.save of the
 //       furnished world, a relaunch --world <that file>, and a second save compare byte-identical (the inline-
@@ -8134,12 +8134,17 @@ static class PlacementsProof {
         var controlAPath = ShotPath(pid: pid, tag: tag, name: "control-a");
         var controlBPath = ShotPath(pid: pid, tag: tag, name: "control-b");
         var stampPath = ShotPath(pid: pid, tag: tag, name: "stamp");
-        var fishAPath = ShotPath(pid: pid, tag: tag, name: "fish-a");
-        var fishBPath = ShotPath(pid: pid, tag: tag, name: "fish-b");
+        var critterAPath = ShotPath(pid: pid, tag: tag, name: "critter-a");
+        var critterBPath = ShotPath(pid: pid, tag: tag, name: "critter-b");
         var savedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-1.world.json");
         var resavedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-2.world.json");
-        var lampFixture = Path.Combine(path1: repoRoot, path2: "docs", path3: "examples", path4: Path.Combine(path1: "creations", path2: "town-lamp.creation.json"));
-        var fishFixture = Path.Combine(path1: repoRoot, path2: "docs", path3: "examples", path4: Path.Combine(path1: "creations", path2: "lantern-fish.creation.json"));
+        // The proof AUTHORS its own creations (owner ruling: Demo content never ships as World content — no
+        // docs/examples fixture enters a World proof). Both cross the same strict import door a player file would.
+        var stampFixture = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-stamp.creation.json");
+        var critterFixture = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-critter.creation.json");
+
+        File.WriteAllText(path: stampFixture, contents: StaticProbeCreationJson);
+        File.WriteAllText(path: critterFixture, contents: AnimatedProbeCreationJson);
         var stopwatch = new Stopwatch();
         var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
         var process = ctx.Process;
@@ -8167,11 +8172,11 @@ static class PlacementsProof {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "census-zero");
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-editor");
 
-            // (a) IMPORT: the committed lamp fixture crosses the strict canonicalizer — one UpsertCreation entry.
+            // (a) IMPORT: the proof-authored stamp probe crosses the strict canonicalizer — one UpsertCreation entry.
             var dirty0 = ReadDirty(ctx: ctx, name: "dirty-baseline");
 
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {lampFixture}",
-                expect: "[world.mutation: UpsertCreation 'town-lamp' applied]", name: "import-lamp-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {stampFixture}",
+                expect: "[world.mutation: UpsertCreation 'probe-stamp' applied]", name: "import-stamp-applies");
             passed &= ComposedShotKit.Check(name: "import-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-import") == (dirty0 + 1)), detail: "import = one journal entry");
 
             // (b) THE STAMP in pixels: aim at empty grass (+Z of the spawn plaza — no screens, no crowd), bound the
@@ -8183,9 +8188,8 @@ static class PlacementsProof {
 
             var placeMark = ctx.Collector.Count;
 
-            // Scale 2.5: the lamp is a thin post — the bulkier stamp keeps the pixel threshold honestly decisive.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place town-lamp 0 2.5",
-                expect: "[world.mutation: UpsertPlacement 'place-1' applied]", name: "place-lamp-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place probe-stamp 0 1.5",
+                expect: "[world.mutation: UpsertPlacement 'place-1' applied]", name: "place-stamp-applies");
 
             var placeEcho = ComposedShotKit.Await(collector: ctx.Collector, mark: placeMark,
                 predicate: l => (l.Contains(value: "[editor.place: seat 1 placement 'place-1'") && AtEcho.IsMatch(input: l)), deadlineSeconds: 15.0);
@@ -8209,8 +8213,8 @@ static class PlacementsProof {
 
             passed &= ComposedShotKit.Check(
                 name: "stamp-visible",
-                // The floor matches the animated check: a lamp is a thin post, so its MEAN band diff is modest —
-                // decisiveness comes from the 4x noise guard over a pinned-static control pair.
+                // The MEAN over the whole band stays modest even for a bulky stamp; decisiveness comes from the
+                // 4x noise guard over a pinned-static control pair.
                 ok: ((stampDiff > 0.8) && (stampDiff > (noise * 4.0))),
                 detail: $"stamp band diff {stampDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs noise {noise.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x noise)"
             );
@@ -8218,7 +8222,7 @@ static class PlacementsProof {
             // (c) THE HASH PIN: the same fixture with a zeroed hash must reject loudly naming the canonical sha256,
             // and the journal must not move — a hash the pipeline did not itself compute is never accepted.
             var dirtyBeforeBad = ReadDirty(ctx: ctx, name: "dirty-before-bad-hash");
-            var badRow = BuildCorruptCreationRow(fixturePath: lampFixture);
+            var badRow = BuildCorruptCreationRow(fixturePath: stampFixture);
 
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.creation.set {badRow}",
                 expect: "does not match the canonical sha256", name: "corrupt-hash-rejects-loudly");
@@ -8254,30 +8258,30 @@ static class PlacementsProof {
             }
 
             // (f) NO CASCADE: removing a creation with a live placement rejects loudly.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.creation.remove town-lamp",
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.creation.remove probe-stamp",
                 expect: "has 1 live placement(s)", name: "remove-referenced-creation-rejects");
 
-            // (g) THE ANIMATED FIXTURE walks its timeline: stamp the 8-frame lantern-fish over its own patch of
-            // grass and demand pixel motion between two shots while a fish-free corner band stays at the noise floor.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {fishFixture}",
-                expect: "[world.mutation: UpsertCreation 'lantern-fish' applied]", name: "import-fish-applies");
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-fish-grass");
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place lantern-fish",
-                expect: "[world.mutation: UpsertPlacement 'place-2' applied]", name: "place-fish-applies");
+            // (g) THE ANIMATED PROBE walks its timeline: stamp the 4-frame critter over its own patch of grass
+            // and demand pixel motion between two shots while a critter-free corner band stays at the noise floor.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {critterFixture}",
+                expect: "[world.mutation: UpsertCreation 'probe-critter' applied]", name: "import-critter-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-critter-grass");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place probe-critter",
+                expect: "[world.mutation: UpsertPlacement 'place-2' applied]", name: "place-critter-applies");
             Thread.Sleep(millisecondsTimeout: 3400); // toast + shimmer decay: motion below is the timeline alone
-            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "fish-shot-a", path: fishAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "critter-shot-a", path: critterAPath);
             Thread.Sleep(millisecondsTimeout: 700);
-            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "fish-shot-b", path: fishBPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "critter-shot-b", path: critterBPath);
 
-            var fishA = ComposedShotKit.DecodePng(path: fishAPath);
-            var fishB = ComposedShotKit.DecodePng(path: fishBPath);
-            var fishMotion = MeanAbsDiff(a: fishB, b: fishA, x: bandX, y: bandY, w: bandW, h: bandH);
-            var cornerStill = MeanAbsDiff(a: fishB, b: fishA, x: (int)(width * 0.02), y: (int)(height * 0.70), w: (int)(width * 0.15), h: (int)(height * 0.20));
+            var critterA = ComposedShotKit.DecodePng(path: critterAPath);
+            var critterB = ComposedShotKit.DecodePng(path: critterBPath);
+            var critterMotion = MeanAbsDiff(a: critterB, b: critterA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var cornerStill = MeanAbsDiff(a: critterB, b: critterA, x: (int)(width * 0.02), y: (int)(height * 0.70), w: (int)(width * 0.15), h: (int)(height * 0.20));
 
             passed &= ComposedShotKit.Check(
                 name: "animated-fixture-walks-timeline",
-                ok: ((fishMotion > 0.8) && (fishMotion > (cornerStill * 4.0))),
-                detail: $"fish band motion {fishMotion.ToString(format: "F2", provider: ProofApp.Inv)} vs still corner {cornerStill.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x the still band)"
+                ok: ((critterMotion > 0.8) && (critterMotion > (cornerStill * 4.0))),
+                detail: $"critter band motion {critterMotion.ToString(format: "F2", provider: ProofApp.Inv)} vs still corner {cornerStill.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x the still band)"
             );
 
             // (i-1) SAVE the furnished world (2 creations, 2 placements) for the ouroboros half below.
@@ -8288,7 +8292,7 @@ static class PlacementsProof {
             var floodMark = ctx.Collector.Count;
 
             for (var extra = 0; (extra < 9); extra++) {
-                ComposedShotKit.Send(ctx: ctx, line: "editor.place town-lamp");
+                ComposedShotKit.Send(ctx: ctx, line: "editor.place probe-stamp");
                 Thread.Sleep(millisecondsTimeout: 250);
             }
 
@@ -8299,7 +8303,7 @@ static class PlacementsProof {
 
             var dirtyAtCeiling = ReadDirty(ctx: ctx, name: "dirty-at-ceiling");
 
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place town-lamp", expect: "exceed the probed render envelope", name: "past-ceiling-rejects-again");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place probe-stamp", expect: "exceed the probed render envelope", name: "past-ceiling-rejects-again");
             passed &= ComposedShotKit.Check(name: "past-ceiling-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-past-ceiling") == dirtyAtCeiling), detail: "journal unchanged past the ceiling");
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
@@ -8313,8 +8317,10 @@ static class PlacementsProof {
             ComposedShotKit.TryDelete(path: controlAPath);
             ComposedShotKit.TryDelete(path: controlBPath);
             ComposedShotKit.TryDelete(path: stampPath);
-            ComposedShotKit.TryDelete(path: fishAPath);
-            ComposedShotKit.TryDelete(path: fishBPath);
+            ComposedShotKit.TryDelete(path: critterAPath);
+            ComposedShotKit.TryDelete(path: critterBPath);
+            ComposedShotKit.TryDelete(path: stampFixture);
+            ComposedShotKit.TryDelete(path: critterFixture);
         }
 
         // (i-2) THE OUROBOROS WITH CREATIONS: reload the furnished save and save again — byte identity proves the
@@ -8357,6 +8363,50 @@ static class PlacementsProof {
             detail: $"sha256 {savedHash[..12]} vs {resavedHash[..12]}"
         );
     }
+
+    // THE STATIC PROBE — a bulky three-primitive beacon authored HERE (owner ruling: Demo content never ships as
+    // World content; the proof owns its art). Vector3/Quaternion members use the creation serializer's field shape.
+    const string StaticProbeCreationJson = """
+        {
+          "schema": "puck.creation.v1",
+          "name": "probe-stamp",
+          "palette": [
+            { "albedo": { "x": 0.8, "y": 0.3, "z": 0.2 } },
+            { "albedo": { "x": 0.9, "y": 0.7, "z": 0.2 } },
+            { "albedo": { "x": 0.2, "y": 0.6, "z": 0.9 }, "emissive": 0.4 },
+            { "albedo": { "x": 0.9, "y": 0.9, "z": 0.9 } }
+          ],
+          "shapes": [
+            { "id": 0, "type": "Box", "position": { "x": 0, "y": 0.3, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.6, "y": 0.8, "z": 1.6 }, "material": 1 },
+            { "id": 1, "type": "Sphere", "position": { "x": 0, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.4, "y": 2.4, "z": 2.4 }, "material": 2 },
+            { "id": 2, "type": "RoundCone", "position": { "x": 0, "y": 2.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.2, "y": 1.2, "z": 1.2 }, "material": 3 }
+          ]
+        }
+        """;
+
+    // THE ANIMATED PROBE — a body + two fins with a 4-frame timeline swinging the body: hold-style stepping at the
+    // 8-tick cadence lands a visibly different frame across the proof's 700 ms shot gap.
+    const string AnimatedProbeCreationJson = """
+        {
+          "schema": "puck.creation.v1",
+          "name": "probe-critter",
+          "palette": [
+            { "albedo": { "x": 0.2, "y": 0.8, "z": 0.5 } },
+            { "albedo": { "x": 0.9, "y": 0.4, "z": 0.7 } }
+          ],
+          "shapes": [
+            { "id": 0, "type": "Sphere", "position": { "x": 0, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 }, "material": 0 },
+            { "id": 1, "type": "Ellipsoid", "position": { "x": -1.1, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }, "material": 1 },
+            { "id": 2, "type": "Ellipsoid", "position": { "x": 1.1, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }, "material": 1 }
+          ],
+          "frames": [
+            { "name": "f1", "transforms": [ { "id": 0, "position": { "x": 0.8, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] },
+            { "name": "f2", "transforms": [ { "id": 0, "position": { "x": 0, "y": 2.2, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] },
+            { "name": "f3", "transforms": [ { "id": 0, "position": { "x": -0.8, "y": 1.6, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] },
+            { "name": "f4", "transforms": [ { "id": 0, "position": { "x": 0, "y": 1.0, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 }, "scale": { "x": 2.0, "y": 2.0, "z": 2.0 } } ] }
+          ]
+        }
+        """;
 
     // One compact (single-token) WorldCreation JSON row wrapping the fixture's document with a ZEROED hash — the
     // corrupt-hash probe world.creation.set must reject.

@@ -647,9 +647,10 @@ proxies), drag, move, nudge, and delete like every other row, shimmer on
 delivery like scene rows, and `world.save` re-canonicalizes every creation row
 so the persisted pin can never diverge from its embedded bytes. Proven on
 both backends by `proof.cs placements` (import/stamp in pixels, the corrupt
-hash pin, drag coalescing, undo, the no-cascade reject, the animated
-fixture's pixel motion, the capacity flood, and the save→reload→save byte
-ouroboros with creations embedded). Text runs COUNT against the per-stamp
+hash pin, drag coalescing, undo, the no-cascade reject, the proof-authored
+animated probe's pixel motion, the capacity flood, and the save→reload→save
+byte ouroboros with creations embedded — the proof authors its OWN creations
+through the canonical pipeline; Demo content never ships as World content). Text runs COUNT against the per-stamp
 shape budget but do not render this arc (World binds no world-space glyph
 atlas — the UIE-7 memory posture; binding one later is emission-only).
 

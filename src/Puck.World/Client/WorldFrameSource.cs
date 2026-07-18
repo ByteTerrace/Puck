@@ -72,6 +72,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private SdfProgram m_program;
     private int m_builtRevision;
     private int m_builtDefinitionRevision;
+    // The placement capacity reservation, in worst-case stamp SEGMENTS: boot static segments + the authoring
+    // headroom. Frozen at construction; the apply-time measure charges max(candidate segments, this).
+    private readonly int m_placementReservation;
     private float m_elapsedSeconds;
     private bool m_uploaded;
 
@@ -127,6 +130,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // A booted world may already stamp animated placements — register them before the first build so the initial
         // program emits their live pool slots.
         m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations);
+        m_placementReservation = (WorldPlacementStamper.StaticStampSegments(creations: definition.Creations, placements: definition.Placements) + WorldPlacementPolicy.AuthoringHeadroomPlacements);
 
         // The envelope probe (never rendered): a worst-case all-128-avatars build over the boot scene/screens PLUS the
         // documented authoring headroom (scene rows, screens, AND placement stamps — WorldPlacementPolicy), so a live
@@ -473,19 +477,6 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // selection (highlight) and drag-overlay counters — all monotonic, so the sum only stalls when none has changed.
     private int RebuildRevision() => ((m_client.Revision + m_targeting.Revision) + m_drag.Revision);
 
-    // The STATIC stamp count of a placement set (animated rows ride the constant replay pool, not the stamp probe).
-    private static int CountStatic(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations) {
-        var count = 0;
-
-        foreach (var placement in placements) {
-            if ((WorldPlacementStamper.FindCreation(creations: creations, id: placement.CreationId) is { } creation) && !WorldPlacementStamper.IsAnimated(creation: creation)) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
     // The boot scene padded with the documented authoring-headroom rows (worst-case slabs: per-row material + box) —
     // the probe-only shape that reserves live editing room in the capacity floors. Never validated, never rendered.
     private static WorldScene WithAuthoringHeadroom(WorldScene scene) {
@@ -623,12 +614,19 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 .ResetPoint();
         }
 
-        // The placement stamps (§D6): the construction probe reserves (boot static stamps + the authoring headroom)
-        // worst-case stamps; a live/measure build emits the rows as authored — static stamps baked into instructions,
-        // animated rows through the reserved replay pool (worst-case under any probe). Selection amber and the change
-        // shimmer tint a stamp's palette (albedo-only; the all-distinct probe bound covers the extra registrations).
-        if (placementProbe) {
-            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: (CountStatic(placements: placements, creations: creations) + WorldPlacementPolicy.AuthoringHeadroomPlacements));
+        // The placement stamps (§D6): the construction probe reserves (boot static segments + the authoring headroom)
+        // worst-case stamps, and the APPLY-TIME MEASURE charges a candidate's static placements at that same
+        // worst-case unit — max(candidate segments, the reservation) — so the placement term stays CONSTANT between
+        // probe and measure while placements are inside their headroom. That constancy is load-bearing: a cheaper
+        // as-authored measure would hand the reservation's word slack to SCENE/SCREEN floods (their ceilings would
+        // silently widen by thousands of words), and a placement flood still rejects exactly one segment past the
+        // headroom. Only the LIVE build emits the rows as authored — static stamps baked into instructions, animated
+        // rows through the replay pool (worst-case under any probe). Selection amber and the change shimmer tint a
+        // stamp's palette (albedo-only; the all-distinct probe bound covers the extra registrations).
+        if (placementProbe || probeWorstCase) {
+            var candidateSegments = WorldPlacementStamper.StaticStampSegments(creations: creations, placements: placements);
+
+            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: Math.Max(val1: candidateSegments, val2: m_placementReservation));
         } else {
             WorldPlacementStamper.EmitStatic(
                 builder: builder,

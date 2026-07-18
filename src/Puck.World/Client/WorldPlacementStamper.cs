@@ -29,6 +29,33 @@ internal static class WorldPlacementStamper {
     /// <param name="creation">The creation row.</param>
     public static bool IsAnimated(WorldCreation creation) => (creation.Document.Frames is { Count: > 0 });
 
+    /// <summary>The emitted SEGMENT count of one placement (its repeat auto-split total; 1 unrepeated) — the unit the
+    /// capacity reservation charges in, so a segmented row can never out-instance its charge.</summary>
+    /// <param name="placement">The placement row.</param>
+    public static int SegmentCount(WorldPlacement placement) {
+        if ((placement.Repeat is not { } repeat) || (repeat.TotalCount <= 1)) {
+            return 1;
+        }
+
+        return (SegmentTotal(count: repeat.CountX) * SegmentTotal(count: repeat.CountZ));
+    }
+
+    /// <summary>The total STATIC stamp segments of a placement set (animated rows ride the constant replay pool and
+    /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
+    /// <param name="creations">The world's creation rows.</param>
+    /// <param name="placements">The placement rows.</param>
+    public static int StaticStampSegments(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements) {
+        var segments = 0;
+
+        foreach (var placement in placements) {
+            if ((FindCreation(creations: creations, id: placement.CreationId) is { } creation) && !IsAnimated(creation: creation)) {
+                segments += SegmentCount(placement: placement);
+            }
+        }
+
+        return segments;
+    }
+
     /// <summary>Resolves a creation row by id, or <see langword="null"/>.</summary>
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="id">The row id.</param>
