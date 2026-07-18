@@ -321,12 +321,20 @@ doesn't need.
 
 1. Fix the `CreationDocument` round-trip loss + add `[JsonExtensionData]`
    (in Demo — protects existing content immediately).
-2. New library `Puck.Authoring`: lift `EditHistory<T>` and `GridSnap`
-   verbatim (both zero-dependency), and move the `CreationDocument` family +
-   `CreationStore` normalize/store (root paths become configurable). Demo
-   consumes the library; namespaces rename on the way (the
-   `Puck.Demo.World.WorldScene` ↔ `Puck.World.WorldScene` collision is
-   resolved by the lift).
+2. New library `Puck.Authoring` — with the copy-vs-move rule (owner-set):
+   **data contracts MOVE** (one definition, Demo rewired to consume) because
+   creations are durable content that outlives Demo and the schema must not
+   fork — the `CreationDocument` family + `CreationStore` (root paths become
+   configurable) + the shared serializer options; **pure code COPIES IN
+   SPIRIT** (`EditHistory<T>`, `GridSnap` — Demo's copies stay untouched and
+   die with Demo; rewiring their Demo consumers is exactly the forbidden
+   Demo polish). "Copy" is never a 1:1 clone: Demo is the reference and the
+   behavioral ORACLE, and the library version is the permanent artifact —
+   destination-quality structure, naming, and API, with hard-won *behavior*
+   (settled math, proven semantics, serialization shapes) preserved
+   deliberately. The same rule governs every later lift: touch Demo only
+   where a single data truth demands it, and improve everything on the way
+   through.
 3. New library `Puck.Overlays` skeleton: glyph atlas/pack lift, neutral
    `BuildServices`, the shared `.hlsli` decode include, dual-compile target.
 
