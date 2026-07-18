@@ -11,9 +11,11 @@
 //   [0, tokenEnd)          the design-token slab (colors + geometry scalars; OverlayTokenBlock.cs)
 //   [atlasBase, panelBase) the shared atlas' per-glyph SDF cells (one RGBA texel per word, uploaded once)
 //   [panelBase, elementBase) the panel records · [elementBase, textBase) the element records ·
-//   [textBase, ...)        the glyph-code words the text runs index (one pre-resolved index per word).
-// Panel/element positions are NORMALIZED [0,1] screen space (the writers scope per-seat UI into viewport rects);
-// scalar widths (radii, plate halves, badge offsets) are PIXELS. KEEP IN SYNC with
+//   [textBase, clipBase)   the glyph-code words the text runs index (one pre-resolved index per word) ·
+//   [clipBase, ...)        the clip table (normalized x, y, w, h per rect; record word 9 indexes it, 0 = unclipped).
+// Panel/element positions are NORMALIZED [0,1] screen space; each record's clip index CONFINES its pixels to a
+// seat's viewport rect (placement inside a viewport is also clipping to it — the split-screen invariant); scalar
+// widths (radii, plate halves, badge offsets) are PIXELS. KEEP IN SYNC with
 // Puck.Overlays.OverlayFrameBuilder (record word layouts) and UnifiedOverlayNode (push constants).
 //
 // On Vulkan the texture+sampler fuse into one combined image sampler at set 0 binding 0 and the buffer is the
@@ -27,7 +29,7 @@
 
 // counts: panelCount, elementCount, atlasCellW, atlasCellH (texels)
 // sdf:    distanceRange (texels), outlineBand (encoded units), panelBase (word index), elementBase (word index)
-// misc:   textBase (word index), atlasBase (word index), reserved x2
+// misc:   textBase (word index), atlasBase (word index), clipBase (word index), reserved
 struct OverlayPassData {
     float4 counts;
     float4 sdf;
@@ -64,6 +66,20 @@ float sdRoundedBox(float2 p, float2 halfSize, float radius) {
 // Coverage of a stroked distance: 1 inside the stroke, 0 outside, an aa-wide ramp between.
 float strokeMask(float distance, float width, float aa) {
     return (1.0 - smoothstep(width, (width + aa), distance));
+}
+
+// Whether the record's clip rect (word 9's index into the clip table; 0 = unclipped) rejects this pixel — the
+// per-seat viewport confinement contract (see OverlayFrameBuilder.BeginClip).
+bool clipRejects(uint clipIndex, float2 fragXy, uint clipBase, float2 dims) {
+    if (clipIndex == 0u) {
+        return false;
+    }
+
+    uint o = (clipBase + ((clipIndex - 1u) * 4u));
+    float2 clipXy = (float2(OverlayFloat(overlayData, o), OverlayFloat(overlayData, (o + 1u))) * dims);
+    float2 clipWh = (float2(OverlayFloat(overlayData, (o + 2u)), OverlayFloat(overlayData, (o + 3u))) * dims);
+
+    return ((fragXy.x < clipXy.x) || (fragXy.y < clipXy.y) || (fragXy.x >= (clipXy.x + clipWh.x)) || (fragXy.y >= (clipXy.y + clipWh.y)));
 }
 
 // ---- letters (unions of capsule strokes in [-1, 1] glyph space, y down) -------------------------------------------
@@ -345,6 +361,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint elementBase = (uint)pc.sdf.w;
     uint textBase = (uint)pc.misc.x;
     uint atlasBase = (uint)pc.misc.y;
+    uint clipBase = (uint)pc.misc.z;
     int panelCount = (int)pc.counts.x;
     int elementCount = (int)pc.counts.y;
     int atlasCellW = (int)pc.counts.z;
@@ -374,6 +391,11 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         uint ringRole = OverlayWord(overlayData, (o + 6u));
         float bandHeight = (OverlayFloat(overlayData, (o + 7u)) * dims.y);
         float panelAlpha = OverlayFloat(overlayData, (o + 8u));
+
+        if (clipRejects(OverlayWord(overlayData, (o + 9u)), fragCoord.xy, clipBase, dims)) {
+            continue;
+        }
+
         float2 local = (fragCoord.xy - rect.xy);
         // The Tier-1 halo legitimately bleeds past the rect; use its reach as the slack when a ring is lit.
         float slack = ((ringRole != 0u) ? haloBlur : edgeAa);
@@ -423,6 +445,11 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //             6 state bits · 7..8 badge offset (px)
     for (int e = 0; (e < elementCount); e++) {
         uint o = (elementBase + ((uint)e * ELEMENT_WORDS));
+
+        if (clipRejects(OverlayWord(overlayData, (o + 9u)), fragCoord.xy, clipBase, dims)) {
+            continue;
+        }
+
         uint packed = OverlayWord(overlayData, (o + 4u));
         uint kind = (packed & 0xFu);
         uint role = ((packed >> 4u) & 0xFFu);

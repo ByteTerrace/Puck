@@ -4,8 +4,9 @@ namespace Puck.Overlays;
 /// The editor-HUD writer: renders each EDITING seat's selection readout from an <see cref="IEditorHudSource"/>
 /// snapshot as a compact strip panel in the seat's top-left corner — a title band, the selection line, the context
 /// hint, the session-honesty line (last act class / drift / exclusive holds), and the drag line (accent-ringed while
-/// a drag is live) — CONFINED to that seat's normalized viewport rect
-/// like the binding bar, so split-screen gets per-seat HUDs with the render node staying dumb. Pure record emission;
+/// a drag is live) — CONFINED to that seat's normalized viewport rect: the panel anchors at the rect's top-left AND
+/// every record rides a <see cref="OverlayFrameBuilder.BeginClip"/> scope on the same rect, so a narrow seat CUTS
+/// the HUD at its boundary instead of bleeding into a neighbor (the UIE-4 clip contract). Pure record emission;
 /// no GPU types. A deliberate NON-consumer of <see cref="PadPictogramLayout"/>: the binding bar already renders the
 /// active chord page's full chip cluster per seat, so a second pictogram here would duplicate that surface at lower
 /// fidelity.
@@ -42,13 +43,21 @@ public sealed class EditorHudWriter {
         }
     }
 
-    // One seat's panel: sized to its longest line, anchored at the seat region's top-left with the standard gutter.
+    // One seat's panel: sized to its longest line, anchored at the seat region's top-left with the standard gutter,
+    // and CLIPPED to the region (a 46-char line can outgrow a narrow split viewport; the boundary wins).
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayEditorSeat seat) {
         var region = seat.Viewport;
 
         if ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent)) {
             return;
         }
+
+        builder.BeginClip(
+            h: (region.Height * builder.Height),
+            w: (region.Width * builder.Width),
+            x: (region.X * builder.Width),
+            y: (region.Y * builder.Height)
+        );
 
         var monoCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMonoSize);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
@@ -92,6 +101,7 @@ public sealed class EditorHudWriter {
         lineY = EmitLine(builder: builder, text: seat.ContextLine, role: OverlayColorRole.TextDim, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
         lineY = EmitLine(builder: builder, text: seat.SessionLine, role: OverlayColorRole.TextDim, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
         _ = EmitLine(builder: builder, text: seat.DragLine, role: OverlayColorRole.Accent, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
+        builder.EndClip();
     }
 
     private static float EmitLine(OverlayFrameBuilder builder, string text, OverlayColorRole role, float x, float y, int cellHeight, float lineStep) {

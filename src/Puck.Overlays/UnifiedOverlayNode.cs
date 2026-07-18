@@ -44,6 +44,11 @@ public sealed record UnifiedOverlaySources(
 public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // counts float4 + sdf float4 + misc float4 — KEEP IN SYNC with overlay-unified.frag.hlsl's OverlayPassData.
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 3);
+    // The toast's tail reservation (UIE-8): its worst-case record shape (1 panel + rail/icon rects + two text runs,
+    // 46 glyph words) held back from the earlier writers so the transient echo always lands.
+    private const int ToastReservedPanels = 1;
+    private const int ToastReservedElements = 4;
+    private const int ToastReservedTextWords = 46;
     // The glyph outline halo width, in encoded signed-distance units — the SDF contrast band that keeps overlay text
     // legible over any world content, kept clear of the atlas' saturation floor at the overlay's screenPxRange.
     private const float OutlineBand = 0.20f;
@@ -89,6 +94,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private IGpuSubmissionFence? m_frameFence;
     private IGpuShaderModule? m_fragmentShader;
     private nint m_lastImageViewHandle;
+    private bool m_overflowNarrated;
     private string? m_pendingCapturePath;
     private IGpuPipeline? m_pipeline;
     private AssetContentHash m_pipelineId;
@@ -173,13 +179,22 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         }
 
         // Freshen the pull-model feeds, then let each present writer pack this frame's records CPU-side. Nothing
-        // visible = pass the frame through untouched (no extra pass).
+        // visible = pass the frame through untouched (no extra pass). Writer order is DRAW order (console under
+        // bars under HUD under toast); the tail reservation keeps the last, most urgent surface (the toast) from
+        // being starved by the earlier ones — the declared capacity/priority policy (UIE-8).
         m_sources.FeedTick?.Invoke();
         m_builder.BeginFrame();
+
+        if (m_toastWriter is not null) {
+            m_builder.ReserveTail(panels: ToastReservedPanels, elements: ToastReservedElements, textWords: ToastReservedTextWords);
+        }
+
         m_consoleWriter?.Emit(builder: m_builder);
         m_bindingBarWriter?.Emit(builder: m_builder);
         m_editorHudWriter?.Emit(builder: m_builder);
+        m_builder.ReleaseTail();
         m_toastWriter?.Emit(builder: m_builder, renderTicks: context.RenderTicks);
+        NarrateOverflowOnce();
 
         if (!m_builder.HasContent) {
             ForwardPendingCapture();
@@ -239,6 +254,17 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         );
     }
 
+    // Loud ONCE per node lifetime (never per-frame spam): the first frame any record drops at a capacity, narrate
+    // the shape on stderr; the per-frame counters keep counting silently after (UIE-8's observable overflow).
+    private void NarrateOverflowOnce() {
+        if (m_overflowNarrated || !m_builder.HasOverflow) {
+            return;
+        }
+
+        m_overflowNarrated = true;
+        Console.Error.WriteLine(value: $"[unified-overlay] record overflow: dropped panels {m_builder.DroppedPanels}, elements {m_builder.DroppedElements}, text words {m_builder.DroppedTextWords}, clips {m_builder.DroppedClips} this frame (capacities: {OverlayFrameBuilder.MaxPanels} panels, {OverlayFrameBuilder.MaxElements} elements, {OverlayFrameBuilder.TextWordCapacity} text words, {OverlayFrameBuilder.MaxClips} clips; toast tail reserved). Later records dropped; further overflows stay silent.");
+    }
+
     // Not drawing this frame: hand a pending capture down the chain (the shared decorator forwarding contract) so
     // the readback lands on whatever actually produced the shown frame.
     private void ForwardPendingCapture() {
@@ -290,7 +316,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         floats[7] = m_builder.ElementBaseWords;
         floats[8] = m_builder.TextBaseWords;
         floats[9] = OverlayTokenBlock.WordCount;   // the glyph pack's base word (the atlas sits after the token slab)
-        floats[10] = 0f;
+        floats[10] = m_builder.ClipBaseWords;
         floats[11] = 0f;
     }
     private void EnsureResources() {

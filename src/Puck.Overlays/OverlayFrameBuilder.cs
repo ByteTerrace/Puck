@@ -20,17 +20,29 @@ public enum OverlayPanelStyle : uint {
 /// <remarks>
 /// Buffer geography (32-bit words): <c>[0, TokenWords)</c> the <see cref="OverlayTokenBlock"/> slab and
 /// <c>[TokenWords, PanelBaseWords)</c> the glyph SDF pack — both static, uploaded once by the node —
-/// then the per-frame region this builder owns: panel records, element records, glyph-code words.
+/// then the per-frame region this builder owns: panel records, element records, glyph-code words, and the clip
+/// table. <para>CLIP CONTRACT (UIE-4): a writer scoping per-seat UI wraps its records in
+/// <see cref="BeginClip"/>/<see cref="EndClip"/>; every record carries a clip index (word 9; 0 = unclipped) into
+/// the clip table and the shader discards the record's contribution outside its rect — placement inside a seat
+/// viewport is therefore also CLIPPING to it.</para><para>OVERFLOW CONTRACT (UIE-8): a record past a capacity is
+/// dropped and COUNTED (<see cref="DroppedPanels"/>/<see cref="DroppedElements"/>/<see cref="DroppedTextWords"/>/
+/// <see cref="DroppedClips"/>, reset each frame) so the node can narrate loudly; the tail reservation
+/// (<see cref="ReserveTail"/>/<see cref="ReleaseTail"/>) holds capacity back from earlier writers so the LAST,
+/// most urgent surface (the toast) can never be starved by writer order.</para>
 /// </remarks>
 public sealed class OverlayFrameBuilder {
     /// <summary>Words per panel record.</summary>
     public const int PanelWords = 12;
     /// <summary>Words per element record.</summary>
     public const int ElementWords = 12;
+    /// <summary>Words per clip-table rect (normalized x, y, w, h).</summary>
+    public const int ClipWords = 4;
     /// <summary>The panel-record capacity.</summary>
     public const int MaxPanels = 8;
     /// <summary>The element-record capacity (rects + text runs + icon chips, all surfaces together).</summary>
     public const int MaxElements = 192;
+    /// <summary>The clip-rect capacity (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips).</summary>
+    public const int MaxClips = 8;
     /// <summary>The glyph-code word capacity shared by every text run in a frame.</summary>
     public const int TextWordCapacity = 4096;
 
@@ -38,9 +50,20 @@ public sealed class OverlayFrameBuilder {
     private readonly uint[] m_scratch;
     private readonly float m_inverseWidth;
     private readonly float m_inverseHeight;
+    // The active clip index records are stamped with: 0 = unclipped, 1..MaxClips = a table rect, -1 = the clip
+    // table overflowed — records inside the scope DROP (never bleed past a seat boundary) and count as overflow.
+    private int m_activeClip;
+    private int m_clipCount;
     private int m_elementCount;
     private int m_panelCount;
     private int m_textWordCount;
+    private int m_droppedClips;
+    private int m_droppedElements;
+    private int m_droppedPanels;
+    private int m_droppedTextWords;
+    private int m_reservedElements;
+    private int m_reservedPanels;
+    private int m_reservedTextWords;
 
     /// <summary>Initializes a new instance of the <see cref="OverlayFrameBuilder"/> class.</summary>
     /// <param name="glyphs">The shared glyph SDF pack (cell metrics + the static prefix the node uploads).</param>
@@ -58,10 +81,11 @@ public sealed class OverlayFrameBuilder {
         PanelBaseWords = (OverlayTokenBlock.WordCount + glyphs.PackedSdf.Count);
         ElementBaseWords = (PanelBaseWords + (MaxPanels * PanelWords));
         TextBaseWords = (ElementBaseWords + (MaxElements * ElementWords));
+        ClipBaseWords = (TextBaseWords + TextWordCapacity);
 
         // Pad the total to a uint4 boundary — the storage buffer is bound as a StructuredBuffer<uint4> (the D3D12
         // allocator's stride-16 SRV), so its element count must divide exactly.
-        var total = (TextBaseWords + TextWordCapacity);
+        var total = (ClipBaseWords + (MaxClips * ClipWords));
 
         WordCount = ((total + 3) & ~3);
         m_scratch = new uint[WordCount];
@@ -85,28 +109,98 @@ public sealed class OverlayFrameBuilder {
     public int ElementBaseWords { get; }
     /// <summary>Gets the first glyph-code word's index.</summary>
     public int TextBaseWords { get; }
+    /// <summary>Gets the clip table's first word index.</summary>
+    public int ClipBaseWords { get; }
     /// <summary>Gets the buffer's total word count (a multiple of 4).</summary>
     public int WordCount { get; }
     /// <summary>Gets the number of panels packed this frame.</summary>
     public int PanelCount => m_panelCount;
     /// <summary>Gets the number of elements packed this frame.</summary>
     public int ElementCount => m_elementCount;
+    /// <summary>Gets the panel records dropped at capacity this frame.</summary>
+    public int DroppedPanels => m_droppedPanels;
+    /// <summary>Gets the element records (rects, text runs, icon chips) dropped at capacity this frame.</summary>
+    public int DroppedElements => m_droppedElements;
+    /// <summary>Gets the glyph-code words refused by the shared text capacity this frame.</summary>
+    public int DroppedTextWords => m_droppedTextWords;
+    /// <summary>Gets the clip rects dropped at table capacity this frame (records inside such a scope also drop).</summary>
+    public int DroppedClips => m_droppedClips;
+    /// <summary>Gets whether any record overflowed a capacity this frame — the node's loud-once narration gate.</summary>
+    public bool HasOverflow => (((m_droppedPanels | m_droppedElements) | (m_droppedTextWords | m_droppedClips)) > 0);
     /// <summary>Gets whether this frame packed anything to draw.</summary>
     public bool HasContent => ((m_panelCount > 0) || (m_elementCount > 0));
     /// <summary>Gets the whole scratch buffer (the node's upload view).</summary>
     public ReadOnlySpan<uint> Scratch => m_scratch;
 
-    /// <summary>Resets the per-frame region (records + glyph codes). The static token/glyph prefix is untouched.</summary>
+    /// <summary>Resets the per-frame region (records + glyph codes + clip table), the clip scope, the overflow
+    /// counters, and the tail reservation. The static token/glyph prefix is untouched.</summary>
     public void BeginFrame() {
         m_panelCount = 0;
         m_elementCount = 0;
         m_textWordCount = 0;
+        m_activeClip = 0;
+        m_clipCount = 0;
+        m_droppedPanels = 0;
+        m_droppedElements = 0;
+        m_droppedTextWords = 0;
+        m_droppedClips = 0;
+        m_reservedPanels = 0;
+        m_reservedElements = 0;
+        m_reservedTextWords = 0;
         Array.Clear(array: m_scratch, index: PanelBaseWords, length: (WordCount - PanelBaseWords));
     }
 
+    /// <summary>Holds capacity back from the writers that follow, so the LAST writer in the node's order (the most
+    /// urgent surface — the toast) can never be starved by an earlier one. Set once after <see cref="BeginFrame"/>;
+    /// released with <see cref="ReleaseTail"/> immediately before the reserved writer emits.</summary>
+    /// <param name="panels">Panel records to hold back.</param>
+    /// <param name="elements">Element records to hold back.</param>
+    /// <param name="textWords">Glyph-code words to hold back.</param>
+    public void ReserveTail(int panels, int elements, int textWords) {
+        m_reservedPanels = Math.Max(val1: 0, val2: panels);
+        m_reservedElements = Math.Max(val1: 0, val2: elements);
+        m_reservedTextWords = Math.Max(val1: 0, val2: textWords);
+    }
+
+    /// <summary>Releases the tail reservation (the reserved writer emits next).</summary>
+    public void ReleaseTail() {
+        m_reservedPanels = 0;
+        m_reservedElements = 0;
+        m_reservedTextWords = 0;
+    }
+
+    /// <summary>Opens a clip scope: records written before <see cref="EndClip"/> are discarded by the shader outside
+    /// this rect — the per-seat viewport invariant every split-screen writer rides. Scopes do not nest (the last
+    /// call wins). On clip-table overflow the scope's records DROP (counted) rather than bleed across a seat.</summary>
+    /// <param name="x">Left, px.</param>
+    /// <param name="y">Top, px.</param>
+    /// <param name="w">Width, px.</param>
+    /// <param name="h">Height, px.</param>
+    public void BeginClip(float x, float y, float w, float h) {
+        if (m_clipCount >= MaxClips) {
+            m_droppedClips++;
+            m_activeClip = -1;
+
+            return;
+        }
+
+        var offset = (ClipBaseWords + (m_clipCount * ClipWords));
+
+        m_scratch[offset] = Pack(value: (x * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
+        m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
+        m_clipCount++;
+        m_activeClip = m_clipCount;
+    }
+
+    /// <summary>Closes the clip scope (records return to unclipped).</summary>
+    public void EndClip() => m_activeClip = 0;
+
     /// <summary>Packs one panel-chrome record (scrim fill + hairline + optional title band + optional Tier-1
     /// status ring/bloom). Word layout (12): 0..3 rect x,y,w,h (normalized floats) · 4 flags (bit0 = title band) ·
-    /// 5 style kind · 6 ring role (0 = none) · 7 band height (normalized y float) · 8 alpha · 9..11 reserved.</summary>
+    /// 5 style kind · 6 ring role (0 = none) · 7 band height (normalized y float) · 8 alpha · 9 clip index ·
+    /// 10..11 reserved.</summary>
     /// <param name="x">Left, px.</param>
     /// <param name="y">Top, px.</param>
     /// <param name="w">Width, px.</param>
@@ -117,7 +211,9 @@ public sealed class OverlayFrameBuilder {
     /// <param name="ringRole">The Tier-1 bloom ring hue, or <see langword="null"/> for a resting panel.</param>
     /// <param name="alpha">The whole panel's opacity.</param>
     public void WritePanel(float x, float y, float w, float h, bool titleBand, float bandHeight, OverlayPanelStyle style, OverlayColorRole? ringRole, float alpha) {
-        if (m_panelCount >= MaxPanels) {
+        if ((m_panelCount >= (MaxPanels - m_reservedPanels)) || (m_activeClip < 0)) {
+            m_droppedPanels++;
+
             return;
         }
 
@@ -132,11 +228,13 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 6)] = ((ringRole is { } ring) ? (uint)ring : 0u);
         m_scratch[(offset + 7)] = Pack(value: (bandHeight * m_inverseHeight));
         m_scratch[(offset + 8)] = Pack(value: alpha);
+        m_scratch[(offset + 9)] = (uint)m_activeClip;
         m_panelCount++;
     }
 
     /// <summary>Packs one rounded-rect element (chip fill, selection fill, accent tick, state rail). Word layout
-    /// (12): 0..3 rect (normalized) · 4 = 1 | (role &lt;&lt; 4) · 6 corner radius (px float) · 7 alpha.</summary>
+    /// (12): 0..3 rect (normalized) · 4 = 1 | (role &lt;&lt; 4) · 6 corner radius (px float) · 7 alpha ·
+    /// 9 clip index.</summary>
     /// <param name="x">Left, px.</param>
     /// <param name="y">Top, px.</param>
     /// <param name="w">Width, px.</param>
@@ -145,7 +243,9 @@ public sealed class OverlayFrameBuilder {
     /// <param name="radius">The corner radius, px.</param>
     /// <param name="alpha">The element opacity.</param>
     public void WriteRect(float x, float y, float w, float h, OverlayColorRole role, float radius, float alpha) {
-        if (m_elementCount >= MaxElements) {
+        if ((m_elementCount >= (MaxElements - m_reservedElements)) || (m_activeClip < 0)) {
+            m_droppedElements++;
+
             return;
         }
 
@@ -158,13 +258,14 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 4)] = (1u | ((uint)role << 4));
         m_scratch[(offset + 6)] = Pack(value: radius);
         m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 9)] = (uint)m_activeClip;
         m_elementCount++;
     }
 
     /// <summary>Packs one fixed-cell text run (codes stored PRE-RESOLVED as atlas glyph indices; anything outside
     /// printable ASCII renders as the blank space cell). Word layout (12): 0..1 origin (normalized) · 2..3 one glyph
     /// cell's on-screen w/h (normalized) · 4 = 0 | (role &lt;&lt; 4) · 5 glyph start (word offset into the text
-    /// region) · 6 glyph count · 7 alpha.</summary>
+    /// region) · 6 glyph count · 7 alpha · 9 clip index.</summary>
     /// <param name="x">The run origin's left, px.</param>
     /// <param name="y">The run origin's top, px.</param>
     /// <param name="text">The characters to pack.</param>
@@ -175,7 +276,20 @@ public sealed class OverlayFrameBuilder {
     public void WriteText(float x, float y, ReadOnlySpan<char> text, int cellHeight, OverlayColorRole role, float alpha, int maxChars = int.MaxValue) {
         var count = Math.Min(val1: text.Length, val2: maxChars);
 
-        if ((m_elementCount >= MaxElements) || (count <= 0) || ((m_textWordCount + count) > TextWordCapacity)) {
+        if (count <= 0) {
+            return;
+        }
+
+        if ((m_elementCount >= (MaxElements - m_reservedElements)) || (m_activeClip < 0)) {
+            m_droppedElements++;
+
+            return;
+        }
+
+        if ((m_textWordCount + count) > (TextWordCapacity - m_reservedTextWords)) {
+            m_droppedElements++;
+            m_droppedTextWords += count;
+
             return;
         }
 
@@ -197,6 +311,7 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 5)] = (uint)start;
         m_scratch[(offset + 6)] = (uint)count;
         m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 9)] = (uint)m_activeClip;
         m_elementCount++;
     }
 
@@ -205,7 +320,7 @@ public sealed class OverlayFrameBuilder {
     /// Word layout (12): 0..1 plate center (normalized) · 2 plate half-size (px) · 3 badge half-size (px) ·
     /// 4 = 2 | (role &lt;&lt; 4, unused) · 5 glyph &lt;&lt; 16 | icon · 6 state (alpha byte | pressed&lt;&lt;8 |
     /// (char0+1)&lt;&lt;9 | (char1+1)&lt;&lt;16 | accent&lt;&lt;23 | bound&lt;&lt;24) · 7..8 badge center offset from
-    /// the plate center (px floats) · 9..11 reserved.</summary>
+    /// the plate center (px floats) · 9 clip index · 10..11 reserved.</summary>
     /// <param name="centerX">The plate center x, px.</param>
     /// <param name="centerY">The plate center y, px.</param>
     /// <param name="plateHalf">The plate half-extent, px.</param>
@@ -219,7 +334,9 @@ public sealed class OverlayFrameBuilder {
     /// <param name="accent">The ACCENT tier-1 state (the context-primary action).</param>
     /// <param name="bound">Whether an action is bound (<see langword="false"/> = the DISABLED tier-0 look).</param>
     public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, OverlayGlyphId glyph, OverlayIconId icon, float alpha, bool pressed, bool accent, bool bound) {
-        if (m_elementCount >= MaxElements) {
+        if ((m_elementCount >= (MaxElements - m_reservedElements)) || (m_activeClip < 0)) {
+            m_droppedElements++;
+
             return;
         }
 
@@ -238,6 +355,7 @@ public sealed class OverlayFrameBuilder {
             | (bound ? (1u << 24) : 0u));
         m_scratch[(offset + 7)] = Pack(value: glyphOffsetX);
         m_scratch[(offset + 8)] = Pack(value: glyphOffsetY);
+        m_scratch[(offset + 9)] = (uint)m_activeClip;
         m_elementCount++;
     }
 
