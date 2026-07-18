@@ -93,6 +93,18 @@
 //       TOAST — asserted as a danger-red pixel population in the toast strip that the control shot lacks — beside
 //       its loud '[world.mutation rejected: ...]' stderr line. Decodes the engine's own PNGs (filter-0 RGBA)
 //       inline; no image dependency.
+//   editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The P2 editor-mode proof, run on BOTH backends like ui-floor. Each session boots, asserts the mode round
+//       trip over stdin (editor.enter/status/exit echoes; the active binding page flips to the merged 'Editor' page
+//       and back; player.control reads idle while editing and the prior source after), asserts the CAMERA in pixels
+//       (console panel off; a screenshot after editor.cam.pose must differ decisively from the seeded shot, while
+//       the seeded shot ~= the pre-enter chase shot and the post-exit shot ~= it again — no pose pop on either
+//       edge), then asserts the diversion honestly: the avatar drives again after exit (player.run + where delta),
+//       two idle where samples match exactly (nothing held leaked across the mode flip), and a tape STILL drives
+//       the avatar while editing (the player.control idle contract — script outranks idle). The sole-editor LAYOUT
+//       policy is asserted positively: a second seat joins, seat 1 enters the editor, and the 50%→70% split seam
+//       band must repaint. The roster is pinned to seat 1 first (dev-machine pads auto-seat extra players). Decodes
+//       the engine's own PNGs inline like ui-floor.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -157,8 +169,9 @@ static class ProofApp {
                 "expodoc" => ExpoProof.RunExpoDoc(opts: opts),
                 "record" => RecordProof.RunRecord(opts: opts),
                 "ui-floor" => UiFloorProof.RunUiFloor(opts: opts),
+                "editor-mode" => EditorModeProof.RunEditorMode(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode)"),
             };
         }
         catch (ArgException ex) {
@@ -185,6 +198,7 @@ static class ProofApp {
         Console.WriteLine(value: "  expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]");
         Console.WriteLine(value: "  ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -6482,25 +6496,17 @@ sealed class MiniEbml {
 }
 
 // ============================================================================================
-// UI-FLOOR — the P1 unified-overlay proof: the ONE screen-space overlay decorator (console
-// mirror + per-seat binding bars + mutation toasts) renders on BOTH backends and the
-// world.screenshot verb captures the final COMPOSED frame through the outermost decorator.
-// Three composed captures per backend session: overlay (console on), control (console off),
-// toast (after a deliberately invalid mutation). The overlay's presence is asserted in PIXELS,
-// never by file existence: the console panel's 0.90-alpha scrim must darken its stage region's
-// mean luminance versus the control (robust against the moving world beneath), and the
-// rejection toast must plant a danger-red pixel population in the toast strip that the control
-// lacks. PNGs are the engine's own PngEncoder output (8-bit RGBA, filter 0, one zlib IDAT) and
-// are decoded inline — zero dependencies, matching this file's rules.
+// COMPOSED-SHOT KIT — the shared session harness for the composed-frame proofs (ui-floor,
+// editor-mode): launch a windowed Puck.World with piped stdio, drive verbs, arm world.screenshot
+// captures through the outermost decorator, and decode the engine's own PNGs (8-bit RGBA,
+// filter 0, one zlib IDAT — anything else is loudly invalid; this is a proof harness, not an
+// image library).
 // ============================================================================================
-static class UiFloorProof {
-    public static int RunUiFloor(ArgMap opts) {
-        var noBuild = opts.Flag(name: "--no-build");
-        var width = opts.GetInt(fallback: 1280, name: "--width");
-        var height = opts.GetInt(fallback: 800, name: "--height");
-        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+static class ComposedShotKit {
+    public sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
 
-        var repoRoot = ProofApp.RepoRoot();
+    // Build (unless --no-build) and locate the freshest Release exe; null on failure (already reported).
+    public static string? BuildAndFindExe(string repoRoot, bool noBuild) {
         var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
 
         if (!noBuild) {
@@ -6515,41 +6521,28 @@ static class UiFloorProof {
             build.WaitForExit();
 
             if (build.ExitCode != 0) {
-                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+                Console.Error.WriteLine(value: $"[proof] build failed ({build.ExitCode})");
+
+                return null;
             }
         }
 
-        var exe = FindExe(projectPath: projectPath);
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+        var exe = (Directory.Exists(path: binRelease)
+            ? Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+                .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+                .FirstOrDefault()
+            : null);
 
         if (exe is null) {
-            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+            Console.Error.WriteLine(value: "[proof] Puck.World.exe not found under bin/Release — build first");
         }
 
-        // D3D12 FIRST (World's default backend — the historically unexercised overlay path), then Vulkan.
-        Console.WriteLine(value: "[proof] === ui-floor (a): Direct3D 12 (the default backend) ===");
-        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
-
-        Console.WriteLine();
-        Console.WriteLine(value: "[proof] === ui-floor (b): Vulkan ===");
-        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
-
-        var passed = (directXPassed && vulkanPassed);
-
-        Console.WriteLine();
-        Console.WriteLine(value: $"[proof] ui-floor proof {(passed ? "PASS" : "FAIL")}");
-
-        return (passed ? 0 : 1);
+        return exe;
     }
 
-    // One scripted session on one backend: boot → overlay shot → console off → control shot → rejected
-    // mutation → toast shot → pixel assertions → loud-fault sweep.
-    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
-        var pid = Environment.ProcessId;
-        var tag = (backend ?? "directx");
-        var overlayPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-overlay.png");
-        var controlPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-control.png");
-        var toastPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-toast.png");
-
+    // The shared launch shape: piped stdio, repo-root working directory, the standard size/backend/exit options.
+    public static Ctx Launch(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, Stopwatch stopwatch) {
         var psi = new ProcessStartInfo {
             FileName = exe,
             RedirectStandardError = true,
@@ -6572,128 +6565,84 @@ static class UiFloorProof {
         psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
 
         var process = new Process { StartInfo = psi };
-        var stopwatch = new Stopwatch();
         var collector = new OutputCollector();
-        var passed = true;
-        var started = false;
-
-        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
-        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
-
-        Console.CancelKeyPress += cancelHandler;
-        AppDomain.CurrentDomain.ProcessExit += exitHandler;
 
         Console.WriteLine(value: $"[proof] launching: {exe} {(backend is null ? "" : $"--backend {backend} ")}--width {width} --height {height}");
+        _ = process.Start();
+        stopwatch.Start();
+        collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+        collector.Start(reader: process.StandardError, stopwatch: stopwatch);
 
+        var stdin = process.StandardInput;
+
+        stdin.AutoFlush = true;
+
+        return new Ctx(Process: process, Stdin: stdin, Collector: collector);
+    }
+
+    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
+    // player.stop is idempotent at boot and leaves the player at the authored spawn.
+    public static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    public static void Send(Ctx ctx, string line) {
         try {
-            _ = process.Start();
-            started = true;
-            stopwatch.Start();
-            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
-            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
 
-            var stdin = process.StandardInput;
+    public static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
 
-            stdin.AutoFlush = true;
+        while (true) {
+            var snapshot = collector.Snapshot();
 
-            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
-
-            if (!WaitForConsole(ctx: ctx)) {
-                return false;
-            }
-
-            // (1) The composed frame with the console panel visible (the boot default).
-            passed &= Screenshot(ctx: ctx, name: "overlay-shot", path: overlayPath);
-
-            // (2) The no-console control: the binding bars stay, but the assertion region is the console's stage
-            // corner, which they never enter.
-            var mark = ctx.Collector.Count;
-
-            Send(ctx: ctx, line: "world.console off");
-            passed &= Check(name: "console-off", ok: (Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.console: off]"), deadlineSeconds: 15.0) is not null), detail: "world.console off echo");
-            passed &= Screenshot(ctx: ctx, name: "control-shot", path: controlPath);
-
-            // (3) The rejection toast: removing the defaultSeatKit fails validation loudly server-side AND must
-            // surface on screen. The screenshot rides the stdin barrier behind the Simulation-routed mutation.
-            mark = ctx.Collector.Count;
-            Send(ctx: ctx, line: "world.kit.remove runner");
-
-            var rejected = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.mutation rejected:"), deadlineSeconds: 15.0);
-
-            passed &= Check(name: "mutation-rejected-loudly", ok: (rejected is not null), detail: (rejected?.Trim() ?? "(no '[world.mutation rejected: ...]' line)"));
-            passed &= Screenshot(ctx: ctx, name: "toast-shot", path: toastPath);
-
-            // (4) The pixel assertions — decode the three composed frames.
-            var overlay = DecodePng(path: overlayPath);
-            var control = DecodePng(path: controlPath);
-            var toast = DecodePng(path: toastPath);
-
-            // Console presence: the panel's 0.90 dark scrim must pull the stage region's mean luminance well below
-            // the control's (the world beneath moves between shots; a scrim-sized drop dwarfs that noise).
-            var regionX = 48;
-            var regionY = 48;
-            var regionW = (width - 112);
-            var regionH = ((int)(height * 0.45) - 48);
-            var overlayLuma = MeanLuminance(image: overlay, x: regionX, y: regionY, w: regionW, h: regionH);
-            var controlLuma = MeanLuminance(image: control, x: regionX, y: regionY, w: regionW, h: regionH);
-
-            passed &= Check(
-                name: "console-panel-darkens-stage",
-                ok: ((controlLuma - overlayLuma) > 15.0),
-                detail: $"mean luminance overlay {overlayLuma.ToString(format: "F1", provider: ProofApp.Inv)} vs control {controlLuma.ToString(format: "F1", provider: ProofApp.Inv)} (want a > 15 scrim drop)"
-            );
-
-            // Toast presence: a danger-red population (the state rail + Tier-1 ring in #F2565B) in the mid-right
-            // toast strip that the control shot lacks.
-            var stripX = (int)(width * 0.55);
-            var stripY = ((height / 2) - 16);
-            var stripW = ((width - 40) - stripX);
-            var stripH = 32;
-            var toastRed = CountDangerRed(image: toast, x: stripX, y: stripY, w: stripW, h: stripH);
-            var controlRed = CountDangerRed(image: control, x: stripX, y: stripY, w: stripW, h: stripH);
-
-            // Both backends measure ~190 danger-red pixels in the strip (the 2px rail + the ring arcs it clips)
-            // against a clean 0 in the control; 120/+100 keeps a decisive margin without riding exact ring geometry.
-            passed &= Check(
-                name: "rejection-surfaces-as-toast",
-                ok: ((toastRed > (controlRed + 100)) && (toastRed > 120)),
-                detail: $"danger-red pixels in the toast strip: toast {toastRed} vs control {controlRed}"
-            );
-
-            // (5) No loud GPU/runtime faults anywhere in the session (both streams).
-            var faults = 0;
-
-            foreach (var line in ctx.Collector.Snapshot()) {
-                if (line.Contains(value: "Unhandled exception") || line.Contains(value: "Fatal error.") || line.Contains(value: "VUID-")) {
-                    faults++;
-                    Console.WriteLine(value: $"[proof]   fault line: {line.Trim()}");
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
                 }
             }
 
-            passed &= Check(name: "no-gpu-or-runtime-faults", ok: (faults == 0), detail: ((faults == 0) ? "clean" : $"{faults} fault line(s)"));
-        }
-        catch (InvalidDataException exception) {
-            passed = Check(name: "png-decode", ok: false, detail: exception.Message);
-        }
-        finally {
-            Console.CancelKeyPress -= cancelHandler;
-            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
-
-            if (started && !process.HasExited) {
-                KillQuietly(process: process);
+            if (DateTime.UtcNow >= deadline) {
+                return null;
             }
 
-            TryDelete(path: overlayPath);
-            TryDelete(path: controlPath);
-            TryDelete(path: toastPath);
+            Thread.Sleep(millisecondsTimeout: 100);
         }
+    }
 
-        return passed;
+    // Send a line, await its echo, and record the check under one name — the every-verb round-trip shape.
+    public static bool SendAwait(Ctx ctx, string line, string expect, string name, double deadlineSeconds = 15.0) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: line);
+
+        var seen = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: expect), deadlineSeconds: deadlineSeconds);
+
+        return Check(name: name, ok: (seen is not null), detail: (seen?.Trim() ?? $"(no '{expect}' echo)"));
+    }
+
+    public static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
     }
 
     // Arms world.screenshot and waits for the unified overlay's capture echo (the readback writes the file BEFORE
     // echoing, so the echo implies the PNG is on disk).
-    static bool Screenshot(Ctx ctx, string name, string path) {
+    public static bool Screenshot(Ctx ctx, string name, string path) {
         var mark = ctx.Collector.Count;
         var fileName = Path.GetFileName(path: path);
 
@@ -6704,46 +6653,9 @@ static class UiFloorProof {
         return Check(name: name, ok: ((captured is not null) && File.Exists(path: path)), detail: (captured?.Trim() ?? "(no unified-overlay capture echo)"));
     }
 
-    static double MeanLuminance((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
-        var sum = 0L;
-
-        for (var row = y; (row < (y + h)); row++) {
-            for (var col = x; (col < (x + w)); col++) {
-                var i = (((row * image.Width) + col) * 4);
-
-                sum += (image.Rgba[i] + image.Rgba[(i + 1)] + image.Rgba[(i + 2)]);
-            }
-        }
-
-        return ((double)sum / ((long)w * h * 3));
-    }
-
-    // Danger-hue population: pixels whose red channel clearly dominates BOTH others — the toast's #F2565B rail/ring
-    // family reads true here while grass (green-dominant), scrims (near-neutral), and the purple avatars (blue-high)
-    // do not.
-    static int CountDangerRed((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
-        var count = 0;
-
-        for (var row = y; (row < (y + h)); row++) {
-            for (var col = x; (col < (x + w)); col++) {
-                var i = (((row * image.Width) + col) * 4);
-                int r = image.Rgba[i];
-                int g = image.Rgba[(i + 1)];
-                int b = image.Rgba[(i + 2)];
-
-                if ((r > (g + 40)) && (r > (b + 40))) {
-                    count++;
-                }
-            }
-        }
-
-        return count;
-    }
-
     // Decodes the engine's own PngEncoder output: 8-bit RGBA, color type 6, every scanline filter 0, one zlib
-    // deflate stream across the IDAT chunks. Anything else is loudly invalid — this is a proof harness, not an
-    // image library.
-    static (int Width, int Height, byte[] Rgba) DecodePng(string path) {
+    // deflate stream across the IDAT chunks.
+    public static (int Width, int Height, byte[] Rgba) DecodePng(string path) {
         var bytes = File.ReadAllBytes(path: path);
         var offset = 8;
         var width = 0;
@@ -6796,7 +6708,21 @@ static class UiFloorProof {
         return (width, height, rgba);
     }
 
-    static void TryDelete(string path) {
+    // No loud GPU/runtime faults anywhere in the session (both streams).
+    public static bool FaultSweep(Ctx ctx) {
+        var faults = 0;
+
+        foreach (var line in ctx.Collector.Snapshot()) {
+            if (line.Contains(value: "Unhandled exception") || line.Contains(value: "Fatal error.") || line.Contains(value: "VUID-")) {
+                faults++;
+                Console.WriteLine(value: $"[proof]   fault line: {line.Trim()}");
+            }
+        }
+
+        return Check(name: "no-gpu-or-runtime-faults", ok: (faults == 0), detail: ((faults == 0) ? "clean" : $"{faults} fault line(s)"));
+    }
+
+    public static void TryDelete(string path) {
         try {
             File.Delete(path: path);
         }
@@ -6806,67 +6732,7 @@ static class UiFloorProof {
         }
     }
 
-    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
-
-    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
-    // player.stop is idempotent at boot and leaves the player at the authored spawn.
-    static bool WaitForConsole(Ctx ctx) {
-        var mark = ctx.Collector.Count;
-
-        Send(ctx: ctx, line: "player.stop 1");
-
-        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
-
-        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
-    }
-
-    static void Send(Ctx ctx, string line) {
-        try {
-            ctx.Stdin.Write(value: line);
-            ctx.Stdin.Write(value: '\n');
-        }
-        catch (IOException) {
-        }
-        catch (ObjectDisposedException) {
-        }
-    }
-
-    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
-        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
-
-        while (true) {
-            var snapshot = collector.Snapshot();
-
-            for (var i = mark; (i < snapshot.Length); i++) {
-                if (predicate(arg: snapshot[i])) {
-                    return snapshot[i];
-                }
-            }
-
-            if (DateTime.UtcNow >= deadline) {
-                return null;
-            }
-
-            Thread.Sleep(millisecondsTimeout: 100);
-        }
-    }
-    static bool Check(string name, bool ok, string detail) {
-        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
-
-        return ok;
-    }
-    static string? FindExe(string projectPath) {
-        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
-
-        if (!Directory.Exists(path: binRelease)) {
-            return null;
-        }
-
-        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
-            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
-            .FirstOrDefault();
-    }
-    static void KillQuietly(Process process) {
+    public static void KillQuietly(Process process) {
         try {
             if (!process.HasExited) {
                 process.Kill(entireProcessTree: true);
@@ -6875,5 +6741,457 @@ static class UiFloorProof {
         catch {
             // best-effort — the child must never outlive us.
         }
+    }
+}
+
+// ============================================================================================
+// UI-FLOOR — the P1 unified-overlay proof: the ONE screen-space overlay decorator (console
+// mirror + per-seat binding bars + mutation toasts) renders on BOTH backends and the
+// world.screenshot verb captures the final COMPOSED frame through the outermost decorator.
+// Three composed captures per backend session: overlay (console on), control (console off),
+// toast (after a deliberately invalid mutation). The overlay's presence is asserted in PIXELS,
+// never by file existence: the console panel's 0.90-alpha scrim must darken its stage region's
+// mean luminance versus the control (robust against the moving world beneath), and the
+// rejection toast must plant a danger-red pixel population in the toast strip that the control
+// lacks. Session/PNG machinery lives in ComposedShotKit.
+// ============================================================================================
+static class UiFloorProof {
+    public static int RunUiFloor(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        // D3D12 FIRST (World's default backend — the historically unexercised overlay path), then Vulkan.
+        Console.WriteLine(value: "[proof] === ui-floor (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === ui-floor (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] ui-floor proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // One scripted session on one backend: boot → overlay shot → console off → control shot → rejected
+    // mutation → toast shot → pixel assertions → loud-fault sweep.
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = (backend ?? "directx");
+        var overlayPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-overlay.png");
+        var controlPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-control.png");
+        var toastPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-toast.png");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // (1) The composed frame with the console panel visible (the boot default).
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "overlay-shot", path: overlayPath);
+
+            // (2) The no-console control: the binding bars stay, but the assertion region is the console's stage
+            // corner, which they never enter.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot", path: controlPath);
+
+            // (3) The rejection toast: removing the defaultSeatKit fails validation loudly server-side AND must
+            // surface on screen. The screenshot rides the stdin barrier behind the Simulation-routed mutation.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.kit.remove runner", expect: "[world.mutation rejected:", name: "mutation-rejected-loudly");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "toast-shot", path: toastPath);
+
+            // (4) The pixel assertions — decode the three composed frames.
+            var overlay = ComposedShotKit.DecodePng(path: overlayPath);
+            var control = ComposedShotKit.DecodePng(path: controlPath);
+            var toast = ComposedShotKit.DecodePng(path: toastPath);
+
+            // Console presence: the panel's 0.90 dark scrim must pull the stage region's mean luminance well below
+            // the control's (the world beneath moves between shots; a scrim-sized drop dwarfs that noise).
+            var regionX = 48;
+            var regionY = 48;
+            var regionW = (width - 112);
+            var regionH = ((int)(height * 0.45) - 48);
+            var overlayLuma = MeanLuminance(image: overlay, x: regionX, y: regionY, w: regionW, h: regionH);
+            var controlLuma = MeanLuminance(image: control, x: regionX, y: regionY, w: regionW, h: regionH);
+
+            passed &= ComposedShotKit.Check(
+                name: "console-panel-darkens-stage",
+                ok: ((controlLuma - overlayLuma) > 15.0),
+                detail: $"mean luminance overlay {overlayLuma.ToString(format: "F1", provider: ProofApp.Inv)} vs control {controlLuma.ToString(format: "F1", provider: ProofApp.Inv)} (want a > 15 scrim drop)"
+            );
+
+            // Toast presence: a danger-red population (the state rail + Tier-1 ring in #F2565B) in the mid-right
+            // toast strip that the control shot lacks.
+            var stripX = (int)(width * 0.55);
+            var stripY = ((height / 2) - 16);
+            var stripW = ((width - 40) - stripX);
+            var stripH = 32;
+            var toastRed = CountDangerRed(image: toast, x: stripX, y: stripY, w: stripW, h: stripH);
+            var controlRed = CountDangerRed(image: control, x: stripX, y: stripY, w: stripW, h: stripH);
+
+            // Both backends measure ~190 danger-red pixels in the strip (the 2px rail + the ring arcs it clips)
+            // against a clean 0 in the control; 120/+100 keeps a decisive margin without riding exact ring geometry.
+            passed &= ComposedShotKit.Check(
+                name: "rejection-surfaces-as-toast",
+                ok: ((toastRed > (controlRed + 100)) && (toastRed > 120)),
+                detail: $"danger-red pixels in the toast strip: toast {toastRed} vs control {controlRed}"
+            );
+
+            // (5) No loud GPU/runtime faults anywhere in the session (both streams).
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: overlayPath);
+            ComposedShotKit.TryDelete(path: controlPath);
+            ComposedShotKit.TryDelete(path: toastPath);
+        }
+
+        return passed;
+    }
+
+    static double MeanLuminance((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+
+                sum += (image.Rgba[i] + image.Rgba[(i + 1)] + image.Rgba[(i + 2)]);
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Danger-hue population: pixels whose red channel clearly dominates BOTH others — the toast's #F2565B rail/ring
+    // family reads true here while grass (green-dominant), scrims (near-neutral), and the purple avatars (blue-high)
+    // do not.
+    static int CountDangerRed((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var count = 0;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+                int r = image.Rgba[i];
+                int g = image.Rgba[(i + 1)];
+                int b = image.Rgba[(i + 2)];
+
+                if ((r > (g + 40)) && (r > (b + 40))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+}
+
+// ============================================================================================
+// EDITOR-MODE — the P2 proof: a seat enters editor mode mid-session over stdin, the binding bar
+// flips to the merged 'Editor' page (asserted through editor.status, which reads the SAME
+// PageView the bar renders), the seat's intent diverts to the honest idle (player.control reads
+// idle while editing, the prior source after), the editor camera seeds at the chase framing and
+// flies on command (asserted in PIXELS: the console panel is hidden and a central world region
+// is mean-abs-diffed between shots — the flown shot must differ decisively while the seeded and
+// restored shots hug the pre-enter chase shot, so neither mode edge pops the camera), and the
+// diversion unwinds honestly (the avatar drives after exit, two idle where samples match
+// exactly, and a scripted tape STILL drives the avatar while editing — script outranks idle).
+// Runs on BOTH backends like ui-floor.
+// ============================================================================================
+static class EditorModeProof {
+    public static int RunEditorMode(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 150, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === editor-mode (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-mode (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] editor-mode proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = (backend ?? "directx");
+        var prePath = ShotPath(pid: pid, tag: tag, name: "pre");
+        var seedPath = ShotPath(pid: pid, tag: tag, name: "seed");
+        var flyPath = ShotPath(pid: pid, tag: tag, name: "fly");
+        var postPath = ShotPath(pid: pid, tag: tag, name: "post");
+        var duoPath = ShotPath(pid: pid, tag: tag, name: "duo");
+        var railPath = ShotPath(pid: pid, tag: tag, name: "rail");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // The console panel would repaint with every verb echo between shots — hide it so the pixel region
+            // reads the WORLD (the binding bars sit in the excluded bottom strip; no toasts fire in this script).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            // Pin the roster to seat 1: connected pads on a dev machine auto-seat extra players, and any second seat
+            // arms the sole-editor LAYOUT policy — which would swamp the camera pixel work below. The policy gets its
+            // own positive block later. player.leave is a friendly no-op echo for an unjoined seat.
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-roster-leave-{seat}");
+            }
+
+            // (1) The mode round trip, narrated: not editing → enter → the active page IS the merged 'Editor' page
+            // (editor.status reads the same PageView the bar renders — the bar flip's assertable truth) → the seat's
+            // intent source reads idle (the diversion) — then the camera work — then exit → restored.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing]", name: "status-before-enter");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "pre-shot", path: prePath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "page=base 'Editor'", name: "bar-page-flips-to-editor");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control 1", expect: "[player.control: p1 is idle]", name: "intent-diverts-to-idle");
+
+            // (2) The camera: the first editor frame seeds at the chase framing (no pose pop), then the console twin
+            // of stick flight relocates it decisively.
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "seed-shot", path: seedPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 8 -18 140 -15", expect: "[editor.cam.pose: seat 1", name: "cam-pose-echo");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "fly-shot", path: flyPath);
+
+            // (3) Exit restores: the prior source returns, the chase rig re-anchors (asserted in pixels below).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "exit-echo");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "[editor.status: seat 1 not editing]", name: "status-after-exit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.control 1", expect: "[player.control: p1 is live]", name: "intent-restores-to-live");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "post-shot", path: postPath);
+
+            // (4) The pixel assertions over a central world band (below any console chrome, above the toast strip
+            // and the bottom binding bars — which DO legitimately change across the mode flip).
+            var pre = ComposedShotKit.DecodePng(path: prePath);
+            var seed = ComposedShotKit.DecodePng(path: seedPath);
+            var fly = ComposedShotKit.DecodePng(path: flyPath);
+            var post = ComposedShotKit.DecodePng(path: postPath);
+            var regionX = (int)(width * 0.10);
+            var regionY = (int)(height * 0.06);
+            var regionW = (int)(width * 0.80);
+            var regionH = (int)(height * 0.38);
+            var flyDiff = MeanAbsDiff(a: fly, b: seed, x: regionX, y: regionY, w: regionW, h: regionH);
+            var seedDiff = MeanAbsDiff(a: seed, b: pre, x: regionX, y: regionY, w: regionW, h: regionH);
+            var restoreDiff = MeanAbsDiff(a: post, b: pre, x: regionX, y: regionY, w: regionW, h: regionH);
+
+            // The flown shot must differ decisively (a relocated camera repaints the band); the seeded/restored
+            // shots must hug the pre-enter chase framing (relative guards, robust against ambient world motion).
+            passed &= ComposedShotKit.Check(
+                name: "camera-flies-on-pose",
+                ok: (flyDiff > 8.0),
+                detail: $"fly-vs-seed mean abs diff {flyDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want > 8)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "enter-seeds-at-chase",
+                ok: (seedDiff < (flyDiff * 0.5)),
+                detail: $"seed-vs-pre {seedDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs fly {flyDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want < half)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "exit-restores-chase",
+                ok: (restoreDiff < (flyDiff * 0.5)),
+                detail: $"post-vs-pre {restoreDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs fly {flyDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want < half)"
+            );
+
+            // (5) The avatar drives again after exit — the diversion unwound.
+            var before = AwaitWhere(ctx: ctx, name: "where-before-run");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.run 1 0 0 0.8", expect: "[player.run:", name: "run-after-exit");
+            Thread.Sleep(millisecondsTimeout: 1400);
+
+            var after = AwaitWhere(ctx: ctx, name: "where-after-run");
+
+            passed &= ComposedShotKit.Check(
+                name: "avatar-drives-after-exit",
+                ok: ((before is { } b1) && (after is { } a1) && (Planar(a: b1, b: a1) > 0.5)),
+                detail: DeltaDetail(before: before, after: after)
+            );
+
+            // (6) Nothing held leaked across the mode flip: two idle samples half a second apart match exactly.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.stop 1", expect: "[player.stop:", name: "stop-after-run");
+            Thread.Sleep(millisecondsTimeout: 400);
+
+            var restA = AwaitWhere(ctx: ctx, name: "where-at-rest-a");
+
+            Thread.Sleep(millisecondsTimeout: 600);
+
+            var restB = AwaitWhere(ctx: ctx, name: "where-at-rest-b");
+
+            passed &= ComposedShotKit.Check(
+                name: "no-held-leak-after-exit",
+                ok: ((restA is { } r1) && (restB is { } r2) && (Planar(a: r1, b: r2) < 0.005)),
+                detail: DeltaDetail(before: restA, after: restB)
+            );
+
+            // (7) The sole-editor LAYOUT policy, positively: with a second seat joined the split is side-by-side;
+            // seat 1 entering the editor takes the full-height left 70% workbench and seat 2 moves into the right
+            // rail — so the band the seam crosses (x 52..68%) repaints decisively between the two shots.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join 2", expect: "[player.join: player 2 joined pending", name: "join-second-seat");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "duo-shot", path: duoPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-for-layout");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "rail-shot", path: railPath);
+
+            var duo = ComposedShotKit.DecodePng(path: duoPath);
+            var rail = ComposedShotKit.DecodePng(path: railPath);
+            var seamX = (int)(width * 0.52);
+            var seamY = (int)(height * 0.10);
+            var seamW = (int)(width * 0.16);
+            var seamH = (int)(height * 0.35);
+            var seamDiff = MeanAbsDiff(a: rail, b: duo, x: seamX, y: seamY, w: seamW, h: seamH);
+
+            passed &= ComposedShotKit.Check(
+                name: "sole-editor-takes-workbench",
+                ok: (seamDiff > 8.0),
+                detail: $"seam-band mean abs diff {seamDiff.ToString(format: "F2", provider: ProofApp.Inv)} (want > 8 — the 50% split boundary moved to 70%)"
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "exit-for-layout");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "leave-second-seat");
+
+            // (8) Re-enter and prove the idle contract's honest edge: a scripted TAPE still drives the avatar while
+            // its seat edits (script outranks idle — the player.control contract, unchanged by the mode), and the
+            // second enter/exit cycle works.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "re-enter-echo");
+
+            var tapeBefore = AwaitWhere(ctx: ctx, name: "where-before-tape");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.run 1 0 0 0.6", expect: "[player.run:", name: "tape-while-editing");
+            Thread.Sleep(millisecondsTimeout: 1200);
+
+            var tapeAfter = AwaitWhere(ctx: ctx, name: "where-after-tape");
+
+            passed &= ComposedShotKit.Check(
+                name: "tape-still-drives-in-editor",
+                ok: ((tapeBefore is { } t1) && (tapeAfter is { } t2) && (Planar(a: t1, b: t2) > 0.3)),
+                detail: DeltaDetail(before: tapeBefore, after: tapeAfter)
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "re-exit-echo");
+
+            // (9) No loud GPU/runtime faults anywhere in the session (both streams).
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: prePath);
+            ComposedShotKit.TryDelete(path: seedPath);
+            ComposedShotKit.TryDelete(path: flyPath);
+            ComposedShotKit.TryDelete(path: postPath);
+            ComposedShotKit.TryDelete(path: duoPath);
+            ComposedShotKit.TryDelete(path: railPath);
+        }
+
+        return passed;
+    }
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-editor-mode-{pid}-{tag}-{name}.png");
+    }
+
+    // Sends player.where and parses player 1's echoed pose through the shared regex; null (and a FAIL line) when the
+    // echo never lands.
+    static (double X, double Z)? AwaitWhere(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "player.where 1");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => ProofApp.WhereEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no player.where echo)");
+
+            return null;
+        }
+
+        var match = ProofApp.WhereEcho.Match(input: line);
+
+        return (
+            X: double.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv),
+            Z: double.Parse(s: match.Groups[4].Value, provider: ProofApp.Inv)
+        );
+    }
+
+    static double Planar((double X, double Z) a, (double X, double Z) b) {
+        var dx = (a.X - b.X);
+        var dz = (a.Z - b.Z);
+
+        return Math.Sqrt(d: ((dx * dx) + (dz * dz)));
+    }
+
+    static string DeltaDetail((double X, double Z)? before, (double X, double Z)? after) {
+        if ((before is not { } b) || (after is not { } a)) {
+            return "(a player.where sample is missing)";
+        }
+
+        return $"({b.X.ToString(format: "F2", provider: ProofApp.Inv)}, {b.Z.ToString(format: "F2", provider: ProofApp.Inv)}) -> ({a.X.ToString(format: "F2", provider: ProofApp.Inv)}, {a.Z.ToString(format: "F2", provider: ProofApp.Inv)}), planar delta {Planar(a: b, b: a).ToString(format: "F3", provider: ProofApp.Inv)}";
+    }
+
+    // Mean absolute per-channel difference over a region of two same-sized frames — the camera-motion witness.
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
     }
 }
