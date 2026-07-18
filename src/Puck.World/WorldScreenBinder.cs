@@ -67,8 +67,8 @@ internal sealed class WorldScreenBinder : IDisposable {
     private readonly DirectXGpuSurfaceExportFactory? m_surfaceExport;
     private long? m_renderAdapterLuid;
     private readonly IReadOnlyList<WorldCamera> m_cameras;
-    // The anchor source for avatar-eye cameras (the client's snapshot-fed entity view). Anchor ids are entity indices,
-    // so an AvatarEye view follows the same interpolated render pose the main world draws without reaching into
+    // The anchor source for anchored cameras (the client's snapshot-fed entity view). Anchor ids are entity indices,
+    // so an Anchored view follows the same interpolated render pose the main world draws without reaching into
     // simulation state or duplicating pose math here.
     private readonly ISdfAnchorSource m_anchors;
     // The registered screen-machine engines by id (ordinal) — the composition root's DI-collected IScreenMachineEngine
@@ -119,7 +119,7 @@ internal sealed class WorldScreenBinder : IDisposable {
     /// <param name="cameraCapture">The platform webcam service (CPU tier) the camera screens share one session of.</param>
     /// <param name="windowCapture">The platform compositor window-capture service.</param>
     /// <param name="cameras">The world's placeable cameras a View (jumbotron) screen resolves its camera name against.</param>
-    /// <param name="anchors">The entity anchor source used by avatar-eye cameras (the client's snapshot-fed view).</param>
+    /// <param name="anchors">The entity anchor source used by anchored cameras (the client's snapshot-fed view).</param>
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 — selects the GPU capture transport for
     /// window/monitor captures (the Vulkan host keeps the CPU-pixel path). Camera capture stays CPU on both.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
@@ -897,8 +897,8 @@ internal sealed class WorldScreenBinder : IDisposable {
     }
 
     // Creates the view pool on first need and registers (or updates in place, idempotent per name) one persistent
-    // SdfCameraView for a camera. Fixed cameras carry their own world-space look-at; avatar-eye cameras resolve the
-    // population entry named by AvatarIndex each frame and pose a FirstPersonRig at the declared local eye offset. A
+    // SdfCameraView for a camera. Fixed cameras carry their own world-space look-at; anchored cameras resolve the
+    // entity named by AnchorIndex each frame and pose a FirstPersonRig at the declared anchor-local offset. A
     // camera FILMS an already-lit world, so it is a budgeted offscreen render with no room glow of its own.
     private void RegisterCameraView(WorldCamera camera) {
         m_viewStack ??= new ViewStack();
@@ -928,12 +928,12 @@ internal sealed class WorldScreenBinder : IDisposable {
                     };
 
                     break;
-                case WorldCamera.AvatarEye avatarEye:
+                case WorldCamera.Anchored anchored:
                     view.AnchorSource = m_anchors;
-                    view.AnchorIdSource = () => avatarEye.AvatarIndex;
+                    view.AnchorIdSource = () => anchored.AnchorIndex;
                     view.Rig = new FirstPersonRig {
-                        EyeOffset = avatarEye.EyeOffset,
-                        FovRadians = avatarEye.FieldOfViewRadians,
+                        EyeOffset = anchored.Offset,
+                        FovRadians = anchored.FieldOfViewRadians,
                     };
 
                     break;

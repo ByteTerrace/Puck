@@ -24,6 +24,17 @@ Doctrine that governs the whole arc:
   verbs are the assist/automation layer; the overlay is the reliable
   accessibility surface, diegetic mirrors come later
   (`docs/game-studio-plan.md:118-130`, `docs/overworld-demo-plan.md:203-205`).
+- **Vocabulary names the primitive, and calcified names are renamed on
+  contact.** A concept's name must describe the mechanism, never one use of
+  it — supergreen makes renames free, so every phase renames what it
+  touches. Precedent (owner-ordered, landed with this plan):
+  `WorldCamera.AvatarEye` → `WorldCamera.Anchored` (`AnchorIndex` +
+  `Offset`) — a camera anchored to an entity is not an "eye"; the anchor
+  point is arbitrary data. The altitude split to preserve: document/protocol
+  vocabulary stays mechanism-named, while genuinely anatomical facts
+  (`WorldAvatarCatalog.EyeOffset` — where the avatar rig's head leaf is) and
+  standard graphics terms (`SdfCameraRig.Eye`, the camera's own eye point)
+  keep their honest names.
 
 ## 1. The decisions
 

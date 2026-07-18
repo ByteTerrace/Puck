@@ -109,13 +109,13 @@ internal static class WorldDefinitionValidator {
                     case WorldCamera.Fixed fixedCamera when !IsFinite(value: fixedCamera.Position) || !IsFinite(value: fixedCamera.LookAt) || (fixedCamera.Position == fixedCamera.LookAt):
                         errors.Add(item: $"{path} needs finite, distinct position and lookAt points.");
                         break;
-                    case WorldCamera.AvatarEye eyeCamera:
-                        if ((eyeCamera.AvatarIndex < 0) || (eyeCamera.AvatarIndex >= WorldPopulation.MaxPopulation)) {
-                            errors.Add(item: $"{path}.avatarIndex {eyeCamera.AvatarIndex} is outside 0..{(WorldPopulation.MaxPopulation - 1)}.");
+                    case WorldCamera.Anchored anchoredCamera:
+                        if ((anchoredCamera.AnchorIndex < 0) || (anchoredCamera.AnchorIndex >= WorldPopulation.MaxPopulation)) {
+                            errors.Add(item: $"{path}.anchorIndex {anchoredCamera.AnchorIndex} is outside 0..{(WorldPopulation.MaxPopulation - 1)}.");
                         }
 
-                        if (!IsFinite(value: eyeCamera.EyeOffset)) {
-                            errors.Add(item: $"{path}.eyeOffset must contain finite coordinates.");
+                        if (!IsFinite(value: anchoredCamera.Offset)) {
+                            errors.Add(item: $"{path}.offset must contain finite coordinates.");
                         }
 
                         break;

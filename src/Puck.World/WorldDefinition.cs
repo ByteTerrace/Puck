@@ -667,14 +667,15 @@ internal readonly record struct FixedWanderTuning(
     );
 }
 
-/// <summary>One placeable camera in the world — either a fixed look-at or a first-person mount on an avatar's eyeballs.
-/// A <see cref="WorldScreenSource.View"/> resolves the stable name and renders the resulting live view offscreen.</summary>
+/// <summary>One placeable camera in the world — either a fixed look-at or an anchored mount riding a world entity's
+/// live pose. A <see cref="WorldScreenSource.View"/> resolves the stable name and renders the resulting live view
+/// offscreen.</summary>
 /// <param name="Name">The camera's stable name — the handle a View screen samples by.</param>
 /// <param name="RenderWidth">The offscreen render width in pixels.</param>
 /// <param name="RenderHeight">The offscreen render height in pixels.</param>
 /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
 [JsonDerivedType(typeof(WorldCamera.Fixed), typeDiscriminator: "fixed")]
-[JsonDerivedType(typeof(WorldCamera.AvatarEye), typeDiscriminator: "avatarEye")]
+[JsonDerivedType(typeof(WorldCamera.Anchored), typeDiscriminator: "anchored")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians) {
     /// <summary>A camera posed directly in world space.</summary>
@@ -687,15 +688,15 @@ internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderH
     internal sealed record Fixed(string Name, Vector3 Position, Vector3 LookAt, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
         : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
 
-    /// <summary>A first-person camera mounted at one population avatar's eyeballs. The avatar root supplies the live
-    /// position and orientation; <paramref name="EyeOffset"/> is the exact anchor-local attachment point.</summary>
+    /// <summary>A camera anchored to one world entity. The entity's root supplies the live position and orientation;
+    /// <paramref name="Offset"/> is the exact anchor-local attachment point — an entity can carry a camera anywhere.</summary>
     /// <param name="Name">The camera's stable name.</param>
-    /// <param name="AvatarIndex">The population avatar to ride, zero based.</param>
-    /// <param name="EyeOffset">The eyeball attachment point relative to the avatar root, in avatar-local axes.</param>
+    /// <param name="AnchorIndex">The entity to ride, zero based.</param>
+    /// <param name="Offset">The attachment point relative to the entity root, in anchor-local axes.</param>
     /// <param name="RenderWidth">The offscreen render width in pixels.</param>
     /// <param name="RenderHeight">The offscreen render height in pixels.</param>
     /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-    internal sealed record AvatarEye(string Name, int AvatarIndex, Vector3 EyeOffset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
+    internal sealed record Anchored(string Name, int AnchorIndex, Vector3 Offset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
         : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
 }
 
@@ -1001,7 +1002,7 @@ internal sealed record WorldDefinition(
                 Route: WorldScreenRoute.Passive
             ),
             // Screen 2 — THE JUMBOTRON: a big billboard high behind the boulder cluster showing this same world through
-            // player one's literal avatar-eye camera. A View source, so
+            // the first-person camera anchored to player one's entity. A View source, so
             // the binder registers one offscreen camera render per produced frame. Passive: a jumbotron is watched, not
             // engaged. Its own face binds 0 inside its render (ViewStack's self-reference rule), so no feedback compounds.
             new WorldScreen(
@@ -1013,7 +1014,7 @@ internal sealed record WorldDefinition(
                 HalfHeight: 1.4f,
                 HalfDepth: 0.14f,
                 Round: 0.1f,
-                Source: new WorldScreenSource.View(CameraName: "avatar-eye"),
+                Source: new WorldScreenSource.View(CameraName: "first-person"),
                 Route: WorldScreenRoute.Passive
             ),
             // Screen 3 — THE CAMERA: a live webcam feed on the broadcast wall's left. Faults gracefully to the procedural
@@ -1056,13 +1057,13 @@ internal sealed record WorldDefinition(
                 Route: WorldScreenRoute.Passive
             ),
         ],
-        // The two live world cameras: one attached to player one's eyeballs for the jumbotron, and one fixed high above
+        // The two live world cameras: one anchored to player one's entity for the jumbotron, and one fixed high above
         // the plaza for the separate overhead monitor.
         Cameras: [
-            new WorldCamera.AvatarEye(
-                Name: "avatar-eye",
-                AvatarIndex: 0,
-                EyeOffset: WorldAvatarCatalog.EyeOffset(avatar: 0),
+            new WorldCamera.Anchored(
+                Name: "first-person",
+                AnchorIndex: 0,
+                Offset: WorldAvatarCatalog.EyeOffset(avatar: 0),
                 RenderWidth: 256,
                 RenderHeight: 144,
                 FieldOfViewRadians: (68f * (MathF.PI / 180f))

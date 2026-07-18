@@ -951,7 +951,7 @@ remains the quality target above that floor.
 The Windows display query reads the active display path's physical signal rate, not the enumerated list of selectable
 desktop modes (which can otherwise misreport a 120 Hz Dynamic Refresh Rate signal as 60).
 
-The overhead and avatar-eye feeds are presentation views: their last images persist between refreshes, and
+The overhead and first-person feeds are presentation views: their last images persist between refreshes, and
 `world.view-refresh 1` restores full-rate offscreen rendering for an A/B.
 
 **Crowd shadows** are the 128-player lever: seats always cast soft shadows;

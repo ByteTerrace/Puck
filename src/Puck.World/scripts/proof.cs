@@ -3307,7 +3307,7 @@ static class ScreensProof {
             passed &= PollState(ctx: ctx, name: "state-assigned-bound", index: machineScreen,
                 predicate: body => (body.Contains(value: "assigned") && body.Contains(value: "bound")));
 
-            // (3) PASSIVE VIEW ENGAGE — screen 2 is the avatar-eye jumbotron, not an interactive machine: its
+            // (3) PASSIVE VIEW ENGAGE — screen 2 is the first-person jumbotron, not an interactive machine: its
             // route rejects engagement before the producer kind matters.
             passed &= ExpectEcho(ctx: ctx, name: "engage-jumbotron-view-errors", command: "player.engage 2",
                 predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "not engageable")));
@@ -3370,7 +3370,7 @@ static class ScreensProof {
             _ = PollState(ctx: ctx, name: "state-reboot", index: machineScreen, predicate: body => body.Contains(value: "bound"));
             ReportEvidence(ctx: ctx);
 
-            // (12) REMOVE A VIEW SCREEN (CR-3b) — screen 2 is the avatar-eye jumbotron, a pure View source whose camera
+            // (12) REMOVE A VIEW SCREEN (CR-3b) — screen 2 is the first-person jumbotron, a pure View source whose camera
             // render lives in the offscreen ViewStack pool (its own SDF engine spending refresh budget every few frames).
             // Removing the last screen wired to that camera must RELEASE its view, witnessed by the registered camera-view
             // count in world.view-refresh dropping by one (the co-existing 'overhead' view survives, so it drops 2 -> 1).

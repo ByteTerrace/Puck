@@ -116,7 +116,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.camera.set",
-            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera ($type fixed|avatarEye): world.camera.set <camera-json>. Document-only this phase (applies at next boot — the offscreen view pool is boot-sized).",
+            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera ($type fixed|anchored): world.camera.set <camera-json>. Document-only this phase (applies at next boot — the offscreen view pool is boot-sized).",
             info: WorldJsonContext.Default.WorldCamera,
             toMutation: static camera => new WorldMutation.UpsertCamera(Principal: WorldPrincipal.Console, Camera: camera)
         );
