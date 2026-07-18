@@ -454,7 +454,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             // when the pre-baked glyph atlas is missing.
             Decorate = producer => {
                 var fontsDirectory = Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Fonts");
-                var glyphs = OverlayGlyphSdfPack.TryCreate(monoFont: new OverlayGlyphAtlasSet(fontsDirectory: fontsDirectory).MonoFont);
+                // The prepacked-artifact path (UIE-7): a warm start reads the ~1.4 MiB pack beside the atlas; only a
+                // cold/rebaked start decodes the combined PNG (and persists the pack for the next boot).
+                var glyphs = new OverlayGlyphAtlasSet(fontsDirectory: fontsDirectory).LoadOverlayPack();
 
                 if (glyphs is null) {
                     Console.Error.WriteLine(value: $"[unified-overlay] skipped: no usable glyph atlas under '{fontsDirectory}' (rebake via tools/font-atlas).");

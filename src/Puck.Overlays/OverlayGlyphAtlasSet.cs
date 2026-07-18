@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Puck.Text;
 
 namespace Puck.Overlays;
@@ -21,6 +22,9 @@ public sealed class OverlayGlyphAtlasSet {
     // The bake packs EVERY font's glyphs into this one image (the one-GPU-texture law); each atlas JSON is a view of
     // it. KEEP IN SYNC with tools/font-atlas/manifest.json's output image name.
     private const string CombinedImageName = "puck-fonts-mtsdf.png";
+    // The mono voice's layout view (the overlay pack's source) and the prepacked overlay artifact written beside it.
+    private const string MonoFontName = "jetbrains-mono-regular";
+    private const string OverlayPackName = "overlay-glyphs.pack";
 
     private readonly string m_fontsDirectory;
     private readonly Lazy<FontAtlasImageData?> m_combinedImage;
@@ -44,7 +48,7 @@ public sealed class OverlayGlyphAtlasSet {
 
         m_fontsDirectory = fontsDirectory;
         m_combinedImage = new Lazy<FontAtlasImageData?>(valueFactory: TryDecodeCombinedImage, isThreadSafe: true);
-        m_monoFont = new Lazy<FontAtlas?>(valueFactory: () => (TryLoadPrebaked(name: "jetbrains-mono-regular") ?? TryLoadFallback(fallback: monoFallback)), isThreadSafe: true);
+        m_monoFont = new Lazy<FontAtlas?>(valueFactory: () => (TryLoadPrebaked(name: MonoFontName) ?? TryLoadFallback(fallback: monoFallback)), isThreadSafe: true);
         m_uiFont = new Lazy<FontAtlas?>(valueFactory: () => TryLoadPrebaked(name: "inter-regular"), isThreadSafe: true);
         m_uiFontMedium = new Lazy<FontAtlas?>(valueFactory: () => TryLoadPrebaked(name: "inter-medium"), isThreadSafe: true);
         m_uiFontSemiBold = new Lazy<FontAtlas?>(valueFactory: () => TryLoadPrebaked(name: "inter-semibold"), isThreadSafe: true);
@@ -69,6 +73,54 @@ public sealed class OverlayGlyphAtlasSet {
 
     /// <summary>The UI grotesque's semi-bold weight (pre-baked only; <see langword="null"/> when absent).</summary>
     public FontAtlas? UiFontSemiBold => m_uiFontSemiBold.Value;
+
+    /// <summary>
+    /// Loads the overlay glyph pack through the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>):
+    /// a warm start reads the ~1.4 MiB finished pack and NEVER decodes the ~79 MiB combined PNG (UIE-7 — the decode
+    /// held ≥150 MiB transient to retain 1.4 MiB); a cold or rebaked start builds the pack from
+    /// <see cref="MonoFont"/> once and persists it, keyed by the SHA-256 of the source PNG + mono layout JSON bytes.
+    /// Returns <see langword="null"/> exactly when <see cref="OverlayGlyphSdfPack.TryCreate"/> would (no usable
+    /// atlas), preserving the loud-degradation contract.
+    /// </summary>
+    /// <remarks>Measured 2026-07-18 (Release, this repo's committed atlas): the full-decode path costs ~2.0 s and
+    /// ~471 MiB of allocation; the warm artifact read costs ~19 ms and ~3 MiB, and the loaded pack is bit-identical
+    /// to the built one.</remarks>
+    public OverlayGlyphSdfPack? LoadOverlayPack() {
+        var imagePath = Path.Combine(path1: m_fontsDirectory, path2: CombinedImageName);
+        var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: (MonoFontName + ".json"));
+
+        if (!File.Exists(path: imagePath) || !File.Exists(path: jsonPath)) {
+            // No committed atlas: the ordinary path (which may resolve a caller-supplied fallback) decides loudly.
+            return OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
+        }
+
+        Span<byte> pngHash = stackalloc byte[SHA256.HashSizeInBytes];
+        Span<byte> jsonHash = stackalloc byte[SHA256.HashSizeInBytes];
+
+        try {
+            using (var image = File.OpenRead(path: imagePath)) {
+                _ = SHA256.HashData(source: image, destination: pngHash);
+            }
+
+            _ = SHA256.HashData(source: File.ReadAllBytes(path: jsonPath), destination: jsonHash);
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            Console.Error.WriteLine(value: $"[Puck.Overlays] could not key the overlay glyph pack ({exception.Message}); building it from the atlas.");
+
+            return OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
+        }
+
+        var packPath = Path.Combine(path1: m_fontsDirectory, path2: OverlayPackName);
+
+        if (OverlayGlyphSdfPack.TryReadPack(path: packPath, pngHash: pngHash, jsonHash: jsonHash) is { } cached) {
+            return cached;
+        }
+
+        var built = OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
+
+        built?.WritePack(path: packPath, pngHash: pngHash, jsonHash: jsonHash);
+
+        return built;
+    }
 
     private FontAtlas? TryLoadFallback(Func<FontAtlas?>? fallback) {
         if (fallback is null) {
