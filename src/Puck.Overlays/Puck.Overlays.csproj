@@ -8,13 +8,12 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <!-- PngEncoder for the capture readback (previously transitive through the retired Puck.SdfVm reference). -->
+        <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
-        <!-- ICaptureRequestTarget + the SdfEngineNode capture-forward fallback + SdfWorldKernels.DefaultDirectory
-             (the shared fullscreen.vert home) live in the render assembly; the unified overlay decorates it. -->
-        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
 

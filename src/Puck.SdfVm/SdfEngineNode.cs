@@ -40,7 +40,7 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
 /// </summary>
-public sealed class SdfEngineNode : IRenderNode, IPassTimingSource {
+public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequestTarget {
     private const ulong TimingReportInterval = 60;
 
     private readonly record struct CpuFrameTiming(

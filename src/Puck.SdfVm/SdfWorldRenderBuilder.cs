@@ -32,9 +32,9 @@ public sealed record SdfWorldRender(
 
 /// <summary>
 /// The ONE assembly path from an <see cref="SdfWorldRenderSpec"/> to a runnable SDF world render host. Every
-/// backend-specific choice lives here: kernel bytecode selection (SPIR-V vs DXIL) and decorator availability derive
-/// from the spec's resolved host backend — a caller never names a bytecode extension, and Vulkan-service decorators
-/// are explicitly skipped (with a notice) on a Direct3D 12 host rather than silently bound.
+/// backend-specific choice lives here: kernel bytecode selection (SPIR-V vs DXIL) derives from the spec's resolved
+/// host backend — a caller never names a bytecode extension. The spec's <c>Decorate</c> seam applies on EVERY
+/// backend (decorators are backend-neutral; the caller hands them backend-selected bytecode).
 /// </summary>
 public static class SdfWorldRenderBuilder {
     /// <summary>The kernel bytecode extension for a resolved host backend — the counterpart of the per-child

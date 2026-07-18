@@ -5,7 +5,6 @@ using Puck.Assets;
 using Puck.Capture;
 using Puck.Compositing;
 using Puck.Hosting;
-using Puck.SdfVm;
 
 namespace Puck.Overlays;
 
@@ -251,8 +250,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         if (m_inner is ICaptureRequestTarget target) {
             target.RequestCapture(path: path);
-        } else if (m_inner is SdfEngineNode producer) {
-            producer.RequestCapture(path: path);
         }
     }
 
