@@ -280,6 +280,8 @@ public sealed record CreationDocument(
 /// expose fields, not properties, and omitting it silently zeroes every transform into degenerate shapes. Root paths
 /// are explicit parameters — this library never bakes in a working-directory convention; a caller's own default
 /// (<see cref="DefaultFolder"/>/<see cref="DefaultCasRoot"/> document what Puck.Demo passes) is the caller's choice.
+/// Both <see cref="Save"/> and <see cref="Load"/> ride <see cref="CreationCanonicalizer"/> exclusively — this store
+/// never validates, normalizes, or hashes a document by any other route.
 /// </summary>
 public static class CreationStore {
     /// <summary>The conventional creations folder name Puck.Demo passes (relative to the working directory, beside
@@ -296,13 +298,18 @@ public static class CreationStore {
         JsonSerializer.Serialize(options: DocumentJsonOptions.Shared, value: document);
 
     /// <summary>Saves a document under <c>&lt;creationsRoot&gt;/&lt;name&gt;.creation.json</c> (the name is sanitized
-    /// to letters, digits, dashes, and underscores), and lands its canonical bytes in the content-addressed store so a
-    /// saved creation is immediately stampable by name.</summary>
+    /// to letters, digits, dashes, and underscores) as <see cref="CreationCanonicalizer.Canonicalize"/>'s canonical
+    /// bytes — so the file this writes, reloaded through <see cref="Load"/> and saved again, re-serializes byte-for-
+    /// byte identically — and lands those same bytes in the content-addressed store so a saved creation is
+    /// immediately stampable by name.</summary>
     /// <param name="document">The document to save.</param>
     /// <param name="name">The save handle.</param>
     /// <param name="creationsRoot">The creations folder (Demo's convention: <see cref="DefaultFolder"/>).</param>
     /// <param name="casRoot">The content-addressed store root (Demo's convention: <see cref="DefaultCasRoot"/>).</param>
     /// <returns>The written path.</returns>
+    /// <exception cref="CreationValidationException"><paramref name="document"/> fails
+    /// <see cref="CreationCanonicalizer.Validate"/> (only its schema can fail here, since this stamps the current one
+    /// before validating — a structural invariant violation still rejects the save).</exception>
     public static string Save(CreationDocument document, string name, string creationsRoot, string casRoot) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentException.ThrowIfNullOrEmpty(creationsRoot);
@@ -310,27 +317,36 @@ public static class CreationStore {
 
         var sanitized = Sanitize(name: name);
         var path = PathFor(name: name, creationsRoot: creationsRoot);
-        var json = ToJson(document: (document with { Name = sanitized, Schema = CreationDocument.CurrentSchema }));
+        var canonical = CreationCanonicalizer.Canonicalize(document: (document with { Name = sanitized, Schema = CreationDocument.CurrentSchema }));
 
         _ = Directory.CreateDirectory(path: creationsRoot);
-        File.WriteAllText(contents: json, path: path);
+        File.WriteAllBytes(path: path, bytes: canonical.Bytes);
 
         // Everything-CAS: the canonical bytes also land in the shared content-addressed store under
         // refs/creations/<name>, so a saved creation is IMMEDIATELY stampable into the world by name
-        // (world.place resolves through the store — the sculpt→stamp loop's front door).
+        // (world.place resolves through the store — the sculpt→stamp loop's front door). Put recomputes the same
+        // SHA-256 over the same bytes, so its hex64 payload always equals canonical.Hash.
         var store = new Puck.Assets.ContentAddressedStore(root: casRoot);
-        var hash = store.Put(content: System.Text.Encoding.UTF8.GetBytes(s: json));
+        var hash = store.Put(content: canonical.Bytes);
 
         store.SetRef(category: "creations", hash: hash, name: sanitized);
 
         return path;
     }
 
-    /// <summary>Loads a creation by save handle or file path. The result is normalized — never trust persisted
-    /// derived values.</summary>
+    /// <summary>Loads a creation by save handle or file path, strictly: <see cref="CreationCanonicalizer.ValidateOrThrow"/>
+    /// rejects an absent/foreign schema or a structural invariant violation loudly rather than silently relabeling or
+    /// repairing it, and only a document that PASSES validation is normalized — never trust persisted derived
+    /// values.</summary>
     /// <param name="nameOrPath">The save handle (resolved under <paramref name="creationsRoot"/>) or an explicit file path.</param>
     /// <param name="creationsRoot">The creations folder a bare handle resolves against (Demo's convention: <see cref="DefaultFolder"/>).</param>
     /// <returns>The normalized document, or null when nothing readable exists at the location.</returns>
+    /// <exception cref="InvalidDataException">The file deserialized to a null document, OR the document declares an
+    /// absent/foreign schema, or fails a structural invariant — in the latter two cases this is
+    /// <see cref="CreationValidationException"/>'s message with the offending <see cref="CreationValidationException"/>
+    /// itself as <see cref="Exception.InnerException"/> (rethrown as plain <see cref="InvalidDataException"/> here so
+    /// the repo's existing malformed-input catch convention, <c>Puck.Commands.CommandArgs.IsMalformedInput</c>, needs
+    /// no changes to catch it).</exception>
     public static CreationDocument? Load(string nameOrPath, string creationsRoot) {
         ArgumentException.ThrowIfNullOrEmpty(nameOrPath);
         ArgumentException.ThrowIfNullOrEmpty(creationsRoot);
@@ -342,8 +358,16 @@ public static class CreationStore {
         }
 
         var json = File.ReadAllText(path: path);
+        var document = (JsonSerializer.Deserialize<CreationDocument>(json: json, options: DocumentJsonOptions.Shared)
+            ?? throw new InvalidDataException(message: $"'{path}' deserialized to null."));
 
-        return Normalize(document: JsonSerializer.Deserialize<CreationDocument>(json: json, options: DocumentJsonOptions.Shared));
+        try {
+            CreationCanonicalizer.ValidateOrThrow(document: document, source: path);
+        } catch (CreationValidationException exception) {
+            throw new InvalidDataException(message: exception.Message, innerException: exception);
+        }
+
+        return CreationCanonicalizer.Normalize(document: document);
     }
 
     /// <summary>Lists the save handles under <paramref name="creationsRoot"/>.</summary>
@@ -367,176 +391,16 @@ public static class CreationStore {
         return names;
     }
 
-    // Normalization is the load-time half of the document doctrine: clamp/default every optional member so the
-    // in-memory model never sees a null it has to reason about.
-    private static CreationDocument? Normalize(CreationDocument? document) {
-        if (document is null) {
-            return null;
-        }
-
-        var shapes = new List<ShapeDocument>(capacity: (document.Shapes?.Count ?? 0));
-        var shapeIds = new HashSet<int>();
-
-        foreach (var shape in (document.Shapes ?? [])) {
-            shapes.Add(item: shape with {
-                Bend = Math.Clamp(value: (shape.Bend ?? 0f), max: ShapeDocument.MaxBend, min: -ShapeDocument.MaxBend),
-                Blend = (shape.Blend ?? SdfBlendOp.Union),
-                Dilate = Math.Clamp(value: (shape.Dilate ?? 0f), max: ShapeDocument.MaxDilate, min: 0f),
-                Group = Math.Max(val1: (shape.Group ?? 0), val2: 0),
-                Material = Math.Clamp(value: (shape.Material ?? 0), max: (CreationDocument.PaletteSize - 1), min: 0),
-                Mirror = (shape.Mirror ?? false),
-                Onion = Math.Clamp(value: (shape.Onion ?? 0f), max: ShapeDocument.MaxOnion, min: 0f),
-                Rotation = ((shape.Rotation == default) ? Quaternion.Identity : Quaternion.Normalize(value: shape.Rotation)),
-                Scale = ((shape.Scale == default) ? Vector3.One : shape.Scale),
-                Smooth = Math.Clamp(value: (shape.Smooth ?? 0f), max: ShapeDocument.MaxSmooth, min: 0f),
-                Twist = Math.Clamp(value: (shape.Twist ?? 0f), max: ShapeDocument.MaxTwist, min: -ShapeDocument.MaxTwist),
-            });
-            _ = shapeIds.Add(item: shape.Id);
-        }
-
-        List<ChainDocument>? chains = null;
-
-        if (document.Chains is { Count: > 0 } sourceChains) {
-            chains = new List<ChainDocument>(capacity: sourceChains.Count);
-
-            foreach (var chain in sourceChains) {
-                // A chain naming any missing shape id is dropped outright — its rest geometry can never be
-                // recaptured against a shape that is not there, and a partial chain has no sound IK meaning.
-                if ((chain.Shapes is not { Count: > 0 } memberIds) || !memberIds.All(predicate: shapeIds.Contains)) {
-                    continue;
-                }
-
-                var kind = (chain.Kind ?? ((memberIds.Count == 3) ? ChainDocument.KindLimb : ChainDocument.KindSpine));
-
-                // "limb" is a structural invariant: exactly 3 shapes (2 bones) or it demotes to "spine" — the spine
-                // solver degrades gracefully to any length, so this can never leave a chain unsolvable.
-                if (string.Equals(a: kind, b: ChainDocument.KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase) && (memberIds.Count != 3)) {
-                    kind = ChainDocument.KindSpine;
-                }
-
-                chains.Add(item: chain with { Kind = kind });
-            }
-        }
-
-        return (document with {
-            BakeStyle = (string.Equals(a: document.BakeStyle, b: "bold", comparisonType: StringComparison.OrdinalIgnoreCase) ? "bold" : "classic"),
-            Behavior = NormalizeBehavior(behavior: document.Behavior, shapeIds: shapeIds),
-            Cameras = NormalizeCreationCameras(cameras: document.Cameras, shapeIds: shapeIds),
-            Chains = chains,
-            Intent = (document.Intent ?? CreatorIntent.Object),
-            Name = Sanitize(name: (document.Name ?? "creation")),
-            Schema = CreationDocument.CurrentSchema,
-            Shapes = shapes,
-            TextRuns = NormalizeTextRuns(textRuns: document.TextRuns),
-        });
-    }
-
-    // The default extrude half-depth a text run relies on when it declares none, and the floors every run clamps to —
-    // a zero-depth glyph slab has no relief (it would be coplanar with the surface), so the depth is floored positive.
-    private const float DefaultTextDepth = 0.02f;
-    private const float MinTextDepth = 0.001f;
-    private const float MinTextEmHeight = 0.01f;
-
-    // Text runs normalize to a canonical mode name, a clamped material slot / positive depth+em, and a normalized
-    // rotation; an empty-text run drops (it carries no geometry). A fully absent list collapses to null so a text-free
-    // creation round-trips byte-identically (the member is JsonIgnore-when-null too).
-    private static List<TextRunDocument>? NormalizeTextRuns(IReadOnlyList<TextRunDocument>? textRuns) {
-        if (textRuns is not { Count: > 0 } source) {
-            return null;
-        }
-
-        var normalized = new List<TextRunDocument>(capacity: source.Count);
-
-        foreach (var run in source) {
-            if (run.Text is not { Length: > 0 } text) {
-                continue;
-            }
-
-            normalized.Add(item: run with {
-                Depth = MathF.Max(x: (run.Depth ?? DefaultTextDepth), y: MinTextDepth),
-                EmHeight = MathF.Max(x: run.EmHeight, y: MinTextEmHeight),
-                Material = Math.Clamp(value: (run.Material ?? 0), max: (CreationDocument.PaletteSize - 1), min: 0),
-                Mode = (string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.OrdinalIgnoreCase) ? TextRunDocument.ModeEngrave : TextRunDocument.ModeEmboss),
-                Rotation = ((run.Rotation == default) ? Quaternion.Identity : Quaternion.Normalize(value: run.Rotation)),
-                Text = text,
-            });
-        }
-
-        return ((normalized.Count > 0) ? normalized : null);
-    }
-
-    // A creation camera rides one of the creation's own shapes; a camera naming a missing shape (or carrying a
-    // non-finite offset) is dropped, mirroring the chain rule. Optional angles/fov coerce to finite; the feed name
-    // defaults to null (the consumer falls back to the eye id).
-    private static List<CreationCameraDocument>? NormalizeCreationCameras(IReadOnlyList<CreationCameraDocument>? cameras, HashSet<int> shapeIds) {
-        if (cameras is not { Count: > 0 } sourceCameras) {
-            return null;
-        }
-
-        var normalized = new List<CreationCameraDocument>(capacity: sourceCameras.Count);
-
-        foreach (var camera in sourceCameras) {
-            if (!shapeIds.Contains(item: camera.ShapeId) ||
-                !float.IsFinite(f: camera.Position.X) || !float.IsFinite(f: camera.Position.Y) || !float.IsFinite(f: camera.Position.Z)) {
-                continue;
-            }
-
-            normalized.Add(item: camera with {
-                Feed = ((camera.Feed is { Length: > 0 } feed) ? feed : null),
-                Focus = (((camera.Focus is { } focus) && float.IsFinite(f: focus)) ? (float?)MathF.Max(x: focus, y: 0.01f) : null),
-                Fov = (((camera.Fov is { } fov) && float.IsFinite(f: fov)) ? (float?)Math.Clamp(value: fov, max: 170f, min: 1f) : null),
-                Pitch = (((camera.Pitch is { } pitch) && float.IsFinite(f: pitch)) ? (float?)Math.Clamp(value: pitch, max: 85f, min: -85f) : null),
-                Yaw = (((camera.Yaw is { } yaw) && float.IsFinite(f: yaw)) ? (float?)yaw : null),
-            });
-        }
-
-        return ((normalized.Count > 0) ? normalized : null);
-    }
-
-    // The behavior manifest normalizes to a canonical locomotion member name and drops a face naming a missing shape.
-    // A manifest that is entirely default (walk, no faces) collapses to null so a creation without behavioral facts
-    // round-trips byte-identically to one that never carried the manifest at all.
-    private static CreationBehaviorDocument? NormalizeBehavior(CreationBehaviorDocument? behavior, HashSet<int> shapeIds) {
-        if (behavior is null) {
-            return null;
-        }
-
-        var locomotion = (behavior.Locomotion?.ToLowerInvariant() switch {
-            "swim" => "swim",
-            "hover" => "hover",
-            _ => "walk",
-        });
-
-        List<CreationFaceDocument>? faces = null;
-
-        if (behavior.Faces is { Count: > 0 } sourceFaces) {
-            faces = new List<CreationFaceDocument>(capacity: sourceFaces.Count);
-
-            foreach (var face in sourceFaces) {
-                // A face may name a specific shape surface or the creation's canonical face (null/-1). A named shape
-                // that is missing drops the face (its surface is not there).
-                if ((face.ShapeId is { } shapeId) && (shapeId >= 0) && !shapeIds.Contains(item: shapeId)) {
-                    continue;
-                }
-
-                faces.Add(item: face with {
-                    DefaultSource = ((face.DefaultSource is { Length: > 0 } source) ? source : null),
-                    Name = ((face.Name is { Length: > 0 } name) ? name : "face"),
-                    ShapeId = (((face.ShapeId is { } id) && (id >= 0)) ? (int?)id : null),
-                });
-            }
-        }
-
-        // Fully default → null (byte-stable round-trip with a manifest-less creation).
-        if (string.Equals(a: locomotion, b: "walk", comparisonType: StringComparison.Ordinal) && (faces is not { Count: > 0 })) {
-            return null;
-        }
-
-        return new CreationBehaviorDocument(Faces: faces, Locomotion: locomotion);
-    }
     private static string PathFor(string name, string creationsRoot) =>
         Path.Combine(path1: creationsRoot, path2: $"{Sanitize(name: name)}.creation.json");
-    private static string Sanitize(string name) {
+
+    /// <summary>Sanitizes a save handle to letters, digits, dashes, and underscores (non-empty; falls back to
+    /// <c>"creation"</c>). Internal — shared with <see cref="CreationCanonicalizer.Normalize"/>, which applies the
+    /// same rule to <see cref="CreationDocument.Name"/> so an in-memory normalize matches what a file-system save
+    /// would produce.</summary>
+    /// <param name="name">The candidate name.</param>
+    /// <returns>The sanitized name.</returns>
+    internal static string Sanitize(string name) {
         var builder = new System.Text.StringBuilder(capacity: name.Length);
 
         foreach (var character in name) {
