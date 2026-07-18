@@ -84,6 +84,15 @@
 //       loudness, is asserted), a video track is present when video landed, the file is non-trivial, and capture.status
 //       reads idle again. --out copies the artifact somewhere for a real player to open. Asserts the overlay row is
 //       present in the recording document used (the capture-only text the owner asked for).
+//   ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The P1 unified-overlay proof, run on BOTH backends (Direct3D 12 first, then --backend vulkan). Each session
+//       boots, waits for the console, then world.screenshot-s three composed frames over the outermost-decorator
+//       capture chain: (a) console panel ON — its stage region must be visibly SCRIM-DARKENED versus (b) a
+//       world.console off control shot (mean-luminance drop, robust against the moving world beneath); (c) a
+//       deliberately invalid mutation (world.kit.remove on the defaultSeatKit) must surface as the danger-hued
+//       TOAST — asserted as a danger-red pixel population in the toast strip that the control shot lacks — beside
+//       its loud '[world.mutation rejected: ...]' stderr line. Decodes the engine's own PNGs (filter-0 RGBA)
+//       inline; no image dependency.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -147,8 +156,9 @@ static class ProofApp {
                 "expo-author" => ExpoProof.RunExpoAuthor(opts: opts),
                 "expodoc" => ExpoProof.RunExpoDoc(opts: opts),
                 "record" => RecordProof.RunRecord(opts: opts),
+                "ui-floor" => UiFloorProof.RunUiFloor(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor)"),
             };
         }
         catch (ArgException ex) {
@@ -174,6 +184,7 @@ static class ProofApp {
         Console.WriteLine(value: "  expo-author [--no-build] [--width W] [--height H] [--exit-after-seconds N] [--out PATH]");
         Console.WriteLine(value: "  expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]");
+        Console.WriteLine(value: "  ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -6467,5 +6478,402 @@ sealed class MiniEbml {
         }
 
         return value;
+    }
+}
+
+// ============================================================================================
+// UI-FLOOR — the P1 unified-overlay proof: the ONE screen-space overlay decorator (console
+// mirror + per-seat binding bars + mutation toasts) renders on BOTH backends and the
+// world.screenshot verb captures the final COMPOSED frame through the outermost decorator.
+// Three composed captures per backend session: overlay (console on), control (console off),
+// toast (after a deliberately invalid mutation). The overlay's presence is asserted in PIXELS,
+// never by file existence: the console panel's 0.90-alpha scrim must darken its stage region's
+// mean luminance versus the control (robust against the moving world beneath), and the
+// rejection toast must plant a danger-red pixel population in the toast strip that the control
+// lacks. PNGs are the engine's own PngEncoder output (8-bit RGBA, filter 0, one zlib IDAT) and
+// are decoded inline — zero dependencies, matching this file's rules.
+// ============================================================================================
+static class UiFloorProof {
+    public static int RunUiFloor(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        // D3D12 FIRST (World's default backend — the historically unexercised overlay path), then Vulkan.
+        Console.WriteLine(value: "[proof] === ui-floor (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === ui-floor (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] ui-floor proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // One scripted session on one backend: boot → overlay shot → console off → control shot → rejected
+    // mutation → toast shot → pixel assertions → loud-fault sweep.
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = (backend ?? "directx");
+        var overlayPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-overlay.png");
+        var controlPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-control.png");
+        var toastPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-toast.png");
+
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        if (backend is not null) {
+            psi.ArgumentList.Add(item: "--backend");
+            psi.ArgumentList.Add(item: backend);
+        }
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} {(backend is null ? "" : $"--backend {backend} ")}--width {width} --height {height}");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // (1) The composed frame with the console panel visible (the boot default).
+            passed &= Screenshot(ctx: ctx, name: "overlay-shot", path: overlayPath);
+
+            // (2) The no-console control: the binding bars stay, but the assertion region is the console's stage
+            // corner, which they never enter.
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "world.console off");
+            passed &= Check(name: "console-off", ok: (Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.console: off]"), deadlineSeconds: 15.0) is not null), detail: "world.console off echo");
+            passed &= Screenshot(ctx: ctx, name: "control-shot", path: controlPath);
+
+            // (3) The rejection toast: removing the defaultSeatKit fails validation loudly server-side AND must
+            // surface on screen. The screenshot rides the stdin barrier behind the Simulation-routed mutation.
+            mark = ctx.Collector.Count;
+            Send(ctx: ctx, line: "world.kit.remove runner");
+
+            var rejected = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.mutation rejected:"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "mutation-rejected-loudly", ok: (rejected is not null), detail: (rejected?.Trim() ?? "(no '[world.mutation rejected: ...]' line)"));
+            passed &= Screenshot(ctx: ctx, name: "toast-shot", path: toastPath);
+
+            // (4) The pixel assertions — decode the three composed frames.
+            var overlay = DecodePng(path: overlayPath);
+            var control = DecodePng(path: controlPath);
+            var toast = DecodePng(path: toastPath);
+
+            // Console presence: the panel's 0.90 dark scrim must pull the stage region's mean luminance well below
+            // the control's (the world beneath moves between shots; a scrim-sized drop dwarfs that noise).
+            var regionX = 48;
+            var regionY = 48;
+            var regionW = (width - 112);
+            var regionH = ((int)(height * 0.45) - 48);
+            var overlayLuma = MeanLuminance(image: overlay, x: regionX, y: regionY, w: regionW, h: regionH);
+            var controlLuma = MeanLuminance(image: control, x: regionX, y: regionY, w: regionW, h: regionH);
+
+            passed &= Check(
+                name: "console-panel-darkens-stage",
+                ok: ((controlLuma - overlayLuma) > 15.0),
+                detail: $"mean luminance overlay {overlayLuma.ToString(format: "F1", provider: ProofApp.Inv)} vs control {controlLuma.ToString(format: "F1", provider: ProofApp.Inv)} (want a > 15 scrim drop)"
+            );
+
+            // Toast presence: a danger-red population (the state rail + Tier-1 ring in #F2565B) in the mid-right
+            // toast strip that the control shot lacks.
+            var stripX = (int)(width * 0.55);
+            var stripY = ((height / 2) - 16);
+            var stripW = ((width - 40) - stripX);
+            var stripH = 32;
+            var toastRed = CountDangerRed(image: toast, x: stripX, y: stripY, w: stripW, h: stripH);
+            var controlRed = CountDangerRed(image: control, x: stripX, y: stripY, w: stripW, h: stripH);
+
+            // Both backends measure ~190 danger-red pixels in the strip (the 2px rail + the ring arcs it clips)
+            // against a clean 0 in the control; 120/+100 keeps a decisive margin without riding exact ring geometry.
+            passed &= Check(
+                name: "rejection-surfaces-as-toast",
+                ok: ((toastRed > (controlRed + 100)) && (toastRed > 120)),
+                detail: $"danger-red pixels in the toast strip: toast {toastRed} vs control {controlRed}"
+            );
+
+            // (5) No loud GPU/runtime faults anywhere in the session (both streams).
+            var faults = 0;
+
+            foreach (var line in ctx.Collector.Snapshot()) {
+                if (line.Contains(value: "Unhandled exception") || line.Contains(value: "Fatal error.") || line.Contains(value: "VUID-")) {
+                    faults++;
+                    Console.WriteLine(value: $"[proof]   fault line: {line.Trim()}");
+                }
+            }
+
+            passed &= Check(name: "no-gpu-or-runtime-faults", ok: (faults == 0), detail: ((faults == 0) ? "clean" : $"{faults} fault line(s)"));
+        }
+        catch (InvalidDataException exception) {
+            passed = Check(name: "png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+
+            TryDelete(path: overlayPath);
+            TryDelete(path: controlPath);
+            TryDelete(path: toastPath);
+        }
+
+        return passed;
+    }
+
+    // Arms world.screenshot and waits for the unified overlay's capture echo (the readback writes the file BEFORE
+    // echoing, so the echo implies the PNG is on disk).
+    static bool Screenshot(Ctx ctx, string name, string path) {
+        var mark = ctx.Collector.Count;
+        var fileName = Path.GetFileName(path: path);
+
+        Send(ctx: ctx, line: $"world.screenshot {path}");
+
+        var captured = Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: "[capture] unified overlay ->") && l.Contains(value: fileName)), deadlineSeconds: 30.0);
+
+        return Check(name: name, ok: ((captured is not null) && File.Exists(path: path)), detail: (captured?.Trim() ?? "(no unified-overlay capture echo)"));
+    }
+
+    static double MeanLuminance((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+
+                sum += (image.Rgba[i] + image.Rgba[(i + 1)] + image.Rgba[(i + 2)]);
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Danger-hue population: pixels whose red channel clearly dominates BOTH others — the toast's #F2565B rail/ring
+    // family reads true here while grass (green-dominant), scrims (near-neutral), and the purple avatars (blue-high)
+    // do not.
+    static int CountDangerRed((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var count = 0;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+                int r = image.Rgba[i];
+                int g = image.Rgba[(i + 1)];
+                int b = image.Rgba[(i + 2)];
+
+                if ((r > (g + 40)) && (r > (b + 40))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    // Decodes the engine's own PngEncoder output: 8-bit RGBA, color type 6, every scanline filter 0, one zlib
+    // deflate stream across the IDAT chunks. Anything else is loudly invalid — this is a proof harness, not an
+    // image library.
+    static (int Width, int Height, byte[] Rgba) DecodePng(string path) {
+        var bytes = File.ReadAllBytes(path: path);
+        var offset = 8;
+        var width = 0;
+        var height = 0;
+
+        using var idat = new MemoryStream();
+
+        while (offset < bytes.Length) {
+            var length = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(source: bytes.AsSpan(start: offset, length: 4));
+            var type = Encoding.ASCII.GetString(bytes: bytes, index: (offset + 4), count: 4);
+            var data = bytes.AsSpan(start: (offset + 8), length: length);
+
+            if (type == "IHDR") {
+                width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(source: data[..4]);
+                height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(source: data.Slice(start: 4, length: 4));
+
+                if ((data[8] != 8) || (data[9] != 6)) {
+                    throw new InvalidDataException($"{path}: expected 8-bit RGBA (bit depth {data[8]}, color type {data[9]})");
+                }
+            } else if (type == "IDAT") {
+                idat.Write(buffer: data);
+            }
+
+            offset += (12 + length);
+
+            if (type == "IEND") {
+                break;
+            }
+        }
+
+        idat.Position = 0;
+
+        var rowBytes = (width * 4);
+        var raw = new byte[(height * (1 + rowBytes))];
+
+        using (var inflate = new System.IO.Compression.ZLibStream(stream: idat, mode: System.IO.Compression.CompressionMode.Decompress)) {
+            inflate.ReadExactly(buffer: raw);
+        }
+
+        var rgba = new byte[(height * rowBytes)];
+
+        for (var row = 0; (row < height); row++) {
+            if (raw[(row * (1 + rowBytes))] != 0) {
+                throw new InvalidDataException($"{path}: unexpected scanline filter {raw[(row * (1 + rowBytes))]} on row {row}");
+            }
+
+            Buffer.BlockCopy(src: raw, srcOffset: ((row * (1 + rowBytes)) + 1), dst: rgba, dstOffset: (row * rowBytes), count: rowBytes);
+        }
+
+        return (width, height, rgba);
+    }
+
+    static void TryDelete(string path) {
+        try {
+            File.Delete(path: path);
+        }
+        catch (IOException) {
+        }
+        catch (UnauthorizedAccessException) {
+        }
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
+    // player.stop is idempotent at boot and leaves the player at the authored spawn.
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
     }
 }

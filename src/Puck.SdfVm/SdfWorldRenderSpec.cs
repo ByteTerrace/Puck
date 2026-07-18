@@ -25,9 +25,9 @@ public sealed record SdfWorldRenderSpec(
     public IReadOnlyDictionary<int, IRenderNode>? Children { get; init; }
     /// <summary>An optional factory for the output image (export mode when it returns an exportable image).</summary>
     public Func<IGpuDeviceContext, IGpuStorageImage>? CreateOutputImage { get; init; }
-    /// <summary>An optional render-node decorator wrapped around the producer (e.g. the overworld binding-bar overlay).
-    /// Applied by the builder ONLY on a Vulkan host — the current decorators bind Vulkan services, and binding
-    /// Vulkan bytecode on a Direct3D 12 host must be an explicit decision, never a silent one.</summary>
+    /// <summary>An optional render-node decorator wrapped around the producer (e.g. the unified overlay). Applied on
+    /// EVERY host backend — a decorator resolves neutral services and selects its bytecode from the resolved host
+    /// (the <see cref="SdfWorldRenderBuilder.BytecodeExtension"/> convention), exactly like the kernels.</summary>
     public Func<SdfEngineNode, IRenderNode>? Decorate { get; init; }
     /// <summary>An optional in-place decorator applied to <see cref="FrameSource"/> before the engine node is built —
     /// the seam a host uses to wrap the scene's frame source (e.g. a diegetic-UI overlay that emits its own SDF
