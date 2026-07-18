@@ -36,7 +36,27 @@ internal static class WorldSessionCapture {
             Render = CaptureRender(render: render, defaults: definition.Render),
             Population = CapturePopulation(population: population, defaults: definition.Population),
             Screens = CaptureScreens(screens: definition.Screens, binder: binder),
+            Creations = CaptureCreations(creations: definition.Creations),
         });
+    }
+
+    // The §D6 world.save hash recompute: every creation row re-crosses the ONE canonicalize pipeline so the persisted
+    // doc + hash come from the SAME CanonicalCreation. Rows are already canonical at compose time, so this is exactly
+    // idempotent (no drift dimension) — it exists so the SAVED file's pin can never diverge from its embedded bytes.
+    private static IReadOnlyList<WorldCreation> CaptureCreations(IReadOnlyList<WorldCreation> creations) {
+        if (creations.Count == 0) {
+            return creations;
+        }
+
+        var captured = new List<WorldCreation>(capacity: creations.Count);
+
+        foreach (var creation in creations) {
+            var canonical = Puck.Authoring.CreationCanonicalizer.Canonicalize(document: creation.Document, source: creation.Id);
+
+            captured.Add(item: (creation with { Document = canonical.Document, Hash = canonical.Hash }));
+        }
+
+        return captured;
     }
 
     /// <summary>A cheap, verb-time (never per-tick) description of which session dimensions have drifted from the loaded

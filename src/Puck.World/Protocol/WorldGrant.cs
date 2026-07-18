@@ -60,6 +60,12 @@ internal enum WorldSection : byte {
     /// <summary>The per-world binding overlays — targeted by the <see cref="WorldMutation.UpsertBindingOverlay"/> /
     /// <see cref="WorldMutation.RemoveBindingOverlay"/> mutations.</summary>
     Bindings,
+
+    /// <summary>The creation ASSET rows (§D6) — inline-canonical <c>puck.creation.v1</c> documents with pinned hashes.</summary>
+    Creations,
+
+    /// <summary>The placement INSTANCE rows (§D6) — creations stamped into the world by reference.</summary>
+    Placements,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

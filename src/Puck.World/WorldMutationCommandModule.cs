@@ -227,6 +227,40 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 return Submit(mutation: new WorldMutation.RemoveBindingOverlay(Principal: WorldPrincipal.Console, Id: args[0]));
             }
         );
+        yield return Row(
+            name: "world.creation.set",
+            description: "Upserts a creation ASSET row (whole-row, keyed by id) from one inline-JSON WorldCreation {id, document, hash}: world.creation.set <json>. The compose boundary re-canonicalizes the document and REJECTS a hash the pipeline did not itself compute (the UIE-6 pin); editor.import <path> is the file-reading twin.",
+            info: WorldJsonContext.Default.WorldCreation,
+            toMutation: static creation => new WorldMutation.UpsertCreation(Principal: WorldPrincipal.Console, Creation: creation)
+        );
+        yield return Simulation(
+            name: "world.creation.remove",
+            description: "Removes a creation asset row by id: world.creation.remove <id>. Rejected loudly while live placements still reference it (no cascade — remove them first).",
+            handler: (context, args) => {
+                if (args.Length != 1) {
+                    return Usage(verb: "world.creation.remove", form: "<id>");
+                }
+
+                return Submit(mutation: new WorldMutation.RemoveCreation(Principal: WorldPrincipal.Console, Id: args[0]));
+            }
+        );
+        yield return Row(
+            name: "world.placement.set",
+            description: "Upserts a placement INSTANCE row (whole-row, keyed by id) from one inline-JSON WorldPlacement {id, creationId, position, yawDegrees, scale, repeat?, mirror?, role?}: world.placement.set <json>. Must name an existing creation row; capacity-checked against the probed render envelope; a framed creation replays its timeline (repeat/mirror are static-only).",
+            info: WorldJsonContext.Default.WorldPlacement,
+            toMutation: static placement => new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.Console, Placement: placement)
+        );
+        yield return Simulation(
+            name: "world.placement.remove",
+            description: "Removes a placement row by id: world.placement.remove <id>.",
+            handler: (context, args) => {
+                if (args.Length != 1) {
+                    return Usage(verb: "world.placement.remove", form: "<id>");
+                }
+
+                return Submit(mutation: new WorldMutation.RemovePlacement(Principal: WorldPrincipal.Console, Id: args[0]));
+            }
+        );
         yield return Simulation(
             name: "world.load",
             description: "Loads a world file through the Phase 1 loader and submits it as a whole-document swap (validate → swap → derived rebuild → journal RESET): world.load <path>. A missing/invalid file echoes a loud line and swaps nothing.",
@@ -298,7 +332,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var dirty = server.JournalLength;
                 var drift = WorldSessionCapture.DescribeDrift(definition: definition, render: renderSettings, population: server.Population, binder: screenBinder);
 
-                return new CommandResult(Output: $"[world.status: source {source} schema {definition.Schema} kits {definition.Kits.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} session-drift {drift} dirty {dirty} undoable {dirty}]");
+                return new CommandResult(Output: $"[world.status: source {source} schema {definition.Schema} kits {definition.Kits.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} session-drift {drift} dirty {dirty} undoable {dirty}]");
             }
         );
     }

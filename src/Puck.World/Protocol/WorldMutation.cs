@@ -121,4 +121,30 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The overlay id to remove.</param>
     internal sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Upserts a creation ASSET row addressed by <see cref="WorldCreation.Id"/> (§D6). The compose boundary
+    /// canonicalizes the row's document (UIE-6: doc + hash from the SAME <see cref="Puck.Authoring.CanonicalCreation"/>)
+    /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
+    /// compute is never accepted.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Creation">The whole creation row.</param>
+    internal sealed record UpsertCreation(WorldPrincipal Principal, WorldCreation Creation) : WorldMutation(Principal);
+
+    /// <summary>Removes the creation row with id <paramref name="Id"/>. Rejected loudly when no row declares that id
+    /// OR when live placements still reference it (the conservative no-cascade ruling — remove the placements first).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The creation id to remove.</param>
+    internal sealed record RemoveCreation(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+
+    /// <summary>Upserts a placement INSTANCE row addressed by <see cref="WorldPlacement.Id"/> (§D6). Rejected loudly
+    /// when it names no creation row, violates the placement policy envelope, or would exceed the probed render
+    /// envelope (the capacity-honesty contract).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Placement">The whole placement row.</param>
+    internal sealed record UpsertPlacement(WorldPrincipal Principal, WorldPlacement Placement) : WorldMutation(Principal);
+
+    /// <summary>Removes the placement row with id <paramref name="Id"/>. Rejected if no row declares that id.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The placement id to remove.</param>
+    internal sealed record RemovePlacement(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
 }

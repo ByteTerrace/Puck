@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Authoring;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.Scene;
@@ -542,6 +543,61 @@ internal sealed record WorldScene(
 }
 
 /// <summary>
+/// One creation ASSET row (§D6) — a whole <c>puck.creation.v1</c> document embedded INLINE-CANONICAL in the world
+/// file with its identity hash pinned beside it. The document and hash MUST come from the SAME
+/// <see cref="Puck.Authoring.CanonicalCreation"/> (the UIE-6 contract): the compose boundary canonicalizes on upsert
+/// and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a
+/// tampered world file rejects loudly. World files stay self-contained — the CAS is an authoring-time import/export
+/// cache, never a load-time dependency.
+/// </summary>
+/// <param name="Id">The row's stable string id — its mutation address and the handle placements reference.</param>
+/// <param name="Document">The canonical (validated + normalized) creation document.</param>
+/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Authoring.CanonicalCreation.Hash"/>).</param>
+internal sealed record WorldCreation(string Id, CreationDocument Document, string Hash);
+
+/// <summary>A placement's repeat facet — a row of copies IS a repeat (the Demo placement vocabulary, adopted): the
+/// stamp replays on a placement-local X/Z lattice. A row longer than <see cref="WorldPlacementPolicy.MaxRepeatPerSegment"/>
+/// on an axis auto-splits into several emitted segments so each instance bound stays tight.</summary>
+/// <param name="SpacingX">The per-copy spacing along the placement's local X.</param>
+/// <param name="SpacingZ">The per-copy spacing along the placement's local Z.</param>
+/// <param name="CountX">The copy count along X (1 = no repeat on the axis).</param>
+/// <param name="CountZ">The copy count along Z.</param>
+internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int CountX, int CountZ) {
+    /// <summary>The total copy count across both axes.</summary>
+    public int TotalCount => (Math.Max(val1: CountX, val2: 1) * Math.Max(val1: CountZ, val2: 1));
+}
+
+/// <summary>
+/// One placement INSTANCE row (§D6) — a creation asset stamped into the world by reference: transform + facets as
+/// data, addressed by its stable <paramref name="Id"/>. A placement whose creation carries timeline frames is
+/// ANIMATED: it replays client-side on the render clock through the reserved dynamic-transform pool (repeat/mirror
+/// facets are static-stamp-only and reject on an animated row). The Demo vocabulary's wallpaper-pattern facet and
+/// cabinet role strings are deliberately NOT adopted (see the P5 report); <paramref name="Role"/> is the reserved
+/// nullable seam the future driven-body rung lands in without schema surgery.
+/// </summary>
+/// <param name="Id">The row's stable string id (its mutation address).</param>
+/// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve; removal of a referenced
+/// creation rejects loudly).</param>
+/// <param name="Position">The stamp position, world space.</param>
+/// <param name="YawDegrees">The stamp yaw about +Y, degrees.</param>
+/// <param name="Scale">The uniform stamp scale (clamped to the placement policy envelope by validation).</param>
+/// <param name="Repeat">The repeat facet, or <see langword="null"/> for a single copy.</param>
+/// <param name="Mirror">The symmetry fold axis (<c>x</c> or <c>z</c> in the placement's local frame), or
+/// <see langword="null"/> for none.</param>
+/// <param name="Role">RESERVED for the driven-body rung (null = decoration). Carried, validated as free text, unused
+/// this arc.</param>
+internal sealed record WorldPlacement(
+    string Id,
+    string CreationId,
+    Vector3 Position,
+    float YawDegrees,
+    float Scale,
+    WorldPlacementRepeat? Repeat = null,
+    string? Mirror = null,
+    string? Role = null
+);
+
+/// <summary>
 /// The signal carried by a <see cref="WorldScreen"/>'s lit face. A source declares which provider feeds a slot; the
 /// engine resolves and samples it. The <c>$type</c> string is the JSON discriminator (the
 /// <see cref="Puck.Scene.ScreenSourceProvider"/> precedent); a new source kind is a new derived record plus its
@@ -904,6 +960,10 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// each seat's profile bindings (§2.4).</param>
 /// <param name="Storage">The storage host-section defaults (§2.5.5) — the reserved per-user cloud endpoint and explicit
 /// user-id override, authored as data.</param>
+/// <param name="Creations">The creation ASSET rows (§D6, default empty) — whole <c>puck.creation.v1</c> documents
+/// embedded inline-canonical with their identity hashes pinned (see <see cref="WorldCreation"/>).</param>
+/// <param name="Placements">The placement INSTANCE rows (§D6, default empty) — creations stamped by reference (see
+/// <see cref="WorldPlacement"/>).</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -918,7 +978,9 @@ internal sealed record WorldDefinition(
     WorldKitAssignment Assignment,
     IReadOnlyList<WorldAddonRow> Addons,
     IReadOnlyList<WorldBindingOverlay> BindingOverlays,
-    WorldStorageDefaults Storage
+    WorldStorageDefaults Storage,
+    IReadOnlyList<WorldCreation> Creations,
+    IReadOnlyList<WorldPlacement> Placements
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1119,6 +1181,10 @@ internal sealed record WorldDefinition(
         BindingOverlays: [],
         // Storage host-section defaults: no cloud endpoint, no explicit user-id — cloud unwired, identity declined,
         // local-only. A deployment authors these (or passes --storage-uri / --user-id) to reserve the per-user seam.
-        Storage: WorldStorageDefaults.None
+        Storage: WorldStorageDefaults.None,
+        // No creation assets or placements in the built-in world — the editor stamps them live (editor.import /
+        // editor.place) and world.save persists them.
+        Creations: [],
+        Placements: []
     );
 }

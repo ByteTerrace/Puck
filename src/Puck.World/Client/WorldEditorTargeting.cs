@@ -92,6 +92,19 @@ internal sealed class WorldEditorTargeting {
         return false;
     }
 
+    /// <summary>Whether any editing seat currently selects the placement with this id — the render-tint query
+    /// (the placement twin of <see cref="IsSceneRowSelected"/>).</summary>
+    /// <param name="id">The placement id.</param>
+    public bool IsPlacementSelected(string id) {
+        foreach (var selection in m_selected) {
+            if (selection is { Section: WorldSection.Placements } selected && string.Equals(a: selected.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>The selected row's authored position, resolved from the LIVE definition — the orbit pivot and the
     /// numeric-verb base. An anchored camera resolves approximately (anchor render pose + raw offset).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
@@ -277,6 +290,14 @@ internal sealed class WorldEditorTargeting {
                 foreach (var spawn in definition.SpawnPoints) {
                     if (string.Equals(a: spawn.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
                         return spawn.Position;
+                    }
+                }
+
+                return null;
+            case WorldSection.Placements:
+                foreach (var placement in definition.Placements) {
+                    if (string.Equals(a: placement.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
+                        return placement.Position;
                     }
                 }
 

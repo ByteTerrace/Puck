@@ -210,6 +210,11 @@ services.AddSingleton(implementationFactory: static sp => {
 });
 services.AddSingleton<ICommandModule, EditorCommandModule>();
 services.AddSingleton<ICommandModule, EditorSelectionCommandModule>();
+// The creation-asset surface (§D6/P5): editor.import/creations/creation.next|prev/spawn.creation — the place page's
+// place-by-name twins. The animated-placement replay pool sits immediately after the avatar catalog's frozen
+// dynamic-transform capacity (the slot-base contract the frame source's capacity arithmetic mirrors).
+services.AddSingleton<ICommandModule, EditorCreationCommandModule>();
+services.AddSingleton(implementationInstance: new WorldPlacementAnimator(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
 
 // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
 // activates — the one body system the snapshot reports (up to 128 avatars: the scale target).
@@ -408,7 +413,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
         editor: sp.GetRequiredService<WorldEditorSession>(),
         targeting: sp.GetRequiredService<WorldEditorTargeting>(),
-        drag: sp.GetRequiredService<WorldEditorDrag>()
+        drag: sp.GetRequiredService<WorldEditorDrag>(),
+        animator: sp.GetRequiredService<WorldPlacementAnimator>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a

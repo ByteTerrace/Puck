@@ -35,10 +35,12 @@ internal sealed class WorldEditorDrag {
         public int FreezeFrames;
         public WorldSceneRow? SceneRow;
         public WorldScreen? Screen;
+        public WorldPlacement? Placement;
         // The whole row the release-edge mutation submitted — the frozen preview's retirement correlator: an apply
         // delivers exactly this row (record equality); a rejection names it through NoteRejected.
         public WorldSceneRow? ExpectedRow;
         public WorldScreen? ExpectedScreen;
+        public WorldPlacement? ExpectedPlacement;
         public Vector3 Origin;
         public Vector3 Intent;
         public Vector3 Snapped;
@@ -135,7 +137,7 @@ internal sealed class WorldEditorDrag {
             return null;
         }
 
-        var subject = ((channel.SceneRow is { } row) ? $"scene '{row.Id}'" : $"screen {channel.Screen!.Index}");
+        var subject = Subject(channel: channel);
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
@@ -165,7 +167,7 @@ internal sealed class WorldEditorDrag {
             case WorldSection.Scene:
                 foreach (var row in definition.Scene.Rows) {
                     if (string.Equals(a: row.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
-                        Begin(channel: channel, sceneRow: row, screen: null, origin: row.Center, isGhost: false);
+                        Begin(channel: channel, sceneRow: row, screen: null, placement: null, origin: row.Center, isGhost: false);
 
                         return true;
                     }
@@ -177,7 +179,7 @@ internal sealed class WorldEditorDrag {
             case WorldSection.Screens:
                 foreach (var screen in definition.Screens) {
                     if (screen.Index == selection.Index) {
-                        Begin(channel: channel, sceneRow: null, screen: screen, origin: screen.Origin, isGhost: false);
+                        Begin(channel: channel, sceneRow: null, screen: screen, placement: null, origin: screen.Origin, isGhost: false);
 
                         return true;
                     }
@@ -186,11 +188,57 @@ internal sealed class WorldEditorDrag {
                 error = $"no screen {selection.Index} to grab";
 
                 return false;
+            case WorldSection.Placements:
+                foreach (var placement in definition.Placements) {
+                    if (string.Equals(a: placement.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
+                        Begin(channel: channel, sceneRow: null, screen: null, placement: placement, origin: placement.Position, isGhost: false);
+
+                        return true;
+                    }
+                }
+
+                error = $"no placement '{selection.Id}' to grab";
+
+                return false;
             default:
                 error = $"{selection.Describe()} does not drag — move it with editor.move/editor.nudge";
 
                 return false;
         }
+    }
+
+    /// <summary>Begins a GHOST drag for a brand-new placement (the stamp act): the creation previews through the
+    /// overlay's composed rows and enters the document only on release. Headroom is verified here against the probed
+    /// envelope, so a ghost never renders past it.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="placement">The new placement row (its id must be free; see <see cref="NextFreePlacementId"/>).</param>
+    /// <param name="error">The loud reason, when the method returns <see langword="false"/>.</param>
+    public bool TrySpawnPlacementGhost(int slot, WorldPlacement placement, out string error) {
+        error = string.Empty;
+
+        var channel = m_channels[SlotOrFirst(slot: slot)];
+
+        if (channel.Active) {
+            error = "a drag is already live — release or cancel it first";
+
+            return false;
+        }
+
+        var definition = m_client.Definition;
+        var rows = new List<WorldPlacement>(capacity: (definition.Placements.Count + 1));
+
+        rows.AddRange(collection: definition.Placements);
+        rows.Add(item: placement);
+
+        if (!m_envelope.TryFit(candidate: (definition with { Placements = rows }), reason: out var capacityReason)) {
+            error = capacityReason;
+
+            return false;
+        }
+
+        Begin(channel: channel, sceneRow: null, screen: null, placement: placement, origin: placement.Position, isGhost: true);
+
+        return true;
     }
 
     /// <summary>Begins a GHOST drag for a brand-new scene row (the spawn act): the row previews through the overlay
@@ -212,13 +260,13 @@ internal sealed class WorldEditorDrag {
 
         var definition = m_client.Definition;
 
-        if (!m_envelope.TryFit(scene: WithRow(scene: definition.Scene, row: row), screens: definition.Screens, reason: out var capacityReason)) {
+        if (!m_envelope.TryFit(candidate: (definition with { Scene = WithRow(scene: definition.Scene, row: row) }), reason: out var capacityReason)) {
             error = capacityReason;
 
             return false;
         }
 
-        Begin(channel: channel, sceneRow: row, screen: null, origin: row.Center, isGhost: true);
+        Begin(channel: channel, sceneRow: row, screen: null, placement: null, origin: row.Center, isGhost: true);
 
         return true;
     }
@@ -287,6 +335,12 @@ internal sealed class WorldEditorDrag {
             m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSceneRow(Principal: principal, Row: moved));
             channel.ExpectedRow = moved;
             subject = $"scene '{row.Id}'";
+        } else if (channel.Placement is { } placement) {
+            var moved = (placement with { Position = channel.Snapped });
+
+            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertPlacement(Principal: principal, Placement: moved));
+            channel.ExpectedPlacement = moved;
+            subject = $"placement '{placement.Id}'";
         } else {
             var screen = channel.Screen!;
             var moved = (screen with { Origin = channel.Snapped });
@@ -319,7 +373,7 @@ internal sealed class WorldEditorDrag {
         }
 
         var channel = m_channels[slot];
-        var subject = ((channel.SceneRow is { } row) ? $"scene '{row.Id}'" : $"screen {channel.Screen!.Index}");
+        var subject = Subject(channel: channel);
         var wasGhost = channel.IsGhost;
 
         Clear(channel: channel);
@@ -398,6 +452,7 @@ internal sealed class WorldEditorDrag {
         var matches = (mutation switch {
             WorldMutation.UpsertSceneRow upsert => ((channel.ExpectedRow is { } expected) && expected.Equals(other: upsert.Row)),
             WorldMutation.UpsertScreen upsert => ((channel.ExpectedScreen is { } expected) && expected.Equals(other: upsert.Screen)),
+            WorldMutation.UpsertPlacement upsert => ((channel.ExpectedPlacement is { } expected) && expected.Equals(other: upsert.Placement)),
             _ => false,
         });
 
@@ -420,6 +475,16 @@ internal sealed class WorldEditorDrag {
             return false;
         }
 
+        if (channel.ExpectedPlacement is { } expectedPlacement) {
+            foreach (var placement in definition.Placements) {
+                if (placement.Equals(other: expectedPlacement)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         if (channel.ExpectedScreen is { } expectedScreen) {
             foreach (var screen in definition.Screens) {
                 if (screen.Equals(other: expectedScreen)) {
@@ -431,12 +496,15 @@ internal sealed class WorldEditorDrag {
         return false;
     }
 
+    // The channel's console-echo subject: the scene row, placement, or screen it carries.
+    private static string Subject(Channel channel) => ((channel.SceneRow is { } row)
+        ? $"scene '{row.Id}'"
+        : ((channel.Placement is { } placement) ? $"placement '{placement.Id}'" : $"screen {channel.Screen!.Index}"));
+
     // Retire a frozen overlay with its honest reason narrated once (act-scale, never per frame) — the proof's
     // observable retire edge.
     private void Retire(int slot, Channel channel, string reason) {
-        var subject = ((channel.SceneRow is { } row) ? $"scene '{row.Id}'" : $"screen {channel.Screen!.Index}");
-
-        Console.Error.WriteLine(value: $"[editor.drag] seat {PlayerRoster.DisplayNumber(slot: slot)} frozen {subject} retired: {reason}");
+        Console.Error.WriteLine(value: $"[editor.drag] seat {PlayerRoster.DisplayNumber(slot: slot)} frozen {Subject(channel: channel)} retired: {reason}");
         Clear(channel: channel);
     }
 
@@ -499,6 +567,63 @@ internal sealed class WorldEditorDrag {
         return (screens ?? live);
     }
 
+    /// <summary>Composes the pending placement rows over the live placements (see <see cref="ComposeScene"/>).</summary>
+    /// <param name="live">The delivered definition's placements.</param>
+    public IReadOnlyList<WorldPlacement> ComposePlacements(IReadOnlyList<WorldPlacement> live) {
+        List<WorldPlacement>? rows = null;
+
+        foreach (var channel in m_channels) {
+            if ((!channel.Active && !channel.Frozen) || (channel.Placement is not { } pending)) {
+                continue;
+            }
+
+            rows ??= [.. live];
+
+            var moved = (pending with { Position = channel.Snapped });
+            var replaced = false;
+
+            for (var index = 0; (index < rows.Count); index++) {
+                if (string.Equals(a: rows[index].Id, b: moved.Id, comparisonType: StringComparison.Ordinal)) {
+                    rows[index] = moved;
+                    replaced = true;
+
+                    break;
+                }
+            }
+
+            if (!replaced) {
+                rows.Add(item: moved);
+            }
+        }
+
+        return (rows ?? live);
+    }
+
+    /// <summary>The next free placement id (the <c>place-</c> prefix), scanning the live rows, every pending ghost,
+    /// and the session's issuance watermark — the placement twin of <see cref="NextFreeSceneRowId"/>.</summary>
+    public string NextFreePlacementId() {
+        const string prefix = "place-";
+        var next = 1;
+
+        foreach (var placement in m_client.Definition.Placements) {
+            BumpPast(id: placement.Id, prefix: prefix, next: ref next);
+        }
+
+        foreach (var channel in m_channels) {
+            if ((channel.Active || channel.Frozen) && (channel.Placement is { } pending)) {
+                BumpPast(id: pending.Id, prefix: prefix, next: ref next);
+            }
+        }
+
+        if (m_idWatermarks.TryGetValue(key: prefix, value: out var issued) && (issued >= next)) {
+            next = (issued + 1);
+        }
+
+        m_idWatermarks[prefix] = next;
+
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{prefix}{next}");
+    }
+
     /// <summary>The next free scene-row id under a kind prefix (<c>boulder-</c>/<c>slab-</c>), scanning the live rows,
     /// every pending ghost, and the session's issuance watermark (so placements buffered into the same tick window
     /// never collide).</summary>
@@ -533,14 +658,16 @@ internal sealed class WorldEditorDrag {
         }
     }
 
-    private void Begin(Channel channel, WorldSceneRow? sceneRow, WorldScreen? screen, Vector3 origin, bool isGhost) {
+    private void Begin(Channel channel, WorldSceneRow? sceneRow, WorldScreen? screen, WorldPlacement? placement, Vector3 origin, bool isGhost) {
         channel.Active = true;
         channel.Frozen = false;
         channel.IsGhost = isGhost;
         channel.SceneRow = sceneRow;
         channel.Screen = screen;
+        channel.Placement = placement;
         channel.ExpectedRow = null;
         channel.ExpectedScreen = null;
+        channel.ExpectedPlacement = null;
         channel.Origin = origin;
         channel.Intent = origin;
         channel.Snapped = origin;
@@ -553,8 +680,10 @@ internal sealed class WorldEditorDrag {
         channel.IsGhost = false;
         channel.SceneRow = null;
         channel.Screen = null;
+        channel.Placement = null;
         channel.ExpectedRow = null;
         channel.ExpectedScreen = null;
+        channel.ExpectedPlacement = null;
         m_revision++;
     }
 

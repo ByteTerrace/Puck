@@ -423,7 +423,7 @@ internal sealed class WorldServer {
             return false;
         }
 
-        if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(scene: candidate.Scene, screens: candidate.Screens, reason: out var capacityReason)) {
+        if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(candidate: candidate, reason: out var capacityReason)) {
             Reject(mutation: mutation, reason: capacityReason);
 
             return false;
@@ -460,7 +460,7 @@ internal sealed class WorldServer {
             return false;
         }
 
-        if (!m_envelope.TryFit(scene: definition.Scene, screens: definition.Screens, reason: out var capacityReason)) {
+        if (!m_envelope.TryFit(candidate: definition, reason: out var capacityReason)) {
             Console.Error.WriteLine(value: $"[world.definition rejected: {capacityReason}]");
 
             return false;
@@ -546,10 +546,13 @@ internal sealed class WorldServer {
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns;
 
-    // Whether a mutation can grow the SDF program past the probed render envelope (scene rows / screen slabs).
+    // Whether a mutation can grow the SDF program past the probed render envelope (scene rows / screen slabs /
+    // creation stamps — an UpsertCreation re-shapes every live placement of it, so it measures too).
     private static bool AffectsRenderEnvelope(WorldMutation mutation) => mutation is
         WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or
-        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen;
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
 
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
     // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
@@ -565,6 +568,8 @@ internal sealed class WorldServer {
         WorldMutation.SetRenderDefaults => WorldSection.Render,
         WorldMutation.UpsertAddon or WorldMutation.RemoveAddon => WorldSection.Addons,
         WorldMutation.UpsertBindingOverlay or WorldMutation.RemoveBindingOverlay => WorldSection.Bindings,
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation => WorldSection.Creations,
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement => WorldSection.Placements,
         _ => WorldSection.Kits,
     };
 
@@ -590,6 +595,10 @@ internal sealed class WorldServer {
         WorldMutation.RemoveAddon m => $"RemoveAddon '{m.Name}'",
         WorldMutation.UpsertBindingOverlay m => $"UpsertBindingOverlay '{m.Overlay.Id}'",
         WorldMutation.RemoveBindingOverlay m => $"RemoveBindingOverlay '{m.Id}'",
+        WorldMutation.UpsertCreation m => $"UpsertCreation '{m.Creation.Id}'",
+        WorldMutation.RemoveCreation m => $"RemoveCreation '{m.Id}'",
+        WorldMutation.UpsertPlacement m => $"UpsertPlacement '{m.Placement.Id}'",
+        WorldMutation.RemovePlacement m => $"RemovePlacement '{m.Id}'",
         _ => "unknown",
     };
 
@@ -704,6 +713,76 @@ internal sealed class WorldServer {
                 }
 
                 candidate = (current with { Addons = addons });
+
+                return true;
+            case WorldMutation.UpsertCreation m: {
+                // The UIE-6 hash contract at the compose boundary: canonicalize (validate + normalize + hash) the
+                // carried document, REJECT a hash the pipeline did not itself compute, and store the canonical pair —
+                // so a stored row's doc and hash always come from the SAME CanonicalCreation.
+                Puck.Authoring.CanonicalCreation canonical;
+
+                try {
+                    canonical = Puck.Authoring.CreationCanonicalizer.Canonicalize(document: m.Creation.Document, source: m.Creation.Id);
+                } catch (Puck.Authoring.CreationValidationException exception) {
+                    candidate = current;
+                    reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+                    return false;
+                }
+
+                if (!string.Equals(a: m.Creation.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                    candidate = current;
+                    reason = $"creation '{m.Creation.Id}' hash '{m.Creation.Hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+                    return false;
+                }
+
+                candidate = (current with { Creations = Upsert(list: current.Creations, item: (m.Creation with { Document = canonical.Document }), keyOf: static creation => creation.Id) });
+
+                return true;
+            }
+            case WorldMutation.RemoveCreation m: {
+                // The conservative no-cascade ruling: a creation with live placements rejects loudly rather than
+                // silently unstamping the world (remove the placements first; undo replay stays order-honest).
+                var referencing = 0;
+
+                foreach (var placement in current.Placements) {
+                    if (string.Equals(a: placement.CreationId, b: m.Id, comparisonType: StringComparison.Ordinal)) {
+                        referencing++;
+                    }
+                }
+
+                if (referencing > 0) {
+                    candidate = current;
+                    reason = $"creation '{m.Id}' has {referencing} live placement(s) — remove them first";
+
+                    return false;
+                }
+
+                if (!Remove(list: current.Creations, key: m.Id, keyOf: static creation => creation.Id, result: out var creations)) {
+                    candidate = current;
+                    reason = $"no creation with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Creations = creations });
+
+                return true;
+            }
+            case WorldMutation.UpsertPlacement m:
+                candidate = (current with { Placements = Upsert(list: current.Placements, item: m.Placement, keyOf: static placement => placement.Id) });
+
+                return true;
+            case WorldMutation.RemovePlacement m:
+                if (!Remove(list: current.Placements, key: m.Id, keyOf: static placement => placement.Id, result: out var placements)) {
+                    candidate = current;
+                    reason = $"no placement with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Placements = placements });
 
                 return true;
             case WorldMutation.UpsertBindingOverlay m:

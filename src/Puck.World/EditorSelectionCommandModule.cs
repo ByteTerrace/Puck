@@ -61,7 +61,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "editor.select",
-            description: "Selects a document row explicitly: editor.select <scene|screens|spawns|cameras> <id-or-index> [seat]. Screens key by engine index; every other section by its stable string id. Selection is client state (never protocol); the selected scene row tints in the render.",
+            description: "Selects a document row explicitly: editor.select <scene|screens|spawns|cameras|placements> <id-or-index> [seat]. Screens key by engine index; every other section by its stable string id. Selection is client state (never protocol); the selected scene row or placement tints in the render.",
             handler: SelectHandler
         );
         yield return CommandDefinition.WithTrailingArgs(
@@ -126,7 +126,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "editor.place",
-            description: "Places a NEW scene row at the editor focus point as one mutation (the immediate typed twin of the spawn-ghost chords): editor.place boulder [radius [smooth]] | slab [hx hy hz]. Acts for seat 1 when typed; ids allocate as boulder-N/slab-N.",
+            description: "Places a NEW row at the editor focus point as one mutation (the immediate typed twin of the spawn-ghost chords): editor.place boulder [radius [smooth]] | slab [hx hy hz] | <creationId> [yawDeg [scale]]. A creation id stamps a placement of that world creation row (place-by-name — see editor.creations / editor.import); ids allocate as boulder-N/slab-N/place-N. Acts for seat 1 when typed.",
             handler: PlaceHandler,
             routing: CommandRouting.Simulation
         );
@@ -259,6 +259,10 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
                 break;
             case WorldSection.Cameras:
                 m_link.SubmitWorldMutation(mutation: new WorldMutation.RemoveCamera(Principal: principal, Name: selection.Id));
+
+                break;
+            case WorldSection.Placements:
+                m_link.SubmitWorldMutation(mutation: new WorldMutation.RemovePlacement(Principal: principal, Id: selection.Id));
 
                 break;
             case WorldSection.Spawns: {
@@ -440,6 +444,17 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
                 }
 
                 break;
+            case WorldSection.Placements:
+                foreach (var placement in definition.Placements) {
+                    if (string.Equals(a: placement.Id, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
+                        target = (relative ? (placement.Position + value) : value);
+                        m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertPlacement(Principal: principal, Placement: (placement with { Position = target })));
+
+                        return true;
+                    }
+                }
+
+                break;
             case WorldSection.Spawns: {
                 var spawns = new List<WorldSpawnPoint>(capacity: definition.SpawnPoints.Count);
                 var found = false;
@@ -497,7 +512,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
 
     private CommandResult PlaceHandler(CommandContext context, string[] args) {
         if (args.Length == 0) {
-            return Error(text: "[editor.place: expected boulder [radius [smooth]] | slab [hx hy hz]]");
+            return Error(text: "[editor.place: expected boulder [radius [smooth]] | slab [hx hy hz] | <creationId> [yawDeg [scale]]]");
         }
 
         var slot = ((context.Parse is null) ? context.Slot : 0);
@@ -506,7 +521,14 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
             return guard;
         }
 
-        var row = BuildRow(args: args, focus: m_session.Focus(slot: slot), reason: out var reason);
+        var focus = m_session.Focus(slot: slot);
+
+        // Place-by-name: a first token naming a world creation row stamps a placement of it (the §D6 instance act).
+        if (args[0].ToUpperInvariant() is not ("BOULDER" or "SLAB")) {
+            return PlaceCreation(slot: slot, args: args, focus: focus);
+        }
+
+        var row = BuildRow(args: args, focus: focus, reason: out var reason);
 
         if (row is null) {
             return Error(text: $"[editor.place: {reason}]");
@@ -518,6 +540,50 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
             provider: CultureInfo.InvariantCulture,
             handler: $"scene '{row.Id}' at ({row.Center.X:0.00}, {row.Center.Y:0.00}, {row.Center.Z:0.00}) — one mutation submitted"
         ));
+    }
+
+    // The creation stamp: editor.place <creationId> [yawDeg [scale]] — an immediate whole-row UpsertPlacement at the
+    // editor focus point (the ghost/drag flow is editor.spawn.creation on the place page).
+    private CommandResult PlaceCreation(int slot, string[] args, Vector3 focus) {
+        if (FindCreation(client: m_client, id: args[0]) is null) {
+            return Error(text: $"[editor.place: unknown kind '{args[0]}' — boulder|slab, or a creation id (see editor.creations)]");
+        }
+
+        var yaw = 0f;
+        var scale = 1f;
+
+        if ((args.Length >= 2) && !TryFloat(token: args[1], value: out yaw)) {
+            return Error(text: $"[editor.place: bad yawDeg '{args[1]}']");
+        }
+
+        if ((args.Length >= 3) && !TryFloat(token: args[2], value: out scale)) {
+            return Error(text: $"[editor.place: bad scale '{args[2]}']");
+        }
+
+        var placement = new WorldPlacement(
+            Id: m_drag.NextFreePlacementId(),
+            CreationId: args[0],
+            Position: focus,
+            YawDegrees: yaw,
+            Scale: scale
+        );
+
+        m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.Seat(slot: slot), Placement: placement));
+
+        return Echo(slot: slot, verb: "editor.place", detail: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"placement '{placement.Id}' of '{placement.CreationId}' at ({focus.X:0.00}, {focus.Y:0.00}, {focus.Z:0.00}) — one mutation submitted"
+        ));
+    }
+
+    private static WorldCreation? FindCreation(WorldClient client, string id) {
+        foreach (var creation in client.Definition.Creations) {
+            if (string.Equals(a: creation.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return creation;
+            }
+        }
+
+        return null;
     }
 
     // Parse the place shape: `boulder [radius [smooth]]` or `slab [hx hy hz]`, defaults per the constants above.
@@ -666,6 +732,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         "SCREENS" => WorldSection.Screens,
         "SPAWNS" => WorldSection.Spawns,
         "CAMERAS" => WorldSection.Cameras,
+        "PLACEMENTS" => WorldSection.Placements,
         _ => null,
     };
 

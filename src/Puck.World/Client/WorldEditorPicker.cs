@@ -130,6 +130,24 @@ internal sealed class WorldEditorPicker {
             targets.Add(item: new EditorPickTarget(Section: WorldSection.Screens, Id: string.Empty, Index: screen.Index, Focus: screen.Origin));
         }
 
+        // Placements pick by a reach-sized proxy sphere at the stamp's position — the creation's own geometry would
+        // demand a per-shape replay in fixed point for little gain; the proxy covers the stamp's core mass.
+        foreach (var placement in definition.Placements) {
+            if (WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
+                continue;
+            }
+
+            var radius = MathF.Max(x: (Puck.Authoring.CreationGeometry.Reach(document: creation.Document) * (placement.Scale * 0.5f)), y: 0.35f);
+
+            AddProxy(
+                builder: builder,
+                targets: targets,
+                target: new EditorPickTarget(Section: WorldSection.Placements, Id: placement.Id, Index: -1, Focus: placement.Position),
+                center: (placement.Position + new Vector3(x: 0f, y: radius, z: 0f)),
+                radius: radius
+            );
+        }
+
         foreach (var spawn in definition.SpawnPoints) {
             AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Spawns, Id: spawn.Id, Index: -1, Focus: spawn.Position), center: (spawn.Position + new Vector3(x: 0f, y: SpawnProxyRadius, z: 0f)), radius: SpawnProxyRadius);
         }

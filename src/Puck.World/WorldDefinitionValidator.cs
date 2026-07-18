@@ -85,6 +85,10 @@ internal static class WorldDefinitionValidator {
         ValidateBindingOverlays(overlays: definition.BindingOverlays, errors: errors);
         ValidateStorage(storage: definition.Storage, errors: errors);
 
+        var creationIds = ValidateCreations(creations: definition.Creations, errors: errors);
+
+        ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, errors: errors);
+
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (definition.Cameras is not { } authoredCameras) {
@@ -440,6 +444,153 @@ internal static class WorldDefinitionValidator {
         } catch (ArgumentException exception) {
             errors.Add(item: $"bindingOverlays do not compose into a valid mapping: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
+    }
+
+    // The creation ASSET rows (§D6): id presence/uniqueness, the document's own strict schema + structural invariants
+    // through CreationCanonicalizer (the ONE pipeline — never a re-implementation), the UIE-6 hash pin (the carried
+    // hash must equal the canonical hash — a tampered/corrupt row rejects loudly), and the per-stamp shape budget
+    // (word-exact ceiling). Returns the resolved id set for the placement gate.
+    private static HashSet<string> ValidateCreations(IReadOnlyList<WorldCreation> creations, List<string> errors) {
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (creations is null) {
+            errors.Add(item: "creations is required.");
+
+            return ids;
+        }
+
+        for (var index = 0; (index < creations.Count); index++) {
+            var creation = creations[index];
+            var path = $"creations[{index}]";
+
+            if (creation is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: creation.Id)) {
+                errors.Add(item: $"{path}.id is required.");
+            } else if (!ids.Add(item: creation.Id)) {
+                errors.Add(item: $"{path}.id '{creation.Id}' is duplicated.");
+            }
+
+            if (creation.Document is null) {
+                errors.Add(item: $"{path}.doc is required.");
+
+                continue;
+            }
+
+            var violations = Puck.Authoring.CreationCanonicalizer.Validate(document: creation.Document);
+
+            if (violations.Count > 0) {
+                foreach (var violation in violations) {
+                    errors.Add(item: $"{path}.doc.{violation.Path}: {violation.Message}");
+                }
+
+                continue;
+            }
+
+            // The hash pin: recompute through the ONE pipeline and compare — the only accepted hash is the one the
+            // pipeline itself computes over this document's canonical bytes.
+            var canonical = Puck.Authoring.CreationCanonicalizer.Canonicalize(document: creation.Document, source: creation.Id);
+
+            if (!string.Equals(a: creation.Hash, b: canonical.Hash, comparisonType: StringComparison.Ordinal)) {
+                errors.Add(item: $"{path}.hash '{creation.Hash}' does not match the canonical sha256 '{canonical.Hash}'.");
+            }
+
+            var stampShapes = creation.Document.StampShapeCount();
+
+            if (stampShapes > WorldPlacementPolicy.MaxShapesPerStamp) {
+                errors.Add(item: $"{path} stamps {stampShapes} shapes, exceeding the {WorldPlacementPolicy.MaxShapesPerStamp}-shape per-stamp budget.");
+            }
+        }
+
+        return ids;
+    }
+
+    // The placement INSTANCE rows (§D6): id presence/uniqueness, the creation reference, finite transform, the policy
+    // scale envelope, the repeat facet's positive counts / finite spacings, the mirror token, and the animated-row
+    // constraints (static-only facets; the reserved replay-pool ceiling, word-exact).
+    private static void ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, List<string> errors) {
+        if (placements is null) {
+            errors.Add(item: "placements is required.");
+
+            return;
+        }
+
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var animatedCount = 0;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+            var path = $"placements[{index}]";
+
+            if (placement is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: placement.Id)) {
+                errors.Add(item: $"{path}.id is required.");
+            } else if (!ids.Add(item: placement.Id)) {
+                errors.Add(item: $"{path}.id '{placement.Id}' is duplicated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: placement.CreationId) || !creationIds.Contains(item: placement.CreationId)) {
+                errors.Add(item: $"{path}.creationId '{placement.CreationId}' names no creation row.");
+            }
+
+            if (!IsFinite(value: placement.Position)) {
+                errors.Add(item: $"{path}.position must contain finite coordinates.");
+            }
+
+            RequireFinite(value: placement.YawDegrees, name: $"{path}.yawDegrees", errors: errors);
+
+            if (!float.IsFinite(f: placement.Scale) || (placement.Scale < WorldPlacementPolicy.MinScale) || (placement.Scale > WorldPlacementPolicy.MaxScale)) {
+                errors.Add(item: $"{path}.scale {placement.Scale} is outside {WorldPlacementPolicy.MinScale}..{WorldPlacementPolicy.MaxScale}.");
+            }
+
+            if (placement.Repeat is { } repeat) {
+                if ((repeat.CountX < 1) || (repeat.CountZ < 1)) {
+                    errors.Add(item: $"{path}.repeat counts must be at least 1.");
+                }
+
+                RequireFinite(value: repeat.SpacingX, name: $"{path}.repeat.spacingX", errors: errors);
+                RequireFinite(value: repeat.SpacingZ, name: $"{path}.repeat.spacingZ", errors: errors);
+            }
+
+            if ((placement.Mirror is { } mirror) &&
+                !string.Equals(a: mirror, b: "x", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(a: mirror, b: "z", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                errors.Add(item: $"{path}.mirror '{mirror}' must be 'x', 'z', or null.");
+            }
+
+            // The animated-row constraints: a placement of a framed creation replays through the reserved dynamic
+            // pool — single copy only (repeat/mirror are static-stamp facets), and at most the reserved pool count.
+            if (FindCreation(creations: creations, id: placement.CreationId) is { Document.Frames.Count: > 0 }) {
+                animatedCount++;
+
+                if ((placement.Repeat is not null) || (placement.Mirror is not null)) {
+                    errors.Add(item: $"{path} is ANIMATED (its creation carries timeline frames) — repeat/mirror facets are static-stamp-only.");
+                }
+            }
+        }
+
+        if (animatedCount > WorldPlacementPolicy.MaxAnimatedPlacements) {
+            errors.Add(item: $"{animatedCount} animated placements exceed the {WorldPlacementPolicy.MaxAnimatedPlacements}-slot replay pool.");
+        }
+    }
+
+    private static WorldCreation? FindCreation(IReadOnlyList<WorldCreation> creations, string id) {
+        foreach (var creation in (creations ?? [])) {
+            if ((creation is not null) && string.Equals(a: creation.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return creation;
+            }
+        }
+
+        return null;
     }
 
     // The storage host-section (§2.5.5, RESERVED): an endpoint must be an absolute URI when present; a user-id must be

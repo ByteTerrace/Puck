@@ -94,8 +94,10 @@ internal static class WorldEditorBindings {
                     Label: "Select"
                 )
             ),
-            // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap) and the two spawn ghosts.
-            // While a drag is live the sticks translate the pending row instead of flying (the session's routing).
+            // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap), the two scene spawn ghosts,
+            // and place-by-name — D-pad Left/Right cycle the armed world creation, North ghosts a placement of it
+            // (§D6/P5). While a drag is live the sticks translate the pending row instead of flying (the session's
+            // routing).
             new BindingChordDefinition(
                 Group: GroupId,
                 Chord: [WorldDefaultBindings.LeftTriggerModifierId, WorldDefaultBindings.RightTriggerModifierId],
@@ -104,10 +106,13 @@ internal static class WorldEditorBindings {
                     Entries: [
                         .. StickEntries(),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSelectionCommandModule.GrabCommand, label: "Grab", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorCreationCommandModule.SpawnCommand, label: "Stamp", icon: "edit.duplicate"),
                         Press(source: InputSources.Gamepad.ButtonEast, command: EditorSelectionCommandModule.CancelCommand, label: "Cancel", icon: "edit.deselect"),
                         Press(source: InputSources.Gamepad.ButtonWest, command: EditorSelectionCommandModule.SnapCommand, label: "Snap", icon: "edit.style"),
                         Press(source: InputSources.Gamepad.DpadUp, command: EditorSelectionCommandModule.SpawnBoulderCommand, label: "Boulder", icon: "edit.duplicate"),
                         Press(source: InputSources.Gamepad.DpadDown, command: EditorSelectionCommandModule.SpawnSlabCommand, label: "Slab", icon: "edit.duplicate"),
+                        Press(source: InputSources.Gamepad.DpadRight, command: EditorCreationCommandModule.NextCommand, label: "Creation+", icon: "edit.next"),
+                        Press(source: InputSources.Gamepad.DpadLeft, command: EditorCreationCommandModule.PrevCommand, label: "Creation-", icon: "edit.prev"),
                     ],
                     Label: "Place"
                 )

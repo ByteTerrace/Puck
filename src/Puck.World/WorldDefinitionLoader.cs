@@ -97,6 +97,8 @@ internal static class WorldDefinitionLoader {
             Addons = (definition.Addons ?? []),
             Assignment = assignment,
             BindingOverlays = (definition.BindingOverlays ?? []),
+            Creations = (definition.Creations ?? []),
+            Placements = (definition.Placements ?? []),
             Storage = (definition.Storage ?? WorldStorageDefaults.None),
         });
     }

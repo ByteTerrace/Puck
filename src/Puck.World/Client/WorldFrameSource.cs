@@ -27,6 +27,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <summary>The extra screen slots the probe reserves (same rationale: <c>UpsertScreen</c> of a NEW index must fit
     /// at runtime), bounded by the engine's screen-surface ceiling.</summary>
     internal const int AuthoringHeadroomScreens = 4;
+    // Placement headroom rides WorldPlacementPolicy.AuthoringHeadroomPlacements (the centralized placement policy);
+    // the probe reserves (boot placements + headroom) worst-case stamps plus the whole animated replay pool.
     // The change shimmer: rows a delivery changed pulse toward this cool cyan — mutation feedback, and the undo
     // spectacle (history flowing backward through the world). Distinct from the amber selection and the danger red.
     private static readonly Vector3 s_shimmerTint = new(x: 0.35f, y: 0.85f, z: 1.0f);
@@ -45,6 +47,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly WorldEditorTargeting m_targeting;
     private readonly WorldChangeShimmer m_shimmer = new();
     private readonly WorldEditorDrag m_drag;
+    // The animated-placement replay pool (§D6): reconciled at the delivery boundary, ticked on the render clock,
+    // packed after the avatar transforms every frame.
+    private readonly WorldPlacementAnimator m_animator;
     // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
     // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
     // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
@@ -54,7 +59,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // Per-frame scratch reused to keep CaptureFrame allocation-free: one transform per leaf in the frozen all-avatar
     // catalog, plus movement-driven gait state per avatar and the joined seats' views. Live programs address only the
     // active avatars' stable slot ranges; stale inactive slots are unreachable.
-    private readonly DynamicTransform[] m_transforms = new DynamicTransform[WorldAvatarCatalog.DynamicTransformCapacity];
+    private readonly DynamicTransform[] m_transforms = new DynamicTransform[(WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount)];
     private readonly float[] m_avatarGaitPhases = new float[WorldPopulation.MaxPopulation];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldPopulation.MaxPopulation];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldPopulation.MaxPopulation];
@@ -83,8 +88,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="editor">The per-seat editor mode (camera rig swap + the sole-editor layout policy).</param>
     /// <param name="targeting">The editor selection state (the render highlight + rebuild watch).</param>
     /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
+    /// <param name="animator">The animated-placement replay pool (§D6).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -94,6 +100,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: editor);
         ArgumentNullException.ThrowIfNull(argument: targeting);
         ArgumentNullException.ThrowIfNull(argument: drag);
+        ArgumentNullException.ThrowIfNull(argument: animator);
 
         m_frameRate = frameRate;
         m_client = client;
@@ -104,6 +111,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_editor = editor;
         m_targeting = targeting;
         m_drag = drag;
+        m_animator = animator;
         m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -114,35 +122,64 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
         m_client.UpdateRenderPoses(alpha: 0f);
 
-        var scene = m_client.Definition.Scene;
-        var screens = m_client.Definition.Screens;
+        var definition = m_client.Definition;
+
+        // A booted world may already stamp animated placements — register them before the first build so the initial
+        // program emits their live pool slots.
+        m_animator.Reconcile(placements: definition.Placements, creations: definition.Creations);
 
         // The envelope probe (never rendered): a worst-case all-128-avatars build over the boot scene/screens PLUS the
-        // documented authoring headroom, so a live editor can add rows/screens up to the reserved ceiling. Its
-        // word/instance counts become the spec's capacity floors; every active-only live rebuild fits by construction.
-        var probe = BuildWorld(client: client, scene: WithAuthoringHeadroom(scene: scene), screens: WithAuthoringHeadroom(screens: screens), probeWorstCase: true, highlight: null);
+        // documented authoring headroom (scene rows, screens, AND placement stamps — WorldPlacementPolicy), so a live
+        // editor can add rows up to the reserved ceilings. Its word/instance counts become the spec's capacity floors;
+        // every active-only live rebuild fits by construction.
+        var probe = Build(
+            scene: WithAuthoringHeadroom(scene: definition.Scene),
+            screens: WithAuthoringHeadroom(screens: definition.Screens),
+            placements: definition.Placements,
+            creations: definition.Creations,
+            probeWorstCase: true,
+            placementProbe: true,
+            highlight: null
+        );
 
         ProgramWordCapacity = probe.Words.Length;
         InstanceCapacity = probe.Instances.Count;
 
-        // Publish the probed envelope + a candidate measurer so a scene/screen mutation is capacity-checked at apply
-        // time against the SAME worst-case build (avatars are always at worst case; only scene/screens vary). The
-        // candidate measures RAW (no headroom), so authoring consumes the reserved room before rejection.
+        // Publish the probed envelope + a candidate measurer so a scene/screen/placement mutation is capacity-checked
+        // at apply time against the SAME worst-case build (avatars and the animated pool are always at worst case;
+        // scene/screens/static placements measure AS AUTHORED, so authoring consumes the reserved room before the
+        // loud rejection).
         envelope.Configure(
             programWordCapacity: ProgramWordCapacity,
             instanceCapacity: InstanceCapacity,
-            measure: (candidateScene, candidateScreens) => {
-                var candidate = BuildWorld(client: m_client, scene: candidateScene, screens: candidateScreens, probeWorstCase: true, highlight: null);
+            measure: candidate => {
+                var measured = Build(
+                    scene: candidate.Scene,
+                    screens: candidate.Screens,
+                    placements: candidate.Placements,
+                    creations: candidate.Creations,
+                    probeWorstCase: true,
+                    placementProbe: false,
+                    highlight: null
+                );
 
-                return (Words: candidate.Words.Length, Instances: candidate.Instances.Count);
+                return (Words: measured.Words.Length, Instances: measured.Instances.Count);
             }
         );
 
         m_builtRevision = RebuildRevision();
         m_builtDefinitionRevision = m_client.DefinitionRevision;
-        m_program = BuildWorld(client: client, scene: scene, screens: screens, probeWorstCase: false, highlight: m_targeting);
-        // The boot scene is the shimmer baseline — the first delivery pulses only what it actually changed.
-        m_shimmer.Observe(scene: scene, now: 0d);
+        m_program = Build(
+            scene: definition.Scene,
+            screens: definition.Screens,
+            placements: definition.Placements,
+            creations: definition.Creations,
+            probeWorstCase: false,
+            placementProbe: false,
+            highlight: m_targeting
+        );
+        // The boot scene + placements are the shimmer baseline — the first delivery pulses only what it changed.
+        m_shimmer.Observe(scene: definition.Scene, placements: definition.Placements, now: 0d);
     }
 
     /// <summary>The worst-case (all avatars active) program word count — the spec's <c>ProgramWordCapacity</c> floor.</summary>
@@ -151,8 +188,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <summary>The worst-case (all avatars active) instance count — the spec's <c>InstanceCapacity</c> floor.</summary>
     public int InstanceCapacity { get; }
 
-    /// <summary>The frozen transform-slot count for every leaf in the all-128 avatar catalog.</summary>
-    public int DynamicTransformCapacity => WorldAvatarCatalog.DynamicTransformCapacity;
+    /// <summary>The frozen transform-slot count: every leaf in the all-128 avatar catalog plus the reserved
+    /// animated-placement replay pool.</summary>
+    public int DynamicTransformCapacity => (WorldAvatarCatalog.DynamicTransformCapacity + WorldPlacementAnimator.DynamicSlotCount);
 
     /// <inheritdoc/>
     public void NotifyDeviceLost() => m_binder.NotifyDeviceLost();
@@ -175,6 +213,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // missing-response deadline — see WorldEditorDrag), so the revision read below already reflects any retirement.
         m_drag.Reconcile();
 
+        // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
+        // program itself never rebuilds for a timeline step).
+        m_animator.Tick(deltaSeconds: deltaSeconds);
+
         // A declared-set or palette change since the last frame (a seat join/leave/recolor or a simulated-count
         // change), a selection change (the highlight tint), or a drag-overlay move rebuilds the program and marks
         // ProgramChanged so the engine re-uploads it, always within the frozen capacities. The first frame also
@@ -194,7 +236,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             if (definitionRevision != m_builtDefinitionRevision) {
                 m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
                 m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
-                m_shimmer.Observe(scene: m_client.Definition.Scene, now: m_elapsedSeconds);
+                // The animated-placement pool reconciles at the same delivery boundary (the P4 template): cheap pose
+                // edits write in place, creation-content changes release + recreate, removals release (symmetric).
+                m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations);
+                m_shimmer.Observe(scene: m_client.Definition.Scene, placements: m_client.Definition.Placements, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;
             }
 
@@ -205,13 +250,14 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             // avatars and ~1.5-2.4 ms worst-of-60 at the 128-avatar ceiling (first-grab spike ~10 ms), with
             // presentation FPS pinned at 117.0 avg / >=114 worst throughout and GPU frame time unchanged. Verdict:
             // the full-rebuild path stays; a cheaper preview transform is not demanded by the evidence.
-            m_program = BuildWorld(
-                client: m_client,
+            m_program = Build(
                 scene: m_drag.ComposeScene(live: m_client.Definition.Scene),
                 screens: m_drag.ComposeScreens(live: m_client.Definition.Screens),
+                placements: m_drag.ComposePlacements(live: m_client.Definition.Placements),
+                creations: m_client.Definition.Creations,
                 probeWorstCase: false,
+                placementProbe: false,
                 highlight: m_targeting,
-                shimmer: m_shimmer,
                 shimmerNow: m_elapsedSeconds
             );
             m_builtRevision = revision;
@@ -279,6 +325,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 transforms: m_transforms
             );
         }
+
+        // The animated-placement pool packs after the avatar catalog (its reserved slots sit past the frozen avatar
+        // capacity); hidden slots park below the floor.
+        m_animator.PackTransforms(transforms: m_transforms);
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is null) {
@@ -423,6 +473,19 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // selection (highlight) and drag-overlay counters — all monotonic, so the sum only stalls when none has changed.
     private int RebuildRevision() => ((m_client.Revision + m_targeting.Revision) + m_drag.Revision);
 
+    // The STATIC stamp count of a placement set (animated rows ride the constant replay pool, not the stamp probe).
+    private static int CountStatic(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations) {
+        var count = 0;
+
+        foreach (var placement in placements) {
+            if ((WorldPlacementStamper.FindCreation(creations: creations, id: placement.CreationId) is { } creation) && !WorldPlacementStamper.IsAnimated(creation: creation)) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     // The boot scene padded with the documented authoring-headroom rows (worst-case slabs: per-row material + box) —
     // the probe-only shape that reserves live editing room in the capacity floors. Never validated, never rendered.
     private static WorldScene WithAuthoringHeadroom(WorldScene scene) {
@@ -480,15 +543,18 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         return padded;
     }
 
-    // The scene: a grass ground plane, then the scene rows (each smooth-unioned into the accumulated field), then
-    // the view's active avatars as leaf-level dynamic instances riding frozen catalog slots. Active-only, never
-    // declared-but-parked: the per-tile instance mask width derives from the program's total declared instance count
-    // (SdfProgram.InstanceMaskWordCount), so parked avatar declarations widen every shadow-gather pixel's mask walk.
-    // Instead the program is rebuilt on population change (the revision watch), and the 128-avatar worst case is held
-    // by the spec's capacity floors (ProgramWordCapacity / InstanceCapacity / DynamicTransformCapacity), probed at
-    // construction. Every avatar keeps its own body + accent material (cheap constant words), so a recolor is data,
-    // not a resize. Unions only, so the accumulator stays additive.
-    private static SdfProgram BuildWorld(WorldClient client, WorldScene scene, IReadOnlyList<WorldScreen> screens, bool probeWorstCase, WorldEditorTargeting? highlight, WorldChangeShimmer? shimmer = null, double shimmerNow = 0d) {
+    // The scene: a grass ground plane, then the scene rows (each smooth-unioned into the accumulated field), the
+    // static placement stamps + the animated replay pool, then the view's active avatars as leaf-level dynamic
+    // instances riding frozen catalog slots. Active-only, never declared-but-parked: the per-tile instance mask width
+    // derives from the program's total declared instance count (SdfProgram.InstanceMaskWordCount), so parked avatar
+    // declarations widen every shadow-gather pixel's mask walk. Instead the program is rebuilt on population change
+    // (the revision watch), and the 128-avatar worst case is held by the spec's capacity floors (ProgramWordCapacity /
+    // InstanceCapacity / DynamicTransformCapacity), probed at construction. Every avatar keeps its own body + accent
+    // material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces the static stamps
+    // with the reserved worst case (construction only); the animated pool and the avatars follow `probeWorstCase`
+    // (worst case for both the construction probe AND the apply-time measure).
+    private SdfProgram Build(WorldScene scene, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, WorldEditorTargeting? highlight, double shimmerNow = 0d) {
+        var client = m_client;
         var builder = new SdfProgramBuilder();
         var grass = builder.AddMaterial(material: new SdfMaterial(Albedo: scene.GroundAlbedo));
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
@@ -503,6 +569,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             avatarBodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: WorldColor.Nose(body: bodyColor)));
         }
+
+        var shimmer = ((highlight is not null) ? m_shimmer : null);
 
         // The static field from the scene data: the grass ground plane, then each scene row (its shape smooth-unioned
         // into the field) translated to its center and reset back for the next. Every row carries its OWN material —
@@ -554,6 +622,33 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 )
                 .ResetPoint();
         }
+
+        // The placement stamps (§D6): the construction probe reserves (boot static stamps + the authoring headroom)
+        // worst-case stamps; a live/measure build emits the rows as authored — static stamps baked into instructions,
+        // animated rows through the reserved replay pool (worst-case under any probe). Selection amber and the change
+        // shimmer tint a stamp's palette (albedo-only; the all-distinct probe bound covers the extra registrations).
+        if (placementProbe) {
+            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: (CountStatic(placements: placements, creations: creations) + WorldPlacementPolicy.AuthoringHeadroomPlacements));
+        } else {
+            WorldPlacementStamper.EmitStatic(
+                builder: builder,
+                creations: creations,
+                placements: placements,
+                tintFor: ((highlight is null) ? null : id => {
+                    if (highlight.IsPlacementSelected(id: id)) {
+                        return (s_selectionTint, SelectionTintBlend);
+                    }
+
+                    if ((shimmer is { } pulses) && (pulses.PlacementIntensity(id: id, now: shimmerNow) is > 0f and var pulse)) {
+                        return (s_shimmerTint, (pulse * ShimmerBlendMax));
+                    }
+
+                    return null;
+                })
+            );
+        }
+
+        m_animator.Emit(builder: builder, probeWorstCase: probeWorstCase);
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
         // each. The probe emits every catalog range; a live build emits only active ranges without renumbering slots.

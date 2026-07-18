@@ -765,5 +765,7 @@
     "endpoint": null,
     "userId": null
   },
+  "creations": [],
+  "placements": [],
   "schema": "puck.world.def.v1"
 }
