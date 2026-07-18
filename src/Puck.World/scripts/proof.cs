@@ -42,7 +42,15 @@
 //       player.where samples a second apart); (c) world.revoke mid-run asserts the edge-latched
 //       "[world.grant denied: ...]" line and that the body then holds perfectly still (two more samples, identical);
 //       (d) denied-mutation honesty — world.revoke console mutate section:kits makes world.kit.tune fail loudly with
-//       world.status's dirty counter unchanged, and re-granting makes the same command apply.
+//       world.status's dirty counter unchanged, and re-granting makes the same command apply; (e)/(f) exclusivity in
+//       both orders plus the exclusive-wildcard outright rejection; (g) EXCLUSIVE SECTION ACQUISITION (§D8) — the
+//       seeded per-section Mutate defaults never block, so world.grant seat1 mutate section:scene exclusive succeeds
+//       on a default table, the console's scene mutation is then denied at the grant boundary, and revoking the hold
+//       restores it; (h) PROFILE SUBJECT (§D8) — Edit is checked against the concrete profile:<id> subject: the
+//       seeded Edit/all wildcard passes, revoking it denies profile.section, and a narrow profile:amber grant
+//       restores exactly amber while cobalt stays denied. (h) writes the player store, so this proof now backs up +
+//       restores the REAL world/ + profiles/ subtrees like the bindings proof (the cleared store reseeds the
+//       deterministic amber/cobalt catalog ids).
 //   bindings [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 3 exit-bar proof for the player document + layered binding resolution (§2.4): (a) session A boots the
 //       REAL local player-document store fresh, asserts the engine-default composed mapping (player.bindings), live-
@@ -111,6 +119,16 @@
 //       policy is asserted positively: a second seat joins, seat 1 enters the editor, and the 50%→70% split seam
 //       band must repaint. The roster is pinned to seat 1 first (dev-machine pads auto-seat extra players). Decodes
 //       the engine's own PNGs inline like ui-floor.
+//   editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The P4 camera live-apply proof (§D7 + §CR-6), run on BOTH backends like editor-mode. Each session boots the
+//       baked default (two declared View screens → two registered camera views, witnessed by world.view-refresh's
+//       count echo) and asserts: (a) a fixed-camera pose/aim edit applies LIVE — the '[world.camera: ... pose updated
+//       live]' reconcile line, and the retired "applies at next boot" narration must NOT appear; (b) the anchored
+//       camera's pose edit takes the same live lane; (c) a NEW camera row + a screen re-point (View→View) binds the
+//       new camera and releases the orphaned one, the pool count holding; (d) a dimension change recreates the
+//       offscreen view ('recreated live (WxH)'); (e) THE CR-6 TRANSITION — re-sourcing the screen View→None unbinds
+//       the slot AND releases the camera registration (view-refresh count drops, world.screens reads none/unbound —
+//       no stale offscreen render); (f) world.camera.remove of the now-unreferenced row applies document-side.
 //   editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       The P3 selection/manipulation proof, run on BOTH backends like editor-mode. Each session pins the roster
 //       (player.leave 2..4) AND the census (world.population 0 — a static world so pixel diffs read the highlight,
@@ -191,8 +209,9 @@ static class ProofApp {
                 "ui-floor" => UiFloorProof.RunUiFloor(opts: opts),
                 "editor-mode" => EditorModeProof.RunEditorMode(opts: opts),
                 "editor-edit" => EditorEditProof.RunEditorEdit(opts: opts),
+                "editor-cameras" => EditorCamerasProof.RunEditorCameras(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras)"),
             };
         }
         catch (ArgException ex) {
@@ -221,6 +240,7 @@ static class ProofApp {
         Console.WriteLine(value: "  ui-floor [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -4302,15 +4322,33 @@ static class GrantsProof {
         var pid = Environment.ProcessId;
         var worldPath = Path.Combine(Path.GetTempPath(), $"puck-world-grants-{pid}.world.json");
 
-        Console.WriteLine(value: "[proof] === grants (a): world.addon.set autopilot + world.save (data-only; the driver mounts at boot) ===");
-        var mountedSaved = RunMountAndSave(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath);
+        // The (h) profile-subject round edits the player document, so the REAL store is backed up whole and restored
+        // in the finally (the bindings-proof discipline); the cleared store reseeds deterministic catalog ids.
+        var worldDir = PlayerStorePaths.WorldDir();
+        var phaseDir = PlayerStorePaths.PhaseThreeDir();
+        var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
+        var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
+        bool mountedSaved;
+        bool sessionPassed;
 
-        Console.WriteLine();
-        Console.WriteLine(value: "[proof] === grants (b)-(d): relaunch --world <saved> — mount, drive/revoke, mutate-denial ===");
-        var sessionPassed = (File.Exists(path: worldPath) && RunGrantSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath));
+        try {
+            DirectoryBackup.Clear(dir: worldDir);
+            DirectoryBackup.Clear(dir: phaseDir);
 
-        if (!File.Exists(path: worldPath)) {
-            Console.WriteLine(value: $"[proof]   FAIL relaunch: {worldPath} was never written (grants (a) did not reach world.save)");
+            Console.WriteLine(value: "[proof] === grants (a): world.addon.set autopilot + world.save (data-only; the driver mounts at boot) ===");
+            mountedSaved = RunMountAndSave(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === grants (b)-(h): relaunch --world <saved> — mount, drive/revoke, mutate-denial, exclusivity, profile subject ===");
+            sessionPassed = (File.Exists(path: worldPath) && RunGrantSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath));
+
+            if (!File.Exists(path: worldPath)) {
+                Console.WriteLine(value: $"[proof]   FAIL relaunch: {worldPath} was never written (grants (a) did not reach world.save)");
+            }
+        }
+        finally {
+            DirectoryBackup.Restore(snapshot: worldBackup);
+            DirectoryBackup.Restore(snapshot: phaseBackup);
         }
 
         var passed = (mountedSaved && sessionPassed);
@@ -4480,6 +4518,12 @@ static class GrantsProof {
             // (e) EXCLUSIVITY (§CR-1): the two grant orders both reject a conflicting second grant, and an exclusively
             // held body has exactly one effective driver — the exclusive holder overrides even the console's Drive/all.
             passed &= RunExclusivityOrders(ctx: ctx);
+
+            // (g) EXCLUSIVE SECTION ACQUISITION (§D8): the seeded per-section Mutate defaults never block a hold.
+            passed &= RunExclusiveSectionRound(ctx: ctx);
+
+            // (h) PROFILE SUBJECT (§D8): Edit checks the concrete profile:<id> subject.
+            passed &= RunProfileSubjectRound(ctx: ctx);
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -4598,6 +4642,83 @@ static class GrantsProof {
             line: $"world.grant addon:{AutopilotName} drive all exclusive",
             needle: $"[world.grant rejected: addon:{AutopilotName} drive all — ");
         Send(ctx: ctx, line: $"world.revoke seat2 drive body:{OrdinaryBodyIndex}");
+
+        return passed;
+    }
+
+    // (g): an exclusive SECTION hold must be acquirable on a DEFAULT table (§D8) — the seeded per-section Mutate rows
+    // are the permissive backdrop's concrete spelling and never block a reservation. While seat1 holds section:scene
+    // exclusively, the console's scene mutation is denied AT THE GRANT BOUNDARY (before compose; the denial also rides
+    // the EchoTap toast channel ui-floor proved). Revoking the hold restores the console: the identical command then
+    // fails at COMPOSE instead (no such row id), proving the grant boundary passed.
+    static bool RunExclusiveSectionRound(Ctx ctx) {
+        var passed = true;
+
+        passed &= ExpectGrant(ctx: ctx, name: "exclusive-section-accepted-on-default-table",
+            line: "world.grant seat1 mutate section:scene exclusive",
+            needle: "[world.grant: seat1 mutate section:scene exclusive]");
+
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.grants seat1");
+
+        var grantsLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.grants:"), deadlineSeconds: 15.0);
+
+        passed &= Check(name: "exclusive-section-marked", ok: ((grantsLine is not null) && grantsLine.Contains(value: "mutate/section:scene(x)")),
+            detail: (grantsLine?.Trim() ?? "(no world.grants echo)"));
+
+        mark = ctx.Collector.Count;
+        Send(ctx: ctx, line: "world.scene.row.remove missing-row");
+
+        var deniedLine = Await(collector: ctx.Collector, mark: mark,
+            predicate: l => (l.Contains(value: "[world.grant denied: console cannot mutate section:scene") && l.Contains(value: "RemoveSceneRow 'missing-row' dropped")),
+            deadlineSeconds: 15.0);
+
+        passed &= Check(name: "exclusive-section-denies-console", ok: (deniedLine is not null),
+            detail: (deniedLine?.Trim() ?? "(no '[world.grant denied: console ... section:scene ...]' line)"));
+
+        Send(ctx: ctx, line: "world.revoke seat1 mutate section:scene");
+        mark = ctx.Collector.Count;
+        Send(ctx: ctx, line: "world.scene.row.remove missing-row");
+
+        var composeLine = Await(collector: ctx.Collector, mark: mark,
+            predicate: l => l.Contains(value: "[world.mutation rejected: RemoveSceneRow 'missing-row'"),
+            deadlineSeconds: 15.0);
+
+        passed &= Check(name: "revoke-restores-console-mutate", ok: (composeLine is not null),
+            detail: (composeLine?.Trim() ?? "(no compose-stage '[world.mutation rejected: ...]' line — the grant boundary still denies)"));
+
+        return passed;
+    }
+
+    // (h): SetPlayerSection is gated on the CONCRETE profile:<id> Edit subject (§D8). The seeded Edit/all wildcard
+    // keeps local play unchanged (the baseline edit applies); revoking it denies every profile edit; a narrow
+    // profile:amber grant restores exactly amber while cobalt stays denied. The store was cleared before launch, so
+    // the seeded catalog ids (amber, cobalt) are deterministic; RunGrants restores the owner's real store afterward.
+    static bool RunProfileSubjectRound(Ctx ctx) {
+        var passed = true;
+
+        passed &= ExpectGrant(ctx: ctx, name: "edit-all-wildcard-baseline",
+            line: "profile.section amber preferences {\"theme\":\"dark\",\"hud\":true}",
+            needle: "[profile.section: amber preferences applied]");
+        passed &= ExpectGrant(ctx: ctx, name: "console-loses-edit-all",
+            line: "world.revoke console edit all",
+            needle: "[world.revoke: console edit all]");
+        passed &= ExpectGrant(ctx: ctx, name: "edit-denied-without-grant",
+            line: "profile.section amber preferences {\"theme\":\"light\",\"hud\":true}",
+            needle: "[profile.section: console cannot edit profile:amber]");
+        passed &= ExpectGrant(ctx: ctx, name: "profile-grant-accepted",
+            line: "world.grant console edit profile:amber",
+            needle: "[world.grant: console edit profile:amber]");
+        passed &= ExpectGrant(ctx: ctx, name: "edit-applies-with-profile-grant",
+            line: "profile.section amber preferences {\"theme\":\"dark\",\"hud\":true}",
+            needle: "[profile.section: amber preferences applied]");
+        passed &= ExpectGrant(ctx: ctx, name: "other-profile-still-denied",
+            line: "profile.section cobalt preferences {\"theme\":\"dark\",\"hud\":true}",
+            needle: "[profile.section: console cannot edit profile:cobalt]");
+        passed &= ExpectGrant(ctx: ctx, name: "edit-all-restored",
+            line: "world.grant console edit all",
+            needle: "[world.grant: console edit all]");
 
         return passed;
     }
@@ -7521,5 +7642,162 @@ static class EditorEditProof {
         }
 
         return count;
+    }
+}
+
+// ============================================================================================
+// EDITOR-CAMERAS — the P4 camera live-apply proof (§D7 + §CR-6): camera rows edit LIVE. The
+// baked default declares two View screens (0 → 'overhead' fixed, 2 → 'first-person' anchored),
+// so the offscreen pool boots with two registered camera views — world.view-refresh's count
+// echo is the pipe-observable witness. A pose/aim edit rewrites the running view's rig in
+// place ('pose updated live'), a dimension change recreates it ('recreated live (WxH)'), a
+// screen re-point (View→View) binds the new camera and releases the orphan, and the CR-6
+// transition (View→None) unbinds the slot AND releases the registration — the count drops and
+// no stale offscreen render survives. Runs on BOTH backends like editor-mode.
+// ============================================================================================
+static class EditorCamerasProof {
+    public static int RunEditorCameras(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 150, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === editor-cameras (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-cameras (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] editor-cameras proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Baseline: both declared View screens registered their cameras' offscreen renders at boot.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "2 camera view(s) registered", name: "boot-two-camera-views");
+
+            // (a) LIVE POSE EDIT (fixed): re-aim 'overhead'. The mutation applies, the client reconcile rewrites the
+            // running view's rig in place, and the RETIRED "applies at next boot" narration must never appear.
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"fixed\",\"position\":[0,18,0],\"lookAt\":[0,0.5,-2.5],\"name\":\"overhead\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":0.96}");
+
+            var poseLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.camera: 'overhead' pose updated live]"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "fixed-pose-updates-live", ok: (poseLine is not null),
+                detail: (poseLine?.Trim() ?? "(no reconcile line for 'overhead')"));
+            passed &= AssertNoNextBoot(ctx: ctx, mark: mark, name: "no-next-boot-narration");
+
+            // (b) The anchored camera's pose edit rides the same live lane (rig property writes + a fresh anchor id).
+            mark = ctx.Collector.Count;
+            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"anchored\",\"anchorIndex\":0,\"offset\":[0,1.5,0],\"name\":\"first-person\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":1.4}");
+
+            var anchoredLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.camera: 'first-person' pose updated live]"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "anchored-pose-updates-live", ok: (anchoredLine is not null),
+                detail: (anchoredLine?.Trim() ?? "(no reconcile line for 'first-person')"));
+
+            // (c) NEW ROW + RE-POINT (View→View): 'birdseye' enters the document, then screen 0 films it. The new
+            // camera registers, the orphaned 'overhead' releases, and the pool count holds at 2.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: "world.camera.set {\"$type\":\"fixed\",\"position\":[12,10,0],\"lookAt\":[0,0,0],\"name\":\"birdseye\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":0.9}",
+                expect: "[world.mutation: UpsertCamera 'birdseye' applied]", name: "new-camera-row-applies");
+
+            mark = ctx.Collector.Count;
+            ComposedShotKit.Send(ctx: ctx, line: "world.screen.set {\"index\":0,\"origin\":[-3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08,\"source\":{\"$type\":\"view\",\"cameraName\":\"birdseye\"},\"route\":{\"engageable\":true,\"engageRadius\":2.5}}");
+
+            var repointLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.screen: screen 0 showing camera 'birdseye']"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "screen0-repoints-live", ok: (repointLine is not null),
+                detail: (repointLine?.Trim() ?? "(no 'showing camera birdseye' line)"));
+
+            var orphanLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => (l.Contains(value: "[world.screen: camera view 'overhead' released") && l.Contains(value: "no remaining screen references it")), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "orphaned-overhead-released", ok: (orphanLine is not null),
+                detail: (orphanLine?.Trim() ?? "(no released line for 'overhead')"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "2 camera view(s) registered", name: "pool-count-holds-after-repoint");
+
+            // (d) DIMENSION CHANGE: an offscreen render target cannot resize — the registration recreates in place.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx,
+                line: "world.camera.set {\"$type\":\"fixed\",\"position\":[12,10,0],\"lookAt\":[0,0,0],\"name\":\"birdseye\",\"renderWidth\":320,\"renderHeight\":180,\"fieldOfViewRadians\":0.9}",
+                expect: "[world.camera: 'birdseye' recreated live (320x180)]", name: "dimension-change-recreates");
+
+            // (e) THE CR-6 TRANSITION (View→None): the slot unbinds AND the camera registration releases — the pool
+            // count drops and world.screens reads the slot honestly none/unbound (no stale offscreen render).
+            mark = ctx.Collector.Count;
+            ComposedShotKit.Send(ctx: ctx, line: "world.screen.set {\"index\":0,\"origin\":[-3,1.2,-3],\"right\":[1,0,0],\"up\":[0,1,0],\"halfWidth\":1.3,\"halfHeight\":1,\"halfDepth\":0.12,\"round\":0.08,\"source\":{\"$type\":\"none\"},\"route\":{\"engageable\":true,\"engageRadius\":2.5}}");
+
+            var unboundLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[world.screen: screen 0 unbound]"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "screen0-unbinds", ok: (unboundLine is not null),
+                detail: (unboundLine?.Trim() ?? "(no 'screen 0 unbound' line)"));
+
+            var releaseLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
+                predicate: l => (l.Contains(value: "[world.screen: camera view 'birdseye' released") && l.Contains(value: "no remaining screen references it")), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "cr6-transition-releases-view", ok: (releaseLine is not null),
+                detail: (releaseLine?.Trim() ?? "(no released line for 'birdseye' — the old view stayed registered)"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.view-refresh", expect: "1 camera view(s) registered", name: "pool-count-drops");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.screens", expect: "0 none unbound", name: "screen0-reads-none-unbound");
+
+            // (f) REMOVE: the row is unreferenced (validator-clean) and already released — the document-side removal
+            // applies with no view work left to do.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.camera.remove birdseye",
+                expect: "[world.mutation: RemoveCamera 'birdseye' applied]", name: "camera-remove-applies");
+
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        return passed;
+    }
+
+    // The retired camera "applies at next boot" narration must never resurface for a camera mutation.
+    static bool AssertNoNextBoot(ComposedShotKit.Ctx ctx, int mark, string name) {
+        var snapshot = ctx.Collector.Snapshot();
+
+        for (var i = mark; (i < snapshot.Length); i++) {
+            if (snapshot[i].Contains(value: "[world.camera: applies at next boot]")) {
+                return ComposedShotKit.Check(name: name, ok: false, detail: snapshot[i].Trim());
+            }
+        }
+
+        return ComposedShotKit.Check(name: name, ok: true, detail: "no next-boot narration");
     }
 }

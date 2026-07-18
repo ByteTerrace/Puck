@@ -435,6 +435,39 @@ Exit: `proof.cs editor-cameras` upserts a camera and asserts the jumbotron
 view updates without restart; `proof.cs grants` grows exclusive-edit and
 profile-subject rounds.
 
+**LANDED (P4).** `WorldScreenBinder.ReconcileCameras` (called camera-first in
+the frame source's delivery branch) diffs the registered offscreen views
+against the mutated rows: a same-kind pose/aim/FOV edit is a live rig
+property write, a dimension/kind change releases + recreates, a removed row
+releases and unbinds its slots, and a boot-faulted declared View self-heals
+when its camera arrives; the "applies at next boot" narration is deleted
+(`world.camera.*` verbs and README updated). §CR-6 closed in the same
+lifecycle work: every declared-source transition away from `View` clears
+`ScreenSlot.View` and releases the orphaned camera registration
+(`ReleaseSlotView` → single-name `ReleaseOrphanedCameraView`, which the
+removal pass now shares), and `TryView` releases the superseded camera on a
+View→View re-point — source transitions and removals are symmetric. Grants:
+`GrantSubject` widened with a nullable string lane
+(`GrantSubjectKind.Profile`, `profile:<id>` verb token), `SetPlayerSection`
+gates on the concrete profile subject (the seeded `Edit/all` wildcard keeps
+local play unchanged), and the seeded per-section `Mutate` rows carry a seed
+marker rule (2) exempts — an exclusive section hold succeeds on a default
+table, while a deliberately granted (or revoked-then-regranted) row still
+blocks. D7 presented: `WorldEditEcho` (message + rejected + kind) replaces
+the EchoTap string pair — grant/revoke outcomes now toast, defaults-class
+mutations narrate "document default (next boot; live levers unchanged)" —
+and the editor HUD gains a session line (`act live/doc/defaults | drift … |
+excl <holder>`) fed at human cadence from a render-settings revision watch,
+the world.status drift hint, and the grant table's exclusive-holder lookup.
+Found and fixed in passing: `world.screens`/`world.quality`/
+`world.population` read the boot `WorldDefinition` singleton, narrating
+stale rows after live mutations — the module now reads `server.Definition`.
+Proven: `proof.cs editor-cameras` (new, both backends — pose/anchored/
+recreate/re-point/CR-6-transition/remove over the `world.view-refresh`
+count + reconcile echoes) and `grants` rounds (g) exclusive-section +
+(h) profile-subject (store backed up/restored); `mutate`, `screens`,
+`worlddoc`, `ui-floor`, `editor-mode`, `editor-edit` re-run green.
+
 ### P5 — Creations and placements in World
 
 1. The `creations` + `placements` sections, four mutation records, validator
