@@ -458,7 +458,11 @@ document PRE-MERGE, compiled once per seat on any change (never per frame):
 effective document = engine default BindingProfileDocument   (WorldDefaultBindings — the player.* vocabulary)
                    ⊕ world overlay(s)                        (puck.world.def.v1 bindingOverlays — a contextual page, e.g. a kart world's remap)
                    ⊕ player profile bindings                 (the seat's selected profile, from puck.world.player.v1)
-                   ⊕ live rebinds                             (session layer; folded into the profile on profile.save)
+                   ⊕ live rebinds                            (session layer; folded into the profile on profile.save)
+                   ⊕ mode layer                              (a runtime per-seat page set — the editor's WorldEditorBindings
+                                                             via WorldSeatBindings.SetModeLayer; outranks even live rebinds
+                                                             while active, and is never a world bindingOverlays mutation,
+                                                             which would re-bind every seat)
 ```
 
 `WorldBindingComposer.Compose` merges layers with an explicit key —
@@ -512,6 +516,29 @@ boot line, the split `world/player.json` + `world/profiles/*.json` +
 migrated names). There is no CLI override for the store path, so the proof
 backs up and restores the owner's REAL `world/` + `profiles/` subtrees whole
 (byte-for-byte) around every session — the real catalog is never destroyed.
+
+**Editor mode (the UI/editor arc's P2)** is the mode layer's first tenant: a
+per-seat client mode entered with **Gamepad Back / Keyboard Tab** (free,
+deliberate controls on the default page) or `editor.enter [seat]`, exited with
+East / Back / Tab or `editor.exit [seat]`. Entering installs
+`WorldEditorBindings` as the seat's mode layer — the merged no-modifier
+**Editor** page (sticks fly, shoulders rise/sink, South toggles fly⇄orbit,
+D-pad steps speed, West echoes status) plus the **LT camera page** (explicit
+fly/orbit + speed; RT and LT+RT page ids are reserved for P3
+selection/placement) — so the binding bar flips to the editor pages with zero
+bar-side work. The seat's intent diverts through the existing `player.control
+idle` contract on both halves (live devices mask; tapes and `player.press`
+still drive — script outranks idle), its camera swaps from the chase rig to
+the session's free-fly/orbit rig (seeded from the chase framing, restored by
+re-anchoring — neither edge pops), and when exactly ONE seat edits among 2+
+players the layout gives it the full-height left 70% workbench with the
+playing seats stacked in a live right rail. `WorldEditorSession` owns all of
+it client-side; nothing crosses the wire beyond the existing `SetControl`.
+The console twins (`editor.status`, `editor.fly`/`editor.orbit`,
+`editor.cam.speed <v>`, `editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>]`)
+script every chord act, and every discrete chord act echoes a console line.
+Proven on both backends by `proof.cs editor-mode` (mode round trip, camera in
+pixels, diversion honesty, the layout seam).
 
 ## Storage (cloud-ready, local-proven)
 
