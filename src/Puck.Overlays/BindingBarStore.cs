@@ -35,13 +35,18 @@ public readonly record struct OverlayBindingModifier(
 /// its bar is confined to (per-viewport scoping happens here, at the writer layer — the render node stays dumb).</summary>
 /// <param name="Viewport">The seat's viewport rect in normalized frame space (its <c>LayoutRegion</c>).</param>
 /// <param name="PageId">The active page's id (diagnostics / transitions).</param>
+/// <param name="Group">The seat's active page group (diagnostics / transitions).</param>
 /// <param name="Slots">The twelve layout slots, in <see cref="BindingBarLayout.SlotButtons"/> order.</param>
 /// <param name="Modifiers">The declared modifiers, in profile order.</param>
+/// <param name="Hints">The active group's command-chord hint lines (e.g. <c>"LT+RT Editor"</c>), pre-formatted
+/// ASCII — rendered as small text above the modifier pips so a chord-fired act is discoverable.</param>
 public readonly record struct OverlayBindingSeat(
     NormalizedRect Viewport,
     string PageId,
+    string Group,
     ReadOnlyMemory<OverlayBindingSlot> Slots,
-    ReadOnlyMemory<OverlayBindingModifier> Modifiers
+    ReadOnlyMemory<OverlayBindingModifier> Modifiers,
+    ReadOnlyMemory<string> Hints
 );
 
 /// <summary>The per-frame binding-bar snapshot the unified overlay renders — one entry per joined seat.</summary>

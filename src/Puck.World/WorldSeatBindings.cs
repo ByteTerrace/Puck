@@ -6,22 +6,24 @@ namespace Puck.World;
 /// <summary>
 /// The World-side per-seat <see cref="IInputBindings"/> the <see cref="InputRouter"/> resolves through — the successor
 /// of the single shared table. It holds one <see cref="PagedInputBindings"/> per local seat, each compiled from that
-/// seat's composed document (engine default ⊕ world overlays ⊕ the seat's profile bindings ⊕ its live session rebinds
-/// ⊕ its runtime MODE layer). Composition and compilation happen only on a CHANGE (a profile selection, a rebind, an
-/// overlay mutation, a mode enter/exit) — never per frame; the per-signal resolve path stays the existing paged lookups.
+/// seat's composed document (engine default ⊕ world overlays ⊕ the seat's profile bindings ⊕ its live session
+/// rebinds). Composition and compilation happen only on a CHANGE (a profile selection, a rebind, an overlay mutation)
+/// — never per frame; the per-signal resolve path stays the existing paged lookups. A seat's runtime MODE is NOT a
+/// layer: every group (play, editor) is always compiled in, and <see cref="SetActiveGroup"/> flips the seat's active
+/// group as a pointer-level switch on the compiled profile.
 /// </summary>
 /// <remarks>Single-threaded, like every input-fold type here: recomposition runs on the launcher's window-pump thread
 /// (a verb handler, a roster mutation, or the post-step overlay sync), and <see cref="Resolve(int, in InputSignal)"/>
 /// runs on the same thread inside the router's snapshot fold. No lock guards this state. Constructed early in
 /// composition (before the container is built) with just the engine default and boot overlays — both pure/available
 /// there; the per-seat profile and session layers start null (every seat inherits the engine default at boot), and
-/// the roster/verbs push them in as they change.</remarks>
-internal sealed class WorldSeatBindings : IInputBindings {
+/// the roster/verbs push them in as they change. Chord-command edges (<see cref="IChordEdgeSource"/>) forward to the
+/// resolving seat's paged bindings.</remarks>
+internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     private readonly BindingProfileDocument m_engineDefault;
     private readonly PagedInputBindings[] m_seats;
     private readonly BindingProfileDocument?[] m_profileBindings;
     private readonly BindingProfileDocument?[] m_sessionRebinds;
-    private readonly BindingProfileDocument?[] m_modeLayers;
     private IReadOnlyList<WorldBindingOverlay> m_overlays;
 
     /// <summary>The number of local seats this router resolves for.</summary>
@@ -40,7 +42,6 @@ internal sealed class WorldSeatBindings : IInputBindings {
         m_overlays = overlays;
         m_profileBindings = new BindingProfileDocument?[SeatCount];
         m_sessionRebinds = new BindingProfileDocument?[SeatCount];
-        m_modeLayers = new BindingProfileDocument?[SeatCount];
 
         var seedBase = BindingProfile.Compile(document: ComposeSeat(slot: 0));
 
@@ -59,6 +60,11 @@ internal sealed class WorldSeatBindings : IInputBindings {
     /// <inheritdoc/>
     public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
         return (((uint)slot < SeatCount) ? m_seats[slot].Resolve(slot: slot, signal: in signal) : null);
+    }
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<BindingChordEdge> DrainChordEdges(int slot) {
+        return (((uint)slot < SeatCount) ? m_seats[slot].DrainChordEdges(slot: slot) : []);
     }
 
     /// <summary>The slot-blind console-dispatch table built from the composed BASE layers (engine default ⊕ world
@@ -95,18 +101,17 @@ internal sealed class WorldSeatBindings : IInputBindings {
         RecomposeSeat(slot: slot);
     }
 
-    /// <summary>Sets a seat's runtime MODE layer (the FINAL compose layer — an editor page set entered/exited at
-    /// runtime) and recomposes that seat; passing <see langword="null"/> clears it. Per-seat by design: a mode is one
-    /// seat's state, never a world <c>bindingOverlays</c> mutation (those re-bind every seat).</summary>
+    /// <summary>Flips a seat's ACTIVE page group — the runtime mode switch (<c>editor.enter</c>/<c>exit</c>). A
+    /// pointer-level switch on the seat's already-compiled profile: no recompose, no document churn, and the seat's
+    /// press latches, held chord, and armed command chords survive (see <see cref="PagedInputBindings.SetActiveGroup"/>).
+    /// Per-seat by design: a mode is one seat's state, never a world <c>bindingOverlays</c> mutation (those re-bind
+    /// every seat).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    /// <param name="layer">The mode-layer document, or <see langword="null"/> to leave the mode.</param>
-    public void SetModeLayer(int slot, BindingProfileDocument? layer) {
-        if ((uint)slot >= SeatCount) {
-            return;
-        }
-
-        m_modeLayers[slot] = layer;
-        RecomposeSeat(slot: slot);
+    /// <param name="group">The group to activate (e.g. <see cref="WorldEditorBindings.GroupId"/>), or
+    /// <see langword="null"/> for the profile's default group.</param>
+    /// <returns><see langword="false"/> when the seat's compiled profile declares no such group.</returns>
+    public bool SetActiveGroup(int slot, string? group) {
+        return (((uint)slot < SeatCount) && m_seats[slot].SetActiveGroup(slot: slot, group: group));
     }
 
     /// <summary>The immutable view of the page the seat's held chord currently selects — the binding bar's read
@@ -121,7 +126,7 @@ internal sealed class WorldSeatBindings : IInputBindings {
     public BindingProfileDocument? SessionRebind(int slot) => (((uint)slot < SeatCount) ? m_sessionRebinds[slot] : null);
 
     /// <summary>The document the seat currently resolves through — the full composed stack (engine default ⊕ overlays ⊕
-    /// profile ⊕ session ⊕ mode). The <c>player.bindings</c> echo reads its active base page.</summary>
+    /// profile ⊕ session). The <c>player.bindings</c> echo reads it.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <returns>The composed document, or the composed base for an out-of-range slot.</returns>
     public BindingProfileDocument ComposedDocument(int slot) => (((uint)slot < SeatCount) ? ComposeSeat(slot: slot) : ComposeBase());
@@ -154,15 +159,15 @@ internal sealed class WorldSeatBindings : IInputBindings {
     }
 
     private BindingProfileDocument ComposeSeat(int slot) {
-        return WorldBindingComposer.Compose(BaseLayers(profile: m_profileBindings[slot], session: m_sessionRebinds[slot], mode: m_modeLayers[slot]));
+        return WorldBindingComposer.Compose(BaseLayers(profile: m_profileBindings[slot], session: m_sessionRebinds[slot]));
     }
 
     private BindingProfileDocument ComposeBase() {
-        return WorldBindingComposer.Compose(BaseLayers(profile: null, session: null, mode: null));
+        return WorldBindingComposer.Compose(BaseLayers(profile: null, session: null));
     }
 
-    private BindingProfileDocument?[] BaseLayers(BindingProfileDocument? profile, BindingProfileDocument? session, BindingProfileDocument? mode) {
-        var layers = new BindingProfileDocument?[m_overlays.Count + 4];
+    private BindingProfileDocument?[] BaseLayers(BindingProfileDocument? profile, BindingProfileDocument? session) {
+        var layers = new BindingProfileDocument?[m_overlays.Count + 3];
         var index = 0;
 
         layers[index++] = m_engineDefault;
@@ -172,9 +177,8 @@ internal sealed class WorldSeatBindings : IInputBindings {
         }
 
         layers[index++] = profile;
-        layers[index++] = session;
-        // The mode layer composes LAST: while a seat is in a mode, its pages outrank even live session rebinds.
-        layers[index] = mode;
+        // Live session rebinds compose LAST — the freshest authoring wins within every group.
+        layers[index] = session;
 
         return layers;
     }

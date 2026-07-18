@@ -2,9 +2,16 @@ namespace Puck.Commands;
 
 /// <summary>
 /// Validates a <see cref="BindingProfileDocument"/> and compiles it into the runtime
-/// <see cref="CompiledBindingProfile"/>: one binding table and one precomputed <see cref="BindingPageView"/>
-/// per page, plus the ordered-chord lookup that turns held modifiers into the active page.
+/// <see cref="CompiledBindingProfile"/>: one compiled chord row per document row (a binding table and a
+/// precomputed <see cref="BindingPageView"/> for a page meaning; edge payloads for a command meaning), plus the
+/// group table the per-slot resolution scopes to.
 /// </summary>
+/// <remarks>
+/// The two uniqueness rules a document must satisfy, rejected loudly otherwise: exactly ONE meaning per
+/// <c>(group, ordered chord)</c>, and exactly ONE resting (empty-chord) page per group — and the resting row must
+/// be a page, since an empty chord has no completion edge to fire a command with. Page ids are unique across the
+/// whole document (they address pages in editors and guided sessions). The first row's group is the DEFAULT group.
+/// </remarks>
 public static class BindingProfile {
     /// <summary>Validates and compiles a profile document.</summary>
     /// <param name="document">The profile document to compile.</param>
@@ -52,25 +59,40 @@ public static class BindingProfile {
             }
         }
 
-        var basePageIndex = (-1);
+        var documentRows = ((document.Chords is { Count: > 0 } chords)
+            ? chords
+            : throw new ArgumentException(message: "A binding profile must carry at least one chord row.", paramName: nameof(document)));
+        // First pass: group registration, chord resolution, the uniqueness rules, and the raw row facts. Views are
+        // built in a second pass so each page view can carry its whole group's command-chord hints.
+        var groupIndexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var groupNames = new List<string>();
         var pageIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var pages = ((document.Pages is { Count: > 0 } documentPages)
-            ? new CompiledBindingProfile.CompiledBindingPage[documentPages.Count]
-            : throw new ArgumentException(message: "A binding profile must carry at least one page.", paramName: nameof(document)));
-        var seenChords = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var restingByGroup = new List<int>();
+        var rowChords = new int[documentRows.Count][];
+        var rowGroups = new int[documentRows.Count];
+        var seenChordKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        for (var pageIndex = 0; (pageIndex < documentPages.Count); pageIndex++) {
-            var page = documentPages[pageIndex];
+        for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
+            var row = (documentRows[rowIndex]
+                ?? throw new ArgumentException(message: $"Chord row {rowIndex} is null.", paramName: nameof(document)));
 
-            if (string.IsNullOrEmpty(value: page.Id)) {
-                throw new ArgumentException(message: "A page id must be non-empty.", paramName: nameof(document));
+            if (string.IsNullOrEmpty(value: row.Group)) {
+                throw new ArgumentException(message: $"Chord row {rowIndex} must name a group.", paramName: nameof(document));
             }
 
-            if (!pageIds.Add(item: page.Id)) {
-                throw new ArgumentException(message: $"Duplicate page id \"{page.Id}\".", paramName: nameof(document));
+            if (!groupIndexByName.TryGetValue(
+                key: row.Group,
+                value: out var groupIndex
+            )) {
+                groupIndex = groupNames.Count;
+                groupIndexByName[row.Group] = groupIndex;
+                groupNames.Add(item: row.Group);
+                restingByGroup.Add(item: -1);
             }
 
-            var chordIds = (page.Chord ?? []);
+            rowGroups[rowIndex] = groupIndex;
+
+            var chordIds = (row.Chord ?? []);
             var chord = new int[chordIds.Count];
             var chordModifiers = new HashSet<int>();
 
@@ -79,40 +101,134 @@ public static class BindingProfile {
                     key: chordIds[chordIndex],
                     value: out var modifierIndex
                 )) {
-                    throw new ArgumentException(message: $"Page \"{page.Id}\" chords on undeclared modifier \"{chordIds[chordIndex]}\".", paramName: nameof(document));
+                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") chords on undeclared modifier \"{chordIds[chordIndex]}\".", paramName: nameof(document));
                 }
 
                 if (!chordModifiers.Add(item: modifierIndex)) {
-                    throw new ArgumentException(message: $"Page \"{page.Id}\" repeats modifier \"{chordIds[chordIndex]}\" in its chord.", paramName: nameof(document));
+                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") repeats modifier \"{chordIds[chordIndex]}\" in its chord.", paramName: nameof(document));
                 }
 
                 chord[chordIndex] = modifierIndex;
             }
 
-            if (!seenChords.Add(item: string.Join(separator: ',', values: chord))) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" duplicates another page's chord.", paramName: nameof(document));
+            rowChords[rowIndex] = chord;
+
+            // Rule 1: exactly one meaning per (group, chord).
+            if (!seenChordKeys.Add(item: $"{groupIndex}\0{string.Join(separator: ',', values: chord)}")) {
+                throw new ArgumentException(message: $"Group \"{row.Group}\" declares two meanings for the chord [{string.Join(separator: ", ", values: chordIds)}] — exactly one meaning per (group, chord).", paramName: nameof(document));
             }
 
-            if (chord.Length == 0) {
-                basePageIndex = pageIndex;
+            if ((row.Page is null) == (row.Command is null)) {
+                throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one meaning — a page or a command.", paramName: nameof(document));
             }
 
-            pages[pageIndex] = new CompiledBindingProfile.CompiledBindingPage(
-                Chord: chord,
-                Table: BuildTable(page: page),
-                View: BuildView(modifiers: modifiers, page: page, chord: chordModifiers)
-            );
+            if (row.Page is { } page) {
+                if (string.IsNullOrEmpty(value: page.Id)) {
+                    throw new ArgumentException(message: "A page id must be non-empty.", paramName: nameof(document));
+                }
+
+                if (!pageIds.Add(item: page.Id)) {
+                    throw new ArgumentException(message: $"Duplicate page id \"{page.Id}\".", paramName: nameof(document));
+                }
+
+                if (chord.Length == 0) {
+                    restingByGroup[groupIndex] = rowIndex;
+                }
+            } else {
+                if (string.IsNullOrEmpty(value: row.Command!.Command)) {
+                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must name the command it fires.", paramName: nameof(document));
+                }
+
+                // Rule 2's command half: an empty chord has no completion edge — the resting row must be a page.
+                if (chord.Length == 0) {
+                    throw new ArgumentException(message: $"Group \"{row.Group}\" binds a command to the empty chord — the resting row must be a page.", paramName: nameof(document));
+                }
+            }
         }
 
-        if (basePageIndex < 0) {
-            throw new ArgumentException(message: "A binding profile must carry an empty-chord (no-modifier) page.", paramName: nameof(document));
+        // Rule 2: exactly one resting page per group (uniqueness is rule 1's empty-chord case; presence is checked here).
+        for (var groupIndex = 0; (groupIndex < groupNames.Count); groupIndex++) {
+            if (restingByGroup[groupIndex] < 0) {
+                throw new ArgumentException(message: $"Group \"{groupNames[groupIndex]}\" has no resting (empty-chord) page.", paramName: nameof(document));
+            }
+        }
+
+        // Second pass: the per-group command-chord hint lists (shared by every page view of the group), then the rows.
+        var commandRowsByGroup = new int[groupNames.Count][];
+        var hintsByGroup = new IReadOnlyList<BindingChordCommandView>[groupNames.Count];
+
+        for (var groupIndex = 0; (groupIndex < groupNames.Count); groupIndex++) {
+            var commandRows = new List<int>();
+            var hints = new List<BindingChordCommandView>();
+
+            for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
+                if ((rowGroups[rowIndex] != groupIndex) || (documentRows[rowIndex].Command is not { } command)) {
+                    continue;
+                }
+
+                commandRows.Add(item: rowIndex);
+                hints.Add(item: new BindingChordCommandView(
+                    Chord: [.. rowChords[rowIndex].Select(selector: index => modifiers[index].Id)],
+                    Command: command.Command,
+                    HoldRelease: command.HoldRelease,
+                    Icon: command.Icon,
+                    Label: command.Label,
+                    Sources: [.. rowChords[rowIndex].Select(selector: index => modifiers[index].Source)]
+                ));
+            }
+
+            commandRowsByGroup[groupIndex] = [.. commandRows];
+            hintsByGroup[groupIndex] = hints;
+        }
+
+        var rows = new CompiledBindingProfile.CompiledChordRow[documentRows.Count];
+
+        for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
+            var row = documentRows[rowIndex];
+            var chord = rowChords[rowIndex];
+            var groupIndex = rowGroups[rowIndex];
+
+            if (row.Page is { } page) {
+                rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
+                    Chord: chord,
+                    Command: null,
+                    GroupIndex: groupIndex,
+                    Table: BuildTable(page: page),
+                    View: BuildView(
+                        chord: [.. chord],
+                        group: groupNames[groupIndex],
+                        hints: hintsByGroup[groupIndex],
+                        modifiers: modifiers,
+                        page: page
+                    )
+                );
+            } else {
+                var command = row.Command!;
+                var pressValue = (command.Value ?? CommandValue.Digital(active: true));
+
+                rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
+                    Chord: chord,
+                    Command: new CompiledBindingProfile.CompiledChordCommand(
+                        Command: command.Command,
+                        DispatchRelease: command.HoldRelease,
+                        PressValue: pressValue,
+                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
+                    ),
+                    GroupIndex: groupIndex,
+                    Table: null,
+                    View: null
+                );
+            }
         }
 
         return new CompiledBindingProfile(
-            basePageIndex: basePageIndex,
+            commandRowsByGroup: commandRowsByGroup,
+            groupIndexByName: groupIndexByName,
+            groups: [.. groupNames],
             modifierIndexBySource: modifierIndexBySource,
             modifiers: modifiers,
-            pages: pages
+            restingRowByGroup: [.. restingByGroup],
+            rows: rows
         );
     }
 
@@ -154,7 +270,13 @@ public static class BindingProfile {
 
         return table;
     }
-    private static BindingPageView BuildView(IReadOnlyList<BindingModifierDefinition> modifiers, BindingPageDefinition page, HashSet<int> chord) {
+    private static BindingPageView BuildView(
+        HashSet<int> chord,
+        string group,
+        IReadOnlyList<BindingChordCommandView> hints,
+        IReadOnlyList<BindingModifierDefinition> modifiers,
+        BindingPageDefinition page
+    ) {
         var buttons = new BindingPageButtonView[(page.Entries?.Count ?? 0)];
 
         for (var entryIndex = 0; (entryIndex < buttons.Length); entryIndex++) {
@@ -184,6 +306,8 @@ public static class BindingProfile {
 
         return new BindingPageView(
             Buttons: buttons,
+            CommandChords: hints,
+            Group: group,
             Icon: page.Icon,
             Label: page.Label,
             Modifiers: modifierViews,

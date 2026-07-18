@@ -6,34 +6,48 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The rebind console surface — the assist layer over the chord-first binding UI to come. <c>player.bind</c> live-remaps
-/// one source for a seat (its unsaved SESSION layer, recomposed and hot-reloaded at once); <c>player.bindings</c> echoes
-/// a seat's composed ACTIVE mapping; <c>profile.save</c> folds a seat's session rebinds into its selected profile's
-/// durable <c>bindings</c> section through the server-owned player document (a <c>SetPlayerSection</c> submission gated
-/// on the Edit capability), then empties the session layer. A SEPARATE module from the profile/settings surface to keep
-/// each class under its analyzer ceilings.
+/// The rebind console surface — the assist layer beside the chord-first binding UI. <c>player.bind</c> live-remaps
+/// one source OR declares a chord row for a seat (its unsaved SESSION layer, recomposed and hot-reloaded at once);
+/// <c>player.bindings</c> echoes a seat's composed ACTIVE mapping (resting-page entries plus every chord row's
+/// meaning); <c>player.signal</c> synthesizes a raw input signal into the router (the scripted twin of a physical
+/// pad, so an agent can drive chords over the pipe); <c>profile.save</c> folds a seat's session rebinds into its
+/// selected profile's durable <c>bindings</c> section through the server-owned player document (a
+/// <c>SetPlayerSection</c> submission gated on the Edit capability), then empties the session layer. A SEPARATE
+/// module from the profile/settings surface to keep each class under its analyzer ceilings.
 /// </summary>
 /// <remarks>Live rebinding changes the input→command mapping mid-run — deliberately breaking replay-stable command
-/// streams (Puck.World is not determinism-gated, §2.4). <c>player.bind</c>/<c>profile.save</c> route Simulation so the
-/// stdin barrier serializes a following <c>player.bindings</c> read-after-write; <c>player.bindings</c> is an Immediate
-/// read.</remarks>
-internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link) : ICommandModule {
+/// streams (Puck.World is not determinism-gated, §2.4). <c>player.bind</c>/<c>player.signal</c>/<c>profile.save</c>
+/// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
+/// <c>player.bindings</c> is an Immediate read.</remarks>
+internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, InputRouter router, IInputClock? clock = null) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly IServerLink m_link = link;
+    private readonly InputRouter m_router = router;
+    private readonly IInputClock? m_clock = clock;
+
+    // The player.bind chord grammar: chord:<m1>+<m2>[+...] declares a command chord row in the DEFAULT group;
+    // chord:<group>:<m1>+<m2> targets an explicit group.
+    private const string ChordPrefix = "chord:";
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "player.bind",
-            description: "Live-remaps one input source for a seat's SESSION layer (unsaved until profile.save): player.bind <seat> <source> <command> — <seat> 1..4, <source> a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast), <command> the player.* command it fires. Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
+            description: "Live-remaps one binding for a seat's SESSION layer (unsaved until profile.save): player.bind <seat> <source> <command> — <seat> 1..4, <command> the command it fires. <source> is a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast) for a resting-page entry, or a CHORD ROW declaration: chord:<m1>+<m2> binds the ordered modifier chord to the command in the default (play) group, chord:<group>:<m1>+<m2> targets an explicit group (modifier ids: lt, rt). Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source or (group, chord) replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
             handler: BindHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "player.bindings",
-            description: "Echoes a seat's composed ACTIVE mapping — the no-modifier page's source→command entries after the engine default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds merge: player.bindings [seat] (optional seat 1..4, default 1).",
+            description: "Echoes a seat's composed ACTIVE mapping after the engine default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds merge: the default group's resting-page source→command entries, then every chord row with its meaning (chord <group>:[m1+m2]→<command> or →page <id>): player.bindings [seat] (optional seat 1..4, default 1).",
             handler: BindingsHandler
+        );
+        yield return CommandDefinition.WithTrailingArgs(
+            name: "player.signal",
+            description: "Synthesizes one raw input signal into the router — the scripted twin of a physical control, so chords and bindings are drivable over the pipe: player.signal <source> <press|release|value> — <source> a provider-neutral input source id (e.g. gamepad.leftTrigger, gamepad.buttonSouth); press/release = a digital edge; a number = an analog Active sample (a trigger sweep — 0.9 latches a modifier, 0 releases it through hysteresis). The signal folds into the NEXT simulation tick's snapshot exactly like device input (it rides the seat the device-neutral lane resolves to — seat 1). Replay streams shift, like any live input.",
+            handler: SignalHandler,
+            routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "profile.doc",
@@ -58,7 +72,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
     private CommandResult BindHandler(CommandContext context, string[] args) {
         if (args.Length != 3) {
-            return Error(output: "[player.bind: expected <seat> <source> <command> — seat 1..4]");
+            return Error(output: "[player.bind: expected <seat> <source> <command> — seat 1..4; <source> may be chord:<m1>+<m2> or chord:<group>:<m1>+<m2>]");
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 0, min: 1, max: PlayerRoster.MaxSlots, fallback: null, value: out var seat)) {
@@ -73,9 +87,21 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         }
 
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
-        var rebind = UpsertRebind(current: m_seatBindings.SessionRebind(slot: slot), source: source, command: command);
+        var current = m_seatBindings.SessionRebind(slot: slot);
+        BindingProfileDocument rebind;
 
-        // Verify the composed result compiles before installing it, so the echo is truthful; SetSessionRebind's own
+        if (source.StartsWith(value: ChordPrefix, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (!TryParseChordToken(token: source, group: out var group, members: out var members)) {
+                return Error(output: "[player.bind: a chord source must be chord:<m1>+<m2>[+...] or chord:<group>:<m1>+<m2> — e.g. chord:lt+rt]");
+            }
+
+            rebind = UpsertChordRebind(current: current, group: group, members: members, command: command);
+        } else {
+            rebind = UpsertRebind(current: current, source: source, command: command);
+        }
+
+        // Verify the composed result compiles before installing it, so the echo is truthful (an undeclared modifier
+        // id or a chord that collides with an existing meaning rejects HERE, loudly); SetSessionRebind's own
         // recompose is the belt-and-braces.
         try {
             _ = BindingProfile.Compile(document: WorldBindingComposer.Compose(WorldDefaultBindings.BuildDocument(), rebind));
@@ -86,6 +112,44 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         m_seatBindings.SetSessionRebind(slot: slot, rebinds: rebind);
 
         return new CommandResult(Output: $"[player.bind: seat {seat} '{source}' → '{command}' (unsaved — profile.save to persist)]");
+    }
+
+    private CommandResult SignalHandler(CommandContext context, string[] args) {
+        if (args.Length != 2) {
+            return Error(output: "[player.signal: expected <source> <press|release|value>]");
+        }
+
+        var source = args[0];
+
+        if (string.IsNullOrWhiteSpace(value: source)) {
+            return Error(output: "[player.signal: <source> must be non-empty]");
+        }
+
+        CommandPhase phase;
+        CommandValue value;
+
+        if (string.Equals(a: args[1], b: "press", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            phase = CommandPhase.Started;
+            value = CommandValue.Digital(active: true);
+        } else if (string.Equals(a: args[1], b: "release", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            phase = CommandPhase.Completed;
+            value = CommandValue.Digital(active: false);
+        } else if (float.TryParse(s: args[1], style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var sample)) {
+            phase = CommandPhase.Active;
+            value = CommandValue.Axis(value: sample);
+        } else {
+            return Error(output: "[player.signal: the second value must be press, release, or a number]");
+        }
+
+        m_router.Capture(signal: new InputSignal(
+            CaptureTick: (m_clock?.NowTicks ?? 0UL),
+            DeviceId: default,
+            Phase: phase,
+            Source: source,
+            Value: value
+        ));
+
+        return new CommandResult(Output: $"[player.signal: {source} {args[1].ToLowerInvariant()}]");
     }
 
     private CommandResult BindingsHandler(CommandContext context, string[] args) {
@@ -100,21 +164,38 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
         var document = m_seatBindings.ComposedDocument(slot: slot);
         var builder = new StringBuilder(value: $"[player.bindings: seat {seat}");
+        var defaultGroup = ((document.Chords is { Count: > 0 } chords) ? chords[0].Group : string.Empty);
         var seen = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var any = false;
 
-        foreach (var page in (document.Pages ?? [])) {
-            if (page.Chord is { Count: > 0 }) {
+        // The default group's resting-page entries first (the classic source→command glance)...
+        foreach (var row in (document.Chords ?? [])) {
+            if ((row.Chord is { Count: > 0 }) || (row.Page?.Entries is not { } entries) ||
+                !string.Equals(a: row.Group, b: defaultGroup, comparisonType: StringComparison.Ordinal)) {
                 continue;
             }
 
-            foreach (var entry in (page.Entries ?? [])) {
-                // One line per distinct source→command pair (a hold/release pair collapses to one).
+            foreach (var entry in entries) {
+                // One segment per distinct source→command pair (a hold/release pair collapses to one).
                 if (seen.Add(item: $"{entry.Source}\0{entry.Command}")) {
                     _ = builder.Append(value: any ? " | " : " ").Append(value: entry.Source).Append(value: "→").Append(value: entry.Command);
                     any = true;
                 }
             }
+        }
+
+        // ...then every chord row with its meaning: chord <group>:[m1+m2]→<command> or →page <id>.
+        foreach (var row in (document.Chords ?? [])) {
+            if (row.Chord is not { Count: > 0 } chord) {
+                continue;
+            }
+
+            _ = builder.Append(value: any ? " | " : " ")
+                .Append(value: "chord ").Append(value: row.Group).Append(value: ":[").Append(value: string.Join(separator: '+', values: chord)).Append(value: "]→");
+            _ = ((row.Command is { } command)
+                ? builder.Append(value: command.Command)
+                : builder.Append(value: "page ").Append(value: row.Page?.Id));
+            any = true;
         }
 
         if (!any) {
@@ -263,32 +344,102 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         return ((args.Length > argTokens) ? string.Join(separator: ' ', values: args[argTokens..]) : string.Empty);
     }
 
-    // Build the seat's session-rebind base-page document: keep every prior rebind for OTHER sources, replace this
-    // source's entry with the new source→command (AnyModifiers, so the remap keeps working with an incidental modifier).
+    // Parse a chord token: chord:<m1>+<m2>[+...] (the default play group) or chord:<group>:<m1>+<m2>.
+    private static bool TryParseChordToken(string token, out string group, out string[] members) {
+        group = WorldDefaultBindings.PlayGroup;
+        members = [];
+
+        var body = token[ChordPrefix.Length..];
+        var groupSplit = body.Split(separator: ':');
+
+        if (groupSplit.Length == 2) {
+            group = groupSplit[0];
+            body = groupSplit[1];
+        } else if (groupSplit.Length != 1) {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(value: group) || string.IsNullOrWhiteSpace(value: body)) {
+            return false;
+        }
+
+        members = body.Split(separator: '+');
+
+        foreach (var member in members) {
+            if (string.IsNullOrWhiteSpace(value: member)) {
+                return false;
+            }
+        }
+
+        return (members.Length > 0);
+    }
+
+    // Build the seat's session-rebind document with one resting-page entry replaced: keep every prior rebind row,
+    // filter the target source out of the resting page, append the new source→command (AnyModifiers, so the remap
+    // keeps working with an incidental modifier).
     private static BindingProfileDocument UpsertRebind(BindingProfileDocument? current, string source, string command) {
         var entries = new List<BindingPageEntryDefinition>();
+        var rows = new List<BindingChordDefinition>();
 
-        foreach (var page in (current?.Pages ?? [])) {
-            if (page.Chord is { Count: > 0 }) {
-                continue;
-            }
-
-            foreach (var entry in (page.Entries ?? [])) {
-                if (!string.Equals(a: entry.Source, b: source, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    entries.Add(item: entry);
+        foreach (var row in (current?.Chords ?? [])) {
+            if (IsSessionRestingPage(row: row)) {
+                foreach (var entry in (row.Page!.Entries ?? [])) {
+                    if (!string.Equals(a: entry.Source, b: source, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        entries.Add(item: entry);
+                    }
                 }
+            } else {
+                rows.Add(item: row);
             }
         }
 
         entries.Add(item: new BindingPageEntryDefinition(Source: source, Command: command, AnyModifiers: true));
+        rows.Insert(index: 0, item: new BindingChordDefinition(
+            Group: WorldDefaultBindings.PlayGroup,
+            Chord: [],
+            Page: new BindingPageDefinition(Id: WorldDefaultBindings.BasePageId, Entries: entries)
+        ));
 
         return new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [],
-            Pages: [
-                new BindingPageDefinition(Id: WorldDefaultBindings.BasePageId, Chord: [], Entries: entries),
-            ]
+            Chords: rows
         );
+    }
+
+    // Build the seat's session-rebind document with one chord row upserted: keep every prior row except the same
+    // (group, ordered chord) — a later bind of the same chord replaces its meaning.
+    private static BindingProfileDocument UpsertChordRebind(BindingProfileDocument? current, string group, string[] members, string command) {
+        var rows = new List<BindingChordDefinition>();
+
+        foreach (var row in (current?.Chords ?? [])) {
+            if (string.Equals(a: row.Group, b: group, comparisonType: StringComparison.Ordinal) &&
+                ((row.Chord?.Count ?? 0) == members.Length) &&
+                (row.Chord?.SequenceEqual(second: members, comparer: StringComparer.Ordinal) ?? false)) {
+                continue;
+            }
+
+            rows.Add(item: row);
+        }
+
+        rows.Add(item: new BindingChordDefinition(
+            Group: group,
+            Chord: members,
+            Command: new BindingCommandDefinition(Command: command)
+        ));
+
+        return new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: rows
+        );
+    }
+
+    // A session-layer resting-page row (the play group's empty chord) — the row entry rebinds accumulate on.
+    private static bool IsSessionRestingPage(BindingChordDefinition row) {
+        return (string.Equals(a: row.Group, b: WorldDefaultBindings.PlayGroup, comparisonType: StringComparison.Ordinal) &&
+            (row.Chord is not { Count: > 0 }) &&
+            (row.Page is not null));
     }
 
     private static CommandResult Error(string output) => new(Output: output) {

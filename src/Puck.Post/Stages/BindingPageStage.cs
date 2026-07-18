@@ -16,17 +16,27 @@ namespace Puck.Post;
 /// distinct pages, and releasing one modifier of a chord leaves the ordered remainder's page;</description></item>
 /// <item><description>the release latch: a button pressed on a page completes as that page's command even when the
 /// modifier lifted first, and leaves no stuck held entry behind;</description></item>
+/// <item><description>page GROUPS: a runtime <see cref="PagedInputBindings.SetActiveGroup"/> flip re-scopes
+/// resolution (deepest-held page-chord PREFIX within the active group, resting-page fallback) without touching
+/// the tracker, and the press latch survives the flip — the release resolves to the pressed group's command;</description></item>
+/// <item><description>command chords: a chord row whose meaning is a COMMAND fires its press edge on the signal
+/// that completes the chord and its release edge when a member releases (HoldRelease dispatching both);</description></item>
+/// <item><description>the two compile-time uniqueness rules reject loudly (one meaning per <c>(group, chord)</c>;
+/// one resting page per group; no empty-chord command);</description></item>
 /// <item><description>determinism: two identical sessions produce identical per-tick snapshot hashes.</description></item>
 /// </list>
 /// </summary>
 internal sealed class BindingPageStage : IPostStage {
     private const string BaseCommand = "bindpage.base";
+    private const string ChordCommand = "bindpage.chord";
     private const string LeftCommand = "bindpage.left";
     private const string LeftRightCommand = "bindpage.leftRight";
+    private const string ModeCommand = "bindpage.mode";
     private const string RightCommand = "bindpage.right";
     private const string RightLeftCommand = "bindpage.rightLeft";
     private const int StuckHeldProbeTick = 24;
-    private const int TickCount = 32;
+    private const int GroupStuckHeldProbeTick = 41;
+    private const int TickCount = 44;
 
     /// <inheritdoc/>
     public string Name => "binding-page";
@@ -36,10 +46,15 @@ internal sealed class BindingPageStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
+        // The compile-time uniqueness rules reject loudly before any session runs.
+        if (RuleRejections() is { } rejection) {
+            return PostStageOutcome.Fail(detail: rejection);
+        }
+
         var registry = new CommandRegistry(modules: [new BindingPageStageModule()]);
         var ids = new Dictionary<string, ushort>(comparer: StringComparer.Ordinal);
 
-        foreach (var name in (string[])[BaseCommand, LeftCommand, RightCommand, LeftRightCommand, RightLeftCommand,]) {
+        foreach (var name in (string[])[BaseCommand, LeftCommand, RightCommand, LeftRightCommand, RightLeftCommand, ModeCommand, ChordCommand,]) {
             if (!registry.TryGetId(
                 name: name,
                 id: out var id
@@ -66,16 +81,67 @@ internal sealed class BindingPageStage : IPostStage {
             }
         }
 
-        // The release-latch guarantee: after the page-4 press released post-modifier-drop, nothing is held.
+        // The release-latch guarantees: after the page-4 press released post-modifier-drop, and after the
+        // cross-group-flip release, nothing is held.
         if (first.HeldAt(tick: StuckHeldProbeTick)) {
             return PostStageOutcome.Fail(detail: $"stuck held entry: tick {StuckHeldProbeTick} still carries an entry after every control released — the release latch failed");
         }
 
-        return PostStageOutcome.Pass(detail: $"paged bindings verified over {TickCount} ticks: threshold hysteresis, ordered chords (left→right vs right→left), chord-remainder fallback, the release latch, and two identical sessions hashing bit-for-bit (final hash 0x{first.Hashes[^1]:X16})");
+        if (first.HeldAt(tick: GroupStuckHeldProbeTick)) {
+            return PostStageOutcome.Fail(detail: $"stuck held entry: tick {GroupStuckHeldProbeTick} still carries an entry after the cross-group release — the press latch leaked across the group flip");
+        }
+
+        return PostStageOutcome.Pass(detail: $"paged bindings verified over {TickCount} ticks: threshold hysteresis, ordered chords (left→right vs right→left), chord-remainder fallback, the release latch (page flips AND group flips), group-scoped deepest-prefix resolution, command-chord press/release edges, the loud uniqueness-rule rejections, and two identical sessions hashing bit-for-bit (final hash 0x{first.Hashes[^1]:X16})");
+    }
+
+    // The three loud compile-time rules, each proven by a document that must be rejected. Null = all rejected.
+    private static string? RuleRejections() {
+        var modifiers = (IReadOnlyList<BindingModifierDefinition>)[new BindingModifierDefinition(Id: "left", Source: InputSources.Gamepad.LeftTrigger),];
+        var resting = new BindingChordDefinition(Group: "main", Chord: [], Page: new BindingPageDefinition(Entries: [], Id: "base"));
+        var probes = (IReadOnlyList<(string Rule, BindingProfileDocument Document)>)[
+            ("one meaning per (group, chord)", new BindingProfileDocument(
+                Chords: [
+                    resting,
+                    new BindingChordDefinition(Group: "main", Chord: ["left"], Page: new BindingPageDefinition(Entries: [], Id: "left")),
+                    new BindingChordDefinition(Group: "main", Chord: ["left"], Command: new BindingCommandDefinition(Command: ChordCommand)),
+                ],
+                Modifiers: modifiers,
+                Version: BindingProfileDocument.CurrentVersion
+            )),
+            ("one resting page per group", new BindingProfileDocument(
+                Chords: [
+                    resting,
+                    new BindingChordDefinition(Group: "orphan", Chord: ["left"], Page: new BindingPageDefinition(Entries: [], Id: "orphan-left")),
+                ],
+                Modifiers: modifiers,
+                Version: BindingProfileDocument.CurrentVersion
+            )),
+            ("no empty-chord command", new BindingProfileDocument(
+                Chords: [
+                    resting,
+                    new BindingChordDefinition(Group: "other", Chord: [], Command: new BindingCommandDefinition(Command: ChordCommand)),
+                ],
+                Modifiers: modifiers,
+                Version: BindingProfileDocument.CurrentVersion
+            )),
+        ];
+
+        foreach (var (rule, document) in probes) {
+            try {
+                _ = BindingProfile.Compile(document: document);
+
+                return $"the \"{rule}\" rule did not reject its violating document";
+            } catch (ArgumentException) {
+                // The loud rejection this probe demands.
+            }
+        }
+
+        return null;
     }
 
     // One session: capture the whole script up front (each signal stamped with its tick), then pull one snapshot
-    // per tick — the exact shape of the host loop — folding page state deterministically in capture order.
+    // per tick — the exact shape of the host loop — folding page state deterministically in capture order. The
+    // scripted group flips fire between ticks, exactly where a host's verb handler would call SetActiveGroup.
     private static Session RunSession(CommandRegistry registry) {
         var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: BuildProfile()));
         var router = new InputRouter(bindings: bindings, registry: registry);
@@ -87,6 +153,14 @@ internal sealed class BindingPageStage : IPostStage {
         var session = new Session(TickCount: TickCount);
 
         for (var tick = 0; (tick < TickCount); tick++) {
+            // The scripted mode flips: into the "mode" group before tick 32, back to the default before tick 39
+            // (while the mode-page press from tick 38 is still held — the latch-across-the-flip probe).
+            if (tick == 32) {
+                _ = bindings.SetActiveGroup(slot: 0, group: "mode");
+            } else if (tick == 39) {
+                _ = bindings.SetActiveGroup(slot: 0, group: null);
+            }
+
             var window = ((ulong)tick);
 
             session.Fold(tick: tick, snapshot: router.SnapshotForTick(tick: window, windowEndTick: (window + 1UL)));
@@ -103,12 +177,16 @@ internal sealed class BindingPageStage : IPostStage {
                 new BindingModifierDefinition(Id: "left", Source: InputSources.Gamepad.LeftTrigger),
                 new BindingModifierDefinition(Id: "right", Source: InputSources.Gamepad.RightTrigger),
             ],
-            Pages: [
-                new BindingPageDefinition(Chord: [], Entries: [new BindingPageEntryDefinition(Command: BaseCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "base"),
-                new BindingPageDefinition(Chord: ["left"], Entries: [new BindingPageEntryDefinition(Command: LeftCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "left"),
-                new BindingPageDefinition(Chord: ["right"], Entries: [new BindingPageEntryDefinition(Command: RightCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "right"),
-                new BindingPageDefinition(Chord: ["left", "right"], Entries: [new BindingPageEntryDefinition(Command: LeftRightCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "left-right"),
-                new BindingPageDefinition(Chord: ["right", "left"], Entries: [new BindingPageEntryDefinition(Command: RightLeftCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "right-left"),
+            Chords: [
+                new BindingChordDefinition(Group: "main", Chord: [], Page: new BindingPageDefinition(Entries: [new BindingPageEntryDefinition(Command: BaseCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "base")),
+                new BindingChordDefinition(Group: "main", Chord: ["left"], Page: new BindingPageDefinition(Entries: [new BindingPageEntryDefinition(Command: LeftCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "left")),
+                new BindingChordDefinition(Group: "main", Chord: ["right"], Page: new BindingPageDefinition(Entries: [new BindingPageEntryDefinition(Command: RightCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "right")),
+                new BindingChordDefinition(Group: "main", Chord: ["left", "right"], Page: new BindingPageDefinition(Entries: [new BindingPageEntryDefinition(Command: LeftRightCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "left-right")),
+                new BindingChordDefinition(Group: "main", Chord: ["right", "left"], Page: new BindingPageDefinition(Entries: [new BindingPageEntryDefinition(Command: RightLeftCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "right-left")),
+                // The "mode" group: a resting page only — no [right] page, so a held right trigger proves the
+                // deepest-PREFIX fallback — plus a HoldRelease COMMAND chord on [right].
+                new BindingChordDefinition(Group: "mode", Chord: [], Page: new BindingPageDefinition(Entries: [new BindingPageEntryDefinition(Command: ModeCommand, Source: InputSources.Gamepad.ButtonSouth),], Id: "mode-base")),
+                new BindingChordDefinition(Group: "mode", Chord: ["right"], Command: new BindingCommandDefinition(Command: ChordCommand, HoldRelease: true)),
             ],
             Version: BindingProfileDocument.CurrentVersion
         );
@@ -160,6 +238,26 @@ internal sealed class BindingPageStage : IPostStage {
         yield return TriggerRelease(source: InputSources.Gamepad.LeftTrigger, captureTick: 28UL);
         yield return InputSignal.Press(source: InputSources.Gamepad.ButtonSouth, captureTick: 29UL);
         yield return InputSignal.Release(source: InputSources.Gamepad.ButtonSouth, captureTick: 30UL);
+        // ---- The GROUP block (RunSession flips to "mode" before tick 32, back to "main" before tick 39). ----
+        // The flipped group's resting page answers.
+        yield return InputSignal.Press(source: InputSources.Gamepad.ButtonSouth, captureTick: 32UL);
+        yield return InputSignal.Release(source: InputSources.Gamepad.ButtonSouth, captureTick: 33UL);
+        // The right trigger completes the mode group's [right] COMMAND chord -> the press edge fires on this very
+        // sample (an Active-phase trigger sweep — the synthesized edge carries its own Started phase).
+        yield return Trigger(source: InputSources.Gamepad.RightTrigger, value: 0.7f, captureTick: 34UL);
+        // Deepest-prefix fallback: mode has no [right] PAGE, so the resting page still answers south while the
+        // trigger is held (main's "right" page must not leak across the group scope).
+        yield return InputSignal.Press(source: InputSources.Gamepad.ButtonSouth, captureTick: 35UL);
+        yield return InputSignal.Release(source: InputSources.Gamepad.ButtonSouth, captureTick: 36UL);
+        // The member releases -> the HoldRelease command chord dispatches its release edge.
+        yield return Trigger(source: InputSources.Gamepad.RightTrigger, value: 0.2f, captureTick: 37UL);
+        // The latch across the group flip: pressed on mode-base, released after the flip back to main — the
+        // release MUST resolve to the mode page's command, and nothing may stay held (tick 41's silent probe).
+        yield return InputSignal.Press(source: InputSources.Gamepad.ButtonSouth, captureTick: 38UL);
+        yield return InputSignal.Release(source: InputSources.Gamepad.ButtonSouth, captureTick: 40UL);
+        // New presses use the new (default) group.
+        yield return InputSignal.Press(source: InputSources.Gamepad.ButtonSouth, captureTick: 42UL);
+        yield return InputSignal.Release(source: InputSources.Gamepad.ButtonSouth, captureTick: 43UL);
     }
     private static IEnumerable<(int Tick, string Command, CommandPhase Phase)> ExpectedEntries() {
         yield return (0, BaseCommand, CommandPhase.Started);
@@ -174,6 +272,16 @@ internal sealed class BindingPageStage : IPostStage {
         yield return (23, LeftRightCommand, CommandPhase.Completed); // the release latch
         yield return (25, BaseCommand, CommandPhase.Started);
         yield return (29, BaseCommand, CommandPhase.Started);        // the release edge alone unlatched the modifier
+        // The group block.
+        yield return (32, ModeCommand, CommandPhase.Started);        // the flipped group's resting page answers
+        yield return (33, ModeCommand, CommandPhase.Completed);
+        yield return (34, ChordCommand, CommandPhase.Started);       // the [right] command chord completes
+        yield return (35, ModeCommand, CommandPhase.Started);        // deepest-prefix fallback under the held chord
+        yield return (36, ModeCommand, CommandPhase.Completed);
+        yield return (37, ChordCommand, CommandPhase.Completed);     // the member released -> the HoldRelease edge
+        yield return (38, ModeCommand, CommandPhase.Started);
+        yield return (40, ModeCommand, CommandPhase.Completed);      // the press latch survived the group flip
+        yield return (42, BaseCommand, CommandPhase.Started);        // new presses use the restored default group
     }
     private static InputSignal Trigger(string source, float value, ulong captureTick) {
         return new InputSignal(
@@ -251,7 +359,7 @@ internal sealed class BindingPageStage : IPostStage {
     private sealed class BindingPageStageModule : ICommandModule {
         /// <inheritdoc/>
         public IEnumerable<CommandDefinition> GetCommands() {
-            foreach (var name in (string[])[BaseCommand, LeftCommand, RightCommand, LeftRightCommand, RightLeftCommand,]) {
+            foreach (var name in (string[])[BaseCommand, LeftCommand, RightCommand, LeftRightCommand, RightLeftCommand, ModeCommand, ChordCommand,]) {
                 yield return CommandDefinition.Verb(
                     description: $"Binding-page stage probe ({name}).",
                     handler: static _ => CommandResult.None,

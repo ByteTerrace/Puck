@@ -57,19 +57,19 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: EnterCommand,
-            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound Gamepad Back / Keyboard Tab). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the binding bar flips to the editor pages (LT holds the camera page; RT is reserved for P3 selection). Exit with East / Back / Tab or editor.exit.",
+            description: "Enters editor mode for a seat: editor.enter [seat] (1..4, default 1; the pressing device's seat on the bound LT-then-RT chord or Gamepad Back / Keyboard Tab). The seat's avatar idles honestly (intent diverts to the player.control idle contract — a live tape or player.press still drives), its sticks fly the editor camera seeded exactly at the current chase framing, and the seat's active binding group flips to 'editor' (a pointer switch on the compiled profile — the bar renders the editor pages at once; LT holds the camera page, RT the select page). Exit with East / Back / Tab or editor.exit.",
             handler: EnterHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: ExitCommand,
-            description: "Leaves editor mode for a seat: editor.exit [seat] (1..4, default 1; the pressing device's seat on the bound East / Back / Tab). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and returns the binding bar to the play pages. A friendly no-op when the seat was not editing.",
+            description: "Leaves editor mode for a seat: editor.exit [seat] (1..4, default 1; the pressing device's seat on the bound East / Back / Tab). Restores the seat's prior intent source and its chase camera (re-anchored to the avatar — no pose pop) and flips the active binding group back to 'play'. A friendly no-op when the seat was not editing.",
             handler: ExitHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: StatusCommand,
-            description: "Echoes a seat's editor state: editor.status [seat] (1..4, default 1) — editing/not-editing, the camera mode and speed, the active binding page (id + label), and the editor eye. The scripted assertion point for mode flips.",
+            description: "Echoes a seat's editor state: editor.status [seat] (1..4, default 1) — editing/not-editing, the camera mode and speed, the active binding group and page (id + label), and the editor eye. The scripted assertion point for mode and group flips.",
             handler: StatusHandler
         );
         yield return CommandDefinition.WithTrailingArgs(
@@ -161,7 +161,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         }
 
         return (m_session.Enter(slot: slot) switch {
-            EditorModeOutcome.Applied => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} editing — sticks fly, LT camera page, East/Back exits]"),
+            EditorModeOutcome.Applied => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} editing — group editor, sticks fly, LT camera page, East/Back exits]"),
             EditorModeOutcome.AlreadyThere => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is already editing]"),
             EditorModeOutcome.Pending => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is pending — confirm a profile first (South/Enter or player.profile)]") {
                 IsError = true,
@@ -195,7 +195,8 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         var seat = PlayerRoster.DisplayNumber(slot: slot);
 
         if (!m_session.IsEditing(slot: slot)) {
-            return new CommandResult(Output: $"[editor.status: seat {seat} not editing]");
+            // The active group rides the not-editing echo too — the scripted assertion point for the exit flip.
+            return new CommandResult(Output: $"[editor.status: seat {seat} not editing group={m_seatBindings.PageView(slot: slot).Group}]");
         }
 
         var view = m_seatBindings.PageView(slot: slot);
@@ -216,7 +217,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection}{dragState}]"
+            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} group={view.Group} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection}{dragState}]"
         ));
     }
 

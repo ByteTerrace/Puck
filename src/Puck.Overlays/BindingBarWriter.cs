@@ -113,5 +113,34 @@ public sealed class BindingBarWriter {
                 pressed: modifier.Held
             );
         }
+
+        // The chord hints stack above the pips: one small centered line per command-chord row of the active group
+        // (ASCII only — the glyph pack is ASCII-95), quiet alpha so the bar's chips stay dominant.
+        var hints = seat.Hints.Span;
+
+        if (hints.Length == 0) {
+            return;
+        }
+
+        var hintCell = Math.Max(val1: 10, val2: (int)(pipHalf * 1.6f));
+        var hintLineStep = (hintCell * 1.3f);
+        var hintBaseY = (anchorY - (pipHalf * 2.2f));
+
+        for (var index = 0; (index < hints.Length); index++) {
+            var hint = hints[index];
+
+            if (string.IsNullOrEmpty(value: hint)) {
+                continue;
+            }
+
+            builder.WriteText(
+                alpha: 0.6f,
+                cellHeight: hintCell,
+                role: OverlayColorRole.TextDim,
+                text: hint,
+                x: (anchorX - (builder.TextWidth(chars: hint.Length, cellHeight: hintCell) * 0.5f)),
+                y: (hintBaseY - ((hints.Length - 1 - index) * hintLineStep) - hintCell)
+            );
+        }
     }
 }

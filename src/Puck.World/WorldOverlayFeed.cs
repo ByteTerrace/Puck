@@ -41,6 +41,10 @@ internal sealed class WorldOverlayFeed {
     private readonly HudCache[] m_hudCaches;
     private readonly WorldEditorTargeting m_targeting;
     private readonly GamepadManager? m_gamepads;
+    // Per-SEAT chord-hint cache: the hint lines are formatted once per published view (views are immutable and
+    // reference-stable per page), so the per-frame publish is a reference handoff.
+    private readonly BindingPageView?[] m_hintViews;
+    private readonly string[][] m_hintLines;
     private readonly OverlayBindingModifier[][] m_modifiers;
     // One cached pressed-probe delegate per SEAT SLOT (the router's held state is slot-keyed), so the per-frame
     // compose closes over nothing.
@@ -84,6 +88,8 @@ internal sealed class WorldOverlayFeed {
         m_store = store;
         m_targeting = targeting;
         m_editorSeats = new OverlayEditorSeat[PlayerRoster.MaxSlots];
+        m_hintLines = new string[PlayerRoster.MaxSlots][];
+        m_hintViews = new BindingPageView?[PlayerRoster.MaxSlots];
         m_hudCaches = new HudCache[PlayerRoster.MaxSlots];
         m_seats = new OverlayBindingSeat[PlayerRoster.MaxSlots];
         m_slots = new OverlayBindingSlot[PlayerRoster.MaxSlots][];
@@ -99,6 +105,7 @@ internal sealed class WorldOverlayFeed {
                 ContextLine = string.Empty,
                 DragLine = string.Empty,
             };
+            m_hintLines[index] = [];
             m_slots[index] = new OverlayBindingSlot[BindingBarSeatComposer.SlotSources.Length];
             m_modifiers[index] = new OverlayBindingModifier[ModifierCapacity];
             m_pressedBySlot[index] = command => router.IsCommandHeld(slot: slot, command: command);
@@ -129,6 +136,8 @@ internal sealed class WorldOverlayFeed {
             var viewport = WorldFrameSource.LayoutRegion(count: joined, index: viewIndex, soleEditorIndex: soleEditorViewIndex);
 
             m_seats[viewIndex] = new OverlayBindingSeat(
+                Group: view.Group,
+                Hints: HintLinesFor(slot: slot, view: view),
                 Modifiers: m_modifiers[viewIndex].AsMemory(start: 0, length: modifierCount),
                 PageId: view.PageId,
                 Slots: m_slots[viewIndex],
@@ -189,6 +198,46 @@ internal sealed class WorldOverlayFeed {
             handler: $"targets {m_targeting.TargetCount} | snap {(snap.Enabled ? "on" : "off")} {snap.Pitch.X:0.##}"
         );
         cache.DragLine = (m_drag.Describe(slot: slot) ?? string.Empty);
+    }
+
+    // The seat's chord-hint lines, re-formatted only when its published view changes (a page/group flip or a
+    // recompose — human cadence, never per frame). One ASCII line per command-chord row of the active group:
+    // the chord's modifier labels joined by '+', then the row's label (or its command name).
+    private ReadOnlyMemory<string> HintLinesFor(int slot, BindingPageView view) {
+        if (ReferenceEquals(objA: m_hintViews[slot], objB: view)) {
+            return m_hintLines[slot];
+        }
+
+        var chords = view.CommandChords;
+        var lines = ((chords.Count == 0) ? [] : new string[chords.Count]);
+
+        for (var index = 0; (index < chords.Count); index++) {
+            var chord = chords[index];
+            var members = new string[chord.Chord.Count];
+
+            for (var memberIndex = 0; (memberIndex < members.Length); memberIndex++) {
+                var id = chord.Chord[memberIndex];
+
+                members[memberIndex] = (ModifierLabelFor(view: view, id: id) ?? id.ToUpperInvariant());
+            }
+
+            lines[index] = $"{string.Join(separator: '+', values: members)} {chord.Label ?? chord.Command}";
+        }
+
+        m_hintLines[slot] = lines;
+        m_hintViews[slot] = view;
+
+        return lines;
+    }
+
+    private static string? ModifierLabelFor(BindingPageView view, string id) {
+        foreach (var modifier in view.Modifiers) {
+            if (string.Equals(a: modifier.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return modifier.Label;
+            }
+        }
+
+        return null;
     }
 
     // The primary player's family drives the glyph theme; the first connected pad stands in until per-player

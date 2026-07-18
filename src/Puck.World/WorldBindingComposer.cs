@@ -4,12 +4,14 @@ namespace Puck.World;
 
 /// <summary>
 /// The §2.4 document PRE-MERGE — the pure, boundary-only function that layers N <see cref="BindingProfileDocument"/>s
-/// into one before it goes through the existing <see cref="BindingProfile.Compile"/> once per seat. The merge key is
-/// <c>(page id + ordered chord, source)</c>: a later layer's entries for a source REPLACE the earlier layer's entries
-/// for that same source within a matching page; entries at new sources append; whole pages unknown to earlier layers
-/// append; modifiers union by id (a later layer overrides a same-id modifier). This is the level the compiled
-/// <c>LayeredInputBindings</c> primitive cannot express — it composes wholesale per <c>(slot, source)</c> and so cannot
-/// override one entry inside a shared page (the per-world overlay's single-lane remap needs exactly that).
+/// into one before it goes through the existing <see cref="BindingProfile.Compile"/> once per seat. Chord rows merge
+/// on <c>(group, ordered chord)</c>: a later layer's row for the same key OVERRIDES the earlier one — wholesale when
+/// the meaning kind or page id differs (a page becoming a command, a renamed page), entry-by-source when both are the
+/// SAME page (a later layer's entries for a source REPLACE the earlier layer's entries for that same source; entries
+/// at new sources append — the per-world overlay's single-lane remap). Rows at new keys append; modifiers union by id
+/// (a later layer overrides a same-id modifier). This is the level the compiled <c>LayeredInputBindings</c> primitive
+/// cannot express — it composes wholesale per <c>(slot, source)</c> and so cannot override one entry inside a shared
+/// page.
 /// </summary>
 internal static class WorldBindingComposer {
     /// <summary>Merges the given layers in order (null layers skipped). At least one non-null layer is required (in
@@ -21,8 +23,8 @@ internal static class WorldBindingComposer {
         string? version = null;
         var modifiers = new List<BindingModifierDefinition>();
         var modifierIndexById = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var pages = new List<MutablePage>();
-        var pageIndexByKey = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var rows = new List<MutableRow>();
+        var rowIndexByKey = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         foreach (var layer in layers) {
             if (layer is null) {
@@ -31,43 +33,46 @@ internal static class WorldBindingComposer {
 
             version ??= layer.Version;
             MergeModifiers(into: modifiers, index: modifierIndexById, layer: layer);
-            MergePages(into: pages, index: pageIndexByKey, layer: layer);
+            MergeRows(into: rows, index: rowIndexByKey, layer: layer);
         }
 
         if (version is null) {
             throw new ArgumentException(message: "Compose requires at least one non-null layer.", paramName: nameof(layers));
         }
 
-        var composedPages = new BindingPageDefinition[pages.Count];
+        var composedRows = new BindingChordDefinition[rows.Count];
 
-        for (var pageIndex = 0; (pageIndex < pages.Count); pageIndex++) {
-            composedPages[pageIndex] = pages[pageIndex].ToDefinition();
+        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
+            composedRows[rowIndex] = rows[rowIndex].ToDefinition();
         }
 
         return new BindingProfileDocument(
             Version: version,
             Modifiers: modifiers,
-            Pages: composedPages
+            Chords: composedRows
         );
     }
 
-    /// <summary>Flattens a composed document's no-modifier BASE page into the slot-blind <c>source → commands</c> table
-    /// the console-dispatch <see cref="BindingCommandSource"/> consumes — so that consumer and the per-seat resolvers
-    /// derive from the same composed documents (no second authoring grammar). The base page is the one with the empty
-    /// chord; an empty table results when the document carries none.</summary>
+    /// <summary>Flattens a composed document's DEFAULT-group resting page into the slot-blind <c>source → commands</c>
+    /// table the console-dispatch <see cref="BindingCommandSource"/> consumes — so that consumer and the per-seat
+    /// resolvers derive from the same composed documents (no second authoring grammar). The default group is the first
+    /// row's; an empty table results when the document carries no resting page for it.</summary>
     /// <param name="document">The composed document.</param>
-    /// <returns>The base page's <c>source → commands</c> table.</returns>
+    /// <returns>The resting page's <c>source → commands</c> table.</returns>
     public static IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> BasePageTable(BindingProfileDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
         var grouped = new Dictionary<string, List<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
+        var defaultGroup = ((document.Chords is { Count: > 0 } chords) ? chords[0].Group : null);
 
-        foreach (var page in (document.Pages ?? [])) {
-            if ((page.Chord is { Count: > 0 }) || (page.Entries is null)) {
+        foreach (var row in (document.Chords ?? [])) {
+            if ((row.Chord is { Count: > 0 }) ||
+                (row.Page?.Entries is not { } entries) ||
+                !string.Equals(a: row.Group, b: defaultGroup, comparisonType: StringComparison.Ordinal)) {
                 continue;
             }
 
-            foreach (var entry in page.Entries) {
+            foreach (var entry in entries) {
                 if (string.IsNullOrEmpty(value: entry.Source) || string.IsNullOrEmpty(value: entry.Command)) {
                     continue;
                 }
@@ -116,78 +121,108 @@ internal static class WorldBindingComposer {
         }
     }
 
-    private static void MergePages(List<MutablePage> into, Dictionary<string, int> index, BindingProfileDocument layer) {
-        foreach (var page in (layer.Pages ?? [])) {
-            var key = PageKey(page: page);
+    private static void MergeRows(List<MutableRow> into, Dictionary<string, int> index, BindingProfileDocument layer) {
+        foreach (var row in (layer.Chords ?? [])) {
+            var key = RowKey(row: row);
 
             if (index.TryGetValue(
                 key: key,
                 value: out var existing
             )) {
-                into[existing].Merge(page: page);
+                into[existing].Merge(row: row);
             } else {
                 index[key] = into.Count;
-                into.Add(item: MutablePage.From(page: page));
+                into.Add(item: MutableRow.From(row: row));
             }
         }
     }
 
-    // The page merge key: id plus the ordered chord (a NUL separator no id/modifier id can carry), so ["left","right"]
-    // and ["right","left"] are distinct pages and a same-id-and-chord page across layers merges.
-    private static string PageKey(BindingPageDefinition page) {
-        return $"{page.Id}\0{string.Join(separator: ',', values: (page.Chord ?? []))}";
+    // The chord-row merge key: group plus the ordered chord (a NUL separator no group/modifier id can carry), so
+    // ["lt","rt"] and ["rt","lt"] are distinct rows and a same-(group, chord) row across layers merges.
+    private static string RowKey(BindingChordDefinition row) {
+        return $"{row.Group}\0{string.Join(separator: ',', values: (row.Chord ?? []))}";
     }
 
-    // One page being composed: its identity (id + chord + display), plus its entries kept in first-seen SOURCE order so
-    // a later layer's entries for a source replace the earlier layer's IN PLACE (a stable, deterministic merge) and a
-    // new source appends.
-    private sealed class MutablePage {
+    // One chord row being composed: its (group, chord) identity plus its current meaning. A page meaning keeps its
+    // entries in first-seen SOURCE order so a later layer's entries for a source replace the earlier layer's IN PLACE
+    // (a stable, deterministic merge) and a new source appends; any other meaning change replaces the row wholesale.
+    private sealed class MutableRow {
+        private readonly string m_group;
+        private readonly IReadOnlyList<string> m_chord;
         private readonly List<string> m_sourceOrder = [];
         private readonly Dictionary<string, List<BindingPageEntryDefinition>> m_bySource = new(comparer: StringComparer.OrdinalIgnoreCase);
-        private string m_id;
-        private IReadOnlyList<string> m_chord;
-        private string? m_label;
-        private string? m_icon;
+        private BindingCommandDefinition? m_command;
+        private string? m_pageId;
+        private string? m_pageLabel;
+        private string? m_pageIcon;
 
-        private MutablePage(string id, IReadOnlyList<string> chord, string? label, string? icon) {
+        private MutableRow(string group, IReadOnlyList<string> chord) {
             m_chord = chord;
-            m_icon = icon;
-            m_id = id;
-            m_label = label;
+            m_group = group;
         }
 
-        public static MutablePage From(BindingPageDefinition page) {
-            var mutable = new MutablePage(id: page.Id, chord: (page.Chord ?? []), label: page.Label, icon: page.Icon);
+        public static MutableRow From(BindingChordDefinition row) {
+            var mutable = new MutableRow(group: row.Group, chord: (row.Chord ?? []));
 
-            mutable.Absorb(entries: page.Entries, replace: false);
+            mutable.Adopt(row: row);
 
             return mutable;
         }
 
-        // Merge a later layer's version of this page: its display metadata overrides when present, and its entries
-        // replace the earlier layer's for each source it names (the single-lane remap).
-        public void Merge(BindingPageDefinition page) {
-            m_chord = (page.Chord ?? m_chord);
-            m_icon = (page.Icon ?? m_icon);
-            m_label = (page.Label ?? m_label);
+        // Merge a later layer's version of this row. The SAME page (matching id) deep-merges: display metadata
+        // overrides when present, entries replace per source. Anything else — a command meaning, or a page under a
+        // different id — is a wholesale override: exactly one meaning per (group, chord) must survive the merge.
+        public void Merge(BindingChordDefinition row) {
+            if ((row.Page is { } page) && (m_command is null) && string.Equals(a: page.Id, b: m_pageId, comparisonType: StringComparison.Ordinal)) {
+                m_pageIcon = (page.Icon ?? m_pageIcon);
+                m_pageLabel = (page.Label ?? m_pageLabel);
 
-            Absorb(entries: page.Entries, replace: true);
+                Absorb(entries: page.Entries, replace: true);
+
+                return;
+            }
+
+            m_bySource.Clear();
+            m_sourceOrder.Clear();
+            Adopt(row: row);
         }
 
-        public BindingPageDefinition ToDefinition() {
+        public BindingChordDefinition ToDefinition() {
+            if (m_command is { } command) {
+                return new BindingChordDefinition(
+                    Group: m_group,
+                    Chord: m_chord,
+                    Command: command
+                );
+            }
+
             var entries = new List<BindingPageEntryDefinition>();
 
             foreach (var source in m_sourceOrder) {
                 entries.AddRange(collection: m_bySource[source]);
             }
 
-            return new BindingPageDefinition(
-                Id: m_id,
+            return new BindingChordDefinition(
+                Group: m_group,
                 Chord: m_chord,
-                Entries: entries,
-                Label: m_label,
-                Icon: m_icon
+                Page: new BindingPageDefinition(
+                    Id: (m_pageId ?? string.Empty),
+                    Entries: entries,
+                    Label: m_pageLabel,
+                    Icon: m_pageIcon
+                )
             );
+        }
+
+        private void Adopt(BindingChordDefinition row) {
+            m_command = row.Command;
+            m_pageIcon = row.Page?.Icon;
+            m_pageId = row.Page?.Id;
+            m_pageLabel = row.Page?.Label;
+
+            if (row.Page is { } page) {
+                Absorb(entries: page.Entries, replace: false);
+            }
         }
 
         private void Absorb(IReadOnlyList<BindingPageEntryDefinition>? entries, bool replace) {

@@ -23,13 +23,13 @@ internal enum EditorModeOutcome {
 
 /// <summary>
 /// One seat's per-session editor mode — the client-side owner of everything entering the editor changes: the seat's
-/// binding MODE layer (<see cref="WorldSeatBindings.SetModeLayer"/> with <see cref="WorldEditorBindings.Document"/>),
-/// its intent diversion (the seat goes <see cref="IntentSource.Idle"/> client-side AND server-side over the existing
-/// <c>SetControl</c> wire — the honest idle: live device input is masked while tapes/<c>player.press</c> still drive,
-/// exactly the <c>player.control idle</c> contract), and its camera (a free-fly/orbit rig swapped in for the chase
-/// rig, integrated at presentation cadence from the pad samples the <c>editor.stick.move/look</c> routers stage). Exit
-/// restores the seat's prior intent source and clears the layer; the chase rig re-anchors deterministically to the
-/// avatar, so there is no pose to restore.
+/// ACTIVE binding group (<see cref="WorldSeatBindings.SetActiveGroup"/> onto <see cref="WorldEditorBindings.GroupId"/>
+/// — a pointer flip on the compiled profile, no recompose), its intent diversion (the seat goes
+/// <see cref="IntentSource.Idle"/> client-side AND server-side over the existing <c>SetControl</c> wire — the honest
+/// idle: live device input is masked while tapes/<c>player.press</c> still drive, exactly the <c>player.control idle</c>
+/// contract), and its camera (a free-fly/orbit rig swapped in for the chase rig, integrated at presentation cadence
+/// from the pad samples the <c>editor.stick.move/look</c> routers stage). Exit restores the seat's prior intent source
+/// and flips the group back; the chase rig re-anchors deterministically to the avatar, so there is no pose to restore.
 /// </summary>
 /// <remarks>Single-threaded, like every input-fold type here: the verb/router mutators run during the command pump's
 /// apply window, <see cref="LatchTick"/> runs in the simulation's finish phase, and <see cref="ResolveRig"/> runs
@@ -147,8 +147,9 @@ internal sealed class WorldEditorSession {
     public Func<int, Vector3?>? OrbitPivotSource { get; set; }
 
     /// <summary>Enters editor mode for a seat: captures its intent source, diverts it to Idle on BOTH halves (the
-    /// client mask and the server body over <c>SetControl</c>), installs the editor binding layer, and arms the
-    /// camera to seed from the seat's current chase framing on the next produced frame (no pose pop).</summary>
+    /// client mask and the server body over <c>SetControl</c>), flips the seat's active binding group to the editor
+    /// group, and arms the camera to seed from the seat's current chase framing on the next produced frame (no pose
+    /// pop).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public EditorModeOutcome Enter(int slot) {
         if (!m_roster.IsJoined(slot: slot)) {
@@ -173,7 +174,7 @@ internal sealed class WorldEditorSession {
         // idle), and the transition drops held keys/lanes so nothing leaks into or out of the mode.
         m_link.SubmitCommand(command: new WorldCommand.SetControl(Principal: WorldPrincipal.Console, EntityIndex: slot, Source: IntentSource.Idle));
         controller?.SetIntentSource(source: IntentSource.Idle);
-        m_bindings.SetModeLayer(slot: slot, layer: WorldEditorBindings.Document);
+        _ = m_bindings.SetActiveGroup(slot: slot, group: WorldEditorBindings.GroupId);
         seat.Active = true;
         seat.SeedPending = true;
         seat.Mode = EditorCameraMode.Fly;
@@ -187,9 +188,9 @@ internal sealed class WorldEditorSession {
         return EditorModeOutcome.Applied;
     }
 
-    /// <summary>Exits editor mode for a seat: clears the binding layer and restores the intent source captured at
-    /// enter on both halves. The chase rig re-anchors to the avatar deterministically, so the camera restores with
-    /// no pose pop by construction.</summary>
+    /// <summary>Exits editor mode for a seat: flips the active binding group back to the default and restores the
+    /// intent source captured at enter on both halves. The chase rig re-anchors to the avatar deterministically, so
+    /// the camera restores with no pose pop by construction.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public EditorModeOutcome Exit(int slot) {
         if ((uint)slot >= (uint)m_seats.Length) {
@@ -323,8 +324,8 @@ internal sealed class WorldEditorSession {
         }
     }
 
-    /// <summary>Self-heals a departed seat: a slot that left the roster while editing is force-exited (layer cleared,
-    /// camera dropped) so a later join never inherits editor bindings. Called once per produced frame.</summary>
+    /// <summary>Self-heals a departed seat: a slot that left the roster while editing is force-exited (group flipped
+    /// back, camera dropped) so a later join never inherits editor bindings. Called once per produced frame.</summary>
     public void PruneDeparted() {
         for (var slot = 0; (slot < m_seats.Length); slot++) {
             if (m_seats[slot].Active && !m_roster.IsJoined(slot: slot)) {
@@ -494,10 +495,10 @@ internal sealed class WorldEditorSession {
         return (((editors == 1) && (viewIndex >= 2)) ? editorViewIndex : -1);
     }
 
-    // Unwind a seat's mode state without touching the (possibly departed) body: clear the binding layer, drop the
-    // camera, forget the sticks.
+    // Unwind a seat's mode state without touching the (possibly departed) body: flip the binding group back, drop
+    // the camera, forget the sticks.
     private void Deactivate(int slot, Seat seat) {
-        m_bindings.SetModeLayer(slot: slot, layer: null);
+        _ = m_bindings.SetActiveGroup(slot: slot, group: null);
         seat.Active = false;
         seat.SeedPending = false;
         seat.StagedMove = Vector2.Zero;

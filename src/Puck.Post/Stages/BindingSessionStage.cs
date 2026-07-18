@@ -87,7 +87,7 @@ internal sealed class BindingSessionStage : IPostStage {
             return PostStageOutcome.Fail(detail: $"displacement wrong: expected exactly [{MenuCommand}], got [{string.Join(separator: ", ", values: displaced.Select(selector: static entry => entry.Command))}]");
         }
 
-        var page = applied.Pages.Single(predicate: static page => string.Equals(a: page.Id, b: PageId, comparisonType: StringComparison.Ordinal));
+        var page = applied.Chords.Select(selector: static row => row.Page).Single(predicate: static page => string.Equals(a: page?.Id, b: PageId, comparisonType: StringComparison.Ordinal))!;
         var sourceOf = page.Entries.ToDictionary(
             comparer: StringComparer.Ordinal,
             elementSelector: static entry => entry.Source,
@@ -112,21 +112,27 @@ internal sealed class BindingSessionStage : IPostStage {
     private static BindingProfileDocument BuildProfile() {
         return new BindingProfileDocument(
             Modifiers: [new BindingModifierDefinition(Id: "left", Source: InputSources.Gamepad.LeftTrigger),],
-            Pages: [
-                new BindingPageDefinition(
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "main",
                     Chord: [],
-                    Entries: [
-                        new BindingPageEntryDefinition(Command: JumpCommand, Source: InputSources.Gamepad.ButtonSouth),
-                        new BindingPageEntryDefinition(Command: InteractCommand, Source: InputSources.Gamepad.ButtonWest),
-                        new BindingPageEntryDefinition(Command: TargetCommand, Source: InputSources.Gamepad.LeftShoulder),
-                        new BindingPageEntryDefinition(Command: MenuCommand, Source: InputSources.Gamepad.ButtonEast),
-                    ],
-                    Id: PageId
+                    Page: new BindingPageDefinition(
+                        Entries: [
+                            new BindingPageEntryDefinition(Command: JumpCommand, Source: InputSources.Gamepad.ButtonSouth),
+                            new BindingPageEntryDefinition(Command: InteractCommand, Source: InputSources.Gamepad.ButtonWest),
+                            new BindingPageEntryDefinition(Command: TargetCommand, Source: InputSources.Gamepad.LeftShoulder),
+                            new BindingPageEntryDefinition(Command: MenuCommand, Source: InputSources.Gamepad.ButtonEast),
+                        ],
+                        Id: PageId
+                    )
                 ),
-                new BindingPageDefinition(
+                new BindingChordDefinition(
+                    Group: "main",
                     Chord: ["left"],
-                    Entries: [new BindingPageEntryDefinition(Command: MenuCommand, Source: InputSources.Gamepad.ButtonSouth),],
-                    Id: "left"
+                    Page: new BindingPageDefinition(
+                        Entries: [new BindingPageEntryDefinition(Command: MenuCommand, Source: InputSources.Gamepad.ButtonSouth),],
+                        Id: "left"
+                    )
                 ),
             ],
             Version: BindingProfileDocument.CurrentVersion

@@ -4,25 +4,21 @@ using Puck.Input;
 namespace Puck.World;
 
 /// <summary>
-/// The editor MODE layer's binding document — code-authored pages speaking the <c>editor.*</c> command vocabulary,
-/// composed as the final layer of an editing seat's stack (engine default ⊕ world overlays ⊕ profile ⊕ session ⊕
-/// MODE) by <see cref="WorldSeatBindings.SetModeLayer"/>. Ordered LT/RT trigger chords select the pages
-/// (<see cref="BindingModifierDefinition"/> hysteresis keeps a resting trigger from flapping them); the binding bar
-/// renders whatever page the chord selects, so entering the mode lights the editor pages with zero bar-side work.
+/// The <see cref="GroupId"/> page group — code-authored chord rows speaking the <c>editor.*</c> command vocabulary,
+/// folded into the engine-default document by <see cref="WorldDefaultBindings.BuildDocument"/> so every seat's
+/// compiled profile always carries them. Entering the editor is <see cref="WorldSeatBindings.SetActiveGroup"/> with
+/// this group — a pointer flip on the already-compiled profile, no recompose — and the binding bar renders whatever
+/// page the group's chords select, so entering the mode lights the editor pages with zero bar-side work. Ordered
+/// LT/RT trigger chords (the <see cref="WorldDefaultBindings.LeftTriggerModifierId"/>/<c>rt</c> modifiers, with
+/// their hysteresis) select the pages; sticks are re-bound on EVERY editor page, so flight continues while a
+/// trigger chord is held (and a live drag re-routes those same latched samples onto the pending row).
 /// </summary>
-/// <remarks>
-/// The no-modifier page reuses <see cref="WorldDefaultBindings.BasePageId"/> so the composer MERGES it into the
-/// default base page (the compiled profile admits exactly one empty-chord page): the gamepad sources it names are
-/// REPLACED with editor verbs, while the keyboard's <c>player.*</c> movement entries persist and are masked by the
-/// seat's Idle intent source for the mode's duration. Sticks are re-bound on EVERY editor page, so flight continues
-/// while a trigger chord is held (and a live drag re-routes those same latched samples onto the pending row).
-/// </remarks>
 internal static class WorldEditorBindings {
-    /// <summary>The left-trigger modifier id (chord vocabulary: <c>lt</c>).</summary>
-    public const string LeftTriggerModifierId = "lt";
-    /// <summary>The right-trigger modifier id (chord vocabulary: <c>rt</c>).</summary>
-    public const string RightTriggerModifierId = "rt";
+    /// <summary>The editor page group — a seat's active group while it edits.</summary>
+    public const string GroupId = "editor";
 
+    /// <summary>The editor resting page id (empty chord: free-fly sticks, verticals, exit, status, speed).</summary>
+    public const string RestingPageId = "editor";
     /// <summary>The camera page id (chord: LT held).</summary>
     public const string CameraPageId = "editor-camera";
     /// <summary>The selection page id (chord: RT held): pick, cycle, deselect, delete, grab.</summary>
@@ -30,34 +26,20 @@ internal static class WorldEditorBindings {
     /// <summary>The placement page id (chord: LT then RT held): the grab/drag verb set, spawn ghosts, snap.</summary>
     public const string PlacePageId = "editor-place";
 
-    /// <summary>The display label the merged no-modifier page carries while the mode layer is active — the binding
-    /// bar's (and <c>editor.status</c>'s) visible evidence the editor pages are live.</summary>
-    public const string BasePageLabel = "Editor";
+    /// <summary>The display label the editor resting page carries — the binding bar's (and <c>editor.status</c>'s)
+    /// visible evidence the editor group is live.</summary>
+    public const string RestingPageLabel = "Editor";
 
-    // Trigger hysteresis: latch at a deliberate squeeze, release only on a clear letoff, so a trigger resting near
-    // its threshold never flaps the active page mid-gesture.
-    private const float TriggerPress = 0.55f;
-    private const float TriggerRelease = 0.35f;
-
-    // Built once — the layer document is immutable data shared by every entering seat.
-    private static readonly BindingProfileDocument s_document = Build();
-
-    /// <summary>The shared editor mode-layer document.</summary>
-    public static BindingProfileDocument Document => s_document;
-
-    private static BindingProfileDocument Build() {
-        return new BindingProfileDocument(
-            Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [
-                new BindingModifierDefinition(Id: LeftTriggerModifierId, Source: InputSources.Gamepad.LeftTrigger, PressThreshold: TriggerPress, ReleaseThreshold: TriggerRelease, Label: "Camera page"),
-                new BindingModifierDefinition(Id: RightTriggerModifierId, Source: InputSources.Gamepad.RightTrigger, PressThreshold: TriggerPress, ReleaseThreshold: TriggerRelease, Label: "Select page"),
-            ],
-            Pages: [
-                // The no-modifier editor page, merged INTO the default base page (same id + empty chord): free-fly
-                // sticks, shoulder verticals, camera toggle, exit, status, and speed steps.
-                new BindingPageDefinition(
-                    Id: WorldDefaultBindings.BasePageId,
-                    Chord: [],
+    /// <summary>Builds the editor group's chord rows (the <see cref="WorldDefaultBindings.BuildDocument"/> fold).</summary>
+    /// <returns>The rows, resting page first.</returns>
+    public static BindingChordDefinition[] Rows() {
+        return [
+            // The editor resting page: free-fly sticks, shoulder verticals, camera toggle, exit, status, speed steps.
+            new BindingChordDefinition(
+                Group: GroupId,
+                Chord: [],
+                Page: new BindingPageDefinition(
+                    Id: RestingPageId,
                     Entries: [
                         .. StickEntries(),
                         .. HoldRelease(source: InputSources.Gamepad.RightShoulder, command: EditorCommandModule.AscendCommand, label: "Rise", icon: "action.jump"),
@@ -67,18 +49,21 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.ButtonWest, command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
                         Press(source: InputSources.Gamepad.DpadUp, command: EditorCommandModule.FasterCommand, label: "Faster", icon: "edit.next"),
                         Press(source: InputSources.Gamepad.DpadDown, command: EditorCommandModule.SlowerCommand, label: "Slower", icon: "edit.prev"),
-                        // The same controls that entered the mode leave it (Back mirrors the default page's enter).
+                        // The same controls that entered the mode leave it (Back/Tab mirror the play page's enter twins).
                         Press(source: InputSources.Gamepad.Back, command: EditorCommandModule.ExitCommand, label: "Exit", icon: "edit.exit"),
                         Press(source: InputSources.Keyboard.Tab, command: EditorCommandModule.ExitCommand, label: "Exit", icon: "edit.exit"),
                     ],
-                    Label: BasePageLabel
-                ),
-                // The LT camera page: explicit fly/orbit selection plus the shared speed steps; North is the
-                // focus-selection (pick under the crosshair, so orbit has a pivot the moment you aim at something).
-                // Sticks stay bound so flight continues under the held chord.
-                new BindingPageDefinition(
+                    Label: RestingPageLabel
+                )
+            ),
+            // The LT camera page: explicit fly/orbit selection plus the shared speed steps; North is the
+            // focus-selection (pick under the crosshair, so orbit has a pivot the moment you aim at something).
+            // Sticks stay bound so flight continues under the held chord.
+            new BindingChordDefinition(
+                Group: GroupId,
+                Chord: [WorldDefaultBindings.LeftTriggerModifierId],
+                Page: new BindingPageDefinition(
                     Id: CameraPageId,
-                    Chord: [LeftTriggerModifierId],
                     Entries: [
                         .. StickEntries(),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorCommandModule.FlyCommand, label: "Fly", icon: "edit.play"),
@@ -88,12 +73,15 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.DpadDown, command: EditorCommandModule.SlowerCommand, label: "Slower", icon: "edit.prev"),
                     ],
                     Label: "Camera"
-                ),
-                // The RT select page: the crosshair pick, the proximity cycle, deselect/delete, and the grab toggle
-                // (grab here so pick→grab flows without releasing RT for the LT+RT place chord).
-                new BindingPageDefinition(
+                )
+            ),
+            // The RT select page: the crosshair pick, the proximity cycle, deselect/delete, and the grab toggle
+            // (grab here so pick→grab flows without releasing RT for the LT+RT place chord).
+            new BindingChordDefinition(
+                Group: GroupId,
+                Chord: [WorldDefaultBindings.RightTriggerModifierId],
+                Page: new BindingPageDefinition(
                     Id: SelectPageId,
-                    Chord: [RightTriggerModifierId],
                     Entries: [
                         .. StickEntries(),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSelectionCommandModule.PickCommand, label: "Pick", icon: "action.target"),
@@ -104,12 +92,15 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.DpadLeft, command: EditorSelectionCommandModule.PrevCommand, label: "Prev", icon: "edit.prev"),
                     ],
                     Label: "Select"
-                ),
-                // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap) and the two spawn ghosts.
-                // While a drag is live the sticks translate the pending row instead of flying (the session's routing).
-                new BindingPageDefinition(
+                )
+            ),
+            // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap) and the two spawn ghosts.
+            // While a drag is live the sticks translate the pending row instead of flying (the session's routing).
+            new BindingChordDefinition(
+                Group: GroupId,
+                Chord: [WorldDefaultBindings.LeftTriggerModifierId, WorldDefaultBindings.RightTriggerModifierId],
+                Page: new BindingPageDefinition(
                     Id: PlacePageId,
-                    Chord: [LeftTriggerModifierId, RightTriggerModifierId],
                     Entries: [
                         .. StickEntries(),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSelectionCommandModule.GrabCommand, label: "Grab", icon: "edit.place"),
@@ -119,9 +110,9 @@ internal static class WorldEditorBindings {
                         Press(source: InputSources.Gamepad.DpadDown, command: EditorSelectionCommandModule.SpawnSlabCommand, label: "Slab", icon: "edit.duplicate"),
                     ],
                     Label: "Place"
-                ),
-            ]
-        );
+                )
+            ),
+        ];
     }
 
     // The two stick routers every editor page carries: a held analog re-dispatches each tick against the ACTIVE page,

@@ -3,11 +3,12 @@ namespace Puck.Commands;
 /// <summary>
 /// The per-slot modifier state machine behind <see cref="PagedInputBindings"/>: latches each declared modifier
 /// held/released with hysteresis and keeps the held set in press order, so an ordered chord
-/// (<c>left</c>-then-<c>right</c> vs <c>right</c>-then-<c>left</c>) selects distinct pages. Determinism comes
+/// (<c>left</c>-then-<c>right</c> vs <c>right</c>-then-<c>left</c>) resolves distinct rows. Determinism comes
 /// for free — the <see cref="InputRouter"/> applies signals in <c>(CaptureTick, Sequence)</c> order on a single
 /// thread, and this state is a pure function of that sequence. A thin, signal-resolving wrapper over the shared
 /// <see cref="HeldOrderTracker"/> primitive, sized to <see cref="CompiledBindingProfile.Modifiers"/>' per-modifier
-/// thresholds.
+/// thresholds. Row resolution (group-scoped, prefix-deep) lives on <see cref="CompiledBindingProfile"/>; this
+/// type owns only the held-order truth.
 /// </summary>
 public sealed class BindingChordTracker {
     private readonly CompiledBindingProfile m_profile;
@@ -23,8 +24,8 @@ public sealed class BindingChordTracker {
         );
     }
 
-    /// <summary>Gets the active page index for the currently held, ordered modifier set.</summary>
-    public int ActivePageIndex => m_profile.PageIndexOf(heldOrder: m_tracker.HeldOrder);
+    /// <summary>Gets the held modifier indices, in press order.</summary>
+    public ReadOnlySpan<int> HeldOrder => m_tracker.HeldOrder;
 
     /// <summary>Applies a signal to the tracker.</summary>
     /// <param name="signal">The signal, in the router's deterministic capture order.</param>
