@@ -3,8 +3,20 @@ using Puck.Input;
 using Puck.Input.Devices;
 using Puck.Overlays;
 using Puck.World.Client;
+using Puck.World.Protocol;
+using Puck.World.Server;
 
 namespace Puck.World;
+
+/// <summary>The class of the last edit act the editor HUD tags (the D7 asymmetry, presented): a LIVE session lever
+/// (applies now, <c>world.save</c> folds it), an ordinary DOCUMENT mutation (applies live on delivery), or a
+/// DOCUMENT-DEFAULTS mutation (next boot; live levers unchanged).</summary>
+internal enum EditorActClass {
+    None,
+    Live,
+    Document,
+    DocumentDefault,
+}
 
 /// <summary>
 /// The World-side feed behind the unified overlay's binding-bar source: once per produced frame (the node's
@@ -23,12 +35,16 @@ internal sealed class WorldOverlayFeed {
     // Secondary-seat bars render at partial opacity so the split-screen HUD stays quiet.
     private const float MultiSeatBarAlpha = 0.5f;
     private const int ModifierCapacity = 8;
+    // Session-honesty sweep cadence in published frames (~4 Hz at 120 FPS): the drift hint and exclusive-hold labels
+    // recompute at human cadence, never per frame — DescribeDrift is a verb-scale composition, not a tick fact.
+    private const int SessionSweepFrames = 32;
 
     // One seat's cached HUD lines + the fact key they were formatted from (re-formatted only on a key change).
     private struct HudCache {
-        public (int Targeting, int Drag, int Definition, bool SnapEnabled, float SnapPitch) Key;
+        public (int Targeting, int Drag, int Definition, int Session, bool SnapEnabled, float SnapPitch) Key;
         public string SelectionLine;
         public string ContextLine;
+        public string SessionLine;
         public string DragLine;
     }
 
@@ -41,6 +57,25 @@ internal sealed class WorldOverlayFeed {
     private readonly HudCache[] m_hudCaches;
     private readonly WorldEditorTargeting m_targeting;
     private readonly GamepadManager? m_gamepads;
+    // The session-honesty sources (loopback-local reads, the DescribePopulation precedent): the live render levers
+    // (their Revision is the live-act watch), the live census, the screen binder's runtime inserts, and the server's
+    // grant table for exclusive-hold readouts.
+    private readonly WorldRenderSettings m_settings;
+    private readonly WorldPopulation m_population;
+    private readonly WorldScreenBinder m_binder;
+    private readonly WorldServer m_server;
+    // The last edit act's class (fed by the EchoTap wiring and the settings-revision watch), the cached drift hint,
+    // the per-seat exclusive-hold labels, and the generation counter the HUD caches key on — all bumped at human
+    // cadence only.
+    private readonly string[] m_exclusiveLabels;
+    private readonly WorldPrincipal?[] m_exclusiveHolders;
+    private EditorActClass m_lastActClass;
+    private string m_driftHint = "none";
+    private int m_sessionGeneration;
+    private int m_settingsRevisionSeen;
+    private int m_sessionSweepCountdown;
+    // Whether a mutation note arrived since the last sweep — a drift change it caused must not be re-tagged Live.
+    private bool m_mutationNoted;
     // Per-SEAT chord-hint cache: the hint lines are formatted once per published view (views are immutable and
     // reference-stable per page), so the per-frame publish is a reference handoff.
     private readonly BindingPageView?[] m_hintViews;
@@ -64,29 +99,45 @@ internal sealed class WorldOverlayFeed {
     /// <param name="router">The input router whose carried held state lights the pressed chips.</param>
     /// <param name="store">The binding-bar store the overlay reads.</param>
     /// <param name="editorHudStore">The editor-HUD store the overlay reads.</param>
+    /// <param name="settings">The live render levers (their revision drives the live-act tag + drift refresh).</param>
+    /// <param name="population">The live census (a drift dimension).</param>
+    /// <param name="binder">The screen binder (runtime inserts are a drift dimension).</param>
+    /// <param name="server">The server whose grant table answers exclusive-hold readouts (loopback-local).</param>
     /// <param name="gamepads">The gamepad manager for family-resolved badge glyphs, or <see langword="null"/>
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, GamepadManager? gamepads) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
+        ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: drag);
         ArgumentNullException.ThrowIfNull(argument: editor);
         ArgumentNullException.ThrowIfNull(argument: editorHudStore);
+        ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: router);
+        ArgumentNullException.ThrowIfNull(argument: server);
+        ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: targeting);
 
         m_bindings = bindings;
+        m_binder = binder;
         m_client = client;
         m_drag = drag;
         m_editor = editor;
         m_editorHudStore = editorHudStore;
         m_gamepads = gamepads;
+        m_population = population;
         m_roster = roster;
+        m_server = server;
+        m_settings = settings;
+        m_settingsRevisionSeen = settings.Revision;
         m_store = store;
         m_targeting = targeting;
+        m_exclusiveLabels = new string[PlayerRoster.MaxSlots];
+        m_exclusiveHolders = new WorldPrincipal?[PlayerRoster.MaxSlots];
+        Array.Fill(array: m_exclusiveLabels, value: string.Empty);
         m_editorSeats = new OverlayEditorSeat[PlayerRoster.MaxSlots];
         m_hintLines = new string[PlayerRoster.MaxSlots][];
         m_hintViews = new BindingPageView?[PlayerRoster.MaxSlots];
@@ -100,9 +151,10 @@ internal sealed class WorldOverlayFeed {
             var slot = index;
 
             m_hudCaches[index] = new HudCache {
-                Key = (-1, -1, -1, false, 0f),
+                Key = (-1, -1, -1, -1, false, 0f),
                 SelectionLine = string.Empty,
                 ContextLine = string.Empty,
+                SessionLine = string.Empty,
                 DragLine = string.Empty,
             };
             m_hintLines[index] = [];
@@ -112,9 +164,33 @@ internal sealed class WorldOverlayFeed {
         }
     }
 
+    /// <summary>Notes an applied edit-boundary outcome (the server's <see cref="WorldServer.EchoTap"/> wiring calls
+    /// this beside the toast publish) so the HUD's act-class tag reflects the last act honestly. Runs on the same
+    /// window-pump thread as <see cref="Tick"/>.</summary>
+    /// <param name="documentOnly">Whether the applied edit was DOCUMENT-DEFAULTS class (next boot) rather than live.</param>
+    public void NoteMutationApplied(bool documentOnly) {
+        m_lastActClass = (documentOnly ? EditorActClass.DocumentDefault : EditorActClass.Document);
+        m_mutationNoted = true;
+        m_sessionGeneration++;
+        // A mutation can move the drift baseline (a defaults edit redefines what the levers drift FROM), so the next
+        // published frame refreshes the hint.
+        m_sessionSweepCountdown = 0;
+    }
+
     /// <summary>Recomposes and publishes this frame's per-seat binding frame and editor-HUD frame (the overlay's
     /// <c>FeedTick</c>).</summary>
     public void Tick() {
+        // A render-lever write since the last frame is a LIVE session act (world.shadows/.ao/.render-scale/…): tag it
+        // and refresh the drift hint on this frame. Human cadence — the levers are console verbs.
+        if (m_settings.Revision != m_settingsRevisionSeen) {
+            m_settingsRevisionSeen = m_settings.Revision;
+            m_lastActClass = EditorActClass.Live;
+            m_sessionGeneration++;
+            m_sessionSweepCountdown = 0;
+        }
+
+        RefreshSessionFacts();
+
         var joined = m_roster.Count;
         var family = ResolveFamily();
         var barAlpha = ((joined > 1) ? MultiSeatBarAlpha : 1f);
@@ -152,6 +228,7 @@ internal sealed class WorldOverlayFeed {
                     Viewport: viewport,
                     SelectionLine: cache.SelectionLine,
                     ContextLine: cache.ContextLine,
+                    SessionLine: cache.SessionLine,
                     DragLine: cache.DragLine,
                     DragActive: m_drag.IsDragging(slot: slot)
                 );
@@ -169,11 +246,68 @@ internal sealed class WorldOverlayFeed {
         ));
     }
 
+    // The human-cadence session-honesty sweep: refreshes the drift hint and per-seat exclusive-hold labels every
+    // SessionSweepFrames published frames WHILE a seat edits (the HUD is hidden otherwise, so an idle session pays
+    // nothing), plus immediately after an explicit trigger (a lever write, a mutation note). DescribeDrift's small
+    // transient allocation rides this divided cadence, never the frame path.
+    private void RefreshSessionFacts() {
+        var anyEditing = false;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (m_editor.IsEditing(slot: slot)) {
+                anyEditing = true;
+
+                break;
+            }
+        }
+
+        if (!anyEditing) {
+            return;
+        }
+
+        if (m_sessionSweepCountdown > 0) {
+            m_sessionSweepCountdown--;
+
+            return;
+        }
+
+        m_sessionSweepCountdown = SessionSweepFrames;
+
+        var drift = WorldSessionCapture.DescribeDrift(definition: m_client.Definition, render: m_settings, population: m_population, binder: m_binder);
+
+        if (!string.Equals(a: drift, b: m_driftHint, comparisonType: StringComparison.Ordinal)) {
+            // Drift moved without a lever write or a mutation note in the window: the remaining producers are the live
+            // census / screen-insert levers (or an undo moving the baseline) — session-class either way.
+            if (!m_mutationNoted && (m_lastActClass != EditorActClass.Live)) {
+                m_lastActClass = EditorActClass.Live;
+            }
+
+            m_driftHint = drift;
+            m_sessionGeneration++;
+        }
+
+        m_mutationNoted = false;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            WorldPrincipal? holder = null;
+
+            if (m_editor.IsEditing(slot: slot) && (m_targeting.Selected(slot: slot) is { } selection)) {
+                holder = m_server.Grants.ExclusiveHolder(capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: selection.Section));
+            }
+
+            if (m_exclusiveHolders[slot] != holder) {
+                m_exclusiveHolders[slot] = holder;
+                m_exclusiveLabels[slot] = (holder?.Describe() ?? string.Empty);
+                m_sessionGeneration++;
+            }
+        }
+    }
+
     // Re-format a seat's HUD lines only when the fact key moved: a drag step or a selection/definition change is a
     // rebuild-scale event anyway, so the transient string cost rides an already-paid frame.
     private void RefreshHudCache(int slot, ref HudCache cache) {
         var snap = m_drag.Snap(slot: slot);
-        var key = (m_targeting.Revision, m_drag.Revision, m_client.DefinitionRevision, snap.Enabled, snap.Pitch.X);
+        var key = (m_targeting.Revision, m_drag.Revision, m_client.DefinitionRevision, m_sessionGeneration, snap.Enabled, snap.Pitch.X);
 
         if (cache.Key == key) {
             return;
@@ -197,7 +331,42 @@ internal sealed class WorldOverlayFeed {
             // ASCII only — the overlay glyph pack is ASCII-95 (a non-ASCII rune renders as the blank cell).
             handler: $"targets {m_targeting.TargetCount} | snap {(snap.Enabled ? "on" : "off")} {snap.Pitch.X:0.##}"
         );
+        cache.SessionLine = ComposeSessionLine(slot: slot);
         cache.DragLine = (m_drag.Describe(slot: slot) ?? string.Empty);
+    }
+
+    // The session-honesty line: the last act's class ("live" applies now and folds at world.save; "doc" applied live
+    // on delivery; "defaults" is next-boot only — the D7 asymmetry made visible), the world.status session-drift hint
+    // while drift exists, and the exclusive holder of the selection's section. Empty when nothing needs saying.
+    private string ComposeSessionLine(int slot) {
+        var act = m_lastActClass switch {
+            EditorActClass.Live => "live (save folds)",
+            EditorActClass.Document => "doc",
+            EditorActClass.DocumentDefault => "defaults (next boot)",
+            _ => null,
+        };
+        var drift = ((m_driftHint.Length > 0) && !string.Equals(a: m_driftHint, b: "none", comparisonType: StringComparison.Ordinal) ? m_driftHint : null);
+        var exclusive = ((m_exclusiveLabels[slot].Length > 0) ? m_exclusiveLabels[slot] : null);
+
+        if ((act is null) && (drift is null) && (exclusive is null)) {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder();
+
+        if (act is not null) {
+            _ = builder.Append(value: "act ").Append(value: act);
+        }
+
+        if (drift is not null) {
+            _ = builder.Append(value: (builder.Length > 0) ? " | " : string.Empty).Append(value: "drift ").Append(value: drift);
+        }
+
+        if (exclusive is not null) {
+            _ = builder.Append(value: (builder.Length > 0) ? " | " : string.Empty).Append(value: "excl ").Append(value: exclusive);
+        }
+
+        return builder.ToString();
     }
 
     // The seat's chord-hint lines, re-formatted only when its published view changes (a page/group flip or a

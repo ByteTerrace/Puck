@@ -66,7 +66,9 @@ internal sealed class WorldScreenBinder : IDisposable {
     private readonly bool m_hostsOnDirectX;
     private readonly DirectXGpuSurfaceExportFactory? m_surfaceExport;
     private long? m_renderAdapterLuid;
-    private readonly IReadOnlyList<WorldCamera> m_cameras;
+    // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
+    // mutation delivers, so a runtime screen.view (and every later resolve) reads the LIVE rows.
+    private IReadOnlyList<WorldCamera> m_cameras;
     // The anchor source for anchored cameras (the client's snapshot-fed entity view). Anchor ids are entity indices,
     // so an Anchored view follows the same interpolated render pose the main world draws without reaching into
     // simulation state or duplicating pose math here.
@@ -85,10 +87,13 @@ internal sealed class WorldScreenBinder : IDisposable {
     // is known, null until then (and forever when the world declares no View screen). The view config the pool needs is
     // stashed alongside so a runtime screen.view can register against the same envelope.
     private ViewStack? m_viewStack;
-    // Persistent SdfCameraView instances by camera name — a camera view owns a real GPU resource (its offscreen engine),
-    // so a re-point to an already-registered camera reuses the SAME instance rather than constructing a fresh one (which
-    // would orphan the built engine). Mirrors the overworld's m_cameraViews.
-    private readonly Dictionary<string, SdfCameraView> m_cameraViews = new(comparer: StringComparer.Ordinal);
+    // Persistent camera-view registrations by camera name — each holds the SdfCameraView (a real GPU resource: its
+    // offscreen engine) plus the WorldCamera row it was built from, so a re-point reuses the SAME instance and a
+    // camera mutation diffs against the row the LIVE view embodies (pose edit = rig property write; dimension/kind
+    // change = release + recreate).
+    private readonly Dictionary<string, CameraRegistration> m_cameraViews = new(comparer: StringComparer.Ordinal);
+    // Reused scratch for ReconcileCameras (the registered names snapshot walked while m_cameraViews mutates).
+    private readonly List<string> m_cameraReconcileScratch = new();
     private IServiceProvider? m_viewServices;
     private bool m_viewHostsOnDirectX;
     private int m_viewProgramWordCapacity;
@@ -576,6 +581,9 @@ internal sealed class WorldScreenBinder : IDisposable {
 
     // Apply one screen's changed source through the runtime machinery. Each Try* already faults loudly rather than
     // throwing; a test-pattern or unconfigured-machine source has no runtime setter, so it takes effect at the next boot.
+    // Every transition AWAY from View clears the slot's jumbotron reference and releases the camera registration when no
+    // surviving slot films it (§CR-6 — TryEject/ClearLive deliberately keep the DECLARED view for the eject verb, so the
+    // declared-source change must drop it here); a View→View re-point releases the superseded camera inside TryView.
     private void ApplySourceChange(int index, ScreenSlot slot, WorldScreenSource source) {
         var outcome = source switch {
             WorldScreenSource.None => (slot.HasLive ? TryEject(index: index) : (Ok: true, Message: $"screen {index} unbound")),
@@ -584,11 +592,39 @@ internal sealed class WorldScreenBinder : IDisposable {
             WorldScreenSource.Camera => TryCamera(index: index),
             WorldScreenSource.Capture { MonitorIndex: { } monitorIndex } => TryDesktop(index: index, monitorIndex: monitorIndex),
             WorldScreenSource.Capture capture => TryCapture(index: index, windowTitle: capture.WindowTitle),
-            WorldScreenSource.View view => TryView(index: index, cameraName: view.CameraName),
+            WorldScreenSource.View view => ApplyViewChange(index: index, slot: slot, view: view),
             _ => (Ok: false, Message: $"screen {index} test-pattern source applies at next boot"),
         };
 
+        if (source is not WorldScreenSource.View) {
+            ReleaseSlotView(slot: slot);
+        }
+
         Console.Error.WriteLine(value: $"[world.screen: {outcome.Message}]");
+    }
+
+    // The reconcile-side View bind: a failed bind (unknown camera, unconfigured pool) still releases the PRIOR view —
+    // the declared source no longer names it — and records the fault so screen.state reads honestly.
+    private (bool Ok, string Message) ApplyViewChange(int index, ScreenSlot slot, WorldScreenSource.View view) {
+        var outcome = TryView(index: index, cameraName: view.CameraName);
+
+        if (!outcome.Ok) {
+            ReleaseSlotView(slot: slot);
+            slot.DeclaredFault = outcome.Message;
+        }
+
+        return outcome;
+    }
+
+    // Drops a slot's jumbotron view reference and releases (or re-narrows) its camera registration — the symmetric
+    // half of TryView's acquire, run whenever the slot stops filming that camera.
+    private void ReleaseSlotView(ScreenSlot slot) {
+        if (slot.View is not { } view) {
+            return;
+        }
+
+        slot.View = null;
+        ReleaseOrphanedCameraView(name: view.Name);
     }
 
     /// <summary>Advances every booted deterministic machine by one host-owned fixed simulation step. Called from
@@ -832,11 +868,19 @@ internal sealed class WorldScreenBinder : IDisposable {
             return (Ok: false, Message: $"camera '{cameraName}' not declared");
         }
 
+        var previousView = slot.View;
+
         RegisterCameraView(camera: camera);
         slot.ClearLive();
         slot.View = new ViewFeed(name: camera.Name) { Stack = m_viewStack };
         slot.DeclaredFault = null;
         m_viewStack!.SetWiredScreens(name: camera.Name, screenIndices: WiredScreensFor(name: camera.Name));
+
+        // A re-point away from another camera releases (or re-narrows) the superseded registration AFTER the new bind,
+        // so a view no slot films stops rendering (§CR-6's View A → View B case).
+        if ((previousView is { } previous) && !string.Equals(a: previous.Name, b: camera.Name, comparisonType: StringComparison.Ordinal)) {
+            ReleaseOrphanedCameraView(name: previous.Name);
+        }
 
         return (Ok: true, Message: $"screen {index} showing camera '{camera.Name}'");
     }
@@ -903,8 +947,8 @@ internal sealed class WorldScreenBinder : IDisposable {
     private void RegisterCameraView(WorldCamera camera) {
         m_viewStack ??= new ViewStack();
 
-        if (!m_cameraViews.TryGetValue(key: camera.Name, value: out var view)) {
-            view = new SdfCameraView(
+        if (!m_cameraViews.TryGetValue(key: camera.Name, value: out var registration)) {
+            var view = new SdfCameraView(
                 services: m_viewServices!,
                 hostsOnDirectX: m_viewHostsOnDirectX,
                 programWordCapacity: m_viewProgramWordCapacity,
@@ -941,34 +985,146 @@ internal sealed class WorldScreenBinder : IDisposable {
                     throw new ArgumentOutOfRangeException(paramName: nameof(camera), actualValue: camera, message: "Unknown world camera kind.");
             }
 
-            m_cameraViews[camera.Name] = view;
+            registration = new CameraRegistration { Row = camera, View = view };
+            m_cameraViews[camera.Name] = registration;
         }
 
-        _ = m_viewStack.Register(name: camera.Name, content: view, band: ScreenSlotPriority.Ambient);
+        _ = m_viewStack.Register(name: camera.Name, content: registration.View, band: ScreenSlotPriority.Ambient);
     }
 
-    // After a screen removal, a camera view no remaining View slot references is orphaned — its offscreen SDF engine
-    // would keep spending refresh budget and GPU work on a jumbotron nobody shows until binder shutdown. For each camera
-    // a removed View screen filmed, recompute the surviving wired set: an empty set RELEASES the view (ViewStack.Release
-    // disposes the SdfCameraView, freeing its offscreen SdfWorldEngine) and drops the cached instance so a later
-    // screen.view rebuilds it fresh; a non-empty set (another jumbotron still films this camera) only re-narrows the
-    // self-reference set to the survivors. The boot-sized ViewStack pool itself stays alive — only this camera's
-    // registration ends.
-    private void ReleaseOrphanedCameraViews(HashSet<string> candidates) {
+    /// <summary>Reconciles the live camera-view machinery to a mutated camera list — the live-application half of an
+    /// <c>UpsertCamera</c>/<c>RemoveCamera</c> world mutation, called by the frame source when the definition revision
+    /// moves (BEFORE <see cref="ReconcileScreens"/>, so a same-delivery View source change resolves the new rows). The
+    /// stored row list is REPLACED (later resolves read live data); then, for each camera with a REGISTERED offscreen
+    /// view: a pose/aim/FOV edit of the same kind writes the live rig's properties in place (the offscreen engine and
+    /// its budget entry survive), a dimension or kind change releases and recreates the view (an offscreen render
+    /// target cannot resize), and a removed row releases the view and unbinds every slot that filmed it. A declared
+    /// View slot that faulted at boot (its camera did not exist yet) self-heals when the camera row arrives. Bounded by
+    /// <see cref="ViewStack.MaxRegisteredViews"/> and the refresh-divisor budget; dimensions are validator-capped.</summary>
+    /// <param name="cameras">The mutated camera list (the live definition's cameras).</param>
+    public void ReconcileCameras(IReadOnlyList<WorldCamera> cameras) {
+        if (m_disposed) {
+            return;
+        }
+
+        m_cameras = cameras;
+
+        // Walk a snapshot of the registered names (the release/recreate paths mutate m_cameraViews).
+        m_cameraReconcileScratch.Clear();
+        m_cameraReconcileScratch.AddRange(collection: m_cameraViews.Keys);
+
+        foreach (var name in m_cameraReconcileScratch) {
+            var registration = m_cameraViews[name];
+
+            if (ResolveCamera(name: name) is not { } next) {
+                ReleaseCameraRow(name: name);
+
+                continue;
+            }
+
+            if (Equals(objA: next, objB: registration.Row)) {
+                continue;
+            }
+
+            if ((next.RenderWidth != registration.Row.RenderWidth) ||
+                (next.RenderHeight != registration.Row.RenderHeight) ||
+                (next.GetType() != registration.Row.GetType())) {
+                // The offscreen render target is sized (and the rig shaped) at construction: release the registration
+                // (ViewStack.Release disposes the SdfCameraView and its engine) and rebuild fresh from the new row,
+                // re-narrowing the survivors' self-reference set.
+                m_viewStack?.Release(name: name);
+                _ = m_cameraViews.Remove(key: name);
+                RegisterCameraView(camera: next);
+                m_viewStack?.SetWiredScreens(name: name, screenIndices: WiredScreensFor(name: name));
+                Console.Error.WriteLine(value: $"[world.camera: '{name}' recreated live ({next.RenderWidth}x{next.RenderHeight})]");
+            } else {
+                ApplyCameraPose(registration: registration, camera: next);
+                Console.Error.WriteLine(value: $"[world.camera: '{name}' pose updated live]");
+            }
+        }
+
+        // Self-heal: a declared View slot left faulted (its camera name was undeclared at bind time) binds now that
+        // the row exists — the same TryView machinery a screen.view verb runs. A live runtime producer (an inserted
+        // machine overlaying the declared view) is never displaced.
+        foreach (var slot in m_slots.Values) {
+            if ((slot.View is null) &&
+                !slot.HasLive &&
+                (slot.DeclaredSource is WorldScreenSource.View declared) &&
+                (ResolveCamera(name: declared.CameraName) is not null) &&
+                (m_viewServices is not null)) {
+                var outcome = TryView(index: slot.Index, cameraName: declared.CameraName);
+
+                Console.Error.WriteLine(value: $"[world.camera: {outcome.Message}]");
+            }
+        }
+    }
+
+    // A same-kind pose/aim/FOV edit lands as property writes on the LIVE rig — the offscreen engine, its ViewStack
+    // budget entry, and every wired slot survive untouched. The registration's row snapshot advances so the next
+    // reconcile diffs against what the view now embodies.
+    private void ApplyCameraPose(CameraRegistration registration, WorldCamera camera) {
+        switch (camera) {
+            case WorldCamera.Fixed fixedCamera when registration.View.Rig is FixedRig rig:
+                rig.Eye = fixedCamera.Position;
+                rig.Target = fixedCamera.LookAt;
+                rig.FovRadians = fixedCamera.FieldOfViewRadians;
+
+                break;
+            case WorldCamera.Anchored anchored when registration.View.Rig is FirstPersonRig rig:
+                rig.EyeOffset = anchored.Offset;
+                rig.FovRadians = anchored.FieldOfViewRadians;
+                // Human-cadence closure: the anchor id is captured from the new row (AnchorIndex is plain data).
+                registration.View.AnchorIdSource = () => anchored.AnchorIndex;
+
+                break;
+        }
+
+        registration.Row = camera;
+    }
+
+    // A removed camera row: every slot filming it unbinds (a slot whose DECLARED source still names it — possible only
+    // transiently inside one delivery, the validator rejects a durable dangling reference — keeps a visible fault), and
+    // the registration is released so its offscreen engine stops spending budget.
+    private void ReleaseCameraRow(string name) {
+        foreach (var slot in m_slots.Values) {
+            if ((slot.View is { } view) && string.Equals(a: view.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                slot.View = null;
+
+                if (slot.DeclaredSource is WorldScreenSource.View) {
+                    slot.DeclaredFault = $"camera '{name}' not declared";
+                }
+            }
+        }
+
+        m_viewStack?.Release(name: name);
+        _ = m_cameraViews.Remove(key: name);
+        Console.Error.WriteLine(value: $"[world.camera: view '{name}' released — camera removed]");
+    }
+
+    // After a slot stops filming a camera (a screen removal OR any source transition away from it, §CR-3/§CR-6),
+    // recompute the surviving wired set: an empty set RELEASES the view (ViewStack.Release disposes the SdfCameraView,
+    // freeing its offscreen SdfWorldEngine) and drops the cached registration so a later screen.view rebuilds it
+    // fresh; a non-empty set (another jumbotron still films this camera) only re-narrows the self-reference set to the
+    // survivors. The boot-sized ViewStack pool itself stays alive — only this camera's registration ends.
+    private void ReleaseOrphanedCameraView(string name) {
         if (m_viewStack is not { } stack) {
             return;
         }
 
-        foreach (var name in candidates) {
-            var wired = WiredScreensFor(name: name);
+        var wired = WiredScreensFor(name: name);
 
-            if (wired.Count == 0) {
-                stack.Release(name: name);
-                _ = m_cameraViews.Remove(key: name);
-                Console.Error.WriteLine(value: $"[world.screen: camera view '{name}' released — no remaining screen references it]");
-            } else {
-                stack.SetWiredScreens(name: name, screenIndices: wired);
-            }
+        if (wired.Count == 0) {
+            stack.Release(name: name);
+            _ = m_cameraViews.Remove(key: name);
+            Console.Error.WriteLine(value: $"[world.screen: camera view '{name}' released — no remaining screen references it]");
+        } else {
+            stack.SetWiredScreens(name: name, screenIndices: wired);
+        }
+    }
+
+    private void ReleaseOrphanedCameraViews(HashSet<string> candidates) {
+        foreach (var name in candidates) {
+            ReleaseOrphanedCameraView(name: name);
         }
     }
 
@@ -1603,6 +1759,13 @@ internal sealed class WorldScreenBinder : IDisposable {
             Source = null;
             Surface.Dispose();
         }
+    }
+
+    // One persistent camera-view registration: the live SdfCameraView plus the WorldCamera row it currently embodies
+    // (advanced by pose edits, replaced wholesale on recreate) — the diff baseline ReconcileCameras works against.
+    private sealed class CameraRegistration {
+        public required WorldCamera Row { get; set; }
+        public required SdfCameraView View { get; init; }
     }
 
     // One named jumbotron view a screen samples: the shared ViewStack (set at ConfigureViews) and the camera name to

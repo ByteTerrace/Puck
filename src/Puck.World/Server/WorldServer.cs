@@ -3,6 +3,28 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
+/// <summary>What kind of edit boundary a <see cref="WorldEditEcho"/> narrates — the class the editor HUD tags.</summary>
+internal enum WorldEditEchoKind {
+    /// <summary>A world-document mutation that applies LIVE on delivery (cameras included).</summary>
+    Mutation,
+
+    /// <summary>A DOCUMENT-DEFAULTS mutation — it changes what the next boot wakes on while the live session levers
+    /// keep their values (the D7 asymmetry: <c>world.render.defaults</c> / <c>world.population.defaults</c>).</summary>
+    DocumentDefaults,
+
+    /// <summary>A grant-table change (<c>world.grant</c>/<c>world.revoke</c>) — runtime capability state, not a
+    /// document edit.</summary>
+    GrantTable,
+}
+
+/// <summary>One edit-boundary outcome echoed beside the loud stderr line — the payload of
+/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the editor HUD's act-class tag) narrates
+/// outcomes without scraping stderr.</summary>
+/// <param name="Message">The human-readable outcome line (no brackets).</param>
+/// <param name="Rejected">Whether the outcome is a rejection/denial.</param>
+/// <param name="Kind">The edit-boundary class the outcome belongs to.</param>
+internal readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind);
+
 /// <summary>
 /// The authoritative world server — one logical instance owning the LIVE <see cref="WorldDefinition"/>, the entity
 /// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Commands, session requests,
@@ -76,10 +98,10 @@ internal sealed class WorldServer {
     /// count, and the <c>world.undo</c> budget).</summary>
     public int JournalLength => m_journal.Count;
 
-    /// <summary>An optional edit-echo tap invoked beside the loud stderr accept/reject lines —
-    /// <c>(message, isRejection)</c> — so a UI surface (the overlay toast) can narrate mutation outcomes without
-    /// scraping stderr. Runs on the server's step thread.</summary>
-    public Action<string, bool>? EchoTap { get; set; }
+    /// <summary>An optional edit-echo tap invoked beside the loud stderr accept/reject lines — mutation outcomes,
+    /// grant/revoke outcomes, and their document-only class — so a UI surface (the overlay toast, the editor HUD)
+    /// narrates them without scraping stderr. Runs on the server's step thread.</summary>
+    public Action<WorldEditEcho>? EchoTap { get; set; }
 
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
     /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
@@ -140,10 +162,14 @@ internal sealed class WorldServer {
     /// checks observe it). A rejected exclusive acquisition prints a loud line and changes nothing.</summary>
     /// <param name="grant">The grant to add.</param>
     public void Grant(WorldGrant grant) {
+        var label = $"{grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
+
         if (m_grants.TryGrant(grant: grant, reason: out var reason)) {
-            Console.Error.WriteLine(value: $"[world.grant: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}{(grant.Exclusive ? " exclusive" : string.Empty)}]");
+            Console.Error.WriteLine(value: $"[world.grant: {label}{(grant.Exclusive ? " exclusive" : string.Empty)}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label}{(grant.Exclusive ? " exclusive" : string.Empty)}", Rejected: false, Kind: WorldEditEchoKind.GrantTable));
         } else {
-            Console.Error.WriteLine(value: $"[world.grant rejected: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()} — {reason}]");
+            Console.Error.WriteLine(value: $"[world.grant rejected: {label} — {reason}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.GrantTable));
         }
     }
 
@@ -151,10 +177,12 @@ internal sealed class WorldServer {
     /// <param name="grant">The grant (capability + subject) to revoke.</param>
     public void Revoke(WorldGrant grant) {
         var removed = m_grants.Revoke(principal: grant.Principal, capability: grant.Capability, subject: grant.Subject);
+        var label = $"{grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
 
         Console.Error.WriteLine(value: removed
-            ? $"[world.revoke: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}]"
+            ? $"[world.revoke: {label}]"
             : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: (removed ? $"revoke {label}" : $"revoke {label} — nothing held"), Rejected: !removed, Kind: WorldEditEchoKind.GrantTable));
     }
 
     /// <summary>Applies an authority command to its target body. Synchronous at submit (see the class summary), so a
@@ -269,10 +297,11 @@ internal sealed class WorldServer {
 
                 return new SessionReply(Accepted: true, AssignedIndex: -1, RosterEcho: string.Empty, Reason: string.Empty);
             case SessionRequest.SetPlayerSection setSection: {
-                // The server owns the durable player document: gate on Edit (permissive local default — every seat and
-                // the console hold Edit/all until revoked), apply/validate the section, bump the revision, and persist.
-                if (!m_grants.Allows(principal: setSection.Principal, capability: WorldCapability.Edit, subject: GrantSubject.All)) {
-                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"{setSection.Principal.Describe()} cannot edit player profiles");
+                // The server owns the durable player document: gate on Edit over the CONCRETE profile subject (the
+                // permissive Edit/all seed passes via the wildcard path, so local play is unchanged; a profile:<id>
+                // grant narrows trust to named profiles), apply/validate the section, bump the revision, and persist.
+                if (!m_grants.Allows(principal: setSection.Principal, capability: WorldCapability.Edit, subject: GrantSubject.Profile(id: setSection.ProfileId))) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"{setSection.Principal.Describe()} cannot edit profile:{setSection.ProfileId}");
                 }
 
                 if (!m_profiles.ApplySection(id: setSection.ProfileId, section: setSection.Section, payload: setSection.Payload, reason: out var sectionReason)) {
@@ -375,7 +404,7 @@ internal sealed class WorldServer {
 
         if (!m_grants.Allows(principal: mutation.Principal, capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: section))) {
             Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} cannot mutate section:{section.ToString().ToLowerInvariant()} — {Describe(mutation: mutation)} dropped]");
-            EchoTap?.Invoke(arg1: $"{Describe(mutation: mutation)} denied: no mutate grant", arg2: true);
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} denied: no mutate grant", Rejected: true, Kind: WorldEditEchoKind.Mutation));
 
             return false;
         }
@@ -400,14 +429,14 @@ internal sealed class WorldServer {
 
         Install(definition: candidate, rebuildPopulation: AffectsPopulation(mutation: mutation));
         m_journal.Add(item: new JournalEntry(Tick: tick, Mutation: mutation));
-        Console.Error.WriteLine(value: $"[world.mutation: {Describe(mutation: mutation)} applied]");
-        EchoTap?.Invoke(arg1: $"{Describe(mutation: mutation)} applied", arg2: false);
 
-        if (mutation is WorldMutation.UpsertCamera or WorldMutation.RemoveCamera) {
-            // The offscreen view pool is sized/registered at boot from the probed render envelope; a live camera pool
-            // rebuild is out of scope this phase, so a camera edit is document-only and takes effect at the next boot.
-            Console.Error.WriteLine(value: "[world.camera: applies at next boot]");
-        }
+        // The D7 asymmetry, presented: a defaults-class mutation edits what the NEXT boot wakes on while the live
+        // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
+        var documentOnly = IsDocumentDefaults(mutation: mutation);
+        var message = $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}";
+
+        Console.Error.WriteLine(value: $"[world.mutation: {message}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: message, Rejected: false, Kind: (documentOnly ? WorldEditEchoKind.DocumentDefaults : WorldEditEchoKind.Mutation)));
 
         return true;
     }
@@ -501,8 +530,13 @@ internal sealed class WorldServer {
 
     private void Reject(WorldMutation mutation, string reason) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
-        EchoTap?.Invoke(arg1: $"{Describe(mutation: mutation)} rejected: {reason}", arg2: true);
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation));
     }
+
+    // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now" —
+    // the settled D7 asymmetry). Everything else, cameras included, applies live on delivery.
+    private static bool IsDocumentDefaults(WorldMutation mutation) => mutation is
+        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults;
 
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
     // compiled tuning/actions). Scene/screen/camera/render/population-default/addon edits do not.

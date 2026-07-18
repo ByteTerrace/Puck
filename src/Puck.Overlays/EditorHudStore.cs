@@ -8,12 +8,16 @@ namespace Puck.Overlays;
 /// <param name="Viewport">The seat's viewport rect in normalized frame space (its <c>LayoutRegion</c>).</param>
 /// <param name="SelectionLine">The selection readout (section, id, position), or empty for none.</param>
 /// <param name="ContextLine">The candidate-pool / camera context hint, or empty.</param>
+/// <param name="SessionLine">The session-honesty readout — the last edit act's class (live session lever vs document
+/// mutation vs document default), the live session-drift hint, and any exclusive hold on the selected section — or
+/// empty when nothing needs saying.</param>
 /// <param name="DragLine">The live drag readout, or empty while idle.</param>
 /// <param name="DragActive">Whether a drag is live (the accent ring state).</param>
 public readonly record struct OverlayEditorSeat(
     NormalizedRect Viewport,
     string SelectionLine,
     string ContextLine,
+    string SessionLine,
     string DragLine,
     bool DragActive
 );

@@ -187,10 +187,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
         if (shimmering || (revision != m_builtRevision)) {
             // A definition delivery (scene/screen mutation, swap, or undo) landed since the last build: reconcile the
-            // binder's runtime source machinery to the new screens BEFORE rebuilding the program off the live geometry.
+            // binder's runtime source machinery to the new definition BEFORE rebuilding the program off the live
+            // geometry — cameras FIRST, so a same-delivery View source change resolves the new camera rows.
             var definitionRevision = m_client.DefinitionRevision;
 
             if (definitionRevision != m_builtDefinitionRevision) {
+                m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
                 m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
                 m_shimmer.Observe(scene: m_client.Definition.Scene, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;

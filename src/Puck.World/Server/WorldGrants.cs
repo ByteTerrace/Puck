@@ -30,7 +30,12 @@ namespace Puck.World.Server;
 /// wildcard <see cref="GrantSubject.All"/> grant is DELIBERATELY EXEMPT on the ordinary
 /// side: the permissive local defaults seed the console with <c>Drive/all</c> and seats/peers with <c>Control/all</c>,
 /// and that backdrop must never block a principal (e.g. an addon) from taking an exclusive hold on one specific body —
-/// so <c>world.grant addon:x drive body:n exclusive</c> succeeds even though the console holds <c>Drive/all</c>.</description></item>
+/// so <c>world.grant addon:x drive body:n exclusive</c> succeeds even though the console holds <c>Drive/all</c>. The
+/// SEEDED per-section <c>Mutate</c> defaults get the same exemption: they are the concrete spelling of the same
+/// permissive backdrop (per-section only so one is revocable), so
+/// <c>world.grant seat1 mutate section:screens exclusive</c> succeeds on a default table — the seed must never block
+/// an exclusive editing hold. A section row DELIBERATELY granted after boot (or re-granted after a revoke) is a real
+/// hold and blocks like any other; only the untouched seed is exempt.</description></item>
 /// <item><description><b>Enforcement (<see cref="Allows"/>).</b> Once <c>body:n</c> is exclusively reserved by principal
 /// P, <see cref="Allows"/> answers TRUE only for P — the exclusive holder OVERRIDES every other grant, INCLUDING the
 /// permissive <c>Drive/all</c> wildcard. So the exempt backdrop from acquisition cannot actually drive an exclusively
@@ -45,6 +50,10 @@ internal sealed class WorldGrants {
     // (capability, subject) -> the exclusive holder. Guards double-exclusive acquisition (the engagement latch's
     // "a live holder owns it" rule, generalized). Only exclusive grants appear here.
     private readonly Dictionary<ExclusiveKey, WorldPrincipal> m_exclusive = new();
+    // The seeded per-section Mutate backdrop rows (principal + section subject), recorded at construction so rule (2)
+    // can exempt them from blocking an exclusive acquisition — the concrete twin of the ordinary-`all` exemption. A
+    // revoke deletes the marker (a later re-grant is a deliberate hold, not a seed).
+    private readonly HashSet<SeededKey> m_seededSections = new();
 
     /// <summary>Seeds the permissive local-play defaults so boot behavior is UNCHANGED until someone revokes: every seat
     /// holds Drive over its own body and Control/Mutate/Edit over its domain; the console holds Drive over any body and
@@ -79,7 +88,12 @@ internal sealed class WorldGrants {
         _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Edit, Subject: GrantSubject.All, Exclusive: false), reason: out _);
 
         foreach (var section in Enum.GetValues<WorldSection>()) {
-            _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(section: section), Exclusive: false), reason: out _);
+            var subject = GrantSubject.Section(section: section);
+
+            _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Mutate, Subject: subject, Exclusive: false), reason: out _);
+            // Mark the row as SEED so it never blocks another principal's exclusive section hold (see the type doc's
+            // acquisition rules) — the backdrop must never block a reservation, exactly like the ordinary `all` wildcard.
+            _ = m_seededSections.Add(item: new SeededKey(Principal: principal, Capability: WorldCapability.Mutate, Subject: subject));
         }
     }
 
@@ -196,9 +210,14 @@ internal sealed class WorldGrants {
         // (2) An incoming EXCLUSIVE grant additionally rejects when a DIFFERENT principal already holds the SAME concrete
         //     subject ordinarily (the ordinary-then-exclusive order). The wildcard `all` is exempt: a Contains of a
         //     concrete subject never matches an `all`-only set, so the seeded Drive/all backdrop does not block here.
+        //     The SEEDED per-section Mutate rows are exempt the same way (they are the concrete spelling of the same
+        //     permissive backdrop), so an exclusive section hold succeeds on a default table; a section row granted
+        //     deliberately after boot blocks like any other hold.
         if (grant.Exclusive && (grant.Subject.Kind != GrantSubjectKind.All)) {
             foreach (var pair in m_byPrincipal) {
-                if ((pair.Key != grant.Principal) && (pair.Value.For(capability: grant.Capability)?.Contains(item: grant.Subject) == true)) {
+                if ((pair.Key != grant.Principal) &&
+                    (pair.Value.For(capability: grant.Capability)?.Contains(item: grant.Subject) == true) &&
+                    !m_seededSections.Contains(item: new SeededKey(Principal: pair.Key, Capability: grant.Capability, Subject: grant.Subject))) {
                     reason = $"{grant.Subject.Describe()} is already held by {pair.Key.Describe()}";
 
                     return true;
@@ -237,8 +256,20 @@ internal sealed class WorldGrants {
             _ = m_exclusive.Remove(key: key);
         }
 
+        // The seed marker dies with the row: a re-grant after this revoke is a deliberate hold and blocks exclusive
+        // acquisition like any other.
+        _ = m_seededSections.Remove(item: new SeededKey(Principal: principal, Capability: capability, Subject: subject));
+
         return removed;
     }
+
+    /// <summary>The principal exclusively reserving <paramref name="subject"/> for <paramref name="capability"/>, or
+    /// <see langword="null"/> when it is unreserved — the editor HUD's exclusive-hold readout. Same wildcard-aware
+    /// lookup <see cref="Allows"/> enforces with; allocation-free, human-cadence reads only.</summary>
+    /// <param name="capability">The capability to query.</param>
+    /// <param name="subject">The subject to query.</param>
+    public WorldPrincipal? ExclusiveHolder(WorldCapability capability, GrantSubject subject) =>
+        ExclusiveHolderOf(capability: capability, subject: subject);
 
     /// <summary>The 0-based entity index of the first body a principal holds a Drive grant over (exclusive or not) — the
     /// addon driver's body binding, discovered from the grant table (the grant IS the assignment). <see langword="null"/>
@@ -430,4 +461,7 @@ internal sealed class WorldGrants {
 
     // The reverse-index key for the exclusive-holder table.
     private readonly record struct ExclusiveKey(WorldCapability Capability, GrantSubject Subject);
+
+    // The seed-marker key: one permissive-default row as constructed (principal + capability + subject).
+    private readonly record struct SeededKey(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject);
 }

@@ -116,13 +116,13 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.camera.set",
-            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera ($type fixed|anchored): world.camera.set <camera-json>. Document-only this phase (applies at next boot — the offscreen view pool is boot-sized).",
+            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera ($type fixed|anchored): world.camera.set <camera-json>. Applies LIVE: a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension or kind change recreates it, and every jumbotron filming it updates without a restart.",
             info: WorldJsonContext.Default.WorldCamera,
             toMutation: static camera => new WorldMutation.UpsertCamera(Principal: WorldPrincipal.Console, Camera: camera)
         );
         yield return Simulation(
             name: "world.camera.remove",
-            description: "Removes a camera by name: world.camera.remove <name>. Rejected if a View screen still references it.",
+            description: "Removes a camera by name: world.camera.remove <name>. Rejected if a View screen still references it; a runtime screen.view of it unbinds and its offscreen render is released live.",
             handler: (context, args) => {
                 if (args.Length != 1) {
                     return Usage(verb: "world.camera.remove", form: "<name>");

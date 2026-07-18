@@ -3,7 +3,8 @@ namespace Puck.Overlays;
 /// <summary>
 /// The editor-HUD writer: renders each EDITING seat's selection readout from an <see cref="IEditorHudSource"/>
 /// snapshot as a compact strip panel in the seat's top-left corner — a title band, the selection line, the context
-/// hint, and the drag line (accent-ringed while a drag is live) — CONFINED to that seat's normalized viewport rect
+/// hint, the session-honesty line (last act class / drift / exclusive holds), and the drag line (accent-ringed while
+/// a drag is live) — CONFINED to that seat's normalized viewport rect
 /// like the binding bar, so split-screen gets per-seat HUDs with the render node staying dumb. Pure record emission;
 /// no GPU types. A deliberate NON-consumer of <see cref="PadPictogramLayout"/>: the binding bar already renders the
 /// active chord page's full chip cluster per seat, so a second pictogram here would duplicate that surface at lower
@@ -52,10 +53,12 @@ public sealed class EditorHudWriter {
         var monoCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMonoSize);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
         var lineStep = (monoCell + DesignTokens.Space.Space1);
-        var lineCount = Math.Max(val1: 1, val2: ((CountPresent(text: seat.SelectionLine) + CountPresent(text: seat.ContextLine)) + CountPresent(text: seat.DragLine)));
+        var lineCount = Math.Max(val1: 1, val2: (((CountPresent(text: seat.SelectionLine) + CountPresent(text: seat.ContextLine)) + CountPresent(text: seat.SessionLine)) + CountPresent(text: seat.DragLine)));
         var widestChars = Math.Min(val1: MaxLineChars, val2: Math.Max(
             val1: Title.Length,
-            val2: Math.Max(val1: seat.SelectionLine.Length, val2: Math.Max(val1: seat.ContextLine.Length, val2: seat.DragLine.Length))
+            val2: Math.Max(
+                val1: Math.Max(val1: seat.SelectionLine.Length, val2: seat.SessionLine.Length),
+                val2: Math.Max(val1: seat.ContextLine.Length, val2: seat.DragLine.Length))
         ));
         var panelWidth = ((DesignTokens.Space.Space3 * 2f) + builder.TextWidth(chars: widestChars, cellHeight: monoCell));
         var bandHeight = (microCell + DesignTokens.Space.Space2);
@@ -87,6 +90,7 @@ public sealed class EditorHudWriter {
 
         lineY = EmitLine(builder: builder, text: seat.SelectionLine, role: OverlayColorRole.TextPrimary, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
         lineY = EmitLine(builder: builder, text: seat.ContextLine, role: OverlayColorRole.TextDim, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
+        lineY = EmitLine(builder: builder, text: seat.SessionLine, role: OverlayColorRole.TextDim, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
         _ = EmitLine(builder: builder, text: seat.DragLine, role: OverlayColorRole.Accent, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
     }
 

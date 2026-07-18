@@ -242,7 +242,7 @@ scripted `mutate-then-read` pair needs no polling.
 | `world.kit.assign hash \| table <kit>…` | sets the kit→entity `WorldKitAssignment` policy |
 | `world.kit.tune <name> <field> <value>` | console sugar: read-modify-write one `MotionTuning` field into a whole-row `UpsertKit` |
 | `world.screen.set <screen-json>` / `world.screen.remove <index>` | upsert/remove a `WorldScreen` row (keyed by index) |
-| `world.camera.set <camera-json>` / `world.camera.remove <name>` | upsert/remove a `WorldCamera` row (keyed by name); document-only, applies at next boot |
+| `world.camera.set <camera-json>` / `world.camera.remove <name>` | upsert/remove a `WorldCamera` row (keyed by name); applies LIVE — a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension/kind change recreates it, a removal releases it |
 | `world.scene.set <scene-json>` | replaces the static scene (albedos + boulders) |
 | `world.spawns.set <spawns-json-array>` | replaces the seat spawn-point list |
 | `world.motion.set <json>` | replaces the profileless `MotionTuning` |
@@ -321,15 +321,21 @@ authorized — the named primitive the three former ad-hoc ownership forms
 A **grant** (`WorldGrant`) is `(principal, capability, subject, exclusive)`.
 **Capabilities** (`WorldCapability`): `Drive` (submit a body's intents/
 commands), `Control` (engage a screen/machine route), `Mutate` (apply a
-`WorldMutation` targeting a `WorldSection`), `Edit` (a player-profile section
-— declared now, wired by the Phase 3 player-document arc). **Subjects**
-(`GrantSubject`): the `all` wildcard, `body:<n>`, `screen:<n>`, or
+`WorldMutation` targeting a `WorldSection`), `Edit` (a player-profile
+section, checked against the concrete `profile:<id>` subject). **Subjects**
+(`GrantSubject`): the `all` wildcard, `body:<n>`, `screen:<n>`,
 `section:<name>` (one of the eleven `WorldSection` values: kits, screens,
 cameras, scene, spawns, motion, wander, population, render, addons,
-bindings). **Exclusive** generalizes the engagement latch: a second exclusive
+bindings), or `profile:<id>` (a player profile's stable string id — the
+subject mirrors `WorldPrincipal`'s index+nullable-string shape). **Exclusive**
+generalizes the engagement latch: a second exclusive
 acquisition of the same `(capability, subject)` by a DIFFERENT live principal
 is rejected loudly; re-granting a subject a principal already holds is
-idempotent. Storage is a per-principal set of four subject sets — an
+idempotent; the SEEDED permissive defaults (the ordinary `all` wildcards AND
+the seeded per-section `Mutate` rows) never block an exclusive acquisition —
+the backdrop must never block a reservation, and enforcement makes the
+exclusive holder the sole effective owner anyway. Storage is a per-principal
+set of four subject sets — an
 `Allows` check is one dictionary lookup plus a `HashSet` membership test,
 allocation-free and O(1).
 
@@ -351,6 +357,7 @@ they hold no `Drive`); addons get NOTHING until granted.
 | Whole-document swap (`SubmitDefinition`/`world.load`) | `Mutate` | every `WorldSection` |
 | Journal undo (`world.undo`) | `Mutate` | every `WorldSection` |
 | Engage (`player.engage`, `WorldEngagement.Engage`) | `Control` | `screen:<index>` |
+| Profile-section edit (`SetPlayerSection` — `profile.section`, the `profile.save` fold) | `Edit` | `profile:<id>` (the seeded `Edit/all` wildcard passes for local play) |
 
 A denial is loud and DATA-shaped — never a new message kind — and the write
 drops: `[world.grant denied: <principal> cannot drive body:<n> —
@@ -367,7 +374,7 @@ command, never buffered to the tick boundary like a mutation:
 
 | Verb | Grammar | Effect |
 |---|---|---|
-| `world.grant <principal> <capability> <subject> [exclusive]` | principal = `seat1..seat4\|console\|addon:<name>\|peer:<n>`; capability = `drive\|control\|mutate\|edit`; subject = `body:<n>\|screen:<n>\|section:<name>\|all` | adds the grant; an exclusive acquisition a live holder owns is rejected loudly |
+| `world.grant <principal> <capability> <subject> [exclusive]` | principal = `seat1..seat4\|console\|addon:<name>\|peer:<n>`; capability = `drive\|control\|mutate\|edit`; subject = `body:<n>\|screen:<n>\|section:<name>\|profile:<id>\|all` | adds the grant; an exclusive acquisition a live holder owns is rejected loudly (the seeded permissive defaults never block one) |
 | `world.revoke <principal> <capability> <subject>` | same tokens, trailing `exclusive` is not accepted | removes the grant (a no-op reports "held no ...") |
 | `world.grants [principal]` | — | echoes the whole table, or one principal's rows (Immediate; the barrier reads the settled table after a pending grant) |
 

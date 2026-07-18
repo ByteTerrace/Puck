@@ -361,14 +361,18 @@ services.AddSingleton(implementationFactory: static sp => {
     );
 });
 services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
+    binder: sp.GetRequiredService<WorldScreenBinder>(),
     bindings: sp.GetRequiredService<WorldSeatBindings>(),
     client: sp.GetRequiredService<WorldClient>(),
     drag: sp.GetRequiredService<WorldEditorDrag>(),
     editor: sp.GetRequiredService<WorldEditorSession>(),
     editorHudStore: sp.GetRequiredService<EditorHudStore>(),
     gamepads: sp.GetService<GamepadManager>(),
+    population: sp.GetRequiredService<WorldPopulation>(),
     roster: sp.GetRequiredService<PlayerRoster>(),
     router: sp.GetRequiredService<InputRouter>(),
+    server: sp.GetRequiredService<WorldServer>(),
+    settings: sp.GetRequiredService<WorldRenderSettings>(),
     store: sp.GetRequiredService<BindingBarStore>(),
     targeting: sp.GetRequiredService<WorldEditorTargeting>()
 ));
@@ -413,8 +417,19 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         instanceCapacity: frameSource.InstanceCapacity,
         dynamicTransformCapacity: frameSource.DynamicTransformCapacity
     );
-    // Mutation outcomes narrate into the overlay toast beside their loud stderr lines — the P1 rejection surface.
-    sp.GetRequiredService<WorldServer>().EchoTap = sp.GetRequiredService<OverlayToastStore>().Publish;
+    // Edit-boundary outcomes narrate into the overlay toast beside their loud stderr lines (the P1 rejection surface,
+    // grown to grant/revoke outcomes), and applied mutations stamp the HUD's act-class tag (the D7 asymmetry surface).
+    var toasts = sp.GetRequiredService<OverlayToastStore>();
+    var overlayFeed = sp.GetRequiredService<WorldOverlayFeed>();
+
+    sp.GetRequiredService<WorldServer>().EchoTap = echo => {
+        toasts.Publish(message: echo.Message, isError: echo.Rejected);
+
+        // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
+        if (!echo.Rejected && (echo.Kind != WorldEditEchoKind.GrantTable)) {
+            overlayFeed.NoteMutationApplied(documentOnly: (echo.Kind == WorldEditEchoKind.DocumentDefaults));
+        }
+    };
 
     var render = SdfWorldRenderBuilder.Build(
         serviceProvider: sp,
