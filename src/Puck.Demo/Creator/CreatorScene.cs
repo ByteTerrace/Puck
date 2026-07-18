@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 using Puck.Demo.Editing;
 using Puck.Demo.Forge;
 using Puck.SdfVm;
@@ -137,6 +138,13 @@ public sealed class CreatorScene {
     private readonly EditHistory<CreatorSnapshot> m_history;
     private bool m_dragOpen;
     private bool m_dragTouchedThisFrame;
+    // Carried, editor-opaque document members (P0 round-trip fix): the editor authors none of these today, so it
+    // stashes whatever the loaded document carried and hands it straight back on save, byte-for-byte. Load-immutable
+    // between loads/Clear — NEVER part of CreatorSnapshot, since undo/redo must not touch what no verb here can edit.
+    private IReadOnlyList<CreationCameraDocument>? m_loadedCameras;
+    private CreationBehaviorDocument? m_loadedBehavior;
+    private IReadOnlyList<TextRunDocument>? m_loadedTextRuns;
+    private IDictionary<string, JsonElement>? m_loadedExtensions;
 
     /// <summary>Initializes an empty scene clamped to the given workbench region.</summary>
     /// <param name="workbench">The authoring region (also the ghost spawn + group bound source).</param>
@@ -865,6 +873,12 @@ public sealed class CreatorScene {
         m_goalChainIndex = -1;
         m_chains.Clear();
         m_name = "creation";
+        // A fresh creation carries no editor-opaque state (see LoadDocument's remarks) — it authors none of it,
+        // so there is nothing left to hand back.
+        m_loadedCameras = null;
+        m_loadedBehavior = null;
+        m_loadedTextRuns = null;
+        m_loadedExtensions = null;
         MarkProgramChanged();
         PushUndo();
 
@@ -2038,19 +2052,26 @@ public sealed class CreatorScene {
 
         return new CreationDocument(
             BakeStyle: m_bakeStyle,
+            Behavior: m_loadedBehavior,
+            Cameras: m_loadedCameras,
             Chains: chains,
             Frames: frames,
             Intent: m_intent,
             Name: m_name,
             Palette: palette,
             Schema: CreationDocument.CurrentSchema,
-            Shapes: shapes
-        );
+            Shapes: shapes,
+            TextRuns: m_loadedTextRuns
+        ) {
+            Extensions = m_loadedExtensions,
+        };
     }
 
     /// <summary>Replaces the scene's content from a NORMALIZED document (see <see cref="CreationStore.Load"/>):
     /// shapes clamp into the workbench, ids/groups resequence their counters, the selection clears. Rebuilds the
-    /// program.</summary>
+    /// program. <see cref="CreationDocument.Cameras"/>/<see cref="CreationDocument.Behavior"/>/
+    /// <see cref="CreationDocument.TextRuns"/>/<see cref="CreationDocument.Extensions"/> are editor-opaque — no verb
+    /// here authors them, so they are stashed verbatim and handed back unchanged by <see cref="ToDocument"/>.</summary>
     /// <param name="document">The normalized document.</param>
     /// <returns>How many shapes loaded (the pool capacity truncates a larger document).</returns>
     public int LoadDocument(CreationDocument document) {
@@ -2062,6 +2083,10 @@ public sealed class CreatorScene {
         m_name = (document.Name ?? "creation");
         m_bakeStyle = (document.BakeStyle ?? "classic");
         m_intent = (document.Intent ?? CreatorIntent.Object);
+        m_loadedCameras = document.Cameras;
+        m_loadedBehavior = document.Behavior;
+        m_loadedTextRuns = document.TextRuns;
+        m_loadedExtensions = document.Extensions;
 
         if (document.Palette is { } palette) {
             for (var index = 0; ((index < palette.Count) && (index < PaletteSize)); index++) {

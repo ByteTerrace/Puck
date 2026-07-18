@@ -233,6 +233,12 @@ public sealed record CreationDocument(
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
 
+    /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture (the
+    /// <see cref="Puck.Scene.PuckRunDocument"/> precedent). Null when the document carries no unknown members. A
+    /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public IDictionary<string, JsonElement>? Extensions { get; set; }
+
     /// <summary>The creation's total per-stamp shape budget: its authored shapes PLUS every text run's expanded glyph
     /// count (a run counts as its letters — the world stamps text as real Glyph geometry, so it competes for the same
     /// <see cref="Puck.Demo.World.WorldScene.MaxShapesPerStamp"/> budget the boxes do).</summary>
