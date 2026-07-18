@@ -18,7 +18,14 @@
         <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
         <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
         <ProjectReference Include="..\Puck.Scene\Puck.Scene.csproj" />
+        <!-- The WASM addon host under test: the scripting-determinism stage compiles inline WAT fixtures against
+             the same deterministic ScriptingEngine and drives them through AddonInstance. Wasmtime flows here
+             transitively from Puck.Scripting. -->
+        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
         <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <!-- The font-atlas model + the SDF coverage generator: the world-glyph stage bakes a deterministic fixture
+             atlas (no font-availability dependency) and lays text out through SdfProgramBuilder.Text. -->
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
         <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
     </ItemGroup>
 
@@ -36,7 +43,8 @@
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
     </ItemGroup>
 
-    <!-- Compile each *.comp.hlsl to SPIR-V (Vulkan; entry CSMain renamed to "main"), mirroring Puck.Demo / Puck.SdfVm. -->
+    <!-- Compile each *.comp.hlsl to SPIR-V (Vulkan; entry CSMain renamed to "main"), mirroring Puck.Demo / Puck.SdfVm,
+         at the shared vulkan1.3 / SM 6.6 / -O3 / -enable-16bit-types capability floor. -->
     <Target
         BeforeTargets="PrepareForBuild"
         Inputs="@(ComputeShaderSource);$(MSBuildProjectFullPath)"
@@ -59,6 +67,6 @@
             Condition="'$(DxcProbeExitCode)' != '0'"
             Text="Puck.Post shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;."
         />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T cs_6_0 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
     </Target>
 </Project>

@@ -120,14 +120,14 @@ internal static class CardArtBake {
     /// <returns>The scene.</returns>
     public static SdfProgram BuildFeltScene() {
         var builder = new SdfProgramBuilder();
-        var felt = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.10f, 0.38f, 0.22f), Emissive: 1.2f));
-        var feltDeep = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.07f, 0.28f, 0.16f), Emissive: 1.1f));
-        var rail = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.24f, 0.14f, 0.08f), Emissive: 1.1f));
+        var felt = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.10f, y: 0.38f, z: 0.22f), Emissive: 1.2f));
+        var feltDeep = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.07f, y: 0.28f, z: 0.16f), Emissive: 1.1f));
+        var rail = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.24f, y: 0.14f, z: 0.08f), Emissive: 1.1f));
 
         // The baize field with a one-unit rail frame; a deep-felt band along the bottom anchors the table.
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0f, -2f)).Box(halfExtents: new Vector3(30f, 20f, 0.5f), round: 0f, material: rail);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0f, -1f)).Box(halfExtents: new Vector3(9f, 8f, 0.4f), round: 0.2f, material: felt);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, -8.2f, 0f)).Box(halfExtents: new Vector3(9f, 0.8f, 0.3f), round: 0f, material: feltDeep);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0f, z: -2f)).Box(halfExtents: new Vector3(x: 30f, y: 20f, z: 0.5f), round: 0f, material: rail);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0f, z: -1f)).Box(halfExtents: new Vector3(x: 9f, y: 8f, z: 0.4f), round: 0.2f, material: felt);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -8.2f, z: 0f)).Box(halfExtents: new Vector3(x: 9f, y: 0.8f, z: 0.3f), round: 0f, material: feltDeep);
 
         return builder.Build();
     }
@@ -146,24 +146,24 @@ internal static class CardArtBake {
 
         switch (suit) {
             case 0: // Spade: an up-pointing diamond over two lobes, with a stem.
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(0f, (0.25f * scale), 0f))).Rotate(rotation: tilt).Box(halfExtents: new Vector3((0.5f * scale), (0.5f * scale), 0.2f), round: (0.08f * scale), material: material);
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3((-0.34f * scale), (-0.18f * scale), 0f))).Sphere(radius: (0.36f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3((0.34f * scale), (-0.18f * scale), 0f))).Sphere(radius: (0.36f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(0f, (-0.65f * scale), 0f))).Box(halfExtents: new Vector3((0.14f * scale), (0.3f * scale), 0.2f), round: 0f, material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.08f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: 0f, y: (0.25f * scale), z: 0f))).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: (0.5f * scale), y: (0.5f * scale), z: 0.2f), round: (0.08f * scale), material: material);
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: (-0.34f * scale), y: (-0.18f * scale), z: 0f))).Sphere(radius: (0.36f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: (0.34f * scale), y: (-0.18f * scale), z: 0f))).Sphere(radius: (0.36f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: 0f, y: (-0.65f * scale), z: 0f))).Box(halfExtents: new Vector3(x: (0.14f * scale), y: (0.3f * scale), z: 0.2f), round: 0f, material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.08f * scale));
                 break;
             case 1: // Heart: two lobes over a down-pointing diamond.
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3((-0.34f * scale), (0.28f * scale), 0f))).Sphere(radius: (0.38f * scale), material: material);
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3((0.34f * scale), (0.28f * scale), 0f))).Sphere(radius: (0.38f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.12f * scale));
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(0f, (-0.18f * scale), 0f))).Rotate(rotation: tilt).Box(halfExtents: new Vector3((0.52f * scale), (0.52f * scale), 0.2f), round: (0.06f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.12f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: (-0.34f * scale), y: (0.28f * scale), z: 0f))).Sphere(radius: (0.38f * scale), material: material);
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: (0.34f * scale), y: (0.28f * scale), z: 0f))).Sphere(radius: (0.38f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.12f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: 0f, y: (-0.18f * scale), z: 0f))).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: (0.52f * scale), y: (0.52f * scale), z: 0.2f), round: (0.06f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.12f * scale));
                 break;
             case 2: // Diamond: one rotated, vertically stretched box.
-                _ = builder.ResetPoint().Translate(offset: centre).Rotate(rotation: tilt).Box(halfExtents: new Vector3((0.55f * scale), (0.55f * scale), 0.2f), round: (0.06f * scale), material: material);
+                _ = builder.ResetPoint().Translate(offset: centre).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: (0.55f * scale), y: (0.55f * scale), z: 0.2f), round: (0.06f * scale), material: material);
                 break;
             default: // Club: three lobes and a stem.
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(0f, (0.4f * scale), 0f))).Sphere(radius: (0.34f * scale), material: material);
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3((-0.36f * scale), (-0.08f * scale), 0f))).Sphere(radius: (0.34f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3((0.36f * scale), (-0.08f * scale), 0f))).Sphere(radius: (0.34f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
-                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(0f, (-0.6f * scale), 0f))).Box(halfExtents: new Vector3((0.13f * scale), (0.32f * scale), 0.2f), round: 0f, material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.08f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: 0f, y: (0.4f * scale), z: 0f))).Sphere(radius: (0.34f * scale), material: material);
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: (-0.36f * scale), y: (-0.08f * scale), z: 0f))).Sphere(radius: (0.34f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: (0.36f * scale), y: (-0.08f * scale), z: 0f))).Sphere(radius: (0.34f * scale), material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.1f * scale));
+                _ = builder.ResetPoint().Translate(offset: (centre + new Vector3(x: 0f, y: (-0.6f * scale), z: 0f))).Box(halfExtents: new Vector3(x: (0.13f * scale), y: (0.32f * scale), z: 0.2f), round: 0f, material: material, blend: SdfBlendOp.SmoothUnion, smooth: (0.08f * scale));
                 break;
         }
     }
@@ -180,14 +180,14 @@ internal static class CardArtBake {
 
         var tilt = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: tiltRadians);
 
-        _ = builder.ResetPoint().Translate(offset: centre).Rotate(rotation: tilt).Box(halfExtents: new Vector3(halfExtents.X, halfExtents.Y, 0.15f), round: 0.12f, material: faceMaterial);
+        _ = builder.ResetPoint().Translate(offset: centre).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: halfExtents.X, y: halfExtents.Y, z: 0.15f), round: 0.12f, material: faceMaterial);
     }
 
     // The head-on camera framing exactly 20×18 world units onto 160×144 pixels (one unit = one tile).
     private static CameraSnapshot BuildScreenCamera(BakeStyle style) =>
         CameraSnapshot.LookAt(
             fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-            position: new Vector3(0f, 0f, ((144f / 16f) / TanHalfFov)),
+            position: new Vector3(x: 0f, y: 0f, z: ((144f / 16f) / TanHalfFov)),
             target: Vector3.Zero,
             viewportHeight: (uint)(144 * style.SupersampleFactor),
             viewportWidth: (uint)(160 * style.SupersampleFactor)
@@ -197,7 +197,7 @@ internal static class CardArtBake {
     private static CameraSnapshot BuildCursorCamera(BakeStyle style) =>
         CameraSnapshot.LookAt(
             fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-            position: new Vector3(0f, 0f, (2f / TanHalfFov)),
+            position: new Vector3(x: 0f, y: 0f, z: (2f / TanHalfFov)),
             target: Vector3.Zero,
             viewportHeight: (uint)(32 * style.SupersampleFactor),
             viewportWidth: (uint)(32 * style.SupersampleFactor)
@@ -206,15 +206,15 @@ internal static class CardArtBake {
     // The cursor's two poses: a gold pointer, and the same pointer pinching a small white card.
     private static SdfProgram BuildCursorScene(bool grab) {
         var builder = new SdfProgramBuilder();
-        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.78f, 0.30f), Emissive: 1.3f));
-        var white = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.92f, 0.93f, 0.95f), Emissive: 1.2f));
+        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.78f, z: 0.30f), Emissive: 1.3f));
+        var white = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.92f, y: 0.93f, z: 0.95f), Emissive: 1.2f));
         var tilt = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-30f * (MathF.PI / 180f)));
 
         // The pointer: a round cone (tip up-left) with a short tail.
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-0.2f, 0.2f, 0f)).Rotate(rotation: tilt).RoundCone(lowerRadius: 0.42f, upperRadius: 0.05f, height: 1.5f, material: gold);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.2f, y: 0.2f, z: 0f)).Rotate(rotation: tilt).RoundCone(lowerRadius: 0.42f, upperRadius: 0.05f, height: 1.5f, material: gold);
 
         if (grab) {
-            _ = builder.ResetPoint().Translate(offset: new Vector3(0.55f, -0.85f, 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(0.5f, 0.65f, 0.12f), round: 0.1f, material: white);
+            _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.55f, y: -0.85f, z: 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 0.5f, y: 0.65f, z: 0.12f), round: 0.1f, material: white);
         }
 
         return builder.Build();

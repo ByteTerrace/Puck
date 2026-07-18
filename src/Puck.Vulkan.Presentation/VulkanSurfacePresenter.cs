@@ -8,7 +8,7 @@ namespace Puck.Vulkan.Presentation;
 /// fullscreen surface blit), so the host loop drives Vulkan presentation through the backend-neutral seam
 /// without referencing either concrete type.
 /// </summary>
-public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable {
+public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable, IPresentationSkipFeedback {
     private readonly SurfaceCompositor m_compositor;
     private readonly VulkanRenderer m_renderer;
 
@@ -52,9 +52,14 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
             height: height,
             width: width
         );
-        // The frame-boundary gate: drain the previous frame's GPU work before the node tree reuses its
-        // per-frame resources. Folded behind the seam so the host loop stays backend-agnostic.
-        m_renderer.WaitForGpuIdle();
+        // The frame-boundary gate, PIPELINED: wait only on the presentation ring slot's fence — the present two
+        // frames back — instead of draining the whole device, so this frame's CPU production overlaps the previous
+        // frame's GPU execution (wall interval → ~max(GPU, produce) when GPU-bound). Per-frame resource reuse is
+        // guarded by each SdfWorldEngine's own frame ring; this wait bounds host latency to the ring depth. The
+        // FULL drain remains the resize/device-loss/shutdown path (renderer BeginFrame recreation, RecoverFromDeviceLoss,
+        // the host's teardown WaitIdle). Folded behind the seam so the host loop stays backend-agnostic — the
+        // [frame-timing] "gpu-drain" bucket now measures this bounded wait.
+        m_renderer.WaitForFrameSlot();
     }
     /// <inheritdoc/>
     public void Present(Surface surface) {
@@ -78,9 +83,11 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
     }
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming =>
-        (m_renderer.TryGetPresentTiming(out var presentCount, out var presentTimestampTicks)
+        (m_renderer.TryGetPresentTiming(presentCount: out var presentCount, presentTimestampTicks: out var presentTimestampTicks)
             ? new PresentTimingSample(PresentCount: presentCount, PresentTimestampTicks: presentTimestampTicks)
             : PresentTimingSample.Unavailable);
+    /// <inheritdoc/>
+    public ulong SkippedPresentCount => m_renderer.SkippedPresentCount;
     /// <inheritdoc/>
     public void Dispose() {
         Deactivate();

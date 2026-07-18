@@ -15,12 +15,9 @@
 
 using System.Runtime.CompilerServices;
 
-namespace System.Runtime
-{
-    internal static unsafe class TypeCast
-    {
-        private struct ArrayElement
-        {
+namespace System.Runtime {
+    internal static unsafe class TypeCast {
+        private struct ArrayElement {
             public object Value;
         }
 
@@ -33,12 +30,12 @@ namespace System.Runtime
         private const uint ET_Array = 0x17u;       // EETypeElementType.Array
         private const uint ET_SzArray = 0x18u;     // EETypeElementType.SzArray
 
-        private static uint ElementType(MethodTable* mt) => (*(uint*)mt & ElementTypeMask) >> ElementTypeShift;
-        private static bool IsArray(MethodTable* mt) { uint et = ElementType(mt); return et == ET_Array || et == ET_SzArray; }
+        private static uint ElementType(MethodTable* mt) => ((*(uint*)mt & ElementTypeMask) >> ElementTypeShift);
+        private static bool IsArray(MethodTable* mt) { uint et = ElementType(mt); return ((et == ET_Array) || (et == ET_SzArray)); }
         // System.Object is the unique CLASS with no base type; interfaces also have a null base,
         // hence the element-type guard.
-        private static bool IsObjectType(MethodTable* mt) => ElementType(mt) == ET_Class && mt->_relatedType == null;
-        private static bool IsSystemArrayType(MethodTable* mt) => ElementType(mt) == ET_SystemArray;
+        private static bool IsObjectType(MethodTable* mt) => ((ElementType(mt) == ET_Class) && (mt->_relatedType is null));
+        private static bool IsSystemArrayType(MethodTable* mt) => (ElementType(mt) == ET_SystemArray);
 
         // Walk the CLASS base-type chain (MethodTable._relatedType is the base type for classes,
         // terminating at System.Object whose related type is null). Includes the exact match.
@@ -47,10 +44,8 @@ namespace System.Runtime
         // would wrongly report e.g. IService[] as deriving from IService. So stop at arrays; an
         // array's class-assignability (-> object / System.Array / covariant array) is handled in
         // IsClassAssignable instead.
-        private static bool DerivesFrom(MethodTable* mt, MethodTable* target)
-        {
-            while (mt != null)
-            {
+        private static bool DerivesFrom(MethodTable* mt, MethodTable* target) {
+            while (mt is not null) {
                 if (mt == target)
                     return true;
 
@@ -70,13 +65,12 @@ namespace System.Runtime
         // The interface map is not a fixed struct field: it follows the 24-byte MethodTable
         // header and the vtable, so its offset depends on the vtable slot count. Read the counts
         // out of the header by offset (they are private on the MethodTable struct).
-        private static bool ImplementsInterface(MethodTable* mt, MethodTable* interfaceType)
-        {
+        private static bool ImplementsInterface(MethodTable* mt, MethodTable* interfaceType) {
             ushort numVtableSlots = *(ushort*)((byte*)mt + 16);
             ushort numInterfaces = *(ushort*)((byte*)mt + 18);
-            MethodTable** interfaceMap = (MethodTable**)((byte*)mt + 24 + (nuint)8 * numVtableSlots);
+            MethodTable** interfaceMap = (MethodTable**)(((byte*)mt + 24) + ((nuint)8 * numVtableSlots));
 
-            for (ushort i = 0; i < numInterfaces; i++)
+            for (ushort i = 0; (i < numInterfaces); i++)
                 if (interfaceMap[i] == interfaceType)
                     return true;
 
@@ -86,13 +80,11 @@ namespace System.Runtime
         // Assignability to a CLASS target (no interfaces). Handles arrays: every array derives
         // from object and System.Array, and S[] is assignable to T[] when S is assignable to T
         // (reference array covariance).
-        private static bool IsClassAssignable(MethodTable* objType, MethodTable* targetType)
-        {
+        private static bool IsClassAssignable(MethodTable* objType, MethodTable* targetType) {
             if (DerivesFrom(objType, targetType))
                 return true;
 
-            if (IsArray(objType))
-            {
+            if (IsArray(objType)) {
                 if (IsObjectType(targetType) || IsSystemArrayType(targetType))
                     return true;
 
@@ -102,61 +94,47 @@ namespace System.Runtime
 
             return false;
         }
-
         private static bool IsAssignableTo(MethodTable* objType, MethodTable* targetType)
-            => IsClassAssignable(objType, targetType) || ImplementsInterface(objType, targetType);
+            => (IsClassAssignable(objType, targetType) || ImplementsInterface(objType, targetType));
 
-        public static object IsInstanceOfClass(MethodTable* pTargetType, object obj)
-        {
-            if (obj == null)
+        public static object IsInstanceOfClass(MethodTable* pTargetType, object obj) {
+            if (obj is null)
                 return null;
 
-            return IsClassAssignable(obj.m_pMethodTable, pTargetType) ? obj : null;
+            return (IsClassAssignable(obj.m_pMethodTable, pTargetType) ? obj : null);
         }
-
-        public static object IsInstanceOfAny(MethodTable* pTargetType, object obj)
-        {
-            if (obj == null)
+        public static object IsInstanceOfAny(MethodTable* pTargetType, object obj) {
+            if (obj is null)
                 return null;
 
-            return IsAssignableTo(obj.m_pMethodTable, pTargetType) ? obj : null;
+            return (IsAssignableTo(obj.m_pMethodTable, pTargetType) ? obj : null);
         }
-
-        public static object IsInstanceOfInterface(MethodTable* pTargetType, object obj)
-        {
-            if (obj == null)
+        public static object IsInstanceOfInterface(MethodTable* pTargetType, object obj) {
+            if (obj is null)
                 return null;
 
-            return ImplementsInterface(obj.m_pMethodTable, pTargetType) ? obj : null;
+            return (ImplementsInterface(obj.m_pMethodTable, pTargetType) ? obj : null);
         }
-
         public static bool IsInstanceOfException(MethodTable* pTargetType, object obj)
-            => obj != null && DerivesFrom(obj.m_pMethodTable, pTargetType);
-
-        public static object CheckCastClass(MethodTable* pTargetType, object obj)
-        {
-            if (obj == null || IsClassAssignable(obj.m_pMethodTable, pTargetType))
+            => ((obj is not null) && DerivesFrom(obj.m_pMethodTable, pTargetType));
+        public static object CheckCastClass(MethodTable* pTargetType, object obj) {
+            if ((obj is null) || IsClassAssignable(obj.m_pMethodTable, pTargetType))
                 return obj;
 
             Environment.FailFast(null);
             return null;
         }
-
         public static object CheckCastClassSpecial(MethodTable* pTargetType, object obj)
             => CheckCastClass(pTargetType, obj);
-
-        public static object CheckCastAny(MethodTable* pTargetType, object obj)
-        {
-            if (obj == null || IsAssignableTo(obj.m_pMethodTable, pTargetType))
+        public static object CheckCastAny(MethodTable* pTargetType, object obj) {
+            if ((obj is null) || IsAssignableTo(obj.m_pMethodTable, pTargetType))
                 return obj;
 
             Environment.FailFast(null);
             return null;
         }
-
-        public static object CheckCastInterface(MethodTable* pTargetType, object obj)
-        {
-            if (obj == null || ImplementsInterface(obj.m_pMethodTable, pTargetType))
+        public static object CheckCastInterface(MethodTable* pTargetType, object obj) {
+            if ((obj is null) || ImplementsInterface(obj.m_pMethodTable, pTargetType))
                 return obj;
 
             Environment.FailFast(null);
@@ -172,20 +150,17 @@ namespace System.Runtime
         // StelemRef (an EXACT element-type match — which rejects storing an implementer into an
         // `IService[]` or a derived instance into a `Base[]`), this allows any element assignable
         // to the array's element type, so DI-style `IService[]` collections work.
-        public static void StelemRef(object[] array, nint index, object obj)
-        {
+        public static void StelemRef(object[] array, nint index, object obj) {
             ref object element = ref Unsafe.As<ArrayElement[]>(array)[index].Value;
 
-            if (obj == null)
-            {
+            if (obj is null) {
                 element = null;
                 return;
             }
 
             MethodTable* elementType = array.m_pMethodTable->_relatedType;
 
-            if (IsAssignableTo(obj.m_pMethodTable, elementType))
-            {
+            if (IsAssignableTo(obj.m_pMethodTable, elementType)) {
                 element = obj;
                 return;
             }

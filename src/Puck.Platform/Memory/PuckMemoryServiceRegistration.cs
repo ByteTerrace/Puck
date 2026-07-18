@@ -17,7 +17,7 @@ public static class PuckMemoryServiceRegistration {
     public static IServiceCollection AddPuckAllocator(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.TryAddSingleton<IAllocator>(static _ => Allocator.Current);
+        services.TryAddSingleton<IAllocator>(implementationFactory: static _ => Allocator.Current);
 
         return services;
     }

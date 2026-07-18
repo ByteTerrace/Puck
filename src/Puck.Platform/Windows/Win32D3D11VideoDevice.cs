@@ -1,10 +1,7 @@
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
-using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
-using Windows.Win32.Graphics.Direct3D10;
 using Windows.Win32.Graphics.Direct3D11;
 using Windows.Win32.Graphics.Dxgi;
 using Windows.Win32.System.Com;
@@ -32,49 +29,30 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
     /// <param name="adapterLuid">The adapter LUID the consumer render device reported (packed <c>(HighPart &lt;&lt; 32) | LowPart</c>).</param>
     /// <exception cref="InvalidOperationException">No adapter matches, or device creation failed.</exception>
     public Win32D3D11VideoDevice(long adapterLuid) {
-        var adapter = FindAdapter(adapterLuid: adapterLuid);
+        var adapter = Win32D3D11.FindAdapterByLuid(adapterLuid: adapterLuid);
 
         if (adapter is null) {
             throw new InvalidOperationException(message: $"no DXGI adapter was found with LUID 0x{adapterLuid:X16}");
         }
 
         try {
-            ID3D11Device* device;
-            ID3D11DeviceContext* context;
-            D3D_FEATURE_LEVEL granted;
-            ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
-
             // VIDEO_SUPPORT: Media Foundation's DXVA components require it. BGRA_SUPPORT: the processor's ARGB32
-            // output format. Driver type must be UNKNOWN when an explicit adapter is passed. Software is the NULL
-            // HMODULE (no software rasterizer) — the generated wrapper wants a non-null SafeHandle wrapping it.
-            using var noSoftwareModule = new SafeFileHandle(preexistingHandle: 0, ownsHandle: false);
-
-            Check(hr: PInvoke.D3D11CreateDevice(
-                pAdapter: (IDXGIAdapter*)adapter,
-                DriverType: D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
-                Software: noSoftwareModule,
-                Flags: (D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT),
-                pFeatureLevels: levels,
-                SDKVersion: PInvoke.D3D11_SDK_VERSION,
-                ppDevice: &device,
-                pFeatureLevel: &granted,
-                ppImmediateContext: &context
-            ), operation: "D3D11CreateDevice");
+            // output format. Driver type must be UNKNOWN when an explicit adapter is passed.
+            Win32D3D11.CreateMultithreadedDevice(
+                adapter: (IDXGIAdapter*)adapter,
+                driverType: D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
+                flags: D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                device: out var device,
+                context: out var context
+            );
 
             m_context = context;
             m_device = device;
 
-            // Media Foundation worker threads call into the device concurrently; multithread protection is required.
-            var multithreadIid = ID3D10Multithread.IID_Guid;
-
-            Check(hr: ((IUnknown*)device)->QueryInterface(in multithreadIid, out var multithread), operation: "QueryInterface(ID3D10Multithread)");
-            _ = ((ID3D10Multithread*)multithread)->SetMultithreadProtected(bMTProtect: true);
-            _ = ((IUnknown*)multithread)->Release();
-
             // ID3D11Device1 carries OpenSharedResource1 (the NT-handle open).
             var device1Iid = ID3D11Device1.IID_Guid;
 
-            Check(hr: ((IUnknown*)device)->QueryInterface(in device1Iid, out var device1), operation: "QueryInterface(ID3D11Device1)");
+            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(in device1Iid, out var device1), operation: "QueryInterface(ID3D11Device1)");
             m_device1 = (ID3D11Device1*)device1;
 
             // The event query CopyToTarget spins on: signaled when everything submitted before End has completed.
@@ -181,39 +159,4 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
         }
     }
 
-    // Returns an owned adapter pointer the caller must Release, or null when no adapter carries the LUID.
-    private static IDXGIAdapter1* FindAdapter(long adapterLuid) {
-        Check(hr: PInvoke.CreateDXGIFactory1(riid: IDXGIFactory1.IID_Guid, ppFactory: out var factoryPointer), operation: "CreateDXGIFactory1");
-
-        var factory = (IDXGIFactory1*)factoryPointer;
-
-        try {
-            for (var index = 0u; ; index++) {
-                IDXGIAdapter1* adapter;
-                var hr = factory->EnumAdapters1(Adapter: index, ppAdapter: &adapter);
-
-                if (HRESULT.DXGI_ERROR_NOT_FOUND == hr) {
-                    return null;
-                }
-
-                Check(hr: hr, operation: "IDXGIFactory1::EnumAdapters1");
-
-                var description = adapter->GetDesc1();
-                var luid = ((((long)description.AdapterLuid.HighPart) << 32) | description.AdapterLuid.LowPart);
-
-                if (luid == adapterLuid) {
-                    return adapter;
-                }
-
-                _ = adapter->Release();
-            }
-        } finally {
-            _ = factory->Release();
-        }
-    }
-    private static void Check(HRESULT hr, string operation) {
-        if (hr.Value < 0) {
-            throw new COMException(message: $"{operation} failed", errorCode: hr.Value);
-        }
-    }
 }

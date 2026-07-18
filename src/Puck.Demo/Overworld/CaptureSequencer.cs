@@ -158,8 +158,7 @@ public sealed class CaptureSequencer {
                     Sprite: shot.Sprite
                 ));
             }
-        }
-        else if (capture.Orbit is { } orbit) {
+        } else if (capture.Orbit is { } orbit) {
             var count = Math.Max(val1: 1, val2: orbit.Count);
             var target = ResolveTarget(x: orbit.TargetX, y: orbit.TargetY, z: orbit.TargetZ, fallback: defaultTarget);
 
@@ -191,10 +190,9 @@ public sealed class CaptureSequencer {
 
         return resolved;
     }
-
     private static Vector3 ResolveTarget(float? x, float? y, float? z, Vector3 fallback) {
-        return ((x is null) && (y is null) && (z is null))
+        return (((x is null) && (y is null) && (z is null))
             ? fallback
-            : new Vector3(x: (x ?? fallback.X), y: (y ?? fallback.Y), z: (z ?? fallback.Z));
+            : new Vector3(x: (x ?? fallback.X), y: (y ?? fallback.Y), z: (z ?? fallback.Z)));
     }
 }

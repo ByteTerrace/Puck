@@ -161,8 +161,8 @@ internal static class SolitaireTables {
         var map = new byte[0x400];
 
         for (var column = 2; (column <= 17); column++) {
-            map[(6 * 32) + column] = (byte)(CardTables.TileSuitBase + (column % 4));
-            map[(16 * 32) + column] = (byte)(CardTables.TileSuitBase + ((column + 2) % 4));
+            map[((6 * 32) + column)] = (byte)(CardTables.TileSuitBase + (column % 4));
+            map[((16 * 32) + column)] = (byte)(CardTables.TileSuitBase + ((column + 2) % 4));
         }
 
         return map;

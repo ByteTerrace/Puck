@@ -18,7 +18,7 @@ internal static class ForgeCliSeams {
     /// <summary>The <c>--forge-camera</c> option.</summary>
     public static Option<string?> CameraOption { get; } = new(name: "--forge-camera") {
         DefaultValueFactory = static _ => null,
-        Description = "Headless tool: forge a POCKET CAMERA .gbc (a real ROM that drives the authentic M64282FP protocol — program registers, trigger, poll busy, blit the captured image) and self-verify it against the deterministic gradient sensor, writing an <out>.emulated.png. Boot it with --rom to run the webcam viewfinder.",
+        Description = "Headless tool: forge a CAMERA .gbc (a real ROM that drives the authentic M64282FP protocol — program registers, trigger, poll busy, blit the captured image) and self-verify it against the deterministic gradient sensor, writing an <out>.emulated.png. Boot it with --rom to run the webcam viewfinder.",
     };
 
     /// <summary>The <c>--forge-avatar</c> option.</summary>
@@ -60,6 +60,18 @@ internal static class ForgeCliSeams {
     public static Option<string?> BrickfallOption { get; } = new(name: "--forge-brickfall") {
         DefaultValueFactory = static _ => null,
         Description = "Headless tool: build the five-star BRICKFALL .gbc (genuine SM83, 7-piece falling blocks with rotation + line clears; the title SDF-bakes on the GPU with a hand-authored fallback), self-verify it, and write it (plus an <out>.emulated.png). Boot it with --rom, or cycle to it at a cabinet.",
+    };
+
+    /// <summary>The <c>--forge-oracle</c> option.</summary>
+    public static Option<string?> OracleOption { get; } = new(name: "--forge-oracle") {
+        DefaultValueFactory = static _ => null,
+        Description = "Headless tool: build the ORACLE .gbc (a genuine SM83 fortune-telling cart — spare and text-only, no GPU/battery/sound; the fortune is the frame counter at the A-press tick modulo twelve, so it feels random yet a replay always agrees, and a frame-perfect power-on press reveals a hidden thirteenth), self-verify it, and write it (plus an <out>.emulated.png). Boot it with --rom, or cycle to it at a cabinet.",
+    };
+
+    /// <summary>The <c>--forge-critterswap</c> option.</summary>
+    public static Option<string?> CritterSwapOption { get; } = new(name: "--forge-critterswap") {
+        DefaultValueFactory = static _ => null,
+        Description = "Headless tool: build the CRITTER-SWAP .gbc (a genuine SM83 link-trading toy — SRAM holds one critter, START offers a trade, and two linked cabinets swap critters over the cable via a boot-order-proof handshake with a NO-LINK timeout; no GPU title bake, battery-backed), self-verify it (single-cart behaviour AND a full two-machine SerialLinkSession swap), and write it (plus an <out>.emulated.png). Boot it with --rom, or cycle two cabinets to it in the overworld, link them, and trade.",
     };
 
     /// <summary>The <c>--forge-chroma</c> option.</summary>
@@ -119,48 +131,58 @@ internal static class ForgeCliSeams {
     public static async Task<int?> TryRunAsync(string[] args, System.CommandLine.ParseResult parseResult) {
         // The SDF-art forge builds its own trimmed GPU host and forges on the first frame; the camera/tune forges
         // need no GPU and run synchronously; the framework games bake their SDF titles on the one-shot host first.
-        if (parseResult.GetValue(ForgeOption) is { } forgePath) {
+        if (parseResult.GetValue(option: ForgeOption) is { } forgePath) {
             return await RomForge.RunAsync(outputPath: forgePath, args: args);
         }
-        if (parseResult.GetValue(CameraOption) is { } cameraPath) {
+        if (parseResult.GetValue(option: CameraOption) is { } cameraPath) {
             return await RomForge.RunCameraAsync(outputPath: cameraPath);
         }
-        if (parseResult.GetValue(TownOption)) {
+        if (parseResult.GetValue(option: TownOption)) {
             // Dispatched straight to the town forge (not via RomForge, which is at its class-coupling ceiling): the
             // town needs no GPU host, so Run is a synchronous CPU build+verify.
             return Puck.Demo.Town.TownForge.Run(args: args);
         }
-        if (parseResult.GetValue(VolleyOption) is { } volleyPath) {
+        if (parseResult.GetValue(option: VolleyOption) is { } volleyPath) {
             return await RomForge.RunVolleyAsync(outputPath: volleyPath, args: args);
         }
-        if (parseResult.GetValue(BrickfallOption) is { } brickfallPath) {
+        if (parseResult.GetValue(option: BrickfallOption) is { } brickfallPath) {
             return await RomForge.RunBrickfallAsync(outputPath: brickfallPath, args: args);
         }
-        if (parseResult.GetValue(ChromaOption) is { } chromaPath) {
+        if (parseResult.GetValue(option: OracleOption) is { } oraclePath) {
+            // Dispatched straight to the oracle forge (not via RomForge, which is at its class-coupling ceiling): the
+            // cart needs no GPU host, so Run is a synchronous CPU build+verify.
+            return Puck.Demo.Forge.OracleForge.Run(outputPath: oraclePath);
+        }
+        if (parseResult.GetValue(option: CritterSwapOption) is { } critterSwapPath) {
+            // Dispatched straight to the critter-swap forge (not via RomForge, which is at its class-coupling ceiling):
+            // the cart needs no GPU host, so Run is a synchronous CPU build → verify (incl. a two-machine link swap) → write.
+            return Puck.Demo.Forge.CritterSwapForge.Run(outputPath: critterSwapPath);
+        }
+        if (parseResult.GetValue(option: ChromaOption) is { } chromaPath) {
             return await RomForge.RunChromaAsync(outputPath: chromaPath, args: args);
         }
-        if (parseResult.GetValue(SolitaireOption) is { } solitairePath) {
+        if (parseResult.GetValue(option: SolitaireOption) is { } solitairePath) {
             return await RomForge.RunSolitaireAsync(outputPath: solitairePath, args: args);
         }
-        if (parseResult.GetValue(PokerOption) is { } pokerPath) {
+        if (parseResult.GetValue(option: PokerOption) is { } pokerPath) {
             return await RomForge.RunPokerAsync(outputPath: pokerPath, args: args);
         }
-        if (parseResult.GetValue(TuneOption) is { } tunePath) {
-            return await RomForge.RunTuneAsync(documentPath: parseResult.GetValue(TuneFromOption), outputPath: tunePath);
+        if (parseResult.GetValue(option: TuneOption) is { } tunePath) {
+            return await RomForge.RunTuneAsync(documentPath: parseResult.GetValue(option: TuneFromOption), outputPath: tunePath);
         }
-        if (parseResult.GetValue(BakeOption) is { } bakePath) {
+        if (parseResult.GetValue(option: BakeOption) is { } bakePath) {
             return await RomForge.RunBakeAsync(outputDirectory: bakePath, stress: false, args: args);
         }
-        if (parseResult.GetValue(BakeStressOption) is { } bakeStressPath) {
+        if (parseResult.GetValue(option: BakeStressOption) is { } bakeStressPath) {
             return await RomForge.RunBakeAsync(outputDirectory: bakeStressPath, stress: true, args: args);
         }
-        if (parseResult.GetValue(BakeCalibrationOption) is { } bakeCalibrationPath) {
+        if (parseResult.GetValue(option: BakeCalibrationOption) is { } bakeCalibrationPath) {
             return await RomForge.RunBakeCalibrationAsync(outputDirectory: bakeCalibrationPath, args: args);
         }
-        if (parseResult.GetValue(AvatarOption) is { } avatarPath) {
-            return await RomForge.RunAvatarAsync(args: args, avatarJsonPath: parseResult.GetValue(AvatarFromOption), movementModeText: parseResult.GetValue(AvatarMovementModeOption), outputPath: avatarPath);
+        if (parseResult.GetValue(option: AvatarOption) is { } avatarPath) {
+            return await RomForge.RunAvatarAsync(args: args, creationPath: parseResult.GetValue(option: AvatarFromOption), movementModeText: parseResult.GetValue(option: AvatarMovementModeOption), outputPath: avatarPath);
         }
-        if (parseResult.GetValue(FlagshipsOption) is { } flagshipsPath) {
+        if (parseResult.GetValue(option: FlagshipsOption) is { } flagshipsPath) {
             return await RomForge.RunFlagshipsAsync(outputPath: flagshipsPath, args: args);
         }
 

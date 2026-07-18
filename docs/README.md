@@ -1,57 +1,88 @@
-# Puck documentation index
+# Puck documentation
 
-Start here. Every doc in this folder is classified as **living** (kept
-current; trust it) or **historical** (a completed design/investigation record;
-accurate when written, may reference deleted paths).
+Puck documentation describes the current product. Design history belongs in
+Git history; durable constraints belong in the relevant guide, skill, or code
+contract. Research pages retain citations and measured evidence because those
+sources remain useful to engineering decisions.
 
-## Start with these (living)
+## Start here
 
-| Doc | What it answers |
+| Document | Purpose |
 |---|---|
-| [capability-catalog.md](capability-catalog.md) | *What can Puck do?* — the master inventory of every capability with verification status and how to invoke it. |
-| [project-map.md](project-map.md) | *Where does it live?* — all `src/Puck.*` + `experimental/` projects, layering, dependency rules. |
-| [agent-guide.md](agent-guide.md) | *How do I work here?* — verification (POST batteries, fuzzing), env vars, hardware gotchas, conventions. |
+| [Capability catalog](capability-catalog.md) | Supported capabilities, verification status, and entry points. |
+| [Project map](project-map.md) | Project ownership, dependencies, and layering rules. |
+| [Agent guide](agent-guide.md) | Development workflow, verification, environments, and documentation policy. |
+| [API reference](api/index.md) | Generated public API documentation. |
 
-## Living references
+## Engine references
 
-| Doc | Scope |
+| Document | Purpose |
 |---|---|
-| [feature-parity-summary.md](feature-parity-summary.md) | Vulkan ↔ Direct3D 12 parity verdict at a glance. |
-| [feature-parity-table.md](feature-parity-table.md) | Per-row parity detail with hardware-verification provenance. |
-| [platform-display-kinds.md](platform-display-kinds.md) | Surfaces vs. windows and the `NativeDisplayKind` dispatch. |
-| [examples/](examples/) | Fourteen valid `puck.run.v1` run documents plus two checked-in negatives (`world-single-bad-material.json`, `overworld-victory-bad-meta.json`), all exercised by the Post `run-document` stage — which is the source of truth for the counts. `puckton.world.json` shares the directory but is a `puck.world.v1` document (a different format, authored by the world sculptor) and the stage skips it. The `world`-graph documents also run live (`--run <path>`, host backend) through the shared world renderer, not only as parse corpus. |
-| [api/](api/) | DocFX configuration for API reference generation. |
+| [Backend parity summary](feature-parity-summary.md) | Current Vulkan and Direct3D 12 parity status. |
+| [Backend parity table](feature-parity-table.md) | Capability-level backend support and evidence. |
+| [Platform display kinds](platform-display-kinds.md) | Native display and surface dispatch contracts. |
+| [Engine benchmark](engine-bench-plan.md) | Benchmark scenes, scoring, report format, and operation. |
+| [UI design tokens](ui-design-tokens.md) | Shared visual-token vocabulary and ownership. |
 
-Per-project READMEs that double as handoff docs:
-[src/Puck.Input](../src/Puck.Input/README.md) ·
-[experimental/Puck.BareMetal](../experimental/Puck.BareMetal/README.md) ·
-[experimental/Puck.AdvancedGamingBrick.Post](../experimental/Puck.AdvancedGamingBrick.Post/README.md)
+## Active engineering ledgers
 
-## Active plans
-
-| Doc | Scope |
+| Document | Purpose |
 |---|---|
-| [overworld-demo-plan.md](overworld-demo-plan.md) | The demo's plan of record — the overworld (room + four bootable console cabinets + staged layout transitions), its seams, and the next steps. Covers multiplayer console mode + proximity takeover, battery saves, and `--rom` fourth-wall boots. **The Demo is GREENFIELD** — verify by running it, not by gating; don't promote its features into Post unasked. |
-| [game-studio-plan.md](game-studio-plan.md) | The in-engine game studio's plan of record: the sculpt→bake→forge→play north star, the binding user decisions, and the remaining arcs — the card games (Poker/Solitaire + determinism design), audio, the editor-through-SDF-VM convergence, the recursion, and the open ❓ forks to prompt on. What already EXISTS is in the capability catalog §7. |
-| [sdf-world-render-centralization-plan.md](sdf-world-render-centralization-plan.md) | The shared world render host (`SdfWorldRenderBuilder`, `WorldNode` driven through data, the document screen-source seam); the status section says what remains open (live-camera re-host, cross-backend `produce`). The plan body is the design record. |
-| [sdf-vm-briefing.md](sdf-vm-briefing.md) | The SDF VM session map (2026-07-08 synthesis): where things stand post-alpha-prep, the ranked live threads (scoped accumulator · the Xor unmaskable-exemption suspicion — since SETTLED, see the doc · the D3 trigger tension · the idle ISA · UI convergence), the Post coverage holes, the deliberate-weirdness list, and the foot-guns. Read this BEFORE the two plan docs; it points into them. |
-| [sdf-wiki/](sdf-wiki/README.md) | The SDF rendering-techniques reference wiki (2026-07-08 research corpus: 7 literature sweeps + 10 adversarial deep reviews, ~100 technique entries with citations, determinism notes, and Puck verdicts — including a negative-results ledger and a master verdict index with empirical in-engine status). The ranked decision shortlist is its companion, [sdf-sota-survey.md](sdf-sota-survey.md). |
-| [sdf-accumulator-plan.md](sdf-accumulator-plan.md) | The flat accumulator: `mapCore` keeps ONE running distance, so `Intersection`/`Xor`/`Onion`/`Dilate`/`Displace` compose against the whole scene before them, not the shape you meant. The measured evidence (five sites, all fixed), why the forge is the one safe place, why such an instance cannot be culled, and the **open decision** on a scoped accumulator (`PushField`/`PopField`) with its measured cost. The settled *rule* lives in `SdfBlendOp`, `sdf-vm.hlsli` and the `sdf-world` skill. |
-| [sdf-bench-notes.md](sdf-bench-notes.md) | The `sdf.bench` perf-bench measurements (per-primitive, per-op, and per-instance-count GPU cost tables), driven from inside the `sdf` fullscreen debug mode. Sourced the beam-slope verdict — `sdf-beam` is O(instances), exponent ≈0.97 — that gates the D3 uniform-grid-cull trigger in [sdf-vm-evolution-plan.md](sdf-vm-evolution-plan.md). |
-| [sdf-vm-evolution-plan.md](sdf-vm-evolution-plan.md) | The SDF renderer's evolution roadmap: the landed Lipschitz-safe/over-relaxed marcher (D1), the log-spherical Droste warp (D2), and the whimsy trio (4-tap normals, vesica, soft shadows) — and, for a future agent, the **unrealized** work (D3 hierarchical cone march + instance BVH, segment tracing, a compute shadow-cull, noise/displacement ops). The landed *contracts* live in the `sdf-world` skill. |
-| [machine-fleet-plan.md](machine-fleet-plan.md) | The machine-fleet PERFORMANCE plan of record, fully measured: the `--bench` instrument, fleet scaling / burst / latency / footprint numbers, the M3 verdict (deferred), and the levers in measured-payoff order. |
-| [machine-fleet-briefing.md](machine-fleet-briefing.md) | The workload-class and vision-posture record behind the fleet plan: what the fleet must serve — choirs, dormancy, interactions, the settled scale posture — plus standing constraints. |
-| [ideal-gaming-brick-plan.md](ideal-gaming-brick-plan.md) | The GB/GBC/GBA "ideal deterministic machine" roadmap (three rules, milestones M0–M6, salvage sources). |
+| [Disposal implementation audit](reviews/2026-07-17-disposal-implementation-audit.md) | Active full-repository disposal findings, ownership evidence, and remediation work items. |
+| [Moldable-state code review](reviews/2026-07-18-moldable-state-code-review.md) | Active findings from the moldable-state implementation review: grant exclusivity, player-section completeness, screen removal, and source-diff hygiene. |
+| [SDF renderer performance plan](reviews/2026-07-16-sdf-renderer-sota-perf-plan.md) | Active measurement-gated SDF optimization phases and current reopen criteria. |
+| [World moldable-state handoff](reviews/2026-07-18-world-moldable-state-handoff.md) | Surfaces the executed Puck.World moldable-state arc shipped for the editor and UI arcs to build on, with zero new "make X data" prework. |
 
-## No historical records live here
+## Demo and content
 
-Every doc in this folder is LIVING — trust it. Completed design/investigation
-records are kept in git history only, never in the tree: before a doc is
-deleted, its durable knowledge is distilled into a living home (usually the
-matching skill under `.claude/skills/` — the GB PPU timing frontier lives in
-`gaming-bricks`, the SDF VM contract in `sdf-world`, the forge contracts in
-`rom-forge`).
+| Document | Purpose |
+|---|---|
+| [Overworld demo](overworld-demo-plan.md) | The unified demo experience, control plane, data model, and open work. |
+| [Game studio](game-studio-plan.md) | Current creator workflow and remaining product roadmap. |
+| [Machine fleet](machine-fleet-plan.md) | Emulator-fleet performance model and optimization priorities. |
+| [Machine fleet briefing](machine-fleet-briefing.md) | Workload classes, scale posture, and design constraints. |
+| [Ideal GamingBrick](ideal-gaming-brick-plan.md) | Cross-generation emulator architecture and roadmap. |
+| [Run-document examples](examples/) | Valid and intentionally invalid data examples used by verification. |
 
-*When adding a doc, add a row here. When a living doc stops being true,
-either fix it or retire it — distill the durable knowledge into a living
-home, then delete.*
+## SDF world
+
+| Document | Purpose |
+|---|---|
+| [SDF handbook](sdf-handbook/README.md) | Conceptual and operational guide to authoring, rendering, queries, and baking. |
+| [World-render assembly](sdf-world-render-centralization-plan.md) | Shared render-builder ownership and extension points. |
+| [Carve baking](carve-bake-plan.md) | Brick representation, lifecycle, synchronization, and verification. |
+| [SDF backlog](sdf-backlog.md) | Open engineering work and measured reopen criteria. |
+| [SDF benchmark notes](sdf-bench-notes.md) | Current performance measurements and their interpretation. |
+| [SDF shader profiling](sdf-shader-profiling.md) | Nsight source/flame-graph workflow and evidence-driven ISA experiments. |
+| [SDF research wiki](sdf-wiki/README.md) | Cited technique reference, empirical verdicts, and rejected approaches. |
+| [SDF survey](sdf-sota-survey.md) | Ranked engineering recommendations derived from the research wiki. |
+
+## Emulator research
+
+| Document | Purpose |
+|---|---|
+| [AGB research wiki](agb-wiki/README.md) | Cited architecture, accuracy, determinism, and performance reference. |
+| [AGB survey](agb-sota-survey.md) | Prioritized emulator recommendations and evidence. |
+
+## Project handoffs
+
+Detailed subsystem usage belongs beside the code. Important entry points
+include:
+
+- [`Puck.World`](../src/Puck.World/README.md)
+- [`Puck.Input`](../src/Puck.Input/README.md)
+- [`Puck.Demo`](../src/Puck.Demo/README.md)
+- [`Puck.DirectX`](../src/Puck.DirectX/README.md)
+- [`Puck.SdfVm` shaders](../src/Puck.SdfVm/Assets/Shaders/README.md)
+- [`Puck.HumbleGamingBrick.Post`](../src/Puck.HumbleGamingBrick.Post/README.md)
+- [`Puck.AdvancedGamingBrick.Post`](../src/Puck.AdvancedGamingBrick.Post/README.md)
+- [`Puck.BareMetal`](../experimental/Puck.BareMetal/README.md)
+
+## Maintenance
+
+- Update a document when its code contract changes.
+- Remove completed rollout steps, dated progress logs, and superseded plans.
+- Preserve measurements only when they still explain a current threshold,
+  limitation, or decision.
+- Preserve source provenance, licensing notices, and research citations.
+- Add new top-level documents to this index.

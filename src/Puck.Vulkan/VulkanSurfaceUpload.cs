@@ -11,32 +11,50 @@ namespace Puck.Vulkan;
 /// into the staging buffer, copies them into the image, leaves it shader-readable, and returns the image-view
 /// handle. This is the generic counterpart to <see cref="VulkanViewTarget"/> for surfaces that crossed a
 /// device boundary as host memory — the consumer half of the CPU-pixel transport, reusable by any Vulkan host.
+/// <para>
+/// With a <c>frameSynchronizationApi</c> supplied, <see cref="Upload"/> is PIPELINED: it waits only for its own
+/// PREVIOUS copy's fence (protecting the reused staging buffer and command buffer), then submits fire-and-forget —
+/// a same-queue consumer is still correct by queue order plus the recorded barriers, and a per-frame feed no longer
+/// drains the whole queue behind a frame-ring host. Without it, the legacy blocking submit-and-wait applies.
+/// </para>
 /// </summary>
 public sealed class VulkanSurfaceUpload : IDisposable {
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
+    private readonly IVulkanFrameSynchronizationApi? m_frameSynchronizationApi;
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
     private readonly IVulkanStorageBufferFactory m_storageBufferFactory;
     private VulkanCommandResources? m_commandResources;
     private VulkanLogicalDevice? m_device;
     private bool m_disposed;
+    private nint m_fence;
     private uint m_format;
     private uint m_height;
     private nint m_imageHandle;
     private nint m_imageViewHandle;
     private nint m_memoryHandle;
     private VulkanStorageBuffer? m_stagingBuffer;
+    private bool m_uploadPending;
     private uint m_width;
 
+    /// <summary>Initializes a reusable CPU-pixel uploader.</summary>
+    /// <param name="offscreenImageApi">The API used to create the sampled image.</param>
+    /// <param name="framebufferSetApi">The API used to create and destroy its image view.</param>
+    /// <param name="storageBufferFactory">The factory for the host-visible staging buffer.</param>
+    /// <param name="commandResourcesFactory">The factory for copy command resources.</param>
+    /// <param name="commandBufferRecordingApi">The API used to record buffer-to-image copies.</param>
+    /// <param name="queueSubmitter">The queue submission service.</param>
+    /// <param name="frameSynchronizationApi">The optional API for pipelined upload synchronization.</param>
     public VulkanSurfaceUpload(
         IVulkanOffscreenImageApi offscreenImageApi,
         IVulkanFramebufferSetApi framebufferSetApi,
         IVulkanStorageBufferFactory storageBufferFactory,
         IVulkanCommandResourcesFactory commandResourcesFactory,
         IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
-        VulkanQueueSubmitter queueSubmitter
+        VulkanQueueSubmitter queueSubmitter,
+        IVulkanFrameSynchronizationApi? frameSynchronizationApi = null
     ) {
         ArgumentNullException.ThrowIfNull(commandBufferRecordingApi);
         ArgumentNullException.ThrowIfNull(commandResourcesFactory);
@@ -48,6 +66,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_commandBufferRecordingApi = commandBufferRecordingApi;
         m_commandResourcesFactory = commandResourcesFactory;
         m_framebufferSetApi = framebufferSetApi;
+        m_frameSynchronizationApi = frameSynchronizationApi;
         m_offscreenImageApi = offscreenImageApi;
         m_queueSubmitter = queueSubmitter;
         m_storageBufferFactory = storageBufferFactory;
@@ -84,6 +103,11 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             width: width
         );
 
+        // Pipelined mode: the previous copy must have retired before the staging buffer and command buffer are
+        // reused. Uploads queue ahead of the frame that samples them, so by the next frame's upload the previous
+        // one has long retired — this wait is ~free in the steady state.
+        WaitForPendingUpload();
+
         m_stagingBuffer!.Write<byte>(data: pixels.Span);
 
         var device = m_device!;
@@ -93,6 +117,10 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             commandBufferHandle: commandBufferHandle,
             deviceHandle: device.Handle
         ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
+        // The Undefined transition DISCARDS the prior contents (each upload rewrites the whole image), but its source
+        // scope must still ORDER after the previous frame's samplers — with a pipelining host the prior frame may
+        // still be reading this image on the queue when this copy is recorded (an execution-only dependency; no
+        // access needed for the discard).
         m_commandBufferRecordingApi.TransitionImageLayout(
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
@@ -104,7 +132,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             newLayout: VulkanImageLayout.TransferDestinationOptimal,
             oldLayout: VulkanImageLayout.Undefined,
             sourceAccessMask: 0,
-            sourceStageMask: VulkanPipelineStageFlags.TopOfPipe
+            sourceStageMask: VulkanPipelineStageFlags.ComputeShader | VulkanPipelineStageFlags.FragmentShader
         );
         m_commandBufferRecordingApi.CopyBufferToImage(
             bufferHandle: m_stagingBuffer.BufferHandle,
@@ -117,11 +145,13 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             imageOffsetY: 0,
             width: m_width
         );
+        // Visible to BOTH consumer stages — a compute sampler (the SDF views kernel's screen sources) and a
+        // fragment sampler (the presenter blit path).
         m_commandBufferRecordingApi.TransitionImageLayout(
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: VulkanAccessFlags.ShaderRead,
-            destinationStageMask: VulkanPipelineStageFlags.FragmentShader,
+            destinationStageMask: VulkanPipelineStageFlags.ComputeShader | VulkanPipelineStageFlags.FragmentShader,
             deviceHandle: device.Handle,
             imageHandle: m_imageHandle,
             mipLevelCount: 1,
@@ -137,15 +167,60 @@ public sealed class VulkanSurfaceUpload : IDisposable {
 
         Span<nint> commandBuffers = [commandBufferHandle];
 
-        m_queueSubmitter.SubmitAndWait(
-            commandBufferHandles: commandBuffers,
-            deviceHandle: device.Handle,
-            graphicsQueue: device.GraphicsQueue
-        );
+        if (0 != m_fence) {
+            // Pipelined: fire-and-forget behind the fence. A same-queue consumer submitted AFTER this copy reads the
+            // finished pixels by queue order + the transitions above; the fence only guards the staging/command
+            // resources' reuse at the NEXT Upload.
+            m_queueSubmitter.Submit(
+                commandBufferHandles: commandBuffers,
+                deviceHandle: device.Handle,
+                fenceHandle: m_fence,
+                graphicsQueue: device.GraphicsQueue
+            );
+            m_uploadPending = true;
+        } else {
+            m_queueSubmitter.SubmitAndWait(
+                commandBufferHandles: commandBuffers,
+                deviceHandle: device.Handle,
+                graphicsQueue: device.GraphicsQueue
+            );
+        }
 
         return m_imageViewHandle;
     }
 
+    // Drains the pipelined path's outstanding copy (fence wait + reset); a no-op when none is outstanding. A lost
+    // device has nothing left to wait on — clear the flag so teardown proceeds (mirroring TryWaitIdle's tolerance).
+    private void WaitForPendingUpload() {
+        if (
+            !m_uploadPending ||
+            (m_device is null) ||
+            m_device.IsDisposed ||
+            (0 == m_fence)
+        ) {
+            m_uploadPending = false;
+
+            return;
+        }
+
+        var waitResult = m_frameSynchronizationApi!.WaitForFence(
+            deviceHandle: m_device.Handle,
+            fenceHandle: m_fence,
+            timeout: ulong.MaxValue
+        );
+
+        m_uploadPending = false;
+
+        if (waitResult == Bindings.VkResult.ErrorDeviceLost) {
+            return;
+        }
+
+        waitResult.ThrowIfFailed(operation: "vkWaitForFences");
+        m_frameSynchronizationApi.ResetFence(
+            deviceHandle: m_device.Handle,
+            fenceHandle: m_fence
+        ).ThrowIfFailed(operation: "vkResetFences");
+    }
     private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat, int pixelsByteLength) {
         var device = deviceContext.LogicalDevice;
 
@@ -198,10 +273,34 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             vulkanInstance: instance
         );
         m_width = width;
+
+        // The pipelined path's completion fence (see the class remarks) — device-scoped, so a device/extent change
+        // rebuilds it alongside the buffer (DisposeResources destroyed the old one just above). Absent (0) when no
+        // frame-synchronization API was supplied: the legacy blocking submit applies.
+        if (m_frameSynchronizationApi is not null) {
+            m_frameSynchronizationApi.CreateFence(
+                fenceHandle: out m_fence,
+                request: new VulkanFrameSynchronizationCreateRequest(DeviceHandle: device.Handle, StartSignaled: false)
+            ).ThrowIfFailed(operation: "vkCreateFence");
+        }
     }
     private void DisposeResources() {
         var device = m_device;
 
+        // The staging/command resources may still feed an outstanding pipelined copy — drain it first.
+        WaitForPendingUpload();
+
+        if (
+            (device is not null) &&
+            !device.IsDisposed &&
+            (0 != m_fence)
+        ) {
+            m_frameSynchronizationApi!.DestroyFence(deviceHandle: device.Handle, fenceHandle: m_fence);
+        }
+
+        m_fence = 0;
+
+        m_uploadPending = false;
         m_commandResources?.Dispose();
         m_commandResources = null;
         m_stagingBuffer?.Dispose();

@@ -35,7 +35,7 @@ public sealed class VulkanGpuTimingRecorder(IVulkanQueryPoolApi queryPoolApi) : 
 
     /// <inheritdoc/>
     public uint ReadTimestamps(nint deviceHandle, nint poolHandle, uint firstQuery, uint queryCount, Span<ulong> rawTicks) {
-        return queryPoolApi.GetTimestampResults(
+        return (queryPoolApi.GetTimestampResults(
             deviceHandle: deviceHandle,
             firstQuery: firstQuery,
             queryCount: queryCount,
@@ -43,12 +43,12 @@ public sealed class VulkanGpuTimingRecorder(IVulkanQueryPoolApi queryPoolApi) : 
             results: rawTicks
         ).IsSuccess()
             ? queryCount
-            : 0u;
+            : 0u);
     }
 
     private static uint ToVulkanStage(GpuTimingStage stage) {
-        return (0 != (stage & GpuTimingStage.BottomOfPipe))
+        return ((0 != (stage & GpuTimingStage.BottomOfPipe))
             ? VulkanPipelineStageFlags.BottomOfPipe
-            : VulkanPipelineStageFlags.TopOfPipe;
+            : VulkanPipelineStageFlags.TopOfPipe);
     }
 }

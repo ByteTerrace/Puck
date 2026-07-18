@@ -4,29 +4,109 @@
 // modifier pips between the clusters. Per-slot data rides a storage buffer (12-60 slots exceed any push-constant
 // budget); push constants carry only the scalar style knobs. This lives in Puck.Demo so no UI concept leaks into
 // the reusable SDF engine.
-// KEEP IN SYNC with Puck.Demo.BindingBar.BindingBarOverlayNode's packing and BindingGlyphId/BindingIconId.
 //
-// On Vulkan the texture+sampler fuse into one combined image sampler at set 0, binding 0, and the slot buffer is
-// the storage buffer at binding 1; on DirectX they are t0/s0 and the storage SRV packs in at t1.
+// The button-face LETTER badges (A/B/X/Y and the LB/RB/LT/RT/LS/RS labels) GRADUATED to the ONE shared SDF glyph
+// atlas: its per-glyph cells are packed once into the TAIL of the SAME storage buffer (after the slot records, at
+// BB_ATLAS_BASE), so the badge text is the same field the console overlay and the diegetic bar draw — reconstructed
+// with per-channel bilinear + MEDIAN-OF-3 + a screenPxRange coverage ramp + an outline band. The iconographic glyphs
+// (d-pad arrows, PlayStation shapes) and the action icons stay PROCEDURAL below. The whole buffer is one
+// StructuredBuffer<uint>: slot records are eight uints each (asfloat of the packed floats), the atlas' SDF texels
+// follow one RGBA texel per uint.
+// KEEP IN SYNC with Puck.Demo.BindingBar.BindingBarOverlayNode's packing (AtlasUintBase, the label bits) and
+// BindingGlyphId/BindingIconId.
+//
+// On Vulkan the texture+sampler fuse into one combined image sampler at set 0, binding 0, and the buffer is the
+// storage buffer at binding 1; on DirectX they are t0/s0 and the storage SRV packs in at t1.
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] Texture2D sourceTexture : register(t0);
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] SamplerState sourceSampler : register(s0);
 
+[[vk::binding(1, 0)]] StructuredBuffer<uint> data : register(t1);
+
+// The first atlas word's uint offset (right after the 64 eight-uint slot records). KEEP IN SYNC with AtlasUintBase.
+#define BB_ATLAS_BASE 512u
+
 // a: xy = plate center (aspect units, origin top-left), z = plate half-size, w = glyph half-size
 // b: x = asfloat(glyphId << 16 | iconId), yz = glyph-badge offset from the plate center,
-//    w = asfloat(alpha byte | pressed flag << 8)
+//    w = asfloat(alpha byte | pressed<<8 | (glyphIndex0+1)<<9 | (glyphIndex1+1)<<16 | accent<<23 | bound<<24)
+// Bits 23/24 are the two chip-state signals docs/ui-design-tokens.md section 5 needs beyond "pressed": ACCENT (the
+// context-primary action — Tier 1) and BOUND (0 selects the DISABLED Tier-0 look). KEEP IN SYNC with
+// BindingBarOverlayNode.Pack's packedState bit layout.
+#define BB_STATE_ACCENT_BIT 23u
+#define BB_STATE_BOUND_BIT 24u
 struct BindingSlot {
     float4 a;
     float4 b;
 };
-[[vk::binding(1, 0)]] StructuredBuffer<BindingSlot> slots : register(t1);
 
-// header: x = slot count, y = plate corner radius (x plate half), z = global alpha, w = pressed boost
-// style:  x = plate darkness, y = outline width (x plate half), z = anti-alias ramp (x plate half), w = reserved
+// One slot record decoded from the raw uint buffer (eight uints: a.xyzw then b.xyzw, each a reinterpreted float).
+BindingSlot readSlot(int i) {
+    uint o = ((uint)i * 8u);
+    BindingSlot s;
+
+    s.a = float4(asfloat(data[o + 0u]), asfloat(data[o + 1u]), asfloat(data[o + 2u]), asfloat(data[o + 3u]));
+    s.b = float4(asfloat(data[o + 4u]), asfloat(data[o + 5u]), asfloat(data[o + 6u]), asfloat(data[o + 7u]));
+
+    return s;
+}
+
+// header: x = slot count, y = plate corner radius ratio (r.1 / half-chip-height, x plate half), z = global alpha,
+//         w = reserved
+// style:  x = plate darkness, y = outline/ring width ratio (edge.hairline / half-chip-height, x plate half),
+//         z = anti-alias ramp ratio (x plate half), w = bloom halo falloff radius ratio (bloom.halo.blur /
+//         half-chip-height, x plate half) — the Tier-1 outward glow's reach
+// atlas:  x = atlas cell width, y = atlas cell height (texels), z = distance range (texels), w = label outline band
 struct BarData {
     float4 header;
     float4 style;
+    float4 atlas;
 };
 [[vk::push_constant]] ConstantBuffer<BarData> bar;
+
+// ---- design tokens (docs/ui-design-tokens.md) — HLSL-literal mirrors; KEEP IN SYNC with Puck.Demo.Ui.DesignTokens.
+// HLSL cannot #include the C# module, so the four chip states (section 5's Tier recipes table) are transcribed by
+// hand here: REST (surface.raised + line.hair), HELD (surface.base + bloom.neutral — Tier 1), ACCENT (accent.quiet
+// + bloom.accent — Tier 1, the context-primary action), DISABLED (transparent + line.soft — Tier 0, unbound).
+static const float3 SURFACE_RAISED_RGB = float3(0.113725, 0.129412, 0.149020);
+static const float3 SURFACE_BASE_RGB = float3(0.054902, 0.062745, 0.074510);
+static const float3 LINE_HAIR_RGB = float3(1.0, 1.0, 1.0);
+static const float LINE_HAIR_A = 0.09;
+static const float3 LINE_SOFT_RGB = float3(1.0, 1.0, 1.0);
+static const float LINE_SOFT_A = 0.06;
+static const float3 ACCENT_RGB = float3(1.0, 0.415686, 0.168627);
+static const float ACCENT_QUIET_A = 0.14;
+static const float3 ACCENT_INK_RGB = float3(0.086275, 0.039216, 0.015686);
+static const float3 TEXT_PRIMARY_RGB = float3(0.929412, 0.937255, 0.949020);
+static const float3 BADGE_DARK_RGB = float3(0.05, 0.05, 0.07);
+static const float3 BADGE_LIGHT_RGB = float3(0.96, 0.96, 0.98);
+// bloom.accent / bloom.neutral ring+halo alphas (the hue itself is ACCENT_RGB or TEXT_PRIMARY_RGB above).
+static const float BLOOM_ACCENT_RING_A = 0.55;
+static const float BLOOM_ACCENT_HALO_A = 0.42;
+static const float BLOOM_NEUTRAL_RING_A = 0.30;
+static const float BLOOM_NEUTRAL_HALO_A = 0.22;
+
+// One atlas SDF texel's RGB channels (edge-clamped): decode the packed RGBA word (each channel encoded = 0.5 + d/range).
+float3 bbAtlasTexel(int glyphIndex, int2 texel, int cellW, int cellH) {
+    texel = clamp(texel, int2(0, 0), int2((cellW - 1), (cellH - 1)));
+
+    uint word = data[BB_ATLAS_BASE + (uint)((glyphIndex * cellW * cellH) + (texel.y * cellW) + texel.x)];
+
+    return (float3(float(word & 0xFFu), float((word >> 8u) & 0xFFu), float((word >> 16u) & 0xFFu)) * (1.0 / 255.0));
+}
+
+// Per-channel manual bilinear then MEDIAN-OF-3 (identical to the console overlay's reconstruction) — legitimate at
+// shade time (only geometry marching bans the median); a replicated single-channel pack medians to its own value.
+float bbAtlasBilinear(int glyphIndex, float2 atlasCoord, int cellW, int cellH) {
+    float2 t = (atlasCoord - 0.5);
+    int2 b = int2(floor(t));
+    float2 f = (t - float2(b));
+    float3 s00 = bbAtlasTexel(glyphIndex, (b + int2(0, 0)), cellW, cellH);
+    float3 s10 = bbAtlasTexel(glyphIndex, (b + int2(1, 0)), cellW, cellH);
+    float3 s01 = bbAtlasTexel(glyphIndex, (b + int2(0, 1)), cellW, cellH);
+    float3 s11 = bbAtlasTexel(glyphIndex, (b + int2(1, 1)), cellW, cellH);
+    float3 s = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
+
+    return max(min(s.r, s.g), min(max(s.r, s.g), s.b));
+}
 
 // ---- distance primitives -------------------------------------------------------------------------------------
 
@@ -362,15 +442,13 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     int slotCount = (int)bar.header.x;
     float globalAlpha = bar.header.z;
 
-    for (int i = 0; i < slotCount; ++i) {
-        BindingSlot slot = slots[i];
-        float2 local = (pointA - slot.a.xy);
-        float plateHalf = slot.a.z;
+    // press.held's 1px translate (docs/ui-design-tokens.md section 5), converted from a design-space px to a
+    // frame-aspect-unit offset (one y aspect-unit spans the frame height in pixels).
+    float pressTranslateY = (1.0 / float(height));
 
-        // Early out: the glyph badge can hang past the plate corner, so the bound is generous.
-        if (max(abs(local.x), abs(local.y)) > (plateHalf * 2.2)) {
-            continue;
-        }
+    for (int i = 0; i < slotCount; ++i) {
+        BindingSlot slot = readSlot(i);
+        float plateHalf = slot.a.z;
 
         uint ids = asuint(slot.b.x);
         uint glyphId = (ids >> 16);
@@ -378,19 +456,54 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         uint state = asuint(slot.b.w);
         float alpha = ((float(state & 0xFFu) / 255.0) * globalAlpha);
         bool pressed = ((state & 0x100u) != 0u);
+        bool accent = ((state & (1u << BB_STATE_ACCENT_BIT)) != 0u);
+        bool bound = ((state & (1u << BB_STATE_BOUND_BIT)) != 0u);
+        // The four chip states (section 5's Tier recipes table). HELD wins over ACCENT (pressing the context-primary
+        // chip still needs press feedback); DISABLED only shows when nothing else lights the chip.
+        bool isHeld = pressed;
+        bool isAccentTier = (accent && !pressed);
+        bool isDisabled = (!bound && !pressed && !accent);
+        // The whole chip (plate + icon + badge) rides press.held's 1px translateY while held.
+        float2 slotCenter = (slot.a.xy + float2(0.0, (isHeld ? pressTranslateY : 0.0)));
+        float2 local = (pointA - slotCenter);
+
+        // Early out: the glyph badge can hang past the plate corner, so the bound is generous.
+        if (max(abs(local.x), abs(local.y)) > (plateHalf * 2.2)) {
+            continue;
+        }
 
         float aa = (plateHalf * bar.style.z);
         float outlineWidth = (plateHalf * bar.style.y);
+        float haloBlurPx = (plateHalf * bar.style.w);
         float plateDistance = sdRoundedBox(local, float2((plateHalf * 0.92), (plateHalf * 0.92)), (plateHalf * bar.header.y));
         float fill = (1.0 - smoothstep(0.0, aa, plateDistance));
         float outline = strokeMask(abs(plateDistance), outlineWidth, aa);
 
-        // The plate: a dark translucent backing; pressing lifts it toward the highlight.
-        float3 plateColor = lerp(float3(0.07, 0.08, 0.11), float3(0.32, 0.34, 0.40), (pressed ? bar.header.w : 0.0));
-        float3 outlineColor = (pressed ? float3(1.0, 0.92, 0.55) : float3(0.62, 0.66, 0.74));
+        // Tier 0 REST: surface.raised + line.hair (the plate-darkness ratio tunes its translucency).
+        // Tier 0 DISABLED: transparent fill + line.soft (a free/unbound button, still shown so its socket reads).
+        // Tier 1 HELD: surface.base, fully seated, + bloom.neutral. Tier 1 ACCENT: accent.quiet + bloom.accent (the
+        // context-primary action). Tier-1 chips skip the plain hairline — the bloom ring below IS their edge.
+        float3 fillColor = (isHeld ? SURFACE_BASE_RGB : (isAccentTier ? ACCENT_RGB : SURFACE_RAISED_RGB));
+        float plateOpacity = (isDisabled ? 0.0 : (isHeld ? 1.0 : (isAccentTier ? ACCENT_QUIET_A : bar.style.x)));
 
-        color = lerp(color, plateColor, (fill * alpha * bar.style.x));
-        color = lerp(color, outlineColor, (outline * alpha * 0.9));
+        color = lerp(color, fillColor, (fill * alpha * plateOpacity));
+
+        if (isHeld || isAccentTier) {
+            // Tier-1 bloom: an SDF distance-falloff halo OUTSIDE the plate plus a brighter 1px ring AT the edge, in
+            // the element's own semantic hue — an extra SDF pass, never a blur (section 9's GPU-implementability rule).
+            float3 hue = (isAccentTier ? ACCENT_RGB : TEXT_PRIMARY_RGB);
+            float ringA = (isAccentTier ? BLOOM_ACCENT_RING_A : BLOOM_NEUTRAL_RING_A);
+            float haloA = (isAccentTier ? BLOOM_ACCENT_HALO_A : BLOOM_NEUTRAL_HALO_A);
+            float haloMask = (saturate(1.0 - (max(plateDistance, 0.0) / max(haloBlurPx, 1e-4))) * step(0.0, plateDistance));
+
+            color = lerp(color, hue, (haloMask * haloA * alpha));
+            color = lerp(color, hue, (outline * ringA * alpha));
+        } else {
+            float3 outlineColor = (isDisabled ? LINE_SOFT_RGB : LINE_HAIR_RGB);
+            float outlineAlpha = (isDisabled ? LINE_SOFT_A : LINE_HAIR_A);
+
+            color = lerp(color, outlineColor, (outline * alpha * outlineAlpha));
+        }
 
         // The bound action's icon, centered on the plate.
         if (iconId != 0u) {
@@ -399,18 +512,60 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             color = lerp(color, icon.rgb, (icon.a * fill * alpha));
         }
 
-        // The gamepad-glyph badge, hugging its corner: a dark backing disc, then the white glyph.
+        // The gamepad-glyph badge, hugging its corner: a dark backing disc, then a light glyph — EXCEPT on the
+        // ACCENT tier, where "badge fills accent, glyph accent.ink" (section 5's accent chip recipe). A LETTER label
+        // (char0 != 0 in the state high bits) renders from the shared SDF atlas; the iconographic glyphs stay procedural.
         float glyphHalf = slot.a.w;
+        uint char0 = ((state >> 9u) & 0x7Fu);
+        float3 badgeBackingColor = (isAccentTier ? ACCENT_RGB : BADGE_DARK_RGB);
+        float3 badgeInkColor = (isAccentTier ? ACCENT_INK_RGB : BADGE_LIGHT_RGB);
 
-        if ((glyphId != 0u) && (glyphHalf > 0.0)) {
-            float2 glyphLocal = ((pointA - (slot.a.xy + slot.b.yz)) / glyphHalf);
+        if ((glyphHalf > 0.0) && (char0 != 0u)) {
+            float2 glyphLocal = ((pointA - (slotCenter + slot.b.yz)) / glyphHalf);
+
+            if (max(abs(glyphLocal.x), abs(glyphLocal.y)) < 1.6) {
+                color = lerp(color, badgeBackingColor, ((1.0 - smoothstep(1.0, (1.0 + (GLYPH_AA * 2.0)), length(glyphLocal))) * alpha * 0.85));
+
+                uint char1 = ((state >> 16u) & 0x7Fu);
+                int labelLen = ((char1 != 0u) ? 2 : 1);
+                int atlasCellW = (int)bar.atlas.x;
+                int atlasCellH = (int)bar.atlas.y;
+                float distanceRange = bar.atlas.z;
+                float outlineBand = bar.atlas.w;
+                // The label is centered in the badge; each char cell preserves the atlas aspect at a fixed height.
+                float labelHalfH = 0.82;
+                float charCellW = ((2.0 * labelHalfH) * (float(atlasCellW) / float(atlasCellH)));
+                float totalW = (charCellW * float(labelLen));
+                float lx = (glyphLocal.x + (totalW * 0.5));
+                int ci = (int)floor(lx / charCellW);
+
+                if ((ci >= 0) && (ci < labelLen) && (abs(glyphLocal.y) <= labelHalfH)) {
+                    int glyphIndex = ((int)((ci == 0) ? char0 : char1) - 1);
+                    float u = ((lx - (float(ci) * charCellW)) / charCellW);       // [0, 1]
+                    float v = ((glyphLocal.y + labelHalfH) / (2.0 * labelHalfH)); // [0, 1], top-down
+                    float2 atlasCoord = float2((u * atlasCellW), (v * atlasCellH));
+                    float encoded = bbAtlasBilinear(glyphIndex, atlasCoord, atlasCellW, atlasCellH);
+
+                    // screenPxRange from the on-screen char height: 2*labelHalfH glyph-local units = that many
+                    // glyphHalf aspect-units, and one y aspect-unit is the frame height in pixels.
+                    float charPxH = ((2.0 * labelHalfH) * glyphHalf * float(height));
+                    float screenPxRange = max((distanceRange * (charPxH / float(atlasCellH))), 1.0);
+                    float coverage = saturate((screenPxRange * (encoded - 0.5)) + 0.5);
+                    float outlineC = saturate((screenPxRange * ((encoded - 0.5) + outlineBand)) + 0.5);
+
+                    color = lerp(color, (badgeInkColor * 0.3), (outlineC * alpha * 0.85));
+                    color = lerp(color, badgeInkColor, (coverage * alpha));
+                }
+            }
+        } else if ((glyphId != 0u) && (glyphHalf > 0.0)) {
+            float2 glyphLocal = ((pointA - (slotCenter + slot.b.yz)) / glyphHalf);
 
             if (max(abs(glyphLocal.x), abs(glyphLocal.y)) < 1.6) {
                 float backing = (1.0 - smoothstep(1.0, (1.0 + (GLYPH_AA * 2.0)), length(glyphLocal)));
                 float glyph = strokeMask(glyphDistance(glyphId, glyphLocal), GLYPH_STROKE, GLYPH_AA);
 
-                color = lerp(color, float3(0.05, 0.05, 0.07), (backing * alpha * 0.85));
-                color = lerp(color, float3(0.96, 0.96, 0.98), (glyph * alpha));
+                color = lerp(color, badgeBackingColor, (backing * alpha * 0.85));
+                color = lerp(color, badgeInkColor, (glyph * alpha));
             }
         }
     }

@@ -1,0 +1,6 @@
+# Pins the default cargo build/run target to wasm32-unknown-unknown so a bare `cargo build --release`
+# (no --target flag) produces the addon module. `cargo test` still runs on the host target — Cargo
+# only applies [build].target to the primary build/run commands, not to unit tests, which is exactly
+# what fixed_tests.rs wants (it needs a real CPU to assert against, not a wasm sandbox).
+[build]
+target = "wasm32-unknown-unknown"

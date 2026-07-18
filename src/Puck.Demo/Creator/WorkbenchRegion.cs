@@ -16,20 +16,20 @@ namespace Puck.Demo.Creator;
 public readonly record struct WorkbenchRegion(Vector3 Center, float HalfExtent, float MinY, float MaxY) {
     /// <summary>Where the ghost (re)spawns on entering creator mode — the region's center, floating a little above
     /// the floor so it reads immediately.</summary>
-    public Vector3 SpawnPosition => new(Center.X, (Center.Y + 0.7f), Center.Z);
+    public Vector3 SpawnPosition => new(x: Center.X, y: (Center.Y + 0.7f), z: Center.Z);
 
     /// <summary>The region's mid-height point — the workpiece camera's default orbit target and the center of a
     /// composition group's static instance bound.</summary>
-    public Vector3 MidPoint => new(Center.X, (0.5f * (MinY + MaxY)), Center.Z);
+    public Vector3 MidPoint => new(x: Center.X, y: (0.5f * (MinY + MaxY)), z: Center.Z);
 
     /// <summary>Clamps a shape-center position inside the region.</summary>
     /// <param name="position">The candidate position.</param>
     /// <returns>The clamped position.</returns>
     public Vector3 Clamp(Vector3 position) =>
         new(
-            Math.Clamp(value: position.X, max: (Center.X + HalfExtent), min: (Center.X - HalfExtent)),
-            Math.Clamp(value: position.Y, max: MaxY, min: MinY),
-            Math.Clamp(value: position.Z, max: (Center.Z + HalfExtent), min: (Center.Z - HalfExtent))
+            x: Math.Clamp(value: position.X, max: (Center.X + HalfExtent), min: (Center.X - HalfExtent)),
+            y: Math.Clamp(value: position.Y, max: MaxY, min: MinY),
+            z: Math.Clamp(value: position.Z, max: (Center.Z + HalfExtent), min: (Center.Z - HalfExtent))
         );
 
     /// <summary>The bounding-sphere radius (about <see cref="MidPoint"/>) that covers EVERY position the region can
@@ -39,9 +39,9 @@ public readonly record struct WorkbenchRegion(Vector3 Center, float HalfExtent, 
     /// <param name="maxShapeReach">The largest possible shape reach from its center (max primitive reach × max scale).</param>
     /// <returns>The group instance bound radius.</returns>
     public float GroupBoundRadius(float maxShapeReach) {
-        var horizontal = (MathF.Sqrt(2f) * HalfExtent);
+        var horizontal = (MathF.Sqrt(x: 2f) * HalfExtent);
         var vertical = (0.5f * (MaxY - MinY));
-        var cornerDistance = MathF.Sqrt((horizontal * horizontal) + (vertical * vertical));
+        var cornerDistance = MathF.Sqrt(x: ((horizontal * horizontal) + (vertical * vertical)));
 
         return (cornerDistance + maxShapeReach);
     }

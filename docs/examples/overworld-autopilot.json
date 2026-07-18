@@ -1,0 +1,17 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Autopilot ghost: a WASM virtual pad walks the room's slot 1 to the center cabinet and boots it, driven purely by fixed-point pad commands (no geometry access). Forge the cartridge first — e.g. `Puck.Demo --forge-volley volley.gbc` — then `Puck.Demo --run docs/examples/overworld-autopilot.json`. Parse-validation does not check modulePath — the run path does.",
+    "addons": [
+        { "name": "ghost", "modulePath": "Assets/Addons/autopilot-ghost.wat", "slot": 1, "fuelPerTick": 250000 }
+    ],
+    "graph": {
+        "$type": "overworld",
+        "immersed": false,
+        "consoles": [
+            { "model": "dmg", "romPath": "volley.gbc" },
+            { "model": "cgb", "romPath": "volley.gbc" },
+            { "model": "agb", "romPath": "volley.gbc" }
+        ]
+    }
+}

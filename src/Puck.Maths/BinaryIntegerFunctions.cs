@@ -68,25 +68,28 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The value whose decimal digits are rotated.</param>
     /// <param name="count">The number of digit positions to rotate; positive rotates toward the most significant digit (left) and negative toward the least significant (right). The count is reduced modulo the digit count.</param>
     /// <returns><paramref name="value"/> with its decimal digits rotated, carrying the original sign.</returns>
-    internal static T RotateDigits<T>(this T value, int count) where T : IBinaryInteger<T> {
-        var absoluteValue = T.Abs(value: value);
-        var digitCount = absoluteValue.LogarithmBase10();
+    /// <remarks>
+    /// <paramref name="count"/> is widened to <see cref="long"/> so that <see cref="RotateDigitsRight{T}(T, int)"/> can
+    /// negate <see cref="int.MinValue"/> without it wrapping back to itself; the reduction modulo the digit count then
+    /// always narrows back to a representable <typeparamref name="T"/>.
+    /// </remarks>
+    internal static T RotateDigits<T>(this T value, long count) where T : IBinaryInteger<T> {
+        var digitCount = value.LogarithmBase10();
 
-        count %= int.CreateTruncating(value: digitCount);
+        count %= long.CreateTruncating(value: digitCount);
 
         var countAsT = T.CreateTruncating(value: count);
 
         if (0 > count) { countAsT += digitCount; }
         if (T.Zero == countAsT) { return value; }
 
+        // Split and recombine on the SIGNED value: the rotation is linear, so the sign factors straight through the two
+        // halves and out of the result — no CopySign, and no unrepresentable T.Abs(T.MinValue) up front.
         var factor = BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: (digitCount - countAsT));
-        var endDigits = (absoluteValue / factor);
-        var startDigits = (absoluteValue - (endDigits * factor));
+        var endDigits = (value / factor);
+        var startDigits = (value - (endDigits * factor));
 
-        return T.CopySign(
-            sign: value,
-            value: ((startDigits * BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: countAsT)) + endDigits)
-        );
+        return ((startDigits * BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: countAsT)) + endDigits);
     }
 
     /// <summary>
@@ -104,7 +107,11 @@ public static class BinaryIntegerFunctions {
     /// width-agnostic SWAR fallback performs the interleave. <see cref="BitwiseUnpair{TInput, TResult}(TInput)"/> is the
     /// inverse operation.
     /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="TInput"/> or <typeparamref name="TResult"/> is <see cref="BigInteger"/>. Interleaving requires a fixed carrier width for both operand and result.</exception>
     public static TResult BitwisePair<TInput, TResult>(this TInput value, TInput other) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        BinaryIntegerConstants<TInput>.ThrowIfUnbounded(operationName: nameof(BitwisePair));
+        BinaryIntegerConstants<TResult>.ThrowIfUnbounded(operationName: nameof(BitwisePair));
+
         switch (value) {
             case short:
             case ushort:
@@ -114,9 +121,9 @@ public static class BinaryIntegerFunctions {
                         value: uint.CreateTruncating(value: value)
                     )) |
                         TResult.CreateTruncating(value: Bmi2.ParallelBitDeposit(
-                            mask: (0.NthFermatMask<uint>() << 1),
-                            value: uint.CreateTruncating(value: other)
-                        ));
+                        mask: (0.NthFermatMask<uint>() << 1),
+                        value: uint.CreateTruncating(value: other)
+                    ));
                 }
                 break;
             case int:
@@ -127,9 +134,9 @@ public static class BinaryIntegerFunctions {
                         value: ulong.CreateTruncating(value: value)
                     )) |
                         TResult.CreateTruncating(value: Bmi2.X64.ParallelBitDeposit(
-                            mask: (0.NthFermatMask<ulong>() << 1),
-                            value: ulong.CreateTruncating(value: other)
-                        ));
+                        mask: (0.NthFermatMask<ulong>() << 1),
+                        value: ulong.CreateTruncating(value: other)
+                    ));
                 }
                 break;
             default:
@@ -141,9 +148,12 @@ public static class BinaryIntegerFunctions {
         int offset;
         int shift;
 
-        var bitCountDividedByTwo = (int.CreateChecked(value: BinaryIntegerConstants<TResult>.Size) >> 1);
-        var evenBits = TResult.CreateTruncating(value: other);
-        var oddBits = TResult.CreateTruncating(value: value);
+        var resultBitCount = int.CreateChecked(value: BinaryIntegerConstants<TResult>.Size);
+        var bitCountDividedByTwo = (resultBitCount >> 1);
+        var inputBitCount = int.CreateChecked(value: BinaryIntegerConstants<TInput>.Size);
+        var inputMask = TResult.AllBitsSet >>> (resultBitCount - inputBitCount);
+        var evenBits = TResult.CreateTruncating(value: other) & inputMask;
+        var oddBits = TResult.CreateTruncating(value: value) & inputMask;
 
         if (LoopOffset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
             var i = ((int.CreateChecked(value: BinaryIntegerConstants<TResult>.Log2Size) - LoopOffset) - 1);
@@ -241,20 +251,24 @@ public static class BinaryIntegerFunctions {
     /// instruction is used when the BMI2 instruction set is available; otherwise a width-agnostic SWAR fallback
     /// performs the extraction.
     /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="TInput"/> or <typeparamref name="TResult"/> is <see cref="BigInteger"/>. De-interleaving requires a fixed carrier width for both operand and result.</exception>
     public static (TResult, TResult) BitwiseUnpair<TInput, TResult>(this TInput value) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        BinaryIntegerConstants<TInput>.ThrowIfUnbounded(operationName: nameof(BitwiseUnpair));
+        BinaryIntegerConstants<TResult>.ThrowIfUnbounded(operationName: nameof(BitwiseUnpair));
+
         switch (value) {
             case int:
             case uint:
                 if (Bmi2.IsSupported) {
                     return (
                         TResult.CreateTruncating(value: Bmi2.ParallelBitExtract(
-                            mask: 0.NthFermatMask<uint>(),
-                            value: uint.CreateTruncating(value: value)
-                        )),
+                        mask: 0.NthFermatMask<uint>(),
+                        value: uint.CreateTruncating(value: value)
+                    )),
                         TResult.CreateTruncating(value: Bmi2.ParallelBitExtract(
-                            mask: (0.NthFermatMask<uint>() << 1),
-                            value: uint.CreateTruncating(value: value)
-                        ))
+                        mask: (0.NthFermatMask<uint>() << 1),
+                        value: uint.CreateTruncating(value: value)
+                    ))
                     );
                 }
                 break;
@@ -263,13 +277,13 @@ public static class BinaryIntegerFunctions {
                 if (Bmi2.X64.IsSupported) {
                     return (
                         TResult.CreateTruncating(value: Bmi2.X64.ParallelBitExtract(
-                            mask: 0.NthFermatMask<ulong>(),
-                            value: ulong.CreateTruncating(value: value)
-                        )),
+                        mask: 0.NthFermatMask<ulong>(),
+                        value: ulong.CreateTruncating(value: value)
+                    )),
                         TResult.CreateTruncating(value: Bmi2.X64.ParallelBitExtract(
-                            mask: (0.NthFermatMask<ulong>() << 1),
-                            value: ulong.CreateTruncating(value: value)
-                        ))
+                        mask: (0.NthFermatMask<ulong>() << 1),
+                        value: ulong.CreateTruncating(value: value)
+                    ))
                     );
                 }
                 break;
@@ -285,7 +299,7 @@ public static class BinaryIntegerFunctions {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static TResult UnpairCore(TInput value) {
-            const int LoopOffset = 8;
+            const int LoopOffset = 7;
 
             int offset;
             int shift;
@@ -373,18 +387,25 @@ public static class BinaryIntegerFunctions {
     /// <returns>Zero when <paramref name="value"/> is zero; otherwise a digit from <c>1</c> through <c>9</c>.</returns>
     /// <remarks>The result is obtained in constant time through the modulo-nine congruence rather than by iterating over the digits.</remarks>
     public static T DigitalRoot<T>(this T value) where T : IBinaryInteger<T> {
-        var x = value.IsNonZero();
-        var y = T.Abs(value: value);
-        var z = BinaryIntegerConstants<T>.Nine;
+        if (T.Zero == value) { return T.Zero; }
 
-        return (x + ((y - x) % z));
+        // The magnitude's residue modulo nine equals the magnitude of the SIGNED remainder, so this never materializes
+        // |value| — which is unrepresentable at T.MinValue. A zero residue means the magnitude is a non-zero multiple
+        // of nine, whose digital root is nine.
+        var residue = T.Abs(value: (value % BinaryIntegerConstants<T>.Nine));
+
+        return ((T.Zero == residue)
+            ? BinaryIntegerConstants<T>.Nine
+            : residue);
     }
     /// <summary>Enumerates the base-10 digits of <paramref name="value"/>, from least significant to most significant.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value whose decimal digits are enumerated; its sign is ignored.</param>
     /// <returns>A lazily evaluated sequence of the decimal digits of <paramref name="value"/>, in least-significant-first order; a single zero is yielded when <paramref name="value"/> is zero.</returns>
     public static IEnumerable<T> EnumerateDigits<T>(this T value) where T : IBinaryInteger<T> {
-        var quotient = T.Abs(value: value);
+        // Divide the SIGNED value down and take each remainder's magnitude, so T.MinValue enumerates cleanly rather than
+        // throwing on an unrepresentable T.Abs(value). A single-digit remainder's magnitude is always representable.
+        var quotient = value;
 
         do {
             (quotient, var remainder) = T.DivRem(
@@ -392,27 +413,35 @@ public static class BinaryIntegerFunctions {
                 right: BinaryIntegerConstants<T>.Ten
             );
 
-            yield return remainder;
-        } while (T.Zero < quotient);
+            yield return T.Abs(value: remainder);
+        } while (T.Zero != quotient);
     }
     /// <summary>Raises <paramref name="value"/> to the power <paramref name="exponent"/> using exponentiation by squaring.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The base.</param>
-    /// <param name="exponent">The exponent; expected to be non-negative.</param>
+    /// <param name="exponent">The exponent; must be non-negative, since a negative integer power is not representable.</param>
     /// <returns><paramref name="value"/> raised to the power <paramref name="exponent"/>. The result wraps on overflow rather than throwing.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="exponent"/> is negative.</exception>
     public static T Exponentiate<T>(this T value, T exponent) where T : IBinaryInteger<T> {
+        // A negative exponent has no integer result; reject it rather than let the squaring loop fall through to a
+        // meaningless value (unsigned T is never negative, so this guard costs a folded-away branch there).
+        ArgumentOutOfRangeException.ThrowIfNegative(value: exponent);
+
         var result = T.One;
 
-        do {
+        while (true) {
             if (T.IsOddInteger(value: exponent)) {
                 result *= value;
             }
 
             exponent >>= 1;
-            value *= value;
-        } while (T.Zero < exponent);
 
-        return result;
+            if (T.Zero == exponent) {
+                return result;
+            }
+
+            value *= value;
+        }
     }
     /// <summary>Returns a value containing only the lowest set bit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -437,9 +466,26 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The first operand; its magnitude is used.</param>
     /// <param name="other">The second operand; its magnitude is used.</param>
     /// <returns>The largest value that divides both operands. When one operand is zero, the magnitude of the other is returned.</returns>
+    /// <exception cref="OverflowException">The result is the magnitude of the minimum signed value and is not representable by <typeparamref name="T"/>.</exception>
     /// <remarks>Implemented with the binary GCD (Stein's) algorithm, whose inner loop is branchless.</remarks>
     public static T GreatestCommonDivisor<T>(this T value, T other) where T : IBinaryInteger<T> {
-        if (T.Zero == other) { return value; } else if (T.Zero == value) { return other; }
+        // The zero fast paths return the OTHER operand's magnitude, matching the general path below (which abs-es both):
+        // returning it verbatim would leak a negative sign the contract promises to drop.
+        if (T.Zero == other) { return T.Abs(value: value); } else if (T.Zero == value) { return T.Abs(value: other); }
+
+        // A signed minimum has no positive magnitude in T. If exactly one operand is the minimum, its magnitude is a
+        // power of two, so the GCD is simply the lowest set bit of the other operand's magnitude and is representable.
+        // If both operands are the minimum, T.Abs below deliberately reports the unrepresentable result.
+        var valueIsMinimum = (T.IsNegative(value: value) && (value == -value));
+        var otherIsMinimum = (T.IsNegative(value: other) && (other == -other));
+
+        if (valueIsMinimum != otherIsMinimum) {
+            var magnitude = T.Abs(value: (valueIsMinimum
+                ? other
+                : value));
+
+            return (T.One << int.CreateChecked(value: T.TrailingZeroCount(value: magnitude)));
+        }
 
         other = T.Abs(value: other);
         value = T.Abs(value: value);
@@ -473,7 +519,14 @@ public static class BinaryIntegerFunctions {
 
         if (T.Zero == divisor) { return T.Zero; }
 
-        return ((value / divisor) * other);
+        var quotient = (value / divisor);
+        var result = (quotient * other);
+
+        // Remove only the MATHEMATICAL sign, based on the operands before multiplication. Looking at the wrapped
+        // product's sign would mistake an overflowed positive result for a negative input and change its modular bits.
+        return ((T.IsNegative(value: quotient) != T.IsNegative(value: other))
+            ? -result
+            : result);
     }
     /// <summary>Returns the one-based position of the lowest set bit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -486,19 +539,22 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The value to examine; its sign is ignored.</param>
     /// <returns>The ones digit of <paramref name="value"/>, a value from <c>0</c> through <c>9</c>.</returns>
     public static T LeastSignificantDigit<T>(this T value) where T : IBinaryInteger<T> =>
-        (T.Abs(value: value) % BinaryIntegerConstants<T>.Ten);
+        // Abs the single-digit remainder, not the whole value, so T.MinValue yields its ones digit instead of throwing.
+        T.Abs(value: (value % BinaryIntegerConstants<T>.Ten));
     /// <summary>Returns the number of base-10 digits required to represent the magnitude of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to measure; its sign is ignored.</param>
     /// <returns>The decimal digit count of <paramref name="value"/>. For a non-zero magnitude this equals <c>⌊log₁₀(|value|)⌋ + 1</c>; the magnitude zero yields <c>1</c>.</returns>
     public static T LogarithmBase10<T>(this T value) where T : IBinaryInteger<T> {
-        var quotient = T.Abs(value: value);
+        // Count divisions of the SIGNED value toward zero — the digit count of the magnitude, without the unrepresentable
+        // T.Abs(T.MinValue). Truncating division reaches zero from either sign, so the loop terminates all the same.
+        var quotient = value;
         var result = T.Zero;
 
         do {
             quotient /= BinaryIntegerConstants<T>.Ten;
             ++result;
-        } while (T.Zero < quotient);
+        } while (T.Zero != quotient);
 
         return result;
     }
@@ -506,14 +562,27 @@ public static class BinaryIntegerFunctions {
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to examine.</param>
     /// <returns>The position of the most significant set bit, counting from <c>1</c>, or <c>0</c> when <paramref name="value"/> is zero.</returns>
-    public static T MostSignificantBit<T>(this T value) where T : IBinaryInteger<T> =>
-        (BinaryIntegerConstants<T>.Size - T.LeadingZeroCount(value: value));
+    /// <remarks>
+    /// "Bit length" has a well-defined meaning even for an unbounded <typeparamref name="T"/> such as <see cref="BigInteger"/>,
+    /// so this is computed from the value itself (<see cref="IBinaryInteger{TSelf}.GetShortestBitLength"/>) rather than
+    /// from a fixed carrier width in that case. Every fixed-width instantiation keeps the branchless width-minus-leading-
+    /// zeros fast path — see <see cref="BinaryIntegerConstants{T}.IsUnbounded"/> for why the guard costs nothing there.
+    /// </remarks>
+    public static T MostSignificantBit<T>(this T value) where T : IBinaryInteger<T> {
+        if (typeof(T) == typeof(BigInteger)) {
+            return T.CreateTruncating(value: value.GetShortestBitLength());
+        }
+
+        return (BinaryIntegerConstants<T>.Size - T.LeadingZeroCount(value: value));
+    }
     /// <summary>Returns the most significant (leading) base-10 digit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to examine; its sign is ignored.</param>
     /// <returns>The leading decimal digit of <paramref name="value"/>, a value from <c>0</c> through <c>9</c>.</returns>
     public static T MostSignificantDigit<T>(this T value) where T : IBinaryInteger<T> =>
-        (T.Abs(value: value) / BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: (value.LogarithmBase10() - T.One)));
+        // Divide the signed value by the leading power of ten, then abs the single-digit result: |value / p| equals
+        // |value| / p (p is positive), so this avoids the unrepresentable T.Abs(T.MinValue).
+        T.Abs(value: (value / BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: (value.LogarithmBase10() - T.One))));
     /// <summary>Returns the next integer greater than <paramref name="value"/> that has the same number of set bits, in lexicographic order.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The current bit permutation.</param>
@@ -537,7 +606,10 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The Gray-coded value to decode.</param>
     /// <returns>The standard binary value corresponding to the Gray code <paramref name="value"/>.</returns>
     /// <remarks>This is the inverse of <see cref="ReflectedBinaryEncode{T}(T)"/>.</remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>. Decoding is width-bounded — it XOR-folds against the carrier's own bit width.</exception>
     public static T ReflectedBinaryDecode<T>(this T value) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReflectedBinaryDecode));
+
         const int LoopOffset = 8;
 
         var bitCount = int.CreateChecked(value: BinaryIntegerConstants<T>.Size);
@@ -573,7 +645,10 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The value whose bits are reversed.</param>
     /// <returns>A value whose bit at position <c>i</c> equals the bit of <paramref name="value"/> at position <c>(width − 1 − i)</c>.</returns>
     /// <remarks>Implemented as a width-agnostic SWAR butterfly that swaps progressively larger bit groups.</remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>. Bit reversal requires a fixed carrier width to define which bit is "first".</exception>
     public static T ReverseBits<T>(this T value) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReverseBits));
+
         const int LoopOffset = 7;
 
         int offset;
@@ -628,7 +703,7 @@ public static class BinaryIntegerFunctions {
 
             do {
                 SwapBitPairs(
-                    offset: offset++,
+                    offset: ++offset,
                     value: ref value
                 );
             } while (0 < --i);
@@ -649,7 +724,9 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The value whose decimal digits are reversed.</param>
     /// <returns><paramref name="value"/> with its decimal digits reversed (for example <c>1230</c> becomes <c>321</c>), carrying the original sign. The result wraps on overflow.</returns>
     public static T ReverseDigits<T>(this T value) where T : IBinaryInteger<T> {
-        var quotient = T.Abs(value: value);
+        // Reverse the SIGNED value directly: signed DivRem yields sign-carrying remainders, so the accumulated result
+        // already bears the original sign (no CopySign, no unrepresentable T.Abs(T.MinValue)).
+        var quotient = value;
         var result = T.Zero;
 
         do {
@@ -659,12 +736,9 @@ public static class BinaryIntegerFunctions {
             );
 
             result = ((result * BinaryIntegerConstants<T>.Ten) + remainder);
-        } while (T.Zero < quotient);
+        } while (T.Zero != quotient);
 
-        return T.CopySign(
-            sign: value,
-            value: result
-        );
+        return result;
     }
     /// <summary>Cyclically rotates the base-10 digits of <paramref name="value"/> toward the most significant end, preserving the sign.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -678,6 +752,12 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The value whose decimal digits are rotated.</param>
     /// <param name="count">The number of digit positions to rotate right; the count is reduced modulo the digit count.</param>
     /// <returns><paramref name="value"/> with its decimal digits rotated right by <paramref name="count"/> places, carrying the original sign.</returns>
+    /// <remarks>
+    /// <paramref name="count"/> is widened to <see cref="long"/> before negating: negating <see cref="int.MinValue"/> as
+    /// an <see cref="int"/> wraps back to itself (its magnitude, <c>2147483648</c>, is not representable in <see cref="int"/>),
+    /// which would silently rotate by the original, un-negated count instead of by its true magnitude in the opposite
+    /// direction.
+    /// </remarks>
     public static T RotateDigitsRight<T>(this T value, int count) where T : IBinaryInteger<T> =>
-        value.RotateDigits(count: -count);
+        value.RotateDigits(count: -(long)count);
 }

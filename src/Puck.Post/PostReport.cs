@@ -80,12 +80,11 @@ internal sealed class PostReport {
             _ => "?????",
         };
     }
-
     private string Summarize() {
-        var pass = Results.Count(predicate: static result => result.Outcome.Verdict == PostVerdict.Pass);
-        var skip = Results.Count(predicate: static result => result.Outcome.Verdict == PostVerdict.Skip);
-        var fail = Results.Count(predicate: static result => result.Outcome.Verdict == PostVerdict.Fail);
-        var infra = Results.Count(predicate: static result => result.Outcome.Verdict == PostVerdict.Infra);
+        var pass = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Pass));
+        var skip = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Skip));
+        var fail = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Fail));
+        var infra = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Infra));
 
         return $"{Results.Count} stage(s): {pass} pass, {fail} fail, {infra} infra, {skip} skip";
     }

@@ -18,7 +18,9 @@ public interface IGamepadParser {
     /// </summary>
     /// <param name="playerIndex">
     /// The zero-based player slot assigned to this device, used to set a per-controller indicator (e.g. the
-    /// Switch player LEDs) so simultaneously connected controllers are visually distinct.
+    /// Switch player LEDs) so simultaneously connected controllers are visually distinct. <c>-1</c> when the
+    /// device is a dormant wireless-receiver slot with no player identity yet (a slot is claimed once state
+    /// streams); a parser that keys an indicator off the slot should treat that as "none yet".
     /// </param>
     /// <param name="cancellationToken">A token that cancels the initialization.</param>
     /// <returns>A task that completes when the device is ready to stream input reports.</returns>

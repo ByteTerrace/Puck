@@ -11,24 +11,12 @@ namespace Puck.Maths;
 /// by 2^16; the most-significant bit is an ordinary magnitude bit, never a sign bit.
 /// </summary>
 /// <param name="Value">The raw underlying storage — the represented real number scaled by <c>2¹⁶</c>.</param>
-public readonly record struct UFixedQ4816(ulong Value)
-    : IComparable,
-      IComparable<UFixedQ4816>,
-      IComparisonOperators<UFixedQ4816, UFixedQ4816, bool>,
-      IAdditionOperators<UFixedQ4816, UFixedQ4816, UFixedQ4816>,
-      ISubtractionOperators<UFixedQ4816, UFixedQ4816, UFixedQ4816>,
-      IMultiplyOperators<UFixedQ4816, UFixedQ4816, UFixedQ4816>,
-      IDivisionOperators<UFixedQ4816, UFixedQ4816, UFixedQ4816>,
-      IModulusOperators<UFixedQ4816, UFixedQ4816, UFixedQ4816>,
-      IIncrementOperators<UFixedQ4816>,
-      IDecrementOperators<UFixedQ4816>,
+public readonly partial record struct UFixedQ4816(ulong Value)
+    : INumber<UFixedQ4816>,
+      IUnsignedNumber<UFixedQ4816>,
       IBitwiseOperators<UFixedQ4816, UFixedQ4816, UFixedQ4816>,
       IShiftOperators<UFixedQ4816, int, UFixedQ4816>,
-      IMinMaxValue<UFixedQ4816>,
-      IAdditiveIdentity<UFixedQ4816, UFixedQ4816>,
-      IMultiplicativeIdentity<UFixedQ4816, UFixedQ4816>,
-      ISpanFormattable,
-      ISpanParsable<UFixedQ4816> {
+      IMinMaxValue<UFixedQ4816> {
     /// <summary>The number of fractional bits in the UQ48.16 layout (<c>16</c>).</summary>
     public const int FractionBitCount = 16;
     /// <summary>The number of integer bits in the UQ48.16 layout (<c>48</c>).</summary>
@@ -45,11 +33,13 @@ public readonly record struct UFixedQ4816(ulong Value)
     private const ulong RawHalf = (1UL << (FractionBitCount - 1));
     private const ulong RawOne = (1UL << FractionBitCount);
     private const double RawOneInverse = (1d / RawOne);
-    // The largest power-of-two-grid double strictly below 2^64; clamping here keeps (ulong) casts from wrapping.
-    private const double ScaledMaximum = 18446744073709547520d;
+    // The largest binary64 value strictly below 2^64. Spacing is 2^11 at this magnitude, so this is 2^64 - 2048;
+    // clamping here keeps (ulong) casts from wrapping while retaining every representable in-range double.
+    private const double ScaledMaximum = 18446744073709549568d;
 
-    // The exact upper bound of the representable real range (ulong.MaxValue / 2^16), used to reject out-of-range text.
-    private static readonly decimal MaxValueAsDecimal = (ulong.MaxValue / ((decimal)RawOne));
+    private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(
+        fractionBitCount: FractionBitCount
+    );
 
     /// <summary>Converts a <see cref="UFixedQ4816"/> to the nearest <see cref="double"/>.</summary>
     /// <param name="value">The value to convert.</param>
@@ -66,28 +56,60 @@ public readonly record struct UFixedQ4816(ulong Value)
     /// <returns>The modular negation of <paramref name="value"/>; provided for completeness, since negating a non-zero value wraps.</returns>
     public static UFixedQ4816 operator -(UFixedQ4816 value) =>
         new(Value: unchecked((0UL - value.Value)));
+    /// <summary>Returns the negation of <paramref name="value"/>, throwing when a non-zero unsigned result would be required.</summary>
+    /// <param name="value">The value to negate.</param>
+    /// <returns>Zero when <paramref name="value"/> is zero.</returns>
+    /// <exception cref="OverflowException"><paramref name="value"/> is non-zero.</exception>
+    public static UFixedQ4816 operator checked -(UFixedQ4816 value) =>
+        new(Value: checked(0UL - value.Value));
     /// <summary>Returns <paramref name="value"/> increased by one, wrapping on overflow.</summary>
     /// <param name="value">The value to increment.</param>
     /// <returns><paramref name="value"/> plus <c>1.0</c>.</returns>
     public static UFixedQ4816 operator ++(UFixedQ4816 value) =>
         new(Value: unchecked((value.Value + RawOne)));
+    /// <summary>Returns <paramref name="value"/> increased by one, throwing when the result is not representable.</summary>
+    /// <param name="value">The value to increment.</param>
+    /// <returns><paramref name="value"/> plus <c>1.0</c>.</returns>
+    /// <exception cref="OverflowException">The result exceeds <see cref="MaxValue"/>.</exception>
+    public static UFixedQ4816 operator checked ++(UFixedQ4816 value) =>
+        new(Value: checked(value.Value + RawOne));
     /// <summary>Returns <paramref name="value"/> decreased by one, wrapping on underflow.</summary>
     /// <param name="value">The value to decrement.</param>
     /// <returns><paramref name="value"/> minus <c>1.0</c>.</returns>
     public static UFixedQ4816 operator --(UFixedQ4816 value) =>
         new(Value: unchecked((value.Value - RawOne)));
+    /// <summary>Returns <paramref name="value"/> decreased by one, throwing when the result is not representable.</summary>
+    /// <param name="value">The value to decrement.</param>
+    /// <returns><paramref name="value"/> minus <c>1.0</c>.</returns>
+    /// <exception cref="OverflowException">The result is less than <see cref="MinValue"/>.</exception>
+    public static UFixedQ4816 operator checked --(UFixedQ4816 value) =>
+        new(Value: checked(value.Value - RawOne));
     /// <summary>Adds two values, wrapping on overflow.</summary>
     /// <param name="x">The first addend.</param>
     /// <param name="y">The second addend.</param>
     /// <returns>The sum <c><paramref name="x"/> + <paramref name="y"/></c>. Use <see cref="AddSaturating(UFixedQ4816, UFixedQ4816)"/> to clamp instead of wrap.</returns>
     public static UFixedQ4816 operator +(UFixedQ4816 x, UFixedQ4816 y) =>
         new(Value: unchecked((x.Value + y.Value)));
+    /// <summary>Adds two values, throwing when the result is not representable.</summary>
+    /// <param name="x">The first addend.</param>
+    /// <param name="y">The second addend.</param>
+    /// <returns>The sum <c><paramref name="x"/> + <paramref name="y"/></c>.</returns>
+    /// <exception cref="OverflowException">The sum exceeds <see cref="MaxValue"/>.</exception>
+    public static UFixedQ4816 operator checked +(UFixedQ4816 x, UFixedQ4816 y) =>
+        new(Value: checked(x.Value + y.Value));
     /// <summary>Subtracts <paramref name="y"/> from <paramref name="x"/>, wrapping on underflow.</summary>
     /// <param name="x">The minuend.</param>
     /// <param name="y">The subtrahend.</param>
     /// <returns>The difference <c><paramref name="x"/> − <paramref name="y"/></c>. Use <see cref="SubtractSaturating(UFixedQ4816, UFixedQ4816)"/> to clamp instead of wrap.</returns>
     public static UFixedQ4816 operator -(UFixedQ4816 x, UFixedQ4816 y) =>
         new(Value: unchecked((x.Value - y.Value)));
+    /// <summary>Subtracts two values, throwing when the result is not representable.</summary>
+    /// <param name="x">The minuend.</param>
+    /// <param name="y">The subtrahend.</param>
+    /// <returns>The difference <c><paramref name="x"/> − <paramref name="y"/></c>.</returns>
+    /// <exception cref="OverflowException"><paramref name="y"/> is greater than <paramref name="x"/>.</exception>
+    public static UFixedQ4816 operator checked -(UFixedQ4816 x, UFixedQ4816 y) =>
+        new(Value: checked(x.Value - y.Value));
     /// <summary>Multiplies two values in fixed point, rounding the result to nearest with ties to even and wrapping on overflow.</summary>
     /// <param name="x">The multiplicand.</param>
     /// <param name="y">The multiplier.</param>
@@ -104,6 +126,25 @@ public readonly record struct UFixedQ4816(ulong Value)
 
         return new UFixedQ4816(Value: unchecked((truncated + correction)));
     }
+    /// <summary>Multiplies two values in fixed point, rounding to nearest with ties to even and throwing when the rounded result is not representable.</summary>
+    /// <param name="x">The multiplicand.</param>
+    /// <param name="y">The multiplier.</param>
+    /// <returns>The rounded product <c><paramref name="x"/> × <paramref name="y"/></c>.</returns>
+    /// <exception cref="OverflowException">The rounded product exceeds <see cref="MaxValue"/>.</exception>
+    public static UFixedQ4816 operator checked *(UFixedQ4816 x, UFixedQ4816 y) {
+        var product = ((UInt128)x.Value * y.Value);
+        var rounded = (product >> FractionBitCount);
+        var remainder = ((ulong)product & FractionBitMask);
+
+        if (
+            (remainder > RawHalf) ||
+            ((remainder == RawHalf) && ((rounded & UInt128.One) != UInt128.Zero))
+        ) {
+            ++rounded;
+        }
+
+        return new(Value: checked((ulong)rounded));
+    }
     /// <summary>Divides <paramref name="x"/> by <paramref name="y"/> in fixed point, rounding the result to nearest with ties to even and wrapping on overflow.</summary>
     /// <param name="x">The dividend.</param>
     /// <param name="y">The divisor.</param>
@@ -114,12 +155,32 @@ public readonly record struct UFixedQ4816(ulong Value)
             x: x,
             y: y
         ).Value;
-        var twiceRemainder = (((UInt128)remainder) << 1);
-        var equalToValue = Convert.ToUInt64(value: (twiceRemainder == y.Value));
-        var greaterThanValue = Convert.ToUInt64(value: (twiceRemainder > y.Value));
+        var remainderComplement = (y.Value - remainder);
+        var equalToValue = Convert.ToUInt64(value: (remainder == remainderComplement));
+        var greaterThanValue = Convert.ToUInt64(value: (remainder > remainderComplement));
         var correction = greaterThanValue | (equalToValue & truncated & 1UL);
 
         return new UFixedQ4816(Value: unchecked((truncated + correction)));
+    }
+    /// <summary>Divides two values in fixed point, rounding to nearest with ties to even and throwing when the rounded result is not representable.</summary>
+    /// <param name="x">The dividend.</param>
+    /// <param name="y">The divisor.</param>
+    /// <returns>The rounded quotient <c><paramref name="x"/> ÷ <paramref name="y"/></c>.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="y"/> is zero.</exception>
+    /// <exception cref="OverflowException">The rounded quotient exceeds <see cref="MaxValue"/>.</exception>
+    public static UFixedQ4816 operator checked /(UFixedQ4816 x, UFixedQ4816 y) {
+        var dividend = (((UInt128)x.Value) << FractionBitCount);
+        var quotient = (dividend / y.Value);
+        var remainder = ((ulong)(dividend - (quotient * y.Value)));
+
+        if (
+            (remainder > (y.Value - remainder)) ||
+            ((remainder == (y.Value - remainder)) && ((quotient & UInt128.One) != UInt128.Zero))
+        ) {
+            ++quotient;
+        }
+
+        return new(Value: checked((ulong)quotient));
     }
     /// <summary>Returns the remainder of dividing the raw storage of <paramref name="x"/> by that of <paramref name="y"/>.</summary>
     /// <param name="x">The dividend.</param>
@@ -223,10 +284,11 @@ public readonly record struct UFixedQ4816(ulong Value)
     }
     /// <summary>Returns the smallest integral value greater than or equal to <paramref name="value"/>.</summary>
     /// <param name="value">The value to round up.</param>
-    /// <returns><paramref name="value"/> rounded toward positive infinity to a whole number. The result wraps when <paramref name="value"/> rounds past <see cref="MaxValue"/>.</returns>
+    /// <returns><paramref name="value"/> rounded toward positive infinity to a whole number.</returns>
+    /// <exception cref="OverflowException">The ceiling exceeds <see cref="MaxValue"/>.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 Ceiling(UFixedQ4816 value) =>
-        new(Value: unchecked((value.Value + FractionBitMask) & IntegerBitMask));
+        new(Value: (checked(value.Value + FractionBitMask) & IntegerBitMask));
     /// <summary>Restricts <paramref name="value"/> to the inclusive range <c>[<paramref name="minimum"/>, <paramref name="maximum"/>]</c>.</summary>
     /// <param name="value">The value to clamp.</param>
     /// <param name="minimum">The inclusive lower bound.</param>
@@ -235,32 +297,33 @@ public readonly record struct UFixedQ4816(ulong Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 Clamp(UFixedQ4816 value, UFixedQ4816 minimum, UFixedQ4816 maximum) =>
         new(Value: Math.Clamp(
-            value: value.Value,
-            min: minimum.Value,
-            max: maximum.Value
-        ));
+        value: value.Value,
+        min: minimum.Value,
+        max: maximum.Value
+    ));
     /// <summary>Divides <paramref name="x"/> by <paramref name="y"/> in fixed point without rounding, also returning the division remainder.</summary>
     /// <param name="x">The dividend.</param>
     /// <param name="y">The divisor.</param>
     /// <param name="remainder">When this method returns, the remainder of the fixed-point division expressed in raw storage units.</param>
     /// <returns>The truncated quotient <c><paramref name="x"/> ÷ <paramref name="y"/></c>.</returns>
     /// <remarks>
-    /// The result is not rounded and the division is not range-checked. A hardware 128-by-64-bit division is used when
-    /// the x64 instruction set is available; otherwise the computation falls back to <see cref="UInt128"/> arithmetic.
-    /// The rounding <c>/</c> operator builds on the remainder reported here.
+    /// The result is not rounded and the division is not range-checked; a quotient wider than 64 bits wraps. A
+    /// hardware 128-by-64-bit division is used when the x64 instruction set is available and the quotient provably
+    /// fits (the dividend's high word is below the divisor — the hardware instruction faults otherwise); every other
+    /// case falls back to <see cref="UInt128"/> arithmetic, so all platforms wrap identically. The rounding <c>/</c>
+    /// operator builds on the remainder reported here.
     /// </remarks>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 DivideUnchecked(UFixedQ4816 x, UFixedQ4816 y, out ulong remainder) {
-        if (X86Base.X64.IsSupported) {
-            var high = Math.BigMul(
-                a: x.Value,
-                b: RawOne,
-                low: out var low
-            );
+        var high = (x.Value >> IntegerBitCount);
 
+        if (
+            X86Base.X64.IsSupported &&
+            (high < y.Value)
+        ) {
 #pragma warning disable SYSLIB5004
             (var quotient, remainder) = X86Base.X64.DivRem(
-                lower: low,
+                lower: (x.Value << FractionBitCount),
                 upper: high,
                 divisor: y.Value
             );
@@ -284,10 +347,10 @@ public readonly record struct UFixedQ4816(ulong Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 DivideUnchecked(UFixedQ4816 x, UFixedQ4816 y) =>
         DivideUnchecked(
-            remainder: out var _,
-            x: x,
-            y: y
-        );
+        remainder: out var _,
+        x: x,
+        y: y
+    );
     /// <summary>Returns the largest integral value less than or equal to <paramref name="value"/>.</summary>
     /// <param name="value">The value to round down.</param>
     /// <returns><paramref name="value"/> with its fractional bits cleared.</returns>
@@ -309,13 +372,13 @@ public readonly record struct UFixedQ4816(ulong Value)
             x: (value * RawOne),
             mode: MidpointRounding.ToEven
         );
-        var clamped = double.Clamp(
-            value: scaled,
-            min: 0d,
-            max: ScaledMaximum
-        );
 
-        return new(Value: unchecked((ulong)clamped));
+        // Saturate to the exact extremes rather than casting the nearest-representable clamp: the largest double below
+        // 2^64 (ScaledMaximum) is 2047 raw units short of MaxValue, so a double clamp alone can never reach it.
+        if (double.IsNaN(d: scaled) || (scaled <= 0d)) { return Zero; }
+        if (scaled > ScaledMaximum) { return MaxValue; }
+
+        return new(Value: unchecked((ulong)scaled));
     }
     /// <summary>Constructs a <see cref="UFixedQ4816"/> from a whole number.</summary>
     /// <param name="value">The integer to represent. Must not exceed the largest representable integer (<c>2⁴⁸ − 1</c>).</param>
@@ -343,9 +406,9 @@ public readonly record struct UFixedQ4816(ulong Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 Max(UFixedQ4816 x, UFixedQ4816 y) =>
         new(Value: Math.Max(
-            val1: x.Value,
-            val2: y.Value
-        ));
+        val1: x.Value,
+        val2: y.Value
+    ));
     /// <summary>Returns the lesser of two values.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>
@@ -353,9 +416,9 @@ public readonly record struct UFixedQ4816(ulong Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 Min(UFixedQ4816 x, UFixedQ4816 y) =>
         new(Value: Math.Min(
-            val1: x.Value,
-            val2: y.Value
-        ));
+        val1: x.Value,
+        val2: y.Value
+    ));
     /// <summary>Multiplies two values in fixed point without rounding, also returning the discarded low-order bits as the remainder.</summary>
     /// <param name="x">The multiplicand.</param>
     /// <param name="y">The multiplier.</param>
@@ -364,15 +427,13 @@ public readonly record struct UFixedQ4816(ulong Value)
     /// <remarks>The product is computed at full 128-bit width; the result is truncated rather than rounded and is not range-checked. The rounding <c>*</c> operator builds on the remainder reported here.</remarks>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 MultiplyUnchecked(UFixedQ4816 x, UFixedQ4816 y, out ulong remainder) {
-        var high = Math.BigMul(
-            a: x.Value,
-            b: y.Value,
-            low: out var low
-        );
+        // Measured 2026-07 (.NET 10.0.10 x64, full-width 4096-element sets): this UInt128 form was ~4% faster at
+        // the median than Math.BigMul plus manual high/low recombination. Re-measure before replacing.
+        var product = ((UInt128)x.Value * y.Value);
 
-        remainder = low & FractionBitMask;
+        remainder = (unchecked((ulong)product) & FractionBitMask);
 
-        return new UFixedQ4816(Value: (high << IntegerBitCount) | (low >> FractionBitCount));
+        return new UFixedQ4816(Value: unchecked((ulong)(product >> FractionBitCount)));
     }
     /// <summary>Multiplies two values in fixed point without rounding, discarding the remainder.</summary>
     /// <param name="x">The multiplicand.</param>
@@ -381,13 +442,14 @@ public readonly record struct UFixedQ4816(ulong Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 MultiplyUnchecked(UFixedQ4816 x, UFixedQ4816 y) =>
         MultiplyUnchecked(
-            remainder: out var _,
-            x: x,
-            y: y
-        );
+        remainder: out var _,
+        x: x,
+        y: y
+    );
     /// <summary>Rounds <paramref name="value"/> to the nearest integral value, with ties rounded to the nearest even integer.</summary>
     /// <param name="value">The value to round.</param>
     /// <returns><paramref name="value"/> rounded to a whole number using banker's rounding.</returns>
+    /// <exception cref="OverflowException">The rounded result exceeds <see cref="MaxValue"/>.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 Round(UFixedQ4816 value) {
         var integerPart = value.Value & IntegerBitMask;
@@ -397,7 +459,7 @@ public readonly record struct UFixedQ4816(ulong Value)
         var isOdd = (integerPart >> FractionBitCount) & 1UL;
         var correction = ((greaterThanHalf | (equalToHalf & isOdd)) * RawOne);
 
-        return new(Value: unchecked((integerPart + correction)));
+        return new(Value: checked((integerPart + correction)));
     }
     /// <summary>Subtracts <paramref name="y"/> from <paramref name="x"/>, saturating to <see cref="MinValue"/> (zero) instead of wrapping on underflow.</summary>
     /// <param name="x">The minuend.</param>
@@ -472,10 +534,10 @@ public readonly record struct UFixedQ4816(ulong Value)
     /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UFixedQ4816 result) =>
         TryParseCore(
-            s: s,
-            provider: provider,
-            result: out result
-        );
+        s: s,
+        provider: provider,
+        result: out result
+    );
     /// <summary>Tries to parse a string into a <see cref="UFixedQ4816"/>.</summary>
     /// <param name="s">The string to parse, or <see langword="null"/>.</param>
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
@@ -495,35 +557,27 @@ public readonly record struct UFixedQ4816(ulong Value)
         );
     }
 
-    // Parses an unsigned decimal in invariant style. decimal arithmetic is exact for all practical magnitudes; only at
-    // the very top of the range (a 15-digit integer with a full 16-digit fraction) can the (parsed * 2^16) product
-    // exceed decimal's significand and incur a one-ULP rounding before the final round-half-to-even quantization.
+    // The default unsigned surface rejects text above MaxValue before rounding, matching the unit-fraction parsers.
+    // Quantization consumes the original digits, so arbitrarily long literals cannot double-round through decimal.
     private static bool TryParseCore(ReadOnlySpan<char> s, IFormatProvider? provider, out UFixedQ4816 result) {
         result = default;
 
-        if (!decimal.TryParse(
+        if (FixedPointParseStatus.Success != FixedPointText.Parse(
             s: s,
             style: NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite | NumberStyles.AllowDecimalPoint,
-            provider: (provider ?? CultureInfo.InvariantCulture),
-            result: out var parsed
+            provider: provider,
+            fractionBitCount: FractionBitCount,
+            parsingDenominator: ParsingDenominator,
+            maximumPositiveRaw: ulong.MaxValue,
+            maximumNegativeMagnitudeRaw: 0UL,
+            rejectExactOutOfRange: true,
+            negative: out _,
+            rawMagnitude: out var rawMagnitude
         )) {
             return false;
         }
 
-        if (
-            (0m > parsed) ||
-            (parsed > MaxValueAsDecimal)
-        ) {
-            return false;
-        }
-
-        var scaled = decimal.Round(
-            d: (parsed * RawOne),
-            decimals: 0,
-            mode: MidpointRounding.ToEven
-        );
-
-        result = new(Value: ((ulong)scaled));
+        result = new(Value: rawMagnitude);
 
         return true;
     }
@@ -531,14 +585,48 @@ public readonly record struct UFixedQ4816(ulong Value)
     /// <summary>Tries to format this value into the provided character span.</summary>
     /// <param name="destination">The span to write the formatted characters into.</param>
     /// <param name="charsWritten">When this method returns, the number of characters written to <paramref name="destination"/>.</param>
-    /// <param name="format">Ignored; the value is always rendered as its exact decimal expansion.</param>
-    /// <param name="provider">Ignored; formatting always uses the invariant culture.</param>
+    /// <param name="format">Empty or <c>G</c> for the exact decimal expansion.</param>
+    /// <param name="provider">The provider supplying the decimal separator; null selects invariant culture.</param>
     /// <returns><see langword="true"/> when <paramref name="destination"/> was large enough; otherwise <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) =>
-        TryFormatCore(
-            destination: destination,
-            charsWritten: out charsWritten
-        );
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        ValidateGeneralFormat(format: format);
+
+        var separator = (provider is null
+            ? NumberFormatInfo.InvariantInfo.NumberDecimalSeparator
+            : NumberFormatInfo.GetInstance(formatProvider: provider).NumberDecimalSeparator);
+
+        if (separator == ".") {
+            return TryFormatCore(destination: destination, charsWritten: out charsWritten);
+        }
+
+        Span<char> invariant = stackalloc char[MaximumFormattedLength];
+        _ = TryFormatCore(destination: invariant, charsWritten: out var invariantLength);
+        var pointIndex = invariant[..invariantLength].IndexOf(value: '.');
+
+        if (pointIndex < 0) {
+            if (destination.Length < invariantLength) {
+                charsWritten = 0;
+                return false;
+            }
+
+            invariant[..invariantLength].CopyTo(destination: destination);
+            charsWritten = invariantLength;
+            return true;
+        }
+
+        var requiredLength = (invariantLength - 1 + separator.Length);
+
+        if (destination.Length < requiredLength) {
+            charsWritten = 0;
+            return false;
+        }
+
+        invariant[..pointIndex].CopyTo(destination: destination);
+        separator.AsSpan().CopyTo(destination: destination[pointIndex..]);
+        invariant[(pointIndex + 1)..invariantLength].CopyTo(destination: destination[(pointIndex + separator.Length)..]);
+        charsWritten = requiredLength;
+        return true;
+    }
     /// <summary>Returns the exact decimal string representation of this value.</summary>
     /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2¹⁶</c> fraction always terminates within sixteen digits).</returns>
     public override string ToString() {
@@ -552,11 +640,27 @@ public readonly record struct UFixedQ4816(ulong Value)
         return new string(value: buffer[..charsWritten]);
     }
     /// <summary>Returns the exact decimal string representation of this value.</summary>
-    /// <param name="format">Ignored; the value is always rendered as its exact decimal expansion.</param>
-    /// <param name="formatProvider">Ignored; formatting always uses the invariant culture.</param>
-    /// <returns>The exact, invariant-culture decimal expansion of this value.</returns>
-    public string ToString(string? format, IFormatProvider? formatProvider) =>
-        ToString();
+    /// <param name="format">Empty or <c>G</c> for the exact decimal expansion.</param>
+    /// <param name="formatProvider">The provider supplying the decimal separator; null selects invariant culture.</param>
+    /// <returns>The exact decimal expansion of this value.</returns>
+    public string ToString(string? format, IFormatProvider? formatProvider) {
+        ValidateGeneralFormat(format: format.AsSpan());
+
+        var invariant = ToString();
+        var separator = (formatProvider is null
+            ? NumberFormatInfo.InvariantInfo.NumberDecimalSeparator
+            : NumberFormatInfo.GetInstance(formatProvider: formatProvider).NumberDecimalSeparator);
+
+        return (separator == "."
+            ? invariant
+            : invariant.Replace(oldValue: ".", newValue: separator, comparisonType: StringComparison.Ordinal));
+    }
+
+    private static void ValidateGeneralFormat(ReadOnlySpan<char> format) {
+        if (!format.IsEmpty && !format.Equals(other: "G", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            throw new FormatException($"The '{format.ToString()}' format is not supported. Use 'G' for the exact decimal expansion.");
+        }
+    }
 
     // Renders the exact decimal expansion (a /2^16 fraction always terminates within 16 digits) without routing
     // through double; returns false and writes nothing meaningful when destination is too small.

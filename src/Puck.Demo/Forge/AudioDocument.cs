@@ -167,7 +167,7 @@ public static class AudioDocumentStore {
         var builder = new System.Text.StringBuilder(capacity: name.Length);
 
         foreach (var character in name) {
-            _ = builder.Append(value: (char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_')) ? character : '-');
+            _ = builder.Append(value: ((char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_')) ? character : '-'));
         }
 
         return ((builder.Length > 0) ? builder.ToString() : "tune");
@@ -243,7 +243,6 @@ public static class AudioDocumentStore {
             Tempo = Math.Max(val1: (document.Tempo ?? AudioDocument.DefaultTempo), val2: 1),
         });
     }
-
     private static List<AudioRowDocument> NormalizeRows(IReadOnlyList<AudioRowDocument>? rows) {
         var normalized = new List<AudioRowDocument>(capacity: (rows?.Count ?? AudioDocument.DefaultPatternRowCount));
 

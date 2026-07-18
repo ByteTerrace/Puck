@@ -92,7 +92,7 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentTimingF
     }
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming =>
-        (m_compositor.TryGetPresentTiming(out var presentCount, out var presentQpcTicks)
+        (m_compositor.TryGetPresentTiming(presentCount: out var presentCount, presentQpcTicks: out var presentQpcTicks)
             ? new PresentTimingSample(PresentCount: presentCount, PresentTimestampTicks: presentQpcTicks)
             : PresentTimingSample.Unavailable);
     /// <inheritdoc/>

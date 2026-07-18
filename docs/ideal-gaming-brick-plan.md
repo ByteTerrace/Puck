@@ -1,195 +1,201 @@
-# The Ideal GamingBrick — GB / GBC / GBA build plan
+# GamingBrick architecture and accuracy contract
 
-Status: **planning complete, ready to build** · Scope: **GB/GBC** (the `Agb`
-costume of the SM83 core is in place via the four-quad demo — see §8; the ARM7TDMI-native epic stays deferred)
+The GamingBrick family models GB, GBC, and GBA hardware as deterministic
+machines. `Puck.HumbleGamingBrick` runs SM83 cartridges in DMG, CGB, and AGB
+compatibility modes. `Puck.AdvancedGamingBrick` runs GBA-native ARM7TDMI
+cartridges. The cores share determinism, snapshot, and link-cable principles;
+they do not share CPU or bus implementations.
 
-This is the plan to evolve `experimental/Puck.HumbleGamingBrick` (the graduated LIVE
-core) into the "ideal" deterministic Game Boy / Game Boy Color machine, using the
-salvage harvested from the `_GBC Attempts` graveyard + the external C++ references.
-It is derived from an 18-dossier forensic sweep of 8 code lineages (raw dossiers:
-`tasks/wvwbb0svb.output`, `tasks/w06iwse9s.output`).
+## Design invariants
 
----
+1. **Deterministic state.** Emulated state is a pure function of machine
+   configuration, integer ticks, and input. Wall-clock time, unrecorded random
+   input, and floating-point simulation state are prohibited.
+2. **One SM83 core.** `ConsoleModel` selects DMG, CGB, or AGB compatibility
+   capabilities. A GB cartridge does not move between separate emulators when
+   the device costume changes.
+3. **Full-instant snapshots.** A snapshot represents an arbitrary mid-frame
+   instant, including CPU, bus, PPU, APU, timer, serial, DMA, cartridge, and
+   scheduler state.
+4. **Explicit ordering.** Equal-timestamp component ordering is part of the
+   machine contract. Timer processing precedes serial processing.
+5. **Observable verification.** Puck's POST batteries gate deterministic
+   behavior. External emulators and ROM suites provide evidence and diagnostics,
+   not an implementation template.
 
-## 1. Mission — the three rules
+## Clock domains
 
-1. **Deterministic.** Driven only by an abstract **integer** tick clock + inputs/config.
-   No wall-clock, no RNG, no float in gameplay state.
-2. **Carry-forward.** A GB game plays bit-perfectly on GBC and GBA; a GBC game on GBA.
-   Architecturally: **ONE shared core parameterized by a capability profile**
-   (`ConsoleModel` = a feature gate), never three emulators.
-3. **Cross-generation determinism.** A DMG player and a GBA player stay bit-locked in
-   the same GB link-cable multiplayer game. The **serial/link + timer/DIV** model is the
-   crux — and it is barely covered by any reference test.
+The common integer time base is 2^24 ticks per second:
 
-## 2. Settled decisions
+| Machine mode | Effective clock |
+|---|---:|
+| DMG and CGB single speed | 2^22 Hz |
+| CGB double speed | 2^23 Hz |
+| GBA native | 2^24 Hz |
 
-| Decision | Choice |
-|---|---|
-| Tick base | **Unified integer 2²⁴.** DMG/CGB=2²², CGB-double=2²³, GBA=2²⁴ are exact powers of two → one integer tick expresses every generation with zero drift. |
-| Tick execution model | **(B) CPU-driven per-tick lockstep** on the Q48.16 clock (no event queue → no equal-timestamp ambiguity), + **(C) idle-span fast-forward** layered in for speed. Reject catch-up + iterator-coroutine PPU (oracle only). |
-| Boot | **Synthesize** the canonical per-profile post-boot state + own the DMG→CGB colorization; keep a selectable real-boot-ROM mode as a conformance oracle only. |
-| Governance | **We author our own contract.** Reference suites are *evidence*, never a whole-suite CI gate. Tiers: Contract (gate) / Informative (canonicalize, track) / Reject. |
-| Starting point | **Evolve the LIVE `Puck.HumbleGamingBrick`** in place — it already has the CPU, Q48.16 tick, docboy PPU, and fault-on-drift snapshot. |
-| GBA | **Deferred.** Perfect GB/GBC + link determinism first; keep `ConsoleModel`/link seams `Agb`-ready. |
-| Snapshot granularity | **Mid-frame full-instant** (arbitrary rewind/netplay in scope). |
-| Link cable | First-class deterministic exchange object; guarded by a **net-new two-machine golden-replay** test, not by any reference suite. |
+`Tick` uses fixed-point sub-cycle precision in the Humble core. The GBA core
+counts native 16.777216 MHz CPU cycles; one frame is 280,896 cycles. Host frame
+cadence is converted to an exact integer budget with a carried remainder.
 
-## 3. The contract (tiers)
+## SM83 timing contract
 
-**CONTRACT — bit-identical across generations, gates CI:**
-1. Serial completion phase = a division of the shared 16-bit counter: tap **DIV bit-7
-   (normal) / bit-2 (CGB-fast)**, one bit per **two** falling edges; SC-write *arms* but
-   does **not** reset the counter. *(Evidence: gambatte `div_write_start_wait_read_if_*`,
-   `start_late_div_write_*` — 46 ROMs; docboy/SameBoy/gambatte all agree on bit-7/two-edge.)*
-2. Timer/DIV shared-counter edge model: TIMA on falling edge of (TAC-bit ∧ enable);
-   DIV/TAC writes self-tick; 4-T reload-delay precedence (TIMA-write-ignored, TMA-write-lands).
-   *(mooneye timer suite; gbmicrotest `timer_tima_phase`.)*
-3. Mid-mode-3 PPU register-delay quirks: BGP-OR, CGB tile-select glitch, 8-bit window-line
-   counter, CGB 2-T write delay, glitched-line-0 LCD-on. *(dmg/cgb-acid2 = 23040/23040; mealybug.)*
-4. OAM-DMA-during-CPU bus conflict (SameBoy `is_addr_in_dma_use` model). *(mooneye `oam_dma`.)*
-5. Component tie-break order at equal timestamp — **timer before serial is load-bearing**.
-6. Deterministic power/uninit state; per-profile post-boot register + DIV seed as a pure
-   function of the cartridge header.
-7. APU **integer** channel digital output (PCM12/34) is contract; the float mix is not.
+### Timer and serial
 
-**INFORMATIVE — canonicalize per profile, tracked not gated:** post-boot DIV seed (see §6
-crux 1) and register file; CGB boot-DIV prediction table; GB-on-GBC compat palette (title-hash
-+ D-pad override); CGB color-correction gamma (output only). The gambatte `_dmgXX_outY_cgbXX_outZ`
-files are the exhaustive list of where a GB game *legitimately* diverges per generation.
+- TIMA increments on the falling edge of the TAC-selected DIV signal while
+  enabled. DIV and TAC writes can therefore cause an increment.
+- TIMA overflow observes the four-T-cycle reload delay and the documented TIMA
+  and TMA write precedence during that interval.
+- Serial shifts on falling edges of DIV counter bit 8 at normal speed and bit 3
+  in CGB fast mode. An SC write arms the transfer without resetting or
+  re-phasing DIV.
+- `SerialLinkSession` advances a pair as one deterministic unit. `Suspend`
+  returns the credit needed to snapshot, restore, and reconnect without losing
+  or duplicating elapsed work.
+- `ISerialPeer` generalizes the cable's far end beyond a second console:
+  `GamePrinterDevice` and the CGB infrared line (`InfraredPort`, RP/0xFF56 and
+  the HuC1/HuC3 IR cart windows, propagated through `IrLinkSession`) are both
+  deterministic peers on the same seam.
 
-**REJECT — do not match:** dead ares scanline outputs; serialized ghost fields; cross-core
-scorecard deltas taken under mismatched stop conditions; APU analog/revision-C glitches
-(canonicalize to CGB-E); RTC/wall-clock; `oam_bug` on CGB/GBA; AGB `_gba.png` PPU washout.
+### PPU timing
 
-## 4. Salvage assembly — subsystem → source
+Mode 0 begins when the 160th visible pixel leaves the FIFO. CPU-visible STAT
+mode and memory-access locks trail that internal transition by the calibrated
+values in `PpuTimingParameters`. Treat those values as a coupled model: changing
+one requires rerunning the PPU evidence corpus and link-game reproducers.
 
-Lineage keys: **PL** = LIVE `Puck.HumbleGamingBrick`, **PN** = graveyard native Puck,
-**BT** = ByteTerrace, **HAB** = HumbleAresBrick, **AGB** = Puck.AdvancedGamingBrick, **REF** = C++ refs.
+The current schedule includes:
 
-| Subsystem | Seed | Grafts / corrections |
-|---|---|---|
-| Tick substrate | PL Q48.16 `Tick`/`MasterClock`/`ComponentClock` | + AGB `StepClocks` idle fast-forward |
-| CPU / SM83 | PL hand-written (x/y/z/p/q, `ie_push`, halt-bug) | flat register file; devirtualize fan-out |
-| Serial / Timer / DIV | shared-16-bit counter (PN architecture) | **bit-7/two-edge phase**, no-SC-reset, PL cached-TIMA mask, gambatte DIV-write re-phasing |
-| PPU | docboy FIFO (dedup ×3→1; PL) | SameBoy OAM-DMA conflict + OAM-bug; `PpuTimingParameters` sweep→constants |
-| APU | BT SameBoy-derived integer FSM | HAB DIV-driven frame-seq + dual-edge envelope; integer sampler |
-| Cart / RTC / EEPROM | PN/PL mappers + tick-RTC | HAB `M93LCx6` + MBC7 driver if in scope |
-| CGB compat | `ConsoleModel` gate + `CompatibilityPalette` (verified vs pandocs) | BT accessor-table mode-switch; **reject** Silo parallel-cores |
-| Snapshot | PL fault-on-drift full-instant | port docboy's full PPU parcel set; serialize every live latch |
-| Tooling | merge (see M0) | Sentinel pass-frame + bijection-compare + shootout grader + signed baseline + Scorecard |
+- polled STAT and VRAM-read unlock at internal mode-0 edge + 4 dots;
+- mode-0 interrupt and VRAM/OAM write unlock at + 5 dots, with the CGB
+  single-speed interrupt adjustment;
+- OAM-read unlock at + 6 dots;
+- the OAM STAT pulse one dot after the LY write;
+- model-specific LCD-enable entry timing and object-fetch stalls.
 
-**Traps to NOT carry forward:** per-tick interface-virtual `Tick()` fan-out (every lineage —
-fix via BT sealed-field-cached `MachineCore`); delegate/`Func<>` indirection on the tick path;
-DI-container in the hot provisioning path; float in APU live state; per-tick heap allocs.
+The remaining GB PPU accuracy work is the mealybug `m3_*` sub-dot register
+signature set. Use `--stat-trace` and `--render` to diagnose it; do not tune
+against a single ROM in isolation.
 
-## 5. Build milestones (GB/GBC)
+### Audio
 
-**M0 — Baseline + scoreboard truth.** Build/run the LIVE core in a harness. Stand up the merged
-conformance **scoreboard** (Sentinel pass-frame gate + structural-bijection image compare +
-ShootoutRunner-over-our-framebuffer + SHA-256 signed baseline + Scorecard governance). CI gate =
-"at least one decided result" + the (initially empty) contract set.
-*Accept:* c-sp v7.0 corpus runs; signed baseline reproduces; one reused DI container, not per-ROM.
+The channel digital outputs, including PCM12 and PCM34, are deterministic
+integer state. The frame sequencer is DIV-driven. Host resampling and speaker
+mixing may use presentation-only transforms, but no feedback from presentation
+may enter emulated state.
 
-**M1 — Access-phase + DIV-seed (crux 1).** Pin the sub-machine-cycle access phase (PL's
-`LeadingTCyclesBeforeRead=3` is an unverified hypothesis and is the root of the 0xABCC-vs-0xABCF
-split). Prove it against blargg `mem_timing`(+`-2`) + mooneye `boot_sclk_align`/`boot_div-*`, then
-**re-derive** the post-boot DIV seed against the chosen phase.
-*Accept:* `mem_timing` green under the pinned phase; derived seed documented; ambiguity closed.
+### Cartridge support
 
-**M2 — Serial/timer to gold + Contract.** Apply bit-7/two-edge phase + no-SC-reset discipline +
-cached TIMA mask + gambatte DIV-write serial-event re-phasing.
-*Accept:* gambatte `serial`(46)+`tima`+mooneye timer green as evidence; timer/serial promoted to Contract.
+The Humble core provides ROM-only, MBC1, MBC2, MBC3, MBC5, MMM01, HuC1, HuC3,
+MBC7, and Pocket Camera implementations. Add a mapper when a supported content
+path requires it, with mapper state included in snapshots and battery-save
+round trips.
 
-**M3 — Devirtualize the tick path (perf). Status: devirtualization done, measured
-1.6×** — `ComponentClock` holds every component as a typed sealed field (per-tick fan-out is
-direct calls; the cartridge RTC facet is the one interface slot, null-skipped), constructor
-verifies declared domains against slots, Contract §3.5 order pinned in code. Guards:
-identical Gold frame hashes (all three costumes), identical battery pass set. Post numbers:
-~552 fps throughput / 532 machine-frames/s trio-lockstep; full curve in
-[machine-fleet-plan.md](machine-fleet-plan.md). A sampling profile predicts only ~1.2× —
-dispatch-share is a floor, not a ceiling, because devirtualization unlocks inlining.
-*Open from this milestone:* idle-span fast-forward (fleet plan lever 4).
+Peripheral feedback and sensor latches are deterministic snapshot state, not
+presentation state. MBC5 rumble variants (0x1C-0x1E) and the AGB GPIO rumble
+pin latch a motor bit; MBC7 latches its tilt reading behind an `ITiltSensor`
+DI seam (the `ICameraSensor` precedent) and the AGB equivalent is address-
+mapped and keyed per game code; Boktai's solar sensor is a GPIO-pin counter
+keyed by game code, with light level entering as recorded per-segment input
+(`MachinePadState.LightLevel`). Both hosts expose the motor line through
+`IFeedbackMachine`. Cartridges with a live sensor input (tilt, solar, camera)
+are excluded from time-travel recording eligibility.
 
-**M4 — Snapshot completeness (mid-frame).** Port docboy's full PPU parcel set; serialize every
-live latch (incl. `haltBug`); mid-frame save/restore byte-identical.
-*Accept:* save→restore at an arbitrary tick continues bit-identically over N frames; a
-save/restore/replay differential fuzz passes.
+## GBA-native contract
 
-**M5 — Two-machine link peer + cross-gen determinism (flagship rule-3 gate). Status: the
-link layer is LANDED** — `SerialComponent` exchanges bits with a linked peer (internal-clock master
-drives; external-clock/slave path counts, completes, and interrupts; idle ports shift silently) and
-`SerialLinkSession` owns the deterministic instruction-interleaved pair-stepping (cumulative dot
-targets, laggard-first, tie to the first machine — a linked pair is ONE step unit). The Humble
-battery's first Tier C stage (`serial-link`) proves a dmg↔cgb byte exchange with per-transfer serial
-interrupts, replay-identical across runs. Still open to close the milestone: the golden-replay
-**link-lock** trace on a REAL link game (bit-identical trace; replay-through-churn), the
-canonicalized start-of-link counter phase across profiles, and the cross-gen (GB↔GBA) leg.
-*Accept:* two linked machines produce bit-identical traces on a link game; the cross-gen test gates CI.
+The Advanced core models ARM7TDMI execution, pipeline-visible open bus, memory
+waitstates and prefetch, DMA, timers, interrupts, PPU, PSG and Direct Sound,
+cartridge backups, SIO, and JOY-bus registers. `AgbMachineFactory` owns machine
+construction. `AgbMachineInstance.Fork` rebuilds from the configuration recipe
+and restores a full `AgbMachineSnapshot`.
 
-**M6 — APU integer-ize + graft.** Integer sampler (accumulator, not `double`); graft BT channel FSM
-+ HAB frame-seq wiring; PCM12/34 = contract surface; sampler phase in the snapshot.
-*Accept:* `dmg_sound`/`cgb_sound` as evidence; no APU float in live state; snapshot round-trips audio phase.
+`AgbLinkCable` and `AgbLinkSession` connect multiple serial controllers. Normal
+and multiplayer transfers expose partner presence and player identity through
+the hardware register fields. A lone machine retains the hardware-appropriate
+idle-line behavior. `Suspend` returns an `AgbLinkResumeToken` carrying each
+console's instruction-overshoot credit past its cumulative link target, so
+severing, snapshotting, restoring, and reconnecting a linked set discards no
+work — the same guarantee `SerialLinkSession` gives the Humble core.
 
-**Cart completeness (rolling):** core mappers (RomOnly, MBC1/2/3/5, MMM01, HuC1/3, PocketCamera)
-first; MBC6/TAMA5 + MBC7 accelerometer + camera sensor as-needed (HAB `M93LCx6` ready to lift).
+Prescaler and cascade timers are event-scheduled in steady state: a running
+timer's next overflow is closed-form from its anchor clock and reload value,
+scheduled as a timing event rather than stepped every master cycle. Per-cycle
+stepping survives only inside the ≤2-cycle control/reload latch and IRQ-delay
+window, so a Direct-Sound title with a timer permanently enabled no longer
+defeats the bus's single-add fast path.
 
-### Execution order (chosen) + ground-truth corrections
+Accuracy work should preserve these boundaries:
 
-**M3 + M6 come first** — front-load perf/float-hygiene before the accuracy/determinism
-milestones. The LIVE base corrects the synthesis on both (the synthesis generalizes a ByteTerrace flaw
-onto the core actually chosen):
+- BIOS identity is explicit. Diagnostics that require retail behavior reject a
+  replacement or unknown BIOS unless the caller deliberately overrides the
+  check.
+- Game-specific save and peripheral exceptions belong in
+  `AgbGameOverrides`, not in instruction or bus special cases.
+- RTC and sensor values enter as deterministic, recordable inputs.
+- Reference-emulator cycle counts are compared per instruction. mGBA rebases
+  its cumulative counter at frame boundaries and exposes a pipeline PC four
+  bytes behind Puck's visible representation.
 
-- **M6 is nearly done — classify as verification, not a port.** LIVE `ApuComponent` **and**
-  `AudioOutputComponent` are already fully integer: the channel FSM is SameBoy-quirk-accurate, the frame
-  sequencer is already DIV-driven (bit 12 / bit 13), PCM12/34 is the integer contract output, and the
-  mixer/resampler is an explicitly float-free integer rational accumulator whose `SaveState` writes
-  nothing (host-output plumbing, snapshot-excluded → determinism already holds). The `double`
-  sampler trap the synthesis flagged is **ByteTerrace's** APU, which we are not using. **M6 ⇒ run
-  `dmg_sound`/`cgb_sound`, confirm pass.** No graft.
-- **M3 must be profiled before it is touched.** `ComponentClock` already partitions components into two
-  small typed `IClockedComponent[]` arrays iterated by `foreach` — not Silo's `List<>`+property-chain.
-  The residual cost is only that `.Tick()` is a non-devirtualizable interface call (N/T-cycle). Whether
-  that is the hot spot is unknown (CPU decode/bus routing may dominate). **Profile first**; flatten to a
-  concrete sealed core only if justified, preserving the DI **registration order** (timer-before-serial
-  is Contract §3.5) behind a frame-hash regression guard.
+## Snapshot identity
 
-**Revised order:** thin harness → **profile** → M3 (if the fan-out is genuinely hot) → M6 (verify) →
-then resume M0 (full scoreboard) → M1 → M2 → M4 → M5. The thin harness (boot ROM · step · frame-hash
-baseline · snapshot round-trip · stopwatch · serial-result read) is the first artifact — the LIVE
-project is library-only today, so no entry point exists yet.
+Both cores share one state-serialization substrate — `Puck.Snapshots`
+(`StateWriter`/`StateReader`, `SnapshotSection`, the FNV-1a fingerprint, and
+the composed `SnapshotImage`) — behind one `ISnapshotable` component contract.
+Snapshots carry a machine identity and an ordered section table. Restore must
+reject a snapshot created for an incompatible configuration or cartridge.
+`ContentEquals` compares deterministic content, while diagnostic section tables
+localize a mismatch without making internal layout a public compatibility
+promise. Identity records and component discovery order stay per-core by
+design (`MachineIdentity` vs `AgbMachineIdentity`); only the plumbing is
+shared. Current format versions: Humble `MachineIdentity.CurrentVersion` = 4,
+Advanced `AgbMachineIdentity.CurrentVersion` = 6. The AGB snapshot excludes
+the presentation-side APU sample rate — it is host configuration, not
+emulated state.
 
-## 6. Open empirical cruxes (resolved by measurement, tracked here)
+Snapshot format changes require all of the following:
 
-1. **Access-phase + DIV-seed** (M1). The 0xABCC (docboy/PL) vs 0xABCF (PN, +3 phase-comp) seeds are
-   *both correct for their own access phase*. Pin one phase, prove it, re-derive the seed — never copy
-   a seed across lineages with different phases.
-2. **Start-of-link counter-phase canonicalization** (M5). Serial/DIV/timer inherit a per-generation
-   post-boot counter phase; **no ROM tests two consoles over a cable.** Decide: one canonical counter
-   phase at power, or a resync at link-establishment. Pin the SC-write convention (gold no-phase-reset;
-   reject PL's `m_edgeToggle=0` reset). Requires the net-new co-sim from M5 to verify.
+- update the writer and reader together;
+- preserve every live latch and pending scheduler event;
+- run the state/snapshot round-trip and fork-determinism stages;
+- use the hash-divergence diagnostic when the serialized byte count or section
+  boundaries change unexpectedly.
 
-## 7. Performance mandate
+## Link verification
 
-Repo targets `net10.0`; apply the `dotnet10-performance` skill on every hot path. Non-negotiables in
-the per-tick loop: no virtual dispatch, no DI resolution, no delegate/`Func<>` indirection, no
-allocation, no float in gameplay state. Devirtualize via sealed field-cached components; use
-`delegate*<>` dispatch tables where a table is warranted; measure with the `--bench` instrument
-([machine-fleet-plan.md](machine-fleet-plan.md) — ~532 machine-frames/s single-threaded, profile
-attribution recorded there).
+The Humble Tier-C battery covers synthetic byte exchange for all SM83 costume
+pairings, suspend/restore/reconnect transparency, a commercial link-game replay,
+a complete Pokémon Gold trade when the required ROM is supplied, GB Printer
+byte-identical print-buffer round trips, and CGB infrared exchange
+(`IrLinkSession`, its own credit-preserving `IrLinkResumeToken`). The
+Advanced Tier-C battery covers deterministic multiplayer exchange, a
+commercial link-game replay, and link-churn (`AgbLinkSession.Suspend`'s
+credit-preserving `AgbLinkResumeToken`: sever, snapshot, restore, and
+reconnect a linked set without discarding overshoot credit).
 
-## 8. GBA carry-forward — Agb costume in place, deltas tracked
+The cross-core SM83-to-ARM cable remains a separate integration problem. Do not
+conflate it with the proven same-core costume pairings or with either core's
+native link session.
 
-GBA-running-a-GB-game is a **mode of the SM83 core, not the ARM7TDMI** — and the four-quad demo
-carries the first slice. **In place:** `ConsoleModel` = `{Dmg, Cgb, Agb}`; every Color gate
-reads `SupportsColor()` (a capability question, not a model equality); the Agb boot handoff applies
-the AGB boot ROM's extra `inc b` (B one higher, F = the increment's flags — the register cartridges
-probe to detect Advance hardware). Gated by the Tier-A `agb-costume` POST stage (Agb deterministic
-+ pixel-identical to Cgb on a non-detecting ROM); a representative dual-mode cartridge renders bit-identically on Cgb and
-Agb (fb-hash match at frame 600).
+## Performance rules
 
-**Tracked, not yet modeled:** KEY0 CPU-mode latch; AGB OBJ quirk; AGB palette/color-correction
-(presentation-only, never state); the AGB post-boot DIV seed (canonicalized to the CGB prediction
-until measured — INFORMATIVE, per §3). Keep the ARM7TDMI (`Puck.AdvancedGamingBrick`) as a
-**separate** GBA-native core, cart-type-selected, sharing the one master clock + link layer; the M5
-link layer must stay `Agb`-ready.
+Measure before changing a hot path and consult the `dotnet10-performance`
+skill. The per-cycle path must avoid allocations, DI resolution, floating-point
+state, and unnecessary dispatch. `ComponentClock` stores concrete components
+and preserves timer-before-serial order. An `AllocationStage` in both `.Post`
+batteries asserts zero allocation across a warmed-up run of emulated frames, so
+a regression surfaces as a red battery rather than a demo GC spike. Fork is
+pooled restore-into-a-parked-instance rather than a fresh DI container build on
+both cores. Fleet-level measurements and accepted optimization seams live in
+[machine-fleet-plan.md](machine-fleet-plan.md).
+
+## Verification
+
+Run the battery for the core changed:
+
+```powershell
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release
+```
+
+Tier A is self-contained. Reference-ROM and commercial-game stages skip when
+their configured assets are absent. See each Post README for asset variables and
+diagnostic commands.

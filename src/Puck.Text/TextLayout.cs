@@ -11,6 +11,13 @@ namespace Puck.Text;
 /// Layout walks the input one Unicode scalar at a time, advancing a pen by each glyph's
 /// <see cref="FontAtlasGlyph.Advance"/> and applying kerning between consecutive glyphs. Carriage returns
 /// are ignored and line feeds start a new line; code points the atlas does not contain are skipped.
+/// <para>
+/// Enrichment composes WITH layout, not around it: the
+/// <see cref="Layout(FontAtlas, IEnumerable{TextEffectRune}, float, float?)"/> overload takes runes already paired
+/// with their effect (from <see cref="TextEnrichmentTags"/> / <see cref="BbCodeTextMarkup"/>) and carries each effect
+/// onto its <see cref="TextGlyphPlacement.Effect"/>, so one atlas and one layout serve every text tier. The plain
+/// string overload is exactly this with <see cref="TextEffect.None"/> on every glyph.
+/// </para>
 /// </remarks>
 public sealed class TextLayout {
     /// <summary>Lays out <paramref name="text"/> against <paramref name="atlas"/> at the given scale.</summary>
@@ -32,6 +39,36 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(text);
 
+        return LayoutRunes(
+            atlas: atlas,
+            maxLineWidth: maxLineWidth,
+            runes: EnumeratePlainRunes(text: text),
+            scale: scale
+        );
+    }
+
+    /// <summary>Lays out enrichment-aware runes — each already paired with its effect — carrying every effect onto its
+    /// placement so a downstream tier can resolve per-glyph channels.</summary>
+    /// <param name="atlas">The atlas providing glyph geometry, metrics, and kerning.</param>
+    /// <param name="runes">The enriched runes, in order (from <see cref="TextEnrichmentTags.EnumerateRichTextRunes"/> or <see cref="BbCodeTextMarkup.EnrichRunes"/>). Line feeds (<c>\n</c>) break lines and carriage returns are ignored, exactly as the string overload.</param>
+    /// <param name="scale">The multiplier applied to every em-space measurement. Must be greater than zero. Defaults to <c>1.0</c>.</param>
+    /// <param name="maxLineWidth">An optional maximum line width for greedy glyph-level wrapping; must be greater than zero when provided.</param>
+    /// <returns>A <see cref="TextLayoutResult"/> whose placements carry their <see cref="TextGlyphPlacement.Effect"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="runes"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not greater than zero, or <paramref name="maxLineWidth"/> is supplied and is not greater than zero.</exception>
+    public TextLayoutResult Layout(FontAtlas atlas, IEnumerable<TextEffectRune> runes, float scale = 1.0f, float? maxLineWidth = null) {
+        ArgumentNullException.ThrowIfNull(atlas);
+        ArgumentNullException.ThrowIfNull(runes);
+
+        return LayoutRunes(
+            atlas: atlas,
+            maxLineWidth: maxLineWidth,
+            runes: runes,
+            scale: scale
+        );
+    }
+
+    private static TextLayoutResult LayoutRunes(FontAtlas atlas, IEnumerable<TextEffectRune> runes, float scale, float? maxLineWidth) {
         if (scale <= 0.0f) {
             throw new ArgumentOutOfRangeException(
                 message: "Text scale must be greater than zero.",
@@ -53,8 +90,8 @@ public sealed class TextLayout {
         var lineCount = 1;
         int? previousUnicode = null;
 
-        foreach (var rune in text.EnumerateRunes()) {
-            var unicode = rune.Value;
+        foreach (var enriched in runes) {
+            var unicode = enriched.Rune.Value;
 
             if (unicode == '\r') {
                 continue;
@@ -113,6 +150,7 @@ public sealed class TextLayout {
                         x: cursorX,
                         y: baselineY
                     ),
+                    Effect: enriched.Effect,
                     Glyph: glyph,
                     PlaneBounds: transformedPlaneBounds,
                     Unicode: unicode
@@ -139,7 +177,11 @@ public sealed class TextLayout {
             width: maxRight
         );
     }
-
+    private static IEnumerable<TextEffectRune> EnumeratePlainRunes(string text) {
+        foreach (var rune in text.EnumerateRunes()) {
+            yield return new TextEffectRune(Rune: rune, Effect: TextEffect.None);
+        }
+    }
     private static bool ShouldWrapGlyph(FontAtlasGlyph glyph, float cursorX, float scale, float? maxLineWidth) {
         if (
             (maxLineWidth is not float width) ||

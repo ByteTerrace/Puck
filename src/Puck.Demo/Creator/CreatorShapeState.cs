@@ -28,6 +28,10 @@ namespace Puck.Demo.Creator;
 /// a POINT op applied BEFORE the primitive). The STYLE page's West button toggles it.</param>
 /// <param name="Twist">The shape's local twist rate about Y, in radians per unit of local Y (<see cref="SdfOp.TwistY"/>,
 /// a POINT op applied before the primitive; 0 = untwisted). Clamped to ±<see cref="CreatorScene.MaxTwist"/>.</param>
+/// <param name="Bend">The shape's local bend rate about Y, in radians per unit of local Y (<see cref="SdfOp.BendY"/>,
+/// a POINT op applied before the primitive, after <see cref="Twist"/>; 0 = unbent). Clamped to ±<see cref="CreatorScene.MaxBend"/>.</param>
+/// <param name="Dilate">The shape's inflation radius (<see cref="SdfOp.Dilate"/>, a FIELD op applied AFTER the
+/// primitive, before <see cref="Onion"/>; 0 = off). Clamped to [0, <see cref="CreatorScene.MaxDilate"/>].</param>
 /// <param name="Onion">The shape's shell thickness (<see cref="SdfOp.Onion"/>, a FIELD op applied AFTER the primitive;
 /// 0 = solid). Clamped to [0, <see cref="CreatorScene.MaxOnion"/>].</param>
 public readonly record struct CreatorShapeState(
@@ -43,5 +47,7 @@ public readonly record struct CreatorShapeState(
     int GroupId,
     bool Mirror = false,
     float Twist = 0f,
+    float Bend = 0f,
+    float Dilate = 0f,
     float Onion = 0f
 );

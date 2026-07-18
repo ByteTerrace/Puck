@@ -16,10 +16,10 @@ internal sealed record PreviewCell(byte[] Rgba, bool[]? Mask, int Width, int Hei
 /// Overlay mode 1 appends a palette strip + warning tick row; mode 2 additionally rules the 8×8 tile grid.
 /// </summary>
 internal static class PreviewComposer {
-    private const int SwatchEdge = 6;
-    private const int StripHeight = (SwatchEdge + 4);
-    private const byte CheckerLight = 0xB4;
     private const byte CheckerDark = 0x8C;
+    private const byte CheckerLight = 0xB4;
+    private const int StripHeight = (SwatchEdge + 4);
+    private const int SwatchEdge = 6;
 
     /// <summary>Composes the preview.</summary>
     /// <param name="cells">The per-view preview cells, in plan view order.</param>
@@ -31,13 +31,13 @@ internal static class PreviewComposer {
         ArgumentNullException.ThrowIfNull(cells);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
-        var columns = Math.Max(val1: 1, val2: ((cells.Count + rows) - 1) / Math.Max(val1: 1, val2: rows));
+        var columns = Math.Max(val1: 1, val2: (((cells.Count + rows) - 1) / Math.Max(val1: 1, val2: rows)));
         var cellWidth = ((cells.Count > 0) ? cells[0].Width : 8);
         var cellHeight = ((cells.Count > 0) ? cells[0].Height : 8);
         var width = (columns * cellWidth);
         var gridHeight = (rows * cellHeight);
         var height = (gridHeight + ((overlayMode >= 1) ? StripHeight : 0));
-        var rgba = new byte[width * height * 4];
+        var rgba = new byte[((width * height) * 4)];
 
         for (var index = 0; (index < cells.Count); index++) {
             PaintCell(cell: cells[index], destination: rgba, destinationWidth: width, originX: ((index % columns) * cellWidth), originY: ((index / columns) * cellHeight));
@@ -65,7 +65,7 @@ internal static class PreviewComposer {
         ArgumentNullException.ThrowIfNull(view);
         ArgumentNullException.ThrowIfNull(palettes);
 
-        var rgba = new byte[view.Width * view.Height * 4];
+        var rgba = new byte[((view.Width * view.Height) * 4)];
         var tilesWide = (view.Width / 8);
 
         for (var y = 0; (y < view.Height); y++) {
@@ -75,19 +75,19 @@ internal static class PreviewComposer {
                 var offset = (pixel * 4);
 
                 if (transparentSlotReserved && (index == 0)) {
-                    rgba[offset + 3] = 0xFF;
+                    rgba[(offset + 3)] = 0xFF;
 
                     continue;
                 }
 
-                var palette = palettes[view.TilePalettes[((y / 8) * tilesWide) + (x / 8)]];
+                var palette = palettes[view.TilePalettes[(((y / 8) * tilesWide) + (x / 8))]];
                 var colourIndex = (transparentSlotReserved ? (index - 1) : index);
                 var colour = palette[Math.Clamp(value: colourIndex, max: (palette.Length - 1), min: 0)];
 
                 rgba[offset] = BakeColor.Expand8(value5: BakeColor.Channel(channel: 0, colour: colour));
-                rgba[offset + 1] = BakeColor.Expand8(value5: BakeColor.Channel(channel: 1, colour: colour));
-                rgba[offset + 2] = BakeColor.Expand8(value5: BakeColor.Channel(channel: 2, colour: colour));
-                rgba[offset + 3] = 0xFF;
+                rgba[(offset + 1)] = BakeColor.Expand8(value5: BakeColor.Channel(channel: 1, colour: colour));
+                rgba[(offset + 2)] = BakeColor.Expand8(value5: BakeColor.Channel(channel: 2, colour: colour));
+                rgba[(offset + 3)] = 0xFF;
             }
         }
 
@@ -101,20 +101,20 @@ internal static class PreviewComposer {
                 var source = (pixel * 4);
                 var target = ((((originY + y) * destinationWidth) + (originX + x)) * 4);
 
-                if (cell.Mask is { } mask && !mask[pixel]) {
+                if ((cell.Mask is { } mask) && !mask[pixel]) {
                     // The classic transparency checkerboard, in 4×4 blocks — position-based, deterministic.
-                    var shade = (((((originX + x) / 4) + ((originY + y) / 4)) % 2) == 0) ? CheckerLight : CheckerDark;
+                    var shade = ((((((originX + x) / 4) + ((originY + y) / 4)) % 2) == 0) ? CheckerLight : CheckerDark);
 
                     destination[target] = shade;
-                    destination[target + 1] = shade;
-                    destination[target + 2] = shade;
+                    destination[(target + 1)] = shade;
+                    destination[(target + 2)] = shade;
                 } else {
                     destination[target] = cell.Rgba[source];
-                    destination[target + 1] = cell.Rgba[source + 1];
-                    destination[target + 2] = cell.Rgba[source + 2];
+                    destination[(target + 1)] = cell.Rgba[(source + 1)];
+                    destination[(target + 2)] = cell.Rgba[(source + 2)];
                 }
 
-                destination[target + 3] = 0xFF;
+                destination[(target + 3)] = 0xFF;
             }
         }
     }
@@ -130,8 +130,8 @@ internal static class PreviewComposer {
                 var offset = (((y * width) + x) * 4);
 
                 rgba[offset] = (byte)((rgba[offset] * 3) / 4);
-                rgba[offset + 1] = (byte)((rgba[offset + 1] * 3) / 4);
-                rgba[offset + 2] = (byte)((rgba[offset + 2] * 3) / 4);
+                rgba[(offset + 1)] = (byte)((rgba[(offset + 1)] * 3) / 4);
+                rgba[(offset + 2)] = (byte)((rgba[(offset + 2)] * 3) / 4);
             }
         }
     }
@@ -150,7 +150,7 @@ internal static class PreviewComposer {
             x += (SwatchEdge + (((colour % 4) == 3) ? 3 : 1));
         }
 
-        var tickX = (width - 2 - SwatchEdge);
+        var tickX = ((width - 2) - SwatchEdge);
 
         for (var warning = 0; (warning < diagnostics.Warnings.Count); warning++) {
             if (tickX < x) {
@@ -161,20 +161,18 @@ internal static class PreviewComposer {
             tickX -= (SwatchEdge + 2);
         }
     }
-
     private static void PaintSwatch(uint colour, byte[] rgba, int width, int x, int y) {
         for (var dy = 0; (dy < SwatchEdge); dy++) {
             for (var dx = 0; (dx < SwatchEdge); dx++) {
                 var offset = ((((y + dy) * width) + (x + dx)) * 4);
 
                 rgba[offset] = (byte)((colour >> 16) & 0xFF);
-                rgba[offset + 1] = (byte)((colour >> 8) & 0xFF);
-                rgba[offset + 2] = (byte)(colour & 0xFF);
-                rgba[offset + 3] = 0xFF;
+                rgba[(offset + 1)] = (byte)((colour >> 8) & 0xFF);
+                rgba[(offset + 2)] = (byte)(colour & 0xFF);
+                rgba[(offset + 3)] = 0xFF;
             }
         }
     }
-
     private static Vector3 Average(byte[] rgba) {
         if (rgba.Length == 0) {
             return Vector3.Zero;
@@ -184,7 +182,7 @@ internal static class PreviewComposer {
         var pixels = (rgba.Length / 4);
 
         for (var offset = 0; (offset < rgba.Length); offset += 4) {
-            sums += new Vector3(rgba[offset], rgba[offset + 1], rgba[offset + 2]);
+            sums += new Vector3(x: rgba[offset], y: rgba[(offset + 1)], z: rgba[(offset + 2)]);
         }
 
         return (sums / (pixels * 255f));

@@ -193,7 +193,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 1,
@@ -222,7 +224,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 2,
@@ -251,7 +255,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 3,
@@ -280,7 +286,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     }
   ],
   "frames": null,

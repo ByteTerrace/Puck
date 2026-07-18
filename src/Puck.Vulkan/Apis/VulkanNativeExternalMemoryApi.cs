@@ -87,7 +87,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             Tiling = ImageTiling2dOptimal,
             // The default samples a foreign render target; a non-zero UsageFlags imports it as a writable image
             // instead (e.g. STORAGE, so Vulkan can produce a compute result INTO a Direct3D 12-owned resource).
-            Usage = ((request.UsageFlags != 0) ? request.UsageFlags : (ImageUsageSampledBit | ImageUsageColorAttachmentBit)),
+            Usage = ((request.UsageFlags != 0) ? request.UsageFlags : ImageUsageSampledBit | ImageUsageColorAttachmentBit),
         };
 
         pointers.CreateImage(

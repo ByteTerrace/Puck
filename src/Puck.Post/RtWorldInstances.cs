@@ -44,16 +44,16 @@ internal static class RtWorldInstances {
                         break;
                     }
                 case SdfOp.Translate: {
-                        center += new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z);
+                        center += new Vector3(x: instruction.Data0.X, y: instruction.Data0.Y, z: instruction.Data0.Z);
 
                         break;
                     }
                 case SdfOp.ShapeBlend when ((SdfShapeType)instruction.Shape == SdfShapeType.Plane): {
-                        var normal = Vector3.Normalize(value: new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z));
+                        var normal = Vector3.Normalize(value: new Vector3(x: instruction.Data0.X, y: instruction.Data0.Y, z: instruction.Data0.Z));
                         // A translate shifts the point by -center, so the world offset gains -dot(center, normal).
                         var offset = (instruction.Data0.W - Vector3.Dot(vector1: center, vector2: normal));
 
-                        return new Vector4(normal, offset);
+                        return new Vector4(value: normal, w: offset);
                     }
                 default: {
                         break;
@@ -97,7 +97,7 @@ internal static class RtWorldInstances {
                         break;
                     }
                 case SdfOp.Translate: {
-                        center += new Vector3(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z);
+                        center += new Vector3(x: instruction.Data0.X, y: instruction.Data0.Y, z: instruction.Data0.Z);
 
                         break;
                     }
@@ -116,7 +116,7 @@ internal static class RtWorldInstances {
                     }
                 case SdfOp.Elongate: {
                         // Elongation sweeps the shape's cross-section over ±extents: pad the following shapes by them.
-                        padding += new Vector3(MathF.Abs(instruction.Data0.X), MathF.Abs(instruction.Data0.Y), MathF.Abs(instruction.Data0.Z));
+                        padding += new Vector3(x: MathF.Abs(x: instruction.Data0.X), y: MathF.Abs(x: instruction.Data0.Y), z: MathF.Abs(x: instruction.Data0.Z));
 
                         break;
                     }
@@ -125,7 +125,7 @@ internal static class RtWorldInstances {
                         // FIELD ops thicken/inflate the ENTIRE field accumulated so far — retroactively pad every
                         // instance already emitted (dilate pushes the surface out by r; onion's skin reaches abs(d)−t
                         // ≤ 0, i.e. t outward).
-                        var inflate = new Vector3(MathF.Max(0f, instruction.Data0.X));
+                        var inflate = new Vector3(value: MathF.Max(x: 0f, y: instruction.Data0.X));
 
                         for (var index = 0; (index < instances.Count); index++) {
                             var instance = instances[index];
@@ -145,7 +145,7 @@ internal static class RtWorldInstances {
                             halfExtent += padding;
 
                             if (isotropic && (padding != Vector3.Zero)) {
-                                halfExtent = new Vector3(MathF.Max(halfExtent.X, MathF.Max(halfExtent.Y, halfExtent.Z)));
+                                halfExtent = new Vector3(value: MathF.Max(x: halfExtent.X, y: MathF.Max(x: halfExtent.Y, y: halfExtent.Z)));
                             }
 
                             instances.Add(item: new RtWorldInstance(
@@ -175,7 +175,7 @@ internal static class RtWorldInstances {
             instances.Add(item: new RtWorldInstance(
                 Center: Vector3.Zero,
                 CustomIndex: (uint)instances.Count,
-                HalfExtent: new Vector3(CatchAllHalfExtent)
+                HalfExtent: new Vector3(value: CatchAllHalfExtent)
             ));
         }
 
@@ -185,7 +185,7 @@ internal static class RtWorldInstances {
     // The world half-extent for a shape, padded by its smooth-blend radius (Data1.x). Returns false for shapes with
     // no finite bound (the plane). When isotropic, the extent is the bounding-sphere radius on every axis.
     private static bool TryShapeHalfExtent(SdfInstruction instruction, bool isotropic, out Vector3 halfExtent) {
-        var smooth = MathF.Max(0f, instruction.Data1.X);
+        var smooth = MathF.Max(x: 0f, y: instruction.Data1.X);
         var data = instruction.Data0;
 
         halfExtent = Vector3.Zero;
@@ -194,21 +194,21 @@ internal static class RtWorldInstances {
             case SdfShapeType.Box:
             case SdfShapeType.ScreenSlab: {
                     // Data0 = (halfX, halfY, halfZ, roundingRadius).
-                    halfExtent = new Vector3(data.X, data.Y, data.Z) + new Vector3(data.W + smooth);
+                    halfExtent = (new Vector3(x: data.X, y: data.Y, z: data.Z) + new Vector3(value: (data.W + smooth)));
 
                     break;
                 }
             case SdfShapeType.Sphere: {
                     // Data0.x = radius.
-                    halfExtent = new Vector3(data.X + smooth);
+                    halfExtent = new Vector3(value: (data.X + smooth));
 
                     break;
                 }
             case SdfShapeType.Torus: {
                     // Data0 = (majorRadius, minorRadius, _, _); the ring lies in the XZ plane.
-                    var ring = (data.X + data.Y + smooth);
+                    var ring = ((data.X + data.Y) + smooth);
 
-                    halfExtent = new Vector3(ring, (data.Y + smooth), ring);
+                    halfExtent = new Vector3(x: ring, y: (data.Y + smooth), z: ring);
 
                     break;
                 }
@@ -216,28 +216,28 @@ internal static class RtWorldInstances {
                     // Data0 = (lowerRadius, upperRadius, height, _); the shape spans y in
                     // [-lowerRadius, height + upperRadius] from its LOCAL ORIGIN (not centered), so a bound symmetric
                     // about the center must reach the full height both ways — up to 2x loose, but conservative.
-                    var radius = (MathF.Max(data.X, data.Y) + smooth);
+                    var radius = (MathF.Max(x: data.X, y: data.Y) + smooth);
 
-                    halfExtent = new Vector3(radius, (data.Z + radius), radius);
+                    halfExtent = new Vector3(x: radius, y: (data.Z + radius), z: radius);
 
                     break;
                 }
             case SdfShapeType.Capsule: {
                     // Data0 = (endX, endY, endZ, radius); the segment runs from the local origin to the endpoint, so a
                     // bound symmetric about the center must reach |endpoint| both ways — up to 2x loose, but conservative.
-                    halfExtent = (new Vector3(MathF.Abs(data.X), MathF.Abs(data.Y), MathF.Abs(data.Z)) + new Vector3(data.W + smooth));
+                    halfExtent = (new Vector3(x: MathF.Abs(x: data.X), y: MathF.Abs(x: data.Y), z: MathF.Abs(x: data.Z)) + new Vector3(value: (data.W + smooth)));
 
                     break;
                 }
             case SdfShapeType.Cylinder: {
                     // Data0 = (radius, halfHeight, _, _); upright and centered — exact.
-                    halfExtent = new Vector3((data.X + smooth), (data.Y + smooth), (data.X + smooth));
+                    halfExtent = new Vector3(x: (data.X + smooth), y: (data.Y + smooth), z: (data.X + smooth));
 
                     break;
                 }
             case SdfShapeType.Ellipsoid: {
                     // Data0 = (radiusX, radiusY, radiusZ, _); centered — exact.
-                    halfExtent = (new Vector3(data.X, data.Y, data.Z) + new Vector3(smooth));
+                    halfExtent = (new Vector3(x: data.X, y: data.Y, z: data.Z) + new Vector3(value: smooth));
 
                     break;
                 }
@@ -249,7 +249,7 @@ internal static class RtWorldInstances {
         }
 
         if (isotropic) {
-            halfExtent = new Vector3(MathF.Max(halfExtent.X, MathF.Max(halfExtent.Y, halfExtent.Z)));
+            halfExtent = new Vector3(value: MathF.Max(x: halfExtent.X, y: MathF.Max(x: halfExtent.Y, y: halfExtent.Z)));
         }
 
         return true;

@@ -62,12 +62,30 @@ public sealed record GamingBrickSource : ViewportSource {
     /// (meta needs the room to combine cabinets); a deterministic READ of emulated state, never a write into it.</summary>
     public BrickVictoryCondition? Victory { get; init; }
     /// <summary>An optional cartridge PERIPHERAL/sensor feed — the seam through which the outside world reaches the
-    /// emulated machine. <c>camera</c> (also what null means for a Pocket Camera cartridge, header <c>0xFC</c>) binds the
+    /// emulated machine. <c>camera</c> (also what null means for a camera cartridge, header <c>0xFC</c>) binds the
     /// PC webcam as the M64282FP image source; <c>none</c> keeps the built-in deterministic sensor so a capture is
     /// reproducible (validation, golden strips); <c>world</c> binds the WORLD→MACHINE membrane, writing the room player's
     /// position into the cartridge's work-RAM sensor page each frame so a world-lens ROM mirrors the room it sits in.
     /// Camera/none are ignored by a cartridge without a sensor; world by a cartridge that never reads the sensor page.</summary>
     public string? Peripheral { get; init; }
+    /// <summary>An optional per-console override for which SM83 cart TYPE (the overworld's Cycle-able cart-type index,
+    /// not <see cref="Model"/>/<see cref="RomPath"/>) this stand's cabinet starts SELECTED to — null (the default, and
+    /// what an omitted value means) keeps the overworld's own default policy (a uniform showcase type on an immersed
+    /// start, else staggered across the cart cycle by console index). Only non-negative here — this record cannot see
+    /// the overworld's cart-type COUNT (a <c>Puck.Demo</c> constant; <c>Puck.Scene</c> takes no dependency on it), so
+    /// the upper bound is range-clamped at CONSUMPTION, not here; an out-of-range value at consumption time is treated
+    /// as "no override" rather than refused, so a document authored against a future, larger cart-type set degrades
+    /// gracefully instead of failing an otherwise-valid run.</summary>
+    public int? StartCart { get; init; }
+    /// <summary>An optional per-cabinet BATTERY-SAVE SLOT — the general mechanism for holding DISTINCT saves on cabinets
+    /// that would otherwise share one. The overworld keys a cart type's save file by TYPE, so two cabinets running the
+    /// SAME cart type (a link trade between two copies of one game, a critter-swap cart) share one <c>.sav</c> by default;
+    /// a slot derives a per-cabinet path (<c>{base}.s{slot}.sav</c>) instead, so distinct slots keep distinct saves and a
+    /// shared slot deliberately shares one. It also disambiguates a cabinet's PRE-INSERTED <see cref="RomPath"/> save when
+    /// two cabinets name the same ROM. Null (the default, and what an omitted value means) keeps the shared-per-type save,
+    /// byte-unchanged. Only non-negative here; there is no upper bound (any slot is a valid filename suffix), so — like
+    /// <see cref="StartCart"/> — an out-of-range value is impossible by construction and consumption degrades gracefully.</summary>
+    public int? SaveSlot { get; init; }
 
     /// <summary>Whether this stand starts with a cartridge already seated (<see cref="RomPath"/> is present).</summary>
     [JsonIgnore]
@@ -92,6 +110,14 @@ public sealed record GamingBrickSource : ViewportSource {
 
         if ((Peripheral is not null) && !SupportedPeripherals.Contains(value: Peripheral, comparer: StringComparer.OrdinalIgnoreCase)) {
             errors.Add(path: $"{path}.peripheral", message: $"peripheral '{Peripheral}' is not one of: {string.Join(separator: ", ", values: SupportedPeripherals)}");
+        }
+
+        if ((StartCart is { } startCart) && (startCart < 0)) {
+            errors.Add(path: $"{path}.startCart", message: $"startCart {startCart} must be non-negative (the upper bound is range-clamped at consumption, not validated here)");
+        }
+
+        if ((SaveSlot is { } saveSlot) && (saveSlot < 0)) {
+            errors.Add(path: $"{path}.saveSlot", message: $"saveSlot {saveSlot} must be non-negative (it is a per-cabinet save-file suffix; there is no upper bound)");
         }
 
         Exit?.Validate(path: $"{path}.exit", errors: errors);
@@ -125,8 +151,8 @@ public sealed record BrickExitCondition {
     public bool TryParseAddress(out ushort address) {
         address = 0;
 
-        return Address.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase)
-            && ushort.TryParse(s: Address.AsSpan(start: 2), style: System.Globalization.NumberStyles.HexNumber, provider: null, result: out address);
+        return (Address.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase)
+            && ushort.TryParse(s: Address.AsSpan(start: 2), style: System.Globalization.NumberStyles.HexNumber, provider: null, result: out address));
     }
 
     internal void Validate(string path, ValidationErrors errors) {

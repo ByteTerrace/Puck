@@ -1,22 +1,16 @@
 # Forge/Framework — the SM83 game framework
 
-`Puck.Demo.Forge.Framework` is the runtime real forged games are made of, so a game is **logic over a
-framework**, not hand-placed bytes. Twenty-two modules share one `Sm83Emitter` behind the `GameFramework` facade:
+`Puck.Demo.Forge.Framework` is the runtime forged games are made of, so a game is **logic over a
+framework**, not hand-placed bytes. Modules share one `Sm83Emitter` behind the `GameFramework` facade:
 an interrupt-driven kernel, a battery-backed cartridge assembler, the input / shadow-OAM / background-queue /
 PRNG / save / text / state-machine / sound plumbing every cartridge needs, and the **asset linker + game
 manifest** layer that turns a game's identity — art, screens, rules, decks, scripts, sound — into declared DATA
 the linker lands as addressed ROM tables. A game's job shrinks to: declare a manifest, define states, emit game
-subroutines. All three built-in games are consumers — five-star Brickfall (`Forge/Brickfall/`), Volley
-(`Forge/Volley/`), and Chroma (`Forge/Chroma/`); the legacy `ArcadeKernel`/`ArcadeCartridge`/`ArcadeArt`
-machinery that Volley and Chroma once hand-assembled on was retired with their re-forge (git history has it).
+subroutines. Built-in consumers include Brickfall, Volley, Chroma, Solitaire,
+Poker, CritterSwap, Tune, and Oracle under their respective `Forge/` directories.
 
-> **Lift posture** ([game-studio-plan](../../../../docs/game-studio-plan.md) binding decisions): this folder depends only on `Sm83Emitter` + the `HgbImage` encoders and owns
-> its own hardware constants (`Hw` — deliberately self-contained, ~30 lines), so a later lift to
-> `experimental/Puck.HumbleGamingBrickRom` stays mechanical. Greenfield discipline holds: verify
-> by running the forge tools, never by adding a gate.
-
-> **In-game reflection** (the [unification contract](../../../../docs/overworld-demo-plan.md#the-unification-contract-read-first--the-north-star-for-this-arc)):
-> the built-in games this framework powers (Brickfall, Volley, Chroma) are reached
+> **In-game reflection** (the [experience contract](../../../../docs/overworld-demo-plan.md#experience-contract)):
+> the built-in games this framework powers are reached
 > in-session — walk up to a cabinet, Cycle to the cart, boot it — with no restart. The
 > `--forge-*` CLIs (e.g. `--forge-brickfall`) are the headless CI/proof twin that builds
 > and self-verifies the same cartridge the in-game path boots, not the only way to
@@ -32,7 +26,7 @@ machinery that Volley and Chroma once hand-assembled on was retired with their r
 | `FrameworkMemoryMap.cs` | THE memory convention — the table below mirrors it; on any drift, the code wins |
 | `Hw.cs` | the framework's own hardware constants (ports, regions, LCDC bits) + the build-time `MapCell(row, column)` |
 | `RomDataBuilder.cs` | the `0x4000..0x7FFF` data window: named blocks (`Add`/`AddText`), duplicate names throw, overrun throws at build time |
-| `PbakBundle.cs` | the `PBAK` wire-form READER (the inverse of the bake's writer): `Parse` → `PbakBackground` + `PbakSpriteSet`s — raw bytes only, no bake types, so the lift posture holds |
+| `PbakBundle.cs` | the `PBAK` wire-form reader (the inverse of the bake's writer): `Parse` → `PbakBackground` + `PbakSpriteSet`s; raw bytes only, with no dependency on bake types |
 | `AssetLinker.cs` | the linker: allocates the 256-tile bank and the 8+8 palette slots as sequential segments, relocates parsed `PBAK` sections onto the grants (map cells/OAM tiles rebased, palette bits shifted), lands the blocks, seals the composed bank/palette tables for the boot spec |
 | `GameManifest.cs` | the declarative layer: a game declares tiles, font, palettes, screens (literal or art-backed, both with text overlays), rule/record tables, strings, and input scripts; `Link` drives the linker once and returns the `LinkedManifest` lookup |
 | `InputModule.cs` | the per-frame joypad tick: raw read → attract-script override → held/pressed/previous (active-high bits: Right `0x01` … Start `0x80`) |
@@ -46,7 +40,9 @@ machinery that Volley and Chroma once hand-assembled on was retired with their r
 | `ApuSoundDriver.cs` | the REAL driver: three per-frame sequencer voices (pulse-1 SFX, noise SFX, pulse-2 music loop) pumping raw APU register bytes from manifest-declared ROM streams; `Bind(linked)` resolves them after `Link` — see the sound section below |
 | `SoundTables.cs` | the curated sound catalog AS DATA (deal/flip/shuffle/win + cursor/thud/sweep/over effects, the short music loop); `DefineIn(manifest)` declares every stream as an ordinary manifest table |
 | `ApuNotePeriod.cs` | common note frequencies in millihertz (equal temperament, A4 = 440 Hz), integers so the period math `SoundTables` builds streams from is exact and byte-identical across runs |
-| `LinkModule.cs` | serial-link plumbing: stateless SB/SC helpers (start-internal-send / arm-external-receive with optional SB staging — one transfer is inherently full-duplex / bounded poll with a timeout label / read byte). No game consumes it yet — link-fed multiplayer Poker is the follow-on arc |
+| `LinkModule.cs` | serial-link plumbing: stateless SB/SC helpers for internal send, external receive, bounded polling, and byte reads |
+| `LinkProtocolModule.cs` | deterministic role negotiation and validated full-duplex block exchange; used by CritterSwap |
+| `VictoryModule.cs` | shared 128-bit cartridge victory metadata |
 | `LinkModuleVerify.cs` | the `SerialLinkSession` loopback proof for `LinkModule` |
 
 ## The linker & the manifest (how a game consumes assets)

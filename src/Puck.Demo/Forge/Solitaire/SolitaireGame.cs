@@ -30,7 +30,6 @@ internal sealed class SolitaireGame {
     private readonly int m_cursorSlot;
     private readonly int m_cursorMaxEntries;
     private readonly LinkedSpriteSet m_cursor;
-
     private readonly RomTable m_bgPalettes;
     private readonly RomTable m_objPalettes;
     private readonly RomTable m_tiles;
@@ -47,7 +46,6 @@ internal sealed class SolitaireGame {
     private readonly RomTable m_strHiScores;
     private readonly RomTable m_strStreak;
     private readonly RomTable m_strBest;
-
     private readonly int m_subPileAddr;
     private readonly int m_subCountAddr;
     private readonly int m_subGetCount;
@@ -100,15 +98,13 @@ internal sealed class SolitaireGame {
 
         if (titleArt is not null) {
             manifest.DefineArtScreen(name: "title", art: titleArt, overlays: SolitaireTables.TitleOverlays);
-        }
-        else {
+        } else {
             manifest.DefineScreen(name: "title", cells: SolitaireTables.BuildTitleBannerCells(), overlays: SolitaireTables.TitleOverlays);
         }
 
         if (feltArt is not null) {
             manifest.DefineArtScreen(name: "play", art: feltArt, overlays: SolitaireTables.PlayOverlays);
-        }
-        else {
+        } else {
             manifest.DefineScreen(name: "play", cells: SolitaireTables.BuildFallbackFeltCells(), overlays: SolitaireTables.PlayOverlays);
         }
 
@@ -459,8 +455,7 @@ internal sealed class SolitaireGame {
             e.Load(destination: Reg8.Memory, source: Reg8.B);
             e.XorA();
             e.StoreAToHighPage(port: Hw.PortVramBank);
-        }
-        else if (m_titleAttributes is not null) {
+        } else if (m_titleAttributes is not null) {
             // The felt is flat but the title paints attributes; keep the board's cells pinned to palette 0.
             e.LoadAImmediate(value: 0x01);
             e.StoreAToHighPage(port: Hw.PortVramBank);
@@ -528,13 +523,11 @@ internal sealed class SolitaireGame {
         e.StoreAToAddress(address: SolitaireProtocol.TmpRow);
         e.Return();
     }
-
     private void EmitDrawBack(Sm83Emitter e) {
         e.MarkLabel(label: m_subDrawBack);
         EmitDrawBlock2x2(e: e, baseTile: CardTables.TileBackBase);
         e.Return();
     }
-
     private void EmitDrawOutline(Sm83Emitter e) {
         e.MarkLabel(label: m_subDrawOutline);
         EmitDrawBlock2x2(e: e, baseTile: CardTables.TileOutlineBase);
@@ -657,7 +650,7 @@ internal sealed class SolitaireGame {
             e.StoreAToAddress(address: SolitaireProtocol.TmpRow);
             e.LoadAImmediate(value: (byte)(7 + (foundation * 2)));
             e.StoreAToAddress(address: SolitaireProtocol.TmpCol);
-            e.LoadAFromAddress(address: (ushort)(SolitaireProtocol.CountsBase + SolitaireProtocol.PileFoundationBase + foundation));
+            e.LoadAFromAddress(address: (ushort)((SolitaireProtocol.CountsBase + SolitaireProtocol.PileFoundationBase) + foundation));
             e.Arithmetic(op: AluOp.Or, source: Reg8.A);
             e.JumpRelative(condition: Condition.Zero, label: empty);
             e.LoadAImmediate(value: (byte)(SolitaireProtocol.PileFoundationBase + foundation));
@@ -987,12 +980,12 @@ internal sealed class SolitaireGame {
         e.XorA();
 
         for (var foundation = 0; (foundation < 4); foundation++) {
-            e.StoreAToAddress(address: (ushort)(SolitaireProtocol.CountsBase + SolitaireProtocol.PileFoundationBase + foundation));
+            e.StoreAToAddress(address: (ushort)((SolitaireProtocol.CountsBase + SolitaireProtocol.PileFoundationBase) + foundation));
         }
 
         for (var tableau = 0; (tableau < 7); tableau++) {
             e.LoadAImmediate(value: (byte)(tableau + 1));
-            e.StoreAToAddress(address: (ushort)(SolitaireProtocol.CountsBase + SolitaireProtocol.PileTableauBase + tableau));
+            e.StoreAToAddress(address: (ushort)((SolitaireProtocol.CountsBase + SolitaireProtocol.PileTableauBase) + tableau));
         }
 
         e.LoadAImmediate(value: 1);
@@ -1774,7 +1767,7 @@ internal sealed class SolitaireGame {
         e.MarkLabel(label: m_subWinCheck);
 
         for (var foundation = 0; (foundation < 4); foundation++) {
-            e.LoadAFromAddress(address: (ushort)(SolitaireProtocol.CountsBase + SolitaireProtocol.PileFoundationBase + foundation));
+            e.LoadAFromAddress(address: (ushort)((SolitaireProtocol.CountsBase + SolitaireProtocol.PileFoundationBase) + foundation));
             e.ArithmeticImmediate(op: AluOp.Compare, value: 13);
             e.JumpRelative(condition: Condition.NotZero, label: notWon);
         }
@@ -1796,7 +1789,7 @@ internal sealed class SolitaireGame {
         for (var slot = 0; (slot < (SolitaireProtocol.HiScoreEntryCount - 1)); slot++) {
             var take = e.NewLabel();
             var skip = e.NewLabel();
-            var entryScore = (ushort)(SolitaireProtocol.HiScoreMirror + (slot * SolitaireProtocol.HiScoreEntryByteCount) + 3);
+            var entryScore = (ushort)((SolitaireProtocol.HiScoreMirror + (slot * SolitaireProtocol.HiScoreEntryByteCount)) + 3);
 
             for (var index = 0; (index < 3); index++) {
                 e.LoadAFromAddress(address: (ushort)(SolitaireProtocol.Score + index));
@@ -1807,8 +1800,7 @@ internal sealed class SolitaireGame {
 
                 if (index < 2) {
                     e.JumpRelative(condition: Condition.NotZero, label: skip);
-                }
-                else {
+                } else {
                     e.JumpRelative(label: skip);
                 }
             }
@@ -1826,8 +1818,8 @@ internal sealed class SolitaireGame {
         e.Arithmetic(op: AluOp.Subtract, source: Reg8.C);
         e.JumpRelative(condition: Condition.Zero, label: noShift);
         e.Load(destination: Reg8.B, source: Reg8.A);
-        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)(SolitaireProtocol.HiScoreMirror + (4 * SolitaireProtocol.HiScoreEntryByteCount) - 1));
-        e.LoadImmediate(pair: Reg16.De, value: (ushort)(SolitaireProtocol.HiScoreMirror + (5 * SolitaireProtocol.HiScoreEntryByteCount) - 1));
+        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)((SolitaireProtocol.HiScoreMirror + (4 * SolitaireProtocol.HiScoreEntryByteCount)) - 1));
+        e.LoadImmediate(pair: Reg16.De, value: (ushort)((SolitaireProtocol.HiScoreMirror + (5 * SolitaireProtocol.HiScoreEntryByteCount)) - 1));
         e.MarkLabel(label: shiftLoop);
         e.LoadAFromHlDecrement();
         e.StoreAToDe();
@@ -1961,7 +1953,6 @@ internal sealed class SolitaireGame {
         e.StoreAToAddress(address: SolitaireProtocol.IdleTimer);
         e.StoreAToAddress(address: SolitaireProtocol.IdleTimerHigh);
     }
-
     private void EmitTitleTick(Sm83Emitter e) {
         var stay = e.NewLabel();
 
@@ -1972,8 +1963,7 @@ internal sealed class SolitaireGame {
                 emitter.Call(label: m_subGameReset);
                 m_fw.States.EmitRequestState(id: SolitaireProtocol.StatePlay);
                 emitter.Return();
-            }
-            else {
+            } else {
                 m_fw.States.EmitRequestState(id: SolitaireProtocol.StateHighScores);
                 emitter.Return();
             }
@@ -1982,7 +1972,6 @@ internal sealed class SolitaireGame {
         m_fw.States.EmitRequestState(id: SolitaireProtocol.StateAttract);
         e.MarkLabel(label: stay);
     }
-
     private void EmitAttractEnter(Sm83Emitter e) {
         // The constant seed makes the scripted deal identical every time; attract never writes SRAM.
         e.LoadAImmediate(value: AttractSeedLow);
@@ -1999,7 +1988,6 @@ internal sealed class SolitaireGame {
         e.Call(label: m_subBoardRepaint);
         e.Call(label: m_subCursorSprite);
     }
-
     private void EmitAttractTick(Sm83Emitter e) {
         var noReal = e.NewLabel();
         var running = e.NewLabel();
@@ -2023,7 +2011,6 @@ internal sealed class SolitaireGame {
         e.MarkLabel(label: running);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitHighScoresEnter(Sm83Emitter e) {
         m_fw.Oam.EmitHideRange(baseSlot: m_cursorSlot, count: m_cursorMaxEntries);
         m_fw.Bg.EmitLcdOff();
@@ -2053,7 +2040,6 @@ internal sealed class SolitaireGame {
         e.StoreAToAddress(address: SolitaireProtocol.IdleTimer);
         e.StoreAToAddress(address: SolitaireProtocol.IdleTimerHigh);
     }
-
     private void EmitHighScoresTick(Sm83Emitter e) {
         var back = e.NewLabel();
         var stay = e.NewLabel();
@@ -2069,7 +2055,6 @@ internal sealed class SolitaireGame {
         m_fw.States.EmitRequestState(id: SolitaireProtocol.StateTitle);
         e.MarkLabel(label: stay);
     }
-
     private void EmitPlayEnter(Sm83Emitter e) {
         m_fw.Bg.EmitLcdOff();
         m_fw.Bg.EmitQueueClear();
@@ -2080,7 +2065,6 @@ internal sealed class SolitaireGame {
         m_fw.Sound.EmitEffect(emitter: e, effectId: SoundTables.MusicLoop);
         e.Call(label: m_subCursorSprite);
     }
-
     private void EmitPlayTick(Sm83Emitter e) {
         var noPause = e.NewLabel();
 
@@ -2093,12 +2077,10 @@ internal sealed class SolitaireGame {
         e.MarkLabel(label: noPause);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitPauseEnter(Sm83Emitter e) {
         ArgumentNullException.ThrowIfNull(e);
         m_fw.Text.EmitPrintQueued(text: m_strPause, row: 9, column: 7);
     }
-
     private void EmitPauseTick(Sm83Emitter e) {
         var resume = e.NewLabel();
         var noAbandon = e.NewLabel();
@@ -2119,7 +2101,6 @@ internal sealed class SolitaireGame {
         m_fw.States.EmitRequestState(id: SolitaireProtocol.StatePlay);
         e.MarkLabel(label: noAbandon);
     }
-
     private void EmitWinEnter(Sm83Emitter e) {
         var capStreak = e.NewLabel();
         var noBest = e.NewLabel();
@@ -2165,12 +2146,11 @@ internal sealed class SolitaireGame {
         e.XorA();
         e.StoreAToAddress(address: SolitaireProtocol.WinCardPhase);
     }
-
     private void EmitWinTick(Sm83Emitter e) {
         var resolve = e.NewLabel();
         var qualify = e.NewLabel();
         var noQualify = e.NewLabel();
-        var entry4Score = (ushort)(SolitaireProtocol.HiScoreMirror + ((SolitaireProtocol.HiScoreEntryCount - 1) * SolitaireProtocol.HiScoreEntryByteCount) + 3);
+        var entry4Score = (ushort)((SolitaireProtocol.HiScoreMirror + ((SolitaireProtocol.HiScoreEntryCount - 1) * SolitaireProtocol.HiScoreEntryByteCount)) + 3);
 
         e.Call(label: m_subWinCard);
         e.LoadAFromAddress(address: FrameworkMemoryMap.InputPressed);
@@ -2375,7 +2355,6 @@ internal sealed class SolitaireGame {
         m_fw.Oam.EmitSetSprite(slot: (m_winCardSlot + 3));
         e.Return();
     }
-
     private void EmitScoreEntryEnter(Sm83Emitter e) {
         m_fw.Oam.EmitHideRange(baseSlot: m_cursorSlot, count: m_cursorMaxEntries);
         m_pad.EmitEnterReset(e: e);
@@ -2387,7 +2366,6 @@ internal sealed class SolitaireGame {
         m_fw.Text.EmitPrintBcdDirect(bcdAddress: SolitaireProtocol.Score, byteCount: 3, row: 6, column: 7);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitScoreEntryTick(Sm83Emitter e) {
         m_pad.EmitTick(e: e, emitConfirm: emitter => {
             emitter.Call(label: m_subHiInsert);
@@ -2410,8 +2388,7 @@ internal sealed class SolitaireGame {
 
         if (attributes is { } table) {
             FrameworkKernel.EmitBlockCopy(emitter: e, sourceAddress: table.Address, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400);
-        }
-        else {
+        } else {
             FrameworkKernel.EmitBlockFill(emitter: e, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400, value: 0x00);
         }
 

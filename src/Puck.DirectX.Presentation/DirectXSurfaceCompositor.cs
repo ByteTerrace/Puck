@@ -44,6 +44,13 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // the waitable instead — the DXGI analogue of Vulkan's vkWaitForPresentKHR.
     private const uint DxgiSwapChainFlagFrameLatencyWaitableObject = 0x00000040; // DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
     private const uint FrameLatencyWaitTimeoutMilliseconds = 100; // bound so a stalled/occluded present pipeline can never hang the pump
+    private const string BlitPixelHlsl = """
+        Texture2D<float4> g_Source : register(t0);
+        SamplerState g_Sampler : register(s0);
+        float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
+            return g_Source.Sample(g_Sampler, uv);
+        }
+        """;
     private const string BlitVertexHlsl = """
         struct VSOutput {
             float4 Position : SV_Position;
@@ -55,13 +62,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             o.TexCoord = uv;
             o.Position = float4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.0, 1.0);
             return o;
-        }
-        """;
-    private const string BlitPixelHlsl = """
-        Texture2D<float4> g_Source : register(t0);
-        SamplerState g_Sampler : register(s0);
-        float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
-            return g_Source.Sample(g_Sampler, uv);
         }
         """;
 
@@ -125,9 +125,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <summary>Gets the blit pipeline layout handle (a <see cref="GCHandle"/>-as-<see cref="nint"/> token to
     /// the internal <see cref="DirectXPipelineLayout"/>), valid after <see cref="Initialize"/>. Callers that
     /// build their own <see cref="DirectXDrawCommand"/> lists can reference it as the default blit pipeline.</summary>
-    public nint BlitPipelineLayoutHandle => m_blitLayoutToken.IsAllocated
-        ? GCHandle.ToIntPtr(m_blitLayoutToken)
-        : 0;
+    public nint BlitPipelineLayoutHandle => (m_blitLayoutToken.IsAllocated
+        ? GCHandle.ToIntPtr(value: m_blitLayoutToken)
+        : 0);
 
     /// <summary>Gets the GPU descriptor handle (<c>D3D12_GPU_DESCRIPTOR_HANDLE.ptr</c>) for the compositor's
     /// single SRV slot; valid after <see cref="Initialize"/>. The handle points at whatever texture was last
@@ -200,11 +200,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         ReleaseBackBuffers();
 
         ((IDXGISwapChain3*)m_swapChain)->ResizeBuffers(
-            FrameCount,
-            width,
-            height,
-            m_swapChainFormat,
-            m_swapChainFlags
+            BufferCount: FrameCount,
+            Height: height,
+            NewFormat: m_swapChainFormat,
+            SwapChainFlags: m_swapChainFlags,
+            Width: width
         );
 
         m_width = width;
@@ -229,7 +229,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         DXGI_FORMAT sourceFormat;
 
         if (surface.ImageViewHandle != 0) {
-            var view = (DirectXImageView)GCHandle.FromIntPtr(surface.ImageViewHandle).Target!;
+            var view = (DirectXImageView)GCHandle.FromIntPtr(value: surface.ImageViewHandle).Target!;
 
             sourceResource = view.ResourceHandle;
             sourceFormat = view.Format;
@@ -291,7 +291,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var swapChain = (IDXGISwapChain3*)m_swapChain;
         var frameIndex = swapChain->GetCurrentBackBufferIndex();
         var backBuffer = (ID3D12Resource*)m_backBuffers[frameIndex];
-        var rtvBase = GetCpuHeapStart((ID3D12DescriptorHeap*)m_rtvHeap);
+        var rtvBase = GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)m_rtvHeap);
         var rtvCpuHandle = (nint)(rtvBase.ptr + (nuint)(frameIndex * m_rtvStride));
 
         var allocator = (ID3D12CommandAllocator*)m_commandAllocator;
@@ -300,6 +300,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         allocator->Reset();
         commandList->Reset(pAllocator: allocator, pInitialState: null);
 
+        // The present-path fullscreen blit as a GPU-capture debug group (PIX event) — the Direct3D 12 peer of the
+        // Vulkan "surface-blit" debug-utils label.
+        DirectXDebugLabel.Begin(commandList: commandList, label: "surface-blit");
         m_commandListRecorder.RecordBackBuffer(
             commandListHandle: m_commandList,
             backBufferHandle: (nint)backBuffer,
@@ -308,13 +311,14 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             viewportHeight: m_height,
             drawCommands: drawCommands
         );
+        DirectXDebugLabel.End(commandList: commandList);
 
         commandList->Close();
 
         var executable = (ID3D12CommandList*)m_commandList;
 
-        ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(1, &executable);
-        swapChain->Present(m_syncInterval, (DXGI_PRESENT)m_presentFlags).ThrowIfFailed(operation: "IDXGISwapChain3::Present");
+        ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
+        swapChain->Present(Flags: (DXGI_PRESENT)m_presentFlags, SyncInterval: m_syncInterval).ThrowIfFailed(operation: "IDXGISwapChain3::Present");
         CapturePresentTiming(swapChain: swapChain);
     }
 
@@ -341,7 +345,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         }
 
         try {
-            swapChain->GetFrameStatistics(out var statistics);
+            swapChain->GetFrameStatistics(pStats: out var statistics);
 
             // GetFrameStatistics reflects only frames the display actually scanned out, so two presents faster than the
             // refresh return an UNCHANGED PresentCount (and the same SyncQPCTime). Availability must therefore require the
@@ -457,7 +461,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         IDXGIFactory5* factory5 = null;
         var iid = IDXGIFactory5.IID_Guid;
 
-        if (((IUnknown*)factory)->QueryInterface(&iid, (void**)&factory5).Failed) {
+        if (((IUnknown*)factory)->QueryInterface(ppvObject: (void**)&factory5, riid: &iid).Failed) {
             return false;
         }
 
@@ -466,9 +470,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
             // CsWin32 generates CheckFeatureSupport as throwing (PreserveSig=false); an unrecognized feature throws.
             factory5->CheckFeatureSupport(
-                DXGI_FEATURE.DXGI_FEATURE_PRESENT_ALLOW_TEARING,
-                &allowTearing,
-                (uint)sizeof(int)
+                Feature: DXGI_FEATURE.DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+                FeatureSupportDataSize: (uint)sizeof(int),
+                pFeatureSupportData: &allowTearing
             );
 
             return (0 != allowTearing);
@@ -505,7 +509,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 m_swapChainFlags |= DxgiSwapChainFlagFrameLatencyWaitableObject;
             }
 
-            // Immediate and Adaptive (VRR) present need an ALLOW_TEARING swap chain (carried into Present too) AND a
+            // Immediate and Adaptive present need an ALLOW_TEARING swap chain (carried into Present too) AND a
             // display that supports tearing; detect once so Vsync/Mailbox are unaffected and the tearing modes degrade
             // to no-vsync when unsupported. Vsync/Mailbox leave both flags zero.
             if (
@@ -553,7 +557,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 IDXGISwapChain3* sc3 = null;
                 var iid = IDXGISwapChain3.IID_Guid;
 
-                ((IUnknown*)sc1)->QueryInterface(&iid, (void**)&sc3)
+                ((IUnknown*)sc1)->QueryInterface(ppvObject: (void**)&sc3, riid: &iid)
                     .ThrowIfFailed(operation: "IDXGISwapChain1::QueryInterface(IDXGISwapChain3)");
                 m_swapChain = (nint)sc3;
 
@@ -566,7 +570,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                     }
 
                     // CsWin32 generates this as a friendly void overload that throws on a failing HRESULT.
-                    sc3->SetMaximumFrameLatency(1);
+                    sc3->SetMaximumFrameLatency(MaxLatency: 1);
                     m_frameLatencyWaitable = sc3->GetFrameLatencyWaitableObject();
                 }
             } finally {
@@ -589,18 +593,18 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             ppvHeap: out var rtvHeap
         );
         m_rtvHeap = (nint)rtvHeap;
-        m_rtvStride = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        m_rtvStride = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     }
     private void AcquireBackBuffers(ID3D12Device* device) {
         var swapChain = (IDXGISwapChain3*)m_swapChain;
-        var handle = GetCpuHeapStart((ID3D12DescriptorHeap*)m_rtvHeap);
+        var handle = GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)m_rtvHeap);
         var resourceIid = ID3D12Resource.IID_Guid;
 
         for (var i = 0u; (i < FrameCount); i++) {
             void* buffer;
 
-            swapChain->GetBuffer(i, &resourceIid, &buffer);
-            device->CreateRenderTargetView((ID3D12Resource*)buffer, null, handle);
+            swapChain->GetBuffer(Buffer: i, ppSurface: &buffer, riid: &resourceIid);
+            device->CreateRenderTargetView(DestDescriptor: handle, pDesc: null, pResource: (ID3D12Resource*)buffer);
             m_backBuffers[i] = (nint)buffer;
             handle.ptr += m_rtvStride;
         }
@@ -650,12 +654,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             );
         }
 
-        m_blitLayoutToken = GCHandle.Alloc(new DirectXPipelineLayout {
-            DescriptorTableParamIndex = 0,
+        m_blitLayoutToken = GCHandle.Alloc(value: new DirectXPipelineLayout {
+            DescriptorSlotCount = 1,
             // One SRV at table slot 0 (the source texture). The compositor writes that descriptor into its own heap
             // directly rather than through the shared allocator, but the map is filled for consistency so a future
             // AllocateSet against this layout resolves binding 0 to slot 0 like every other layout.
-            DescriptorSlotCount = 1,
+            DescriptorTableParamIndex = 0,
             PsoHandle = pso,
             RootSignatureHandle = rootSig,
             SlotByBinding = [0],
@@ -728,10 +732,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         try {
             PInvoke.D3D12SerializeRootSignature(
-                in rootSigDesc,
-                D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1,
-                &sigBlob,
-                &errBlob
+                Version: D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1,
+                pRootSignature: in rootSigDesc,
+                ppBlob: &sigBlob,
+                ppErrorBlob: &errBlob
             ).ThrowIfFailed(operation: "D3D12SerializeRootSignature");
 
             void* rootSig;
@@ -818,7 +822,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;
 
-        device->CreateGraphicsPipelineState(in psoDesc, in psoIid, out pso);
+        device->CreateGraphicsPipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
 
         return (nint)pso;
     }
@@ -853,7 +857,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         device->CreateShaderResourceView(
             pResource: resource,
             pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart((ID3D12DescriptorHeap*)m_srvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)m_srvHeap)
         );
     }
 }

@@ -87,7 +87,7 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback,
     /// alternative is available or the presenter has not been activated. On activation failure the previous
     /// backend is restored and the exception rethrown.</summary>
     public void Switch() {
-        if (!m_initialized || m_other is null) {
+        if (!m_initialized || (m_other is null)) {
             return;
         }
 

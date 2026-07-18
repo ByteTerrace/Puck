@@ -3,6 +3,7 @@ using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan;
 
+/// <summary>Submits Vulkan command buffers to a graphics queue.</summary>
 public sealed unsafe class VulkanQueueSubmitter {
     private const uint StructureTypeSubmitInfo = 4;
 
@@ -15,6 +16,10 @@ public sealed unsafe class VulkanQueueSubmitter {
         public delegate* unmanaged[Cdecl]<nint, VkResult> QueueWaitIdle;
     }
 
+    /// <summary>Submits command buffers without a fence or an idle wait.</summary>
+    /// <param name="deviceHandle">The logical device that owns the queue.</param>
+    /// <param name="graphicsQueue">The queue that receives the submission.</param>
+    /// <param name="commandBufferHandles">The native command-buffer handles to submit.</param>
     public void Submit(nint deviceHandle, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles) {
         if (commandBufferHandles.IsEmpty) {
             return;
@@ -27,6 +32,11 @@ public sealed unsafe class VulkanQueueSubmitter {
             pointers: GetPointers(deviceHandle: deviceHandle)
         );
     }
+    /// <summary>Submits command buffers and signals a fence when execution completes.</summary>
+    /// <param name="deviceHandle">The logical device that owns the queue and fence.</param>
+    /// <param name="graphicsQueue">The queue that receives the submission.</param>
+    /// <param name="commandBufferHandles">The native command-buffer handles to submit.</param>
+    /// <param name="fenceHandle">The native fence to signal.</param>
     public void Submit(nint deviceHandle, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle) {
         if (commandBufferHandles.IsEmpty) {
             return;
@@ -39,6 +49,10 @@ public sealed unsafe class VulkanQueueSubmitter {
             pointers: GetPointers(deviceHandle: deviceHandle)
         );
     }
+    /// <summary>Submits command buffers and waits for the queue to become idle.</summary>
+    /// <param name="deviceHandle">The logical device that owns the queue.</param>
+    /// <param name="graphicsQueue">The queue that receives the submission.</param>
+    /// <param name="commandBufferHandles">The native command-buffer handles to submit.</param>
     public void SubmitAndWait(nint deviceHandle, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles) {
         if (commandBufferHandles.IsEmpty) {
             return;

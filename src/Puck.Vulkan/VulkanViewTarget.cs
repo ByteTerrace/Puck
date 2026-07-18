@@ -4,6 +4,7 @@ using Puck.Vulkan.Messages;
 
 namespace Puck.Vulkan;
 
+/// <summary>Owns an offscreen Vulkan color target and the resources needed to render into it.</summary>
 public sealed class VulkanViewTarget : IGpuRenderTarget, IVulkanRenderTarget {
     private readonly VulkanCommandResources m_commandResources;
     private readonly nint m_deviceHandle;
@@ -16,6 +17,16 @@ public sealed class VulkanViewTarget : IGpuRenderTarget, IVulkanRenderTarget {
     private readonly VulkanRenderPass m_renderPass;
     private bool m_disposed;
 
+    /// <summary>Creates an offscreen render target.</summary>
+    /// <param name="logicalDevice">The device that owns the target.</param>
+    /// <param name="instance">The Vulkan instance associated with the device.</param>
+    /// <param name="format">The target's Vulkan pixel format.</param>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    /// <param name="offscreenImageApi">The API used to allocate the color image.</param>
+    /// <param name="renderPassApi">The API used to create the compatible render pass.</param>
+    /// <param name="framebufferSetApi">The API used to create the image view and framebuffer.</param>
+    /// <param name="commandResourcesFactory">The factory for the target's command buffer.</param>
     public VulkanViewTarget(
         VulkanLogicalDevice logicalDevice,
         VulkanInstance instance,
@@ -93,15 +104,24 @@ public sealed class VulkanViewTarget : IGpuRenderTarget, IVulkanRenderTarget {
         );
     }
 
+    /// <summary>Gets the native command buffer used to render the target.</summary>
     public nint CommandBufferHandle => m_commandResources.CommandBufferHandles[0];
+    /// <summary>Gets the native framebuffer handle.</summary>
     public nint FramebufferHandle => m_framebufferHandle;
+    /// <summary>Gets the target height in pixels.</summary>
     public uint Height { get; }
+    /// <summary>Gets the native image handle.</summary>
     public nint ImageHandle => m_imageHandle;
+    /// <summary>Gets the native image-view handle used to sample the target.</summary>
     public nint ImageViewHandle => m_imageViewHandle;
+    /// <summary>Gets the render-pass owner.</summary>
     public VulkanRenderPass RenderPass => m_renderPass;
+    /// <summary>Gets the native render-pass handle.</summary>
     public nint RenderPassHandle => m_renderPass.Handle;
+    /// <summary>Gets the target width in pixels.</summary>
     public uint Width { get; }
 
+    /// <summary>Releases the target and all owned Vulkan resources.</summary>
     public void Dispose() {
         if (m_disposed) {
             return;

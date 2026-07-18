@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Commands;
 using Puck.Input.Devices;
 
 namespace Puck.Demo.World;
@@ -28,14 +29,15 @@ namespace Puck.Demo.World;
 /// Left stick = move SELECTED placement planar; right stick X = rotate it; d-pad up/down = scale it — all three
 /// ride the DRAG dynamic slot while held (<see cref="WorldScene.BeginDrag"/>/<see cref="WorldScene.EndDrag"/> bracket
 /// the drag). South = cycle selection forward; North = cycle selection backward; East = delete selected;
-/// West = deselect; LeftShoulder = rebind selected to the ghost's armed creation; RightShoulder = toggle the
-/// selected placement's role between plain decoration and the console-set cabinet role (informational only here).
+/// West = deselect; LeftShoulder = the feed-WIRE step (latch a feed from a selected eye-role placement, then wire it
+/// onto a selected screen-role placement, or unwire an already-wired screen); RightShoulder = cycle the selected
+/// placement's endpoint role (decoration → cabinet:0 → eye → screen). Rebind is console-only (world.rebind).
 /// </description></item>
 /// <item><term>TERRAIN/LIGHTS ([RT])</term><description>
 /// Left stick = resize the pending terrain patch's X/Z half-extents; right stick X = cycle the world palette
-/// material; d-pad up/down = adjust pending light intensity. South = add a terrain slab at the target position;
-/// East = add a plaza patch; West = add a light; North = remove the nearest terrain patch or light to the target
-/// (terrain first, then lights).
+/// material, right stick up/down = adjust pending light intensity; d-pad up/down = the DAYLIGHT dial (the room
+/// brightens/darkens live). South = add a terrain slab at the target position; East = add a plaza patch; West = add
+/// a light; North = remove the nearest terrain patch or light to the target (terrain first, then lights).
 /// </description></item>
 /// <item><term>WALK OVERRIDES ([LT,RT])</term><description>
 /// Left stick = resize the pending override rectangle's half-extents; right stick / d-pad unused (reserved).
@@ -77,16 +79,18 @@ internal sealed class WorldSculptController {
     private readonly EditHistory<WorldScene.Snapshot> m_history;
     private readonly Func<ContentAddressedStoreHandle> m_store;
     private GamepadButtons m_prevButtons;
-    private bool m_prevLeftTrigger;
-    private bool m_prevRightTrigger;
-    private readonly List<int> m_heldModifierOrder = [];
+    private readonly HeldOrderTracker m_modifierTracker = new(modifierCount: 2, pressThreshold: TriggerThreshold, releaseThreshold: TriggerThreshold);
     private Page m_page;
     private bool m_dragActive;
     // Pending terrain/light/walk-override authoring knobs (STYLE-page-like state the console/pad both nudge).
-    private Vector2 m_pendingTerrainHalfExtents = new(1f, 1f);
+    private Vector2 m_pendingTerrainHalfExtents = new(x: 1f, y: 1f);
     private int m_pendingMaterial;
     private float m_pendingLightIntensity = 1f;
-    private Vector2 m_pendingWalkHalfExtents = new(1f, 1f);
+    private Vector2 m_pendingWalkHalfExtents = new(x: 1f, y: 1f);
+    // The SELECT-page feed-wiring latch: the feed index captured from an eye-role placement on the first LB press,
+    // consumed on the next LB press over a screen-role placement (eye -> feed -> wire -> screen). Live-session only —
+    // null between wires.
+    private int? m_pendingFeedSource;
 
     /// <summary>A late-bound accessor for the content-addressed store the sculptor saves/loads/rebinds against — a
     /// delegate (not a constructor dependency) so the host may construct the controller before the store exists.</summary>
@@ -120,10 +124,9 @@ internal sealed class WorldSculptController {
     /// never fires a stale edge into the other mode.</summary>
     public void Reset() {
         m_prevButtons = GamepadButtons.None;
-        m_prevLeftTrigger = false;
-        m_prevRightTrigger = false;
-        m_heldModifierOrder.Clear();
+        m_modifierTracker.Reset();
         m_page = Page.Sculpt;
+        m_pendingFeedSource = null;
 
         if (m_dragActive) {
             m_scene.EndDrag();
@@ -163,36 +166,23 @@ internal sealed class WorldSculptController {
         m_prevButtons = buttons;
     }
 
-    // Tracks LT/RT as ORDER-SENSITIVE modifiers (mirrors Puck.Commands.BindingChordTracker's held-order model): a
-    // press appends to the held-order list, a release removes it, and the page resolves from the exact ordered
-    // sequence — [LT] alone, [RT] alone, [LT then RT], or [RT then LT] are four distinct chords past bare.
+    // Tracks LT/RT as ORDER-SENSITIVE modifiers via the shared Puck.Commands.HeldOrderTracker (the same primitive
+    // BindingChordTracker resolves a binding page from): a press appends to the held-order list, a release removes
+    // it, and the page resolves from the exact ordered sequence — [LT] alone, [RT] alone, [LT then RT], or [RT then
+    // LT] are four distinct chords past bare. Press and release share ONE threshold here (no hysteresis band, unlike
+    // BindingModifierDefinition's defaults) — the sculptor's triggers have always used a single cutoff.
     private void AdvanceChord(in GamepadState raw) {
         const int leftModifier = 0;
         const int rightModifier = 1;
-        var leftHeld = (raw.LeftTrigger >= TriggerThreshold);
-        var rightHeld = (raw.RightTrigger >= TriggerThreshold);
 
-        if (leftHeld && !m_prevLeftTrigger) {
-            m_heldModifierOrder.Remove(item: leftModifier);
-            m_heldModifierOrder.Add(item: leftModifier);
-        } else if (!leftHeld && m_prevLeftTrigger) {
-            m_heldModifierOrder.Remove(item: leftModifier);
-        }
+        _ = m_modifierTracker.Set(index: leftModifier, value: raw.LeftTrigger);
+        _ = m_modifierTracker.Set(index: rightModifier, value: raw.RightTrigger);
 
-        if (rightHeld && !m_prevRightTrigger) {
-            m_heldModifierOrder.Remove(item: rightModifier);
-            m_heldModifierOrder.Add(item: rightModifier);
-        } else if (!rightHeld && m_prevRightTrigger) {
-            m_heldModifierOrder.Remove(item: rightModifier);
-        }
-
-        m_prevLeftTrigger = leftHeld;
-        m_prevRightTrigger = rightHeld;
-
-        var nextPage = m_heldModifierOrder.Count switch {
+        var heldOrder = m_modifierTracker.HeldOrder;
+        var nextPage = heldOrder.Length switch {
             0 => Page.Sculpt,
-            1 => ((m_heldModifierOrder[0] == leftModifier) ? Page.Select : Page.TerrainLights),
-            _ => ((m_heldModifierOrder[0] == leftModifier) ? Page.WalkOverrides : Page.BoundsSaveRepeat),
+            1 => ((heldOrder[0] == leftModifier) ? Page.Select : Page.TerrainLights),
+            _ => ((heldOrder[0] == leftModifier) ? Page.WalkOverrides : Page.BoundsSaveRepeat),
         };
 
         if (nextPage != m_page) {
@@ -207,9 +197,8 @@ internal sealed class WorldSculptController {
             m_narrate($"[world] page: {PageName(page: m_page)}");
         }
     }
-
     private void AdvanceSculptPage(in GamepadState raw, float deltaSeconds, Func<GamepadButtons, bool> pressed) {
-        m_scene.Move(deltaSeconds: deltaSeconds, planar: new Vector2(raw.LeftStick.X, -raw.LeftStick.Y));
+        m_scene.Move(deltaSeconds: deltaSeconds, planar: new Vector2(x: raw.LeftStick.X, y: -raw.LeftStick.Y));
         m_scene.Rotate(deltaSeconds: deltaSeconds, rate: raw.RightStick.X);
         m_scene.ScaleTarget(deltaSeconds: deltaSeconds, rate: (VerticalAxis(raw: in raw)));
 
@@ -219,7 +208,7 @@ internal sealed class WorldSculptController {
             if (m_scene.Place() is { } id) {
                 m_narrate($"[world] placed #{id} '{m_scene.GhostRefName}'");
             } else {
-                m_narrate(m_scene.GhostReady ? "[world] placement budget full" : "[world] nothing armed — world.place <creation> first");
+                m_narrate((m_scene.GhostReady ? "[world] placement budget full" : "[world] nothing armed — world.place <creation> first"));
             }
         }
 
@@ -246,9 +235,8 @@ internal sealed class WorldSculptController {
             m_narrate($"[world] snap {(m_scene.Snap.Enabled ? "on" : "off")} — world.snap pitch/ref/rot/grid tune it");
         }
     }
-
     private void AdvanceSelectPage(in GamepadState raw, float deltaSeconds, Func<GamepadButtons, bool> pressed) {
-        var planar = new Vector2(raw.LeftStick.X, -raw.LeftStick.Y);
+        var planar = new Vector2(x: raw.LeftStick.X, y: -raw.LeftStick.Y);
         var yawRate = raw.RightStick.X;
         var scaleRate = VerticalAxis(raw: in raw);
         var dragInput = ((planar != Vector2.Zero) || (yawRate != 0f) || (scaleRate != 0f));
@@ -293,36 +281,113 @@ internal sealed class WorldSculptController {
             m_narrate("[world] deselected — the ghost is the target again");
         }
 
-        if (pressed(arg: GamepadButtons.LeftShoulder) && (m_scene.GhostRefName is { } refName) && (m_scene.GhostSourceHash is { } hash)) {
-            PushUndoBaseline();
-
-            if (m_scene.RebindSelected(hash: hash, refName: refName, refusal: out var refusal, store: m_store().Store)) {
-                m_narrate($"[world] rebound selection to '{refName}'");
-                PushRedoTarget();
-            } else {
-                m_narrate($"[world] rebind refused: {refusal}");
-            }
+        // LB is the WIRE step (eye -> feed -> wire -> screen): press over an eye-role placement to latch its feed, then
+        // over a screen-role placement to complete the wire (or unwire an already-wired screen). Rebind moved to the
+        // console (world.rebind) so the pad's SELECT bumpers host the feed-wiring pair.
+        if (pressed(arg: GamepadButtons.LeftShoulder)) {
+            HandleWireStep();
         }
 
+        // RB cycles the selected placement's ENDPOINT ROLE, extending the old decoration/cabinet toggle to the two
+        // wiring endpoints: decoration -> cabinet:0 -> eye -> screen -> decoration. The role string is the abstraction
+        // (an eye is a placement with Role "eye", a screen "screen"), carried on the live placement only.
         if (pressed(arg: GamepadButtons.RightShoulder) && (m_scene.SelectedPlacement is { } selected)) {
             PushUndoBaseline();
-            m_scene.SetSelectedRole(role: ((selected.Role is null) ? "cabinet:0" : null));
-            m_narrate($"[world] role: {m_scene.SelectedPlacement?.Role ?? "decoration"}");
+            _ = m_scene.SetSelectedRole(role: NextEndpointRole(current: selected.Role));
+            m_narrate($"[world] role: {(m_scene.SelectedPlacement?.Role ?? "decoration")}");
             PushRedoTarget();
         }
     }
 
+    // The SELECT-page feed-wire step: uses the selected placement's Role to identify a wiring endpoint (an "eye" or a
+    // "screen", each carrying an optional ":<index>" the same way "cabinet:<n>" does — default 0). First press over an
+    // eye latches its feed; the next press over a screen wires that latched feed onto the screen (or, over an
+    // already-wired screen, unwires it). Live WorldScene state only — WireScreen/ClearWire are the existing verbs.
+    private void HandleWireStep() {
+        if (m_scene.SelectedPlacement is not { } selected) {
+            m_narrate("[world] wire needs a selection — South/North cycles placements; RB sets an eye/screen role");
+
+            return;
+        }
+
+        var role = (selected.Role ?? string.Empty);
+
+        if (role.StartsWith(value: "eye", comparisonType: StringComparison.Ordinal)) {
+            m_pendingFeedSource = RoleIndex(role: role);
+            m_narrate($"[world] feed latched from eye #{selected.Id} (feed {m_pendingFeedSource}). Select a screen and press LB to wire.");
+
+            return;
+        }
+
+        if (role.StartsWith(value: "screen", comparisonType: StringComparison.Ordinal)) {
+            var screenIndex = RoleIndex(role: role);
+
+            if (m_scene.Wiring.ContainsKey(key: screenIndex)) {
+                PushUndoBaseline();
+                _ = m_scene.ClearWire(screenIndex: screenIndex);
+                m_narrate($"[world] unwired screen {screenIndex}");
+                PushRedoTarget();
+
+                return;
+            }
+
+            if (m_pendingFeedSource is { } feed) {
+                PushUndoBaseline();
+                _ = m_scene.WireScreen(screenIndex: screenIndex, source: ScreenSourceRef.Camera(feedIndex: feed));
+                m_narrate($"[world] wired eye feed {feed} -> screen {screenIndex}");
+                PushRedoTarget();
+
+                return;
+            }
+
+            m_narrate("[world] no feed latched — select an eye placement and press LB first");
+
+            return;
+        }
+
+        m_narrate("[world] wire: give this placement an eye/screen role first (RB cycles decoration/cabinet/eye/screen)");
+    }
+
+    // The next endpoint role in the SELECT-page RB cycle: decoration (null) -> cabinet:0 -> eye -> screen -> decoration.
+    private static string? NextEndpointRole(string? current) =>
+        current switch {
+            null => "cabinet:0",
+            "cabinet:0" => "eye",
+            "eye" => "screen",
+            _ => null,
+        };
+
+    // The optional ":<index>" a wiring-endpoint role carries (mirrors "cabinet:<n>"); default 0 when absent/malformed.
+    private static int RoleIndex(string role) {
+        var colon = role.IndexOf(value: ':');
+
+        return (((colon >= 0) && int.TryParse(s: role.AsSpan(start: (colon + 1)), result: out var index) && (index >= 0))
+            ? index
+            : 0);
+    }
     private void AdvanceTerrainLightsPage(in GamepadState raw, float deltaSeconds, Func<GamepadButtons, bool> pressed) {
         const float resizeSpeed = 1.5f;
         const float intensitySpeed = 1.2f;
+        const float daylightSpeed = 0.6f;
 
-        m_pendingTerrainHalfExtents = Vector2.Max(value1: (m_pendingTerrainHalfExtents + (raw.LeftStick * resizeSpeed * deltaSeconds)), value2: new Vector2(0.1f));
+        m_pendingTerrainHalfExtents = Vector2.Max(value1: (m_pendingTerrainHalfExtents + ((raw.LeftStick * resizeSpeed) * deltaSeconds)), value2: new Vector2(value: 0.1f));
 
         if (raw.RightStick.X != 0f) {
-            m_pendingMaterial = (((m_pendingMaterial + Math.Sign(raw.RightStick.X)) % 4) + 4) % 4;
+            m_pendingMaterial = ((((m_pendingMaterial + Math.Sign(value: raw.RightStick.X)) % 4) + 4) % 4);
         }
 
-        m_pendingLightIntensity = Math.Clamp(value: (m_pendingLightIntensity + (VerticalAxis(raw: in raw) * intensitySpeed * deltaSeconds)), max: 4f, min: 0.05f);
+        // The daylight DIAL rides the d-pad vertical (the room actually brightens/darkens as you hold it) — a live,
+        // continuous, presentation-only dial (WorldScene.Daylight is never saved/snapshotted, so no undo baseline).
+        var daylightRate = VerticalAxis(raw: in raw);
+
+        if (daylightRate != 0f) {
+            m_scene.SetDaylight(value: (m_scene.Daylight + ((daylightRate * daylightSpeed) * deltaSeconds)));
+            m_narrate($"[world] daylight {m_scene.Daylight:F2}");
+        }
+
+        // The pending light intensity moved off the d-pad (now daylight) onto the right stick's vertical — its X still
+        // cycles the palette material, so the stick tunes both a new light's colour slot and its brightness.
+        m_pendingLightIntensity = Math.Clamp(value: (m_pendingLightIntensity + ((-raw.RightStick.Y * intensitySpeed) * deltaSeconds)), max: 4f, min: 0.05f);
 
         if (pressed(arg: GamepadButtons.ButtonSouth)) {
             AddTerrainWithHistory(kind: "slab");
@@ -349,7 +414,6 @@ internal sealed class WorldSculptController {
             RemoveNearestTerrainOrLight();
         }
     }
-
     private void AddTerrainWithHistory(string kind) {
         if (m_scene.Terrain.Count >= WorldScene.MaxTerrainPatches) {
             m_narrate($"[world] terrain budget full ({WorldScene.MaxTerrainPatches})");
@@ -359,16 +423,15 @@ internal sealed class WorldSculptController {
 
         PushUndoBaseline();
 
-        var id = m_scene.AddTerrain(halfExtents: new Vector3(m_pendingTerrainHalfExtents.X, 0.05f, m_pendingTerrainHalfExtents.Y), kind: kind, material: m_pendingMaterial);
+        var id = m_scene.AddTerrain(halfExtents: new Vector3(x: m_pendingTerrainHalfExtents.X, y: 0.05f, z: m_pendingTerrainHalfExtents.Y), kind: kind, material: m_pendingMaterial);
 
         m_narrate($"[world] {kind} #{id} added ({m_pendingTerrainHalfExtents.X:F1}×{m_pendingTerrainHalfExtents.Y:F1}, material {m_pendingMaterial})");
         PushRedoTarget();
     }
-
     private void AdvanceWalkOverridesPage(in GamepadState raw, float deltaSeconds, Func<GamepadButtons, bool> pressed) {
         const float resizeSpeed = 1.5f;
 
-        m_pendingWalkHalfExtents = Vector2.Max(value1: (m_pendingWalkHalfExtents + (raw.LeftStick * resizeSpeed * deltaSeconds)), value2: new Vector2(0.1f));
+        m_pendingWalkHalfExtents = Vector2.Max(value1: (m_pendingWalkHalfExtents + ((raw.LeftStick * resizeSpeed) * deltaSeconds)), value2: new Vector2(value: 0.1f));
 
         if (pressed(arg: GamepadButtons.ButtonSouth)) {
             AddWalkOverrideWithHistory(kind: "blocker");
@@ -382,7 +445,6 @@ internal sealed class WorldSculptController {
             RemoveNearestWalkOverride();
         }
     }
-
     private void AddWalkOverrideWithHistory(string kind) {
         if (m_scene.WalkOverrides.Count >= WorldScene.MaxWalkOverrides) {
             m_narrate($"[world] walk-override budget full ({WorldScene.MaxWalkOverrides})");
@@ -397,14 +459,13 @@ internal sealed class WorldSculptController {
         m_narrate($"[world] {kind} #{id} painted ({m_pendingWalkHalfExtents.X:F1}×{m_pendingWalkHalfExtents.Y:F1})");
         PushRedoTarget();
     }
-
     private void AdvanceBoundsSaveRepeatPage(in GamepadState raw, float deltaSeconds, Func<GamepadButtons, bool> pressed) {
         const float boundsSpeed = 3f;
 
         if (raw.LeftStick != Vector2.Zero) {
             PushUndoBaseline();
 
-            var bounds = m_scene.GrowBounds(deltaX: (raw.LeftStick.X * boundsSpeed * deltaSeconds), deltaZ: (-raw.LeftStick.Y * boundsSpeed * deltaSeconds));
+            var bounds = m_scene.GrowBounds(deltaX: ((raw.LeftStick.X * boundsSpeed) * deltaSeconds), deltaZ: ((-raw.LeftStick.Y * boundsSpeed) * deltaSeconds));
 
             m_narrate($"[world] bounds: ({bounds.MinX:F1},{bounds.MinZ:F1}) to ({bounds.MaxX:F1},{bounds.MaxZ:F1})");
         }
@@ -413,12 +474,12 @@ internal sealed class WorldSculptController {
             PushUndoBaseline();
 
             var current = (selected.Repeat ?? new WorldPlacementRepeat(CountX: 1, CountZ: 1, SpacingX: 1.5f, SpacingZ: 1.5f));
-            var countX = Math.Max(val1: 1, val2: (current.CountX + Math.Sign(raw.RightStick.X)));
-            var countZ = Math.Max(val1: 1, val2: (current.CountZ + Math.Sign(VerticalAxis(raw: in raw))));
+            var countX = Math.Max(val1: 1, val2: (current.CountX + Math.Sign(value: raw.RightStick.X)));
+            var countZ = Math.Max(val1: 1, val2: (current.CountZ + Math.Sign(value: VerticalAxis(raw: in raw))));
 
-            m_narrate(m_scene.SetSelectedRepeat(refusal: out var refusal, repeat: (current with { CountX = countX, CountZ = countZ }))
+            m_narrate((m_scene.SetSelectedRepeat(refusal: out var refusal, repeat: (current with { CountX = countX, CountZ = countZ }))
                 ? $"[world] repeat: {countX}×{countZ}"
-                : $"[world] repeat refused — {refusal}");
+                : $"[world] repeat refused — {refusal}"));
         }
 
         if (pressed(arg: GamepadButtons.ButtonSouth)) {
@@ -458,10 +519,9 @@ internal sealed class WorldSculptController {
 
         PushUndoBaseline();
         _ = m_scene.SetSelectedMirror(axis: next);
-        m_narrate($"[world] mirror: {next ?? "off"} (world.pattern adds a wallpaper fold from the console)");
+        m_narrate($"[world] mirror: {(next ?? "off")} (world.pattern adds a wallpaper fold from the console)");
         PushRedoTarget();
     }
-
     private void RemoveNearestTerrainOrLight() {
         var target = m_scene.TargetPosition;
         var nearestTerrainId = -1;
@@ -508,15 +568,14 @@ internal sealed class WorldSculptController {
 
         m_narrate("[world] nothing nearby to remove");
     }
-
     private void RemoveNearestWalkOverride() {
         var target = m_scene.TargetPosition;
         var nearestId = -1;
         var nearestDistance = float.MaxValue;
 
         foreach (var entry in m_scene.WalkOverrides) {
-            var center = new Vector2((0.5f * (entry.MinX + entry.MaxX)), (0.5f * (entry.MinZ + entry.MaxZ)));
-            var distance = Vector2.DistanceSquared(value1: center, value2: new Vector2(target.X, target.Z));
+            var center = new Vector2(x: (0.5f * (entry.MinX + entry.MaxX)), y: (0.5f * (entry.MinZ + entry.MaxZ)));
+            var distance = Vector2.DistanceSquared(value1: center, value2: new Vector2(x: target.X, y: target.Z));
 
             if (distance < nearestDistance) {
                 nearestDistance = distance;
@@ -535,7 +594,6 @@ internal sealed class WorldSculptController {
         m_narrate($"[world] removed walk override #{nearestId}");
         PushRedoTarget();
     }
-
     private void Undo() {
         if (m_history.TryUndo(snapshot: out var snapshot)) {
             m_scene.RestoreSnapshot(snapshot: snapshot);
@@ -544,7 +602,6 @@ internal sealed class WorldSculptController {
             m_narrate("[world] nothing to undo");
         }
     }
-
     private void Redo() {
         if (m_history.TryRedo(snapshot: out var snapshot)) {
             m_scene.RestoreSnapshot(snapshot: snapshot);
@@ -553,16 +610,14 @@ internal sealed class WorldSculptController {
             m_narrate("[world] nothing to redo");
         }
     }
-
     private void Save() {
         var (path, hash) = m_scene.Save(store: m_store().Store);
         var petname = ((hash is { } h) ? Puck.Assets.ContentPetname.From(hashHex: h) : null);
 
-        m_narrate((hash is { } fullHash)
+        m_narrate(((hash is { } fullHash)
             ? $"[world: saved as \"{petname}\" (sha256/{fullHash["sha256/".Length..][..12]}…)]"
-            : $"[world: saved to {path} (no CAS store)]");
+            : $"[world: saved to {path} (no CAS store)]"));
     }
-
     private void Verify() {
         var live = WorldDocumentStore.ToJson(document: m_scene.ToDocument());
         var loaded = WorldDocumentStore.Load(nameOrPath: m_scene.Name);
@@ -575,11 +630,10 @@ internal sealed class WorldSculptController {
 
         var stored = WorldDocumentStore.ToJson(document: loaded);
 
-        m_narrate(string.Equals(a: live, b: stored, comparisonType: StringComparison.Ordinal)
+        m_narrate((string.Equals(a: live, b: stored, comparisonType: StringComparison.Ordinal)
             ? "[world.verify: MATCH]"
-            : "[world.verify: MISMATCH — the live model differs from the last save; world.save to reconcile]");
+            : "[world.verify: MISMATCH — the live model differs from the last save; world.save to reconcile]"));
     }
-
     private void PushUndoBaseline() {
         m_history.Push(snapshot: m_scene.CaptureSnapshot());
     }
@@ -589,11 +643,10 @@ internal sealed class WorldSculptController {
     private void PushRedoTarget() {
         m_history.Push(snapshot: m_scene.CaptureSnapshot());
     }
-
     private void NarrateSelection() {
-        m_narrate((m_scene.SelectedPlacement is { } placement)
+        m_narrate(((m_scene.SelectedPlacement is { } placement)
             ? $"[world] selected #{placement.Id} '{placement.RefName}'"
-            : "[world] selection cleared — the ghost is the target again");
+            : "[world] selection cleared — the ghost is the target again"));
     }
 
     // The d-pad's vertical axis is the one page-independent analog every page reads the same way (scale/intensity/
@@ -604,11 +657,10 @@ internal sealed class WorldSculptController {
 
         return ((up ? 1f : 0f) - (down ? 1f : 0f));
     }
-
     private static string PageName(Page page) {
         return page switch {
-            Page.Select => "SELECT — South/North cycle selection, East deletes, West deselects, LB rebinds to the armed ghost, RB toggles cabinet role; left stick moves/right stick rotates/d-pad scales the SELECTED stamp (drag)",
-            Page.TerrainLights => "TERRAIN/LIGHTS — South adds a slab, East a plaza, West a light, North removes the nearest; left stick resizes, right stick cycles material, d-pad adjusts light intensity",
+            Page.Select => "SELECT — South/North cycle selection, East deletes, West deselects, LB wires an eye→screen feed, RB cycles the endpoint role (decoration/cabinet/eye/screen); left stick moves/right stick rotates/d-pad scales the SELECTED stamp (drag)",
+            Page.TerrainLights => "TERRAIN/LIGHTS — South adds a slab, East a plaza, West a light, North removes the nearest; left stick resizes, right stick X cycles material / Y sets light intensity, d-pad is the DAYLIGHT dial",
             Page.WalkOverrides => "WALK OVERRIDES — South paints a blocker, East a walkable, North removes the nearest; left stick resizes the pending rectangle",
             Page.BoundsSaveRepeat => "BOUNDS/SAVE/REPEAT — South saves, East verifies, West clears the selected repeat, North cycles the selected mirror (off/x/z); left stick grows bounds, right stick/d-pad adjust the selected repeat count",
             _ => "SCULPT — South places the ghost, East clears it, North undoes, LB redoes, RB toggles grid-snap, left-stick-click saves; left stick moves/right stick spins/d-pad scales the ghost",

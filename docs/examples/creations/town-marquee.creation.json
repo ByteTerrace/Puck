@@ -1,0 +1,536 @@
+{
+  "schema": "puck.creation.v1",
+  "name": "town-marquee",
+  "intent": "Object",
+  "bakeStyle": "classic",
+  "palette": [
+    {
+      "albedo": {
+        "x": 0.62,
+        "y": 0.58,
+        "z": 0.5
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.46,
+        "y": 0.42,
+        "z": 0.36
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 1,
+        "y": 0.72,
+        "z": 0.3
+      },
+      "emissive": 1.8,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.95,
+        "y": 0.78,
+        "z": 0.35
+      },
+      "emissive": 1.6,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.7664081
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.62050974,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.4746121,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.37128553,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.35,
+        "z": 0.5171839
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.66308224,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.8089806,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.74512255,
+        "y": 0.35,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.85,
+        "z": 0.5992242
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.85,
+        "y": 0.45332584,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.35,
+        "y": 0.39257106,
+        "z": 0.85
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    },
+    {
+      "albedo": {
+        "x": 0.53847086,
+        "y": 0.85,
+        "z": 0.35
+      },
+      "emissive": 0,
+      "specular": 0,
+      "shininess": 32
+    }
+  ],
+  "shapes": [
+    {
+      "id": 0,
+      "name": "pillarL",
+      "type": "Box",
+      "position": {
+        "x": -1.1,
+        "y": 1,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.4117647,
+        "y": 2.9411764,
+        "z": 0.4117647
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 1,
+      "name": "pillarR",
+      "type": "Box",
+      "position": {
+        "x": 1.1,
+        "y": 1,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.4117647,
+        "y": 2.9411764,
+        "z": 0.4117647
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 2,
+      "name": "capL",
+      "type": "Box",
+      "position": {
+        "x": -1.1,
+        "y": 2.06,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5882353,
+        "y": 0.2352941,
+        "z": 0.5882353
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 3,
+      "name": "capR",
+      "type": "Box",
+      "position": {
+        "x": 1.1,
+        "y": 2.06,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.5882353,
+        "y": 0.2352941,
+        "z": 0.5882353
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 4,
+      "name": "lintel",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 2.24,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 3,
+        "y": 0.4117647,
+        "z": 0.4705882
+      },
+      "material": 0,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 5,
+      "name": "lintelCap",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 2.42,
+        "z": 0
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 3,
+        "y": 0.2,
+        "z": 0.5882353
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 6,
+      "name": "marqueeGlow",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.58,
+        "z": 0.16
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 2.9411764,
+        "y": 0.6470588,
+        "z": 0.2
+      },
+      "material": 2,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 7,
+      "name": "marqueeSill",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.32,
+        "z": 0.16
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 3,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "material": 1,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 8,
+      "name": "accentTrim",
+      "type": "Box",
+      "position": {
+        "x": 0,
+        "y": 1.9,
+        "z": 0.15
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 3,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "material": 3,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 9,
+      "name": "accentStudL",
+      "type": "Box",
+      "position": {
+        "x": -1.1,
+        "y": 1.9,
+        "z": 0.13
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "material": 3,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    },
+    {
+      "id": 10,
+      "name": "accentStudR",
+      "type": "Box",
+      "position": {
+        "x": 1.1,
+        "y": 1.9,
+        "z": 0.13
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "scale": {
+        "x": 0.2,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "material": 3,
+      "blend": "Union",
+      "smooth": 0,
+      "group": 0,
+      "mirror": false,
+      "twist": 0,
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
+    }
+  ],
+  "frames": null,
+  "chains": null,
+  "cameras": null,
+  "behavior": null,
+  "textRuns": [
+    {
+      "text": "PUCKTON",
+      "position": {
+        "x": 0,
+        "y": 1.58,
+        "z": 0.21
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "emHeight": 0.26,
+      "depth": 0.03,
+      "mode": "emboss",
+      "material": 3
+    }
+  ]
+}

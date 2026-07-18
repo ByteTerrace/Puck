@@ -1,6 +1,7 @@
 namespace Puck.SdfVm;
 
-// Values must match Shaders/Sdf/sdf-vm.hlsli (SDF_OP_*); the numbering is the legacy ISA and is non-sequential.
+/// <summary>Identifies an SDF VM instruction operation. Values must match the <c>SDF_OP_*</c> definitions in
+/// <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>; reserved gaps preserve the packed wire format.</summary>
 public enum SdfOp : uint {
     ResetPoint = 0,
     Translate = 1,
@@ -33,8 +34,7 @@ public enum SdfOp : uint {
     /// solids into hollow skins. A FIELD op, not a point op — order objects so it follows everything it should shell.</summary>
     Onion = 16,
     /// <summary>Inflates the ENTIRE field accumulated so far by a radius: <c>d −= radius</c> (Data0.x = radius) rounds
-    /// and fattens everything before it. A FIELD op, not a point op. (The legacy ISA's "Round"; named Dilate because
-    /// the box primitive's corner rounding already owns that word.)</summary>
+    /// and fattens everything before it. A field operation, not a point operation.</summary>
     Dilate = 17,
     /// <summary>Folds the evaluation point's in-plane coordinates onto the fundamental cell of a wallpaper symmetry
     /// group (all 17 IUC groups; square/rectangular lattices plus the equilateral hex lattice for P3 and up). The
@@ -48,8 +48,7 @@ public enum SdfOp : uint {
     /// folds are skipped — upright copies, cheaper and shimmer-free at range.</summary>
     WallpaperFold = 18,
     /// <summary>Twists space about the local Y axis: the XZ plane rotates by <c>rate * y</c> radians (Data0.x = rate).
-    /// NOT an isometry — keep rates moderate. (The legacy ISA numbered this 4, now owned by
-    /// <see cref="TransformDynamic"/>; slot 20 is its new home.)</summary>
+    /// It is not an isometry; keep rates moderate.</summary>
     TwistY = 20,
     /// <summary>Log-spherical DOMAIN WARP: tiles space into infinite self-similar "Droste" shells by folding the
     /// RADIAL log-coordinate to the nearest shell — a translation along <c>log(radius)</c> becomes a uniform SCALING
@@ -113,7 +112,7 @@ public enum SdfOp : uint {
     /// travel (<c>amp·√3</c>) into a downstream twist/bend's reach. amp = 0 is an exact identity (byte-identical).</summary>
     DomainWarp = 25,
     /// <summary>Reflection fold across an ARBITRARY plane — the general-normal superset of the axis-aligned
-    /// <c>SymmetryX</c>/<c>SymmetryY</c>/<c>SymmetryZ</c> folds (which it replaced; the builder keeps them as sugar):
+    /// <c>SymmetryX</c>/<c>SymmetryY</c>/<c>SymmetryZ</c> builder methods:
     /// everything on the plane's negative side
     /// is mirrored onto its positive side, so one authored half repeats mirror-imaged (a kaleidoscope leaf, a bilateral
     /// body, the reflect atom of a KIFS fold). Data0.xyz = the UNIT plane normal (host-normalized), Data0.w = the plane

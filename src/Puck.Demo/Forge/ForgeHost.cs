@@ -13,7 +13,7 @@ namespace Puck.Demo.Forge;
 /// The shared one-shot GPU harness for the forge tool modes. The forge needs a live GPU to render its SDF scenes, and —
 /// like the POST battery — cannot bring one up before a host exists, so it builds a trimmed Vulkan host (the window
 /// flashes once) and runs the caller's <c>work</c> on the first frame, then exits. The <see cref="RomForge"/> tool
-/// modes (the SDF-scene forge and the Pocket Camera forge) run through here.
+/// modes (the SDF-scene forge and the camera forge) run through here.
 /// </summary>
 internal static class ForgeHost {
     /// <summary>Builds the host, runs <paramref name="work"/> once with a live GPU device + compute services, and
@@ -53,7 +53,6 @@ internal static class ForgeHost {
     private sealed class ForgeResult {
         public int ExitCode = 2;
     }
-
     private sealed class ForgeNode : IRenderNode {
         private readonly NodeDescriptor m_descriptor = new(Name: "forge", SurfaceId: SurfaceId.New());
         private readonly ForgeResult m_result;
@@ -70,7 +69,6 @@ internal static class ForgeHost {
         public NodeDescriptor Descriptor => m_descriptor;
 
         public void Dispose() { }
-
         public Surface ProduceFrame(in FrameContext context) {
             if (m_done) {
                 return default;

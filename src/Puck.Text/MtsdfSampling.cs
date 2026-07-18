@@ -10,8 +10,8 @@ namespace Puck.Text;
 /// normalized so that the value <c>0.5</c> lies exactly on the edge. The <em>unit range</em> is the width
 /// of that encoded band in em units; multiplying it by the on-screen pixels-per-em gives the
 /// <em>screen pixel range</em>, the band width in destination pixels, which sets the slope of the
-/// anti-aliasing ramp. The naming follows the conventions of the <c>msdfgen</c> / <c>msdf-atlas-gen</c>
-/// toolchain.
+/// anti-aliasing ramp. The naming follows the committed atlas metadata's own convention (see the
+/// font-atlas bake pipeline, <c>tools/font-atlas</c>).
 /// </remarks>
 public static class MtsdfSampling {
     /// <summary>

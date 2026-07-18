@@ -13,7 +13,6 @@ namespace Puck.Demo;
 internal sealed class EditHistory<T> {
     private readonly int m_capacity;
     private readonly List<T> m_snapshots;
-
     private int m_index;
 
     /// <summary>Initializes the history around an initial baseline state.</summary>

@@ -138,10 +138,10 @@ public static class WalkGridBaker {
         // query is valid for the whole body box — the same fold-in FixedRoom.From applies to walls/obstacles.
         var dilateX = DilationCells(halfExtent: playerHalfExtentX);
         var dilateZ = DilationCells(halfExtent: playerHalfExtentZ);
-        var dilated = ((dilateX > 0) || (dilateZ > 0)) ? Dilate(cells: cells, width: width, height: height, dilateX: dilateX, dilateZ: dilateZ) : cells;
+        var dilated = (((dilateX > 0) || (dilateZ > 0)) ? Dilate(cells: cells, width: width, height: height, dilateX: dilateX, dilateZ: dilateZ) : cells);
 
         return new WalkGridDocument(
-            Cells: Convert.ToBase64String(PackBytes(cells: dilated)),
+            Cells: Convert.ToBase64String(inArray: PackBytes(cells: dilated)),
             CellSizeRaw: CellSizeRaw,
             Height: height,
             OriginXRaw: originXRaw,
@@ -212,7 +212,7 @@ public static class WalkGridBaker {
         }
 
         return new WalkGridDocument(
-            Cells: Convert.ToBase64String(PackBytes(cells: cells)),
+            Cells: Convert.ToBase64String(inArray: PackBytes(cells: cells)),
             CellSizeRaw: CellSizeRaw,
             Height: height,
             Kind: HexKind,
@@ -243,9 +243,9 @@ public static class WalkGridBaker {
             for (var column = minColumn; (column <= maxColumn); column++) {
                 var cellIndex = ((row * width) + column);
                 var word = (cellIndex >> 6);
-                var bit = (cellIndex & 63);
+                var bit = cellIndex & 63;
 
-                cells[word] = (blocked ? (cells[word] | (1UL << bit)) : (cells[word] & ~(1UL << bit)));
+                cells[word] = (blocked ? cells[word] | (1UL << bit) : cells[word] & ~(1UL << bit));
             }
         }
     }
@@ -258,7 +258,6 @@ public static class WalkGridBaker {
 
         return (((remainder != 0L) && ((remainder < 0L) != (divisor < 0L))) ? (quotient - 1L) : quotient);
     }
-
     private static long CeilDivBy(long dividend, long divisor) =>
         -FloorDivBy(dividend: -dividend, divisor: divisor);
 
@@ -282,7 +281,7 @@ public static class WalkGridBaker {
             return 0;
         }
 
-        return (int)MathF.Ceiling(halfExtent / CellSize);
+        return (int)MathF.Ceiling(x: (halfExtent / CellSize));
     }
 
     // Sets (or, when !blocked and reused for carving, clears) every cell whose center falls inside [minX,maxX) x
@@ -298,9 +297,9 @@ public static class WalkGridBaker {
             for (var cellX = minCellX; (cellX < maxCellX); cellX++) {
                 var cellIndex = ((cellZ * width) + cellX);
                 var word = (cellIndex >> 6);
-                var bit = (cellIndex & 63);
+                var bit = cellIndex & 63;
 
-                cells[word] = (blocked ? (cells[word] | (1UL << bit)) : (cells[word] & ~(1UL << bit)));
+                cells[word] = (blocked ? cells[word] | (1UL << bit) : cells[word] & ~(1UL << bit));
             }
         }
     }
@@ -313,7 +312,6 @@ public static class WalkGridBaker {
 
         return (int)FloorDivRaw(dividend: offsetRaw);
     }
-
     private static long FloorDivRaw(long dividend) {
         const long Divisor = 16384L;
         var quotient = (dividend / Divisor);
@@ -336,13 +334,12 @@ public static class WalkGridBaker {
 
                 var cellIndex = ((cellZ * width) + cellX);
 
-                result[cellIndex >> 6] |= (1UL << (cellIndex & 63));
+                result[(cellIndex >> 6)] |= (1UL << (cellIndex & 63));
             }
         }
 
         return result;
     }
-
     private static bool AnyBlockedInWindow(ulong[] cells, int width, int height, int centerX, int centerZ, int dilateX, int dilateZ) {
         var minX = Math.Max(val1: (centerX - dilateX), val2: 0);
         var maxX = Math.Min(val1: (centerX + dilateX), val2: (width - 1));
@@ -353,7 +350,7 @@ public static class WalkGridBaker {
             for (var x = minX; (x <= maxX); x++) {
                 var cellIndex = ((z * width) + x);
 
-                if (0UL != (cells[cellIndex >> 6] & (1UL << (cellIndex & 63)))) {
+                if (0UL != (cells[(cellIndex >> 6)] & (1UL << (cellIndex & 63)))) {
                     return true;
                 }
             }
@@ -361,7 +358,6 @@ public static class WalkGridBaker {
 
         return false;
     }
-
     private static byte[] PackBytes(ulong[] cells) {
         var bytes = new byte[(cells.Length * 8)];
 

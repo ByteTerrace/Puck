@@ -6,7 +6,7 @@ namespace Puck.DirectX.Interop;
 
 /// <summary>
 /// A Direct3D 12 upload-heap buffer implementing <see cref="IGpuStorageBuffer"/>. Permanently mapped for
-/// host writes; <see cref="Write{T}"/> copies data into it without mapping/unmapping overhead.
+/// host writes; its <see cref="IGpuStorageBuffer"/> write operations copy data without mapping/unmapping overhead.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {

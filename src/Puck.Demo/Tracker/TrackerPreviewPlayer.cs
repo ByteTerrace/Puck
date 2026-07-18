@@ -31,6 +31,7 @@ internal sealed class TrackerPreviewPlayer : IDisposable {
     private const int StagingSampleCapacity = (CabinetAudioOutput.SampleRate * 2);
 
     private readonly IAudioSink m_audioSink;
+    private readonly HumbleAudioMachine m_audioMachine;
     private readonly CabinetAudioOutput? m_audioOutput;
     private readonly MachineInstance m_machine;
     // Manual drain staging: used ONLY when no CabinetAudioOutput opened (headless/non-Windows), so the sink's ring
@@ -42,6 +43,7 @@ internal sealed class TrackerPreviewPlayer : IDisposable {
     private TrackerPreviewPlayer(MachineInstance machine) {
         m_machine = machine;
         m_audioSink = machine.GetRequiredService<IAudioSink>();
+        m_audioMachine = new HumbleAudioMachine(sink: m_audioSink);
         m_audioOutput = CabinetAudioOutput.TryOpen();
         m_audioSink.Configure(sampleRate: CabinetAudioOutput.SampleRate);
     }
@@ -94,7 +96,7 @@ internal sealed class TrackerPreviewPlayer : IDisposable {
     private void PumpAudio() {
         if (m_audioOutput is { } output) {
             SamplesPumped += m_audioSink.AvailableSampleCount;
-            output.Pump(sink: m_audioSink);
+            output.Pump(machine: m_audioMachine);
 
             return;
         }

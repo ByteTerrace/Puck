@@ -14,8 +14,8 @@ namespace Puck.Demo.Forge;
 /// INDEPENDENT C# checksum, top-slot insertion, and corruption recovery to the ROM defaults. Throws on any violation.
 /// </summary>
 internal static class ChromaVerify {
-    private const ulong TCyclesPerFrame = 70224UL;
     private const int CellCount = (ChromaProtocol.Cols * ChromaProtocol.Rows);
+    private const ulong TCyclesPerFrame = 70224UL;
     // The window for a STAGED (forced-drip) top-out to reach the game-over card — a few frames' headroom over the one
     // drip StageTopOut arms. Comfortable rather than tight, but the outcome no longer depends on the PRNG spawn phase.
     private const int TopOutWindowFrames = (ChromaProtocol.DropInterval * 3);
@@ -126,7 +126,7 @@ internal static class ChromaVerify {
             driver.Press(buttons: JoypadButtons.Down); // Walk to the floor.
         }
 
-        Assert(condition: (driver.Read(address: ChromaProtocol.CursorRow) == (ChromaProtocol.Rows - 1)), message: $"the cursor row did not clamp to {ChromaProtocol.Rows - 1} (got {driver.Read(address: ChromaProtocol.CursorRow)})");
+        Assert(condition: (driver.Read(address: ChromaProtocol.CursorRow) == (ChromaProtocol.Rows - 1)), message: $"the cursor row did not clamp to {(ChromaProtocol.Rows - 1)} (got {driver.Read(address: ChromaProtocol.CursorRow)})");
 
         // A swap actually rearranges the grid (some cell changes across the press).
         var changed = false;
@@ -145,7 +145,7 @@ internal static class ChromaVerify {
         var scoreBefore = ReadBcd(driver: driver, address: ChromaProtocol.Score, byteCount: 3);
 
         for (var column = 0; (column < 3); column++) {
-            driver.Write(address: (ushort)(ChromaProtocol.GridBase + ((ChromaProtocol.Rows - 1) * ChromaProtocol.Cols) + column), value: ChromaTables.TileBlockBase);
+            driver.Write(address: (ushort)((ChromaProtocol.GridBase + ((ChromaProtocol.Rows - 1) * ChromaProtocol.Cols)) + column), value: ChromaTables.TileBlockBase);
         }
 
         var scored = false;
@@ -211,11 +211,11 @@ internal static class ChromaVerify {
         Assert(condition: (slot >= 0), message: "the BCA entry is missing from the high-score mirror");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[(slot * ChromaProtocol.HiScoreEntryByteCount) + 3 + index] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
+            Assert(condition: (mirror[(((slot * ChromaProtocol.HiScoreEntryByteCount) + 3) + index)] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
         }
 
         for (var entry = 1; (entry < ChromaProtocol.HiScoreEntryCount); entry++) {
-            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {entry - 1} < entry {entry})");
+            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {(entry - 1)} < entry {entry})");
         }
 
         return (driver.ExportExternalRam(), mirror, ReadBcdValue(bytes: finalScore), slot);
@@ -234,10 +234,10 @@ internal static class ChromaVerify {
         var sum = 0;
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        var stored = (sram[SaveModule.HeaderByteCount + payloadLength] | (sram[SaveModule.HeaderByteCount + payloadLength + 1] << 8));
+        var stored = sram[(SaveModule.HeaderByteCount + payloadLength)] | (sram[((SaveModule.HeaderByteCount + payloadLength) + 1)] << 8);
 
         Assert(condition: (sum == stored), message: $"the stored checksum 0x{stored:X4} does not match the independently computed 0x{sum:X4}");
         Assert(condition: payload.SequenceEqual(other: expectedMirror), message: "the persisted payload does not match the in-game mirror");
@@ -257,7 +257,7 @@ internal static class ChromaVerify {
 
         for (var entry = 0; (entry < ChromaProtocol.HiScoreEntryCount); entry++) {
             for (var index = 0; (index < 3); index++) {
-                payload[(entry * ChromaProtocol.HiScoreEntryByteCount) + 3 + index] = 0x00;
+                payload[(((entry * ChromaProtocol.HiScoreEntryByteCount) + 3) + index)] = 0x00;
             }
         }
 
@@ -270,7 +270,7 @@ internal static class ChromaVerify {
         StartPlay(driver: driver, idleFrames: 4);
 
         for (var column = 0; (column < 3); column++) {
-            driver.Write(address: (ushort)(ChromaProtocol.GridBase + ((ChromaProtocol.Rows - 1) * ChromaProtocol.Cols) + column), value: ChromaTables.TileBlockBase);
+            driver.Write(address: (ushort)((ChromaProtocol.GridBase + ((ChromaProtocol.Rows - 1) * ChromaProtocol.Cols)) + column), value: ChromaTables.TileBlockBase);
         }
 
         var scored = false;
@@ -296,9 +296,9 @@ internal static class ChromaVerify {
         Assert(condition: (FindEntry(mirror: mirror, initials: "AAA") == 0), message: "the beating score did not insert at slot 0");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[3 + index] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
-            Assert(condition: (mirror[ChromaProtocol.HiScoreEntryByteCount + index] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
-            Assert(condition: (mirror[ChromaProtocol.HiScoreEntryByteCount + 3 + index] == 0x00), message: "the old leader's score did not shift down intact");
+            Assert(condition: (mirror[(3 + index)] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
+            Assert(condition: (mirror[(ChromaProtocol.HiScoreEntryByteCount + index)] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
+            Assert(condition: (mirror[((ChromaProtocol.HiScoreEntryByteCount + 3) + index)] == 0x00), message: "the old leader's score did not shift down intact");
         }
     }
 
@@ -307,7 +307,7 @@ internal static class ChromaVerify {
     private static void AssertCorruptionRecovery(byte[] rom, byte[] sram) {
         var corrupted = (byte[])sram.Clone();
 
-        corrupted[SaveModule.HeaderByteCount + 5] ^= 0x5A;
+        corrupted[(SaveModule.HeaderByteCount + 5)] ^= 0x5A;
 
         using var driver = new Driver(rom: rom, externalRam: corrupted);
 
@@ -352,7 +352,7 @@ internal static class ChromaVerify {
     private static void PokeCheckerboard(Driver driver) {
         for (var row = 0; (row < ChromaProtocol.Rows); row++) {
             for (var column = 0; (column < ChromaProtocol.Cols); column++) {
-                driver.Write(address: (ushort)(ChromaProtocol.GridBase + (row * ChromaProtocol.Cols) + column), value: (byte)(ChromaTables.TileBlockBase + (((row + column) % 2) == 0 ? 0 : 1)));
+                driver.Write(address: (ushort)((ChromaProtocol.GridBase + (row * ChromaProtocol.Cols)) + column), value: (byte)(ChromaTables.TileBlockBase + ((((row + column) % 2) == 0) ? 0 : 1)));
             }
         }
     }
@@ -363,7 +363,7 @@ internal static class ChromaVerify {
             var sawBlock = false;
 
             for (var row = 0; (row < ChromaProtocol.Rows); row++) {
-                var value = driver.Read(address: (ushort)(ChromaProtocol.GridBase + (row * ChromaProtocol.Cols) + column));
+                var value = driver.Read(address: (ushort)((ChromaProtocol.GridBase + (row * ChromaProtocol.Cols)) + column));
 
                 Assert(condition: (value <= 3), message: $"grid cell ({row},{column}) holds an out-of-range colour {value}");
 
@@ -375,7 +375,6 @@ internal static class ChromaVerify {
             }
         }
     }
-
     private static int GridCount(Driver driver) {
         var count = 0;
 
@@ -387,7 +386,6 @@ internal static class ChromaVerify {
 
         return count;
     }
-
     private static byte[] ReadGrid(Driver driver) {
         var grid = new byte[CellCount];
 
@@ -410,17 +408,16 @@ internal static class ChromaVerify {
         payload.CopyTo(array: sram, index: SaveModule.HeaderByteCount);
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        sram[SaveModule.HeaderByteCount + payload.Length] = (byte)(sum & 0xFF);
-        sram[SaveModule.HeaderByteCount + payload.Length + 1] = (byte)((sum >> 8) & 0xFF);
+        sram[(SaveModule.HeaderByteCount + payload.Length)] = (byte)(sum & 0xFF);
+        sram[((SaveModule.HeaderByteCount + payload.Length) + 1)] = (byte)((sum >> 8) & 0xFF);
 
         return sram;
     }
-
     private static byte[] ReadMirror(Driver driver) {
-        var mirror = new byte[ChromaProtocol.HiScoreEntryCount * ChromaProtocol.HiScoreEntryByteCount];
+        var mirror = new byte[(ChromaProtocol.HiScoreEntryCount * ChromaProtocol.HiScoreEntryByteCount)];
 
         for (var index = 0; (index < mirror.Length); index++) {
             mirror[index] = driver.Read(address: (ushort)(ChromaProtocol.HiScoreMirror + index));
@@ -428,13 +425,12 @@ internal static class ChromaVerify {
 
         return mirror;
     }
-
     private static int FindEntry(byte[] mirror, string initials) {
         for (var entry = 0; (entry < ChromaProtocol.HiScoreEntryCount); entry++) {
             var matches = true;
 
             for (var index = 0; (index < 3); index++) {
-                if (mirror[(entry * ChromaProtocol.HiScoreEntryByteCount) + index] != TextModule.TileFor(fontTileBase: ChromaTables.FontTileBase, character: initials[index])) {
+                if (mirror[((entry * ChromaProtocol.HiScoreEntryByteCount) + index)] != TextModule.TileFor(fontTileBase: ChromaTables.FontTileBase, character: initials[index])) {
                     matches = false;
 
                     break;
@@ -448,13 +444,11 @@ internal static class ChromaVerify {
 
         return -1;
     }
-
     private static int EntryScore(byte[] mirror, int entry) {
         var offset = ((entry * ChromaProtocol.HiScoreEntryByteCount) + 3);
 
-        return ReadBcdValue(bytes: [mirror[offset], mirror[offset + 1], mirror[offset + 2]]);
+        return ReadBcdValue(bytes: [mirror[offset], mirror[(offset + 1)], mirror[(offset + 2)]]);
     }
-
     private static int ReadBcd(Driver driver, ushort address, int byteCount) {
         var bytes = new byte[byteCount];
 
@@ -464,17 +458,15 @@ internal static class ChromaVerify {
 
         return ReadBcdValue(bytes: bytes);
     }
-
     private static int ReadBcdValue(byte[] bytes) {
         var value = 0;
 
         foreach (var packed in bytes) {
-            value = ((value * 100) + (((packed >> 4) & 0x0F) * 10) + (packed & 0x0F));
+            value = (((value * 100) + (((packed >> 4) & 0x0F) * 10)) + (packed & 0x0F));
         }
 
         return value;
     }
-
     private static void Assert(bool condition, string message) {
         if (!condition) {
             throw new InvalidOperationException(message: $"chroma ROM verification failed: {message}");
@@ -505,11 +497,8 @@ internal static class ChromaVerify {
         }
 
         public byte Read(ushort address) => m_bus.ReadByte(address: address);
-
-        public int ReadWide(ushort address) => (Read(address: address) | (Read(address: (ushort)(address + 1)) << 8));
-
+        public int ReadWide(ushort address) => Read(address: address) | (Read(address: (ushort)(address + 1)) << 8);
         public void Write(ushort address, byte value) => m_bus.WriteByte(address: address, value: value);
-
         public void RunFrames(JoypadButtons buttons, int frames) {
             for (var frame = 0; (frame < frames); frame++) {
                 m_joypad.SetButtons(pressed: buttons);
@@ -518,12 +507,10 @@ internal static class ChromaVerify {
 
             VerifyMachineSettle.SettleOutOfOamDma(machine: m_machine.Machine, cpu: m_cpu, label: "chroma");
         }
-
         public void Press(JoypadButtons buttons) {
             RunFrames(buttons: buttons, frames: 2);
             RunFrames(buttons: JoypadButtons.None, frames: 2);
         }
-
         public bool RunUntilState(byte state, JoypadButtons buttons, int maxFrames) {
             for (var frame = 0; (frame < maxFrames); frame++) {
                 RunFrames(buttons: buttons, frames: 1);
@@ -535,9 +522,7 @@ internal static class ChromaVerify {
 
             return false;
         }
-
         public byte[] ExportExternalRam() => m_cartridge.ExportExternalRam();
-
         public void Dispose() => m_machine.Dispose();
     }
 }

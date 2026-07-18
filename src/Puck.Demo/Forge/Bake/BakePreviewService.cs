@@ -6,7 +6,7 @@ using Puck.Hosting;
 namespace Puck.Demo.Forge.Bake;
 
 /// <summary>
-/// The LIVE in-editor bake preview — the arc's headline: while the player sculpts, this service watches
+/// The live in-editor bake preview. While the player sculpts, this service watches
 /// <see cref="CreatorScene.Revision"/>, and once the scene sits still for a frame-count debounce it snapshots the
 /// document, rasterizes ONE view per produced frame on the render thread (spreading the GPU cost), quantizes on a
 /// worker task, and publishes the composed preview through <see cref="IGpuSurfaceUpload"/> so the workbench easel's
@@ -117,7 +117,6 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
                 break;
         }
     }
-
     private void StartBake(int revision) {
         var document = m_scene.ToDocument();
         var style = BakeStyles.Resolve(diagnostic: out var note, name: document.BakeStyle);
@@ -178,7 +177,6 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
             m_state = BakeState.Quantizing;
         }
     }
-
     private void TryFinish(in FrameContext context) {
         if (m_cpuTask is not { IsCompleted: true } task) {
             return;
@@ -202,7 +200,6 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
         m_lastBakedRevision = m_snapshotRevision;
         Publish(device: device, gpu: gpu, result: task.Result);
     }
-
     private void Publish(IGpuDeviceContext device, IGpuComputeServices gpu, BakeResult result) {
         m_upload ??= gpu.SurfaceTransferFactory.CreateUpload(deviceContext: device);
         // The returned handle is only valid until the NEXT Upload on this object — re-stored on every publish, and
@@ -217,7 +214,6 @@ internal sealed class BakePreviewService : ICreatorBakePreview, IDisposable {
         PreviewAverageColor = result.AverageColor;
         Narrate(line: result.Diagnostics.Summarize(target: m_plan!.Target));
     }
-
     private bool TryResolveGpu(in FrameContext context, out IGpuDeviceContext device, out IGpuComputeServices gpu) {
         gpu = ((m_services.GetService(serviceType: typeof(IGpuComputeServices)) as IGpuComputeServices)!);
 

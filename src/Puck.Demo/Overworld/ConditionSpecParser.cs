@@ -59,10 +59,10 @@ internal static class ConditionSpecParser {
             Value = value,
         };
 
-        return condition.TryParseAddress(address: out var parsed)
+        return (condition.TryParseAddress(address: out var parsed)
             && (parsed >= 0xC000) && (parsed <= 0xDFFF)
             && BrickExitCondition.SupportedOps.Contains(value: op, comparer: StringComparer.Ordinal)
-            && (value >= 0) && (value <= 255);
+            && (value >= 0) && (value <= 255));
     }
 
     /// <summary>Parses a victory spec: <c>solo target=&lt;guid&gt;</c> or <c>meta target=&lt;guid&gt; share=&lt;guid&gt;
@@ -96,14 +96,11 @@ internal static class ConditionSpecParser {
 
             if (string.Equals(a: key, b: "target", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 target = val;
-            }
-            else if (string.Equals(a: key, b: "share", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            } else if (string.Equals(a: key, b: "share", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 share = val;
-            }
-            else if (string.Equals(a: key, b: "group", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            } else if (string.Equals(a: key, b: "group", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 group = val;
-            }
-            else {
+            } else {
                 return false;
             }
         }
@@ -119,18 +116,17 @@ internal static class ConditionSpecParser {
             if ((share is null) || !Guid.TryParse(input: share, result: out _)) {
                 return false;
             }
-        }
-        else if ((share is not null) || (group is not null)) {
+        } else if ((share is not null) || (group is not null)) {
             // A solo victory FORBIDS share/group (BrickVictoryCondition.Validate errors on either) — reject rather than
             // silently drop, so the live editor accepts exactly what the document loader accepts.
             return false;
         }
 
         condition = new BrickVictoryCondition {
-            Mode = (isMeta ? "meta" : "solo"),
-            Target = target,
-            Share = (isMeta ? share : null),
             Group = (isMeta ? group : null),
+            Mode = (isMeta ? "meta" : "solo"),
+            Share = (isMeta ? share : null),
+            Target = target,
         };
 
         return true;

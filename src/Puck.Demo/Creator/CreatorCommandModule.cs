@@ -5,7 +5,7 @@ using Puck.Demo.Editing;
 using Puck.Demo.Overworld;
 using Puck.Hosting;
 using Puck.SdfVm;
-using static Puck.Demo.CommandArgs;
+using static Puck.Commands.CommandArgs;
 
 namespace Puck.Demo.Creator;
 
@@ -35,9 +35,9 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
     private IEnumerable<CommandDefinition> GetDocumentCommands() {
         yield return Plain(
             description: "Lists the saved creations under ./creations/.",
-            handler: _ => new CommandResult((CreationStore.List() is { Count: > 0 } names)
+            handler: _ => new CommandResult(((CreationStore.List() is { Count: > 0 } names)
                 ? $"[creator.list: {string.Join(separator: ", ", values: names)}]"
-                : "[creator.list: none saved yet — creator.save <name> writes one]"),
+                : "[creator.list: none saved yet — creator.save <name> writes one]")),
             name: "creator.list"
         );
         yield return Plain(
@@ -70,7 +70,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             name: "creator.save"
         );
         yield return WithArgs(
-            description: "Loads a saved creation (or an explicit file path; legacy .avatar.json imports too): creator.load <name>.",
+            description: "Loads a saved creation (or an explicit file path): creator.load <name>.",
             handler: WithSceneArgs(handler: static (scene, args) => {
                 if (args.Length == 0) {
                     return "[creator.load: give a name — creator.list shows what's saved]";
@@ -80,8 +80,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
                     return ((CreationStore.Load(nameOrPath: args[0]) is { } document)
                         ? $"[creator.load: {scene.LoadDocument(document: document)} shape(s) from '{document.Name}' (style {document.BakeStyle}, intent {document.Intent})]"
                         : $"[creator.load: nothing readable at '{args[0]}']");
-                }
-                catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+                } catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
                     return $"[creator.load: '{args[0]}' is unreadable — {exception.Message}]";
                 }
             }),
@@ -116,7 +115,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             handler: WithSceneArgs(handler: static (scene, args) => ((args.Length == 0)
                 ? "[creator.select: give an id or name]"
                 : ((scene.Select(idOrName: args[0]) is { } shape)
-                    ? $"[creator.select: #{shape.Id} {shape.Name ?? shape.Type.ToString()}{((shape.GroupId != 0) ? $" (group {shape.GroupId})" : "")}]"
+                    ? $"[creator.select: #{shape.Id} {(shape.Name ?? shape.Type.ToString())}{((shape.GroupId != 0) ? $" (group {shape.GroupId})" : "")}]"
                     : $"[creator.select: no shape matches '{args[0]}']"))),
             name: "creator.select"
         );
@@ -157,7 +156,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
                     return "[creator.palette: usage — creator.palette <slot> <r> <g> <b> [emissive] [specular] [shininess]]";
                 }
 
-                var defaults = new SdfMaterial(Albedo: new Vector3(rgb[0], rgb[1], rgb[2]));
+                var defaults = new SdfMaterial(Albedo: new Vector3(x: rgb[0], y: rgb[1], z: rgb[2]));
 
                 scene.SetPaletteEntry(index: slot, material: (defaults with {
                     Emissive = (((args.Length > 4) && TryParseFloat(text: args[4], value: out var emissive)) ? emissive : defaults.Emissive),
@@ -216,6 +215,20 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             name: "creator.twist"
         );
         yield return WithArgs(
+            description: $"Sets the target's bend rate directly: creator.bend <rate> (±{CreatorScene.MaxBend:F1} rad/unit).",
+            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && TryParseFloat(text: args[0], value: out var rate))
+                ? $"[creator.bend: {scene.SetBend(value: rate):F2}]"
+                : $"[creator.bend: give a rate ±{CreatorScene.MaxBend:F1}]")),
+            name: "creator.bend"
+        );
+        yield return WithArgs(
+            description: $"Sets the target's dilate (inflation) radius directly: creator.dilate <radius> (0-{CreatorScene.MaxDilate:F2}).",
+            handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && TryParseFloat(text: args[0], value: out var radius))
+                ? $"[creator.dilate: {scene.SetDilate(value: radius):F3}]"
+                : $"[creator.dilate: give a radius 0-{CreatorScene.MaxDilate:F2}]")),
+            name: "creator.dilate"
+        );
+        yield return WithArgs(
             description: $"Sets the target's onion shell thickness directly: creator.onion <thickness> (0-{CreatorScene.MaxOnion:F2}).",
             handler: WithSceneArgs(handler: static (scene, args) => (((args.Length > 0) && TryParseFloat(text: args[0], value: out var thickness))
                 ? $"[creator.onion: {scene.SetOnion(value: thickness):F3}]"
@@ -229,7 +242,7 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
         yield return WithArgs(
             description: "Places the target at an exact position: creator.move <x> <y> <z> (clamped to the workbench).",
             handler: WithSceneArgs(handler: static (scene, args) => (TryParseFloats(args: args, count: 3, start: 0, values: out var xyz)
-                ? $"[creator.move: {Describe(vector: scene.SetTargetPosition(position: new Vector3(xyz[0], xyz[1], xyz[2])))}]"
+                ? $"[creator.move: {Describe(vector: scene.SetTargetPosition(position: new Vector3(x: xyz[0], y: xyz[1], z: xyz[2])))}]"
                 : "[creator.move: usage — creator.move <x> <y> <z>]")),
             name: "creator.move"
         );
@@ -250,11 +263,11 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             description: "Sets the target's scale, per-axis when three values are given: creator.scale <x> [y z] (0.2-3.0).",
             handler: WithSceneArgs(handler: static (scene, args) => {
                 if (TryParseFloats(args: args, count: 3, start: 0, values: out var xyz)) {
-                    return $"[creator.scale: {Describe(vector: scene.SetTargetScale(scale: new Vector3(xyz[0], xyz[1], xyz[2])))}]";
+                    return $"[creator.scale: {Describe(vector: scene.SetTargetScale(scale: new Vector3(x: xyz[0], y: xyz[1], z: xyz[2])))}]";
                 }
 
                 if ((args.Length > 0) && TryParseFloat(text: args[0], value: out var uniform)) {
-                    return $"[creator.scale: {Describe(vector: scene.SetTargetScale(scale: new Vector3(uniform)))}]";
+                    return $"[creator.scale: {Describe(vector: scene.SetTargetScale(scale: new Vector3(value: uniform)))}]";
                 }
 
                 return "[creator.scale: usage — creator.scale <x> [y z]]";
@@ -384,7 +397,6 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
             inactiveMessage: "[creator: enter creator mode first (console: creator)]",
             unavailableMessage: "[creator: unavailable — the overworld is not the active root]"
         );
-
     internal Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<CreatorScene, string[], string> handler) =>
         CommandAvailability.WithTargetArgs(
             getTarget: () => Scene,
@@ -403,80 +415,79 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
 
         switch (args[0].ToLowerInvariant()) {
             case "on": {
-                scene.SetSnapEnabled(enabled: true);
+                    scene.SetSnapEnabled(enabled: true);
 
-                return CreatorSnapState(scene: scene);
-            }
+                    return CreatorSnapState(scene: scene);
+                }
             case "off": {
-                scene.SetSnapEnabled(enabled: false);
+                    scene.SetSnapEnabled(enabled: false);
 
-                return CreatorSnapState(scene: scene);
-            }
+                    return CreatorSnapState(scene: scene);
+                }
             case "pitch": {
-                if ((args.Length == 2) && TryParseFloat(text: args[1], value: out var uniform)) {
-                    scene.SetSnapPitch(pitch: new Vector3(uniform));
+                    if ((args.Length == 2) && TryParseFloat(text: args[1], value: out var uniform)) {
+                        scene.SetSnapPitch(pitch: new Vector3(value: uniform));
 
-                    return CreatorSnapState(scene: scene);
+                        return CreatorSnapState(scene: scene);
+                    }
+
+                    if (TryParseFloats(args: args, count: 3, start: 1, values: out var xyz)) {
+                        scene.SetSnapPitch(pitch: new Vector3(x: xyz[0], y: xyz[1], z: xyz[2]));
+
+                        return CreatorSnapState(scene: scene);
+                    }
+
+                    return "[creator.snap pitch: usage — creator.snap pitch <x> <y> <z>, or creator.snap pitch <n>]";
                 }
-
-                if (TryParseFloats(args: args, count: 3, start: 1, values: out var xyz)) {
-                    scene.SetSnapPitch(pitch: new Vector3(xyz[0], xyz[1], xyz[2]));
-
-                    return CreatorSnapState(scene: scene);
-                }
-
-                return "[creator.snap pitch: usage — creator.snap pitch <x> <y> <z>, or creator.snap pitch <n>]";
-            }
             case "rot": {
-                RotationSnap? mode = (((args.Length >= 2) ? args[1].ToLowerInvariant() : null) switch {
-                    "90" => RotationSnap.Deg90,
-                    "45" => RotationSnap.Deg45,
-                    "off" or "none" or "0" => RotationSnap.Off,
-                    _ => null,
-                });
+                    RotationSnap? mode = (((args.Length >= 2) ? args[1].ToLowerInvariant() : null) switch {
+                        "90" => RotationSnap.Deg90,
+                        "45" => RotationSnap.Deg45,
+                        "off" or "none" or "0" => RotationSnap.Off,
+                        _ => null,
+                    });
 
-                if (mode is not { } resolved) {
-                    return "[creator.snap rot: usage — creator.snap rot <90|45|off>]";
+                    if (mode is not { } resolved) {
+                        return "[creator.snap rot: usage — creator.snap rot <90|45|off>]";
+                    }
+
+                    scene.SetSnapRotation(rotation: resolved);
+
+                    return CreatorSnapState(scene: scene);
                 }
-
-                scene.SetSnapRotation(rotation: resolved);
-
-                return CreatorSnapState(scene: scene);
-            }
             case "ref": {
-                if (args.Length == 1) {
-                    return (scene.TrySetSnapReferenceSelected(echo: out var echo) ? $"[creator.snap: {echo}]" : $"[creator.snap ref: {echo}]");
+                    if (args.Length == 1) {
+                        return (scene.TrySetSnapReferenceSelected(echo: out var echo) ? $"[creator.snap: {echo}]" : $"[creator.snap ref: {echo}]");
+                    }
+
+                    if (string.Equals(a: args[1], b: "clear", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        scene.ClearSnapReference();
+
+                        return "[creator.snap: reference cleared — world-lattice only]";
+                    }
+
+                    return (scene.TrySetSnapReference(idOrName: args[1], echo: out var refEcho) ? $"[creator.snap: {refEcho}]" : $"[creator.snap ref: {refEcho}]");
                 }
-
-                if (string.Equals(a: args[1], b: "clear", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    scene.ClearSnapReference();
-
-                    return "[creator.snap: reference cleared — world-lattice only]";
-                }
-
-                return (scene.TrySetSnapReference(idOrName: args[1], echo: out var refEcho) ? $"[creator.snap: {refEcho}]" : $"[creator.snap ref: {refEcho}]");
-            }
             case "grid": {
-                if ((args.Length >= 2) && string.Equals(a: args[1], b: "show", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    scene.SetSnapGridVisible(visible: true);
+                    if ((args.Length >= 2) && string.Equals(a: args[1], b: "show", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        scene.SetSnapGridVisible(visible: true);
 
-                    return CreatorSnapState(scene: scene);
+                        return CreatorSnapState(scene: scene);
+                    }
+
+                    if ((args.Length >= 2) && string.Equals(a: args[1], b: "hide", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        scene.SetSnapGridVisible(visible: false);
+
+                        return CreatorSnapState(scene: scene);
+                    }
+
+                    return "[creator.snap grid: usage — creator.snap grid <show|hide>]";
                 }
-
-                if ((args.Length >= 2) && string.Equals(a: args[1], b: "hide", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    scene.SetSnapGridVisible(visible: false);
-
-                    return CreatorSnapState(scene: scene);
-                }
-
-                return "[creator.snap grid: usage — creator.snap grid <show|hide>]";
-            }
             default: {
-                return "[creator.snap: usage — creator.snap on|off | pitch <x> <y> <z> (or <n>) | rot <90|45|off> | ref [<id|name>] (or clear) | grid <show|hide>]";
-            }
+                    return "[creator.snap: usage — creator.snap on|off | pitch <x> <y> <z> (or <n>) | rot <90|45|off> | ref [<id|name>] (or clear) | grid <show|hide>]";
+                }
         }
     }
-
     private static string CreatorSnapState(CreatorScene scene) {
         var snap = scene.Snap;
         var target = (scene.SelectedShape?.Position ?? scene.GhostPosition);
@@ -492,7 +503,6 @@ internal sealed class CreatorCommandModule(IRenderNode rootNode) : ICommandModul
 
         return $"[creator.snap: {(snap.Enabled ? "on" : "off")} | pitch ({snap.Pitch.X:F2}, {snap.Pitch.Y:F2}, {snap.Pitch.Z:F2}) | rot {rotation} | grid {(scene.SnapGridVisible ? "show" : "hide")} | ref {reference} | target ({target.X:F2}, {target.Y:F2}, {target.Z:F2}) quat ({orientation.X:F2}, {orientation.Y:F2}, {orientation.Z:F2}, {orientation.W:F2})]";
     }
-
     private static SdfBlendOp? ParseBlend(string name) {
         return name.ToLowerInvariant() switch {
             "union" => SdfBlendOp.Union,

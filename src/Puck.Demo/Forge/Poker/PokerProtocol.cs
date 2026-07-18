@@ -14,7 +14,7 @@ namespace Puck.Demo.Forge;
 /// → a second betting round → showdown (full evaluation, high card through straight flush). Chips are packed BCD
 /// throughout. The <see cref="DecisionAction"/> byte is THE opponent seam: hand strength + table state flow in
 /// through <see cref="DecisionSeat"/>/<see cref="DecisionStrength"/>/<see cref="DecisionFacing"/>/<see cref="DecisionRaises"/>,
-/// one action byte flows out — the follow-on link-multiplayer arc substitutes link-fed actions at exactly this
+/// one action byte flows out. Link-fed actions can substitute at this
 /// seam without restructuring the table.
 /// </summary>
 internal static class PokerProtocol {
@@ -190,19 +190,19 @@ internal static class PokerProtocol {
     /// <summary>Scratch: the draw mask being built.</summary>
     public const ushort TmpMask = 0xC22F;
 
-    // The opponent decision seam (see the class summary — the link arc's substitution point).
-    /// <summary>Seam input: the deciding seat.</summary>
+    // Inputs and output for the replaceable opponent-decision routine.
+    /// <summary>The seat whose action is being selected.</summary>
     public const ushort DecisionSeat = 0xC230;
-    /// <summary>Seam input: the seat's evaluated hand strength.</summary>
+    /// <summary>The deciding seat's evaluated hand strength.</summary>
     public const ushort DecisionStrength = 0xC231;
-    /// <summary>Seam input: whether an outstanding bet must be answered.</summary>
+    /// <summary>Indicates whether the deciding seat must answer an outstanding bet.</summary>
     public const ushort DecisionFacing = 0xC232;
-    /// <summary>Seam input: bets/raises already used this round.</summary>
+    /// <summary>The number of bets or raises already made in the current round.</summary>
     public const ushort DecisionRaises = 0xC233;
-    /// <summary>Seam output: the chosen <see cref="ActionFold"/>/<see cref="ActionCheckCall"/>/<see cref="ActionBetRaise"/>
-    /// (an INTENT — the table still applies its legality/affordability downgrades).</summary>
+    /// <summary>The selected <see cref="ActionFold"/>, <see cref="ActionCheckCall"/>, or
+    /// <see cref="ActionBetRaise"/> intent. The table applies legality and affordability constraints.</summary>
     public const ushort DecisionAction = 0xC234;
-    /// <summary>Seam scratch: whether this decision's bluff roll succeeded.</summary>
+    /// <summary>Indicates whether the current decision's bluff roll succeeded.</summary>
     public const ushort DecisionBluff = 0xC235;
 
     // Evaluator scratch.
@@ -299,5 +299,5 @@ internal static class PokerProtocol {
     /// <summary>The persisted biggest pot (2 packed-BCD bytes).</summary>
     public const ushort BiggestPotMirror = (ushort)(HandsWonMirror + 2);
     /// <summary>The save payload's byte count (the score table + bankrolls + hands won + biggest pot).</summary>
-    public const int SavePayloadByteCount = ((HiScoreEntryCount * HiScoreEntryByteCount) + (SeatCount * 2) + 2 + 2);
+    public const int SavePayloadByteCount = ((((HiScoreEntryCount * HiScoreEntryByteCount) + (SeatCount * 2)) + 2) + 2);
 }

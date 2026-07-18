@@ -17,27 +17,23 @@ using System;
 
 namespace Puck.BareMetal.VulkanWindow;
 
-internal sealed class DisposalScope : IDisposable
-{
-    private sealed class Node
-    {
+internal sealed class DisposalScope : IDisposable {
+    private sealed class Node {
         public IDisposable Item;
         public Node Next;
     }
 
     private Node _head;
 
-    public void Track(IDisposable item)
-    {
+    public void Track(IDisposable item) {
         Node node = new Node();
+
         node.Item = item;
         node.Next = _head;
         _head = node; // prepend -> Dispose walks newest-first = reverse registration order
     }
-
-    public void Dispose()
-    {
-        for (Node node = _head; node != null; node = node.Next)
+    public void Dispose() {
+        for (Node node = _head; (node is not null); node = node.Next)
             node.Item.Dispose(); // polymorphic interface dispatch (multiple implementers)
         _head = null;
     }

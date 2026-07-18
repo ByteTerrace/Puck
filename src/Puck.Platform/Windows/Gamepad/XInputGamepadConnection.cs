@@ -44,7 +44,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             // GameInput drives all four motors, so the Xbox connection advertises trigger (impulse) rumble when
             // GameInput is available; without it only the two main XInput motors can be reached.
             capabilities: ((haptics is not null)
-                ? (GamepadOutputCapabilities.Rumble | GamepadOutputCapabilities.TriggerRumble)
+                ? GamepadOutputCapabilities.Rumble | GamepadOutputCapabilities.TriggerRumble
                 : GamepadOutputCapabilities.Rumble),
             deviceId: deviceId,
             queue: m_outputQueue
@@ -105,7 +105,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             }
         }
 
-        if (!TryTakeRumble(out var rumble)) {
+        if (!TryTakeRumble(rumble: out var rumble)) {
             return;
         }
 

@@ -1,0 +1,83 @@
+# Puck.Demo carve-bake tour — spawn a settled carve cluster, force-bake it into a sampled distance-field brick, and
+# verify the handoff + invalidation (carve-bake plan, docs/carve-bake-plan.md). Drives the INTERACTIVE SDF debugger
+# (`sdf`), not the --bench harness — this proves the PIPELINE mechanics; the throughput gate (>= 60 fps on sdf.carves,
+# plan §6) is W2a's `bench.sweep sdf.carve-bake=off,on` over the standard suite, a separate headless proof.
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 30 < docs/examples/scripts/carve-bake-proof.console
+# Run (PowerShell): Get-Content docs/examples/scripts/carve-bake-proof.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 30
+#
+# sdf.carve-bake defaults OFF (bit-identical to today; the owner flips the demo default only once W2a measures the
+# >=60fps gate) — this script flips it on to exercise the pipeline, then off again to round-trip. sdf.bake is the
+# assist layer: `status` echoes bins/slots/pool occupancy, `now` forces an immediate settle (settle-threshold-0)
+# instead of waiting the usual 120-produced-frame quiet window — the dev/bench accelerator.
+
+# Enter the fullscreen SDF debugger and lay a floor so the carved cluster has something to bite alongside.
+sdf
+sdf.floor on
+
+# SPAWN: 20 clustered HARD-subtraction carves in one bin — clears the plan's bake-eligibility floor (>= 16 hard
+# carves per 6-unit bin, each radius >= 4h ~= 0.19; the default 0.35 radius clears it comfortably). Smooth carves are
+# EXCLUDED from baking this arc (plan §4) — these are all plain sdf.carve (hard), not `smooth`.
+sdf.carve 0.0 0.0 0.0 0.35
+sdf.carve 0.3 0.1 -0.2 0.35
+sdf.carve -0.25 0.2 0.15 0.35
+sdf.carve 0.1 -0.3 0.2 0.35
+sdf.carve -0.1 0.25 -0.3 0.35
+sdf.carve 0.35 -0.1 0.1 0.35
+sdf.carve -0.35 -0.15 -0.05 0.35
+sdf.carve 0.2 0.3 0.25 0.35
+sdf.carve -0.2 -0.3 0.3 0.35
+sdf.carve 0.05 0.35 -0.15 0.35
+sdf.carve -0.05 -0.35 0.1 0.35
+sdf.carve 0.3 0.15 -0.3 0.35
+sdf.carve -0.3 0.1 0.3 0.35
+sdf.carve 0.15 -0.25 -0.25 0.35
+sdf.carve -0.15 0.3 0.05 0.35
+sdf.carve 0.25 -0.05 0.3 0.35
+sdf.carve -0.25 -0.1 -0.3 0.35
+sdf.carve 0.1 0.2 0.3 0.35
+sdf.carve -0.1 -0.2 -0.3 0.35
+sdf.carve 0.3 0.3 -0.1 0.35
+step 10
+settle
+sdf.info
+capture artifacts/carve-bake/01-analytic-cluster.png
+step 3
+
+# The pipeline defaults OFF — status should read the bin analytic (no bake ever requested).
+sdf.bake status
+
+# BAKE: flip the feature switch on, then force an immediate settle instead of waiting the usual quiet window.
+sdf.carve-bake on
+sdf.bake now
+step 10
+settle
+
+# VERIFY: the bin should now report a Ready slot sampling the SampledRegion brick. The render is expected to stay
+# within the plan's epsilon fidelity budget (sub-voxel surface displacement) — NOT bit-identical to the analytic
+# capture above, which is the point (the brick is a compiled cache, not a re-derivation).
+sdf.bake status
+sdf.info
+capture artifacts/carve-bake/02-baked-cluster.png
+step 3
+
+# INVALIDATE: edit the settled bin (append one more carve) — the plan's rule is that the touched bin falls straight
+# back to analytic THIS rebuild (never a stale brick sampled past an edit), and only re-bakes after it settles again.
+sdf.carve 0.0 -0.1 0.0 0.3
+step 5
+sdf.bake status
+capture artifacts/carve-bake/03-invalidated-back-to-analytic.png
+step 3
+
+# ROUND-TRIP: disable the switch — deleting every brick must always reproduce the identical scene (plan §0's
+# doctrine), so this recaptures the SAME analytic field as the very first capture, just slower.
+sdf.carve-bake off
+step 5
+sdf.bake status
+capture artifacts/carve-bake/04-disabled-back-to-analytic.png
+step 3
+
+# Exit the mode — the room returns.
+sdf
+step 20
+settle
+state

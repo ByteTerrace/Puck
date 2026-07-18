@@ -19,10 +19,17 @@ namespace Puck.Commands;
 /// stamp it from the shared capture clock when it arrives (the live path); a producer that already knows the tick
 /// (a deterministic script or a replay-grade harness) sets it explicitly.
 /// </param>
+/// <param name="Text">The original simulation-command line, when the injection came from console text. Preserved in
+/// the snapshot so argument-bearing verbs execute from the recording at tick time.</param>
 public readonly record struct CommandInjection(
     ushort CommandId,
     CommandValue Value,
     CommandPhase Phase,
     int Slot = 0,
-    ulong CaptureTick = 0UL
-);
+    ulong CaptureTick = 0UL,
+    string? Text = null
+) {
+    /// <summary>Whether applying this local live injection releases <see cref="TextCommandSource"/>'s deferred-mutation
+    /// drain barrier. This is process-local coordination, not deterministic snapshot identity.</summary>
+    internal bool CompletesTextSubmission { get; init; }
+}

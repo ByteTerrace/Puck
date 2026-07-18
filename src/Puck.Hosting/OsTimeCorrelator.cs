@@ -38,7 +38,7 @@ public readonly struct OsTimeCorrelator {
     /// <param name="osStamp">The event's OS timestamp (same 32-bit base as the pin).</param>
     /// <param name="engineCeiling">The current <see cref="InputClock.NowTicks"/>; the result never exceeds it.</param>
     public ulong ToEngineTicks(uint osStamp, ulong engineCeiling) {
-        var osDelta = (ulong)unchecked(osStamp - m_osReference);
+        var osDelta = (ulong)unchecked((osStamp - m_osReference));
 
         // floor(osDelta × PerSecond ÷ osFrequency), overflow-safe (split whole/fraction), exact.
         var whole = (osDelta / m_osFrequency);

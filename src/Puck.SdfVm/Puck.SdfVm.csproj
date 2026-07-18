@@ -22,7 +22,14 @@
         <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <!-- Puck.SdfVm.Queries (Queries/) is fixed-point-only by contract — no float, no GPU — so it leans on the
+             shared fixed-point math types directly rather than re-deriving them. Puck.Maths has zero dependencies of
+             its own, so this edge only ever points one way. -->
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
+        <!-- The font-atlas model + em-space layout (render-agnostic, same engine-services layer): the SdfProgramBuilder
+             Text() helper lays a string out against a FontAtlas and emits one SDF_SHAPE_GLYPH cell per character. -->
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -37,9 +44,10 @@
     <ItemGroup>
         <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
         <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
-        <!-- The ray-query kernels (*.rq.comp.hlsl) need Shader Model 6.5 (inline RayQuery) and the vulkan1.2 SPIR-V
-             target, so they have their own rule below; EXCLUDE them from the cs_6_0 compute batch. They compile to
-             BOTH SPIR-V (Vulkan) and DXIL (Direct3D 12 DXR 1.1) — inline ray tracing is expressible in both. -->
+        <!-- The ray-query kernels (*.rq.comp.hlsl) need inline RayQuery (Shader Model 6.5+); they compile at the same
+             cs_6_6 / vulkan1.3 floor as every other kernel below, but keep their own rule so the DXIL pass emits DXR 1.1
+             inline ray tracing. EXCLUDE them from the plain compute batch. They compile to BOTH SPIR-V (Vulkan) and DXIL
+             (Direct3D 12 DXR 1.1) — inline ray tracing is expressible in both. -->
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" Exclude="Assets\Shaders\**\*.rq.comp.hlsl" />
         <RayQueryComputeShaderSource Include="Assets\Shaders\**\*.rq.comp.hlsl" />
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
@@ -52,9 +60,12 @@
         />
     </Target>
 
-    <!-- Compile each *.vert.hlsl / *.frag.hlsl to BOTH SPIR-V (Vulkan; entry renamed to "main") and DXIL
-         (DirectX). DXC resolves #include relative to the source directory. The vk:: binding/push-constant
-         attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. -->
+    <!-- Compile each *.vert.hlsl / *.frag.hlsl to BOTH SPIR-V (Vulkan 1.3 / SPIR-V 1.6, entry renamed to "main")
+         and DXIL (DirectX, Shader Model 6.6). DXC resolves #include relative to the source directory. The vk:: binding/
+         push-constant attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. Every
+         invocation pins the capability floor: -fspv-target-env=vulkan1.3 (SPIR-V 1.6), -T *_6_6 (Shader Model 6.6),
+         explicit -O3, and -enable-16bit-types (inert until a kernel adopts fp16 — no min16float appears today, so it
+         changes no semantics; it raises the toolchain floor so the four supported GPUs' 2×-rate fp16 is reachable). -->
     <Target
         BeforeTargets="PrepareForBuild"
         Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)"
@@ -80,20 +91,21 @@
         <!-- The per-item-type Condition guards (FullPath != '') keep a partial incremental build robust: when
              only one shader stage changed, MSBuild runs the target with the other stage's batch empty, and an
              unguarded Exec would invoke dxc with no input file. -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T vs_6_0 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T vs_6_0 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
         <!-- Compute kernels: SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX). The vk:: binding/push-constant
              attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings; the register()
              slots drive the Direct3D 12 root signature. -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T cs_6_0 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T cs_6_0 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
-        <!-- Ray-query kernels compile to BOTH backends at Shader Model 6.5: SPIR-V (Vulkan; the vulkan1.2 target env
-             enables SPV_KHR_ray_query, entry renamed to "main") and DXIL (Direct3D 12 DXR 1.1 inline ray tracing). The
-             vk:: binding/push-constant/image-format attributes are SPIR-V-only, so the DXIL pass suppresses the
-             "attribute ignored" warnings; the register() slots drive the Direct3D 12 root signature. -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.2 -fspv-entrypoint-name=main -T cs_6_5 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).spv&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T cs_6_5 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).dxil&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <!-- Ray-query kernels compile to BOTH backends at Shader Model 6.6: SPIR-V (Vulkan; the vulkan1.3 target env —
+             SPIR-V 1.6 — subsumes SPV_KHR_ray_query's 1.2 requirement, entry renamed to "main") and DXIL (Direct3D 12
+             DXR 1.1 inline ray tracing). The vk:: binding/push-constant/image-format attributes are SPIR-V-only, so the
+             DXIL pass suppresses the "attribute ignored" warnings; the register() slots drive the Direct3D 12 root
+             signature. Same -O3 / -enable-16bit-types floor as the other kernels. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).spv&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).dxil&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
     </Target>
 </Project>

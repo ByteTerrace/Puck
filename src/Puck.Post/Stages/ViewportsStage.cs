@@ -20,10 +20,10 @@ internal sealed class ViewportsStage : IPostStage {
     private const uint OutputWidth = 512;
     private const uint PaneSize = 256;    // each half pane is 256×256
     private const uint SmallSize = 64;    // the right pane's pre-upscale source (exact 4x)
-    private const uint WorkgroupEdge = 8;
     private const int ChildPushByteLength = 16;
-    private const int ResamplePushByteLength = 32;
     private const int CompositePushByteLength = (16 + ((sizeof(float) * 4) * MaxViewports));
+    private const int ResamplePushByteLength = 32;
+    private const uint WorkgroupEdge = 8;
 
     /// <inheritdoc/>
     public string Name => "viewports";
@@ -157,7 +157,7 @@ internal sealed class ViewportsStage : IPostStage {
             var raw = readback.Read(bytesPerPixel: 4, deviceContext: device, format: Format, height: PaneSize, sourceImageHandle: rawPane.ImageHandle, width: PaneSize).ToArray();
             var small = readback.Read(bytesPerPixel: 4, deviceContext: device, format: Format, height: SmallSize, sourceImageHandle: smallSource.ImageHandle, width: SmallSize).ToArray();
 
-            var artifactPath = Path.Combine(context.ArtifactsDirectory, "viewports.png");
+            var artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "viewports.png");
 
             _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
             PngEncoder.Write(height: (int)OutputHeight, path: artifactPath, rgba: composite, width: (int)OutputWidth);
@@ -174,20 +174,20 @@ internal sealed class ViewportsStage : IPostStage {
                         expected = (int)(((y * PaneSize) + x) * 4);
                         half = "left(raw)";
 
-                        if ((composite[actual] != raw[expected]) || (composite[actual + 1] != raw[expected + 1]) || (composite[actual + 2] != raw[expected + 2])) {
+                        if ((composite[actual] != raw[expected]) || (composite[(actual + 1)] != raw[(expected + 1)]) || (composite[(actual + 2)] != raw[(expected + 2)])) {
                             return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"composite({x},{y}) {half} != oracle — region placement or the 1:1 copy broke");
                         }
                     } else {
                         expected = (int)(((((y / 4) * SmallSize) + ((x - PaneSize) / 4))) * 4);
                         half = "right(4x nearest)";
 
-                        if ((composite[actual] != small[expected]) || (composite[actual + 1] != small[expected + 1]) || (composite[actual + 2] != small[expected + 2])) {
+                        if ((composite[actual] != small[expected]) || (composite[(actual + 1)] != small[(expected + 1)]) || (composite[(actual + 2)] != small[(expected + 2)])) {
                             return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"composite({x},{y}) {half} != oracle — the resampled pane or its placement broke");
                         }
                     }
 
-                    if (composite[actual + 3] != 255) {
-                        return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"composite({x},{y}) alpha {composite[actual + 3]} != 255");
+                    if (composite[(actual + 3)] != 255) {
+                        return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"composite({x},{y}) alpha {composite[(actual + 3)]} != 255");
                     }
                 }
             }
@@ -200,7 +200,6 @@ internal sealed class ViewportsStage : IPostStage {
     }
 
     private static uint Groups(uint size) => ((size + (WorkgroupEdge - 1)) / WorkgroupEdge);
-
     private static byte[] ChildPush(uint extent) {
         var push = new byte[ChildPushByteLength];
         var words = MemoryMarshal.Cast<byte, uint>(span: push.AsSpan());

@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
 using Puck.Commands;
-using Puck.Demo.Replay;
 
 namespace Puck.Demo.Overworld;
 
@@ -43,39 +42,23 @@ public static class OverworldDeterminism {
         }
 
         var schedule = BuildSchedule(players: players);
+        var subject = new Subject(cycleId: cycleId, interactId: interactId, jumpId: jumpId, moveId: moveId, registry: registry, schedule: schedule, seed: seed, ticks: ticks);
+        var report = DeterminismHarness.Verify(seed: seed, subject: subject);
 
-        ISnapshotSource Script() => new ScriptedSnapshotSource(script: tick => BuildSnapshot(tick: tick, moveId: moveId, jumpId: jumpId, interactId: interactId, cycleId: cycleId));
-
-        // First run records its input snapshots and the per-tick roster events it applied.
-        var recorder = new InputRecorder(seed: seed);
-        var capturedRoster = new List<ImmutableArray<RosterEvent>>();
-        var first = Simulate(seed: seed, input: new RecordingSnapshotSource(inner: Script(), recorder: recorder), roster: new ScriptedRosterEventSource(schedule: schedule), ticks: ticks, moveId: moveId, jumpId: jumpId, interactId: interactId, cycleId: cycleId, capturedRoster: capturedRoster);
-        var second = Simulate(seed: seed, input: Script(), roster: new ScriptedRosterEventSource(schedule: schedule), ticks: ticks, moveId: moveId, jumpId: jumpId, interactId: interactId, cycleId: cycleId, capturedRoster: null);
-        var divergence = HashTrace.FirstDivergence(left: first, right: second);
-
-        if (divergence >= 0) {
-            return new Result(Message: $"NON-DETERMINISTIC across join/leave: two identical scripted runs diverged at tick {divergence}.", Passed: false);
+        if (report.Verdict == DeterminismVerdict.NonDeterministic) {
+            return new Result(Message: $"NON-DETERMINISTIC across join/leave: two identical scripted runs diverged at tick {report.DivergenceTick}.", Passed: false);
         }
 
-        // Replay fidelity, including a binary round-trip of the recording (input snapshots + roster events).
-        var recording = new OverworldRecording { Input = recorder.ToRecording(), RosterEvents = [.. capturedRoster], };
-
-        using var stream = new MemoryStream();
-
-        recording.Write(stream: stream, registry: registry);
-        stream.Position = 0L;
-
-        var roundTripped = OverworldRecording.Read(stream: stream, registry: registry);
-        var replayed = Simulate(seed: roundTripped.Input.Seed, input: new ReplaySnapshotSource(recording: roundTripped.Input), roster: new ReplayRosterEventSource(recording: roundTripped), ticks: ticks, moveId: moveId, jumpId: jumpId, interactId: interactId, cycleId: cycleId, capturedRoster: null);
-        var replayDivergence = HashTrace.FirstDivergence(left: first, right: replayed);
-
-        if (replayDivergence >= 0) {
-            return new Result(Message: $"REPLAY DIVERGED from the recorded run at tick {replayDivergence}.", Passed: false);
+        if (report.Verdict == DeterminismVerdict.ReplayDiverged) {
+            return new Result(Message: $"REPLAY DIVERGED from the recorded run at tick {report.DivergenceTick}.", Passed: false);
         }
 
         // Planet-scale translation invariance: the same scripted run with the whole room in a far world cell must
-        // produce an identical CELL-INVARIANT (local) trajectory.
+        // produce an identical CELL-INVARIANT (local) trajectory. Deliberately outside the harness — it is a
+        // spatial-invariance property, not a record/replay one.
         const long farCell = 1_000_000_000L;
+
+        ISnapshotSource Script() => new ScriptedSnapshotSource(script: tick => BuildSnapshot(tick: tick, moveId: moveId, jumpId: jumpId, interactId: interactId, cycleId: cycleId));
         var nearLocal = Simulate(seed: seed, input: Script(), roster: new ScriptedRosterEventSource(schedule: schedule), ticks: ticks, moveId: moveId, jumpId: jumpId, interactId: interactId, cycleId: cycleId, capturedRoster: null, localHash: true);
         var farLocal = Simulate(seed: seed, input: Script(), roster: new ScriptedRosterEventSource(schedule: schedule), ticks: ticks, moveId: moveId, jumpId: jumpId, interactId: interactId, cycleId: cycleId, capturedRoster: null, spawnCell: farCell, localHash: true);
         var cellDivergence = HashTrace.FirstDivergence(left: nearLocal, right: farLocal);
@@ -84,7 +67,50 @@ public static class OverworldDeterminism {
             return new Result(Message: $"PLANET-SCALE INVARIANCE BROKEN: the cell 0 and cell {farCell:N0} local trajectories diverged at tick {cellDivergence}.", Passed: false);
         }
 
-        return new Result(Message: $"determinism + replay + planet-scale cell-invariance (cell 0 ≡ cell {farCell:N0}) verified over {ticks} ticks with scheduled join/leave/recycle + cabinet insert/eject/cycle (peak {OverworldWorld.MaxPlayers} players; final hash 0x{first[^1]:X16})", Passed: true);
+        return new Result(Message: $"determinism + replay + planet-scale cell-invariance (cell 0 ≡ cell {farCell:N0}) verified over {ticks} ticks with scheduled join/leave/recycle + cabinet insert/eject/cycle (peak {OverworldWorld.MaxPlayers} players; final hash 0x{report.LiveHashes[^1]:X16})", Passed: true);
+    }
+
+    // The determinism-harness subject: one fresh scripted Overworld run per call, packing the roster side channel
+    // alongside the harness-captured input recording.
+    private sealed class Subject : IDeterminismSubject<OverworldRecording> {
+        private readonly List<ImmutableArray<RosterEvent>> m_capturedRoster = [];
+        private readonly ushort m_cycleId;
+        private readonly ushort m_interactId;
+        private readonly ushort m_jumpId;
+        private readonly ushort m_moveId;
+        private readonly CommandRegistry m_registry;
+        private readonly IReadOnlyList<(ulong Tick, RosterEvent Event)> m_schedule;
+        private readonly uint m_seed;
+        private readonly int m_ticks;
+
+        public Subject(ushort cycleId, ushort interactId, ushort jumpId, ushort moveId, CommandRegistry registry, IReadOnlyList<(ulong Tick, RosterEvent Event)> schedule, uint seed, int ticks) {
+            m_cycleId = cycleId;
+            m_interactId = interactId;
+            m_jumpId = jumpId;
+            m_moveId = moveId;
+            m_registry = registry;
+            m_schedule = schedule;
+            m_seed = seed;
+            m_ticks = ticks;
+        }
+
+        public ulong[] RunScripted(bool record, Func<ISnapshotSource, ISnapshotSource> decorate) {
+            ISnapshotSource Script() => new ScriptedSnapshotSource(script: tick => BuildSnapshot(tick: tick, moveId: m_moveId, jumpId: m_jumpId, interactId: m_interactId, cycleId: m_cycleId));
+
+            return Simulate(seed: m_seed, input: decorate(Script()), roster: new ScriptedRosterEventSource(schedule: m_schedule), ticks: m_ticks, moveId: m_moveId, jumpId: m_jumpId, interactId: m_interactId, cycleId: m_cycleId, capturedRoster: (record ? m_capturedRoster : null));
+        }
+        public OverworldRecording PackRecording(SnapshotRecording input) {
+            return new OverworldRecording { Input = input, RosterEvents = [.. m_capturedRoster], };
+        }
+        public void WriteRecording(Stream stream, OverworldRecording recording) {
+            recording.Write(stream: stream, registry: m_registry);
+        }
+        public OverworldRecording ReadRecording(Stream stream) {
+            return OverworldRecording.Read(stream: stream, registry: m_registry);
+        }
+        public ulong[] RunReplay(OverworldRecording recording) {
+            return Simulate(seed: recording.Input.Seed, input: new ReplaySnapshotSource(recording: recording.Input), roster: new ReplayRosterEventSource(recording: recording), ticks: m_ticks, moveId: m_moveId, jumpId: m_jumpId, interactId: m_interactId, cycleId: m_cycleId, capturedRoster: null);
+        }
     }
 
     // Exercises empty→full, two joins on one tick (ordering), a mid-slot leave, and a recycling rejoin.
@@ -130,7 +156,6 @@ public static class OverworldDeterminism {
 
         return new CommandSnapshot(Lanes: lanes.DrainToImmutable(), Tick: tick);
     }
-
     private static ulong[] Simulate(uint seed, ISnapshotSource input, IRosterEventSource roster, int ticks, ushort moveId, ushort jumpId, ushort interactId, ushort cycleId, List<ImmutableArray<RosterEvent>>? capturedRoster, long spawnCell = 0L, bool localHash = false) {
         var world = new OverworldWorld(room: ScriptedRoom, tuning: PlatformerTuning.Default, tickSeconds: TickSeconds, seed: seed, spawnCellX: spawnCell, spawnCellZ: spawnCell, startLoaded: false);
         var hashes = new ulong[ticks];
@@ -159,11 +184,10 @@ public static class OverworldDeterminism {
 
         return hashes;
     }
-
     private static Guid DeterministicGuid(uint salt) {
         var bytes = new byte[16];
 
-        BitConverter.TryWriteBytes(destination: bytes, value: (0xA571_0000u | salt));
+        BitConverter.TryWriteBytes(destination: bytes, value: 0xA571_0000u | salt);
 
         return new Guid(b: bytes);
     }

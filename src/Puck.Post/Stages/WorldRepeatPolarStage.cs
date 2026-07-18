@@ -41,42 +41,42 @@ internal sealed class WorldRepeatPolarStage : IPostStage {
     // mirrored and unmirrored fold, and both the geometric-only and material-strided recolor paths.
     internal static SdfProgram BuildRepeatPolarScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
 
         // Chain 1's 10 CONTIGUOUS emissive rows: the shape names only the first (rainbowBase); materialStride 1
         // reaches the 9 that follow — the only path to them, exactly as CellJitter's hashed variants reach lime/azure.
         const int RainbowCount = 10;
         var rainbowBase = 0;
 
-        for (var i = 0; i < RainbowCount; i++) {
+        for (var i = 0; (i < RainbowCount); i++) {
             var hue = (i * ((2f * MathF.PI) / RainbowCount));
             var color = new Vector3(
-                0.5f + (0.45f * MathF.Cos(hue)),
-                0.5f + (0.45f * MathF.Cos(hue - 2.0944f)),
-                0.5f + (0.45f * MathF.Cos(hue - 4.1888f))
+                x: (0.5f + (0.45f * MathF.Cos(x: hue))),
+                y: (0.5f + (0.45f * MathF.Cos(x: (hue - 2.0944f)))),
+                z: (0.5f + (0.45f * MathF.Cos(x: (hue - 4.1888f))))
             );
             var row = builder.AddMaterial(material: new SdfMaterial(Albedo: color, Emissive: 0.3f));
 
             if (i == 0) { rainbowBase = row; }
         }
 
-        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.75f, 0.25f), Emissive: 0.3f));
+        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.75f, z: 0.25f), Emissive: 0.3f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // Chain 1: ring center at world (-1.8, 0, 0). The asymmetric round box sits ON the bisector (a = 0) at
             // radius 1.0; its 0.07 tangential half-extent subtends ~5° there, far inside the 10-sector 18° half-angle.
-            .Translate(offset: new Vector3(-1.8f, 0f, 0f))
+            .Translate(offset: new Vector3(x: -1.8f, y: 0f, z: 0f))
             .RepeatPolar(count: RainbowCount, axis: SdfPolarAxis.Y, mirror: false, materialStride: 1)
-            .Translate(offset: new Vector3(1.0f, 0.1f, 0f))
-            .Box(halfExtents: new Vector3(0.16f, 0.09f, 0.07f), round: 0.02f, material: rainbowBase)
+            .Translate(offset: new Vector3(x: 1.0f, y: 0.1f, z: 0f))
+            .Box(halfExtents: new Vector3(x: 0.16f, y: 0.09f, z: 0.07f), round: 0.02f, material: rainbowBase)
             // Chain 2: ring center at world (1.8, 0, 0). The cone sits OFF the bisector (~9° at radius ~0.87) so its
             // mirrored twin (the fold reflects it back across a = 0) lands ~9° to the other side of the bisector —
             // both wells inside the 8-sector 22.5° half-angle, so the mirrored pair never approaches a wall.
             .ResetPoint()
-            .Translate(offset: new Vector3(1.8f, 0f, 0f))
+            .Translate(offset: new Vector3(x: 1.8f, y: 0f, z: 0f))
             .RepeatPolar(count: 8, axis: SdfPolarAxis.Y, mirror: true)
-            .Translate(offset: new Vector3(0.86f, 0.02f, 0.135f))
+            .Translate(offset: new Vector3(x: 0.86f, y: 0.02f, z: 0.135f))
             .RoundCone(lowerRadius: 0.12f, upperRadius: 0.04f, height: 0.28f, material: gold)
             .Build();
     }

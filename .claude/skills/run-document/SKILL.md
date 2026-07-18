@@ -36,9 +36,9 @@ GENERATED, never hand-edited.
   unless they start with `$` or `_` (comments/schema refs). Adding a
   top-level section means updating that error message's expected-keys list.
 - **The validator/pre-flight split**: the validator rejects what is NEVER
-  valid — malformed shapes, RETIRED affordances (e.g. `world.child`), and
-  data the selected root intent would silently ignore (e.g. a non-empty
-  `screenSources` on a non-world graph). `GraphBuilder.UnsupportedReason`
+  valid — malformed shapes, and data the selected root intent would silently
+  ignore (e.g. a non-empty `screenSources` on a non-world graph).
+  `GraphBuilder.UnsupportedReason`
   (pre-flighted in `Program` before the window host builds; attributed
   stderr + exit 2) owns only CAPABILITY gaps a valid document may name —
   deferred paths (`live-camera`) and host-dependent ones (cross-backend
@@ -76,18 +76,36 @@ canonical statement.)
 - Hex convention: JSON has no hex numbers — addresses are `0x`-prefixed
   STRINGS (see `BrickExitCondition.Address` + `TryParseAddress`).
 
+## The group construct (scene-object scoping in JSON)
+
+- `"shape": "group"` (`GroupObject`, landed 2026-07-09): members blend
+  against EACH OTHER inside the group's own `PushField`/`PopField` scope
+  (each member's `blend`/`smooth` is local), then the finished field
+  composes into the parent via the GROUP's own `blend`/`smooth`. The JSON
+  surface for the VM's scoped accumulator — an intersection inside a group
+  can no longer annihilate the rest of the scene.
+- Depth-1 rules the VALIDATOR enforces (`MaxFieldScopeDepth` = 1): a nested
+  group is rejected, and a member carrying its own `dilate`/`onion`/
+  `displace` is rejected (each of those wants its own scope). The negatives
+  corpus pins both.
+- `RunDocumentValidator.CountPrimitives` recurses into groups for the
+  `MaxPrimitives` bound. Showcase: `docs/examples/world-group.json`.
+
 ## The graph kinds and their policy
 
 - **`world`**: the document's scene + viewports rendered live through the
-  shared `SdfWorldRenderBuilder` on the HOST backend. The retired `child`
-  bool is rejected by the VALIDATOR; explicit `produce` disagreeing with the
-  host and `live-camera` viewport sources are capability gaps rejected by
-  `GraphBuilder.UnsupportedReason` (the one owner of that list).
+  shared `SdfWorldRenderBuilder` on the HOST backend. Explicit `produce`
+  disagreeing with the host and `live-camera` viewport sources are
+  capability gaps rejected by `GraphBuilder.UnsupportedReason` (the one
+  owner of that list).
 - **`overworld`**: builds its own dynamic scene/views; consumes `consoles` +
   `library`, ignores scene/viewports, REJECTS `produce` (host device only).
 - **Viewport sources** (`$type`): `orbit`/`perspective` cameras;
   `gaming-brick` (a live machine pane — `model`/`fit`/`romPath`/`speed`/
-  `runAs`/`exit`); `live-camera` (data modeled, node pending re-host).
+  `runAs`/`native`/`exit`/`victory`/`peripheral`/`startCart`; `startCart` is
+  a nullable int naming the cabinet's initial cart type as durable data,
+  range-clamped at CONSUMPTION in Puck.Demo, which owns `CartTypeCount`);
+  `live-camera` (data modeled, node pending re-host).
 - **`screenSources`** (top level): screenIndex → provider; the `viewport`
   provider samples a gaming-brick viewport's NATIVE (unresampled)
   framebuffer. Consumed ONLY by the world graph — the validator rejects a
@@ -105,6 +123,24 @@ canonical statement.)
 - Precedence gotcha: a document's `host.exitAfterSeconds` WINS over the CLI
   flag (`host?.ExitAfterSeconds ?? flag`); a doc pinning `0` runs until the
   window closes or an exit condition fires, regardless of the flag.
+
+## Addons (`puck.addon.v1` declarations)
+
+The document-level `addons` list (`PuckRunDocument.Addons`, beside
+`viewports`/`screenSources`) declares WASM addons the sim-tick host
+instantiates via `Puck.Scripting` — a first-class engine concept, not a field
+on `OverworldNode`. Each `AddonDocument` names a module by **path only**
+(`ModulePath`, mirroring `GamingBrickSource.RomPath` — "content-addressing is
+a host-side concern"); an optional `ModuleHash` (`sha256-64/{16 hex}`) is a
+pure integrity pin, not an identity. `RunDocumentValidator.ValidateAddons`
+rejects a duplicate `Name` and a duplicate **declared** (non-null) `Slot`
+(mirroring the duplicate-`ScreenIndex` check) — null slots are not
+dedup-checked here since the demo host seats them at the first free
+non-human slot. Addons are meaningful only under a `graph` root intent
+(rejected under `validation`/`fuzzing`, mirroring the `screenSources`
+scoping). Like everything else, addons are **filesystem-free at parse
+time** — existence and hash verification are the demo's pre-flight, not the
+validator's job.
 
 ## Verifying
 

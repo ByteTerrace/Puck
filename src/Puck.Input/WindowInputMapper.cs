@@ -23,11 +23,24 @@ public static class WindowInputMapper {
                     ? InputSignal.Release(source: source, modifiers: inputEvent.Modifiers)
                     : InputSignal.Press(source: source, modifiers: inputEvent.Modifiers));
             case WindowInputKind.Text:
-                return InputSignal.Typed(source: InputSources.Keyboard.Text, text: inputEvent.Text ?? string.Empty);
+                return InputSignal.Typed(source: InputSources.Keyboard.Text, text: (inputEvent.Text ?? string.Empty));
             case WindowInputKind.PointerMove:
                 return InputSignal.Axis(source: InputSources.Pointer.Move, value: inputEvent.Vector);
             case WindowInputKind.PointerPosition:
                 return InputSignal.Axis(source: InputSources.Pointer.Position, value: inputEvent.Vector);
+            case WindowInputKind.PointerButton:
+                // Deliberately inert: see InputSources.Pointer.Button. A drag needs continuous per-frame held
+                // state, not a one-shot bound command, and button state is presentation/session-only — it must
+                // never reach a CommandSnapshot. UI-layer consumers (the demo's pointer store) read button state
+                // directly off the raw WindowInputEvent stream via IPointerInputSink, not through this signal or
+                // the binding vocabulary. This case exists only so a click does not throw as it passes through
+                // here on its way to that store.
+                return new InputSignal(
+                    Source: InputSources.Pointer.Button,
+                    DeviceId: default,
+                    Value: CommandValue.Digital(active: (inputEvent.Phase == CommandPhase.Started)),
+                    Phase: inputEvent.Phase
+                );
             default:
                 throw new ArgumentOutOfRangeException(paramName: nameof(inputEvent));
         }
@@ -44,6 +57,7 @@ public static class WindowInputMapper {
             KeyCode.ArrowDown => InputSources.Keyboard.ArrowDown,
             KeyCode.ArrowLeft => InputSources.Keyboard.ArrowLeft,
             KeyCode.ArrowRight => InputSources.Keyboard.ArrowRight,
+            KeyCode.Space => InputSources.Keyboard.Space,
             KeyCode.Letter => InputSources.Keyboard.Letter(letter: inputEvent.Character),
             >= KeyCode.F1 and <= KeyCode.F12 => InputSources.Keyboard.Function(number: ((inputEvent.Key - KeyCode.F1) + 1)),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(inputEvent)),

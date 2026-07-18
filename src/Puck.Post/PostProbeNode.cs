@@ -57,7 +57,6 @@ internal sealed class PostProbeNode : IRenderNode {
     private readonly string m_mode;
     private readonly PostRunResult m_runResult;
     private readonly IServiceProvider m_services;
-
     private nint m_commandBuffer;
     private IGpuComputeCommandPool? m_commandPool;
     private IGpuDeviceContext? m_deviceContext;
@@ -165,7 +164,7 @@ internal sealed class PostProbeNode : IRenderNode {
             ? m_services.GetRequiredService<BackendSwitcher>().ActiveBackendName
             : VulkanBackendName);
 
-        if ((m_image is not null) && !string.Equals(m_resourcesBackend, activeBackend, StringComparison.OrdinalIgnoreCase)) {
+        if ((m_image is not null) && !string.Equals(a: m_resourcesBackend, b: activeBackend, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             ReleaseResources();
             m_rebuildCount++;
         }
@@ -198,7 +197,6 @@ internal sealed class PostProbeNode : IRenderNode {
             RequestExit(context: in context);
         }
     }
-
     private void StepHotSwitch(in FrameContext context) {
         var switcher = m_services.GetRequiredService<BackendSwitcher>();
 
@@ -212,7 +210,7 @@ internal sealed class PostProbeNode : IRenderNode {
             switcher.Switch();
             m_switched = true;
 
-            if (string.Equals(before, switcher.ActiveBackendName, StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(a: before, b: switcher.ActiveBackendName, comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 Console.Error.WriteLine(value: $"PROBE hot-switch fail | Switch() did not change the active backend (still '{switcher.ActiveBackendName}') — is the second presenter registered?");
                 m_runResult.ExitCode = 1;
                 m_verdictWritten = true;
@@ -262,7 +260,7 @@ internal sealed class PostProbeNode : IRenderNode {
         // A changed PresentCount signals a NEW confirmed present; difference its timestamp with the previous one.
         if (sample.IsAvailable && (sample.PresentCount != m_lastPresentCount)) {
             if (m_lastPresentTicks > 0L) {
-                var intervalMs = ((sample.PresentTimestampTicks - m_lastPresentTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                var intervalMs = (((sample.PresentTimestampTicks - m_lastPresentTicks) * 1000.0) / System.Diagnostics.Stopwatch.Frequency);
 
                 if (intervalMs <= 0.0) {
                     m_nonMonotonicPresent = true;
@@ -315,7 +313,7 @@ internal sealed class PostProbeNode : IRenderNode {
             return true;
         }
 
-        if (string.Equals(activeBackend, VulkanBackendName, StringComparison.OrdinalIgnoreCase)) {
+        if (string.Equals(a: activeBackend, b: VulkanBackendName, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             if (!context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)) {
                 return false;
             }
@@ -329,7 +327,7 @@ internal sealed class PostProbeNode : IRenderNode {
         }
 
         var deviceHandle = m_deviceContext!.DeviceHandle;
-        var extension = (string.Equals(activeBackend, VulkanBackendName, StringComparison.OrdinalIgnoreCase) ? ".spv" : ".dxil");
+        var extension = (string.Equals(a: activeBackend, b: VulkanBackendName, comparisonType: StringComparison.OrdinalIgnoreCase) ? ".spv" : ".dxil");
         var bytecode = PostShaders.Read(folder: "Sdf", file: ("sdf-child.comp" + extension));
 
         GpuComputeBinding[] bindings = [new GpuComputeBinding(Binding: 0, Kind: GpuComputeBindingKind.StorageImage)];
@@ -363,11 +361,11 @@ internal sealed class PostProbeNode : IRenderNode {
             var collection = new ServiceCollection();
 
             collection.AddDirectXComputeApis();
-            collection.TryAddSingleton<IGpuDescriptorAllocator>(static _ => new DirectXGpuDescriptorAllocator());
-            collection.TryAddSingleton<IGpuQueueSubmitter>(static _ => new DirectXGpuQueueSubmitter());
-            collection.TryAddSingleton<IGpuShaderModuleFactory>(static _ => new DirectXGpuShaderModuleFactory());
-            collection.TryAddSingleton<IGpuStorageBufferFactory>(static _ => new DirectXGpuStorageBufferFactory());
-            collection.TryAddSingleton<IGpuSurfaceTransferFactory>(static _ => new DirectXGpuSurfaceTransferFactory());
+            collection.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static _ => new DirectXGpuDescriptorAllocator());
+            collection.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static _ => new DirectXGpuQueueSubmitter());
+            collection.TryAddSingleton<IGpuShaderModuleFactory>(implementationFactory: static _ => new DirectXGpuShaderModuleFactory());
+            collection.TryAddSingleton<IGpuStorageBufferFactory>(implementationFactory: static _ => new DirectXGpuStorageBufferFactory());
+            collection.TryAddSingleton<IGpuSurfaceTransferFactory>(implementationFactory: static _ => new DirectXGpuSurfaceTransferFactory());
 
             m_directXProvider = collection.BuildServiceProvider();
         }
@@ -416,7 +414,6 @@ internal sealed class PostProbeNode : IRenderNode {
 
         return (seen.Count > 1);
     }
-
     private void ReleaseResources() {
         m_commandPool?.Dispose();
         m_commandPool = null;
@@ -437,7 +434,6 @@ internal sealed class PostProbeNode : IRenderNode {
         m_outputInitialized = false;
         m_resourcesBackend = null;
     }
-
     private static byte[] BuildChildPush() {
         var push = new byte[ChildPushByteLength];
         var words = MemoryMarshal.Cast<byte, uint>(span: push.AsSpan());
@@ -447,7 +443,6 @@ internal sealed class PostProbeNode : IRenderNode {
 
         return push;
     }
-
     private static void RequestExit(in FrameContext context) {
         if (context.Host.HoldsCapability<ITerminalControl>(capability: out var terminal)) {
             terminal.RequestExit();

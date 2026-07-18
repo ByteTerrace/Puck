@@ -28,8 +28,8 @@ internal static class VolleyTables {
     private const int TitlePromptRow = 11;
     private const int TitlePromptColumn = 5;
     private const string TitlePromptText = "PUSH START";
-    private const int TitleScoresRow = 13;
     private const int TitleScoresColumn = 3;
+    private const int TitleScoresRow = 13;
     private const string TitleScoresText = "SELECT SCORES";
 
     private static PbakBackground? s_titleArt;
@@ -95,7 +95,7 @@ internal static class VolleyTables {
             PaddleTileArt(),
             BallTileArt(),
         };
-        var tiles = new byte[parts.Length * 16];
+        var tiles = new byte[(parts.Length * 16)];
 
         for (var index = 0; (index < parts.Length); index++) {
             parts[index].CopyTo(array: tiles, index: (index * 16));
@@ -151,8 +151,8 @@ internal static class VolleyTables {
         var map = new byte[0x400];
 
         for (var column = 2; (column <= 17); column++) {
-            map[(2 * 32) + column] = TileNet;
-            map[(7 * 32) + column] = TileNet;
+            map[((2 * 32) + column)] = TileNet;
+            map[((7 * 32) + column)] = TileNet;
         }
 
         WriteText(map: map, row: 5, column: 7, text: "VOLLEY");
@@ -167,7 +167,7 @@ internal static class VolleyTables {
         var map = new byte[0x400];
 
         for (var row = 1; (row < 18); row++) {
-            map[(row * 32) + 10] = TileNet;
+            map[((row * 32) + 10)] = TileNet;
         }
 
         return map;
@@ -177,20 +177,17 @@ internal static class VolleyTables {
         EncodeTile(rows: [
             "...11...", "...11...", "...11...", "...11...", "........", "........", "...11...", "...11...",
         ]);
-
     private static byte[] PaddleTileArt() =>
         EncodeTile(rows: [
             "33333333", "33333333", "33333333", "33333333", "33333333", "33333333", "33333333", "33333333",
         ]);
-
     private static byte[] BallTileArt() =>
         EncodeTile(rows: [
             "........", "..2222..", ".222222.", ".222222.", ".222222.", ".222222.", "..2222..", "........",
         ]);
-
     private static void WriteText(byte[] map, int row, int column, string text) {
         for (var index = 0; (index < text.Length); index++) {
-            map[(row * 32) + column + index] = TextModule.TileFor(fontTileBase: FontTileBase, character: text[index]);
+            map[(((row * 32) + column) + index)] = TextModule.TileFor(fontTileBase: FontTileBase, character: text[index]);
         }
     }
 
@@ -202,7 +199,7 @@ internal static class VolleyTables {
             var line = rows[row];
 
             for (var column = 0; (column < 8); column++) {
-                indices[(row * 8) + column] = (byte)((column < line.Length) ? (line[column] switch {
+                indices[((row * 8) + column)] = (byte)((column < line.Length) ? (line[column] switch {
                     '1' => 1,
                     '2' => 2,
                     '3' or '#' => 3,

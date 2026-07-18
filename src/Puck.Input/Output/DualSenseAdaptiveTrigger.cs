@@ -17,10 +17,10 @@ public static class DualSenseAdaptiveTrigger {
     /// <summary>The length of one trigger block: the mode byte plus ten parameter bytes.</summary>
     public const int TriggerBlockLength = 11;
 
-    private const byte ModeOff = 0x00;
     private const byte ModeFeedback = 0x21;
-    private const byte ModeWeapon = 0x25;
+    private const byte ModeOff = 0x00;
     private const byte ModeVibration = 0x26;
+    private const byte ModeWeapon = 0x25;
     private const int FrequencyParameterIndex = 8; // Vibration's frequency byte, after the 6-byte zone field
 
     /// <summary>Encodes <paramref name="spec"/> into <paramref name="block"/> (cleared first); the block must be at least <see cref="TriggerBlockLength"/> bytes.</summary>
@@ -31,52 +31,52 @@ public static class DualSenseAdaptiveTrigger {
 
         switch (spec.Kind) {
             case TriggerEffectKind.Feedback: {
-                var (activeZones, valueZones) = PackUniform(startZone: spec.StartZone, strength: spec.Strength);
+                    var (activeZones, valueZones) = PackUniform(startZone: spec.StartZone, strength: spec.Strength);
 
-                block[0] = ModeFeedback;
-                WriteZones(parameters: block[1..], activeZones: activeZones, valueZones: valueZones);
+                    block[0] = ModeFeedback;
+                    WriteZones(parameters: block[1..], activeZones: activeZones, valueZones: valueZones);
 
-                break;
-            }
+                    break;
+                }
             case TriggerEffectKind.Weapon: {
-                var bandZones = ((ushort)((1 << spec.StartZone) | (1 << spec.EndZone)));
+                    var bandZones = ((ushort)((1 << spec.StartZone) | (1 << spec.EndZone)));
 
-                block[0] = ModeWeapon;
-                block[1] = ((byte)(bandZones & 0xFF));
-                block[2] = ((byte)((bandZones >> 8) & 0xFF));
-                block[3] = ((byte)(spec.Strength - 1));
+                    block[0] = ModeWeapon;
+                    block[1] = ((byte)(bandZones & 0xFF));
+                    block[2] = ((byte)((bandZones >> 8) & 0xFF));
+                    block[3] = ((byte)(spec.Strength - 1));
 
-                break;
-            }
+                    break;
+                }
             case TriggerEffectKind.Vibration: {
-                var (activeZones, valueZones) = PackUniform(startZone: spec.StartZone, strength: spec.Strength);
+                    var (activeZones, valueZones) = PackUniform(startZone: spec.StartZone, strength: spec.Strength);
 
-                block[0] = ModeVibration;
-                WriteZones(parameters: block[1..], activeZones: activeZones, valueZones: valueZones);
-                block[1 + FrequencyParameterIndex] = spec.Frequency;
+                    block[0] = ModeVibration;
+                    WriteZones(parameters: block[1..], activeZones: activeZones, valueZones: valueZones);
+                    block[(1 + FrequencyParameterIndex)] = spec.Frequency;
 
-                break;
-            }
+                    break;
+                }
             case TriggerEffectKind.ContinuousCurve: {
-                var (activeZones, valueZones) = PackCurve(spec: in spec);
+                    var (activeZones, valueZones) = PackCurve(spec: in spec);
 
-                block[0] = ModeFeedback;
-                WriteZones(parameters: block[1..], activeZones: activeZones, valueZones: valueZones);
+                    block[0] = ModeFeedback;
+                    WriteZones(parameters: block[1..], activeZones: activeZones, valueZones: valueZones);
 
-                break;
-            }
+                    break;
+                }
             default: {
-                block[0] = ModeOff;
+                    block[0] = ModeOff;
 
-                break;
-            }
+                    break;
+                }
         }
     }
 
     // Sets the same 3-bit strength in every zone from `startZone` to the end of the pull (the uniform Feedback /
     // Vibration packing). Strength is 1..8 here (a zero-strength effect resolves to Off before reaching this).
     private static (ushort ActiveZones, uint ValueZones) PackUniform(byte startZone, byte strength) {
-        var value3Bit = (((uint)(strength - 1)) & 0x07u);
+        var value3Bit = ((uint)(strength - 1)) & 0x07u;
         var valueZones = 0u;
         var activeZones = ((ushort)0);
 

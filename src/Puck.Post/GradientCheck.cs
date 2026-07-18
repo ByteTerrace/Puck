@@ -22,18 +22,18 @@ internal static class GradientCheck {
         for (var y = 0u; (y < height); y++) {
             for (var x = 0u; (x < width); x++) {
                 var offset = (int)((((y * width) + x) * 4u));
-                var expectedR = (int)Math.Round(x / (double)width * 255.0);
-                var expectedG = (int)Math.Round(y / (double)height * 255.0);
+                var expectedR = (int)Math.Round(a: ((x / (double)width) * 255.0));
+                var expectedG = (int)Math.Round(a: ((y / (double)height) * 255.0));
                 int r = pixels[offset];
-                int g = pixels[offset + 1];
-                int b = pixels[offset + 2];
-                int a = pixels[offset + 3];
+                int g = pixels[(offset + 1)];
+                int b = pixels[(offset + 2)];
+                int a = pixels[(offset + 3)];
 
-                if (Math.Abs(r - expectedR) > 1) {
+                if (Math.Abs(value: (r - expectedR)) > 1) {
                     return $"R at ({x},{y}) = {r}, expected {expectedR}±1 (x/width ramp)";
                 }
 
-                if (Math.Abs(g - expectedG) > 1) {
+                if (Math.Abs(value: (g - expectedG)) > 1) {
                     return $"G at ({x},{y}) = {g}, expected {expectedG}±1 (y/height ramp)";
                 }
 

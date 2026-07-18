@@ -76,6 +76,11 @@ internal static partial class User32 {
     [DllImport("user32.dll", EntryPoint = "EnumDisplaySettingsW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool EnumDisplaySettings(string? deviceName, uint modeNumber, ref DevMode devMode);
+    // EnumDisplayMonitors takes a managed delegate callback, unsupported by the source generator — it stays DllImport
+    // (converting needs a function pointer + GCHandle), mirroring EnumWindows.
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumDisplayMonitors(nint deviceContext, nint clipRectangle, MonitorEnumCallback callback, nint parameter);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ShowWindow(nint windowHandle, int command);
@@ -104,31 +109,26 @@ internal static partial class User32 {
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool EnumWindows(EnumWindowsCallback callback, nint parameter);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    public static partial nint GetDC(nint windowHandle);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    public static partial int GetSystemMetrics(int index);
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     public static partial int GetWindowText(nint windowHandle, [Out] char[] text, int maxLength);
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextLengthW", SetLastError = true)]
     public static partial int GetWindowTextLength(nint windowHandle);
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool IsIconic(nint windowHandle);
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool IsWindow(nint windowHandle);
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(nint windowHandle, out uint processId);
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool IsWindowVisible(nint windowHandle);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool PrintWindow(nint windowHandle, nint deviceContextHandle, uint flags);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    public static partial int ReleaseDC(nint windowHandle, nint deviceContextHandle);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool RegisterRawInputDevices(in RawInputDevice rawInputDevices, uint deviceCount, uint size);
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial uint GetRawInputData(nint rawInput, uint command, out RawInput data, ref uint size, uint headerSize);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial nint SetCapture(nint windowHandle);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ReleaseCapture();
 }

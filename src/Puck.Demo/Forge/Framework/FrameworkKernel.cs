@@ -232,7 +232,6 @@ internal static class FrameworkKernel {
         emitter.Pop(pair: StackPair.Af);
         emitter.ReturnFromInterrupt();
     }
-
     private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort, int byteCount) {
         var loop = emitter.NewLabel();
 

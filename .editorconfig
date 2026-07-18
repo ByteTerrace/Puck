@@ -37,12 +37,12 @@ csharp_style_var_for_built_in_types = true:warning
 csharp_style_var_when_type_is_apparent = true:warning
 # CA1501: flag types that inherit from too many base types (deep hierarchies).
 dotnet_diagnostic.CA1501.severity = warning
-# CA1502: flag methods with excessive cyclomatic complexity.
-dotnet_diagnostic.CA1502.severity = warning
-# CA1505: flag members with a low maintainability index (hard to maintain).
-dotnet_diagnostic.CA1505.severity = warning
-# CA1506: flag excessive class coupling (too many type dependencies).
-dotnet_diagnostic.CA1506.severity = warning
+# CA1502/CA1505/CA1506 are design signals, not build gates. Treat a hit as a
+# prompt to simplify the design; do not introduce facade types merely to lower
+# the reported metric.
+dotnet_diagnostic.CA1502.severity = suggestion
+dotnet_diagnostic.CA1505.severity = suggestion
+dotnet_diagnostic.CA1506.severity = suggestion
 # IDE0005: flag unnecessary using directives.
 dotnet_diagnostic.IDE0005.severity = warning
 # Rule: const fields must be PascalCase.
@@ -126,16 +126,23 @@ dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
 indent_size = 4
 indent_style = space
 
-# CS0419: ambiguous `<see cref>` reference; held at suggestion until the XML-doc pass runs.
-dotnet_diagnostic.CS0419.severity = suggestion
-# CS1573: parameter missing a `<param>` tag; held at suggestion until the XML-doc pass runs.
-dotnet_diagnostic.CS1573.severity = suggestion
-# CS1587: XML comment on an invalid element; held at suggestion until the XML-doc pass runs.
-dotnet_diagnostic.CS1587.severity = suggestion
-# CS1591: missing XML doc on a public member; held at suggestion until the XML-doc pass runs.
+# XML documentation must remain structurally valid. Missing documentation stays
+# advisory because low-level bindings intentionally expose large mechanical
+# surfaces that are documented at the containing API level.
+dotnet_diagnostic.CS0419.severity = warning
+dotnet_diagnostic.CS1570.severity = warning
+dotnet_diagnostic.CS1572.severity = warning
+dotnet_diagnostic.CS1573.severity = warning
+dotnet_diagnostic.CS1574.severity = warning
+dotnet_diagnostic.CS1580.severity = warning
+dotnet_diagnostic.CS1581.severity = warning
+dotnet_diagnostic.CS1584.severity = warning
+dotnet_diagnostic.CS1587.severity = warning
 dotnet_diagnostic.CS1591.severity = suggestion
-# CS1734: `<paramref>` with no matching parameter; held at suggestion until the XML-doc pass.
-dotnet_diagnostic.CS1734.severity = suggestion
+dotnet_diagnostic.CS1658.severity = warning
+dotnet_diagnostic.CS1710.severity = warning
+dotnet_diagnostic.CS1734.severity = warning
+dotnet_diagnostic.CS1735.severity = warning
 
 # CA1510: prefer ArgumentNullException.ThrowIfNull over an `if`-throw (statement form only).
 dotnet_diagnostic.CA1510.severity = warning

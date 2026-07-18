@@ -15,12 +15,12 @@ namespace Puck.Demo.Forge.Framework;
 /// logo/checksums are not required to boot here; they are written so the <c>.gbc</c> is valid on real hardware.</para>
 /// </summary>
 internal static class FrameworkCartridge {
-    private const int RomSize = 0x8000;
     private const ushort EntryPoint = 0x0100;
-    private const int MaxRoutineBytes = (RomDataBuilder.BaseAddress - Hw.EntryAddress);
     private const int MaxDataBytes = 0x4000;
+    private const int MaxRoutineBytes = (RomDataBuilder.BaseAddress - Hw.EntryAddress);
     private const byte OpcodeJumpAbsolute = 0xC3;
     private const byte OpcodeReturnFromInterrupt = 0xD9;
+    private const int RomSize = 0x8000;
 
     private static readonly byte[] BootLogo = [
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
@@ -76,20 +76,19 @@ internal static class FrameworkCartridge {
         rom[0x0058] = OpcodeReturnFromInterrupt;
         rom[0x0060] = OpcodeReturnFromInterrupt;
     }
-
     private static void WriteHeader(byte[] rom, string title) {
         // Entry point (0x0100): nop; jp EntryAddress.
         rom[EntryPoint] = 0x00;
-        rom[EntryPoint + 1] = OpcodeJumpAbsolute;
-        rom[EntryPoint + 2] = (byte)(Hw.EntryAddress & 0xFF);
-        rom[EntryPoint + 3] = (byte)((Hw.EntryAddress >> 8) & 0xFF);
+        rom[(EntryPoint + 1)] = OpcodeJumpAbsolute;
+        rom[(EntryPoint + 2)] = (byte)(Hw.EntryAddress & 0xFF);
+        rom[(EntryPoint + 3)] = (byte)((Hw.EntryAddress >> 8) & 0xFF);
 
         BootLogo.CopyTo(array: rom, index: 0x0104);
 
         var titleBytes = Encoding.ASCII.GetBytes(s: title.ToUpperInvariant());
 
         for (var index = 0; ((index < titleBytes.Length) && (index < 15)); index++) {
-            rom[0x0134 + index] = titleBytes[index];
+            rom[(0x0134 + index)] = titleBytes[index];
         }
 
         rom[0x0143] = 0xC0; // CGB flag: Color REQUIRED.
@@ -99,12 +98,11 @@ internal static class FrameworkCartridge {
         rom[0x014A] = 0x01; // Destination: non-Japanese.
         rom[0x014B] = 0x33; // Old licensee 0x33 = "see new licensee code".
     }
-
     private static void Finalize(byte[] rom) {
         byte headerChecksum = 0;
 
         for (var address = 0x0134; (address <= 0x014C); address++) {
-            headerChecksum = (byte)(headerChecksum - rom[address] - 1);
+            headerChecksum = (byte)((headerChecksum - rom[address]) - 1);
         }
 
         rom[0x014D] = headerChecksum;

@@ -13,6 +13,8 @@ namespace Puck.Hosting;
 /// <param name="Host">The host capability seam exposed to the node, through which it resolves the device context and any host-published service.</param>
 /// <param name="ElapsedTicks">The fixed-step simulation clock: engine ticks consumed by whole update steps since the host loop started.</param>
 /// <param name="DeltaTicks">The engine ticks the simulation advances this frame — always a whole multiple of <see cref="StepTicks"/>.</param>
+/// <param name="FrameDeltaTicks">The clamped wall interval between presented host frames, for presentation animation
+/// and frame-rate observation only. Authoritative simulation must use <paramref name="DeltaTicks"/> / fixed steps.</param>
 /// <param name="AccumulatorTicks">The engine ticks elapsed but not yet consumed by a fixed step; the render interpolation numerator.</param>
 /// <param name="StepTicks">The fixed update period in engine ticks; the render interpolation denominator.</param>
 /// <param name="TargetWidth">The pixel width the parent is asking this node to fill.</param>
@@ -21,6 +23,7 @@ public readonly record struct FrameContext(
     IHostContext Host,
     ulong ElapsedTicks,
     ulong DeltaTicks,
+    ulong FrameDeltaTicks,
     ulong AccumulatorTicks,
     ulong StepTicks,
     uint TargetWidth,
@@ -37,6 +40,9 @@ public readonly record struct FrameContext(
     /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
     public double DeltaSeconds =>
         EngineTicks.ToSeconds(ticks: DeltaTicks);
+    /// <summary>Gets the clamped wall interval for this presented host frame. Presentation-only; never simulation time.</summary>
+    public double FrameDeltaSeconds =>
+        EngineTicks.ToSeconds(ticks: FrameDeltaTicks);
     /// <summary>Gets the fixed-step simulation clock in seconds (<see cref="ElapsedTicks"/> as seconds).</summary>
     public double ElapsedSeconds =>
         EngineTicks.ToSeconds(ticks: ElapsedTicks);

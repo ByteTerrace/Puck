@@ -31,15 +31,15 @@ internal static class AvatarForge {
     /// <summary>The sprite's pixel size (a 16×16 metasprite, the overworld standard).</summary>
     public const int SpriteSize = 16;
 
-    private const int SupersampleSize = 128;
     private const int ReduceFactor = (SupersampleSize / SpriteSize);
+    private const int SupersampleSize = 128;
     // The procedural walk, as fractions of the avatar bound: a step lifts the body (bob) and shifts it (sway); the two
     // walk frames sway opposite ways so alternating them reads as a stride. The idle frame is dead-centre. This is the
     // FALLBACK cycle — a creation document with authored timeline frames supplies its own poses instead.
     private static readonly Vector3[] WalkPose = [
-        new Vector3(0f, 0f, 0f),      // frame 0: idle / neutral
-        new Vector3(0.18f, 0.12f, 0f),  // frame 1: step A (sway +, bob up)
-        new Vector3(-0.18f, 0.12f, 0f), // frame 2: step B (sway −, bob up)
+        new Vector3(x: 0f, y: 0f, z: 0f),      // frame 0: idle / neutral
+        new Vector3(x: 0.18f, y: 0.12f, z: 0f),  // frame 1: step A (sway +, bob up)
+        new Vector3(x: -0.18f, y: 0.12f, z: 0f), // frame 2: step B (sway −, bob up)
     ];
 
     /// <summary>A forged avatar sprite sheet: one shared 8-byte OBJ palette and <see cref="PoseCount"/> poses of
@@ -132,7 +132,7 @@ internal static class AvatarForge {
         var poses = new List<IReadOnlyList<AvatarShape>>(capacity: FramesPerFacing) { avatar.Shapes };
 
         for (var slot = 1; (slot < FramesPerFacing); slot++) {
-            poses.Add(item: PoseShapes(frame: frames[(slot - 1) % frames.Count], offset: offset, restShapes: restShapes));
+            poses.Add(item: PoseShapes(frame: frames[((slot - 1) % frames.Count)], offset: offset, restShapes: restShapes));
         }
 
         framePoses = poses;
@@ -147,11 +147,11 @@ internal static class AvatarForge {
     // The camera-framing bound: the avatar's own bound, widened so no AUTHORED pose crops (the procedural nudge
     // scales with the bound, so the fallback needs no widening).
     private static float PoseBound(AvatarDefinition avatar, IReadOnlyList<IReadOnlyList<AvatarShape>>? framePoses) {
-        var bound = MathF.Max(avatar.BoundRadius, 0.1f);
+        var bound = MathF.Max(x: avatar.BoundRadius, y: 0.1f);
 
         foreach (var pose in (framePoses ?? [])) {
             foreach (var shape in pose) {
-                bound = MathF.Max(bound, (shape.Position.Length() + AvatarDefinition.Reach(scale: shape.Scale, type: shape.Type)));
+                bound = MathF.Max(x: bound, y: (shape.Position.Length() + AvatarDefinition.Reach(scale: shape.Scale, type: shape.Type)));
             }
         }
 
@@ -170,7 +170,7 @@ internal static class AvatarForge {
                 : avatar.BuildProgram(poseOffset: (WalkPose[frame] * bound)));
         }
 
-        var target = new Vector3(0f, (bound * 0.55f), 0f);
+        var target = new Vector3(x: 0f, y: (bound * 0.55f), z: 0f);
         var horizontalDistance = (bound * 1.5f);
         var verticalDistance = (bound * 0.75f);
         var views = new List<BakeView>(capacity: PoseCount);
@@ -179,7 +179,7 @@ internal static class AvatarForge {
             var azimuth = (facing * (MathF.PI / 2f));
             var camera = CameraSnapshot.LookAt(
                 fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-                position: (target + new Vector3((MathF.Sin(azimuth) * horizontalDistance), verticalDistance, (MathF.Cos(azimuth) * horizontalDistance))),
+                position: (target + new Vector3(x: (MathF.Sin(x: azimuth) * horizontalDistance), y: verticalDistance, z: (MathF.Cos(x: azimuth) * horizontalDistance))),
                 target: target,
                 viewportHeight: SupersampleSize,
                 viewportWidth: SupersampleSize
@@ -205,7 +205,7 @@ internal static class AvatarForge {
     // index grid (flips resolved in software — the ROM plays plain tiles), then slices into its four ordered tiles.
     private static AvatarSheet BuildSheet(byte[]? rawPreview, BakeResult result) {
         var sprites = result.Assets.Sprites[0];
-        var spriteTiles = new byte[PoseCount * TilesPerPose * 16];
+        var spriteTiles = new byte[((PoseCount * TilesPerPose) * 16)];
 
         for (var pose = 0; (pose < PoseCount); pose++) {
             var indices = ComposePoseIndices(frame: sprites.Frames[pose], tiles: sprites.Tiles);
@@ -215,7 +215,7 @@ internal static class AvatarForge {
                 throw new InvalidOperationException(message: $"A {SpriteSize}×{SpriteSize} pose must slice into {TilesPerPose} tiles (got {count}).");
             }
 
-            tiles.CopyTo(array: spriteTiles, index: (pose * TilesPerPose * 16));
+            tiles.CopyTo(array: spriteTiles, index: ((pose * TilesPerPose) * 16));
         }
 
         return new AvatarSheet(
@@ -237,7 +237,7 @@ internal static class AvatarForge {
     // (transparent). The anchor is the native cell's centre, so offsets land on the grid's own quadrants.
     private static byte[] ComposePoseIndices(MetaspriteFrame frame, BakedTileSet tiles) {
         const int anchor = (SpriteSize / 2);
-        var indices = new byte[SpriteSize * SpriteSize];
+        var indices = new byte[(SpriteSize * SpriteSize)];
 
         foreach (var entry in frame.Entries) {
             var tile = HgbImage.DecodeTile2bpp(tileBytes: tiles.TileData.AsSpan(start: (entry.TileId * 16), length: 16));
@@ -246,14 +246,14 @@ internal static class AvatarForge {
 
             for (var row = 0; (row < 8); row++) {
                 for (var column = 0; (column < 8); column++) {
-                    var x = (anchor + entry.OffsetX + column);
-                    var y = (anchor + entry.OffsetY + row);
+                    var x = ((anchor + entry.OffsetX) + column);
+                    var y = ((anchor + entry.OffsetY) + row);
 
                     if ((x < 0) || (x >= SpriteSize) || (y < 0) || (y >= SpriteSize)) {
                         continue;
                     }
 
-                    indices[(y * SpriteSize) + x] = tile[((flipY ? (7 - row) : row) * 8) + (flipX ? (7 - column) : column)];
+                    indices[((y * SpriteSize) + x)] = tile[(((flipY ? (7 - row) : row) * 8) + (flipX ? (7 - column) : column))];
                 }
             }
         }
@@ -265,7 +265,7 @@ internal static class AvatarForge {
     // rasters in place), so the SDF output is visible independent of quantization. Same grid as the quantized preview.
     private static byte[] ComposeRawPreview(IReadOnlyList<RasterizedView> views) {
         var previewWidth = (FramesPerFacing * SpriteSize);
-        var preview = new byte[previewWidth * (FacingCount * SpriteSize) * 4];
+        var preview = new byte[((previewWidth * (FacingCount * SpriteSize)) * 4)];
 
         for (var pose = 0; (pose < views.Count); pose++) {
             var native = HgbImage.BoxReduce(factor: ReduceFactor, height: views[pose].Height, outHeight: out _, outWidth: out _, rgba: views[pose].Rgba, width: views[pose].Width);
@@ -275,7 +275,6 @@ internal static class AvatarForge {
 
         return preview;
     }
-
     private static void PaintRawCell(byte[] preview, int previewWidth, int facing, int frame, byte[] rgba) {
         var originX = (frame * SpriteSize);
         var originY = (facing * SpriteSize);
@@ -286,9 +285,9 @@ internal static class AvatarForge {
                 var dst = ((((originY + y) * previewWidth) + (originX + x)) * 4);
 
                 preview[dst] = rgba[src];
-                preview[dst + 1] = rgba[src + 1];
-                preview[dst + 2] = rgba[src + 2];
-                preview[dst + 3] = 0xFF;
+                preview[(dst + 1)] = rgba[(src + 1)];
+                preview[(dst + 2)] = rgba[(src + 2)];
+                preview[(dst + 3)] = 0xFF;
             }
         }
     }
@@ -301,12 +300,12 @@ internal static class AvatarForge {
 
         foreach (var shape in shapes) {
             centroid += shape.Position;
-            lowestY = MathF.Min(lowestY, (shape.Position.Y - AvatarDefinition.Reach(scale: shape.Scale, type: shape.Type)));
+            lowestY = MathF.Min(x: lowestY, y: (shape.Position.Y - AvatarDefinition.Reach(scale: shape.Scale, type: shape.Type)));
         }
 
         centroid /= shapes.Count;
 
-        return new Vector3(centroid.X, lowestY, centroid.Z);
+        return new Vector3(x: centroid.X, y: lowestY, z: centroid.Z);
     }
 
     // One timeline frame applied over the rest shapes: a transform moves the shape it names, everything else keeps
@@ -316,6 +315,7 @@ internal static class AvatarForge {
 
         foreach (var shape in restShapes) {
             var transform = frame.Transforms.FirstOrDefault(predicate: entry => (entry.Id == shape.Id));
+
             var (position, rotation, scale) = ((transform is { } pose)
                 ? (pose.Position, pose.Rotation, pose.Scale)
                 : (shape.Position, shape.Rotation, shape.Scale));

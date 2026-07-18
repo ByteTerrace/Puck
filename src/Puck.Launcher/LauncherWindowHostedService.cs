@@ -23,9 +23,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private const int SpinThresholdMilliseconds = 2;
     // Fixed simulation rate (Hz); a divisor of EngineTicks.PerSecond so the step is a whole number of ticks.
     private const uint TargetUpdateRate = 240U;
-    // Cap the present rate this far below the display's maximum refresh so the cadence stays inside the variable-refresh
-    // (VRR) window rather than pinning at the top edge, where many displays drop VRR back to fixed vsync.
-    private const double VrrCapHeadroomHertz = 3.0;
     // Cap on back-to-back device-loss recoveries with no successful frame between them, so a permanently-dead GPU (or a
     // presenter that cannot recover) fails loudly instead of spinning forever. Reset to 0 after any good frame.
     private const int MaxConsecutiveDeviceLossRecoveries = 8;
@@ -35,55 +32,110 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     // consecutive-loss streak above (which guards against a device that drops again the instant it is recovered).
     private const int DeviceReacquireBackoffMilliseconds = 250;
     private const double DeviceReacquireBudgetSeconds = 10.0;
+    // [frame-timing] digest cadence — summarize each block of produced frames, matching SdfEngineNode's
+    // [world-timing] throttle so the two digests read at the same rate.
+    private const ulong FrameTimingReportInterval = 60UL;
 
     private readonly IHostApplicationLifetime m_applicationLifetime;
+    private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly ExternalClockRegistry m_externalClocks;
+    private readonly FrameTimingHub m_frameTimingHub;
     private readonly IInputClock m_inputClock;
+    private readonly InputRouter? m_inputRouter;
     private readonly ILogger<LauncherWindowHostedService> m_logger;
     private readonly LauncherOptions m_options;
+    private readonly PresentPacingControl m_presentPacing;
     private readonly ISurfacePresenter m_presenter;
     private readonly IRenderNode m_root;
     private readonly IHostContext m_rootHostContext;
     private readonly CommandShell m_shell;
+    private readonly CommandRegistry m_registry;
+    private readonly IFixedStepSimulation? m_simulation;
+    private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
     private readonly TerminalControl m_terminal;
     private readonly INativeWindowFactory m_windowFactory;
+    private ulong m_frameTimingDigestLastProducedFrameIndex;
+    private ulong m_frameTimingDigestSampleCount;
+    private FrameTimingSample m_frameTimingDigestWorst;
 
     public LauncherWindowHostedService(
         IHostApplicationLifetime applicationLifetime,
+        BufferedConsoleOutput bufferedOutput,
         ExternalClockRegistry externalClocks,
+        FrameTimingHub frameTimingHub,
         IInputClock inputClock,
         ILogger<LauncherWindowHostedService> logger,
         LauncherOptions options,
+        PresentPacingControl presentPacing,
         ISurfacePresenter presenter,
         IRenderNode root,
         IHostContext rootHostContext,
+        IEnumerable<InputRouter> inputRouters,
+        IEnumerable<IFixedStepSimulation> simulations,
+        IEnumerable<ISnapshotInputCapture> snapshotInputCaptures,
+        CommandRegistry registry,
         CommandShell shell,
         TerminalControl terminal,
         INativeWindowFactory windowFactory
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
+        ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(externalClocks);
+        ArgumentNullException.ThrowIfNull(frameTimingHub);
         ArgumentNullException.ThrowIfNull(inputClock);
+        ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(presentPacing);
         ArgumentNullException.ThrowIfNull(presenter);
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(rootHostContext);
+        ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(shell);
         ArgumentNullException.ThrowIfNull(terminal);
         ArgumentNullException.ThrowIfNull(windowFactory);
 
         m_applicationLifetime = applicationLifetime;
+        m_bufferedOutput = bufferedOutput;
         m_externalClocks = externalClocks;
+        m_frameTimingHub = frameTimingHub;
         m_inputClock = inputClock;
+        m_inputRouter = SingleOrDefault(items: inputRouters, name: nameof(InputRouter));
         m_logger = logger;
         m_options = options;
+        m_presentPacing = presentPacing;
         m_presenter = presenter;
         m_root = root;
         m_rootHostContext = rootHostContext;
+        m_registry = registry;
         m_shell = shell;
+        m_simulation = SingleOrDefault(items: simulations, name: nameof(IFixedStepSimulation));
+        m_snapshotInputCaptures = snapshotInputCaptures.ToArray();
         m_terminal = terminal;
         m_windowFactory = windowFactory;
+
+        if ((m_simulation is null) != (m_inputRouter is null)) {
+            throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
+        }
+
+        m_registry.RouteSimulationTo(sink: m_inputRouter);
+    }
+
+    private static T? SingleOrDefault<T>(IEnumerable<T> items, string name)
+        where T : class {
+        using var enumerator = items.GetEnumerator();
+
+        if (!enumerator.MoveNext()) {
+            return null;
+        }
+
+        var item = enumerator.Current;
+
+        if (enumerator.MoveNext()) {
+            throw new InvalidOperationException(message: $"The launcher accepts at most one {name}.");
+        }
+
+        return item;
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) {
@@ -125,30 +177,40 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                 var accumulatorTicks = 0UL;
                 var clock = TickClock.Start();
+                var captureOriginTicks = m_inputClock.NowTicks;
                 var elapsedTicks = 0UL;
+                var hostFrame = 0UL;
                 var frequency = Stopwatch.Frequency;
                 var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
-                // VRR pacing: clamp the render cadence into the display's refresh window (presentation only — the fixed
-                // sim step below is untouched). The window reports its range; the high-resolution waiter (when present)
-                // makes the pacer hit the cadence accurately. The range is resolved here and RE-resolved in the loop when
-                // the window signals a display change (mode change or a move to a different monitor) via its version.
-                var refreshInfo = (window as IDisplayRefreshInfo);
-                var refreshRange = (refreshInfo?.QueryRefreshRange() ?? DisplayRefreshRange.Unknown);
-                var refreshConfigurationVersion = (refreshInfo?.RefreshConfigurationVersion ?? 0UL);
+                // Display-aware presentation pacing. Active signal timing and explicit VRR capabilities are independent
+                // facts; the host never turns selectable fixed modes into a fictional VRR range. Re-resolve only when the
+                // window reports a display/topology change.
+                var displayTimingInfo = (window as IDisplayTimingInfo);
+                var displayTiming = (displayTimingInfo?.QueryDisplayTiming() ?? DisplayTimingSnapshot.Unknown);
+                var displayConfigurationVersion = (displayTimingInfo?.DisplayConfigurationVersion ?? 0UL);
+                const int displayTimingRetryLimit = 8;
+                var displayTimingRetryAttemptsRemaining = (displayTimingInfo is not null && !displayTiming.IsKnown ? displayTimingRetryLimit : 0);
+                var nextDisplayTimingRetryTimestamp = 0L;
                 var precisionWaiter = (window as IPrecisionWaiter);
-                // CLOSED-LOOP present timing: when the presenter reports a present-confirmation rhythm, phase-lock the
-                // deadline to it instead of free-accumulating the period (which drifts from the display). The anchor is a
-                // backend-specific present-confirmation time, NOT necessarily an exact vblank: DirectX feeds a true display
-                // timestamp (GetFrameStatistics.SyncQPCTime), whereas Vulkan feeds the CPU instant vkWaitForPresentKHR
-                // returned for the PRIOR present — lagged by one present plus wake jitter. The consecutive-sample DELTA is
-                // the present interval in both cases (the constant offset cancels), which is what the pacer locks to.
-                // Absent any feedback the pacer stays open-loop. Render-side only — never touches the fixed-step sim.
+                // An optional HELD root capability (contributed by the composition root, e.g. the demo's
+                // PointerStore) that wants every raw pointer event as it is dequeued — see IPointerInputSink's
+                // doc comment for why pointer/button state bypasses the InputSignal/command-binding pipeline
+                // below entirely. Resolved once: the set of contributed capabilities never changes mid-run.
+                _ = m_rootHostContext.HoldsCapability<IPointerInputSink>(capability: out var pointerSink);
+                // CLOSED-LOOP present timing (VK_KHR_present_wait): the presenter confirms each present and reports the
+                // instant it was confirmed. The pacer OBSERVES this rhythm — reporting the measured display interval (the
+                // DELTA between consecutive confirmed presents, the only phase-meaningful part of the sample) — but it does
+                // NOT re-anchor the render deadline to the confirmation timestamp. That timestamp is backend-specific and,
+                // for Vulkan, is the CPU instant vkWaitForPresentKHR returned INSIDE this frame's Present call — i.e. AFTER
+                // produce ran — so anchoring the deadline to it and adding the period pushed every deadline out by one whole
+                // produce, serializing produce and the pacer wait (capping ~120 Hz runs near ~100 FPS). The deadline is
+                // instead advanced on an absolute slot grid (see the pacer block below), which lets produce + GPU work
+                // overlap the wait. Absent any feedback the pacer is unaffected. Render-side only — never touches the sim.
                 var presentTiming = (m_presenter as IPresentTimingFeedback);
                 var lastObservedPresentCount = 0u;
-                var presentTimingPrimed = false;
                 var previousPresentTimestamp = 0L;
                 var presentSampleCounter = 0;
-                // Opt-in (LauncherOptions.LogPresentTiming, formerly PUCK_PRESENT_TIMING=1): periodically log the
+                // Opt-in through LauncherOptions.LogPresentTiming: periodically log the
                 // measured present interval — proof the closed loop is live and what the real display cadence is. Off
                 // by default so a shipped run isn't noisy.
                 var logPresentTiming = m_options.LogPresentTiming;
@@ -156,12 +218,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // timestamps, the aligner biases the render deadline toward them with a light PI filter on the phase
                 // error, so the frame that samples a fresh arrival starts (and presents) as soon after it as possible —
                 // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher;
-                // LauncherOptions.GenlockEnabled (formerly PUCK_GENLOCK=0) disables it.
+                // LauncherOptions.GenlockEnabled disables it.
                 var genlock = new GenlockPhaseAligner(clock: m_externalClocks.PacerClock, enabled: m_options.GenlockEnabled, logger: m_logger, logPhase: logPresentTiming);
                 // Starts behind any possible registry state so the first loop iteration always evaluates (and, when
                 // sources registered before the loop, announces) the current election.
                 var observedElectionGeneration = -1;
-                var renderPeriod = ResolveRenderPeriod(refreshRange: refreshRange, frequency: frequency);
+                // The live present-rate target the `present-rate` verb retargets: the pacer re-resolves its period when
+                // this control's version advances (mirroring the display-change re-resolve below). Presentation only —
+                // never reaches the fixed-step sim.
+                var presentPacingVersion = m_presentPacing.Version;
+                var renderPeriod = ResolveRenderPeriod(displayTiming: displayTiming, frequency: frequency, requestedHertz: m_presentPacing.TargetHertz);
                 var spinThreshold = ((frequency / 1000L) * SpinThresholdMilliseconds);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: TargetUpdateRate);
                 var startTimestamp = Stopwatch.GetTimestamp();
@@ -176,32 +242,88 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 var syntheticDeviceLossAt = ResolveSyntheticDeviceLossTimestamp(seconds: m_options.SyntheticDeviceLossSeconds, startTimestamp: startTimestamp, frequency: frequency);
                 var syntheticDeviceLossFired = false;
 
+                // [frame-timing] (presentation-side only — Stopwatch ticks, never simulation state): wall buckets around
+                // the loop's own phases, tiling the loop-top-to-loop-top interval so bucket sums plus the remainder
+                // always equal the measured interval. An optional IPresentationSkipFeedback presenter (Vulkan) folds its
+                // running skipped-present tally into the same line. Arming is the live GpuTimingControl.Shared state (a
+                // bench arm / the demo's gpu.timing switch / Puck.World's world.timing verb flip it mid-session, and the
+                // run-doc host.timing field seeds it) — so ONE switch lights both the GPU per-pass digest and this CPU
+                // hub. Each armed iteration publishes a sample into the frame-timing hub, and the throttled stderr digest
+                // is one SUBSCRIBER of that hub rather than a private code path — the bench runner is another.
+                var frameTimingSkipFeedback = (m_presenter as IPresentationSkipFeedback);
+                var frameTimingProducedFrames = 0UL;
+
+                m_frameTimingHub.Published += PublishFrameTimingDigest;
+
                 while (
                     window.IsOpen &&
                     !stoppingToken.IsCancellationRequested
                 ) {
+                    // Re-read the live arming state each iteration so a mid-session arm/disarm (bench.run, gpu.timing)
+                    // takes effect without a restart.
+                    var frameTimingEnabled = GpuTimingControl.Shared.Armed;
+                    // The loop-top mark: [frame-timing]'s interval bucket is THIS iteration's own span (loop-top to the
+                    // point just before the next loop-top re-check below), so every bucket measured inside this iteration
+                    // tiles it exactly.
+                    var frameTimingIterationStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+                    var frameTimingGcPauseStart = (frameTimingEnabled ? GC.GetTotalPauseDuration().Ticks : 0L);
+                    var frameTimingGcCollectionsStart = (frameTimingEnabled
+                        ? ((GC.CollectionCount(generation: 0) + GC.CollectionCount(generation: 1)) + GC.CollectionCount(generation: 2))
+                        : 0);
+                    var frameTimingPumpTicks = 0L;
+                    var frameTimingClockTicks = 0L;
+                    var frameTimingInputSnapshotTicks = 0L;
+                    var frameTimingCommandApplyTicks = 0L;
+                    var frameTimingSimulationStepTicks = 0L;
+                    var frameTimingFixedStepOverheadTicks = 0L;
+                    var frameTimingFixedSteps = 0UL;
+                    var frameTimingSimulationOutputTicks = 0L;
+                    var frameTimingBeginFrameTicks = 0L;
+                    var frameTimingProduceTicks = 0L;
+                    var frameTimingPresentTicks = 0L;
+                    var frameTimingPostPresentTicks = 0L;
+                    var frameTimingPacerTicks = 0L;
+
                     window.PollEvents();
 
-                    // PollEvents may have processed a display change (mode change, or the window crossing to a different
-                    // monitor); when the window's version advanced, re-query the range and re-clamp the render cadence so
-                    // VRR pacing follows the new display. Render-side only — the fixed-step sim below is untouched.
+                    // PollEvents may have processed a display change. Immediately discard both old-monitor facts, then
+                    // make bounded retries because Windows topology queries can be transiently unavailable mid-change.
                     if (
-                        (refreshInfo is not null) &&
-                        (refreshInfo.RefreshConfigurationVersion != refreshConfigurationVersion)
+                        (displayTimingInfo is not null) &&
+                        (displayTimingInfo.DisplayConfigurationVersion != displayConfigurationVersion)
                     ) {
-                        refreshConfigurationVersion = refreshInfo.RefreshConfigurationVersion;
+                        displayConfigurationVersion = displayTimingInfo.DisplayConfigurationVersion;
+                        displayTiming = DisplayTimingSnapshot.Unknown;
+                        renderPeriod = ResolveRenderPeriod(displayTiming: displayTiming, frequency: frequency, requestedHertz: m_presentPacing.TargetHertz);
+                        displayTimingRetryAttemptsRemaining = displayTimingRetryLimit;
+                        nextDisplayTimingRetryTimestamp = 0L;
+                    }
 
-                        // Only adopt a KNOWN re-queried range. A version bump can fire mid-transition (e.g. during a
-                        // mode/topology change or hot-plug) while the monitor is momentarily not enumerable, returning
-                        // Unknown — adopting that would collapse renderPeriod to 0 (free-run) and disable the closed loop
-                        // until the NEXT display event. Keeping the prior good clamp degrades gracefully; the version is
-                        // already consumed, so this does not re-query every frame.
-                        var requeriedRange = refreshInfo.QueryRefreshRange();
+                    if (
+                        (displayTimingInfo is not null) &&
+                        (displayTimingRetryAttemptsRemaining > 0) &&
+                        (Stopwatch.GetTimestamp() >= nextDisplayTimingRetryTimestamp)
+                    ) {
+                        var requeriedTiming = displayTimingInfo.QueryDisplayTiming();
 
-                        if (requeriedRange.IsKnown) {
-                            refreshRange = requeriedRange;
-                            renderPeriod = ResolveRenderPeriod(refreshRange: refreshRange, frequency: frequency);
+                        --displayTimingRetryAttemptsRemaining;
+                        displayTiming = requeriedTiming;
+                        renderPeriod = ResolveRenderPeriod(displayTiming: displayTiming, frequency: frequency, requestedHertz: m_presentPacing.TargetHertz);
+
+                        if (requeriedTiming.IsKnown) {
+                            displayTimingRetryAttemptsRemaining = 0;
+                        } else {
+                            nextDisplayTimingRetryTimestamp = (Stopwatch.GetTimestamp() + (frequency / 10L));
                         }
+                    }
+
+                    // A live present-rate retarget (the `present-rate` verb) bumps the control's version; re-resolve the
+                    // pacer period against the current display range so the new cadence takes effect next frame. The pacer
+                    // deadline below re-anchors naturally (the catch-up clamp absorbs the transition). Presentation-side
+                    // only — the fixed-step sim is untouched.
+                    if (m_presentPacing.Version != presentPacingVersion) {
+                        presentPacingVersion = m_presentPacing.Version;
+                        renderPeriod = ResolveRenderPeriod(displayTiming: displayTiming, frequency: frequency, requestedHertz: m_presentPacing.TargetHertz);
                     }
 
                     // GENLOCK election watch: announce (once per election change) when plural rhythm sources are
@@ -215,11 +337,18 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         !heldFocus.IsActiveFor(deviceId: default)
                     ) {
                         m_shell.ReleaseHeld();
+                        m_inputRouter?.ReleaseHeld();
                     }
 
                     m_shell.BeginFrame();
 
                     while (inputSource.TryDequeueInput(inputEvent: out var windowInput)) {
+                        // Hand the RAW event to the pointer sink first, unconditionally (not focus-gated): pointer
+                        // state is presentation/session-only, never simulation input, so it never touches
+                        // CaptureTick/CommandSnapshot below — it just mirrors the window's own button/position
+                        // truth for whichever composition root wants it (e.g. a draggable overlay panel).
+                        pointerSink?.Observe(inputEvent: in windowInput);
+
                         // Stamp at the pump: the wndproc dispatched these during PollEvents above, so capture
                         // time ≈ now. Monotonic and sufficient to attribute the input to a fixed-step tick;
                         // per-event OS-event-time (GetMessageTime via OsTimeCorrelator) is a later refinement.
@@ -229,13 +358,37 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                         if (
                             m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus) &&
-                            inputFocus.IsActiveFor(signal.DeviceId)
+                            inputFocus.IsActiveFor(deviceId: signal.DeviceId)
                         ) {
-                            m_shell.Enqueue(signal: signal);
+                            if (m_inputRouter is { } router) {
+                                router.Capture(signal: in signal);
+                            } else {
+                                m_shell.Enqueue(signal: signal);
+                            }
                         }
                     }
 
+                    for (var captureIndex = 0; (captureIndex < m_snapshotInputCaptures.Length); captureIndex++) {
+                        m_snapshotInputCaptures[captureIndex].CaptureFrame(frameKey: hostFrame);
+                    }
+
+                    hostFrame++;
+
                     m_shell.Collect();
+
+                    // Flush the command pump's buffered result echoes ONCE, right after the drain that produced them
+                    // (see BufferedConsoleOutput): every line submitted this frame appended to the buffer during Collect,
+                    // so one flush here emits the whole burst in a single write, preserving FIFO order. The teardown
+                    // finally-block flushes again so the final lines before an --exit-after shutdown are never lost.
+                    m_bufferedOutput.Flush();
+
+                    // [frame-timing] pump bucket: everything from loop-top through the input drain above (PollEvents,
+                    // the display/genlock/focus checks, the windowInput dequeue loop, Collect).
+                    if (frameTimingEnabled) {
+                        frameTimingPumpTicks = (Stopwatch.GetTimestamp() - frameTimingIterationStart);
+                    }
+
+                    var frameTimingClockStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
 
                     if (
                         (exitAfterTimestamp is { } deadline) &&
@@ -247,6 +400,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     var deltaTicks = clock.Sample();
 
                     if (deltaTicks > maxFrameTicks) {
+                        // InputClock never clamps, while the simulation intentionally drops excess wall time. Rebase the
+                        // capture-to-simulation pin by the dropped interval so newly captured input remains due now rather
+                        // than waiting for simulation time the host deliberately discarded.
+                        captureOriginTicks += (deltaTicks - maxFrameTicks);
                         deltaTicks = maxFrameTicks;
                     }
 
@@ -255,10 +412,78 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     var consumedTicks = ((accumulatorTicks / stepTicks) * stepTicks);
 
                     accumulatorTicks -= consumedTicks;
+                    var previousElapsedTicks = elapsedTicks;
+
                     elapsedTicks += consumedTicks;
+
+                    if (frameTimingEnabled) {
+                        frameTimingClockTicks = (Stopwatch.GetTimestamp() - frameTimingClockStart);
+                    }
+
+                    var frameTimingFixedStepStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+
+                    if ((m_simulation is { } simulation) && (m_inputRouter is { } inputRouter)) {
+                        var stepCount = (consumedTicks / stepTicks);
+                        var firstTick = (previousElapsedTicks / stepTicks);
+
+                        for (var stepIndex = 0UL; (stepIndex < stepCount); stepIndex++) {
+                            var tick = (firstTick + stepIndex);
+                            var stepElapsedTicks = ((tick + 1UL) * stepTicks);
+                            var windowEndTick = (captureOriginTicks + stepElapsedTicks);
+                            var frameTimingInputSnapshotStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+                            var commands = inputRouter.SnapshotForTick(tick: tick, windowEndTick: windowEndTick);
+
+                            if (frameTimingEnabled) {
+                                frameTimingInputSnapshotTicks += (Stopwatch.GetTimestamp() - frameTimingInputSnapshotStart);
+                            }
+
+                            var frameTimingCommandApplyStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+
+                            m_registry.ApplySnapshot(snapshot: in commands);
+
+                            if (frameTimingEnabled) {
+                                frameTimingCommandApplyTicks += (Stopwatch.GetTimestamp() - frameTimingCommandApplyStart);
+                            }
+
+                            var fixedStep = new FixedStepContext(
+                                ElapsedTicks: stepElapsedTicks,
+                                StepTicks: stepTicks,
+                                Tick: tick
+                            );
+                            var frameTimingSimulationStepStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+
+                            simulation.Step(context: in fixedStep, commands: in commands);
+
+                            if (frameTimingEnabled) {
+                                frameTimingSimulationStepTicks += (Stopwatch.GetTimestamp() - frameTimingSimulationStepStart);
+                                frameTimingFixedSteps++;
+                            }
+                        }
+                    }
+
+                    if (frameTimingEnabled) {
+                        var frameTimingFixedStepTicks = (Stopwatch.GetTimestamp() - frameTimingFixedStepStart);
+
+                        frameTimingFixedStepOverheadTicks = (((frameTimingFixedStepTicks
+                            - frameTimingInputSnapshotTicks)
+                            - frameTimingCommandApplyTicks)
+                            - frameTimingSimulationStepTicks);
+                    }
+
+                    var frameTimingSimulationOutputStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+
+                    // Simulation-routed console handlers run while snapshots are applied above. Flush their real
+                    // results in this iteration rather than leaving them buffered until the next rendered frame.
+                    m_bufferedOutput.Flush();
 
                     var width = window.Width;
                     var height = window.Height;
+
+                    if (frameTimingEnabled) {
+                        frameTimingSimulationOutputTicks = (Stopwatch.GetTimestamp() - frameTimingSimulationOutputStart);
+                    }
+
+                    var frameTimingPostPresentStart = 0L;
 
                     // The frame body (present-side GPU work) can surface a DEVICE LOST — DXGI_ERROR_DEVICE_REMOVED /
                     // VK_ERROR_DEVICE_LOST — at BeginFrame's wait-for-idle, the node tree's own submit, or Present, all
@@ -274,11 +499,18 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         ThrowIfSyntheticDeviceLossDue(at: syntheticDeviceLossAt, fired: ref syntheticDeviceLossFired);
 
                         // BeginFrame recreates presentation resources when the size changed and waits for the
-                        // previous frame's GPU work, so the node tree can safely reuse its per-frame resources.
+                        // previous frame's GPU work, so the node tree can safely reuse its per-frame resources — the
+                        // [frame-timing] "gpu-drain" bucket, since that wait is where the PRIOR frame's GPU work is drained.
+                        var frameTimingBeginFrameStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+
                         m_presenter.BeginFrame(
                             height: height,
                             width: width
                         );
+
+                        if (frameTimingEnabled) {
+                            frameTimingBeginFrameTicks = (Stopwatch.GetTimestamp() - frameTimingBeginFrameStart);
+                        }
 
                         if (
                             (width > 0) &&
@@ -288,15 +520,31 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 AccumulatorTicks: accumulatorTicks,
                                 DeltaTicks: consumedTicks,
                                 ElapsedTicks: elapsedTicks,
+                                FrameDeltaTicks: deltaTicks,
                                 Host: m_rootHostContext,
                                 StepTicks: stepTicks,
                                 TargetHeight: height,
                                 TargetWidth: width
                             );
+                            var frameTimingProduceStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
                             var surface = m_root.ProduceFrame(context: in frameContext);
 
+                            if (frameTimingEnabled) {
+                                frameTimingProduceTicks = (Stopwatch.GetTimestamp() - frameTimingProduceStart);
+                            }
+
+                            var frameTimingPresentStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+
                             m_presenter.Present(surface: surface);
+
+                            if (frameTimingEnabled) {
+                                frameTimingPresentTicks = (Stopwatch.GetTimestamp() - frameTimingPresentStart);
+                            }
+
+                            ++frameTimingProducedFrames;
                         }
+
+                        frameTimingPostPresentStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
 
                         NoteFrameSucceeded(streak: ref deviceLossStreak);
                     } catch (DeviceLostException deviceLost) {
@@ -321,6 +569,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         continue;
                     }
 
+                    // Everything from the completed present through the pacing decision is tracked separately from the
+                    // actual deadline wait. This isolates feedback/genlock/exit bookkeeping from both GPU work and slack.
+                    if (frameTimingEnabled && (0L == frameTimingPostPresentStart)) {
+                        frameTimingPostPresentStart = Stopwatch.GetTimestamp();
+                    }
+
+                    var frameTimingPostPresentClosed = false;
+
                     if (m_terminal.TryConsumeExit()) {
                         window.Close();
                         window.PollEvents();
@@ -328,12 +584,17 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     }
 
                     if (renderPeriod > 0L) {
-                        // Closed loop: when the presenter confirms a NEW present, re-anchor the deadline to that present's
-                        // confirmation timestamp (QPC == Stopwatch ticks) so the cadence phase-locks to the present rhythm
-                        // rather than drifting on the computed period. A constant phase offset from true vblank (Vulkan's
-                        // wait-return lag) does not matter — re-anchoring each present keeps the PERIOD correct. Guarded
-                        // against a stale/absurd sample (the catch-up clamp below also absorbs it). When no present-timing
-                        // capability is present, this is a no-op and the pacer stays open-loop.
+                        // GRID-ANCHORED pacing. The render deadline advances by exactly renderPeriod from the PREVIOUS
+                        // deadline — an absolute present-slot grid — NOT from when produce/present finished this frame. That
+                        // is what lets this frame's produce + GPU work OVERLAP the wait for the next slot: the wait is only
+                        // the slack between the fixed grid point and however long produce ran, so the loop-to-loop interval
+                        // is the slot itself (renderPeriod), not produce + slot.
+                        //
+                        // The closed loop stays OBSERVED, not authoritative: when the presenter confirms a NEW present, the
+                        // measured display interval (the DELTA between confirmed presents) is reported, but the confirmation
+                        // timestamp does NOT move the deadline — re-anchoring to it serialized produce and the wait (that
+                        // timestamp is a post-produce, one-present-lagged value on Vulkan; see the presentTiming remarks
+                        // above). When no present-timing capability is present this whole block is a no-op.
                         if (presentTiming is not null) {
                             var sample = presentTiming.LastPresentTiming;
 
@@ -360,36 +621,97 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 }
 
                                 previousPresentTimestamp = sample.PresentTimestampTicks;
-
-                                if (
-                                    presentTimingPrimed &&
-                                    (Math.Abs(value: (Stopwatch.GetTimestamp() - sample.PresentTimestampTicks)) < (renderPeriod * 4L))
-                                ) {
-                                    nextRenderDeadline = sample.PresentTimestampTicks;
-                                }
-
-                                presentTimingPrimed = true;
                             }
                         }
 
-                        // GENLOCK: bias the accumulated deadline toward the latest external arrival (see
-                        // GenlockPhaseAligner); a no-op with no publisher or a stale feed.
+                        // Advance to the next grid slot. GENLOCK biases the slot toward the latest external arrival (see
+                        // GenlockPhaseAligner) when one publishes; a no-op with no publisher or a stale feed.
                         nextRenderDeadline = genlock.Apply(deadline: (nextRenderDeadline + renderPeriod), frequency: frequency, renderPeriod: renderPeriod);
 
                         var nowTimestamp = Stopwatch.GetTimestamp();
 
+                        // CATCH-UP: a frame that overran its slot (GPU-bound, or a one-off hitch) is already more than a
+                        // full slot past the next grid point. Re-origin the grid at now — jump to the next slot — instead
+                        // of accumulating the missed slots as debt (which would burst several presents back-to-back to
+                        // "catch up"). A GPU-bound frame therefore never waits: its interval is its own GPU time, unchanged.
                         if ((nowTimestamp - nextRenderDeadline) > renderPeriod) {
                             nextRenderDeadline = nowTimestamp;
                         } else {
+                            if (frameTimingEnabled) {
+                                frameTimingPostPresentTicks = (Stopwatch.GetTimestamp() - frameTimingPostPresentStart);
+                                frameTimingPostPresentClosed = true;
+                            }
+
+                            var frameTimingPacerStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+
                             WaitUntil(
                                 deadlineTimestamp: nextRenderDeadline,
                                 frequency: frequency,
                                 precisionWaiter: precisionWaiter,
                                 spinThreshold: spinThreshold
                             );
+
+                            if (frameTimingEnabled) {
+                                frameTimingPacerTicks = (Stopwatch.GetTimestamp() - frameTimingPacerStart);
+                            }
                         }
                     }
+
+                    if (frameTimingEnabled && !frameTimingPostPresentClosed) {
+                        frameTimingPostPresentTicks = (Stopwatch.GetTimestamp() - frameTimingPostPresentStart);
+                    }
+
+                    // [frame-timing]: close out this iteration's interval (loop-top to here, right before the next
+                    // loop-top re-check) and PUBLISH a sample that TILES it — the twelve phase buckets plus whatever is left
+                    // over (principally this measurement's own overhead) —
+                    // into the hub. Subscribers (the throttled stderr digest, a bench runner) read from there; the
+                    // publish fires them synchronously on this thread.
+                    if (frameTimingEnabled) {
+                        var frameTimingGcPauseTicks = (GC.GetTotalPauseDuration().Ticks - frameTimingGcPauseStart);
+                        var frameTimingGcCollections = (((GC.CollectionCount(generation: 0) + GC.CollectionCount(generation: 1)) + GC.CollectionCount(generation: 2)) - frameTimingGcCollectionsStart);
+                        var frameTimingIntervalTicks = (Stopwatch.GetTimestamp() - frameTimingIterationStart);
+                        var frameTimingRemainderTicks = ((((((((((((frameTimingIntervalTicks
+                            - frameTimingPumpTicks)
+                            - frameTimingClockTicks)
+                            - frameTimingInputSnapshotTicks)
+                            - frameTimingCommandApplyTicks)
+                            - frameTimingSimulationStepTicks)
+                            - frameTimingFixedStepOverheadTicks)
+                            - frameTimingSimulationOutputTicks)
+                            - frameTimingBeginFrameTicks)
+                            - frameTimingProduceTicks)
+                            - frameTimingPresentTicks)
+                            - frameTimingPostPresentTicks)
+                            - frameTimingPacerTicks);
+
+                        static double ToMs(long ticks, long frequency) =>
+                            (((double)ticks * 1000.0) / frequency);
+
+                        m_frameTimingHub.Publish(sample: new FrameTimingSample(
+                            ProducedFrameIndex: frameTimingProducedFrames,
+                            IntervalMs: ToMs(frequency: frequency, ticks: frameTimingIntervalTicks),
+                            PumpMs: ToMs(frequency: frequency, ticks: frameTimingPumpTicks),
+                            ClockMs: ToMs(frequency: frequency, ticks: frameTimingClockTicks),
+                            InputSnapshotMs: ToMs(frequency: frequency, ticks: frameTimingInputSnapshotTicks),
+                            CommandApplyMs: ToMs(frequency: frequency, ticks: frameTimingCommandApplyTicks),
+                            SimulationStepMs: ToMs(frequency: frequency, ticks: frameTimingSimulationStepTicks),
+                            FixedStepOverheadMs: ToMs(frequency: frequency, ticks: frameTimingFixedStepOverheadTicks),
+                            SimulationOutputMs: ToMs(frequency: frequency, ticks: frameTimingSimulationOutputTicks),
+                            GpuDrainMs: ToMs(frequency: frequency, ticks: frameTimingBeginFrameTicks),
+                            ProduceMs: ToMs(frequency: frequency, ticks: frameTimingProduceTicks),
+                            PresentMs: ToMs(frequency: frequency, ticks: frameTimingPresentTicks),
+                            PostPresentMs: ToMs(frequency: frequency, ticks: frameTimingPostPresentTicks),
+                            PacerMs: ToMs(frequency: frequency, ticks: frameTimingPacerTicks),
+                            RemainderMs: ToMs(frequency: frequency, ticks: frameTimingRemainderTicks),
+                            GcPauseMs: ((double)frameTimingGcPauseTicks / TimeSpan.TicksPerMillisecond),
+                            GcCollections: frameTimingGcCollections,
+                            FixedSteps: frameTimingFixedSteps,
+                            SkippedPresentTotal: (frameTimingSkipFeedback?.SkippedPresentCount ?? 0UL)
+                        ));
+                    }
                 }
+
+                m_frameTimingHub.Published -= PublishFrameTimingDigest;
 
                 if (window.IsOpen) {
                     window.Close();
@@ -398,6 +720,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                 m_logger.LogInformation("Native window closed; shutting the host down.");
             } finally {
+                // Flush any buffered echo tail before teardown so the final lines a scripted run emits (e.g. right
+                // before an --exit-after shutdown, or the frame a quit/exit verb lands) are never lost.
+                m_bufferedOutput.Flush();
+
                 // The loop's final Present submitted GPU work that the NEXT frame's BeginFrame would normally
                 // wait on — but there is no next frame. Drain the device here so node/presenter teardown below
                 // can't destroy resources still referenced by that last in-flight frame.
@@ -412,10 +738,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             m_applicationLifetime.StopApplication();
         }
     }
-    // Resolves the per-frame present period (in Stopwatch ticks) the pacer holds to. With a known display range it
-    // clamps into the VRR window — uncapped runs just below the maximum, a configured rate is clamped into the window;
-    // with no display information it keeps the legacy behavior (fixed configured rate, or 0 = free-run). PRESENTATION
-    // ONLY — the variable rate never reaches the fixed-step sim, so determinism is unaffected.
     /// <summary>Recovers from a graphics device loss on the pump thread: the render tree releases its device-derived GPU
     /// resources (on the still-valid lost device), then the presenter rebuilds the device + presentation resources in
     /// place; the next frame rebuilds the node resources on the new device. Returns <see langword="false"/> (so the caller
@@ -510,7 +832,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             m_logger.LogWarning(
                 message: "Genlock: {Count} rhythm sources are registered ({SourceIds}) with no genlock election; the pacer free-runs until one is named.",
                 sourceIds.Count,
-                string.Join(", ", sourceIds)
+                string.Join(separator: ", ", values: sourceIds)
             );
         }
     }
@@ -524,8 +846,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             streak = 0;
         }
     }
-    // Resolves the one-shot synthetic-device-loss injection time from the configured delay (LauncherOptions.
-    // SyntheticDeviceLossSeconds, formerly PUCK_TEST_DEVICE_LOSS), or null when the test hook is off. Render/test only.
+    // Resolves the one-shot synthetic-device-loss injection time from LauncherOptions.SyntheticDeviceLossSeconds,
+    // or null when the test hook is off. Render/test only.
     private static long? ResolveSyntheticDeviceLossTimestamp(double? seconds, long startTimestamp, long frequency) {
         return (((seconds is { } value) && (value > 0.0))
             ? (long?)(startTimestamp + (long)(value * frequency))
@@ -544,29 +866,49 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             throw new DeviceLostException(message: "Synthetic device-loss test injection (PUCK_TEST_DEVICE_LOSS).");
         }
     }
-    private long ResolveRenderPeriod(DisplayRefreshRange refreshRange, long frequency) {
-        var configuredHertz = ((m_options.TargetRenderRate is { } rate and > 0) ? (double?)rate : null);
-
-        if (!refreshRange.IsKnown) {
-            return ((configuredHertz is { } legacyHertz) ? (long)(frequency / legacyHertz) : 0L);
-        }
-
-        var capHertz = Math.Max(refreshRange.MinimumHertz, (refreshRange.MaximumHertz - VrrCapHeadroomHertz));
-        var targetHertz = Math.Clamp(value: (configuredHertz ?? capHertz), max: capHertz, min: refreshRange.MinimumHertz);
+    private long ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
+        var decision = PresentPacingPolicy.Resolve(timing: displayTiming, requestedHertz: requestedHertz);
 
         if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
             m_logger.LogInformation(
-                "VRR pacing: display [{Min:0.#}-{Max:0.#}] Hz (current {Current:0.#}); present clamped to {Target:0.#} Hz.",
-                refreshRange.MinimumHertz,
-                refreshRange.MaximumHertz,
-                refreshRange.CurrentHertz,
-                targetHertz
+                "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}).",
+                (displayTiming.Signal.IsKnown ? $"{displayTiming.Signal.Hertz:0.###} Hz" : "unknown"),
+                displayTiming.VariableRefresh.Support,
+                (displayTiming.VariableRefresh.Range is { } range ? $"{range.MinimumHertz:0.###}-{(range.MaximumHertz is { } maximum ? $"{maximum:0.###}" : "mode-max")} Hz" : "unknown"),
+                displayTiming.VariableRefresh.Source,
+                decision.TargetHertz,
+                decision.Basis
             );
         }
 
-        // Guard the divide: a (contract-legal but degenerate) range with a non-positive clamp target falls back to
-        // free-run rather than producing an Infinity/garbage period.
-        return ((targetHertz > 0.0) ? (long)(frequency / targetHertz) : 0L);
+        return decision.ToPeriodTicks(frequency: frequency);
+    }
+    // The [frame-timing] stderr digest, now ONE SUBSCRIBER of the frame-timing hub (the loop publishes every armed
+    // iteration; a bench runner is another subscriber). One line per FrameTimingReportInterval newly PRODUCED frames
+    // reports the slowest complete interval in that block and its literal bucket tiling. Reporting the block maximum,
+    // rather than whichever frame happened to land on the modulo boundary, makes intermittent hitches attributable
+    // without logging every frame and perturbing the cadence under investigation.
+    private void PublishFrameTimingDigest(FrameTimingSample sample) {
+        if (sample.ProducedFrameIndex <= m_frameTimingDigestLastProducedFrameIndex) {
+            return;
+        }
+
+        m_frameTimingDigestLastProducedFrameIndex = sample.ProducedFrameIndex;
+        ++m_frameTimingDigestSampleCount;
+
+        if (sample.IntervalMs >= m_frameTimingDigestWorst.IntervalMs) {
+            m_frameTimingDigestWorst = sample;
+        }
+
+        if (0UL != (m_frameTimingDigestSampleCount % FrameTimingReportInterval)) {
+            return;
+        }
+
+        var worst = m_frameTimingDigestWorst;
+
+        m_frameTimingDigestWorst = default;
+
+        Console.Error.WriteLine(value: $"[frame-timing] worst-of-{FrameTimingReportInterval} frame {worst.ProducedFrameIndex} | interval {worst.IntervalMs:0.000}ms | pump {worst.PumpMs:0.000} | clock {worst.ClockMs:0.000} | input-snapshot {worst.InputSnapshotMs:0.000} | command-apply {worst.CommandApplyMs:0.000} | simulation-step {worst.SimulationStepMs:0.000} | fixed-overhead {worst.FixedStepOverheadMs:0.000} | sim-output {worst.SimulationOutputMs:0.000} | gpu-drain {worst.GpuDrainMs:0.000} | produce {worst.ProduceMs:0.000} | present {worst.PresentMs:0.000} | post-present {worst.PostPresentMs:0.000} | pacer {worst.PacerMs:0.000} | remainder {worst.RemainderMs:0.000} | gc-pause {worst.GcPauseMs:0.000} ({worst.GcCollections}) | steps {worst.FixedSteps} | skippedTotal {worst.SkippedPresentTotal}");
     }
     private static void WaitUntil(long deadlineTimestamp, long spinThreshold, long frequency, IPrecisionWaiter? precisionWaiter) {
         while (true) {
@@ -581,7 +923,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // remainder for an accurate edge; fall back to a coarse 1 ms sleep where no precision waiter exists.
                 var sleepTicks = (remaining - spinThreshold);
 
-                if ((precisionWaiter is null) || !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds((double)sleepTicks / frequency))) {
+                if ((precisionWaiter is null) || !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds(value: ((double)sleepTicks / frequency)))) {
                     Thread.Sleep(millisecondsTimeout: 1);
                 }
             } else {

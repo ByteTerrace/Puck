@@ -12,6 +12,35 @@ namespace Puck.Launcher;
 /// against the Puck.* libraries — no engine-wide bring-up helper. Grouped by concern so the composition
 /// root stays readable.</summary>
 public static class LauncherServiceRegistration {
+    /// <summary>Registers the launcher's deterministic fixed-step easy path: one consumer, one slot-aware input router,
+    /// and one command snapshot per host-owned fixed tick. The ordinary terminal registration still supplies the window,
+    /// clock, command registry, and run loop.</summary>
+    /// <typeparam name="TSimulation">The composition root's authoritative simulation.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <param name="bindings">The physical-input bindings folded into snapshots.</param>
+    /// <returns>The same service collection.</returns>
+    public static IServiceCollection AddFixedStepSimulation<TSimulation>(this IServiceCollection services, IInputBindings bindings)
+        where TSimulation : class, IFixedStepSimulation {
+        ArgumentNullException.ThrowIfNull(bindings);
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IInputBindings>(instance: bindings);
+        services.TryAddSingleton<TSimulation>();
+        services.TryAddSingleton<IFixedStepSimulation>(implementationFactory: static sp => sp.GetRequiredService<TSimulation>());
+        services.TryAddSingleton(implementationFactory: static sp => {
+            var slotResolver = sp.GetService<IInputSlotResolver>();
+            var bindings = sp.GetRequiredService<IInputBindings>();
+            var clock = sp.GetRequiredService<IInputClock>();
+            var registry = sp.GetRequiredService<CommandRegistry>();
+
+            return ((slotResolver is null)
+                ? new InputRouter(bindings: bindings, clock: clock, registry: registry)
+                : new InputRouter(bindings: bindings, clock: clock, registry: registry, slotResolver: slotResolver));
+        });
+
+        return services;
+    }
+
     /// <summary>The backend-neutral terminal: the terminal-control <em>baton</em>, the command pump, and the window
     /// run loop. It carries no graphics backend AND no platform windowing — the run loop drives an
     /// <see cref="ISurfacePresenter"/>, whichever root <see cref="IRenderNode"/> the developer registers, and the
@@ -27,6 +56,15 @@ public static class LauncherServiceRegistration {
         // hosted children do not — the capability-permission system. The window loop drains exit + routes
         // input through them.
         services.TryAddSingleton<LauncherOptions>();
+
+        // The live present-rate control the window pump's display-aware pacer reads: seeded from the configured target rate, then
+        // retargeted mid-session by the `present-rate` verb (presentation pacing only — the fixed-step sim is untouched).
+        services.TryAddSingleton(implementationFactory: static sp => new PresentPacingControl(initialTargetHertz: sp.GetRequiredService<LauncherOptions>().TargetRenderRate));
+
+        // The in-process CPU frame-timing publish hub: the window loop publishes one FrameTimingSample per iteration
+        // while GPU timing is armed, and observers (the [frame-timing] stderr digest, a bench runner) subscribe. A
+        // presentation-side diagnostic seam, registered beside the present-pacing control.
+        services.TryAddSingleton<FrameTimingHub>();
 
         // The shared monotonic capture clock: every input backend stamps CaptureTick from this one instance, and
         // the window pump uses it to time-stamp drained input. One origin so all stamps are comparable.
@@ -66,7 +104,7 @@ public static class LauncherServiceRegistration {
                     ? heldCapabilities
                     : inheritedCapabilities);
 
-                _ = target.TryAdd(contribution.CapabilityType, contribution.Instance);
+                _ = target.TryAdd(key: contribution.CapabilityType, value: contribution.Instance);
             }
 
             return new HostContext(
@@ -79,14 +117,22 @@ public static class LauncherServiceRegistration {
         // assertable), and the per-frame shell. The keyboard binding source and the input adapter are
         // developer-supplied (they encode the engine's controls), so the pump stays engine-agnostic.
         services.TryAddSingleton<CommandRegistry>();
-        services.TryAddSingleton(implementationFactory: static provider => new TextCommandSource(
-            onResult: static (line, result) => {
-                if (!string.IsNullOrEmpty(value: result.Output)) {
-                    Console.Out.WriteLine(value: result.Output);
-                }
-            },
-            registry: provider.GetRequiredService<CommandRegistry>()
-        ));
+        // The once-per-frame buffered stdout the pump flushes after each Collect (see BufferedConsoleOutput): the result
+        // echoes append into it instead of each paying an AutoFlush syscall, collapsing a piped burst to one write.
+        services.TryAddSingleton<BufferedConsoleOutput>();
+        services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<ICommandObserver, SimulationCommandOutputObserver>());
+        services.TryAddSingleton(implementationFactory: static provider => {
+            var output = provider.GetRequiredService<BufferedConsoleOutput>();
+
+            return new TextCommandSource(
+                onResult: (line, result) => {
+                    if (!string.IsNullOrEmpty(value: result.Output)) {
+                        output.WriteLine(value: result.Output);
+                    }
+                },
+                registry: provider.GetRequiredService<CommandRegistry>()
+            );
+        });
         services.TryAddSingleton(implementationFactory: static sp => new CommandShell(
             // Any source registered as ICommandSource (e.g. the gamepad source) is pulled each frame alongside
             // the keyboard and text sources; the keyboard/text sources are registered by concrete type, so they
@@ -129,14 +175,14 @@ public static class LauncherServiceRegistration {
                 throw new InvalidOperationException(message: "No surface presenters were registered; contribute at least one SurfacePresenterDescriptor before calling AddBackendSwitcher.");
             }
 
-            var preferred = (descriptors.Find(match: descriptor => string.Equals(descriptor.Name, preferredBackend, StringComparison.OrdinalIgnoreCase)) ?? descriptors[0]);
-            var other = descriptors.Find(match: descriptor => !ReferenceEquals(descriptor, preferred));
+            var preferred = (descriptors.Find(match: descriptor => string.Equals(a: descriptor.Name, b: preferredBackend, comparisonType: StringComparison.OrdinalIgnoreCase)) ?? descriptors[0]);
+            var other = descriptors.Find(match: descriptor => !ReferenceEquals(objA: descriptor, objB: preferred));
 
-            return (other is null)
+            return ((other is null)
                 ? new BackendSwitcher(current: preferred.Presenter, currentName: preferred.Name, other: null, otherName: null)
-                : new BackendSwitcher(current: preferred.Presenter, currentName: preferred.Name, other: other.Presenter, otherName: other.Name);
+                : new BackendSwitcher(current: preferred.Presenter, currentName: preferred.Name, other: other.Presenter, otherName: other.Name));
         });
-        services.Replace(ServiceDescriptor.Singleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<BackendSwitcher>()));
+        services.Replace(descriptor: ServiceDescriptor.Singleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<BackendSwitcher>()));
         services.AddSingleton<ICommandModule, BackendCommandModule>();
 
         return services;

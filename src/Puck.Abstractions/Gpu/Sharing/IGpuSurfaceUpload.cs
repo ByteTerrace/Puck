@@ -5,8 +5,10 @@ namespace Puck.Abstractions.Gpu;
 /// behind the handles it returns.
 /// </summary>
 public interface IGpuSurfaceUpload : IDisposable {
-    /// <summary>Uploads the pixel data, blocks until the copy completes, and returns a native image view handle
-    /// ready for sampling. The returned handle is owned by this upload object — the caller never destroys it —
+    /// <summary>Uploads the pixel data and returns a native image view handle ready for sampling by any work
+    /// submitted to the same queue AFTER this call returns — the copy is either complete (a blocking backend) or
+    /// queue-ordered ahead of that work (Vulkan's pipelined fenced path); the caller's pixel buffer is free to
+    /// reuse either way. The returned handle is owned by this upload object — the caller never destroys it —
     /// and is only guaranteed valid until the next <see cref="Upload"/> on this instance or this object's disposal
     /// (Direct3D 12 replaces the handle on every call; Vulkan reuses the same view while the device and
     /// extent/format are unchanged).</summary>

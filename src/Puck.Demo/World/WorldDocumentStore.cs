@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Assets;
+using Puck.Commands;
 
 namespace Puck.Demo.World;
 
@@ -104,8 +105,7 @@ public static class WorldDocumentStore {
             document = Load(nameOrPath: nameOrPath);
 
             return true;
-        }
-        catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+        } catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
             document = null;
             error = exception.Message;
 
@@ -167,7 +167,7 @@ public static class WorldDocumentStore {
         var builder = new System.Text.StringBuilder(capacity: name.Length);
 
         foreach (var character in name) {
-            _ = builder.Append(value: (char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_')) ? character : '-');
+            _ = builder.Append(value: ((char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_')) ? character : '-'));
         }
 
         return ((builder.Length > 0) ? builder.ToString() : "world");
@@ -207,10 +207,10 @@ public static class WorldDocumentStore {
             normalized.Add(item: camera with {
                 Anchor = anchor,
                 AnchorId = ((anchor == "placement") ? (camera.AnchorId ?? 0) : null),
-                Focus = ((camera.Focus is { } focus && float.IsFinite(f: focus)) ? (float?)MathF.Max(focus, 0.01f) : null),
-                Fov = ((camera.Fov is { } fov && float.IsFinite(f: fov)) ? (float?)Math.Clamp(value: fov, max: 170f, min: 1f) : null),
-                Pitch = ((camera.Pitch is { } pitch && float.IsFinite(f: pitch)) ? (float?)Math.Clamp(value: pitch, max: 85f, min: -85f) : null),
-                Yaw = ((camera.Yaw is { } yaw && float.IsFinite(f: yaw)) ? (float?)yaw : null),
+                Focus = (((camera.Focus is { } focus) && float.IsFinite(f: focus)) ? (float?)MathF.Max(x: focus, y: 0.01f) : null),
+                Fov = (((camera.Fov is { } fov) && float.IsFinite(f: fov)) ? (float?)Math.Clamp(value: fov, max: 170f, min: 1f) : null),
+                Pitch = (((camera.Pitch is { } pitch) && float.IsFinite(f: pitch)) ? (float?)Math.Clamp(value: pitch, max: 85f, min: -85f) : null),
+                Yaw = (((camera.Yaw is { } yaw) && float.IsFinite(f: yaw)) ? (float?)yaw : null),
             });
         }
 
@@ -225,8 +225,8 @@ public static class WorldDocumentStore {
     // The wiring table normalizes each entry to a canonical source kind and drops an entry with an out-of-range screen
     // index or (for a named source) a missing name. At most ONE entry survives per screen index — a later entry for a
     // taken index REPLACES the earlier (last-wins), matching the verb's set-semantics, so a round-trip is deterministic.
-    private static List<ScreenWireDocument> NormalizeWiring(IReadOnlyList<ScreenWireDocument>? wiring) {
-        var byScreen = new Dictionary<int, ScreenWireDocument>();
+    private static List<ScreenSourceDocument> NormalizeWiring(IReadOnlyList<ScreenSourceDocument>? wiring) {
+        var byScreen = new Dictionary<int, ScreenSourceDocument>();
         var order = new List<int>();
 
         foreach (var entry in (wiring ?? [])) {
@@ -242,8 +242,8 @@ public static class WorldDocumentStore {
                 kind = "none";
             }
 
-            var normalized = new ScreenWireDocument(
-                Index: ((kind is "brick" or "feed") ? (int?)Math.Max(val1: (entry.Index ?? 0), val2: 0) : null),
+            var normalized = new ScreenSourceDocument(
+                Index: ((kind is "guest" or "camera") ? (int?)Math.Max(val1: (entry.Index ?? 0), val2: 0) : null),
                 Kind: kind,
                 Name: (string.Equals(a: kind, b: "named", comparisonType: StringComparison.Ordinal) ? entry.Name : null),
                 Screen: entry.Screen
@@ -256,7 +256,7 @@ public static class WorldDocumentStore {
             byScreen[entry.Screen] = normalized;
         }
 
-        var result = new List<ScreenWireDocument>(capacity: order.Count);
+        var result = new List<ScreenSourceDocument>(capacity: order.Count);
 
         foreach (var screen in order) {
             // A "none" wire is the ABSENCE of a wire — it need not persist (an unlisted screen already reads as none),
@@ -271,12 +271,11 @@ public static class WorldDocumentStore {
 
     private static string NormalizeWireKind(string? kind) =>
         (kind?.ToLowerInvariant() switch {
-            "brick" => "brick",
-            "feed" => "feed",
+            "guest" => "guest",
+            "camera" => "camera",
             "named" => "named",
             _ => "none",
         });
-
     private static WorldBoundsDocument? NormalizeBounds(WorldBoundsDocument? bounds) {
         if (bounds is null) {
             return null;
@@ -293,7 +292,6 @@ public static class WorldDocumentStore {
             MaxZ = Math.Max(val1: bounds.MaxZ, val2: bounds.MinZ),
         });
     }
-
     private static List<TerrainPatchDocument> NormalizeTerrain(IReadOnlyList<TerrainPatchDocument>? terrain) {
         var normalized = new List<TerrainPatchDocument>(capacity: (terrain?.Count ?? 0));
 
@@ -306,10 +304,8 @@ public static class WorldDocumentStore {
 
         return normalized;
     }
-
     private static string NormalizeTerrainKind(string? kind) =>
         (string.Equals(a: kind, b: "plaza", comparisonType: StringComparison.OrdinalIgnoreCase) ? "plaza" : "slab");
-
     private static List<PlacementDocument> NormalizePlacements(IReadOnlyList<PlacementDocument>? placements) {
         var normalized = new List<PlacementDocument>(capacity: (placements?.Count ?? 0));
 
@@ -317,7 +313,7 @@ public static class WorldDocumentStore {
             // Bit-for-bit doctrine: a placement with no (or malformed) source can never resolve to a creation, so
             // Normalize drops it rather than carrying a placement that could never build. Normalize stays pure —
             // this is a silent drop, not a throw; loud refusal belongs to TryResolvePlacementSources at load time.
-            if (placement.Source is not { Length: > 0 } source || !IsWellFormedHash(hash: source)) {
+            if ((placement.Source is not { Length: > 0 } source) || !IsWellFormedHash(hash: source)) {
                 continue;
             }
 
@@ -343,7 +339,6 @@ public static class WorldDocumentStore {
 
         return (string.Equals(a: mirror, b: "z", comparisonType: StringComparison.OrdinalIgnoreCase) ? "z" : null);
     }
-
     private static PlacementPatternDocument? NormalizePattern(PlacementPatternDocument? pattern) {
         if (pattern is null) {
             return null;
@@ -353,22 +348,21 @@ public static class WorldDocumentStore {
             throw new ArgumentException(message: "A placement pattern's cell sizes must be finite.", paramName: nameof(pattern));
         }
 
-        if ((pattern.LimitX is { } limitX && !float.IsFinite(f: limitX)) || (pattern.LimitZ is { } limitZ && !float.IsFinite(f: limitZ))) {
+        if (((pattern.LimitX is { } limitX) && !float.IsFinite(f: limitX)) || ((pattern.LimitZ is { } limitZ) && !float.IsFinite(f: limitZ))) {
             throw new ArgumentException(message: "A placement pattern's limits must be finite.", paramName: nameof(pattern));
         }
 
         return (pattern with {
-            CellHeight = MathF.Max(pattern.CellHeight, 0.0001f),
-            CellWidth = MathF.Max(pattern.CellWidth, 0.0001f),
+            CellHeight = MathF.Max(x: pattern.CellHeight, y: 0.0001f),
+            CellWidth = MathF.Max(x: pattern.CellWidth, y: 0.0001f),
             // Coerced to the CANONICAL member name (so a load→save round-trip is byte-stable regardless of the
             // authored casing); an unrecognized name drops to null — which reads as P1, exactly like null.
             Group = (((pattern.Group is { Length: > 0 } name) && Enum.TryParse<Puck.SdfVm.SdfWallpaperGroup>(ignoreCase: true, result: out var group, value: name)) ? group.ToString() : null),
-            LimitX = ((pattern.LimitX is { } lx) ? (float?)MathF.Max(lx, 1f) : null),
-            LimitZ = ((pattern.LimitZ is { } lz) ? (float?)MathF.Max(lz, 1f) : null),
+            LimitX = ((pattern.LimitX is { } lx) ? (float?)MathF.Max(x: lx, y: 1f) : null),
+            LimitZ = ((pattern.LimitZ is { } lz) ? (float?)MathF.Max(x: lz, y: 1f) : null),
             MaterialStride = ((pattern.MaterialStride is { } stride) ? (int?)Math.Max(val1: stride, val2: 0) : null),
         });
     }
-
     private static PlacementRepeatDocument? NormalizeRepeat(PlacementRepeatDocument? repeat) {
         if (repeat is null) {
             return null;
@@ -383,7 +377,6 @@ public static class WorldDocumentStore {
             CountZ = Math.Max(val1: repeat.CountZ, val2: 1),
         });
     }
-
     private static float? NormalizeYaw(float? yawDegrees) {
         if (yawDegrees is not { } yaw) {
             return null;
@@ -393,7 +386,6 @@ public static class WorldDocumentStore {
 
         return ((wrapped < 0f) ? (wrapped + 360f) : wrapped);
     }
-
     private static List<WorldLightDocument> NormalizeLights(IReadOnlyList<WorldLightDocument>? lights) {
         var normalized = new List<WorldLightDocument>(capacity: (lights?.Count ?? 0));
 
@@ -405,7 +397,6 @@ public static class WorldDocumentStore {
 
         return normalized;
     }
-
     private static List<WalkOverrideDocument> NormalizeWalkOverrides(IReadOnlyList<WalkOverrideDocument>? overrides) {
         var normalized = new List<WalkOverrideDocument>(capacity: (overrides?.Count ?? 0));
 
@@ -419,7 +410,6 @@ public static class WorldDocumentStore {
 
         return normalized;
     }
-
     private static bool IsWellFormedHash(string hash) =>
         (hash.StartsWith(value: "sha256/", comparisonType: StringComparison.Ordinal) && (hash.Length == ("sha256/".Length + 64)));
 }

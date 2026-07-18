@@ -3,7 +3,6 @@ using Puck.Demo.Creator;
 using Puck.Demo.Overworld;
 using Puck.Demo.Tracker;
 using Puck.Hosting;
-using Puck.Input.Devices;
 
 namespace Puck.Demo.Forge;
 
@@ -20,6 +19,37 @@ namespace Puck.Demo.Forge;
 /// geometry.
 /// </summary>
 internal static class ForgeCommands {
+    // ── Workbench authoring-mode hub forwarders ──
+    //
+    // The hub's mode table lives in AuthoringModeRegistry; the render node is at its analyzer coupling ceiling and
+    // cannot name that type, so it reaches the registry ONLY through these primitive-typed forwarders — the same
+    // ForgeCommands escape the tracker/forge registries already use. ICreatorModeHost is already coupled to the node
+    // (it implements it), so ActivateAuthoringMode's parameter costs it nothing.
+
+    /// <summary>The number of authoring modes the workbench hub cycles through.</summary>
+    public static int AuthoringModeCount => AuthoringModeRegistry.Count;
+
+    /// <summary>The mode id at <paramref name="index"/> (wrapped), e.g. <c>world</c> — feeds the hub page's id.</summary>
+    /// <param name="index">The selected mode index.</param>
+    /// <returns>The mode id.</returns>
+    public static string AuthoringModeId(int index) => AuthoringModeRegistry.IdAt(index: index);
+
+    /// <summary>The mode label at <paramref name="index"/> (wrapped), e.g. <c>WORLD</c>.</summary>
+    /// <param name="index">The selected mode index.</param>
+    /// <returns>The mode label.</returns>
+    public static string AuthoringModeLabel(int index) => AuthoringModeRegistry.LabelAt(index: index);
+
+    /// <summary>Activates the authoring mode at <paramref name="index"/> on <paramref name="host"/> — the hub's confirm
+    /// (South) routes here. The hub only opens from a clean room state, so the registry's <c>Toggle*</c>-from-off is an
+    /// Enter.</summary>
+    /// <param name="host">The creator-mode host (the render node).</param>
+    /// <param name="index">The selected mode index.</param>
+    public static void ActivateAuthoringMode(ICreatorModeHost host, int index) {
+        ArgumentNullException.ThrowIfNull(host);
+
+        AuthoringModeRegistry.Enter(host: host, index: index);
+    }
+
     /// <summary>Builds the world-lens cabinet cart, SDF-forging its room background on the live GPU when available and
     /// falling back to the CPU-authored room otherwise (so the cabinet always has a cart).</summary>
     /// <param name="context">The current frame context (its host resolves the live GPU device).</param>
@@ -50,6 +80,32 @@ internal static class ForgeCommands {
     /// <returns>A genuine Brickfall ROM.</returns>
     public static byte[] BuildBrickfallCart(in FrameContext context, IServiceProvider services) =>
         BuildTitleBakedCart(context: in context, services: services, label: "brickfall", tryInstallTitle: BrickfallTitleBake.TryInstall, build: static () => BrickfallRom.Build());
+
+    /// <summary>Builds the ORACLE cabinet cart — a spare, pure-CPU fortune cart with no GPU title bake and no battery,
+    /// so unlike the five games it needs neither the device nor a fallback path; the frame context and services are
+    /// accepted only to match the render node's cart-build forwarder shape.</summary>
+    /// <param name="context">The current frame context (unused — ORACLE needs no GPU).</param>
+    /// <param name="services">The application services (unused).</param>
+    /// <returns>A genuine ORACLE ROM.</returns>
+    public static byte[] BuildOracleCart(in FrameContext context, IServiceProvider services) {
+        _ = context;
+        _ = services;
+
+        return OracleRom.Build();
+    }
+
+    /// <summary>Builds the CRITTER-SWAP cabinet cart — a genuine SM83 link-trading toy with no GPU title bake and
+    /// battery-backed SRAM (the held critter); like ORACLE it needs neither the device nor a fallback path, and the
+    /// frame context and services are accepted only to match the render node's cart-build forwarder shape.</summary>
+    /// <param name="context">The current frame context (unused — CRITTER-SWAP needs no GPU).</param>
+    /// <param name="services">The application services (unused).</param>
+    /// <returns>A genuine CRITTER-SWAP ROM.</returns>
+    public static byte[] BuildCritterSwapCart(in FrameContext context, IServiceProvider services) {
+        _ = context;
+        _ = services;
+
+        return CritterSwapRom.Build();
+    }
 
     /// <summary>Builds the Volley cabinet cart, SDF-baking its title screen on the live GPU when available (see
     /// <see cref="VolleyTitleBake"/>) and falling back to the hand-authored title otherwise. Narrates which title
@@ -99,6 +155,20 @@ internal static class ForgeCommands {
     public static string PreparePokerSavePath() =>
         PokerRom.PrepareDefaultSavePath();
 
+    /// <summary>Resolves the CRITTER-SWAP cart's battery save path — forwarded here for the same coupling-budget reason
+    /// as the Solitaire/Poker paths above (the overworld node names this facade, never <see cref="CritterSwapRom"/>).</summary>
+    /// <returns>The default CRITTER-SWAP <c>.sav</c> path.</returns>
+    public static string PrepareCritterSwapSavePath() =>
+        CritterSwapRom.PrepareDefaultSavePath();
+
+    /// <summary>Seeds a CRITTER-SWAP cabinet's DISTINCT starting critter for a save SLOT into <paramref name="path"/> if
+    /// none exists yet — forwarded here so the overworld node's load path keeps its coupling budget while giving two
+    /// linked cabinets (distinct slots) different critters. Never throws.</summary>
+    /// <param name="path">The (per-cabinet) save path.</param>
+    /// <param name="slot">The cabinet's save slot (-1 = none → the slot-0 default critter).</param>
+    public static void SeedCritterSwapDefaultSave(string path, int slot) =>
+        CritterSwapRom.SeedDefaultSaveForSlot(path: path, slot: slot);
+
     // The shared always-has-a-cart shape of the four framework games: try the live-GPU title bake (narrating a
     // decline or failure), then build the cartridge either way.
     private static byte[] BuildTitleBakedCart(in FrameContext context, IServiceProvider services, string label, Func<IGpuDeviceContext, IGpuComputeServices, bool> tryInstallTitle, Func<byte[]> build) {
@@ -127,7 +197,7 @@ internal static class ForgeCommands {
     // through the primitive-typed forwarders below (ForgeSubjectRom / IsForgedCartType / ForgedCartTypes), never as a
     // typed ForgeSubject/ForgeRegistry field — it is at its analyzer coupling ceiling.
 
-    /// <summary>The AVATAR walker cart type (the in-engine create→commit→play loop; the original forged subject).</summary>
+    /// <summary>The avatar walker cart type for the in-engine create→commit→play loop.</summary>
     public const int AvatarCartType = 3;
 
     /// <summary>The JUKEBOX (tune) cart type — the tracker's live puck.audio.v1 document compiled to a music cart (no GPU).</summary>
@@ -141,8 +211,7 @@ internal static class ForgeCommands {
     // resolution (a room with no GPU can still forge + play a tune). Never mutated after construction.
     private static readonly ForgeRegistry s_forgeRegistry = new(subjects: [
         new ForgeSubject(CartType: AvatarCartType, Kind: "avatar", NeedsGpu: true, Forge: static context => (
-            // EMPTY creator scene → the built-in STARTER figure (the lazy-default cabinet cart before the player has
-            // committed anything of their own — byte-identical to the old ForgeDefaultAvatarRom). A NON-empty scene →
+            // Empty creator scene → the built-in starter figure used by the lazy-default cabinet cart. A non-empty scene →
             // LOSSLESS: the SAME rich AvatarForge.FromCreation route --forge-avatar-from uses (frames + bake style reach
             // the ROM), so an in-game commit and a headless forge of the same saved creation are byte-identical.
             (context.FrameSource.Creator.PlacedCount == 0)
@@ -157,9 +226,8 @@ internal static class ForgeCommands {
             RomForge.ForgeSceneRomFromCreation(device: context.Device!, gpu: context.Gpu!, document: context.FrameSource.Creator.ToDocument(), title: "PUCKSCEN")),
     ]);
 
-    /// <summary>Whether <paramref name="cartType"/> is a FORGED (lazily-baked) subject cart — the registry-driven test the
-    /// render node's lazy-forge / reload paths iterate against, replacing the old avatar-only <c>== AvatarCartType</c>
-    /// branch. A forged type is Cycle-reachable / lazy-forged, never a cabinet boot default.</summary>
+    /// <summary>Whether <paramref name="cartType"/> is a forged, lazily baked subject cart. The render node's lazy-forge
+    /// and reload paths iterate over these types. A forged type is Cycle-reachable, never a cabinet boot default.</summary>
     /// <param name="cartType">The cart type to test.</param>
     /// <returns>Whether a subject forges this type.</returns>
     public static bool IsForgedCartType(int cartType) => s_forgeRegistry.IsForgedType(cartType: cartType);
@@ -169,8 +237,8 @@ internal static class ForgeCommands {
     public static IEnumerable<int> ForgedCartTypes => [AvatarCartType, JukeboxCartType, SceneCartType];
 
     /// <summary>Forges the registered subject for <paramref name="cartType"/> into overworld ROM BYTES in memory — the ONE
-    /// generalized path the render node's commit / lazy-forge routes call for ANY forged subject (avatar/tune/scene),
-    /// replacing the avatar-hardcoded forge. The GPU-vs-no-GPU dispatch is EXPLICIT: a GPU-needing subject (avatar/scene)
+    /// path the render node's commit and lazy-forge routes call for any forged subject (avatar/tune/scene).
+    /// The GPU-vs-no-GPU dispatch is explicit: a GPU-needing subject (avatar/scene)
     /// resolves the live device first and narrates a decline when it is unavailable; a pure-CPU subject (the tune) is
     /// invoked WITHOUT touching device resolution, so its compile is never gated behind a device the room may lack.
     /// Returns null (narrated) on an unknown type, a missing GPU, or a bake throw, so a failed forge never takes the demo
@@ -238,6 +306,7 @@ internal static class ForgeCommands {
 
             var document = frameSource.Creator.ToDocument();
             var directory = Path.Combine(path1: Environment.CurrentDirectory, path2: "forged-avatars");
+
             _ = Directory.CreateDirectory(path: directory);
             var romPath = Path.Combine(path1: directory, path2: "creator-avatar.gbc");
 
@@ -304,27 +373,6 @@ internal static class ForgeCommands {
         if (active) {
             tracker.NarrateRows();
         }
-    }
-
-    /// <summary>The tracker's per-frame pad takeover for the creating slot: advances pad input and consumes any exit
-    /// request. A no-op when tracker mode is inactive.</summary>
-    /// <param name="services">The application services.</param>
-    /// <param name="raw">The creating slot's raw pad state this frame.</param>
-    /// <returns>Whether tracker mode was active (and therefore took the slot over) this frame.</returns>
-    public static bool TrackerAdvanceInput(IServiceProvider services, in GamepadState raw) {
-        var tracker = TrackerModeInstance(services: services);
-
-        if (!tracker.Active) {
-            return false;
-        }
-
-        tracker.AdvanceInput(raw: in raw);
-
-        if (tracker.ConsumeExitRequest()) {
-            TrackerSetActive(services: services, active: false);
-        }
-
-        return true;
     }
 
     /// <summary>Starts or stops the tracker's headless preview from the CURRENT working document — the

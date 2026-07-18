@@ -64,8 +64,7 @@ internal static class AudioDocumentCompiler {
         foreach (var row in effect.Rows) {
             if (isNoise) {
                 AppendNoiseRow(frames: stepFrames, row: row, stream: stream);
-            }
-            else {
+            } else {
                 AppendPulseRow(frames: stepFrames, row: row, stream: stream);
             }
         }

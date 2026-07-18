@@ -7,8 +7,9 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
-/// swapchain extension always and the optional ray-query, pipeline-executable-properties, and
-/// storage-image-without-format features only when the physical device fully supports them.
+/// swapchain extension always and the optional ray-query, pipeline-executable-properties,
+/// storage-image-without-format, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control)
+/// features only when the physical device supports them.
 /// </summary>
 public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private const string SwapchainExtension = "VK_KHR_swapchain";
@@ -57,6 +58,20 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // (the FEATURE struct, used here). Swapping them silently breaks the feature query AND device creation. (1000294001)
     private const uint StructureTypePhysicalDevicePresentIdFeaturesKhr = 1000294001;
     private const uint StructureTypePhysicalDevicePresentWaitFeaturesKhr = 1000248000;
+
+    // The GPU capability floor requires fp16 arithmetic and 16-bit storage — supported at 2× rate on all four target
+    // GPUs (Turing / RDNA2 / RDNA3) — plus subgroup-size-control from Vulkan 1.3. Each is enabled only when the
+    // device reports it, through the generic single-flag chain: the FIRST VkBool32 of each struct is exactly the
+    // feature wanted — shaderFloat16 / storageBuffer16BitAccess / subgroupSizeControl — so the chain reaches it.
+    // Enabling these features is pixel- and performance-neutral until a kernel uses them. Do not route them through the aggregate
+    // VkPhysicalDeviceVulkan1xFeatures structs — their flags are not first, so the single-flag chain would miss them.
+    private const uint StructureTypePhysicalDeviceShaderFloat16Int8Features = 1000082000;
+    private const uint StructureTypePhysicalDevice16BitStorageFeatures = 1000083000;
+    // 1000225002 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES (verified against the Vulkan SDK
+    // 1.4.350 header). ⚠ NOT 1000225001 — that is VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+    // the pipeline-stage create-info; probing the device's Features2 with it returns FALSE on hardware that DOES support
+    // the feature (caught at runtime on the RTX 4070, which reported it "unavailable" until this was corrected).
+    private const uint StructureTypePhysicalDeviceSubgroupSizeControlFeatures = 1000225002;
 
     // 0-based VkPhysicalDeviceFeatures flag indices for storage-image read/write without a
     // shader format qualifier (shaderStorageImage*WithoutFormat) — needed to write image
@@ -221,7 +236,52 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         Console.Error.WriteLine(value: $"[present-timing] VK_KHR_present_wait/present_id {(presentTiming ? "ENABLED (closed-loop pacing)" : "unavailable (open-loop pacing)")}");
 
+        AppendCapabilityFloorFeatures(
+            featureStructureTypes: featureStructureTypes,
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
         return (extensions, featureStructureTypes);
+    }
+    // Enable the GPU capability-floor features (fp16, 16-bit storage, subgroup-size-control) on any device that reports
+    // them. Core-promoted (Vulkan 1.1/1.2/1.3), so no device extension is needed — just the chained feature struct.
+    private void AppendCapabilityFloorFeatures(
+        List<uint> featureStructureTypes,
+        nint instanceHandle,
+        nint physicalDeviceHandle
+    ) {
+        var shaderFloat16 = m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceShaderFloat16Int8Features
+        );
+
+        if (shaderFloat16) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderFloat16Int8Features);
+        }
+
+        var storage16Bit = m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDevice16BitStorageFeatures
+        );
+
+        if (storage16Bit) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDevice16BitStorageFeatures);
+        }
+
+        var subgroupSizeControl = m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceSubgroupSizeControlFeatures
+        );
+
+        if (subgroupSizeControl) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDeviceSubgroupSizeControlFeatures);
+        }
+
+        Console.Error.WriteLine(value: $"[capability-floor] shaderFloat16 {(shaderFloat16 ? "ENABLED" : "unavailable")}, storageBuffer16BitAccess {(storage16Bit ? "ENABLED" : "unavailable")}, subgroupSizeControl {(subgroupSizeControl ? "ENABLED" : "unavailable")}");
     }
     private IReadOnlyList<uint> ComposeFeatureIndices(nint instanceHandle, nint physicalDeviceHandle) {
         var support = m_physicalDeviceApi.GetFeatureSupport(

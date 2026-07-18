@@ -1,0 +1,119 @@
+namespace Puck.World.Protocol;
+
+/// <summary>The coarse capability verbs a <see cref="WorldGrant"/> confers — the closed set the server checks a
+/// submission's <see cref="WorldPrincipal"/> against at each write boundary. A genre world arrives as different DATA
+/// (new subjects, new sections), never a new capability (the §2.6 audit).</summary>
+internal enum WorldCapability : byte {
+    /// <summary>The right to DRIVE a body — submit its per-tick intents and authority commands. Checked at the intent
+    /// drain and <c>ApplyCommand</c>.</summary>
+    Drive,
+
+    /// <summary>The right to CONTROL a screen/machine surface — the engagement route (a player's intent diverts to the
+    /// screen's machine). Checked on the engage path.</summary>
+    Control,
+
+    /// <summary>The right to MUTATE a world-document section — apply a <see cref="WorldMutation"/> targeting it.
+    /// Checked at mutation apply (and, over every section, at a whole-document swap or journal undo).</summary>
+    Mutate,
+
+    /// <summary>The right to EDIT a player-profile section — apply a <c>SetPlayerSection</c> (the <c>profile.save</c>
+    /// fold path). Checked where the server applies the section; granted over <see cref="GrantSubject.All"/> by the
+    /// permissive local defaults (per-profile subjects are a future refinement).</summary>
+    Edit,
+}
+
+/// <summary>The world-document sections the 2a <see cref="WorldMutation"/> vocabulary targets — the stable-id subject a
+/// <see cref="WorldCapability.Mutate"/> grant scopes to. A section names a coarse row set; a mutation is checked against
+/// exactly one.</summary>
+internal enum WorldSection : byte {
+    /// <summary>The locomotion kit rows, the default seat kit, and the kit→entity assignment policy.</summary>
+    Kits,
+
+    /// <summary>The diegetic screen rows.</summary>
+    Screens,
+
+    /// <summary>The placeable camera rows.</summary>
+    Cameras,
+
+    /// <summary>The static scene (ground albedos + boulders).</summary>
+    Scene,
+
+    /// <summary>The seat spawn-point list.</summary>
+    Spawns,
+
+    /// <summary>The profileless locomotion/jump tuning.</summary>
+    Motion,
+
+    /// <summary>The wander tuning.</summary>
+    Wander,
+
+    /// <summary>The census defaults (document-only).</summary>
+    Population,
+
+    /// <summary>The render-lever defaults and quality-preset table (document-only).</summary>
+    Render,
+
+    /// <summary>The data-side addon descriptor rows.</summary>
+    Addons,
+
+    /// <summary>The per-world binding overlays — targeted by the <see cref="WorldMutation.UpsertBindingOverlay"/> /
+    /// <see cref="WorldMutation.RemoveBindingOverlay"/> mutations.</summary>
+    Bindings,
+}
+
+/// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
+internal enum GrantSubjectKind : byte {
+    /// <summary>The wildcard — the capability over every subject of its natural domain.</summary>
+    All,
+
+    /// <summary>A single body, by 0-based entity index.</summary>
+    Body,
+
+    /// <summary>A single screen, by engine screen index.</summary>
+    Screen,
+
+    /// <summary>A single world-document section.</summary>
+    Section,
+}
+
+/// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, or a document
+/// section. A zero-alloc value key into the grant table's per-capability subject sets.</summary>
+/// <param name="Kind">The subject flavor.</param>
+/// <param name="Value">The 0-based body/screen index, or the <see cref="WorldSection"/> ordinal for a section; zero for
+/// <see cref="GrantSubjectKind.All"/>.</param>
+internal readonly record struct GrantSubject(GrantSubjectKind Kind, int Value) {
+    /// <summary>The wildcard subject — the capability over its whole domain.</summary>
+    public static GrantSubject All { get; } = new(Kind: GrantSubjectKind.All, Value: 0);
+
+    /// <summary>A single body by 0-based entity index.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public static GrantSubject Body(int index) => new(Kind: GrantSubjectKind.Body, Value: index);
+
+    /// <summary>A single screen by engine screen index.</summary>
+    /// <param name="index">The engine screen index.</param>
+    public static GrantSubject Screen(int index) => new(Kind: GrantSubjectKind.Screen, Value: index);
+
+    /// <summary>A single world-document section.</summary>
+    /// <param name="section">The section.</param>
+    public static GrantSubject Section(WorldSection section) => new(Kind: GrantSubjectKind.Section, Value: (int)section);
+
+    /// <summary>A short stable label for console echoes — <c>all</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>,
+    /// <c>section:&lt;name&gt;</c>.</summary>
+    /// <returns>The label.</returns>
+    public string Describe() => Kind switch {
+        GrantSubjectKind.All => "all",
+        GrantSubjectKind.Body => $"body:{Value}",
+        GrantSubjectKind.Screen => $"screen:{Value}",
+        GrantSubjectKind.Section => $"section:{((WorldSection)Value).ToString().ToLowerInvariant()}",
+        _ => "?",
+    };
+}
+
+/// <summary>One grant row — the wire payload of <c>world.grant</c>/<c>world.revoke</c>: a principal holds a capability
+/// over a subject, optionally EXCLUSIVE (the engagement latch generalized — acquiring an exclusive grant a live holder
+/// owns is rejected). Revoke ignores <see cref="Exclusive"/>.</summary>
+/// <param name="Principal">The acting identity the grant is for.</param>
+/// <param name="Capability">The capability conferred.</param>
+/// <param name="Subject">The subject the capability scopes to.</param>
+/// <param name="Exclusive">Whether the grant is held exclusively (single holder per capability+subject).</param>
+internal readonly record struct WorldGrant(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, bool Exclusive);

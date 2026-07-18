@@ -45,6 +45,10 @@ Desktop.ini
 __azurite_db_blob*.json
 __blobstorage__
 
+# Python (tools/font-atlas/bake.py)
+__pycache__/
+*.pyc
+
 # ROMS
 *.gb
 *.gba
@@ -54,4 +58,13 @@ __blobstorage__
 /creations/
 /store/
 worlds/
+# The checked-in world documents are repo content, not runtime saves — exempt them from the bare worlds/ pattern.
+!/src/Puck.World/Assets/worlds/
 forged-avatars/
+# Engine benchmark (puck.bench) reports — puck.bench.v1 JSON written under the cwd by --bench / bench.run
+# (plan §8). Machine-specific measurements, never a committed artifact.
+bench-reports/
+
+# Font-atlas bake pipeline: per-font intermediates + the proof render (not shipped assets;
+# see tools/font-atlas/README.md). The committed outputs live in src/Puck.Demo/Assets/Fonts/.
+tools/font-atlas/build/

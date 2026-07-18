@@ -37,13 +37,13 @@ internal sealed class WorldDomainWarpStage : IPostStage {
     // moderate, clearly organic distortion of the torus's otherwise perfectly round profile.
     internal static SdfProgram BuildDomainWarpScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
-        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.7f, 0.75f), Emissive: 0.3f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
+        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.7f, z: 0.75f), Emissive: 0.3f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
-            .Translate(offset: new Vector3(0f, 0.9f, 0f))
-            .DomainWarp(frequency: new Vector3(2.0f, 2.0f, 2.0f), amplitude: 0.12f)
+            .Translate(offset: new Vector3(x: 0f, y: 0.9f, z: 0f))
+            .DomainWarp(frequency: new Vector3(x: 2.0f, y: 2.0f, z: 2.0f), amplitude: 0.12f)
             .Torus(majorRadius: 0.9f, minorRadius: 0.28f, material: teal)
             .Build();
     }

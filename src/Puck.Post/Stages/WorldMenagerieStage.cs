@@ -38,39 +38,39 @@ internal sealed class WorldMenagerieStage : IPostStage {
     // (the emissive lift), so both new material channels render on both backends under the same thresholds.
     internal static SdfProgram BuildMenagerieScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.55f, 0.6f)));
-        var coral = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.4f, 0.3f)));
-        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.3f, 0.85f), Specular: 0.6f, Shininess: 64f));
-        var lime = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.45f, 0.8f, 0.25f)));
-        var cream = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.85f, 0.7f), Emissive: 1.2f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.55f, z: 0.6f)));
+        var coral = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.4f, z: 0.3f)));
+        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.3f, z: 0.85f), Specular: 0.6f, Shininess: 64f));
+        var lime = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.45f, y: 0.8f, z: 0.25f)));
+        var cream = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.85f, z: 0.7f), Emissive: 1.2f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // A leaning capsule: the segment endpoint exercises the off-axis distance math.
-            .Translate(offset: new Vector3(-2.0f, 0.35f, 0.2f))
-            .Capsule(endpoint: new Vector3(0.7f, 1.3f, -0.3f), radius: 0.3f, material: coral)
+            .Translate(offset: new Vector3(x: -2.0f, y: 0.35f, z: 0.2f))
+            .Capsule(endpoint: new Vector3(x: 0.7f, y: 1.3f, z: -0.3f), radius: 0.3f, material: coral)
             // An upright cylinder with a capsule bored THROUGH it (hard subtraction: interior surfaces + rim edges).
             .ResetPoint()
-            .Translate(offset: new Vector3(0.1f, 0.8f, 0.5f))
+            .Translate(offset: new Vector3(x: 0.1f, y: 0.8f, z: 0.5f))
             .Cylinder(radius: 0.65f, halfHeight: 0.8f, material: violet)
             .ResetPoint()
-            .Translate(offset: new Vector3(0.1f, 0.8f, 0.5f))
-            .Capsule(endpoint: new Vector3(0f, 1.8f, 0f), radius: 0.28f, material: cream, blend: SdfBlendOp.Subtraction)
+            .Translate(offset: new Vector3(x: 0.1f, y: 0.8f, z: 0.5f))
+            .Capsule(endpoint: new Vector3(x: 0f, y: 1.8f, z: 0f), radius: 0.28f, material: cream, blend: SdfBlendOp.Subtraction)
             // An eccentric ellipsoid smooth-blended into the ground (the first-order approximation's soft limbs).
             .ResetPoint()
-            .Translate(offset: new Vector3(2.1f, 0.4f, -0.4f))
-            .Ellipsoid(radii: new Vector3(1.0f, 0.45f, 0.7f), material: lime, blend: SdfBlendOp.SmoothUnion, smooth: 0.3f)
+            .Translate(offset: new Vector3(x: 2.1f, y: 0.4f, z: -0.4f))
+            .Ellipsoid(radii: new Vector3(x: 1.0f, y: 0.45f, z: 0.7f), material: lime, blend: SdfBlendOp.SmoothUnion, smooth: 0.3f)
             // A small smooth capsule-sphere pair floating behind (soft blend between two curved fields).
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.3f, 1.9f, -1.5f))
+            .Translate(offset: new Vector3(x: -0.3f, y: 1.9f, z: -1.5f))
             .Sphere(radius: 0.35f, material: cream)
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.6f, 1.6f, -1.5f))
-            .Capsule(endpoint: new Vector3(0.7f, 0.5f, 0f), radius: 0.2f, material: coral, blend: SdfBlendOp.SmoothUnion, smooth: 0.25f)
+            .Translate(offset: new Vector3(x: -0.6f, y: 1.6f, z: -1.5f))
+            .Capsule(endpoint: new Vector3(x: 0.7f, y: 0.5f, z: 0f), radius: 0.2f, material: coral, blend: SdfBlendOp.SmoothUnion, smooth: 0.25f)
             // A vesica (lens): the exact 2D-vesica-of-revolution primitive, floating so its silhouette shows both the
             // XZ disc rim and the pointed ±Y tips — the last ISA shape to enter cross-backend parity.
             .ResetPoint()
-            .Translate(offset: new Vector3(-1.3f, 1.4f, -0.9f))
+            .Translate(offset: new Vector3(x: -1.3f, y: 1.4f, z: -0.9f))
             .Vesica(radius: 0.85f, halfSeparation: 0.5f, material: violet)
             .Build();
     }

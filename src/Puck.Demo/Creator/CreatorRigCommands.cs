@@ -1,6 +1,6 @@
 using System.Numerics;
 using Puck.Commands;
-using static Puck.Demo.CommandArgs;
+using static Puck.Commands.CommandArgs;
 
 namespace Puck.Demo.Creator;
 
@@ -28,8 +28,8 @@ internal static class CreatorRigCommands {
 
                 var name = args[0];
                 var last = args[^1];
-                var hasKind = string.Equals(a: last, b: CreatorChainState.KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(a: last, b: CreatorChainState.KindSpine, comparisonType: StringComparison.OrdinalIgnoreCase);
+                var hasKind = (string.Equals(a: last, b: CreatorChainState.KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(a: last, b: CreatorChainState.KindSpine, comparisonType: StringComparison.OrdinalIgnoreCase));
                 var kind = (hasKind ? last : null);
                 var shapeTokens = args[1..(hasKind ? (args.Length - 1) : args.Length)];
 
@@ -60,8 +60,8 @@ internal static class CreatorRigCommands {
                     return "[creator.pole: usage — creator.pole <idOrName> <x> <y> <z>]";
                 }
 
-                return (scene.SetPole(idOrName: args[0], pole: new Vector3(xyz[0], xyz[1], xyz[2]))
-                    ? $"[creator.pole: {CreatorCommandModule.Describe(vector: new Vector3(xyz[0], xyz[1], xyz[2]))}]"
+                return (scene.SetPole(idOrName: args[0], pole: new Vector3(x: xyz[0], y: xyz[1], z: xyz[2]))
+                    ? $"[creator.pole: {CreatorCommandModule.Describe(vector: new Vector3(x: xyz[0], y: xyz[1], z: xyz[2]))}]"
                     : $"[creator.pole: no chain matches '{args[0]}']");
             }),
             name: "creator.pole"

@@ -18,6 +18,8 @@ internal static class OverworldSnapshotProjection {
     /// <param name="hasJump">Whether the jump command is interned in the registry.</param>
     /// <param name="interactId">The interned id of the interact command (ignored when <paramref name="hasInteract"/> is false).</param>
     /// <param name="hasInteract">Whether the interact command is interned in the registry.</param>
+    /// <param name="cycleId">The interned id of the cartridge-cycle command (ignored when <paramref name="hasCycle"/> is false).</param>
+    /// <param name="hasCycle">Whether the cartridge-cycle command is interned in the registry.</param>
     /// <returns>One intent per slot, in slot order (length <see cref="OverworldWorld.MaxPlayers"/>).</returns>
     public static PlayerIntent[] ToIntents(in CommandSnapshot snapshot, ushort moveId, bool hasMove, ushort jumpId, bool hasJump, ushort interactId, bool hasInteract, ushort cycleId = 0, bool hasCycle = false) {
         var row = new PlayerIntent[OverworldWorld.MaxPlayers];
@@ -39,6 +41,8 @@ internal static class OverworldSnapshotProjection {
     /// <param name="hasJump">Whether the jump command is interned in the registry.</param>
     /// <param name="interactId">The interned id of the interact command (ignored when <paramref name="hasInteract"/> is false).</param>
     /// <param name="hasInteract">Whether the interact command is interned in the registry.</param>
+    /// <param name="cycleId">The interned id of the cartridge-cycle command (ignored when <paramref name="hasCycle"/> is false).</param>
+    /// <param name="hasCycle">Whether the cartridge-cycle command is interned in the registry.</param>
     /// <returns>The slot's intent for the tick.</returns>
     public static PlayerIntent FromLane(CommandLane lane, ushort moveId, bool hasMove, ushort jumpId, bool hasJump, ushort interactId, bool hasInteract, ushort cycleId = 0, bool hasCycle = false) {
         var move = Vector2.Zero;

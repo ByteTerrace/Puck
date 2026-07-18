@@ -19,15 +19,15 @@ public sealed unsafe class DirectXGpuComputePipeline : IGpuComputePipeline {
     public DirectXGpuComputePipeline(DirectXPipelineLayout layout) {
         ArgumentNullException.ThrowIfNull(layout);
 
-        m_token = GCHandle.Alloc(layout);
+        m_token = GCHandle.Alloc(value: layout);
     }
 
     /// <inheritdoc/>
-    public nint DescriptorSetLayoutHandle => GCHandle.ToIntPtr(m_token);
+    public nint DescriptorSetLayoutHandle => GCHandle.ToIntPtr(value: m_token);
     /// <inheritdoc/>
-    public nint Handle => GCHandle.ToIntPtr(m_token);
+    public nint Handle => GCHandle.ToIntPtr(value: m_token);
     /// <inheritdoc/>
-    public nint LayoutHandle => GCHandle.ToIntPtr(m_token);
+    public nint LayoutHandle => GCHandle.ToIntPtr(value: m_token);
 
     /// <inheritdoc/>
     public void Dispose() {

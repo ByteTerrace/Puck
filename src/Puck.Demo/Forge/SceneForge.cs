@@ -13,11 +13,12 @@ namespace Puck.Demo.Forge;
 /// caller decides what cartridge to assemble around them.
 /// </summary>
 internal static class SceneForge {
-    public const int ScreenWidth = 160;
     public const int ScreenHeight = 144;
-    private const int RoomSupersampleWidth = 320;
-    private const int RoomSupersampleHeight = 288;
+    public const int ScreenWidth = 160;
+
     private const int RoomReduceFactor = 2;
+    private const int RoomSupersampleHeight = 288;
+    private const int RoomSupersampleWidth = 320;
 
     /// <summary>A forged background: deduplicated tiles, a 32×32 tilemap, the derived palette, the unique-tile count,
     /// and the raw quantized indices (for previews).</summary>
@@ -32,7 +33,7 @@ internal static class SceneForge {
             device: device,
             gpu: gpu,
             height: (uint)height,
-            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv", directory: DemoShaders.SdfDirectory),
+            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
             options: new SdfWorldEngineOptions(Program: program),
             width: (uint)width
         );
@@ -54,14 +55,14 @@ internal static class SceneForge {
     public static SdfProgramBuilder AddRoom(SdfProgramBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
 
-        var floor = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.34f, 0.56f, 0.36f)));
-        var wall = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.52f, 0.46f, 0.60f)));
+        var floor = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.34f, y: 0.56f, z: 0.36f)));
+        var wall = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.52f, y: 0.46f, z: 0.60f)));
 
         _ = builder.Plane(normal: Vector3.UnitY, offset: 0f, material: floor);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0.6f, -6f)).Box(halfExtents: new Vector3(6f, 0.6f, 0.3f), round: 0.06f, material: wall);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0.6f, 6f)).Box(halfExtents: new Vector3(6f, 0.6f, 0.3f), round: 0.06f, material: wall);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-6f, 0.6f, 0f)).Box(halfExtents: new Vector3(0.3f, 0.6f, 6f), round: 0.06f, material: wall);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(6f, 0.6f, 0f)).Box(halfExtents: new Vector3(0.3f, 0.6f, 6f), round: 0.06f, material: wall);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0.6f, z: -6f)).Box(halfExtents: new Vector3(x: 6f, y: 0.6f, z: 0.3f), round: 0.06f, material: wall);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0.6f, z: 6f)).Box(halfExtents: new Vector3(x: 6f, y: 0.6f, z: 0.3f), round: 0.06f, material: wall);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -6f, y: 0.6f, z: 0f)).Box(halfExtents: new Vector3(x: 0.3f, y: 0.6f, z: 6f), round: 0.06f, material: wall);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 6f, y: 0.6f, z: 0f)).Box(halfExtents: new Vector3(x: 0.3f, y: 0.6f, z: 6f), round: 0.06f, material: wall);
 
         return builder;
     }
@@ -73,8 +74,8 @@ internal static class SceneForge {
     /// the GB background was forged from.</summary>
     public static CameraSnapshot RoomCamera(int width, int height) =>
         CameraSnapshot.LookAt(
-            position: new Vector3(0f, 16f, 3.5f),
-            target: new Vector3(0f, 0f, 0f),
+            position: new Vector3(x: 0f, y: 16f, z: 3.5f),
+            target: new Vector3(x: 0f, y: 0f, z: 0f),
             fieldOfViewRadians: (52f * (MathF.PI / 180f)),
             viewportWidth: (uint)width,
             viewportHeight: (uint)height
@@ -115,7 +116,7 @@ internal static class SceneForge {
 
         for (var row = 0; (row < tilesHigh); row++) {
             for (var column = 0; (column < tilesWide); column++) {
-                map[(row * 32) + column] = tileIds[(row * tilesWide) + column];
+                map[((row * 32) + column)] = tileIds[((row * tilesWide) + column)];
             }
         }
 
@@ -130,7 +131,7 @@ internal static class SceneForge {
 
         tileCount = (tilesWide * tilesHigh);
 
-        var tileData = new byte[tileCount * 16];
+        var tileData = new byte[(tileCount * 16)];
         var tileIndices = new byte[64];
         var tile = 0;
 
@@ -138,7 +139,7 @@ internal static class SceneForge {
             for (var tileX = 0; (tileX < tilesWide); tileX++) {
                 for (var row = 0; (row < 8); row++) {
                     for (var column = 0; (column < 8); column++) {
-                        tileIndices[(row * 8) + column] = indices[(((tileY * 8) + row) * width) + ((tileX * 8) + column)];
+                        tileIndices[((row * 8) + column)] = indices[((((tileY * 8) + row) * width) + ((tileX * 8) + column))];
                     }
                 }
 
@@ -149,25 +150,23 @@ internal static class SceneForge {
 
         return tileData;
     }
-
     public static List<HgbImage.Rgb> CollectPixels(byte[] rgba, int count) {
         var pixels = new List<HgbImage.Rgb>(capacity: count);
 
         for (var pixel = 0; (pixel < count); pixel++) {
             var offset = (pixel * 4);
 
-            pixels.Add(item: new HgbImage.Rgb(R: rgba[offset], G: rgba[offset + 1], B: rgba[offset + 2]));
+            pixels.Add(item: new HgbImage.Rgb(R: rgba[offset], G: rgba[(offset + 1)], B: rgba[(offset + 2)]));
         }
 
         return pixels;
     }
-
     public static List<HgbImage.Rgb> CollectForegroundPixels(byte[] rgba, int count, HgbImage.Rgb background, int thresholdSquared) {
         var pixels = new List<HgbImage.Rgb>();
 
         for (var pixel = 0; (pixel < count); pixel++) {
             var offset = (pixel * 4);
-            var colour = new HgbImage.Rgb(R: rgba[offset], G: rgba[offset + 1], B: rgba[offset + 2]);
+            var colour = new HgbImage.Rgb(R: rgba[offset], G: rgba[(offset + 1)], B: rgba[(offset + 2)]);
 
             if (colour.DistanceSquaredTo(other: background) > thresholdSquared) {
                 pixels.Add(item: colour);

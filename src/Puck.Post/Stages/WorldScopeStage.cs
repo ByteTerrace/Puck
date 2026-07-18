@@ -51,10 +51,10 @@ internal sealed class WorldScopeStage : IPostStage {
     // deleting the floor. That freedom is the scope's whole product.
     internal static SdfProgram BuildScopeScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
-        var copper = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.45f, 0.15f), Emissive: 0.3f));
-        var jade = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.8f, 0.5f), Emissive: 0.3f));
-        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.6f, 0.35f, 0.9f), Emissive: 0.3f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
+        var copper = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.85f, y: 0.45f, z: 0.15f), Emissive: 0.3f));
+        var jade = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.8f, z: 0.5f), Emissive: 0.3f));
+        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.6f, y: 0.35f, z: 0.9f), Emissive: 0.3f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
@@ -63,28 +63,28 @@ internal sealed class WorldScopeStage : IPostStage {
             // without touching the floor — the flat model would have annihilated the plane here.
             .ResetPoint()
             .PushField(compose: SdfBlendOp.Union)
-            .Translate(offset: new Vector3(1.7f, 0.55f, 0f))
-            .Box(halfExtents: new Vector3(0.45f, 0.45f, 0.45f), round: 0f, material: violet)
+            .Translate(offset: new Vector3(x: 1.7f, y: 0.55f, z: 0f))
+            .Box(halfExtents: new Vector3(x: 0.45f, y: 0.45f, z: 0.45f), round: 0f, material: violet)
             .ResetPoint()
-            .Translate(offset: new Vector3(1.7f, 0.55f, 0f))
+            .Translate(offset: new Vector3(x: 1.7f, y: 0.55f, z: 0f))
             .Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (MathF.PI / 4f)))
-            .Box(halfExtents: new Vector3(0.45f, 0.45f, 0.45f), round: 0f, material: violet, blend: SdfBlendOp.Intersection)
+            .Box(halfExtents: new Vector3(x: 0.45f, y: 0.45f, z: 0.45f), round: 0f, material: violet, blend: SdfBlendOp.Intersection)
             .PopField()
             // A SCOPED ONION whose FIRST member is a SmoothUnion — exercising blendSmoothUnion(FAR, b, k)'s near-endpoint
             // (it must return the sphere, not detonate) — then Onion shells that sphere ALONE. The floor stays solid.
             .ResetPoint()
             .PushField(compose: SdfBlendOp.Union)
-            .Translate(offset: new Vector3(-1.5f, 0.55f, 0f))
+            .Translate(offset: new Vector3(x: -1.5f, y: 0.55f, z: 0f))
             .Sphere(radius: 0.5f, material: copper, blend: SdfBlendOp.SmoothUnion, smooth: 0.2f)
             .Onion(thickness: 0.07f)
             .PopField()
             // A SCOPED SUBTRACTION: a box with a cylinder carved out of it inside a scope, composed Union onto the scene.
             .ResetPoint()
             .PushField(compose: SdfBlendOp.Union)
-            .Translate(offset: new Vector3(0.1f, 0.55f, 0f))
-            .Box(halfExtents: new Vector3(0.45f, 0.4f, 0.45f), round: 0.05f, material: jade)
+            .Translate(offset: new Vector3(x: 0.1f, y: 0.55f, z: 0f))
+            .Box(halfExtents: new Vector3(x: 0.45f, y: 0.4f, z: 0.45f), round: 0.05f, material: jade)
             .ResetPoint()
-            .Translate(offset: new Vector3(0.1f, 0.55f, 0f))
+            .Translate(offset: new Vector3(x: 0.1f, y: 0.55f, z: 0f))
             .Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 2f)))
             .Cylinder(radius: 0.18f, halfHeight: 0.7f, material: jade, blend: SdfBlendOp.Subtraction)
             .PopField()

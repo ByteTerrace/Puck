@@ -148,7 +148,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     }
     /// <inheritdoc/>
     public bool SupportsPresentWait(nint deviceHandle) {
-        return (GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr != null);
+        return (GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr is not null);
     }
     /// <inheritdoc/>
     public void InvalidateDevice(nint deviceHandle) {
@@ -160,7 +160,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
 
         // Null only if the function pointer never loaded (extension absent); callers gate on SupportsPresentWait, so this
         // is purely defensive — report a benign timeout rather than dereferencing null.
-        return ((waitForPresent == null)
+        return ((waitForPresent is null)
             ? VkResult.Timeout
             : waitForPresent(deviceHandle, swapchainHandle, presentId, timeoutNanoseconds));
     }

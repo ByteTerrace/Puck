@@ -17,28 +17,31 @@ internal sealed class JsonObjectBlobStore(IObjectBlobStore blobStore) : IJsonObj
             target: target
         );
 
-        if (content is null) {
+        if (content is not { } blob) {
             return new ObjectBlobReadResult<T>(
                 Found: false,
-                Value: default
+                Value: default,
+                VersionToken: null
             );
         }
 
         var value = JsonSerializer.Deserialize<T>(
             options: SerializerOptions,
-            utf8Json: content.Value.Span
+            utf8Json: blob.Content.Span
         );
 
         return new ObjectBlobReadResult<T>(
             Found: true,
-            Value: value
+            Value: value,
+            VersionToken: blob.VersionToken
         );
     }
-    public ValueTask<bool> WriteAsync<T>(
+    public ValueTask<ObjectBlobWriteResult> WriteAsync<T>(
         ObjectStorageTarget target,
         ObjectBlobAddress address,
         T value,
         ObjectBlobWriteMode mode,
+        string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     ) {
         var content = JsonSerializer.SerializeToUtf8Bytes(
@@ -50,6 +53,7 @@ internal sealed class JsonObjectBlobStore(IObjectBlobStore blobStore) : IJsonObj
             address: address,
             cancellationToken: cancellationToken,
             content: content,
+            ifMatchVersion: ifMatchVersion,
             mode: mode,
             target: target
         );

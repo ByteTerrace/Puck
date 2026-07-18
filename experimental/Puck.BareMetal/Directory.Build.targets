@@ -1,0 +1,13 @@
+<Project>
+
+    <!--
+        Build firewall — DO NOT add <Import> of the repository-root Directory.Build.targets.
+
+        Its companion Directory.Build.props stops MSBuild's upward Directory.Build.props discovery
+        at this folder; MSBuild searches for Directory.Build.targets separately, so this empty file
+        stops that discovery too. Without it the freestanding companion would inherit the engine's
+        Directory.Build.targets (and the Windows-capture projection references it imports), defeating
+        the isolation the .props firewall establishes.
+    -->
+
+</Project>

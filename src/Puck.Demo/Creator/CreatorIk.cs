@@ -6,8 +6,9 @@ namespace Puck.Demo.Creator;
 /// Pure, static IK math for the creator's rig (<see cref="CreatorChainState"/> captures rest geometry;
 /// <see cref="CreatorScene.SolveChains"/> calls in here every time a goal moves). Deliberately in
 /// <c>System.Numerics</c> floats — this is HOST-SIDE AUTHORING/RENDER math, never simulation state, so it never
-/// belongs in <c>Puck.Maths</c>' fixed-point world. The two-bone solver is in the spirit of Inigo Quilez's classic
-/// "simpleik" construction (iq is credited generically in ACKNOWLEDGMENTS.md; no new attribution needed here).
+/// belongs in <c>Puck.Maths</c>' fixed-point world. The two-bone solver is analytic: the mid joint sits at the
+/// circle-circle intersection of the two bone-length spheres centered on the root and the (reach-clamped) goal,
+/// found via the law of cosines rather than an iterative solve.
 /// </summary>
 public static class CreatorIk {
     // Keeps the law-of-cosines argument strictly inside [-1, 1] (float rounding can walk it just past an edge) and
@@ -32,12 +33,12 @@ public static class CreatorIk {
         // point) would otherwise divide by 2*lenA*distance = 0 in the law of cosines and normalize a zero-length
         // mid→root — producing a NaN tip that strict JSON serialization (creator.save) later rejects uncaught. Real
         // authored bones dwarf Epsilon, so this is a no-op for any non-degenerate capture.
-        lenA = MathF.Max(lenA, Epsilon);
-        lenB = MathF.Max(lenB, Epsilon);
+        lenA = MathF.Max(x: lenA, y: Epsilon);
+        lenB = MathF.Max(x: lenB, y: Epsilon);
 
         var toGoal = (goal - root);
         var distance = toGoal.Length();
-        var rest = ((restDirection.LengthSquared() > Epsilon) ? Vector3.Normalize(restDirection) : Vector3.UnitY);
+        var rest = ((restDirection.LengthSquared() > Epsilon) ? Vector3.Normalize(value: restDirection) : Vector3.UnitY);
 
         // Degenerate goal (essentially at the root): no meaningful direction to solve toward — hold rest, straight.
         if (distance < Epsilon) {
@@ -50,45 +51,45 @@ public static class CreatorIk {
         // Clamp the EFFECTIVE distance into the triangle-inequality envelope; the direction stays the true direction
         // to the (possibly unreachable) goal, so an out-of-reach target reads as "reaching as far as it can" rather
         // than snapping to some other pose.
-        var minReach = (MathF.Abs(lenA - lenB) + Epsilon);
-        var maxReach = (lenA + lenB - Epsilon);
-        var clampedDistance = Math.Clamp(value: distance, min: MathF.Min(minReach, maxReach), max: MathF.Max(minReach, maxReach));
+        var minReach = (MathF.Abs(x: (lenA - lenB)) + Epsilon);
+        var maxReach = ((lenA + lenB) - Epsilon);
+        var clampedDistance = Math.Clamp(value: distance, min: MathF.Min(x: minReach, y: maxReach), max: MathF.Max(x: minReach, y: maxReach));
 
         // Law of cosines: the angle at ROOT between the direction-to-goal and the root→mid bone.
         var cosAngleA = Math.Clamp(
-            value: (((lenA * lenA) + (clampedDistance * clampedDistance) - (lenB * lenB)) / (2f * lenA * clampedDistance)),
+            value: ((((lenA * lenA) + (clampedDistance * clampedDistance)) - (lenB * lenB)) / ((2f * lenA) * clampedDistance)),
             min: -1f,
             max: 1f
         );
-        var angleA = MathF.Acos(cosAngleA);
+        var angleA = MathF.Acos(x: cosAngleA);
 
         // The bend axis: perpendicular to both the reach direction and the pole hint, so the elbow/knee leans toward
         // the pole. A pole nearly colinear with dir has no well-defined perpendicular — fall back to any axis
         // perpendicular to dir (world-up, or world-right if dir is itself nearly vertical).
         var poleOffset = (pole - root);
-        var bendAxis = Vector3.Cross(dir, poleOffset);
+        var bendAxis = Vector3.Cross(vector1: dir, vector2: poleOffset);
 
         if (bendAxis.LengthSquared() < Epsilon) {
-            bendAxis = Vector3.Cross(dir, Vector3.UnitY);
+            bendAxis = Vector3.Cross(vector1: dir, vector2: Vector3.UnitY);
 
             if (bendAxis.LengthSquared() < Epsilon) {
-                bendAxis = Vector3.Cross(dir, Vector3.UnitX);
+                bendAxis = Vector3.Cross(vector1: dir, vector2: Vector3.UnitX);
             }
         }
 
-        bendAxis = Vector3.Normalize(bendAxis);
+        bendAxis = Vector3.Normalize(value: bendAxis);
 
-        var mid = (root + (Vector3.Transform(dir, Quaternion.CreateFromAxisAngle(bendAxis, angleA)) * lenA));
-        var midToGoalDir = ((clampedDistance > Epsilon) ? Vector3.Normalize(mid - root) : dir);
+        var mid = (root + (Vector3.Transform(dir, Quaternion.CreateFromAxisAngle(angle: angleA, axis: bendAxis)) * lenA));
+        var midToGoalDir = ((clampedDistance > Epsilon) ? Vector3.Normalize(value: (mid - root)) : dir);
         // The tip completes the second bone FROM MID, aimed back toward the goal direction along the same bend
         // plane (mirroring mid's angle at the root by the exterior angle at mid, law of cosines again).
         var cosAngleB = Math.Clamp(
-            value: (((lenA * lenA) + (lenB * lenB) - (clampedDistance * clampedDistance)) / (2f * lenA * lenB)),
+            value: ((((lenA * lenA) + (lenB * lenB)) - (clampedDistance * clampedDistance)) / ((2f * lenA) * lenB)),
             min: -1f,
             max: 1f
         );
-        var angleB = (MathF.PI - MathF.Acos(cosAngleB));
-        var tip = (mid + (Vector3.Transform(midToGoalDir, Quaternion.CreateFromAxisAngle(bendAxis, -angleB)) * lenB));
+        var angleB = (MathF.PI - MathF.Acos(x: cosAngleB));
+        var tip = (mid + (Vector3.Transform(midToGoalDir, Quaternion.CreateFromAxisAngle(angle: -angleB, axis: bendAxis)) * lenB));
 
         return (mid, tip);
     }
@@ -112,12 +113,12 @@ public static class CreatorIk {
 
         for (var index = 0; (index < lengths.Length); index++) {
             var toGoal = (goal - joint);
-            var desiredDirection = ((toGoal.LengthSquared() > Epsilon) ? Vector3.Normalize(toGoal) : previousDirection);
+            var desiredDirection = ((toGoal.LengthSquared() > Epsilon) ? Vector3.Normalize(value: toGoal) : previousDirection);
             var weight = Math.Clamp(value: ((index < stiffness.Length) ? stiffness[index] : 1f), min: 0f, max: 1f);
-            var blended = Vector3.Lerp(previousDirection, desiredDirection, weight);
-            var direction = ((blended.LengthSquared() > Epsilon) ? Vector3.Normalize(blended) : desiredDirection);
+            var blended = Vector3.Lerp(amount: weight, value1: previousDirection, value2: desiredDirection);
+            var direction = ((blended.LengthSquared() > Epsilon) ? Vector3.Normalize(value: blended) : desiredDirection);
 
-            joint += (direction * MathF.Max(lengths[index], 0f));
+            joint += (direction * MathF.Max(x: lengths[index], y: 0f));
             destination[index] = joint;
             previousDirection = direction;
         }
@@ -135,8 +136,8 @@ public static class CreatorIk {
     /// <returns>The shape's posed position and orientation.</returns>
     public static (Vector3 Position, Quaternion Rotation) PoseChain(Vector3 joint, Vector3 solvedDirection, Vector3 restBoneDirection, Vector3 restOffset, Quaternion restOrientation) {
         var swing = ShortestArc(from: restBoneDirection, to: solvedDirection);
-        var rotation = Quaternion.Normalize(swing * restOrientation);
-        var position = (joint + Vector3.Transform(restOffset, swing));
+        var rotation = Quaternion.Normalize(value: (swing * restOrientation));
+        var position = (joint + Vector3.Transform(rotation: swing, value: restOffset));
 
         return (position, rotation);
     }
@@ -148,26 +149,26 @@ public static class CreatorIk {
     /// <param name="to">The target unit direction.</param>
     /// <returns>The unit quaternion rotating <paramref name="from"/> onto <paramref name="to"/>.</returns>
     public static Quaternion ShortestArc(Vector3 from, Vector3 to) {
-        var a = ((from.LengthSquared() > Epsilon) ? Vector3.Normalize(from) : Vector3.UnitY);
-        var b = ((to.LengthSquared() > Epsilon) ? Vector3.Normalize(to) : Vector3.UnitY);
-        var dot = Vector3.Dot(a, b);
+        var a = ((from.LengthSquared() > Epsilon) ? Vector3.Normalize(value: from) : Vector3.UnitY);
+        var b = ((to.LengthSquared() > Epsilon) ? Vector3.Normalize(value: to) : Vector3.UnitY);
+        var dot = Vector3.Dot(vector1: a, vector2: b);
 
         // Opposed vectors: no unique rotation plane — pick any axis perpendicular to a and rotate 180°.
         if (dot < (-1f + Epsilon)) {
-            var axis = Vector3.Cross(Vector3.UnitX, a);
+            var axis = Vector3.Cross(vector1: Vector3.UnitX, vector2: a);
 
             if (axis.LengthSquared() < Epsilon) {
-                axis = Vector3.Cross(Vector3.UnitY, a);
+                axis = Vector3.Cross(vector1: Vector3.UnitY, vector2: a);
             }
 
-            return Quaternion.CreateFromAxisAngle(Vector3.Normalize(axis), MathF.PI);
+            return Quaternion.CreateFromAxisAngle(Vector3.Normalize(value: axis), MathF.PI);
         }
 
-        var cross = Vector3.Cross(a, b);
+        var cross = Vector3.Cross(vector1: a, vector2: b);
         // The half-angle construction (w = 1+dot, xyz = cross) avoids an explicit acos/sin pair; normalizing at the
         // end folds in the missing 2x factor from the half-angle identities.
-        var quaternion = new Quaternion(cross.X, cross.Y, cross.Z, (1f + dot));
+        var quaternion = new Quaternion(w: (1f + dot), x: cross.X, y: cross.Y, z: cross.Z);
 
-        return Quaternion.Normalize(quaternion);
+        return Quaternion.Normalize(value: quaternion);
     }
 }

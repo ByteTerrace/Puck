@@ -19,7 +19,7 @@ internal sealed class ConsoleGlyphFont {
     /// <summary>The first code point in the atlas (space).</summary>
     public const int FirstChar = 0x20;
     /// <summary>The number of glyphs (printable ASCII 0x20–0x7E).</summary>
-    public const int GlyphCount = 0x7F - 0x20;
+    public const int GlyphCount = (0x7F - 0x20);
 
     private ConsoleGlyphFont(int cellWidth, int cellHeight, uint[] packedCoverage) {
         CellHeight = cellHeight;
@@ -56,7 +56,7 @@ internal sealed class ConsoleGlyphFont {
 
     [SupportedOSPlatform("windows")]
     private static ConsoleGlyphFont BuildWindows(int cellWidth, int cellHeight) {
-        var coverage = new byte[ConsoleGlyphFont.GlyphCount * cellWidth * cellHeight];
+        var coverage = new byte[((ConsoleGlyphFont.GlyphCount * cellWidth) * cellHeight)];
         // A small canvas per glyph, rendered white on transparent so the alpha channel IS the anti-aliased coverage.
         using var bitmap = new Bitmap(width: cellWidth, height: cellHeight, format: PixelFormat.Format32bppArgb);
         using var graphics = Graphics.FromImage(image: bitmap);
@@ -69,7 +69,7 @@ internal sealed class ConsoleGlyphFont {
         // GenericTypographic drops the extra padding DrawString adds, so the glyph sits tight in the cell.
         var format = StringFormat.GenericTypographic;
         var stride = (cellWidth * cellHeight);
-        var rowBytes = new byte[cellWidth * cellHeight * 4];
+        var rowBytes = new byte[((cellWidth * cellHeight) * 4)];
 
         for (var index = 0; (index < ConsoleGlyphFont.GlyphCount); index++) {
             graphics.Clear(color: Color.Transparent);
@@ -89,7 +89,7 @@ internal sealed class ConsoleGlyphFont {
                 for (var y = 0; (y < cellHeight); y++) {
                     for (var x = 0; (x < cellWidth); x++) {
                         // BGRA little-endian: the alpha byte is at +3; it holds the AA coverage of the white glyph.
-                        coverage[(index * stride) + (y * cellWidth) + x] = rowBytes[(y * locked.Stride) + (x * 4) + 3];
+                        coverage[(((index * stride) + (y * cellWidth)) + x)] = rowBytes[(((y * locked.Stride) + (x * 4)) + 3)];
                     }
                 }
             } finally {
@@ -99,7 +99,6 @@ internal sealed class ConsoleGlyphFont {
 
         return new ConsoleGlyphFont(cellWidth: cellWidth, cellHeight: cellHeight, packedCoverage: Pack(coverage: coverage));
     }
-
     [SupportedOSPlatform("windows")]
     private static Font CreateMonospaceFont(float pixelSize) {
         try {
@@ -119,10 +118,10 @@ internal sealed class ConsoleGlyphFont {
 
     // Packs the coverage bytes four-to-a-uint (little-endian), padding the final word with zeros.
     private static uint[] Pack(byte[] coverage) {
-        var packed = new uint[(coverage.Length + 3) / 4];
+        var packed = new uint[((coverage.Length + 3) / 4)];
 
         for (var index = 0; (index < coverage.Length); index++) {
-            packed[index >> 2] |= ((uint)coverage[index] << ((index & 3) * 8));
+            packed[(index >> 2)] |= ((uint)coverage[index] << ((index & 3) * 8));
         }
 
         return packed;

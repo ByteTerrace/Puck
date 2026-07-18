@@ -1,0 +1,18 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Host-level bench tuning: automatic display pacing (verified VRR bounds when advertised, otherwise active signal timing) plus fixed feature-switch overrides applied at composition. The SAME host.features map the feature.set verb and bench.sweep drive live, here pinned as durable data. Shape only is parse-validated; runtime registration/type knowledge remains in FeatureSwitchRegistry. Run with: Puck.Demo --run docs/examples/overworld-bench-host.json --timing",
+    "host": {
+        "presentMode": "immediate",
+        "presentRate": "display",
+        "timing": true,
+        "features": {
+            "render.scale": "quarter",
+            "sdf.soft-shadows": "off"
+        }
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld"
+    }
+}

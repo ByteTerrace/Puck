@@ -29,11 +29,11 @@ public readonly record struct TriggerEffectSpec {
     /// <summary>The number of resistance zones along the trigger pull.</summary>
     public const int ZoneCount = 10;
 
-    private const byte MaxZone = 9;
     private const byte MaxStrength = 8;
-    private const byte WeaponMinStart = 2;
-    private const byte WeaponMaxStart = 7;
+    private const byte MaxZone = 9;
     private const byte WeaponMaxEnd = 8;
+    private const byte WeaponMaxStart = 7;
+    private const byte WeaponMinStart = 2;
 
     /// <summary>The effect kind; selects which other members apply.</summary>
     public TriggerEffectKind Kind { get; private init; }
@@ -80,7 +80,7 @@ public readonly record struct TriggerEffectSpec {
 
         return ((strength == 0)
             ? Off
-            : new TriggerEffectSpec { Kind = TriggerEffectKind.Weapon, StartZone = startZone, EndZone = endZone, Strength = strength, });
+            : new TriggerEffectSpec { EndZone = endZone, Kind = TriggerEffectKind.Weapon, StartZone = startZone, Strength = strength, });
     }
 
     /// <summary>Vibration from <paramref name="position"/> to the end of the pull.</summary>
@@ -95,7 +95,7 @@ public readonly record struct TriggerEffectSpec {
 
         return (((amplitude == 0) || (frequency == 0))
             ? Off
-            : new TriggerEffectSpec { Kind = TriggerEffectKind.Vibration, StartZone = position, Strength = amplitude, Frequency = frequency, });
+            : new TriggerEffectSpec { Frequency = frequency, Kind = TriggerEffectKind.Vibration, StartZone = position, Strength = amplitude, });
     }
 
     /// <summary>A per-zone resistance curve: each zone's strength (<c>0..8</c>) along the pull.</summary>
@@ -118,7 +118,7 @@ public readonly record struct TriggerEffectSpec {
         }
 
         return (any
-            ? new TriggerEffectSpec { Kind = TriggerEffectKind.ContinuousCurve, Curve = curve, }
+            ? new TriggerEffectSpec { Curve = curve, Kind = TriggerEffectKind.ContinuousCurve, }
             : Off);
     }
 

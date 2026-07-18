@@ -100,7 +100,6 @@ internal sealed class CardMenu {
         e.StoreAToAddress(address: m_cursorAddress);
         e.MarkLabel(label: noDown);
     }
-
     private void EmitCursorDraw(Sm83Emitter e) {
         for (var index = 0; (index < m_items.Count); index++) {
             var isCursor = e.NewLabel();
@@ -117,7 +116,6 @@ internal sealed class CardMenu {
             m_fw.Bg.EmitQueueCell(row: m_items[index].Row, column: (m_items[index].Column - 2));
         }
     }
-
     private void EmitConfirm(Sm83Emitter e, Action<Sm83Emitter, int> emitConfirm) {
         var noConfirm = e.NewLabel();
         var confirmed = e.NewLabel();

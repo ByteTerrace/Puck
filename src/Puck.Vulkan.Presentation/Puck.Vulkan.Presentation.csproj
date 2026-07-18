@@ -28,13 +28,15 @@
     </ItemGroup>
 
     <!-- Compile each *.vert.hlsl / *.frag.hlsl to SPIR-V via DXC. The Vulkan pipeline binds the entry point by
-         the fixed name "main", so the SPIR-V entry is renamed regardless of the HLSL entry function. -->
+         the fixed name "main", so the SPIR-V entry is renamed regardless of the HLSL entry function. Every invocation
+         pins the shared capability floor: -fspv-target-env=vulkan1.3 (SPIR-V 1.6), -T *_6_6 (Shader Model 6.6), explicit
+         -O3, and -enable-16bit-types (inert until a shader adopts fp16). -->
     <Target BeforeTargets="PrepareForBuild" Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)" Name="CompileShaders" Outputs="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
         <Exec Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
             <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
         </Exec>
         <Error Condition="'$(DxcProbeExitCode)' != '0'" Text="Puck.Vulkan.Presentation shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T vs_6_0 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
     </Target>
 </Project>

@@ -77,7 +77,7 @@ internal sealed partial class ExportStage : IPostStage {
             Height: RenderSize,
             InstanceHandle: instanceHandle,
             PhysicalDeviceHandle: physicalDeviceHandle,
-            UsageFlags: (VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource),
+            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource,
             Width: RenderSize
         ));
 
@@ -189,7 +189,6 @@ internal sealed partial class ExportStage : IPostStage {
 
         return null;
     }
-
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CloseHandle(nint handle);

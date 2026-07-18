@@ -35,7 +35,7 @@ public static class ViewportBuilder {
                 // A child-content slot still renders an SDF view (a placeholder camera keeps the frame well-formed); the
                 // host composites the child's produced surface over it — the camera's parameters are never seen.
                 LiveCameraSource or GamingBrickSource => PlaceholderCamera(),
-                _ => throw new NotSupportedException(message: $"viewport[{index}] source '{viewport.Source?.GetType().Name ?? "null"}' is not a buildable viewport source"),
+                _ => throw new NotSupportedException(message: $"viewport[{index}] source '{(viewport.Source?.GetType().Name ?? "null")}' is not a buildable viewport source"),
             };
             regions[index] = new NormalizedRect(
                 Height: region[3],

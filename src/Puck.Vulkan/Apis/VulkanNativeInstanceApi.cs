@@ -29,16 +29,20 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     private const uint VkStructureTypeApplicationInfo = 0;
     private const uint VkStructureTypeDebugUtilsMessengerCreateInfoExt = 1000128004;
     private const uint VkStructureTypeInstanceCreateInfo = 1;
-    // Request Vulkan 1.2 to make core vkGetPhysicalDeviceFeatures2, core
-    // buffer-device-address, and SPIR-V 1.4+ shader modules available (needed by optional
-    // ray-query pipelines). Pre-1.1 loaders, which would reject a higher requested version,
-    // are effectively extinct.
-    private const uint VulkanApiVersion12 = (1u << 22) | (2u << 12);
+    // Request Vulkan 1.3 as the hard floor: SPIR-V 1.6 is core in 1.3, and every Puck kernel now
+    // compiles at -fspv-target-env=vulkan1.3, so a lower instance would refuse those modules at
+    // vkCreateShaderModule. 1.3 also makes core vkGetPhysicalDeviceFeatures2, buffer-device-address,
+    // and subgroup-size-control available. All four supported GPUs (RTX 2070, RTX 4070, Steam Machine
+    // [RDNA3], Steam Deck [RDNA2]) expose 1.3 on current drivers; pre-1.1 loaders that would reject a
+    // higher requested version are effectively extinct. The device-side floor is enforced separately in
+    // VulkanPhysicalDeviceSelector (a device may report a lower ApiVersion than the loader).
+    private const uint VulkanApiVersion13 = (1u << 22) | (3u << 12);
 
     private readonly Lock m_syncRoot = new();
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> m_createInstance;
     private unsafe delegate* unmanaged[Cdecl]<nint, nint, void> m_destroyInstance;
     private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
+    private unsafe delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult> m_enumerateInstanceExtensionProperties;
 
     /// <inheritdoc/>
     public VkResult CreateInstance(VulkanInstanceCreateRequest request, out nint instanceHandle) {
@@ -95,8 +99,8 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     }
     // Probe the loader's highest supported instance version (vkEnumerateInstanceVersion, Vulkan 1.1+) and request
     // it — the parity-equivalent of the Direct3D 12 path probing feature levels down to the highest the adapter
-    // accepts — instead of pinning a fixed version. Floored at the 1.2 the engine's core features need; a pre-1.1
-    // loader (no such export) is effectively extinct, so fall back to 1.2 there too.
+    // accepts — instead of pinning a fixed version. Floored at the 1.3 the engine's SPIR-V 1.6 kernels need; a
+    // pre-1.1 loader (no such export) is effectively extinct, so fall back to 1.3 there too.
     private static uint ProbeApiVersion() {
         try {
             var enumerateInstanceVersion = (delegate* unmanaged[Cdecl]<uint*, VkResult>)VulkanNativeLibrary.GetExport(functionName: "vkEnumerateInstanceVersion");
@@ -105,17 +109,65 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             if (
                 (enumerateInstanceVersion is not null) &&
                 (VkResult.Success == enumerateInstanceVersion(&version)) &&
-                (version >= VulkanApiVersion12)
+                (version >= VulkanApiVersion13)
             ) {
                 return version;
             }
         } catch {
-            // A pre-1.1 loader lacks the export (GetExport throws); fall through to the 1.2 floor.
+            // A pre-1.1 loader lacks the export (GetExport throws); fall through to the 1.3 floor.
         }
 
-        return VulkanApiVersion12;
+        return VulkanApiVersion13;
     }
 
+    /// <inheritdoc/>
+    public bool HasInstanceExtension(string extensionName) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: extensionName);
+
+        var enumerate = GetEnumerateInstanceExtensionProperties();
+
+        if (enumerate is null) {
+            return false;
+        }
+
+        var count = 0U;
+
+        // pLayerName == null enumerates the loader's core + implicit-layer instance extensions (which is where the
+        // debug-utils extension is advertised), independent of any explicit validation layer.
+        if (
+            (VkResult.Success != enumerate(null, &count, null)) ||
+            (0 == count)
+        ) {
+            return false;
+        }
+
+        var properties = new VkExtensionProperties[count];
+
+        fixed (VkExtensionProperties* propertiesPointer = properties) {
+            // A second enumeration can legitimately return Incomplete if the list grew between calls; the entries
+            // that were written are still valid.
+            var result = enumerate(null, &count, propertiesPointer);
+
+            if (
+                (VkResult.Success != result) &&
+                (VkResult.Incomplete != result)
+            ) {
+                return false;
+            }
+
+            for (var index = 0; (index < count); index++) {
+                if (string.Equals(
+                    a: Marshal.PtrToStringUTF8(ptr: (nint)propertiesPointer[index].ExtensionName),
+                    b: extensionName,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
     /// <inheritdoc/>
     public void DestroyInstance(nint instanceHandle) {
         if (0 == instanceHandle) {
@@ -147,9 +199,9 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
         var createInfo = BuildMessengerCreateInfo();
 
-        return (VkResult.Success == createMessenger(instanceHandle, in createInfo, 0, out var messengerHandle))
+        return ((VkResult.Success == createMessenger(instanceHandle, in createInfo, 0, out var messengerHandle))
             ? messengerHandle
-            : 0;
+            : 0);
     }
 
     // The messenger configuration shared by the standalone messenger (vkCreateDebugUtilsMessengerEXT) and the
@@ -157,7 +209,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     // route each to OnDebugMessage.
     private static VkDebugUtilsMessengerCreateInfoExt BuildMessengerCreateInfo() {
         return new VkDebugUtilsMessengerCreateInfoExt {
-            MessageSeverity = (DebugMessageSeverityWarning | DebugMessageSeverityError),
+            MessageSeverity = DebugMessageSeverityWarning | DebugMessageSeverityError,
             MessageType = DebugMessageTypeAll,
             StructureType = VkStructureTypeDebugUtilsMessengerCreateInfoExt,
             UserCallback = (nint)(delegate* unmanaged[Cdecl]<uint, uint, VkDebugUtilsMessengerCallbackDataExt*, void*, uint>)(&OnDebugMessage),
@@ -196,9 +248,9 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         ) {
             // "INFO" is a defensive fallback: the subscription is WARNING|ERROR, so it is unreachable today but
             // keeps the label total if a lower severity is ever subscribed.
-            var label = (messageSeverity >= DebugMessageSeverityError)
+            var label = ((messageSeverity >= DebugMessageSeverityError)
                 ? "ERROR"
-                : ((messageSeverity >= DebugMessageSeverityWarning) ? "WARNING" : "INFO");
+                : ((messageSeverity >= DebugMessageSeverityWarning) ? "WARNING" : "INFO"));
 
             Console.Error.WriteLine(value: $"[vulkan-debug] {label}: {Marshal.PtrToStringUTF8(ptr: callbackData->Message)}");
         }
@@ -214,6 +266,17 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             m_getInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr");
 
             return m_getInstanceProcAddr;
+        }
+    }
+    private unsafe delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult> GetEnumerateInstanceExtensionProperties() {
+        lock (m_syncRoot) {
+            if (m_enumerateInstanceExtensionProperties is not null) {
+                return m_enumerateInstanceExtensionProperties;
+            }
+
+            m_enumerateInstanceExtensionProperties = (delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult>)VulkanNativeLibrary.GetExport(functionName: "vkEnumerateInstanceExtensionProperties");
+
+            return m_enumerateInstanceExtensionProperties;
         }
     }
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> GetCreateInstance() {

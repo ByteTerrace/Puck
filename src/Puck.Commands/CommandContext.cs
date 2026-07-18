@@ -18,11 +18,21 @@ namespace Puck.Commands;
 /// The device that produced the activation (for source-driven input), letting a handler target the specific
 /// device — e.g. rumbling the controller that pressed the button. <see langword="default"/> for the text path.
 /// </param>
+/// <param name="Slot">
+/// The stable logical player lane that owns the invocation. Snapshot-driven handlers must use this, rather than
+/// <paramref name="DeviceId"/>, when choosing simulation state: device identities are local annotations and are not
+/// serialized into recordings. The immediate/text path defaults to slot <c>0</c>.
+/// </param>
+/// <param name="AssignedSlot">Whether this invocation's physical signal created its device-to-slot assignment.
+/// Snapshot-driven handlers use this deterministic bit to distinguish a first-seat gesture from an ordinary action;
+/// it remains valid during replay even though <paramref name="DeviceId"/> is local-only.</param>
 public readonly record struct CommandContext(
     CommandValue Value,
     CommandPhase Phase,
     ParseResult? Parse,
     string? Text = null,
     CommandRegistry? Registry = null,
-    InputDeviceId DeviceId = default
+    InputDeviceId DeviceId = default,
+    int Slot = 0,
+    bool AssignedSlot = false
 );

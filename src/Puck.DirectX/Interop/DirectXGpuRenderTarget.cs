@@ -36,12 +36,12 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
 
         var device = (ID3D12Device*)deviceContext.Device.Handle;
 
-        CreateRenderTarget(device, format, width, height);
+        CreateRenderTarget(device: device, format: format, height: height, width: width);
 
         var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
+            Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
             NumDescriptors = 1,
             Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
         };
 
         device->CreateDescriptorHeap(
@@ -62,7 +62,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         device->CreateShaderResourceView(
             pResource: (ID3D12Resource*)m_renderTarget,
             pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart((ID3D12DescriptorHeap*)srvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)srvHeap)
         );
 
         device->CreateCommandAllocator(
@@ -86,26 +86,26 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
             CommandList = (nint)commandList,
         };
 
-        m_commandBufferToken = GCHandle.Alloc(state);
+        m_commandBufferToken = GCHandle.Alloc(value: state);
 
         var imageView = new DirectXImageView {
             Format = format,
             ResourceHandle = m_renderTarget,
         };
 
-        m_imageViewToken = GCHandle.Alloc(imageView);
+        m_imageViewToken = GCHandle.Alloc(value: imageView);
     }
 
     /// <inheritdoc/>
-    public nint CommandBufferHandle => GCHandle.ToIntPtr(m_commandBufferToken);
+    public nint CommandBufferHandle => GCHandle.ToIntPtr(value: m_commandBufferToken);
     /// <inheritdoc/>
-    public nint FramebufferHandle => (nint)GetCpuHeapStart((ID3D12DescriptorHeap*)m_rtvHeap).ptr;
+    public nint FramebufferHandle => (nint)GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)m_rtvHeap).ptr;
     /// <inheritdoc/>
     public uint Height { get; }
     /// <inheritdoc/>
     public nint ImageHandle => m_renderTarget;
     /// <inheritdoc/>
-    public nint ImageViewHandle => GCHandle.ToIntPtr(m_imageViewToken);
+    public nint ImageViewHandle => GCHandle.ToIntPtr(value: m_imageViewToken);
     /// <inheritdoc/>
     public nint RenderPassHandle => m_renderTarget;
     /// <inheritdoc/>
@@ -176,7 +176,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         device->CreateRenderTargetView(
             pResource: (ID3D12Resource*)renderTarget,
             pDesc: null,
-            DestDescriptor: GetCpuHeapStart((ID3D12DescriptorHeap*)rtvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)rtvHeap)
         );
     }
 
@@ -190,8 +190,9 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
 
         if (m_commandBufferToken.IsAllocated) {
             var state = (DirectXCommandBufferState)m_commandBufferToken.Target!;
-            Release(ref state.CommandList);
-            Release(ref state.Allocator);
+
+            Release(pointer: ref state.CommandList);
+            Release(pointer: ref state.Allocator);
             m_commandBufferToken.Free();
         }
 
@@ -199,8 +200,8 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
             m_imageViewToken.Free();
         }
 
-        Release(ref m_srvHeap);
-        Release(ref m_rtvHeap);
-        Release(ref m_renderTarget);
+        Release(pointer: ref m_srvHeap);
+        Release(pointer: ref m_rtvHeap);
+        Release(pointer: ref m_renderTarget);
     }
 }

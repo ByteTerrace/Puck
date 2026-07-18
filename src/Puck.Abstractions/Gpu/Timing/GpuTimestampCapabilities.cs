@@ -28,8 +28,8 @@ public readonly record struct GpuTimestampCapabilities(double PeriodNanoseconds,
         }
 
         var mask = ValidBitsMask;
-        var start = (startTicks & mask);
-        var end = (endTicks & mask);
+        var start = startTicks & mask;
+        var end = endTicks & mask;
         // The counter can wrap within its valid bits between the two writes; recover the true delta if so.
         var delta = ((end >= start)
             ? (end - start)

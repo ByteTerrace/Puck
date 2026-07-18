@@ -20,6 +20,7 @@ namespace Puck.Post;
 /// </summary>
 internal sealed class VictoryGateStage : IPostStage {
     private const int MetaCabinets = 3;
+
     private static readonly int[] Seeds = [1, 7, 23, 42, 91, 1000];
 
     /// <inheritdoc/>
@@ -53,6 +54,7 @@ internal sealed class VictoryGateStage : IPostStage {
 
         // META: subset-proof cooperative XOR onto the "one" v4 constant.
         var metaTarget = new byte[VictoryGate.RegionByteCount];
+
         _ = VictoryGate.TryParseGuidBytes(text: VictoryConstants.OneV4Guid, destination: metaTarget);
 
         foreach (var seed in Seeds) {
@@ -141,7 +143,7 @@ internal sealed class VictoryGateStage : IPostStage {
             }
         }
 
-        return VictoryGate.RegionEquals(region: v, target: target) ? null : "final value is not the target";
+        return (VictoryGate.RegionEquals(region: v, target: target) ? null : "final value is not the target");
     }
 
     // Author n shares whose XOR is the target (each non-zero and not itself the target), then prove the cooperative gate:
@@ -156,13 +158,14 @@ internal sealed class VictoryGateStage : IPostStage {
 
         // The last share closes the group: S_last = T XOR (all the others).
         var last = new byte[VictoryGate.RegionByteCount];
+
         target.CopyTo(array: last, index: 0);
 
         for (var cabinet = 0; (cabinet < (MetaCabinets - 1)); cabinet++) {
             VictoryGate.Xor(accumulator: last, operand: shares[cabinet]);
         }
 
-        shares[MetaCabinets - 1] = last;
+        shares[(MetaCabinets - 1)] = last;
 
         // Every share must be non-zero (else dropping it wouldn't change the XOR) and not the target (else that cabinet
         // would win alone). Re-rolling the free shares keeps this deterministic per seed; the closing share we just assert.
@@ -204,10 +207,10 @@ internal sealed class VictoryGateStage : IPostStage {
 
         return null;
     }
-
     private static byte[] RandomNonTrivial(byte[] target, Random rng) {
         while (true) {
             var candidate = new byte[VictoryGate.RegionByteCount];
+
             rng.NextBytes(buffer: candidate);
 
             if (!IsZero(bytes: candidate) && !VictoryGate.RegionEquals(region: candidate, target: target)) {
@@ -215,7 +218,6 @@ internal sealed class VictoryGateStage : IPostStage {
             }
         }
     }
-
     private static int[] Shuffle(int count, Random rng) {
         var order = new int[count];
 
@@ -226,12 +228,12 @@ internal sealed class VictoryGateStage : IPostStage {
         // Fisher–Yates with the seeded RNG — a deterministic permutation per seed.
         for (var index = (count - 1); (index > 0); index--) {
             var swap = rng.Next(maxValue: (index + 1));
+
             (order[index], order[swap]) = (order[swap], order[index]);
         }
 
         return order;
     }
-
     private static int Hamming(byte[] a, byte[] b) {
         var bits = 0;
 
@@ -241,7 +243,6 @@ internal sealed class VictoryGateStage : IPostStage {
 
         return bits;
     }
-
     private static bool IsZero(byte[] bytes) {
         foreach (var value in bytes) {
             if (value != 0) {

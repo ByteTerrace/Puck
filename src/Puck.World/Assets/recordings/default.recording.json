@@ -1,0 +1,59 @@
+{
+  "schema": "puck.recording.v1",
+  "output": null,
+  "clock": "Wall",
+  "video": {
+    "codecLadder": [
+      "av1",
+      "h264"
+    ],
+    "width": null,
+    "height": null,
+    "frameRate": 60,
+    "bitrateKbps": 12000
+  },
+  "audio": [
+    {
+      "id": "microphone",
+      "kind": "Microphone",
+      "device": null,
+      "gain": 1,
+      "track": "Mix"
+    },
+    {
+      "id": "loopback",
+      "kind": "Loopback",
+      "device": null,
+      "gain": 1,
+      "track": "Mix"
+    }
+  ],
+  "overlays": [
+    {
+      "kind": "Text",
+      "x": 0.02,
+      "y": 0.03,
+      "width": 0,
+      "height": 0,
+      "pixelHeight": 28,
+      "content": "PUCK WORLD - CAPTURE ONLY",
+      "color": "#FFFFFFFF",
+      "outlineColor": null,
+      "anchor": "TopLeft",
+      "clock": "Session"
+    },
+    {
+      "kind": "Timecode",
+      "x": 0.98,
+      "y": 0.03,
+      "width": 0,
+      "height": 0,
+      "pixelHeight": 24,
+      "content": null,
+      "color": "#FFD200FF",
+      "outlineColor": null,
+      "anchor": "TopRight",
+      "clock": "Session"
+    }
+  ]
+}

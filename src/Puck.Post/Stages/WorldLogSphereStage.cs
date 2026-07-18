@@ -5,15 +5,16 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage. Cross-backend parity for the D2 LOG-SPHERICAL domain warp (<see cref="SdfOp.LogSphere"/>): a ground
+/// Tier-C stage. Cross-backend parity for the log-spherical domain warp (<see cref="SdfOp.LogSphere"/>): a ground
 /// plane and a Droste showcase — one torus prototype tiled by a log-spherical fold into a spiral of self-similar
 /// nested rings (shellRatio 2, a per-shell Z-spin), plus a box tiled with no spin (concentric shells) — the
 /// max-visual-density-per-instruction pitch rendered on both backends.
-/// <para>The fold puts <c>log</c>/<c>exp</c>/<c>round</c>/<c>cos</c>/<c>sin</c> into the differential path and is not an
-/// isometry, so — exactly like <see cref="WorldWarpStage"/>'s twist/bend — DXC's SPIR-V and DXIL codegen re-roll the
-/// benign ±1-LSB noise and the many self-similar shell edges dither along gradient bands. The diff therefore judges
-/// under <c>WorldLsbExact</c> (the every-delta-exactly-±1 family that survives codegen redistribution), staying within
-/// an EXISTING threshold family — no threshold moved.</para>
+/// <para>The diff judges under <c>WorldFoldBoundary</c>: the fold-safe step bound makes marchers stop and
+/// resample at every shell boundary instead of striding through, so a ±1-ULP cross-backend difference at a boundary
+/// sample legitimately flips which SHELL the pixel resolves — a whole material/shading class, not ±1-LSB dither. This
+/// A parity check alone cannot detect a defect shared by both backends, so correctness is gated by
+/// <see cref="WorldDrosteSolidityStage"/> and <see cref="WorldLogSphereSolidityStage"/>, and this diff now guards only
+/// region/layout-level divergence.</para>
 /// </summary>
 internal sealed class WorldLogSphereStage : IPostStage {
     private const uint WorldHeight = 600;
@@ -41,36 +42,36 @@ internal sealed class WorldLogSphereStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildLogSphereScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.52f, 0.58f)));
-        var brick = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.8f, 0.35f, 0.25f)));
-        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.7f, 0.7f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.52f, z: 0.58f)));
+        var brick = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.8f, y: 0.35f, z: 0.25f)));
+        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.7f, z: 0.7f)));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // A torus tiled into a Droste spiral of self-similar nested rings (per-shell Z-spin).
             .ResetPoint()
-            .Translate(offset: new Vector3(-1.5f, 1.4f, 0.0f))
+            .Translate(offset: new Vector3(x: -1.5f, y: 1.4f, z: 0.0f))
             .LogSphere(shellRatio: 2.0f, twist: 0.6f)
             .Torus(majorRadius: 0.7f, minorRadius: 0.16f, material: brick)
             // A box tiled into concentric self-similar shells (no spin).
             .ResetPoint()
-            .Translate(offset: new Vector3(1.7f, 1.2f, 0.2f))
+            .Translate(offset: new Vector3(x: 1.7f, y: 1.2f, z: 0.2f))
             .LogSphere(shellRatio: 1.9f)
-            .Box(halfExtents: new Vector3(0.55f, 0.2f, 0.55f), round: 0.05f, material: teal)
+            .Box(halfExtents: new Vector3(x: 0.55f, y: 0.2f, z: 0.55f), round: 0.05f, material: teal)
             .Build();
     }
 
     [SupportedOSPlatform("windows10.0.10240")]
     private static PostStageOutcome RunCore(PostContext context) {
-        // The log-spherical fold puts log/exp/round/cos/sin into the differential path and is not an isometry, so the
-        // diff judges under WorldLsbExact — the every-delta-exactly-±1 signature that survives codegen redistribution
-        // (the WorldWarpStage precedent). An existing family; no threshold moved.
+        // Judged under WorldFoldBoundary (see the family's calibration note): honest fold-boundary marching makes a
+        // ±1-ULP backend difference legitimately flip a boundary sample's SHELL, so this diff guards region/layout
+        // divergence only — the solidity stages carry the correctness teeth for this scene class.
         return WorldStage.RunSceneParity(
             context: context,
             prefix: "world-log-sphere",
             program: BuildLogSphereScene(),
-            thresholds: ParityThresholds.WorldLsbExact,
-            passLabel: $"{WorldWidth}x{WorldHeight} log-spherical Droste warp (spinning + concentric shells) | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldLsbExact thresholds"
+            thresholds: ParityThresholds.WorldFoldBoundary,
+            passLabel: $"{WorldWidth}x{WorldHeight} log-spherical Droste warp (spinning + concentric shells) | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldFoldBoundary thresholds"
         );
     }
 }

@@ -30,7 +30,7 @@ public enum FaceExpression {
 /// </para>
 /// </summary>
 public sealed class ProceduralFeed : IDisposable {
-    /// <summary>The face feed's fixed width — the native Game Boy panel size, matching every other diegetic screen
+    /// <summary>The face feed's fixed width — the native DMG/CGB panel size, matching every other diegetic screen
     /// source in the overworld.</summary>
     public const int FaceWidth = 160;
     /// <summary>The face feed's fixed height.</summary>
@@ -48,8 +48,7 @@ public sealed class ProceduralFeed : IDisposable {
     private static readonly byte[] BackgroundColor = [0x08, 0x0c, 0x10, 0xff];
     private static readonly byte[] FaceColor = [0x6a, 0xf0, 0x9a, 0xff];
     private static readonly byte[] HighlightColor = [0xd8, 0xff, 0xe8, 0xff];
-
-    private readonly byte[] m_pixels = new byte[(FaceWidth * FaceHeight * BytesPerPixel)];
+    private readonly byte[] m_pixels = new byte[((FaceWidth * FaceHeight) * BytesPerPixel)];
     private IGpuSurfaceUpload? m_upload;
     private FaceExpression m_expression = FaceExpression.Idle;
     private FaceExpression? m_lastPublishedExpression;
@@ -130,40 +129,40 @@ public sealed class ProceduralFeed : IDisposable {
     private void DrawFace(FaceExpression expression, bool blinking) {
         Fill(color: BackgroundColor);
 
-        const int leftEyeX = (FaceWidth * 3 / 8);
-        const int rightEyeX = (FaceWidth * 5 / 8);
-        const int eyeY = (FaceHeight * 2 / 5);
+        const int leftEyeX = ((FaceWidth * 3) / 8);
+        const int rightEyeX = ((FaceWidth * 5) / 8);
+        const int eyeY = ((FaceHeight * 2) / 5);
 
         switch (expression) {
             case FaceExpression.Happy: {
-                DrawUpwardArcEye(centerX: leftEyeX, centerY: eyeY);
-                DrawUpwardArcEye(centerX: rightEyeX, centerY: eyeY);
-                DrawGrinMouth();
+                    DrawUpwardArcEye(centerX: leftEyeX, centerY: eyeY);
+                    DrawUpwardArcEye(centerX: rightEyeX, centerY: eyeY);
+                    DrawGrinMouth();
 
-                break;
-            }
+                    break;
+                }
             case FaceExpression.Curious: {
-                DrawRoundEye(centerX: leftEyeX, centerY: eyeY, radius: 10, blinking: false);
-                DrawRoundEye(centerX: rightEyeX, centerY: (eyeY - 4), radius: 14, blinking: false);
-                DrawRoundMouth();
+                    DrawRoundEye(centerX: leftEyeX, centerY: eyeY, radius: 10, blinking: false);
+                    DrawRoundEye(centerX: rightEyeX, centerY: (eyeY - 4), radius: 14, blinking: false);
+                    DrawRoundMouth();
 
-                break;
-            }
+                    break;
+                }
             default: {
-                DrawRoundEye(centerX: leftEyeX, centerY: eyeY, radius: 12, blinking: blinking);
-                DrawRoundEye(centerX: rightEyeX, centerY: eyeY, radius: 12, blinking: blinking);
-                DrawFlatMouth();
+                    DrawRoundEye(centerX: leftEyeX, centerY: eyeY, radius: 12, blinking: blinking);
+                    DrawRoundEye(centerX: rightEyeX, centerY: eyeY, radius: 12, blinking: blinking);
+                    DrawFlatMouth();
 
-                break;
-            }
+                    break;
+                }
         }
     }
     private void Fill(byte[] color) {
         for (var index = 0; (index < m_pixels.Length); index += BytesPerPixel) {
-            m_pixels[index + 0] = color[0];
-            m_pixels[index + 1] = color[1];
-            m_pixels[index + 2] = color[2];
-            m_pixels[index + 3] = color[3];
+            m_pixels[(index + 0)] = color[0];
+            m_pixels[(index + 1)] = color[1];
+            m_pixels[(index + 2)] = color[2];
+            m_pixels[(index + 3)] = color[3];
         }
     }
     // A round eye: a filled disc, or (while blinking) a thin horizontal line at its vertical center.
@@ -184,32 +183,32 @@ public sealed class ProceduralFeed : IDisposable {
 
         for (var x = -radius; (x <= radius); x++) {
             var normalized = (x / (float)radius);
-            var archHeight = (int)(MathF.Sqrt(MathF.Max(0f, (1f - (normalized * normalized))) ) * radius);
+            var archHeight = (int)(MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (normalized * normalized)))) * radius);
 
-            DrawFilledRect(left: (centerX + x), top: (centerY - archHeight), right: (centerX + x + 1), bottom: (centerY - archHeight + thickness), color: FaceColor);
+            DrawFilledRect(left: (centerX + x), top: (centerY - archHeight), right: ((centerX + x) + 1), bottom: ((centerY - archHeight) + thickness), color: FaceColor);
         }
     }
     private void DrawFlatMouth() {
         const int halfWidth = 20;
-        const int y = (FaceHeight * 7 / 10);
+        const int y = ((FaceHeight * 7) / 10);
 
-        DrawFilledRect(left: (FaceWidth / 2 - halfWidth), top: y, right: (FaceWidth / 2 + halfWidth), bottom: (y + 3), color: FaceColor);
+        DrawFilledRect(left: ((FaceWidth / 2) - halfWidth), top: y, right: ((FaceWidth / 2) + halfWidth), bottom: (y + 3), color: FaceColor);
     }
     private void DrawGrinMouth() {
         const int halfWidth = 26;
-        const int y = (FaceHeight * 7 / 10);
+        const int y = ((FaceHeight * 7) / 10);
         const int thickness = 5;
 
         for (var x = -halfWidth; (x <= halfWidth); x++) {
             var normalized = (x / (float)halfWidth);
-            var dip = (int)(MathF.Sqrt(MathF.Max(0f, (1f - (normalized * normalized)))) * 10f);
+            var dip = (int)(MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (normalized * normalized)))) * 10f);
 
-            DrawFilledRect(left: (FaceWidth / 2 + x), top: (y + dip), right: (FaceWidth / 2 + x + 1), bottom: (y + dip + thickness), color: FaceColor);
+            DrawFilledRect(left: ((FaceWidth / 2) + x), top: (y + dip), right: (((FaceWidth / 2) + x) + 1), bottom: ((y + dip) + thickness), color: FaceColor);
         }
     }
     private void DrawRoundMouth() {
-        DrawFilledCircle(centerX: (FaceWidth / 2), centerY: (FaceHeight * 7 / 10), radius: 9, color: FaceColor);
-        DrawFilledCircle(centerX: (FaceWidth / 2), centerY: (FaceHeight * 7 / 10), radius: 5, color: BackgroundColor);
+        DrawFilledCircle(centerX: (FaceWidth / 2), centerY: ((FaceHeight * 7) / 10), radius: 9, color: FaceColor);
+        DrawFilledCircle(centerX: (FaceWidth / 2), centerY: ((FaceHeight * 7) / 10), radius: 5, color: BackgroundColor);
     }
     private void DrawFilledCircle(int centerX, int centerY, int radius, byte[] color) {
         var radiusSquared = (radius * radius);
@@ -241,9 +240,9 @@ public sealed class ProceduralFeed : IDisposable {
 
         var offset = (((y * FaceWidth) + x) * BytesPerPixel);
 
-        m_pixels[offset + 0] = color[0];
-        m_pixels[offset + 1] = color[1];
-        m_pixels[offset + 2] = color[2];
-        m_pixels[offset + 3] = color[3];
+        m_pixels[(offset + 0)] = color[0];
+        m_pixels[(offset + 1)] = color[1];
+        m_pixels[(offset + 2)] = color[2];
+        m_pixels[(offset + 3)] = color[3];
     }
 }

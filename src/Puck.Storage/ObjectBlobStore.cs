@@ -13,7 +13,7 @@ internal sealed class ObjectBlobStore(IEnumerable<IObjectBlobStoreBackend> backe
         throw new InvalidOperationException(message: $"No object blob store backend is registered for target type '{target.GetType().Name}' (objectId: {address.ObjectId}).");
     }
 
-    public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
+    public ValueTask<ObjectBlobContent?> ReadAsync(
         ObjectStorageTarget target,
         ObjectBlobAddress address,
         CancellationToken cancellationToken = default
@@ -29,11 +29,12 @@ internal sealed class ObjectBlobStore(IEnumerable<IObjectBlobStoreBackend> backe
             target: target
         );
     }
-    public ValueTask<bool> WriteAsync(
+    public ValueTask<ObjectBlobWriteResult> WriteAsync(
         ObjectStorageTarget target,
         ObjectBlobAddress address,
         ReadOnlyMemory<byte> content,
         ObjectBlobWriteMode mode,
+        string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     ) {
         ArgumentNullException.ThrowIfNull(target);
@@ -45,6 +46,7 @@ internal sealed class ObjectBlobStore(IEnumerable<IObjectBlobStoreBackend> backe
             address: address,
             cancellationToken: cancellationToken,
             content: content,
+            ifMatchVersion: ifMatchVersion,
             mode: mode,
             target: target
         );

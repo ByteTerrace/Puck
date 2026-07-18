@@ -21,7 +21,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
 ) : IGpuSurfaceTransferFactory {
     /// <inheritdoc/>
     public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) =>
-        new VulkanGpuSurfaceReadback(new VulkanSurfaceReadback(
+        new VulkanGpuSurfaceReadback(inner: new VulkanSurfaceReadback(
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
             frameReadbackApi: frameReadbackApi,
@@ -30,17 +30,20 @@ public sealed class VulkanGpuSurfaceTransferFactory(
         ));
     /// <inheritdoc/>
     public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) =>
-        new VulkanGpuSurfaceUpload(new VulkanSurfaceUpload(
+        // The frame-synchronization API opts the upload into its PIPELINED mode (fenced fire-and-forget — see
+        // VulkanSurfaceUpload's remarks), so a per-frame feed behind the frame-ring host never drains the queue.
+        new VulkanGpuSurfaceUpload(inner: new VulkanSurfaceUpload(
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
             framebufferSetApi: framebufferSetApi,
+            frameSynchronizationApi: frameSynchronizationApi,
             offscreenImageApi: offscreenImageApi,
             queueSubmitter: queueSubmitter,
             storageBufferFactory: storageBufferFactory
         ));
     /// <inheritdoc/>
     public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) =>
-        new VulkanGpuSurfaceImport(new VulkanSurfaceImport(
+        new VulkanGpuSurfaceImport(inner: new VulkanSurfaceImport(
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
             externalMemoryApi: externalMemoryApi,

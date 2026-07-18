@@ -51,13 +51,14 @@ internal static class TileAssembler {
         for (var tileY = 0; (tileY < tilesHigh); tileY++) {
             for (var tileX = 0; (tileX < tilesWide); tileX++) {
                 var indices = ExtractTile(view: view, tileX: tileX, tileY: tileY);
+
                 var (id, flipX, flipY) = bank.Add(indices: indices);
                 var cell = ((tileY * 32) + tileX);
 
                 tileMap[cell] = (byte)(id & 0xFF);
 
                 if (attributeMap is not null) {
-                    attributeMap[cell] = AttributeByte(flipX: flipX, flipY: flipY, palette: view.TilePalettes[(tileY * tilesWide) + tileX]);
+                    attributeMap[cell] = AttributeByte(flipX: flipX, flipY: flipY, palette: view.TilePalettes[((tileY * tilesWide) + tileX)]);
                 }
             }
         }
@@ -127,7 +128,7 @@ internal static class TileAssembler {
 
                 var (id, flipX, flipY) = bank.Add(indices: indices);
                 var attributes = ((target == BakeTarget.Cgb)
-                    ? AttributeByte(flipX: flipX, flipY: flipY, palette: view.TilePalettes[(tileY * tilesWide) + tileX])
+                    ? AttributeByte(flipX: flipX, flipY: flipY, palette: view.TilePalettes[((tileY * tilesWide) + tileX)])
                     : (byte)0);
 
                 entries.Add(item: new OamEntry(
@@ -152,7 +153,7 @@ internal static class TileAssembler {
 
         for (var y = 0; (y < view.Height); y++) {
             for (var x = 0; (x < view.Width); x++) {
-                if ((view.Mask is { } mask) ? !mask[(y * view.Width) + x] : (view.Indices[(y * view.Width) + x] == 0)) {
+                if ((view.Mask is { } mask) ? !mask[((y * view.Width) + x)] : (view.Indices[((y * view.Width) + x)] == 0)) {
                     continue;
                 }
 
@@ -170,19 +171,17 @@ internal static class TileAssembler {
 
         return (maxX >= 0);
     }
-
     private static byte[] ExtractTile(QuantizedView view, int tileX, int tileY) {
         var indices = new byte[64];
 
         for (var row = 0; (row < TileEdge); row++) {
             for (var column = 0; (column < TileEdge); column++) {
-                indices[(row * TileEdge) + column] = view.Indices[(((tileY * TileEdge) + row) * view.Width) + ((tileX * TileEdge) + column)];
+                indices[((row * TileEdge) + column)] = view.Indices[((((tileY * TileEdge) + row) * view.Width) + ((tileX * TileEdge) + column))];
             }
         }
 
         return indices;
     }
-
     private static bool IsFullyTransparent(byte[] indices) {
         foreach (var index in indices) {
             if (index != 0) {
@@ -192,7 +191,6 @@ internal static class TileAssembler {
 
         return true;
     }
-
     private static byte AttributeByte(int palette, bool flipX, bool flipY) =>
         (byte)((palette & 0x07) | (flipX ? 0x20 : 0x00) | (flipY ? 0x40 : 0x00));
 
@@ -247,9 +245,8 @@ internal static class TileAssembler {
 
             return (id, false, false);
         }
-
         public BakedTileSet ToTileSet() {
-            var data = new byte[m_tiles.Count * 16];
+            var data = new byte[(m_tiles.Count * 16)];
 
             for (var tile = 0; (tile < m_tiles.Count); tile++) {
                 m_tiles[tile].CopyTo(array: data, index: (tile * 16));
@@ -275,16 +272,15 @@ internal static class TileAssembler {
 
             return false;
         }
-
         private static byte[] Flip(byte[] indices, bool flipX, bool flipY) {
             var flipped = new byte[64];
 
             for (var row = 0; (row < TileEdge); row++) {
                 for (var column = 0; (column < TileEdge); column++) {
-                    var sourceRow = (flipY ? (TileEdge - 1 - row) : row);
-                    var sourceColumn = (flipX ? (TileEdge - 1 - column) : column);
+                    var sourceRow = (flipY ? ((TileEdge - 1) - row) : row);
+                    var sourceColumn = (flipX ? ((TileEdge - 1) - column) : column);
 
-                    flipped[(row * TileEdge) + column] = indices[(sourceRow * TileEdge) + sourceColumn];
+                    flipped[((row * TileEdge) + column)] = indices[((sourceRow * TileEdge) + sourceColumn)];
                 }
             }
 

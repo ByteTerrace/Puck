@@ -12,14 +12,12 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-namespace System
-{
+namespace System {
     // The other part (runtime/System/CoreTypes.cs) declares `partial class Array<T> : Array`.
-    partial class Array<T> : IEnumerable<T>, ICollection<T>, IList<T>, IReadOnlyList<T>
-    {
-        public IEnumerator<T> GetEnumerator()
-        {
+    partial class Array<T> : IEnumerable<T>, ICollection<T>, IList<T>, IReadOnlyList<T> {
+        public IEnumerator<T> GetEnumerator() {
             T[] self = Unsafe.As<T[]>(this); // `this` is the array; reinterpret as T[]
+
             return new SZGenericArrayEnumerator<T>(self, self.Length);
         }
 
@@ -30,17 +28,16 @@ namespace System
         public int Count => Length;
         public bool IsReadOnly => true;
 
-        public T this[int index]
-        {
+        public T this[int index] {
             get => Unsafe.As<T[]>(this)[index];
             set => Unsafe.As<T[]>(this)[index] = value;
         }
 
-        public void CopyTo(T[] array, int arrayIndex)
-        {
+        public void CopyTo(T[] array, int arrayIndex) {
             T[] self = Unsafe.As<T[]>(this);
-            for (int i = 0; i < self.Length; i++)
-                array[arrayIndex + i] = self[i];
+
+            for (int i = 0; (i < self.Length); i++)
+                array[(arrayIndex + i)] = self[i];
         }
 
         // A fixed-size array genuinely cannot grow/shrink; the BCL throws NotSupportedException
@@ -58,24 +55,21 @@ namespace System
     }
 
     // The enumerator T[].GetEnumerator() hands back: the array plus a [-1, length) cursor.
-    internal sealed class SZGenericArrayEnumerator<T> : IEnumerator<T>
-    {
+    internal sealed class SZGenericArrayEnumerator<T> : IEnumerator<T> {
         private readonly T[] _array;
         private int _index;
         private readonly int _endIndex;
 
-        internal SZGenericArrayEnumerator(T[] array, int length)
-        {
+        internal SZGenericArrayEnumerator(T[] array, int length) {
             _array = array;
             _index = -1;
             _endIndex = length;
         }
 
-        public bool MoveNext()
-        {
-            int next = _index + 1;
-            if ((uint)next < (uint)_endIndex)
-            {
+        public bool MoveNext() {
+            int next = (_index + 1);
+
+            if ((uint)next < (uint)_endIndex) {
                 _index = next;
                 return true;
             }
@@ -89,7 +83,6 @@ namespace System
         object IEnumerator.Current => Current; // boxes value-typed T; reference T is unaffected
 
         public void Reset() => _index = -1;
-
         public void Dispose() { }
     }
 }

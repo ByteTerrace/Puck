@@ -43,7 +43,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         // Derive the PSO render-target format from the bound target (the DirectXImageView it exposes via
         // ImageViewHandle) so the PSO format always matches the RTV — mirroring how the Vulkan factory derives
         // the format from the render pass. A hardcoded format would mismatch a B8G8R8A8Unorm target.
-        var renderTargetView = (DirectXImageView)GCHandle.FromIntPtr(renderTarget.ImageViewHandle).Target!;
+        var renderTargetView = (DirectXImageView)GCHandle.FromIntPtr(value: renderTarget.ImageViewHandle).Target!;
         var layout = BuildLayout(
             device: device,
             textureSamplerCount: textureSamplerCount,
@@ -74,7 +74,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             );
         }
 
-        return new DirectXGpuPipeline(layout);
+        return new DirectXGpuPipeline(layout: layout);
     }
 
     private static DirectXPipelineLayout BuildLayout(
@@ -89,13 +89,13 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
 
         if (hasDescriptorTable) {
             layout.DescriptorTableParamIndex = 0;
-            layout.RootConstantsParamIndex = hasRootConstants ? 1 : -1;
+            layout.RootConstantsParamIndex = (hasRootConstants ? 1 : -1);
         } else {
-            layout.RootConstantsParamIndex = hasRootConstants ? 0 : -1;
+            layout.RootConstantsParamIndex = (hasRootConstants ? 0 : -1);
         }
 
         if (hasRootConstants) {
-            layout.RootConstantsCount = (pushConstantBinding!.Size + 3) / 4;
+            layout.RootConstantsCount = ((pushConstantBinding!.Size + 3) / 4);
         }
 
         // The descriptor table packs SRVs t0..tN-1 then the optional storage-buffer SRV — contiguous from slot 0 — so
@@ -130,8 +130,8 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         bool hasRootConstants,
         uint rootConstantsCount
     ) {
-        var rangeCount = (textureSamplerCount > 0 ? 1 : 0) + (enableStorageBuffer ? 1 : 0);
-        var paramCount = (hasDescriptorTable ? 1 : 0) + (hasRootConstants ? 1 : 0);
+        var rangeCount = (((textureSamplerCount > 0) ? 1 : 0) + (enableStorageBuffer ? 1 : 0));
+        var paramCount = ((hasDescriptorTable ? 1 : 0) + (hasRootConstants ? 1 : 0));
         var ranges = stackalloc D3D12_DESCRIPTOR_RANGE[2];
         var parameters = stackalloc D3D12_ROOT_PARAMETER[2];
         var rangeIndex = 0;
@@ -209,7 +209,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
             NumParameters = (uint)paramCount,
             NumStaticSamplers = 1,
-            pParameters = (0 < paramCount) ? parameters : null,
+            pParameters = ((0 < paramCount) ? parameters : null),
             pStaticSamplers = &staticSampler,
         };
 

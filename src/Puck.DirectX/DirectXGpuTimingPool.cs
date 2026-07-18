@@ -19,7 +19,7 @@ public sealed unsafe class DirectXGpuTimingPool : IGpuTimingPool {
     /// <param name="capacity">The number of timestamp queries the heap holds.</param>
     public DirectXGpuTimingPool(nint queryHeapHandle, nint readbackBufferHandle, uint capacity) {
         Capacity = capacity;
-        m_token = GCHandle.Alloc(new DirectXTimingPoolState {
+        m_token = GCHandle.Alloc(value: new DirectXTimingPoolState {
             Capacity = capacity,
             QueryHeapHandle = queryHeapHandle,
             ReadbackBufferHandle = readbackBufferHandle,
@@ -29,7 +29,7 @@ public sealed unsafe class DirectXGpuTimingPool : IGpuTimingPool {
     /// <inheritdoc/>
     public uint Capacity { get; }
     /// <inheritdoc/>
-    public nint PoolHandle => GCHandle.ToIntPtr(m_token);
+    public nint PoolHandle => GCHandle.ToIntPtr(value: m_token);
 
     /// <inheritdoc/>
     public void Dispose() {

@@ -12,6 +12,10 @@ namespace Puck.DirectX.Interfaces;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public interface IDirectXDeviceContext {
+    /// <summary>Gets the packed LUID (<c>ID3D12Device::GetAdapterLuid</c>) of the adapter the device was created on —
+    /// the value a foreign backend matches to share resources on the same GPU. Additive: Puck.World's D3D12-host GPU
+    /// capture transport opens its window/monitor capture on this adapter so its shared textures import cross-API.</summary>
+    long AdapterLuid { get; }
     /// <summary>Gets the native <c>ID3D12CommandQueue</c> handle work is submitted to.</summary>
     nint CommandQueueHandle { get; }
     /// <summary>Gets the owning Direct3D 12 device.</summary>

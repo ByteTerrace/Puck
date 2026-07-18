@@ -1,0 +1,186 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "scene": {
+        "materials": [
+            {
+                "albedo": [
+                    0.5,
+                    0.55,
+                    0.6
+                ]
+            },
+            {
+                "albedo": [
+                    0.45,
+                    0.5,
+                    0.72
+                ]
+            },
+            {
+                "albedo": [
+                    0.82,
+                    0.62,
+                    0.26
+                ],
+                "specular": 0.5,
+                "shininess": 48
+            },
+            {
+                "albedo": [
+                    0.45,
+                    0.8,
+                    0.3
+                ]
+            }
+        ],
+        "objects": [
+            {
+                "shape": "plane",
+                "normal": [
+                    0.0,
+                    1.0,
+                    0.0
+                ],
+                "offset": 0.0,
+                "material": 0
+            },
+            {
+                "shape": "vesica",
+                "ops": [
+                    {
+                        "op": "translate",
+                        "offset": [
+                            -2.4,
+                            0.9,
+                            0.0
+                        ]
+                    }
+                ],
+                "radius": 0.5,
+                "halfSeparation": 0.3,
+                "material": 1
+            },
+            {
+                "shape": "roundedRectangle",
+                "ops": [
+                    {
+                        "op": "translate",
+                        "offset": [
+                            -1.4,
+                            0.5,
+                            0.0
+                        ]
+                    }
+                ],
+                "halfWidth": 0.4,
+                "halfHeight": 0.5,
+                "cornerRadius": 0.1,
+                "lift": "Extrude",
+                "liftAmount": 0.25,
+                "material": 2
+            },
+            {
+                "shape": "regularPolygon",
+                "ops": [
+                    {
+                        "op": "translate",
+                        "offset": [
+                            -0.3,
+                            0.6,
+                            0.0
+                        ]
+                    }
+                ],
+                "sides": 6,
+                "radius": 0.3,
+                "lift": "Revolve",
+                "liftAmount": 0.5,
+                "material": 3
+            },
+            {
+                "shape": "star",
+                "ops": [
+                    {
+                        "op": "translate",
+                        "offset": [
+                            0.7,
+                            0.55,
+                            0.0
+                        ]
+                    }
+                ],
+                "points": 5,
+                "radius": 0.45,
+                "sharpness": 2.6,
+                "lift": "Extrude",
+                "liftAmount": 0.2,
+                "material": 1
+            },
+            {
+                "shape": "trapezoid",
+                "ops": [
+                    {
+                        "op": "translate",
+                        "offset": [
+                            1.8,
+                            0.5,
+                            0.0
+                        ]
+                    }
+                ],
+                "bottomHalfWidth": 0.5,
+                "topHalfWidth": 0.28,
+                "halfHeight": 0.5,
+                "lift": "Revolve",
+                "liftAmount": 0.0,
+                "material": 2
+            },
+            {
+                "shape": "ellipse",
+                "ops": [
+                    {
+                        "op": "translate",
+                        "offset": [
+                            2.8,
+                            0.8,
+                            0.0
+                        ]
+                    }
+                ],
+                "semiX": 0.45,
+                "semiY": 0.65,
+                "lift": "Revolve",
+                "liftAmount": 0.0,
+                "material": 3
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.0,
+                "azimuth": 1.5708,
+                "fieldOfView": 65.0,
+                "height": 1.6,
+                "radius": 6.0,
+                "target": [
+                    0.2,
+                    0.6,
+                    0.0
+                ]
+            },
+            "region": [
+                0.0,
+                0.0,
+                1.0,
+                1.0
+            ]
+        }
+    ],
+    "graph": {
+        "$type": "world",
+        "produce": "vulkan"
+    }
+}

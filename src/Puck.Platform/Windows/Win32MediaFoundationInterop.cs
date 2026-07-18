@@ -29,22 +29,16 @@ internal static class MfInterop {
 
     [DllImport("Mfplat.dll")]
     public static extern int MFStartup(uint Version, uint dwFlags);
-
     [DllImport("Mfplat.dll")]
     public static extern int MFShutdown();
-
     [DllImport("Mfplat.dll")]
     public static extern int MFCreateAttributes(out IMFAttributes ppMFAttributes, uint cInitialSize);
-
     [DllImport("Mfplat.dll")]
     public static extern int MFCreateMediaType(out IMFMediaType ppMFType);
-
     [DllImport("Mf.dll")]
     public static extern int MFEnumDeviceSources(IMFAttributes pAttributes, out nint pppSourceActivate, out uint pcSourceActivate);
-
     [DllImport("Mfreadwrite.dll")]
     public static extern int MFCreateSourceReaderFromMediaSource([MarshalAs(UnmanagedType.IUnknown)] object pMediaSource, IMFAttributes pAttributes, out IMFSourceReader ppSourceReader);
-
     [DllImport("Mfplat.dll")]
     public static extern int MFCreateDXGIDeviceManager(out uint pResetToken, out IMFDXGIDeviceManager ppDeviceManager);
 
@@ -86,9 +80,9 @@ internal static class MfInterop {
         Marshal.FreeCoTaskMem(ptr: devices);
 
         var nameKey = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
-        var name = (activate.GetAllocatedString(guidKey: ref nameKey, ppwszValue: out var deviceName, pcchLength: out _) >= 0)
+        var name = ((activate.GetAllocatedString(guidKey: ref nameKey, ppwszValue: out var deviceName, pcchLength: out _) >= 0)
             ? deviceName
-            : null;
+            : null);
 
         var sourceIid = IID_IMFMediaSource;
 

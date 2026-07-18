@@ -37,7 +37,8 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
     private bool? m_presentWaitSupported;    // resolved per-device (re-resolved when m_presentWaitResolvedForDevice changes); null = not yet probed
     private nint m_presentWaitResolvedForDevice; // the device handle m_presentWaitSupported was resolved for; 0 = none yet
     private ulong m_nextPresentId = 1UL;     // monotonic per-swapchain; 0 is the "no id" sentinel
-    private ulong m_priorPresentId;          // the id queued last frame, waited on this frame; 0 = none yet
+    private ulong m_priorPresentId;          // the id queued last frame; 0 = none yet
+    private ulong m_priorPriorPresentId;     // the id queued TWO frames back, waited on this frame (the frame-ring mirror); 0 = none yet
     private nint m_priorSwapchainHandle;     // present ids are per-swapchain, so the counter resets when this changes
     private long m_lastPresentTimestamp;     // Stopwatch ticks of the last confirmed present; 0 = none
     private uint m_presentCount;             // monotonic confirmed-present count (the pacer's "new present" signal)
@@ -195,12 +196,14 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             m_presentWaitSupported = m_framePresentationApi.SupportsPresentWait(deviceHandle: deviceHandle);
             m_presentWaitResolvedForDevice = deviceHandle;
             m_priorPresentId = 0UL;
+            m_priorPriorPresentId = 0UL;
             m_nextPresentId = 1UL;
         }
 
         if (swapchain.Handle != m_priorSwapchainHandle) {
             m_priorSwapchainHandle = swapchain.Handle;
             m_priorPresentId = 0UL;
+            m_priorPriorPresentId = 0UL;
             m_nextPresentId = 1UL;
         }
 
@@ -240,14 +243,19 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         return (m_lastPresentTimestamp > 0L);
     }
 
-    // Waits (bounded) for the PRIOR present to be displayed and timestamps it, then advances the id. Waiting on the prior
-    // id (not this frame's) overlaps the wait with the next frame's CPU work. An unexpected hard error disables further
-    // waits for the session (graceful → open-loop); a timeout/swapchain status code just skips this one sample.
+    // Waits (bounded) for the present TWO frames back to be displayed and timestamps it, then advances the ids.
+    // Two back — not one — is the presentation frame-ring's mirror: with two presents in flight, the prior present's
+    // display typically lands only after the current frame's GPU work drains, so waiting on it re-serialized the pump
+    // to two vblank periods per loop (the intro probe capped at 60 FPS under a 120 Hz target); the N−2 present has
+    // already displayed by now in the steady state, so this wait returns ~immediately while still confirming real
+    // display cadence for the pacer (one period staler — the pacer's re-anchor guard absorbs that). An unexpected
+    // hard error disables further waits for the session (graceful → open-loop); a timeout/swapchain status code just
+    // skips this one sample.
     private void RecordPresentTiming(nint deviceHandle, nint swapchainHandle) {
-        if (m_priorPresentId != 0UL) {
+        if (m_priorPriorPresentId != 0UL) {
             var waitResult = m_framePresentationApi.WaitForPresent(
                 deviceHandle: deviceHandle,
-                presentId: m_priorPresentId,
+                presentId: m_priorPriorPresentId,
                 swapchainHandle: swapchainHandle,
                 timeoutNanoseconds: PresentWaitTimeoutNanoseconds
             );
@@ -271,6 +279,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             }
         }
 
+        m_priorPriorPresentId = m_priorPresentId;
         m_priorPresentId = m_nextPresentId;
 
         unchecked {

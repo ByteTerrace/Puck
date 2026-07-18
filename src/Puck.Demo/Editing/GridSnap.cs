@@ -49,12 +49,12 @@ internal readonly record struct SnapConfig(
     /// <summary>The default world-sculpt config: snapping off, pitch matched to <c>WalkGridBaker.CellSize</c> (0.25 wu)
     /// on X/Z with Y free (floor-rest), no rotation snap, no reference.</summary>
     public static SnapConfig WorldDefault =>
-        new(Enabled: false, Pitch: new Vector3(0.25f, 0f, 0.25f), Rotation: RotationSnap.Off, Reference: null);
+        new(Enabled: false, Pitch: new Vector3(x: 0.25f, y: 0f, z: 0.25f), Rotation: RotationSnap.Off, Reference: null);
 
     /// <summary>The default creator config: snapping off, a sub-metre uniform pitch (0.25 wu on all axes), no rotation
     /// snap, no reference.</summary>
     public static SnapConfig CreatorDefault =>
-        new(Enabled: false, Pitch: new Vector3(0.25f, 0.25f, 0.25f), Rotation: RotationSnap.Off, Reference: null);
+        new(Enabled: false, Pitch: new Vector3(x: 0.25f, y: 0.25f, z: 0.25f), Rotation: RotationSnap.Off, Reference: null);
 }
 
 /// <summary>
@@ -79,9 +79,9 @@ internal static class GridSnap {
     /// <returns>The snapped position.</returns>
     public static Vector3 SnapToWorldLattice(Vector3 p, Vector3 pitch) =>
         new(
-            ((pitch.X > 0f) ? (MathF.Round(p.X / pitch.X) * pitch.X) : p.X),
-            ((pitch.Y > 0f) ? (MathF.Round(p.Y / pitch.Y) * pitch.Y) : p.Y),
-            ((pitch.Z > 0f) ? (MathF.Round(p.Z / pitch.Z) * pitch.Z) : p.Z)
+            x: ((pitch.X > 0f) ? (MathF.Round(x: (p.X / pitch.X)) * pitch.X) : p.X),
+            y: ((pitch.Y > 0f) ? (MathF.Round(x: (p.Y / pitch.Y)) * pitch.Y) : p.Y),
+            z: ((pitch.Z > 0f) ? (MathF.Round(x: (p.Z / pitch.Z)) * pitch.Z) : p.Z)
         );
 
     /// <summary>The full position snap (the proposal's combined case §1f). With no reference it is the pure
@@ -107,18 +107,18 @@ internal static class GridSnap {
             var local = Vector3.Transform(value: (intent - reference.Origin), rotation: inverse);
             var previousLocal = Vector3.Transform(value: (previousSnapped - reference.Origin), rotation: inverse);
             var snappedLocal = new Vector3(
-                SnapAxisCombined(value: local.X, previousValue: previousLocal.X, pitch: reference.Pitch.X, halfExtent: reference.LocalHalfExtents.X, candidateHalfExtent: candidateLocalHalfExtents.X, faceRadius: reference.FaceRadius),
-                SnapAxisCombined(value: local.Y, previousValue: previousLocal.Y, pitch: reference.Pitch.Y, halfExtent: reference.LocalHalfExtents.Y, candidateHalfExtent: candidateLocalHalfExtents.Y, faceRadius: reference.FaceRadius),
-                SnapAxisCombined(value: local.Z, previousValue: previousLocal.Z, pitch: reference.Pitch.Z, halfExtent: reference.LocalHalfExtents.Z, candidateHalfExtent: candidateLocalHalfExtents.Z, faceRadius: reference.FaceRadius)
+                x: SnapAxisCombined(value: local.X, previousValue: previousLocal.X, pitch: reference.Pitch.X, halfExtent: reference.LocalHalfExtents.X, candidateHalfExtent: candidateLocalHalfExtents.X, faceRadius: reference.FaceRadius),
+                y: SnapAxisCombined(value: local.Y, previousValue: previousLocal.Y, pitch: reference.Pitch.Y, halfExtent: reference.LocalHalfExtents.Y, candidateHalfExtent: candidateLocalHalfExtents.Y, faceRadius: reference.FaceRadius),
+                z: SnapAxisCombined(value: local.Z, previousValue: previousLocal.Z, pitch: reference.Pitch.Z, halfExtent: reference.LocalHalfExtents.Z, candidateHalfExtent: candidateLocalHalfExtents.Z, faceRadius: reference.FaceRadius)
             );
 
             return (reference.Origin + Vector3.Transform(value: snappedLocal, rotation: reference.Frame));
         }
 
         return new Vector3(
-            SnapAxisBand(value: intent.X, previousValue: previousSnapped.X, pitch: config.Pitch.X),
-            SnapAxisBand(value: intent.Y, previousValue: previousSnapped.Y, pitch: config.Pitch.Y),
-            SnapAxisBand(value: intent.Z, previousValue: previousSnapped.Z, pitch: config.Pitch.Z)
+            x: SnapAxisBand(value: intent.X, previousValue: previousSnapped.X, pitch: config.Pitch.X),
+            y: SnapAxisBand(value: intent.Y, previousValue: previousSnapped.Y, pitch: config.Pitch.Y),
+            z: SnapAxisBand(value: intent.Z, previousValue: previousSnapped.Z, pitch: config.Pitch.Z)
         );
     }
 
@@ -130,7 +130,7 @@ internal static class GridSnap {
     public static float SnapYawDegrees(float yawDegrees, RotationSnap mode) {
         var step = IncrementDegrees(mode: mode);
 
-        return ((step > 0f) ? (MathF.Round(yawDegrees / step) * step) : yawDegrees);
+        return ((step > 0f) ? (MathF.Round(x: (yawDegrees / step)) * step) : yawDegrees);
     }
 
     /// <summary>Snaps a full orientation to the nearest coarse-orientation candidate (creator's path §1d, the
@@ -156,7 +156,7 @@ internal static class GridSnap {
         var bestDot = -1f;
 
         foreach (var candidate in candidates) {
-            var dot = MathF.Abs(Quaternion.Dot(quaternion1: normalized, quaternion2: candidate));
+            var dot = MathF.Abs(x: Quaternion.Dot(quaternion1: normalized, quaternion2: candidate));
 
             if (dot > bestDot) {
                 bestDot = dot;
@@ -172,7 +172,7 @@ internal static class GridSnap {
     private static float SnapAxisCombined(float value, float previousValue, float pitch, float halfExtent, float candidateHalfExtent, float faceRadius) {
         var faceCandidate = NearestFaceCandidate(value: value, halfExtent: halfExtent, candidateHalfExtent: candidateHalfExtent);
 
-        if (MathF.Abs(value - faceCandidate) <= faceRadius) {
+        if (MathF.Abs(x: (value - faceCandidate)) <= faceRadius) {
             return faceCandidate;
         }
 
@@ -195,10 +195,10 @@ internal static class GridSnap {
             (halfExtent + candidateHalfExtent),
         ];
         var best = candidates[0];
-        var bestDistance = MathF.Abs(value - best);
+        var bestDistance = MathF.Abs(x: (value - best));
 
         foreach (var candidate in candidates) {
-            var distance = MathF.Abs(value - candidate);
+            var distance = MathF.Abs(x: (value - candidate));
 
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -216,7 +216,7 @@ internal static class GridSnap {
             return value;
         }
 
-        var nearest = (MathF.Round(value / pitch) * pitch);
+        var nearest = (MathF.Round(x: (value / pitch)) * pitch);
 
         // A NaN previous means "no magnetize history" — the path-independent console SET; snap to the nearest node
         // with no release band. Only a valid, on-node previous engages the drag hysteresis.
@@ -224,15 +224,14 @@ internal static class GridSnap {
             return nearest;
         }
 
-        var previousOnNode = (MathF.Abs((previousValue / pitch) - MathF.Round(previousValue / pitch)) < OnNodeEpsilon);
+        var previousOnNode = (MathF.Abs(x: ((previousValue / pitch) - MathF.Round(x: (previousValue / pitch)))) < OnNodeEpsilon);
 
-        if (previousOnNode && (MathF.Abs(value - previousValue) <= (ReleaseBandFraction * pitch))) {
+        if (previousOnNode && (MathF.Abs(x: (value - previousValue)) <= (ReleaseBandFraction * pitch))) {
             return previousValue;
         }
 
         return nearest;
     }
-
     private static float IncrementDegrees(RotationSnap mode) =>
         mode switch {
             RotationSnap.Deg90 => 90f,
@@ -248,7 +247,7 @@ internal static class GridSnap {
     private static readonly Quaternion[] s_deg45Set = BuildOrientationSet(stepDegrees: 45f);
 
     private static Quaternion[] BuildOrientationSet(float stepDegrees) {
-        var stepCount = (int)MathF.Round(360f / stepDegrees);
+        var stepCount = (int)MathF.Round(x: (360f / stepDegrees));
         var unique = new List<Quaternion>();
 
         for (var xi = 0; (xi < stepCount); xi++) {
@@ -262,7 +261,7 @@ internal static class GridSnap {
                     var duplicate = false;
 
                     foreach (var existing in unique) {
-                        if (MathF.Abs(Quaternion.Dot(quaternion1: candidate, quaternion2: existing)) > OrientationDedupeDot) {
+                        if (MathF.Abs(x: Quaternion.Dot(quaternion1: candidate, quaternion2: existing)) > OrientationDedupeDot) {
                             duplicate = true;
 
                             break;

@@ -203,8 +203,7 @@ internal sealed class ApuSoundDriver : ISoundDriver {
             emitter.LoadAFromAddress(address: (ushort)(loopStart + 1));
             emitter.StoreAToAddress(address: pointerHighAddress);
             emitter.JumpAbsolute(label: step);
-        }
-        else {
+        } else {
             // The effect terminator: stop the voice (A is zero here) and turn the channel's DAC off.
             emitter.StoreAToAddress(address: pointerHighAddress);
             emitter.StoreAToHighPage(port: muteEnvelopePort);

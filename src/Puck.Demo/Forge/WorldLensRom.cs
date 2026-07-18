@@ -13,8 +13,8 @@ internal static class WorldLensRom {
     // and the player's 8×16 sprite are appended AFTER whichever background is used; the sprite base is rounded up to an
     // EVEN id (hardware pairs tile N with N+1).
     private const int FloorTile = 0;
-    private const int WallTile = 1;
     private const int GridTile = 2;
+    private const int WallTile = 1;
 
     // The WIN goal: the tile the player's sprite must reach (within the sensor's [1,17]×[1,15] reachable window). A
     // marker is drawn here so the player can see where to run; reaching it raises the ROM's win flag.
@@ -149,7 +149,7 @@ internal static class WorldLensRom {
         parts.Add(item: EncodeTile(rows: PlayerBottom));
 
         // Stamp the goal marker into the (top-left, on-screen) goal cell so the player can see where to run.
-        backgroundMap[(GoalTileY * 32) + GoalTileX] = (byte)goalTileId;
+        backgroundMap[((GoalTileY * 32) + GoalTileX)] = (byte)goalTileId;
 
         return HgbCartridge.BuildWorldLens(
             title: title,
@@ -170,14 +170,14 @@ internal static class WorldLensRom {
         const int visibleWidth = 20;
         const int visibleHeight = 18;
 
-        var map = new byte[mapEdge * mapEdge];
+        var map = new byte[(mapEdge * mapEdge)];
 
         for (var row = 0; (row < mapEdge); row++) {
             for (var column = 0; (column < mapEdge); column++) {
-                var onBorder = (row == 0) || (column == 0) || (row == (visibleHeight - 1)) || (column == (visibleWidth - 1));
-                var visible = (row < visibleHeight) && (column < visibleWidth);
+                var onBorder = ((row == 0) || (column == 0) || (row == (visibleHeight - 1)) || (column == (visibleWidth - 1)));
+                var visible = ((row < visibleHeight) && (column < visibleWidth));
 
-                map[(row * mapEdge) + column] = (byte)((visible && onBorder) ? WallTile : (visible ? GridTile : FloorTile));
+                map[((row * mapEdge) + column)] = (byte)((visible && onBorder) ? WallTile : (visible ? GridTile : FloorTile));
             }
         }
 
@@ -190,7 +190,7 @@ internal static class WorldLensRom {
 
         for (var row = 0; (row < 8); row++) {
             for (var column = 0; (column < 8); column++) {
-                indices[(row * 8) + column] = (byte)(rows[row][column] switch {
+                indices[((row * 8) + column)] = (byte)(rows[row][column] switch {
                     '1' => 1,
                     '2' => 2,
                     '3' => 3,
@@ -201,7 +201,6 @@ internal static class WorldLensRom {
 
         return HgbImage.EncodeTile2bpp(tileIndices: indices);
     }
-
     private static byte[] Concat(params byte[][] parts) {
         var length = 0;
 

@@ -28,6 +28,12 @@ public sealed class VulkanSurfaceImport : IDisposable {
     private nint m_sharedHandle;
     private uint m_width;
 
+    /// <summary>Initializes a shared-surface importer.</summary>
+    /// <param name="externalMemoryApi">The external-memory API used to import the shared allocation.</param>
+    /// <param name="framebufferSetApi">The API used to create and destroy the imported image view.</param>
+    /// <param name="commandResourcesFactory">The factory for transition command resources.</param>
+    /// <param name="commandBufferRecordingApi">The API used to record image transitions.</param>
+    /// <param name="queueSubmitter">The queue submission service.</param>
     public VulkanSurfaceImport(
         IVulkanExternalMemoryApi externalMemoryApi,
         IVulkanFramebufferSetApi framebufferSetApi,

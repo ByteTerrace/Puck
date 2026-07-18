@@ -107,7 +107,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             dwCreationDisposition: FILE_CREATION_DISPOSITION.OPEN_EXISTING,
             dwDesiredAccess: ((uint)(GENERIC_ACCESS_RIGHTS.GENERIC_READ | GENERIC_ACCESS_RIGHTS.GENERIC_WRITE)),
             dwFlagsAndAttributes: FILE_FLAGS_AND_ATTRIBUTES.FILE_FLAG_OVERLAPPED,
-            dwShareMode: (FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE),
+            dwShareMode: FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE,
             hTemplateFile: default,
             lpFileName: devicePath,
             lpSecurityAttributes: null
@@ -121,7 +121,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 dwCreationDisposition: FILE_CREATION_DISPOSITION.OPEN_EXISTING,
                 dwDesiredAccess: ((uint)GENERIC_ACCESS_RIGHTS.GENERIC_READ),
                 dwFlagsAndAttributes: FILE_FLAGS_AND_ATTRIBUTES.FILE_FLAG_OVERLAPPED,
-                dwShareMode: (FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE),
+                dwShareMode: FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE,
                 hTemplateFile: default,
                 lpFileName: devicePath,
                 lpSecurityAttributes: null
@@ -135,7 +135,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 dwCreationDisposition: FILE_CREATION_DISPOSITION.OPEN_EXISTING,
                 dwDesiredAccess: ((uint)GENERIC_ACCESS_RIGHTS.GENERIC_WRITE),
                 dwFlagsAndAttributes: FILE_FLAGS_AND_ATTRIBUTES.FILE_FLAG_OVERLAPPED,
-                dwShareMode: (FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE),
+                dwShareMode: FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE,
                 hTemplateFile: default,
                 lpFileName: devicePath,
                 lpSecurityAttributes: null
@@ -244,7 +244,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         using var deviceInfoSet = PInvoke.SetupDiGetClassDevs(
             ClassGuid: PInvoke.GUID_DEVINTERFACE_HID,
             Enumerator: null,
-            Flags: (SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_DEVICEINTERFACE | SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_PRESENT),
+            Flags: SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_DEVICEINTERFACE | SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_PRESENT,
             hwndParent: HWND.Null
         );
 
@@ -510,6 +510,26 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
 
         fixed (byte* reportBuffer = buffer) {
             return PInvoke.HidD_GetFeature(
+                HidDeviceObject: fileStream.SafeFileHandle,
+                ReportBuffer: reportBuffer,
+                ReportBufferLength: ((uint)buffer.Length)
+            );
+        }
+    }
+
+    /// <inheritdoc />
+    [SupportedOSPlatform(platformName: "windows5.1.2600")]
+    public unsafe bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
+        var fileStream = m_fileStream;
+
+        if ((fileStream is null) || buffer.IsEmpty) {
+            return false;
+        }
+
+        // HidD_SetFeature does not mutate the buffer; the API just lacks a const pointer, so a read-only span is
+        // safe to pin and pass through.
+        fixed (byte* reportBuffer = buffer) {
+            return PInvoke.HidD_SetFeature(
                 HidDeviceObject: fileStream.SafeFileHandle,
                 ReportBuffer: reportBuffer,
                 ReportBufferLength: ((uint)buffer.Length)

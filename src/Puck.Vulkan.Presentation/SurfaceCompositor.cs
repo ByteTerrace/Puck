@@ -18,6 +18,12 @@ namespace Puck.Vulkan.Presentation;
 /// </summary>
 public sealed class SurfaceCompositor : IDisposable {
     private const string BlitFragmentShaderFileName = "blit.frag.spv";
+    // The blit descriptor-set ring depth — matches the renderer's presentation frame ring: a set is rewritten only
+    // when the ROOT surface's image view changes, and cycling to the other set on each change means the set being
+    // written was last referenced by a blit at least two presents back, which the renderer's frame-slot fence wait
+    // (WaitForFrameSlot) has already proven retired. A single set was updated while a pending blit still referenced
+    // it (VUID-vkUpdateDescriptorSets-None-03047, caught by the validation layer once the per-frame drain left).
+    private const int DescriptorSetRingSize = 2;
     private const uint SamplerBindingIndex = 0;
     private const string VertexShaderFileName = "fullscreen.vert.spv";
 
@@ -42,8 +48,9 @@ public sealed class SurfaceCompositor : IDisposable {
     private VulkanGraphicsPipeline? m_blitPipeline;
     private AssetContentHash m_blitPipelineId;
     private nint m_descriptorPool;
-    private nint m_descriptorSet;
-    private VulkanDrawCommand[]? m_drawCommands;
+    private readonly nint[] m_descriptorSets = new nint[DescriptorSetRingSize];
+    private int m_descriptorSetIndex;
+    private VulkanDrawCommand[][]? m_drawCommandsPerSet;
     private Dictionary<AssetContentHash, VulkanGraphicsPipeline>? m_graphicsPipelines;
     private bool m_initialized;
     private nint m_lastWrittenImageView;
@@ -117,7 +124,7 @@ public sealed class SurfaceCompositor : IDisposable {
         if (
             !m_initialized ||
             (m_blitPipeline is null) ||
-            (0 == m_descriptorSet) ||
+            (0 == m_descriptorSets[0]) ||
             surface.IsEmpty
         ) {
             return;
@@ -175,10 +182,14 @@ public sealed class SurfaceCompositor : IDisposable {
         }
 
         if (imageViewHandle != m_lastWrittenImageView) {
+            // Cycle to the NEXT ring set before writing (see DescriptorSetRingSize): the set being written was last
+            // referenced by a blit the renderer's frame-slot wait already proved retired; the pending blit rides the
+            // other set untouched.
+            m_descriptorSetIndex = ((m_descriptorSetIndex + 1) % DescriptorSetRingSize);
             m_descriptorAllocator.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: SamplerBindingIndex,
-                descriptorSetHandle: m_descriptorSet,
+                descriptorSetHandle: m_descriptorSets[m_descriptorSetIndex],
                 deviceHandle: m_renderer.Device.Handle,
                 imageViewHandle: imageViewHandle,
                 samplerHandle: m_sampler
@@ -188,7 +199,7 @@ public sealed class SurfaceCompositor : IDisposable {
         }
 
         m_renderer.Present(
-            drawCommands: m_drawCommands!,
+            drawCommands: m_drawCommandsPerSet![m_descriptorSetIndex],
             graphicsPipelines: m_graphicsPipelines!
         );
     }
@@ -211,9 +222,9 @@ public sealed class SurfaceCompositor : IDisposable {
 
         m_resourceDevice = device;
 
-        // The blit binds one sampled source texture. This single count drives BOTH the pipeline's descriptor-set layout
-        // and the pool's capacity, so they cannot drift out of sync (a pool undersized for the layout would fail
-        // vkAllocateDescriptorSets).
+        // The blit binds one sampled source texture per ring set. This single count drives BOTH the pipeline's
+        // descriptor-set layout and the pool's capacity, so they cannot drift out of sync (a pool undersized for
+        // the layout would fail vkAllocateDescriptorSets).
         const uint textureSamplerCount = 1;
 
         m_blitPipeline = m_graphicsPipelineFactory.Create(
@@ -228,34 +239,44 @@ public sealed class SurfaceCompositor : IDisposable {
         );
         m_descriptorPool = m_descriptorAllocator.CreatePool(
             deviceHandle: device.Handle,
-            maxSets: 1,
+            maxSets: DescriptorSetRingSize,
             poolSizes: new VulkanDescriptorPoolSize[]
             {
                 new(
-                    DescriptorCount: textureSamplerCount,
+                    DescriptorCount: (textureSamplerCount * DescriptorSetRingSize),
                     DescriptorType: VulkanDescriptorType.CombinedImageSampler
                 ),
             }
         );
-        m_descriptorSet = m_descriptorAllocator.AllocateSet(
-            deviceHandle: device.Handle,
-            descriptorSetLayoutHandle: m_blitPipeline.DescriptorSetLayoutHandle,
-            poolHandle: m_descriptorPool
-        );
-        m_lastWrittenImageView = 0;
-        m_drawCommands = [
-            new VulkanDrawCommand(
-                DescriptorSetHandle: m_descriptorSet,
-                DrawParameters: new VulkanDrawParameters(
-                    firstInstance: 0,
-                    firstVertex: 0,
-                    instanceCount: 1,
-                    vertexCount: 3
+
+        // One set + one prebuilt draw-command list per ring slot (the draw command bakes the set handle in, so the
+        // Blit path just indexes — see DescriptorSetRingSize).
+        var drawCommandsPerSet = new VulkanDrawCommand[DescriptorSetRingSize][];
+
+        for (var setIndex = 0; (setIndex < DescriptorSetRingSize); setIndex++) {
+            m_descriptorSets[setIndex] = m_descriptorAllocator.AllocateSet(
+                deviceHandle: device.Handle,
+                descriptorSetLayoutHandle: m_blitPipeline.DescriptorSetLayoutHandle,
+                poolHandle: m_descriptorPool
+            );
+            drawCommandsPerSet[setIndex] = [
+                new VulkanDrawCommand(
+                    DescriptorSetHandle: m_descriptorSets[setIndex],
+                    DrawParameters: new VulkanDrawParameters(
+                        firstInstance: 0,
+                        firstVertex: 0,
+                        instanceCount: 1,
+                        vertexCount: 3
+                    ),
+                    PipelineId: m_blitPipelineId,
+                    VertexBufferBinding: new VulkanVertexBufferBinding(bufferHandle: m_vertexBuffer!.BufferHandle)
                 ),
-                PipelineId: m_blitPipelineId,
-                VertexBufferBinding: new VulkanVertexBufferBinding(bufferHandle: m_vertexBuffer!.BufferHandle)
-            ),
-        ];
+            ];
+        }
+
+        m_lastWrittenImageView = 0;
+        m_descriptorSetIndex = 0;
+        m_drawCommandsPerSet = drawCommandsPerSet;
         m_graphicsPipelines = new Dictionary<AssetContentHash, VulkanGraphicsPipeline> {
             [m_blitPipelineId] = m_blitPipeline,
         };
@@ -320,10 +341,10 @@ public sealed class SurfaceCompositor : IDisposable {
                 poolHandle: m_descriptorPool
             );
             m_descriptorPool = 0;
-            m_descriptorSet = 0;
+            Array.Clear(array: m_descriptorSets);
         }
 
-        m_drawCommands = null;
+        m_drawCommandsPerSet = null;
         m_graphicsPipelines = null;
         m_blitPipeline?.Dispose();
         m_blitPipeline = null;
@@ -402,7 +423,6 @@ public sealed class SurfaceCompositor : IDisposable {
         DisposeDeviceResources(device: device);
         m_resourceDevice = null;
     }
-
     public void Dispose() {
         m_renderer.PresentationResourcesRecreated -= OnPresentationResourcesRecreated;
         m_rootUpload?.Dispose();

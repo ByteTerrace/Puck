@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Commands;
 using Puck.Input.Devices;
 using Puck.SdfVm;
 
@@ -46,9 +47,9 @@ public sealed class CreatorController {
 
     // The orbit envelope: pitch stays off the poles, distance stays outside the workpiece and inside the room.
     private const float MinPitch = 0.05f;
+    private const float MaxDistance = 14f;
     private const float MaxPitch = 1.35f;
     private const float MinDistance = 2f;
-    private const float MaxDistance = 14f;
     // The order-sensitive chord tracker's press/release hysteresis on the trigger axes (mirrors
     // BindingModifierDefinition's defaults, so the creator's own chord feel matches the paged binding system).
     private const float ModifierPressThreshold = 0.5f;
@@ -59,12 +60,11 @@ public sealed class CreatorController {
     private CreatorPage m_page;
     private GamepadButtons m_prevButtons;
     private bool m_exitRequested;
-    // The order-sensitive LT/RT chord tracker (a tiny in-class twin of Puck.Commands.BindingChordTracker — creator
-    // input bypasses the paged binding system entirely, so it cannot reuse that tracker directly): which modifiers
-    // are latched held, in PRESS ORDER, so [LT,RT] and [RT,LT] resolve to different pages while both stay held.
-    private bool m_leftModifierHeld;
-    private bool m_rightModifierHeld;
-    private bool m_leftPressedFirst;
+    // The order-sensitive LT/RT chord tracker: which modifiers are latched held, in PRESS ORDER, so [LT,RT] and
+    // [RT,LT] resolve to different pages while both stay held. Creator input bypasses the paged binding system
+    // entirely (it repurposes the same physical buttons the gameplay pages bind), so it drives the shared
+    // Puck.Commands.HeldOrderTracker primitive directly against raw pad state instead of through PagedInputBindings.
+    private readonly HeldOrderTracker m_modifierTracker = new(modifierCount: 2, pressThreshold: ModifierPressThreshold, releaseThreshold: ModifierReleaseThreshold);
     // The workpiece camera (always driving the room view while creator is up): an orbit about a pannable target.
     // Camera MODE (right-stick click) hands the sticks/triggers to it; outside the mode it holds its last framing.
     private bool m_cameraMode;
@@ -116,9 +116,7 @@ public sealed class CreatorController {
         m_exitRequested = false;
         m_page = CreatorPage.Sculpt;
         m_prevButtons = GamepadButtons.None;
-        m_leftModifierHeld = false;
-        m_rightModifierHeld = false;
-        m_leftPressedFirst = false;
+        m_modifierTracker.Reset();
     }
 
     /// <summary>Returns whether the EXIT verb fired since the last consume (and clears it) — the node leaves the
@@ -217,33 +215,24 @@ public sealed class CreatorController {
         m_prevButtons = buttons;
     }
 
-    // The order-sensitive LT/RT chord tracker: latches each trigger held/released with hysteresis (mirroring
-    // BindingModifierDefinition's defaults) and remembers PRESS ORDER, so [LT,RT] (left pressed while right is
-    // already held) and [RT,LT] resolve to distinct pages — the exact semantics of BindingChordTracker, replicated
-    // here because creator input never touches PagedInputBindings.
+    // The order-sensitive LT/RT chord tracker: feeds both triggers into the shared HeldOrderTracker (hysteresis
+    // mirroring BindingModifierDefinition's defaults) and reads back the held set in PRESS ORDER, so [LT,RT] (left
+    // pressed while right is already held) and [RT,LT] resolve to distinct pages — the exact semantics
+    // BindingChordTracker resolves a binding page from, applied here because creator input never touches
+    // PagedInputBindings.
     private void AdvancePage(in GamepadState raw) {
-        var leftHeld = (m_leftModifierHeld ? (raw.LeftTrigger > ModifierReleaseThreshold) : (raw.LeftTrigger >= ModifierPressThreshold));
-        var rightHeld = (m_rightModifierHeld ? (raw.RightTrigger > ModifierReleaseThreshold) : (raw.RightTrigger >= ModifierPressThreshold));
+        const int leftModifier = 0;
+        const int rightModifier = 1;
 
-        if (leftHeld && !m_leftModifierHeld && !rightHeld) {
-            m_leftPressedFirst = true;
-        } else if (rightHeld && !m_rightModifierHeld && !leftHeld) {
-            m_leftPressedFirst = false;
-        } else if (leftHeld && !m_leftModifierHeld && rightHeld) {
-            // Right was already held: left just joined it, so [RT,LT] (right pressed first).
-            m_leftPressedFirst = false;
-        } else if (rightHeld && !m_rightModifierHeld && leftHeld) {
-            // Left was already held: right just joined it, so [LT,RT] (left pressed first).
-            m_leftPressedFirst = true;
-        }
+        _ = m_modifierTracker.Set(index: leftModifier, value: raw.LeftTrigger);
+        _ = m_modifierTracker.Set(index: rightModifier, value: raw.RightTrigger);
 
-        m_leftModifierHeld = leftHeld;
-        m_rightModifierHeld = rightHeld;
-
-        var next = (!leftHeld && !rightHeld) ? CreatorPage.Sculpt
-            : (leftHeld && !rightHeld) ? CreatorPage.Select
-            : (!leftHeld && rightHeld) ? CreatorPage.Style
-            : (m_leftPressedFirst ? CreatorPage.Animate : CreatorPage.Rig);
+        var heldOrder = m_modifierTracker.HeldOrder;
+        var next = heldOrder.Length switch {
+            0 => CreatorPage.Sculpt,
+            1 => ((heldOrder[0] == leftModifier) ? CreatorPage.Select : CreatorPage.Style),
+            _ => ((heldOrder[0] == leftModifier) ? CreatorPage.Animate : CreatorPage.Rig),
+        };
 
         if (next != m_page) {
             m_page = next;
@@ -256,18 +245,18 @@ public sealed class CreatorController {
         const float orbitSpeed = 2.4f;  // radians/second at full deflection
         const float panSpeed = 4.0f;    // world units/second at full deflection
 
-        m_orbitYaw += (raw.LeftStick.X * orbitSpeed * deltaSeconds);
-        m_orbitPitch = Math.Clamp(value: (m_orbitPitch + (raw.LeftStick.Y * orbitSpeed * deltaSeconds)), max: MaxPitch, min: MinPitch);
-        m_orbitDistance = Math.Clamp(value: (m_orbitDistance * MathF.Exp(((raw.LeftTrigger - raw.RightTrigger) * 1.2f * deltaSeconds))), max: MaxDistance, min: MinDistance);
+        m_orbitYaw += ((raw.LeftStick.X * orbitSpeed) * deltaSeconds);
+        m_orbitPitch = Math.Clamp(value: (m_orbitPitch + ((raw.LeftStick.Y * orbitSpeed) * deltaSeconds)), max: MaxPitch, min: MinPitch);
+        m_orbitDistance = Math.Clamp(value: (m_orbitDistance * MathF.Exp(x: (((raw.LeftTrigger - raw.RightTrigger) * 1.2f) * deltaSeconds))), max: MaxDistance, min: MinDistance);
 
         if (raw.RightStick != Vector2.Zero) {
             // Pan in camera-relative planar axes (right = orbit-right, up on the stick = away from the camera), so
             // the target moves the way the view suggests regardless of the orbit angle.
-            var forward = new Vector2(-MathF.Sin(x: m_orbitYaw), -MathF.Cos(x: m_orbitYaw));
-            var right = new Vector2(-forward.Y, forward.X);
-            var planar = ((right * raw.RightStick.X) + (forward * raw.RightStick.Y)) * (panSpeed * deltaSeconds);
+            var forward = new Vector2(x: -MathF.Sin(x: m_orbitYaw), y: -MathF.Cos(x: m_orbitYaw));
+            var right = new Vector2(x: -forward.Y, y: forward.X);
+            var planar = (((right * raw.RightStick.X) + (forward * raw.RightStick.Y)) * (panSpeed * deltaSeconds));
 
-            m_orbitTarget = m_scene.Workbench.Clamp(position: (m_orbitTarget + new Vector3(planar.X, 0f, planar.Y)));
+            m_orbitTarget = m_scene.Workbench.Clamp(position: (m_orbitTarget + new Vector3(x: planar.X, y: 0f, z: planar.Y)));
         }
     }
 
@@ -279,11 +268,11 @@ public sealed class CreatorController {
         if (pressed(arg: GamepadButtons.ButtonSouth)) { m_scene.Place(); }
 
         if (pressed(arg: GamepadButtons.ButtonEast)) {
-            m_narrate(m_scene.Undo() ? $"[creator] undo — {m_scene.PlacedCount} shape(s)" : "[creator] nothing to undo");
+            m_narrate((m_scene.Undo() ? $"[creator] undo — {m_scene.PlacedCount} shape(s)" : "[creator] nothing to undo"));
         }
 
         if (pressed(arg: GamepadButtons.ButtonWest)) {
-            m_narrate(m_scene.Redo() ? $"[creator] redo — {m_scene.PlacedCount} shape(s)" : "[creator] nothing to redo");
+            m_narrate((m_scene.Redo() ? $"[creator] redo — {m_scene.PlacedCount} shape(s)" : "[creator] nothing to redo"));
         }
     }
 
@@ -309,9 +298,9 @@ public sealed class CreatorController {
         }
 
         if (pressed(arg: GamepadButtons.ButtonWest)) {
-            m_narrate((m_scene.LinkWithPrevious() is { } group)
+            m_narrate(((m_scene.LinkWithPrevious() is { } group)
                 ? $"[creator] linked into group {group} — blends now act within it (STYLE page sets the op)"
-                : "[creator] link needs two shapes: select one, select another, then link");
+                : "[creator] link needs two shapes: select one, select another, then link"));
         }
     }
 
@@ -378,9 +367,9 @@ public sealed class CreatorController {
         }
 
         if (pressed(arg: GamepadButtons.ButtonWest)) {
-            m_narrate(m_scene.TogglePlayback()
+            m_narrate((m_scene.TogglePlayback()
                 ? "[creator] playing — West stops, North returns to rest and exits"
-                : ((m_scene.FrameCount == 0) ? "[creator] nothing to play — pose the target, then South records a frame" : "[creator] stopped"));
+                : ((m_scene.FrameCount == 0) ? "[creator] nothing to play — pose the target, then South records a frame" : "[creator] stopped")));
         }
     }
 
@@ -408,55 +397,47 @@ public sealed class CreatorController {
         }
 
         if (pressed(arg: GamepadButtons.ButtonSouth)) {
-            m_narrate((m_scene.DefineChainFromSelection() is { } defined)
+            m_narrate(((m_scene.DefineChainFromSelection() is { } defined)
                 ? $"[creator] chain defined: {DescribeChain(chain: defined)} — SELECT page's bumpers now cycle into its goal"
-                : "[creator] select a shape with 2 more placed after it (document order), then South defines a limb");
+                : "[creator] select a shape with 2 more placed after it (document order), then South defines a limb"));
         }
 
         if (pressed(arg: GamepadButtons.ButtonEast)) {
-            m_narrate(m_scene.DeleteCurrentChain() ? "[creator] chain deleted" : "[creator] no chain cursored — bumpers cycle to one");
+            m_narrate((m_scene.DeleteCurrentChain() ? "[creator] chain deleted" : "[creator] no chain cursored — bumpers cycle to one"));
         }
 
         if (pressed(arg: GamepadButtons.ButtonWest)) {
-            m_narrate((m_scene.ToggleCurrentChainKind() is { } kind) ? $"[creator] chain kind: {kind}" : "[creator] no chain cursored — bumpers cycle to one");
+            m_narrate(((m_scene.ToggleCurrentChainKind() is { } kind) ? $"[creator] chain kind: {kind}" : "[creator] no chain cursored — bumpers cycle to one"));
         }
     }
-
     private void NarrateFrame(int cursor) {
-        m_narrate((cursor == 0)
+        m_narrate(((cursor == 0)
             ? "[creator] frame: rest (the live pose)"
-            : $"[creator] frame: {cursor} of {m_scene.FrameCount} — pose the target, South re-records");
+            : $"[creator] frame: {cursor} of {m_scene.FrameCount} — pose the target, South re-records"));
     }
-
     private void NarrateSelection() {
-        m_narrate(m_scene.TargetIsGoal
+        m_narrate((m_scene.TargetIsGoal
             ? $"[creator] goal selected: {DescribeChain(chain: m_scene.TargetGoalChain!)} — move it to pose the chain live"
             : ((m_scene.SelectedShape is { } shape)
                 ? $"[creator] selected {DescribeShape(shape: shape)}"
-                : "[creator] selection cleared — the ghost is the target"));
+                : "[creator] selection cleared — the ghost is the target")));
     }
-
     private void NarrateChain(CreatorChainState? chain) {
-        m_narrate((chain is { } found)
+        m_narrate(((chain is { } found)
             ? $"[creator] chain cursor: {DescribeChain(chain: found)}"
-            : "[creator] chain cursor: none");
+            : "[creator] chain cursor: none"));
     }
-
     private void NarrateBlend(SdfBlendOp blend) {
         var grouped = (m_scene.SelectedShape is { GroupId: not 0 });
 
         m_narrate($"[creator] blend: {blend}{(grouped ? "" : (m_scene.TargetIsGhost ? " (inherited by the next place)" : " (auto-grouped)"))}");
     }
-
     private string DescribeTarget() =>
         ((m_scene.SelectedShape is { } shape) ? DescribeShape(shape: shape) : "the ghost");
-
     private static string DescribeShape(CreatorShapeState shape) =>
-        $"#{shape.Id} {shape.Name ?? shape.Type.ToString()}{((shape.GroupId != 0) ? $" (group {shape.GroupId})" : "")}";
-
+        $"#{shape.Id} {(shape.Name ?? shape.Type.ToString())}{((shape.GroupId != 0) ? $" (group {shape.GroupId})" : "")}";
     private static string DescribeChain(CreatorChainState chain) =>
-        $"#{chain.Id} {chain.Name ?? chain.Kind}";
-
+        $"#{chain.Id} {(chain.Name ?? chain.Kind)}";
     private static string PageName(CreatorPage page) {
         return page switch {
             CreatorPage.Select => "SELECT [LT] — bumpers cycle shapes then goals, South duplicates, East deletes, West links",

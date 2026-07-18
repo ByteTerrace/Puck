@@ -43,26 +43,26 @@ internal static class FlagshipCreations {
 
         for (var index = 0; (index < spineCount); index++) {
             var t = (index / (float)(spineCount - 1));
-            var position = new Vector3(0f, 1.4f, (1.0f - (t * 2.0f)));
+            var position = new Vector3(x: 0f, y: 1.4f, z: (1.0f - (t * 2.0f)));
             var scale = (1.15f - (t * 0.7f));
 
-            spineIds[index] = PlaceNamed(scene: scene, name: $"spine{index}", type: AvatarPrimitive.Ellipsoid, position: position, scale: new Vector3((scale * 0.9f), (scale * 0.62f), scale), material: (index % CreatorScene.PaletteSize));
+            spineIds[index] = PlaceNamed(scene: scene, name: $"spine{index}", type: AvatarPrimitive.Ellipsoid, position: position, scale: new Vector3(x: (scale * 0.9f), y: (scale * 0.62f), z: scale), material: (index % CreatorScene.PaletteSize));
         }
 
-        _ = scene.DefineChain(name: "spine", shapeIdsOrNames: [.. spineIds.Select(selector: static id => id.ToString(System.Globalization.CultureInfo.InvariantCulture))], kind: CreatorChainState.KindSpine);
+        _ = scene.DefineChain(name: "spine", shapeIdsOrNames: [.. spineIds.Select(selector: static id => id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))], kind: CreatorChainState.KindSpine);
 
         // The lure stalk: 2 shapes (one bone) arcing up and forward from the head — a "spine" chain too (only a
         // 3-shape run is ever "limb"), so it drags/lags behind the head the same gentle way the body does. The bulb
         // at its tip IS the camera-lure the game-studio plan names.
-        var stalkBaseId = PlaceNamed(scene: scene, name: "lureStalk", type: AvatarPrimitive.Capsule, position: new Vector3(0f, 1.95f, 1.05f), scale: new Vector3(0.24f), material: 6);
-        var stalkTipId = PlaceNamed(scene: scene, name: "lureBulb", type: AvatarPrimitive.Sphere, position: new Vector3(0f, 2.55f, 1.55f), scale: new Vector3(0.34f), material: 7);
+        var stalkBaseId = PlaceNamed(scene: scene, name: "lureStalk", type: AvatarPrimitive.Capsule, position: new Vector3(x: 0f, y: 1.95f, z: 1.05f), scale: new Vector3(value: 0.24f), material: 6);
+        var stalkTipId = PlaceNamed(scene: scene, name: "lureBulb", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0f, y: 2.55f, z: 1.55f), scale: new Vector3(value: 0.34f), material: 7);
 
-        _ = scene.DefineChain(name: "lure", shapeIdsOrNames: [stalkBaseId.ToString(System.Globalization.CultureInfo.InvariantCulture), stalkTipId.ToString(System.Globalization.CultureInfo.InvariantCulture)], kind: CreatorChainState.KindSpine);
+        _ = scene.DefineChain(name: "lure", shapeIdsOrNames: [stalkBaseId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), stalkTipId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)], kind: CreatorChainState.KindSpine);
 
         // Two flank fins — plain placed shapes (not rigged; a fin reads fine as a flattened, twisted ellipsoid
         // riding the body, no goal needed).
-        _ = PlaceNamed(scene: scene, name: "finLeft", type: AvatarPrimitive.Ellipsoid, position: new Vector3(-0.62f, 1.1f, -0.1f), rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (-0.5f * MathF.PI)), scale: new Vector3(0.5f, 0.22f, 0.32f), material: 3);
-        _ = PlaceNamed(scene: scene, name: "finRight", type: AvatarPrimitive.Ellipsoid, position: new Vector3(0.62f, 1.1f, -0.1f), rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (0.5f * MathF.PI)), scale: new Vector3(0.5f, 0.22f, 0.32f), material: 3);
+        _ = PlaceNamed(scene: scene, name: "finLeft", type: AvatarPrimitive.Ellipsoid, position: new Vector3(x: -0.62f, y: 1.1f, z: -0.1f), rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (-0.5f * MathF.PI)), scale: new Vector3(x: 0.5f, y: 0.22f, z: 0.32f), material: 3);
+        _ = PlaceNamed(scene: scene, name: "finRight", type: AvatarPrimitive.Ellipsoid, position: new Vector3(x: 0.62f, y: 1.1f, z: -0.1f), rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (0.5f * MathF.PI)), scale: new Vector3(x: 0.5f, y: 0.22f, z: 0.32f), material: 3);
 
         // The swim cycle: sweep the SPINE chain's goal through one full sinusoid, recording 4 frames (a clean loop —
         // frame 4 hands back off to frame 1 with no jump). This is the SAME sweep-and-record shape
@@ -76,7 +76,7 @@ internal static class FlagshipCreations {
 
         for (var frame = 0; (frame < swimFrames); frame++) {
             var phase = ((frame / (float)swimFrames) * MathF.Tau);
-            var sway = new Vector3((MathF.Sin(phase) * 0.55f), 0f, 0f);
+            var sway = new Vector3(x: (MathF.Sin(x: phase) * 0.55f), y: 0f, z: 0f);
 
             ResetTimelineCursor(scene: scene);
             SetChainGoal(scene: scene, chainName: "spine", goal: (restGoal + sway));
@@ -102,20 +102,20 @@ internal static class FlagshipCreations {
         scene.SetName(name: "crt-robot");
         scene.SetIntent(intent: CreatorIntent.Object);
 
-        _ = PlaceNamed(scene: scene, name: "body", type: AvatarPrimitive.Box, position: new Vector3(0f, 1.35f, 0f), scale: new Vector3(0.95f, 1.05f, 0.7f), material: 0);
+        _ = PlaceNamed(scene: scene, name: "body", type: AvatarPrimitive.Box, position: new Vector3(x: 0f, y: 1.35f, z: 0f), scale: new Vector3(x: 0.95f, y: 1.05f, z: 0.7f), material: 0);
 
         // The face: a flattened plate given a small Onion shell (a rounded rim rather than a razor-flat decal, the
         // "slightly-curved" read) mounted on the body's front — named "face" per the flagship contract; the host
         // decides what a shape named this way becomes (the screen-slab assignment is a ledger concern, not this
         // document's).
-        _ = PlaceNamed(scene: scene, name: "face", type: AvatarPrimitive.Box, position: new Vector3(0f, 1.55f, 0.62f), scale: new Vector3(0.62f, 0.5f, 0.2f), material: 1, onion: 0.05f);
+        _ = PlaceNamed(scene: scene, name: "face", type: AvatarPrimitive.Box, position: new Vector3(x: 0f, y: 1.55f, z: 0.62f), scale: new Vector3(x: 0.62f, y: 0.5f, z: 0.2f), material: 1, onion: 0.05f);
 
         // Four 2-link LIMB chains (arms, legs) — each a 3-shape/2-bone run, so CreatorChainState infers "limb"
         // without an explicit kind (still passed explicitly for readability and to survive a future default change).
-        DefineLimb(scene: scene, name: "armLeft", root: new Vector3(-0.85f, 1.55f, 0f), mid: new Vector3(-1.25f, 1.15f, 0f), tip: new Vector3(-1.35f, 0.7f, 0f), material: 2);
-        DefineLimb(scene: scene, name: "armRight", root: new Vector3(0.85f, 1.55f, 0f), mid: new Vector3(1.25f, 1.15f, 0f), tip: new Vector3(1.35f, 0.7f, 0f), material: 2);
-        DefineLimb(scene: scene, name: "legLeft", root: new Vector3(-0.4f, 0.75f, 0f), mid: new Vector3(-0.42f, 0.4f, 0f), tip: new Vector3(-0.42f, 0.05f, 0f), material: 4);
-        DefineLimb(scene: scene, name: "legRight", root: new Vector3(0.4f, 0.75f, 0f), mid: new Vector3(0.42f, 0.4f, 0f), tip: new Vector3(0.42f, 0.05f, 0f), material: 4);
+        DefineLimb(scene: scene, name: "armLeft", root: new Vector3(x: -0.85f, y: 1.55f, z: 0f), mid: new Vector3(x: -1.25f, y: 1.15f, z: 0f), tip: new Vector3(x: -1.35f, y: 0.7f, z: 0f), material: 2);
+        DefineLimb(scene: scene, name: "armRight", root: new Vector3(x: 0.85f, y: 1.55f, z: 0f), mid: new Vector3(x: 1.25f, y: 1.15f, z: 0f), tip: new Vector3(x: 1.35f, y: 0.7f, z: 0f), material: 2);
+        DefineLimb(scene: scene, name: "legLeft", root: new Vector3(x: -0.4f, y: 0.75f, z: 0f), mid: new Vector3(x: -0.42f, y: 0.4f, z: 0f), tip: new Vector3(x: -0.42f, y: 0.05f, z: 0f), material: 4);
+        DefineLimb(scene: scene, name: "legRight", root: new Vector3(x: 0.4f, y: 0.75f, z: 0f), mid: new Vector3(x: 0.42f, y: 0.4f, z: 0f), tip: new Vector3(x: 0.42f, y: 0.05f, z: 0f), material: 4);
 
         // Frame 1 (idle): every limb goal held at its rest tip — record it as the neutral pose.
         _ = scene.RecordFrame();
@@ -124,7 +124,7 @@ internal static class FlagshipCreations {
         // Frame 2 (wave): armRight's goal lifts up and out, the rest hold rest — an emote pose distinct from idle.
         var armRightRestGoal = FindChain(scene: scene, name: "armRight").Goal;
 
-        SetChainGoal(scene: scene, chainName: "armRight", goal: new Vector3(1.15f, 2.05f, 0.15f));
+        SetChainGoal(scene: scene, chainName: "armRight", goal: new Vector3(x: 1.15f, y: 2.05f, z: 0.15f));
         _ = scene.RecordFrame();
         ResetTimelineCursor(scene: scene);
         RestoreChainGoal(scene: scene, chainName: "armRight", goal: armRightRestGoal);
@@ -145,13 +145,13 @@ internal static class FlagshipCreations {
         scene.SetName(name: "adventurer");
         scene.SetIntent(intent: CreatorIntent.Object);
 
-        _ = PlaceNamed(scene: scene, name: "torso", type: AvatarPrimitive.Capsule, position: new Vector3(0f, 1.15f, 0f), scale: new Vector3(0.62f), material: 0);
-        _ = PlaceNamed(scene: scene, name: "head", type: AvatarPrimitive.Sphere, position: new Vector3(0f, 1.85f, 0f), scale: new Vector3(0.55f), material: 5);
+        _ = PlaceNamed(scene: scene, name: "torso", type: AvatarPrimitive.Capsule, position: new Vector3(x: 0f, y: 1.15f, z: 0f), scale: new Vector3(value: 0.62f), material: 0);
+        _ = PlaceNamed(scene: scene, name: "head", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0f, y: 1.85f, z: 0f), scale: new Vector3(value: 0.55f), material: 5);
 
-        DefineLimb(scene: scene, name: "armLeft", root: new Vector3(-0.55f, 1.5f, 0f), mid: new Vector3(-0.75f, 1.1f, 0f), tip: new Vector3(-0.8f, 0.65f, 0f), material: 2);
-        DefineLimb(scene: scene, name: "armRight", root: new Vector3(0.55f, 1.5f, 0f), mid: new Vector3(0.75f, 1.1f, 0f), tip: new Vector3(0.8f, 0.65f, 0f), material: 2);
-        DefineLimb(scene: scene, name: "legLeft", root: new Vector3(-0.28f, 0.75f, 0f), mid: new Vector3(-0.3f, 0.4f, 0f), tip: new Vector3(-0.3f, 0.05f, 0f), material: 4);
-        DefineLimb(scene: scene, name: "legRight", root: new Vector3(0.28f, 0.75f, 0f), mid: new Vector3(0.3f, 0.4f, 0f), tip: new Vector3(0.3f, 0.05f, 0f), material: 4);
+        DefineLimb(scene: scene, name: "armLeft", root: new Vector3(x: -0.55f, y: 1.5f, z: 0f), mid: new Vector3(x: -0.75f, y: 1.1f, z: 0f), tip: new Vector3(x: -0.8f, y: 0.65f, z: 0f), material: 2);
+        DefineLimb(scene: scene, name: "armRight", root: new Vector3(x: 0.55f, y: 1.5f, z: 0f), mid: new Vector3(x: 0.75f, y: 1.1f, z: 0f), tip: new Vector3(x: 0.8f, y: 0.65f, z: 0f), material: 2);
+        DefineLimb(scene: scene, name: "legLeft", root: new Vector3(x: -0.28f, y: 0.75f, z: 0f), mid: new Vector3(x: -0.3f, y: 0.4f, z: 0f), tip: new Vector3(x: -0.3f, y: 0.05f, z: 0f), material: 4);
+        DefineLimb(scene: scene, name: "legRight", root: new Vector3(x: 0.28f, y: 0.75f, z: 0f), mid: new Vector3(x: 0.3f, y: 0.4f, z: 0f), tip: new Vector3(x: 0.3f, y: 0.05f, z: 0f), material: 4);
 
         // The walk-pair convention: creator.gait's own ellipse-sweep math, invoked on the "leg" name prefix so
         // legLeft/legRight (the first/second half of the 2-member match set) land half a cycle apart — a
@@ -169,7 +169,7 @@ internal static class FlagshipCreations {
     private static int PlaceNamed(CreatorScene scene, string name, AvatarPrimitive type, Vector3 position, Vector3 scale, int material, Quaternion? rotation = null, float onion = 0f) {
         scene.Deselect();
 
-        var steps = (((int)type - (int)scene.GhostType) + CreatorScene.PrimitiveCount) % CreatorScene.PrimitiveCount;
+        var steps = ((((int)type - (int)scene.GhostType) + CreatorScene.PrimitiveCount) % CreatorScene.PrimitiveCount);
 
         for (var step = 0; (step < steps); step++) {
             scene.CyclePrimitive(direction: 1);
@@ -192,7 +192,7 @@ internal static class FlagshipCreations {
 
         scene.Place();
 
-        _ = scene.Select(idOrName: placedId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        _ = scene.Select(idOrName: placedId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
         _ = scene.RenameSelected(name: name);
         scene.Deselect();
 
@@ -204,7 +204,7 @@ internal static class FlagshipCreations {
     // (Quaternion.CreateFromAxisAngle(UnitY, angle)) for the fins, so this decomposes that back to an exact yaw
     // degrees value instead of pretending to support the general axis-angle case no flagship needs.
     private static void ApplyGhostRotation(CreatorScene scene, Quaternion rotation) {
-        var angle = (2f * MathF.Atan2(rotation.Y, rotation.W));
+        var angle = (2f * MathF.Atan2(x: rotation.W, y: rotation.Y));
 
         scene.SetTargetRotation(yawDegrees: (angle * (180f / MathF.PI)), pitchDegrees: 0f, rollDegrees: 0f);
     }
@@ -216,16 +216,16 @@ internal static class FlagshipCreations {
     // Defines a "limb" (2-bone) chain from three FRESH shapes placed at the given root/mid/tip — small unit spheres
     // acting as joints, exactly what a player would place before linking them into a chain via the RIG page.
     private static void DefineLimb(CreatorScene scene, string name, Vector3 root, Vector3 mid, Vector3 tip, int material) {
-        var rootId = PlaceNamed(scene: scene, name: $"{name}Root", type: AvatarPrimitive.Capsule, position: root, scale: new Vector3(0.26f), material: material);
-        var midId = PlaceNamed(scene: scene, name: $"{name}Mid", type: AvatarPrimitive.Capsule, position: mid, scale: new Vector3(0.22f), material: material);
-        var tipId = PlaceNamed(scene: scene, name: $"{name}Tip", type: AvatarPrimitive.Sphere, position: tip, scale: new Vector3(0.2f), material: material);
+        var rootId = PlaceNamed(scene: scene, name: $"{name}Root", type: AvatarPrimitive.Capsule, position: root, scale: new Vector3(value: 0.26f), material: material);
+        var midId = PlaceNamed(scene: scene, name: $"{name}Mid", type: AvatarPrimitive.Capsule, position: mid, scale: new Vector3(value: 0.22f), material: material);
+        var tipId = PlaceNamed(scene: scene, name: $"{name}Tip", type: AvatarPrimitive.Sphere, position: tip, scale: new Vector3(value: 0.2f), material: material);
 
         _ = scene.DefineChain(
             name: name,
             shapeIdsOrNames: [
-                rootId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                midId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                tipId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                rootId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                midId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                tipId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
             ],
             kind: CreatorChainState.KindLimb
         );
@@ -249,7 +249,6 @@ internal static class FlagshipCreations {
         SelectGoal(scene: scene, chainName: chainName);
         _ = scene.SetTargetPosition(position: goal);
     }
-
     private static void RestoreChainGoal(CreatorScene scene, string chainName, Vector3 goal) {
         SelectGoal(scene: scene, chainName: chainName);
         _ = scene.SetTargetPosition(position: goal);

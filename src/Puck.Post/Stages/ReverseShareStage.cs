@@ -94,7 +94,7 @@ internal sealed class ReverseShareStage : IPostStage {
             InstanceHandle: deviceContext.Instance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
             SharedHandle: sharedHandle,
-            UsageFlags: (VulkanImageUsageFlags.Storage | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource),
+            UsageFlags: VulkanImageUsageFlags.Storage | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource,
             Width: RenderSize
         ));
 

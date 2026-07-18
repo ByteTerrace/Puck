@@ -48,7 +48,7 @@ if (Test-Path $radvSrc) {
 }
 
 # GPU microcode: the kernel preloads \amdgpu\vangogh_*.bin from the ESP and feeds it to the PSP
-# during bring-up (stage (d) of docs/gfx103-bringup-spec.md).
+# during PSP firmware initialization; see docs/gfx103-bringup-spec.md.
 $fwSrc = Join-Path $proj "..\..\amdgpu\firmware"
 if (Test-Path $fwSrc) {
     $fwDst = Join-Path $Target "amdgpu"

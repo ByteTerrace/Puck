@@ -1,4 +1,4 @@
-# Platform display kinds (surfaces & windows)
+# Platform display kinds
 
 Puck separates **surfaces** (the Vulkan `VkSurfaceKHR` and its `NativeSurfaceBinding`) from
 **windows** (`INativeWindow` and its native backends). A window produces a
@@ -41,9 +41,10 @@ compiles everywhere.
 
 ## Verification
 
-- **Windows:** `dotnet run tools/Tools.cs -- validate` — runs the Win32 path through the
-  determinism gate and confirms the cross-platform code compiles under
-  warnings-as-errors. The Linux/Switch paths are not exercised on Windows.
+- **All platforms:** `dotnet build Puck.slnx -c Release` validates the managed
+  contracts and platform-specific compilation under warnings-as-errors.
+- **Windows:** run the engine or demo with the default `Win32` display kind.
+  The Linux and Switch paths are not exercised by this run.
 - **Linux / Steam Deck:** run with `NativeWindowOptions.DisplayKind = Xcb`, then `Wayland`,
   through the `WindowProbeRunner` smoke loop (show → poll → first-paint autoclose). The
   Wayland backend's hand-built xdg-shell glue and event dispatch are expected to need

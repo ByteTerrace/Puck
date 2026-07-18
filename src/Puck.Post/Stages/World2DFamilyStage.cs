@@ -36,52 +36,52 @@ internal sealed class World2DFamilyStage : IPostStage {
     // hex ring), and a Subtraction carves a Star out of a RoundedRectangle (a new primitive as BOTH base and cutter).
     internal static SdfProgram BuildFamilyScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.55f, 0.6f)));
-        var slate = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.45f, 0.5f, 0.72f)));
-        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.82f, 0.62f, 0.26f), Specular: 0.5f, Shininess: 48f));
-        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.8f, 0.24f)));
-        var coral = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.45f, 0.32f)));
-        var lime = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.45f, 0.8f, 0.3f)));
-        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.55f, 0.35f, 0.85f), Specular: 0.6f, Shininess: 64f));
-        var cream = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.85f, 0.7f), Emissive: 0.6f));
-        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.7f, 0.68f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.55f, z: 0.6f)));
+        var slate = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.45f, y: 0.5f, z: 0.72f)));
+        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.82f, y: 0.62f, z: 0.26f), Specular: 0.5f, Shininess: 48f));
+        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.8f, z: 0.24f)));
+        var coral = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.45f, z: 0.32f)));
+        var lime = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.45f, y: 0.8f, z: 0.3f)));
+        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.55f, y: 0.35f, z: 0.85f), Specular: 0.6f, Shininess: 64f));
+        var cream = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.85f, z: 0.7f), Emissive: 0.6f));
+        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.7f, z: 0.68f)));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // --- Extruded prisms (front row) ---
             // A plaque with a star punched through it (Subtraction between two new primitives, same chain/centre).
             .ResetPoint()
-            .Translate(offset: new Vector3(-2.0f, 0.75f, 0.2f))
+            .Translate(offset: new Vector3(x: -2.0f, y: 0.75f, z: 0.2f))
             .RoundedRectangle(halfWidth: 0.5f, halfHeight: 0.6f, cornerRadius: 0.12f, lift: SdfLift.Extrude, liftAmount: 0.25f, material: slate)
             .Star(points: 5, radius: 0.34f, sharpness: 2.6f, lift: SdfLift.Extrude, liftAmount: 0.35f, material: cream, blend: SdfBlendOp.Subtraction)
             // A hexagonal nut (regular-polygon prism).
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.8f, 0.6f, 0.2f))
+            .Translate(offset: new Vector3(x: -0.8f, y: 0.6f, z: 0.2f))
             .RegularPolygon(sides: 6, radius: 0.5f, lift: SdfLift.Extrude, liftAmount: 0.28f, material: brass)
             // A star badge.
             .ResetPoint()
-            .Translate(offset: new Vector3(0.5f, 0.66f, 0.2f))
+            .Translate(offset: new Vector3(x: 0.5f, y: 0.66f, z: 0.2f))
             .Star(points: 5, radius: 0.55f, sharpness: 2.6f, lift: SdfLift.Extrude, liftAmount: 0.25f, material: gold)
             // A keystone (trapezoid prism).
             .ResetPoint()
-            .Translate(offset: new Vector3(1.75f, 0.6f, 0.2f))
+            .Translate(offset: new Vector3(x: 1.75f, y: 0.6f, z: 0.2f))
             .Trapezoid(bottomHalfWidth: 0.5f, topHalfWidth: 0.28f, halfHeight: 0.5f, lift: SdfLift.Extrude, liftAmount: 0.28f, material: coral)
             // --- Revolved solids (back row) ---
             // A spheroid (ellipse revolved) — the exact one that earns a cull bound the approximate Ellipsoid forfeits.
             .ResetPoint()
-            .Translate(offset: new Vector3(-1.7f, 1.4f, -1.7f))
+            .Translate(offset: new Vector3(x: -1.7f, y: 1.4f, z: -1.7f))
             .Ellipse(semiX: 0.55f, semiY: 0.82f, lift: SdfLift.Revolve, liftAmount: 0f, material: lime)
             // A cup / frustum (trapezoid revolved).
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.3f, 1.35f, -1.7f))
+            .Translate(offset: new Vector3(x: -0.3f, y: 1.35f, z: -1.7f))
             .Trapezoid(bottomHalfWidth: 0.6f, topHalfWidth: 0.32f, halfHeight: 0.5f, lift: SdfLift.Revolve, liftAmount: 0f, material: violet)
             // A puck (rounded rectangle revolved).
             .ResetPoint()
-            .Translate(offset: new Vector3(1.1f, 1.35f, -1.7f))
+            .Translate(offset: new Vector3(x: 1.1f, y: 1.35f, z: -1.7f))
             .RoundedRectangle(halfWidth: 0.55f, halfHeight: 0.3f, cornerRadius: 0.18f, lift: SdfLift.Revolve, liftAmount: 0f, material: cream)
             // A faceted ring: a hexagon revolved at an OFFSET → a polygonal torus (exercises revolve with offset > 0).
             .ResetPoint()
-            .Translate(offset: new Vector3(2.4f, 1.4f, -1.7f))
+            .Translate(offset: new Vector3(x: 2.4f, y: 1.4f, z: -1.7f))
             .RegularPolygon(sides: 6, radius: 0.24f, lift: SdfLift.Revolve, liftAmount: 0.5f, material: teal)
             .Build();
     }

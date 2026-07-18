@@ -1,31 +1,7 @@
 using Puck.SdfVm;
+using Puck.SdfVm.Views;
 
 namespace Puck.Demo.Overworld;
-
-/// <summary>The priority BAND a <see cref="ScreenSlotLedger"/> claim is made at — lower numeric value always wins a
-/// contested slot. Ties (two claims at the same band wanting the same slot) resolve to whichever claimed FIRST (the
-/// ledger never reshuffles an existing same-band holder for a same-band challenger).
-/// <para>
-/// These are ABSTRACT bands, not a menu of named consumers — a claimant's identity lives entirely in its own owner
-/// token (see <see cref="ScreenSlotLedger.Claim"/>), never in this axis, so adding a new kind of screen claimant
-/// never means adding a new enum member here. The three bands are spaced 10 apart so a future caller can insert an
-/// intermediate band (e.g. <c>(Anchored + Overlay) / 2</c>) without renumbering anything, though in practice most
-/// claimants fit one of the three as-is.
-/// </para></summary>
-public enum ScreenSlotPriority {
-    /// <summary>A claim tied to a fixed, load-bearing identity that owns its preferred slot outright — never evicted
-    /// by anything in a lower band; only another <see cref="Anchored"/> claim for the SAME slot (a same-band race,
-    /// e.g. a re-boot) can replace it. The room's booted cabinets claim this band.</summary>
-    Anchored = 0,
-    /// <summary>A session-scoped claim that temporarily borrows or overrides an <see cref="Anchored"/> slot for as
-    /// long as some mode is active, then releases it — the room's creator-mode preview easel claims this band (the
-    /// settled index-3 borrow contract).</summary>
-    Overlay = 10,
-    /// <summary>Any other floating, lowest-priority claim (an incidental diegetic screen, a placeable camera feed) —
-    /// the first band evicted/degraded when the room runs out of slots. No concrete claimant of this source's own
-    /// uses this band today; it exists for future callers wired through <see cref="ScreenSlotLedger.Claim"/>.</summary>
-    Ambient = 20,
-}
 
 /// <summary>One resolved claim: the slot the ledger granted, and whether it is the claim's own requested slot or a
 /// degraded fallback (<see cref="Slot"/> differs from the index the caller asked for, or no slot was available at
@@ -83,7 +59,7 @@ public readonly record struct ScreenSlotClaim(int Slot, bool Degraded) {
 /// </para>
 /// <para>
 /// Preferred-slot claims (a claimant wanting one EXACT index — e.g. a booted cabinet wanting its own console index)
-/// pass a fixed <paramref name="preferredSlot"/>; a floating claim (no exact index in mind) passes -1 and is seated
+/// pass a fixed <c>preferredSlot</c>; a floating claim (no exact index in mind) passes -1 and is seated
 /// at any FREE slot only, LOWEST INDEX FIRST (a floating claim never evicts), or dropped when none remain — so
 /// allocation stays deterministic frame over frame for a fixed set of registered claims.
 /// </para>
@@ -135,7 +111,7 @@ public sealed class ScreenSlotLedger {
             (preferredSlot != -1) &&
             ((preferredSlot < 0) || (preferredSlot >= SdfProgramBuilder.MaxScreenSurfaces))
         ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(preferredSlot), message: $"A preferred slot must be -1 or 0..{SdfProgramBuilder.MaxScreenSurfaces - 1}.");
+            throw new ArgumentOutOfRangeException(paramName: nameof(preferredSlot), message: $"A preferred slot must be -1 or 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}.");
         }
 
         for (var index = 0; (index < m_registrations.Count); index++) {
@@ -220,7 +196,7 @@ public sealed class ScreenSlotLedger {
     private int CompareByPriorityThenPosition(int left, int right) {
         var byPriority = m_registrations[left].Priority.CompareTo(m_registrations[right].Priority);
 
-        return (byPriority != 0) ? byPriority : left.CompareTo(right);
+        return ((byPriority != 0) ? byPriority : left.CompareTo(value: right));
     }
 
     // Seats one claim (called in priority order, lowest tier/highest priority first): a preferred slot already held
@@ -270,5 +246,5 @@ public sealed class ScreenSlotLedger {
         return new ScreenSlotClaim(Slot: -1, Degraded: true);
     }
     private static string Describe(object ownerToken) =>
-        ownerToken.ToString() ?? ownerToken.GetType().Name;
+        (ownerToken.ToString() ?? ownerToken.GetType().Name);
 }

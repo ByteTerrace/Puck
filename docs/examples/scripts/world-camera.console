@@ -1,0 +1,43 @@
+# Puck.Demo console-driving SMOKE: world.camera places a diegetic camera eye, world.wire routes it (and a booted
+# cabinet's guest viewport) onto screen surfaces using the wiring grammar (guest:N / camera:N).
+#
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 20 < docs/examples/scripts/world-camera.console
+# Run (PowerShell): Get-Content docs/examples/scripts/world-camera.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 20
+# No captures — this asserts what the engine SAYS (the bracketed [verb: …] echoes), not what it renders.
+
+state
+
+# Boot console 1 (console 0 auto-takes-over to a connected pad on the first frame — see
+# smoke-overworld-control.console's note — so console 1 is the one a script can freely wire).
+cart 1 1
+boot 1
+step 30
+settle
+state
+
+# Place a world-space camera eye at the lot center — its narration itself now speaks the reworded grammar
+# ("wire its feed with world.wire camera:0 <screen>").
+world.camera add
+world.camera list
+
+# Wire screen 2 to console 1's GUEST viewport (was brick:1 pre-reform) and screen 3 to the placed eye's CAMERA feed
+# (was feed:0 pre-reform).
+world.wire guest:1 2
+world.wire camera:0 3
+world.wire list
+
+# Let the newly-wired camera feed render at least once (the diegetic one-frame-lag feed pool ticks on the produced
+# frame — see CameraFeedPool's remarks) before reading state.
+step 10
+settle
+state
+
+# Clear one wire (falls back to the flat/procedural default) and delete the eye — both echo their own result, and a
+# deleted eye's dangling wire is cleared automatically (WorldScene.DeleteCamera's remarks).
+world.wire clear 2
+world.camera del 0
+world.wire list
+world.camera list
+
+# The final state read is the pass condition.
+state

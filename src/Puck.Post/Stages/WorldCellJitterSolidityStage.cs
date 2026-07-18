@@ -11,7 +11,7 @@ namespace Puck.Post;
 /// Tier-C stage — the <see cref="SdfOp.CellJitter"/> SOLIDITY proof, the gate cross-backend PARITY cannot provide:
 /// CellJitter's per-cell <c>round()</c> fold is a HARD boundary where the hashed offset jumps by up to <c>jitter</c>
 /// between adjacent cells, so the folded field is DISCONTINUOUS across every cell wall and OVERESTIMATES true distance
-/// there. Sphere-traced OVER-RELAXED (omega 1.2) WITHOUT the D1 Lipschitz step clamp, a grazing ray APPROACHING a blade
+/// there. Sphere-traced OVER-RELAXED (omega 1.2) WITHOUT the Lipschitz step clamp, a grazing ray APPROACHING a blade
 /// near a cell wall reads that overestimate and steps clean OVER the whole blade — so the blade is MISSED, not merely
 /// punctured. Because both backends run the identical field, a parity diff of two equally-eroded renders passes while
 /// both are wrong; this stage renders the jittered field on ONE backend (the Vulkan host) and asserts the blades survive.
@@ -79,11 +79,11 @@ internal sealed class WorldCellJitterSolidityStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildJitteredBladesScene() {
         var builder = new SdfProgramBuilder();
-        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.55f, 0.1f), Emissive: 0.7f));
+        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.55f, z: 0.1f), Emissive: 0.7f));
 
         return builder
-            .CellJitter(spacing: new Vector3(1.9f, 6.0f, 6.0f), jitter: 0.25f, seed: 24601u, tumble: 0.6f, materialVariants: 0)
-            .Box(halfExtents: new Vector3(0.30f, 0.30f, 0.12f), round: 0.02f, material: brass)
+            .CellJitter(spacing: new Vector3(x: 1.9f, y: 6.0f, z: 6.0f), jitter: 0.25f, seed: 24601u, tumble: 0.6f, materialVariants: 0)
+            .Box(halfExtents: new Vector3(x: 0.30f, y: 0.30f, z: 0.12f), round: 0.02f, material: brass)
             .Build();
     }
 
@@ -95,7 +95,7 @@ internal sealed class WorldCellJitterSolidityStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var artifactPath = Path.Combine(context.ArtifactsDirectory, "world-cell-jitter-solidity.png");
+        var artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-cell-jitter-solidity.png");
 
         PngEncoder.Write(height: (int)Height, path: artifactPath, rgba: pixels, width: (int)Width);
 
@@ -126,7 +126,6 @@ internal sealed class WorldCellJitterSolidityStage : IPostStage {
 
         return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"the CellJitter blade lattice (jitter 0.25, tumble 0.6, stepScale {program.StepScale:0.###}) renders SOLID on the Vulkan host: {solidPixels} blade pixels, {enclosedHoles} enclosed ({(enclosedFraction * 100.0):0.###}%) — the reach-independent boundary step clamp holds the over-relaxed march conservative across every cell wall");
     }
-
     private static int CountSolid(byte[] pixels) {
         var count = 0;
 
@@ -190,15 +189,14 @@ internal sealed class WorldCellJitterSolidityStage : IPostStage {
 
         return enclosed;
     }
-
     private static SdfFrame BuildFrame(SdfProgram program) {
         // An ELEVATED, offset camera looking along the floating row: its rays travel low and oblique across the lattice,
         // crossing SEVERAL cell boundaries in X and Z at grazing angles — exactly the condition that makes the
         // round()-boundary jitter jump overstep. A face-on camera staring into one cell would never cross a boundary and
         // never hole, hiding the very defect this stage guards.
         var camera = CameraSnapshot.LookAt(
-            position: new Vector3(6.0f, 2.2f, 1.0f),
-            target: new Vector3(-6.0f, 0.0f, -0.2f),
+            position: new Vector3(x: 6.0f, y: 2.2f, z: 1.0f),
+            target: new Vector3(x: -6.0f, y: 0.0f, z: -0.2f),
             fieldOfViewRadians: FieldOfViewRadians,
             viewportWidth: Width,
             viewportHeight: Height

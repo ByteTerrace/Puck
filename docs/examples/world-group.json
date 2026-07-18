@@ -1,0 +1,67 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "scene": {
+        "materials": [
+            { "albedo": [0.46, 0.48, 0.54] },
+            { "albedo": [0.60, 0.35, 0.90] },
+            { "albedo": [0.90, 0.27, 0.21] }
+        ],
+        "objects": [
+            {
+                "shape": "plane",
+                "normal": [0.0, 1.0, 0.0],
+                "offset": 1.0,
+                "material": 0
+            },
+            {
+                "shape": "group",
+                "blend": "Union",
+                "objects": [
+                    {
+                        "shape": "box",
+                        "ops": [{ "op": "translate", "offset": [-0.25, 0.0, 0.0] }],
+                        "halfExtents": [0.42, 0.42, 0.42],
+                        "round": 0.0,
+                        "material": 1
+                    },
+                    {
+                        "shape": "box",
+                        "ops": [
+                            { "op": "translate", "offset": [0.25, 0.0, 0.0] },
+                            { "op": "rotate", "rotation": [0.0, 0.3826834, 0.0, 0.9238795] }
+                        ],
+                        "halfExtents": [0.42, 0.42, 0.42],
+                        "round": 0.0,
+                        "material": 1,
+                        "blend": "ChamferIntersection",
+                        "smooth": 0.16
+                    }
+                ]
+            },
+            {
+                "shape": "sphere",
+                "ops": [{ "op": "translate", "offset": [1.6, 0.1, -1.2] }],
+                "radius": 0.5,
+                "material": 2,
+                "blend": "SmoothUnion",
+                "smooth": 0.3
+            }
+        ]
+    },
+    "viewports": [
+        {
+            "source": {
+                "$type": "orbit",
+                "angularSpeed": 0.4,
+                "azimuth": 0.0,
+                "fieldOfView": 60.0,
+                "height": 1.6,
+                "radius": 5.2,
+                "target": [0.0, 0.1, 0.0]
+            },
+            "region": [0.0, 0.0, 1.0, 1.0]
+        }
+    ],
+    "graph": { "$type": "world", "produce": "vulkan" }
+}

@@ -24,8 +24,8 @@ internal static class ChromaTitleBake {
 
     // Background palette slots 1..7 — slot 0 belongs to the gameplay palette the play screen renders with.
     private const int PaletteBudget = 7;
-    private const int NativeWidth = 160;
     private const int NativeHeight = 144;
+    private const int NativeWidth = 160;
     private const float TanHalfFov = 0.41421356f; // tan(45°/2)
 
     /// <summary>Bakes the title scene and installs it as the cartridge's title art. Never throws.</summary>
@@ -74,7 +74,7 @@ internal static class ChromaTitleBake {
     private static BakeView TitleView(BakeStyle style) {
         var camera = CameraSnapshot.LookAt(
             fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-            position: new Vector3(0f, 0f, ((NativeHeight / 16f) / TanHalfFov)),
+            position: new Vector3(x: 0f, y: 0f, z: ((NativeHeight / 16f) / TanHalfFov)),
             target: Vector3.Zero,
             viewportHeight: (uint)(NativeHeight * style.SupersampleFactor),
             viewportWidth: (uint)(NativeWidth * style.SupersampleFactor)
@@ -88,18 +88,18 @@ internal static class ChromaTitleBake {
     // bold dither as REPEATED 4×4 patterns, which the tile dedupe then collapses.
     private static SdfProgram BuildTitleScene() {
         var builder = new SdfProgramBuilder();
-        var sky = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.08f, 0.08f, 0.16f), Emissive: 1.4f));
-        var wellWall = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.16f, 0.17f, 0.28f), Emissive: 1.0f));
-        var red = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.93f, 0.38f, 0.41f), Emissive: 1.2f));
-        var green = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.47f, 0.82f, 0.51f), Emissive: 1.2f));
-        var blue = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.43f, 0.67f, 0.94f), Emissive: 1.2f));
-        var faller = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.98f, 0.50f, 0.52f), Emissive: 1.6f));
+        var sky = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.08f, y: 0.08f, z: 0.16f), Emissive: 1.4f));
+        var wellWall = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.16f, y: 0.17f, z: 0.28f), Emissive: 1.0f));
+        var red = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.93f, y: 0.38f, z: 0.41f), Emissive: 1.2f));
+        var green = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.47f, y: 0.82f, z: 0.51f), Emissive: 1.2f));
+        var blue = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.43f, y: 0.67f, z: 0.94f), Emissive: 1.2f));
+        var faller = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.98f, y: 0.50f, z: 0.52f), Emissive: 1.6f));
 
         // Backdrop + the two well walls flanking a 8-unit-wide well.
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0f, -2f)).Box(halfExtents: new Vector3(30f, 20f, 0.5f), round: 0f, material: sky);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-5.5f, -3.0f, 0f)).Box(halfExtents: new Vector3(0.5f, 6.0f, 0.2f), round: 0f, material: wellWall);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(5.5f, -3.0f, 0f)).Box(halfExtents: new Vector3(0.5f, 6.0f, 0.2f), round: 0f, material: wellWall);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, -8.5f, 0f)).Box(halfExtents: new Vector3(6.0f, 0.5f, 0.2f), round: 0f, material: wellWall);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0f, z: -2f)).Box(halfExtents: new Vector3(x: 30f, y: 20f, z: 0.5f), round: 0f, material: sky);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -5.5f, y: -3.0f, z: 0f)).Box(halfExtents: new Vector3(x: 0.5f, y: 6.0f, z: 0.2f), round: 0f, material: wellWall);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 5.5f, y: -3.0f, z: 0f)).Box(halfExtents: new Vector3(x: 0.5f, y: 6.0f, z: 0.2f), round: 0f, material: wellWall);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -8.5f, z: 0f)).Box(halfExtents: new Vector3(x: 6.0f, y: 0.5f, z: 0.2f), round: 0f, material: wellWall);
 
         // The settled blocks: unit cells stacked in the well, colours interleaved so no course reads as one slab, and
         // a one-column gap under the falling block.
@@ -123,8 +123,8 @@ internal static class ChromaTitleBake {
             for (var level = 0; (level < columns[column].Length); level++) {
                 _ = builder
                     .ResetPoint()
-                    .Translate(offset: new Vector3(x, (-7.5f + level), 0f))
-                    .Box(halfExtents: new Vector3(0.5f, 0.5f, 0.2f), round: 0f, material: materials[columns[column][level]]);
+                    .Translate(offset: new Vector3(x: x, y: (-7.5f + level), z: 0f))
+                    .Box(halfExtents: new Vector3(x: 0.5f, y: 0.5f, z: 0.2f), round: 0f, material: materials[columns[column][level]]);
             }
         }
 
@@ -132,8 +132,8 @@ internal static class ChromaTitleBake {
         // against the locked stack.
         var tilt = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-14f * (MathF.PI / 180f)));
 
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-0.5f, 3.6f, 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(0.9f, 0.9f, 0.2f), round: 0.08f, material: faller);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-0.2f, 6.2f, 0f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (10f * (MathF.PI / 180f)))).Box(halfExtents: new Vector3(0.5f, 0.5f, 0.2f), round: 0.08f, material: red);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.5f, y: 3.6f, z: 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 0.9f, y: 0.9f, z: 0.2f), round: 0.08f, material: faller);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.2f, y: 6.2f, z: 0f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (10f * (MathF.PI / 180f)))).Box(halfExtents: new Vector3(x: 0.5f, y: 0.5f, z: 0.2f), round: 0.08f, material: red);
 
         return builder.Build();
     }

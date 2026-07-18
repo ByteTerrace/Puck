@@ -38,7 +38,7 @@ combined whole and the ByteTerrace-authored glue are under the Puck license.
 - **License:** MIT — each header carries the full MIT permission text verbatim (AMD copyright
   for the `asic_reg`/ip-offset headers; X11/MIT for the DRM UAPI headers). Verified per-file
   at vendoring time.
-- **Use:** register offsets/masks and IP base tables for the Van Gogh (Steam Deck LCD) GPU
+- **Use:** register offsets/masks and IP base tables for the Steam Deck gfx1033 GPU
   bring-up, plus the `amdgpu_drm.h`/`drm.h` UAPI contract the DRM shim implements. Vendored
   **verbatim**, upstream directory layout preserved. The kernel's GPL `.c` driver logic is
   **not** vendored — reference-only, clean-roomed per

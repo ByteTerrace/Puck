@@ -48,7 +48,14 @@ public static class SecureRandom {
     /// <param name="minimum">The inclusive lower bound of the interval.</param>
     /// <returns>A random value greater than or equal to <paramref name="minimum"/> and less than or equal to <paramref name="maximum"/>.</returns>
     /// <remarks>When the interval spans the full range of <typeparamref name="T"/>, a single unbounded draw is returned directly.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maximum"/> is less than <paramref name="minimum"/>.</exception>
     public static T NextUInt<T>(T maximum, T minimum) where T : struct, IBinaryInteger<T>, IUnsignedNumber<T> {
+        // Guard the inverted interval: an unsigned (maximum - minimum) would wrap to a huge span and silently draw an
+        // unrelated value, so reject it rather than honour a range that was never asked for.
+        if (maximum < minimum) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(maximum), actualValue: maximum, message: "The maximum must be greater than or equal to the minimum.");
+        }
+
         var range = (maximum - minimum);
 
         return ((range != T.AllBitsSet)

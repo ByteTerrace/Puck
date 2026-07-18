@@ -17,7 +17,6 @@ public static class ContentPetname {
         "Thistle", "Clover", "Heather", "Bramble", "Lichen", "Fungus", "Sprout", "Blossom",
         "Comet", "Nebula", "Meteor", "Aurora", "Zenith", "Horizon", "Tundra", "Glacier",
     ];
-
     private static readonly string[] SecondWords = [
         "Lantern", "Compass", "Anchor", "Beacon", "Kettle", "Ladder", "Basket", "Barrel",
         "Satchel", "Locket", "Whistle", "Buckle", "Bobbin", "Spindle", "Chisel", "Mallet",
@@ -28,7 +27,6 @@ public static class ContentPetname {
         "Thimble", "Needle", "Loom", "Spool", "Quill", "Parchment", "Scroll", "Envelope",
         "Nugget", "Pebblestone", "Shard", "Crystal", "Ingot", "Medallion", "Trinket", "Charm",
     ];
-
     private static readonly string[] NumberWords = [
         "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
         "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",

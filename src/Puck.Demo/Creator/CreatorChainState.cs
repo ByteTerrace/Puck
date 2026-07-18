@@ -79,10 +79,10 @@ public sealed record CreatorChainState(
         ArgumentNullException.ThrowIfNull(rotations);
 
         var boneCount = (shapeIds.Count - 1);
-        var lengths = new float[Math.Max(boneCount, 0)];
+        var lengths = new float[Math.Max(val1: boneCount, val2: 0)];
 
         for (var index = 0; (index < lengths.Length); index++) {
-            lengths[index] = Vector3.Distance(positions[index], positions[index + 1]);
+            lengths[index] = Vector3.Distance(value1: positions[index], value2: positions[(index + 1)]);
         }
 
         // Rest offset/orientation: with no separate "joint" authoring affordance, the joint IS the shape's own rest
@@ -122,8 +122,9 @@ public sealed record CreatorChainState(
 
         var root = RestJoints[0];
 
-        if (string.Equals(Kind, KindLimb, StringComparison.OrdinalIgnoreCase) && (count == 3)) {
+        if (string.Equals(a: Kind, b: KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase) && (count == 3)) {
             var restDirection = ((BoneLengths[0] > 0f) ? ((RestJoints[1] - RestJoints[0]) / BoneLengths[0]) : Vector3.UnitY);
+
             var (mid, tip) = CreatorIk.SolveLimb(root: root, goal: Goal, lenA: BoneLengths[0], lenB: BoneLengths[1], pole: Pole, restDirection: restDirection);
 
             poses[0] = PoseJoint(index: 0, joint: root, solvedDirection: RestBoneDirection(index: 0));
@@ -163,9 +164,9 @@ public sealed record CreatorChainState(
         poses[0] = PoseJoint(index: 0, joint: root, solvedDirection: ((joints.Length > 0) ? SafeDirection(from: root, to: joints[0], fallback: RestBoneDirection(index: 0)) : RestBoneDirection(index: 0)));
 
         for (var index = 1; (index < count); index++) {
-            var joint = joints[index - 1];
+            var joint = joints[(index - 1)];
             var next = ((index < joints.Length) ? joints[index] : joint);
-            var direction = ((index < count - 1) ? SafeDirection(from: joint, to: next, fallback: RestBoneDirection(index: index)) : RestBoneDirection(index: Math.Max(index - 1, 0)));
+            var direction = ((index < (count - 1)) ? SafeDirection(from: joint, to: next, fallback: RestBoneDirection(index: index)) : RestBoneDirection(index: Math.Max(val1: (index - 1), val2: 0)));
 
             poses[index] = PoseJoint(index: index, joint: joint, solvedDirection: direction);
         }
@@ -196,9 +197,8 @@ public sealed record CreatorChainState(
 
         var length = BoneLengths[boneIndex];
 
-        return ((length > 0.0001f) ? ((RestJoints[boneIndex + 1] - RestJoints[boneIndex]) / length) : Vector3.UnitY);
+        return ((length > 0.0001f) ? ((RestJoints[(boneIndex + 1)] - RestJoints[boneIndex]) / length) : Vector3.UnitY);
     }
-
     private static Vector3 SafeDirection(Vector3 from, Vector3 to, Vector3 fallback) {
         var delta = (to - from);
         var length = delta.Length();

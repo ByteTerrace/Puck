@@ -210,11 +210,11 @@ internal static class VolleyVerify {
         Assert(condition: (slot >= 0), message: "the BCA entry is missing from the high-score mirror");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[(slot * VolleyProtocol.HiScoreEntryByteCount) + 3 + index] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
+            Assert(condition: (mirror[(((slot * VolleyProtocol.HiScoreEntryByteCount) + 3) + index)] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
         }
 
         for (var entry = 1; (entry < VolleyProtocol.HiScoreEntryCount); entry++) {
-            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {entry - 1} < entry {entry})");
+            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {(entry - 1)} < entry {entry})");
         }
 
         return (driver.ExportExternalRam(), mirror, ReadBcdValue(bytes: finalScore), slot);
@@ -233,10 +233,10 @@ internal static class VolleyVerify {
         var sum = 0;
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        var stored = (sram[SaveModule.HeaderByteCount + payloadLength] | (sram[SaveModule.HeaderByteCount + payloadLength + 1] << 8));
+        var stored = sram[(SaveModule.HeaderByteCount + payloadLength)] | (sram[((SaveModule.HeaderByteCount + payloadLength) + 1)] << 8);
 
         Assert(condition: (sum == stored), message: $"the stored checksum 0x{stored:X4} does not match the independently computed 0x{sum:X4}");
         Assert(condition: payload.SequenceEqual(other: expectedMirror), message: "the persisted payload does not match the in-game mirror");
@@ -256,7 +256,7 @@ internal static class VolleyVerify {
 
         for (var entry = 0; (entry < VolleyProtocol.HiScoreEntryCount); entry++) {
             for (var index = 0; (index < 3); index++) {
-                payload[(entry * VolleyProtocol.HiScoreEntryByteCount) + 3 + index] = 0x00;
+                payload[(((entry * VolleyProtocol.HiScoreEntryByteCount) + 3) + index)] = 0x00;
             }
         }
 
@@ -300,9 +300,9 @@ internal static class VolleyVerify {
         Assert(condition: (FindEntry(mirror: mirror, initials: "AAA") == 0), message: "the beating score did not insert at slot 0");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[3 + index] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
-            Assert(condition: (mirror[VolleyProtocol.HiScoreEntryByteCount + index] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
-            Assert(condition: (mirror[VolleyProtocol.HiScoreEntryByteCount + 3 + index] == 0x00), message: "the old leader's score did not shift down intact");
+            Assert(condition: (mirror[(3 + index)] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
+            Assert(condition: (mirror[(VolleyProtocol.HiScoreEntryByteCount + index)] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
+            Assert(condition: (mirror[((VolleyProtocol.HiScoreEntryByteCount + 3) + index)] == 0x00), message: "the old leader's score did not shift down intact");
         }
     }
 
@@ -311,7 +311,7 @@ internal static class VolleyVerify {
     private static void AssertCorruptionRecovery(byte[] rom, byte[] sram) {
         var corrupted = (byte[])sram.Clone();
 
-        corrupted[SaveModule.HeaderByteCount + 5] ^= 0x5A;
+        corrupted[(SaveModule.HeaderByteCount + 5)] ^= 0x5A;
 
         using var driver = new Driver(rom: rom, externalRam: corrupted);
 
@@ -387,7 +387,6 @@ internal static class VolleyVerify {
         reboot.RunFrames(buttons: JoypadButtons.None, frames: 8);
         Assert(condition: IsRegionClear(driver: reboot), message: "a fresh boot from a save carrying a share did not re-clear the win region (a stale save could auto-fire the gate)");
     }
-
     private static bool IsRegionClear(Driver driver) {
         var region = driver.ReadVictoryRegion();
 
@@ -435,17 +434,16 @@ internal static class VolleyVerify {
         payload.CopyTo(array: sram, index: SaveModule.HeaderByteCount);
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        sram[SaveModule.HeaderByteCount + payload.Length] = (byte)(sum & 0xFF);
-        sram[SaveModule.HeaderByteCount + payload.Length + 1] = (byte)((sum >> 8) & 0xFF);
+        sram[(SaveModule.HeaderByteCount + payload.Length)] = (byte)(sum & 0xFF);
+        sram[((SaveModule.HeaderByteCount + payload.Length) + 1)] = (byte)((sum >> 8) & 0xFF);
 
         return sram;
     }
-
     private static byte[] ReadMirror(Driver driver) {
-        var mirror = new byte[VolleyProtocol.HiScoreEntryCount * VolleyProtocol.HiScoreEntryByteCount];
+        var mirror = new byte[(VolleyProtocol.HiScoreEntryCount * VolleyProtocol.HiScoreEntryByteCount)];
 
         for (var index = 0; (index < mirror.Length); index++) {
             mirror[index] = driver.Read(address: (ushort)(VolleyProtocol.HiScoreMirror + index));
@@ -453,13 +451,12 @@ internal static class VolleyVerify {
 
         return mirror;
     }
-
     private static int FindEntry(byte[] mirror, string initials) {
         for (var entry = 0; (entry < VolleyProtocol.HiScoreEntryCount); entry++) {
             var matches = true;
 
             for (var index = 0; (index < 3); index++) {
-                if (mirror[(entry * VolleyProtocol.HiScoreEntryByteCount) + index] != TextModule.TileFor(fontTileBase: VolleyTables.FontTileBase, character: initials[index])) {
+                if (mirror[((entry * VolleyProtocol.HiScoreEntryByteCount) + index)] != TextModule.TileFor(fontTileBase: VolleyTables.FontTileBase, character: initials[index])) {
                     matches = false;
 
                     break;
@@ -473,13 +470,11 @@ internal static class VolleyVerify {
 
         return -1;
     }
-
     private static int EntryScore(byte[] mirror, int entry) {
         var offset = ((entry * VolleyProtocol.HiScoreEntryByteCount) + 3);
 
-        return ReadBcdValue(bytes: [mirror[offset], mirror[offset + 1], mirror[offset + 2]]);
+        return ReadBcdValue(bytes: [mirror[offset], mirror[(offset + 1)], mirror[(offset + 2)]]);
     }
-
     private static int ReadBcd(Driver driver, ushort address, int byteCount) {
         var bytes = new byte[byteCount];
 
@@ -489,17 +484,15 @@ internal static class VolleyVerify {
 
         return ReadBcdValue(bytes: bytes);
     }
-
     private static int ReadBcdValue(byte[] bytes) {
         var value = 0;
 
         foreach (var packed in bytes) {
-            value = ((value * 100) + (((packed >> 4) & 0x0F) * 10) + (packed & 0x0F));
+            value = (((value * 100) + (((packed >> 4) & 0x0F) * 10)) + (packed & 0x0F));
         }
 
         return value;
     }
-
     private static void Assert(bool condition, string message) {
         if (!condition) {
             throw new InvalidOperationException(message: $"volley ROM verification failed: {message}");
@@ -530,11 +523,8 @@ internal static class VolleyVerify {
         }
 
         public byte Read(ushort address) => m_bus.ReadByte(address: address);
-
-        public int ReadWide(ushort address) => (Read(address: address) | (Read(address: (ushort)(address + 1)) << 8));
-
+        public int ReadWide(ushort address) => Read(address: address) | (Read(address: (ushort)(address + 1)) << 8);
         public void Write(ushort address, byte value) => m_bus.WriteByte(address: address, value: value);
-
         public void RunFrames(JoypadButtons buttons, int frames) {
             for (var frame = 0; (frame < frames); frame++) {
                 m_joypad.SetButtons(pressed: buttons);
@@ -543,12 +533,10 @@ internal static class VolleyVerify {
 
             VerifyMachineSettle.SettleOutOfOamDma(machine: m_machine.Machine, cpu: m_cpu, label: "volley");
         }
-
         public void Press(JoypadButtons buttons) {
             RunFrames(buttons: buttons, frames: 2);
             RunFrames(buttons: JoypadButtons.None, frames: 2);
         }
-
         public bool RunUntilState(byte state, JoypadButtons buttons, int maxFrames) {
             for (var frame = 0; (frame < maxFrames); frame++) {
                 RunFrames(buttons: buttons, frames: 1);
@@ -560,7 +548,6 @@ internal static class VolleyVerify {
 
             return false;
         }
-
         public byte[] ExportExternalRam() => m_cartridge.ExportExternalRam();
 
         // The top-16 SRAM win region, read exactly as the host's meta gate does (ReadExternalRam by absolute offset —
@@ -572,7 +559,6 @@ internal static class VolleyVerify {
 
             return region;
         }
-
         public void Dispose() => m_machine.Dispose();
     }
 }

@@ -1,0 +1,6471 @@
+#:property EnforceCodeStyleInBuild=false
+#:property AnalysisLevel=none
+// proof.cs — Puck.World's PROOF SUITE + THE EXPO, one .NET 10 file-based app.
+//
+//   dotnet run src/Puck.World/scripts/proof.cs -- <subcommand> [options]
+//
+// Subcommands:
+//   generate --kind parade|flood|flight|hop|expo [--population N] [--seed S] [--out PATH] [kind opts]
+//       Emits a timed STDIN corpus (the PS-compatible @<t> text, plus the #sweep-at directive).
+//   run [--corpus PATH | --kind K] [--headless] [--loop] [--quality low|medium|high]
+//       [--width W] [--height H] [--no-build] [--tolerance T] [--yaw-tolerance Y]
+//       [--min-fps FPS] [--log PATH] [--world-arg PATH]
+//       The feeder: builds, launches Puck.World, paces the corpus into stdin over reader
+//       threads, marks each sweep, asserts (closed-form #expect / band / separation where
+//       present; report-only otherwise), and asserts the last rolling world.fps sample is at
+//       least 60 avg/worst by default. Pass --min-fps 0 to disable the performance assertion.
+//       --world-arg forwards a --world <path> argument to the launched child (e.g. to force the
+//       baked-default fallback with a nonexistent path). DEFAULT kind when nothing is specified: expo.
+//   compare --reference A --candidate B [--tolerance T] [--yaw-tolerance Y]
+//       Rerun byte/near-identity of two transcripts' final sweeps + dispersion statistics.
+//   worlddoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       Phase 1 exit-bar proofs for the world document (puck.world.def.v1): (a) the ouroboros
+//       gate — EVERY checked-in Assets/worlds/*.world.json (default, kart-remap, expo) round-trips
+//       world.save byte-for-byte, twice over, so a save that now folds session state (§2.1) stays
+//       idempotent on a fresh boot; (b) baked-default parity — a checked-in-world run and a
+//       missing-world (baked-default fallback) run of the same short hop corpus compare
+//       byte-identical, and the loud "[world] definition: baked default (...)" line appears only
+//       in the fallback run.
+//   mutate [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       Phase 2a exit-bar proof for the mutation vocabulary: (a) a scripted world.kit.tune / world.undo /
+//       world.save round-trip over stdin, asserting the journal-length dirty counter at each step and the
+//       server's loud accept/undo lines; (b) rejection honesty — world.kit.remove on the defaultSeatKit is
+//       rejected loudly and the document is unchanged; (c) survival — relaunching with --world <the saved
+//       file> boots it (the "[world] definition:" line) and the saved JSON carries the tuned value. The
+//       protocol-version handshake is proven by the implementing session, not re-covered here (no scripted
+//       Join path exists over stdin without inventing a debug verb).
+//   grants [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       Phase 2b exit-bar proof for principals/capability grants (§2.7 criterion 4): (a) world.addon.set mounts an
+//       autopilot WorldAddonRow (data-only — the driver mounts enabled addon rows only at BOOT) and world.save writes
+//       it; (b) relaunching --world <the saved file> asserts the "[world.addon: mounted autopilot ...]" boot line,
+//       then world.grant addon:autopilot drive body:<n> exclusive is asserted to move the granted body (two
+//       player.where samples a second apart); (c) world.revoke mid-run asserts the edge-latched
+//       "[world.grant denied: ...]" line and that the body then holds perfectly still (two more samples, identical);
+//       (d) denied-mutation honesty — world.revoke console mutate section:kits makes world.kit.tune fail loudly with
+//       world.status's dirty counter unchanged, and re-granting makes the same command apply.
+//   bindings [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       Phase 3 exit-bar proof for the player document + layered binding resolution (§2.4): (a) session A boots the
+//       REAL local player-document store fresh, asserts the engine-default composed mapping (player.bindings), live-
+//       rebinds keyboard.e -> player.forward (player.bind), and profile.save folds+persists it into the boot profile
+//       (revision bumps, read back through profile.doc); (b) session B relaunches and asserts the rebind survived and
+//       the revision did not bump again on a plain boot; (c) session C boots --world kart-remap.world.json and asserts
+//       the world's bindingOverlays entry merges over the engine default (gamepad.buttonEast -> player.primary), then
+//       world.bindings.remove live-recomposes it back to the engine default; (d) a synthesized pre-Phase-3
+//       puck.world.profiles.v1 profiles.json migrates once at boot (the loud "... retired puck.world.profiles.v1 ..."
+//       line, world/player.json + world/local.json written, profiles/profiles.json deleted, profile.list showing the
+//       migrated names); (e) a synthesized Phase 3 single-file profiles/player.json migrates once at boot the other
+//       migration path (the loud "... Phase 3 single-file layout ..." line, the split world/ layout written,
+//       profiles/player.json deleted). There is no CLI override for the player-document store path (see
+//       WorldProfileStore), so this proof backs up the owner's REAL world/ + profiles/ subtrees (whole directories,
+//       byte-for-byte) before every session and restores them in a finally — the real catalog is never destroyed.
+//   storage [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       Phase 4 exit-bar proof for cloud-readiness (§2.5, local backend only): (a) a fresh boot against the REAL
+//       cleared local store asserts storage.status's honest baseline (tier local authoritative/cloud unwired,
+//       identity declined, endpoint none, a present catalog revision + version token), then the cheapest
+//       revision-bumping verb (profile.set speed 7 1) is asserted to bump the revision, change the version token, and
+//       flip dirty on; the on-disk split layout (world/player.json + world/profiles/*.json + world/local.json) is
+//       asserted present; (b) a relaunch against the same store asserts storage.status reports the same persisted
+//       revision; (c) a boot with --user-id <a valid oid Guid> asserts the "identity explicit override" echo; (d) a
+//       boot with --user-id not-a-guid asserts the declining echo. Backs up + restores the REAL world/ + profiles/
+//       subtrees exactly like the bindings proof — the real catalog is never destroyed.
+//   expo-author [--no-build] [--width W] [--height H] [--exit-after-seconds N] [--out PATH]
+//       Regenerates the second world reproducibly (Phase 5 §2.6). Boots a baked-default Puck.World, feeds the checked-in
+//       scripts/expo-world.txt authoring session (a new kit row + retunings + a table policy, a warmer four-pillar scene,
+//       staggered spawns, three asset-free screens) over stdin, then world.save-s to Assets/worlds/expo.world.json
+//       (--out overrides) — the trailing save FOLDS the live render levers + census into the document (§2.1). The
+//       artifact and this script are the checked-in, reproducible pair; NEVER hand-edit the JSON.
+//   record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]
+//       Native-capture proof (the recording arc). Boots Puck.World (a real GPU window — the tap reads each captured
+//       frame back to CPU pixels through the SDF engine, so a live present surface is required), asserts capture.status
+//       reads idle, capture.start arms a RecordingSession (echoing the codec that landed and any device declines — a
+//       mic privacy denial is a PASS path), lets ~S seconds of the autonomous crowd move, capture.stop finalizes, and
+//       then walks the produced container: the EBML doc type matches the landed codec (webm for AV1, matroska for the
+//       H.264 fallback), the audio track is present (loopback in a headless-ish run may be silence — track presence, not
+//       loudness, is asserted), a video track is present when video landed, the file is non-trivial, and capture.status
+//       reads idle again. --out copies the artifact somewhere for a real player to open. Asserts the overlay row is
+//       present in the recording document used (the capture-only text the owner asked for).
+//   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
+//       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
+//       from the default's (kits 6 screens 3 vs kits 5 screens 5), a visibly different game with zero code; (c) the
+//       write-back SLICE not covered by the mutate proof — a live SESSION lever (world.population count) is changed, the
+//       world is saved to a temp copy, and a relaunch --world <that copy> boots a census whose networkPlayers survived
+//       the fold (the saved JSON carries it, world.population echoes it); (d) the third fold dimension positively — a
+//       runtime screen.insert of a real ROM makes world.status name the 'screens' drift and world.save fold the live
+//       machine into that screen row's Machine source. Expo's own ouroboros is covered by worlddoc.
+//
+// Puck.World simulation is fixed-point and host-ticked. These are World-owned live proofs (paced console journeys and
+// closed-form tableaux), while the shared fixed-step/snapshot/numerics contracts are enforced by Puck.Post Tier A.
+//
+// Zero NuGet dependencies; invariant culture everywhere numbers are formatted/parsed; the child
+// process is never orphaned (Ctrl+C + ProcessExit + try/finally all kill it).
+
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+
+return ProofApp.Run(args: args);
+
+// ============================================================================================
+// Entry + argument plumbing
+// ============================================================================================
+
+static class ProofApp {
+    public static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    // The full 6DOF where echo: p<N> pos=(x, y, z) yaw=ddd° pitch=ddd° roll=ddd°. The three-number
+    // pos never matches the roster's planar two-number world.players glance, so only the sweep is captured.
+    public static readonly Regex WhereEcho = new(
+        options: RegexOptions.Compiled,
+        pattern: @"p(\d+) pos=\((-?[0-9.]+), (-?[0-9.]+), (-?[0-9.]+)\) yaw=(\d+)\D+pitch=(\d+)\D+roll=(\d+)");
+
+    public static int Run(string[] args) {
+        if (args.Length == 0) {
+            Console.Error.WriteLine(value: "usage: proof.cs <generate|run|compare> [options]  (run --help for subcommands)");
+
+            return 2;
+        }
+
+        var subcommand = args[0];
+        var opts = new ArgMap(args: args.AsSpan(start: 1).ToArray());
+
+        try {
+            return subcommand switch {
+                "generate" => Generators.RunGenerate(opts: opts),
+                "run" => Feeder.RunFeeder(opts: opts),
+                "compare" => Comparer.RunCompare(opts: opts),
+                "screens" => ScreensProof.RunScreens(opts: opts),
+                "worlddoc" => WorldDocProof.RunWorldDoc(opts: opts),
+                "mutate" => MutateProof.RunMutate(opts: opts),
+                "grants" => GrantsProof.RunGrants(opts: opts),
+                "bindings" => BindingsProof.RunBindings(opts: opts),
+                "storage" => StorageProof.RunStorage(opts: opts),
+                "expo-author" => ExpoProof.RunExpoAuthor(opts: opts),
+                "expodoc" => ExpoProof.RunExpoDoc(opts: opts),
+                "record" => RecordProof.RunRecord(opts: opts),
+                "--help" or "-h" or "help" => PrintHelp(),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record)"),
+            };
+        }
+        catch (ArgException ex) {
+            Console.Error.WriteLine(value: $"[proof] argument error: {ex.Message}");
+
+            return 2;
+        }
+    }
+
+    static int PrintHelp() {
+        Console.WriteLine(value: "proof.cs — Puck.World proof suite");
+        Console.WriteLine(value: "  generate --kind parade|flood|flight|hop|expo [--population N] [--seed S] [--out PATH]");
+        Console.WriteLine(value: "  run [--corpus PATH | --kind K] [--headless] [--loop] [--quality low|medium|high]");
+        Console.WriteLine(value: "      [--width W] [--height H] [--no-build] [--tolerance T] [--yaw-tolerance Y]");
+        Console.WriteLine(value: "      [--min-fps FPS] [--log PATH] [--world-arg PATH]  (default min-fps 60; 0 disables it)");
+        Console.WriteLine(value: "  compare --reference A --candidate B [--tolerance T] [--yaw-tolerance Y]");
+        Console.WriteLine(value: "  screens [--width W] [--height H] [--no-build] [--rom PATH]");
+        Console.WriteLine(value: "  worlddoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  mutate [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  grants [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  bindings [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  storage [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  expo-author [--no-build] [--width W] [--height H] [--exit-after-seconds N] [--out PATH]");
+        Console.WriteLine(value: "  expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  record [--no-build] [--width W] [--height H] [--seconds S] [--out PATH]");
+
+        return 0;
+    }
+
+    public static int Fail(string message) {
+        Console.Error.WriteLine(value: $"[proof] {message}");
+
+        return 2;
+    }
+
+    // Invariant number formatting — the ONE place doubles become text: a period decimal separator, no thousands
+    // separator, and up to `format`'s digit count with trailing zeros trimmed, so output is stable across locales
+    // and diffable byte-for-byte between runs.
+    public static string F(double value, string format = "0.###") {
+        return value.ToString(format: format, provider: Inv);
+    }
+
+    // The script's own source path at compile time, so the repo root resolves regardless of CWD.
+    public static string ScriptPath([CallerFilePath] string path = "") {
+        return path;
+    }
+
+    // repoRoot = .../src/Puck.World/scripts/proof.cs -> up three dirs. Falls back to CWD-walk if the
+    // caller path is unavailable (some publish scenarios), searching for src/Puck.World/Puck.World.csproj.
+    public static string RepoRoot() {
+        var scriptPath = ScriptPath();
+
+        if (!string.IsNullOrEmpty(value: scriptPath) && File.Exists(path: scriptPath)) {
+            var scriptsDir = Path.GetDirectoryName(path: scriptPath)!;
+
+            return Path.GetFullPath(path: Path.Combine(path1: scriptsDir, path2: "..", path3: "..", path4: ".."));
+        }
+
+        var dir = new DirectoryInfo(path: Directory.GetCurrentDirectory());
+
+        while (dir is not null) {
+            if (File.Exists(path: Path.Combine(path1: dir.FullName, path2: "src", path3: "Puck.World", path4: "Puck.World.csproj"))) {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
+    }
+}
+sealed class ArgException(string message) : Exception(message);
+
+// A hand-rolled parser: "--key value" pairs plus boolean "--flag" switches.
+sealed class ArgMap {
+    static readonly HashSet<string> BooleanFlags = new(comparer: StringComparer.Ordinal) {
+        "--headless", "--loop", "--no-build",
+    };
+    readonly Dictionary<string, string> m_values = new(comparer: StringComparer.Ordinal);
+    readonly HashSet<string> m_flags = new(comparer: StringComparer.Ordinal);
+
+    public ArgMap(string[] args) {
+        for (var i = 0; (i < args.Length); i++) {
+            var token = args[i];
+
+            if (!token.StartsWith(comparisonType: StringComparison.Ordinal, value: "--")) {
+                throw new ArgException(message: $"expected an option (got '{token}')");
+            }
+
+            if (BooleanFlags.Contains(item: token)) {
+                _ = m_flags.Add(item: token);
+
+                continue;
+            }
+
+            if ((i + 1) >= args.Length) {
+                throw new ArgException(message: $"option '{token}' expects a value");
+            }
+
+            m_values[token] = args[++i];
+        }
+    }
+
+    public bool Flag(string name) {
+        return m_flags.Contains(item: name);
+    }
+    public string? Get(string name) {
+        return (m_values.TryGetValue(key: name, value: out var value) ? value : null);
+    }
+    public string GetRequired(string name) {
+        return (Get(name: name) ?? throw new ArgException(message: $"missing required option '{name}'"));
+    }
+    public int GetInt(string name, int fallback) {
+        var raw = Get(name: name);
+
+        if (raw is null) {
+            return fallback;
+        }
+
+        return (int.TryParse(provider: ProofApp.Inv, result: out var value, s: raw, style: NumberStyles.Integer)
+            ? value
+            : throw new ArgException(message: $"option '{name}' expects an integer (got '{raw}')"));
+    }
+    public double GetDouble(string name, double fallback) {
+        var raw = Get(name: name);
+
+        if (raw is null) {
+            return fallback;
+        }
+
+        return (double.TryParse(provider: ProofApp.Inv, result: out var value, s: raw, style: NumberStyles.Float)
+            ? value
+            : throw new ArgException(message: $"option '{name}' expects a number (got '{raw}')"));
+    }
+}
+
+// ============================================================================================
+// Corpus model + parser
+// ============================================================================================
+
+readonly record struct TimedCommand(double T, string Command, bool InLoop);
+readonly record struct PoseExpect(int N, double X, double Y, double Z, int Yaw, int Pitch, int Roll);
+readonly record struct BandExpect(int N, char Axis, double Lo, double Hi, string Class);
+readonly record struct Separation(char Axis, string ClassA, string ClassB, double MinGap);
+
+// One timed pose-readback point: the player.where lines at time T, plus whatever assertions attach.
+sealed class Sweep {
+    public double T;
+    public string Name = "final";
+    public readonly List<PoseExpect> PoseExpects = new();
+    public readonly List<BandExpect> BandExpects = new();
+    public readonly List<Separation> Separations = new();
+
+    public bool HasAsserts => ((PoseExpects.Count > 0) || (BandExpects.Count > 0) || (Separations.Count > 0));
+}
+sealed class Corpus {
+    public readonly List<TimedCommand> Commands = new();
+    public readonly List<Sweep> Sweeps = new();
+    public double CycleEnd;
+    public double LoopStartT = double.MaxValue;
+    public bool HasLoop;
+}
+static class CorpusParser {
+    static readonly Regex TimedLine = new(options: RegexOptions.Compiled, pattern: @"^@([0-9.]+)\s+(.+)$");
+    static readonly Regex ExpectLine = new(
+        options: RegexOptions.Compiled,
+        pattern: @"^#expect\s+p(\d+)\s+(-?[0-9.]+)\s+(-?[0-9.]+)\s+(-?[0-9.]+)\s+(\d+)\s+(\d+)\s+(\d+)$");
+    static readonly Regex BandLine = new(
+        options: RegexOptions.Compiled,
+        pattern: @"^#expect-band\s+p(\d+)\s+([xyz])\s+(-?[0-9.]+)\s+(-?[0-9.]+)(?:\s+(\S+))?$");
+    static readonly Regex SeparationLine = new(
+        options: RegexOptions.Compiled,
+        pattern: @"^#expect-separation\s+([xyz])\s+(\S+)\s+(\S+)\s+(-?[0-9.]+)$");
+    static readonly Regex SweepAtLine = new(options: RegexOptions.Compiled, pattern: @"^#sweep-at\s+([0-9.]+)(?:\s+(\S+))?$");
+    static readonly Regex CycleEndLine = new(options: RegexOptions.Compiled, pattern: @"^#cycle-end\s+([0-9.]+)");
+
+    static double D(string text) {
+        return double.Parse(provider: ProofApp.Inv, s: text, style: NumberStyles.Float);
+    }
+    static int I(string text) {
+        return int.Parse(provider: ProofApp.Inv, s: text, style: NumberStyles.Integer);
+    }
+
+    public static Corpus Parse(IEnumerable<string> lines) {
+        var corpus = new Corpus();
+        var loopSeen = false;
+
+        // Assertions attach to the OPEN sweep (from a #sweep-at). Before the first #sweep-at they land in
+        // this default bucket, adopted by the synthesized final sweep (parade/flight/flood compatibility).
+        var defaultPoses = new List<PoseExpect>();
+        var defaultBands = new List<BandExpect>();
+        var defaultSeparations = new List<Separation>();
+        Sweep? current = null;
+
+        foreach (var raw in lines) {
+            var line = raw.Trim();
+
+            if (line.Length == 0) {
+                continue;
+            }
+
+            var timed = TimedLine.Match(input: line);
+
+            if (timed.Success) {
+                var t = D(text: timed.Groups[1].Value);
+
+                corpus.Commands.Add(item: new TimedCommand(T: t, Command: timed.Groups[2].Value.Trim(), InLoop: loopSeen));
+
+                if (loopSeen && (t < corpus.LoopStartT)) {
+                    corpus.LoopStartT = t;
+                }
+
+                continue;
+            }
+
+            var sweepAt = SweepAtLine.Match(input: line);
+
+            if (sweepAt.Success) {
+                current = new Sweep {
+                    T = D(text: sweepAt.Groups[1].Value),
+                    Name = (sweepAt.Groups[2].Success ? sweepAt.Groups[2].Value : "sweep"),
+                };
+                corpus.Sweeps.Add(item: current);
+
+                continue;
+            }
+
+            var expect = ExpectLine.Match(input: line);
+
+            if (expect.Success) {
+                var pose = new PoseExpect(
+                    N: I(text: expect.Groups[1].Value),
+                    X: D(text: expect.Groups[2].Value),
+                    Y: D(text: expect.Groups[3].Value),
+                    Z: D(text: expect.Groups[4].Value),
+                    Yaw: I(text: expect.Groups[5].Value),
+                    Pitch: I(text: expect.Groups[6].Value),
+                    Roll: I(text: expect.Groups[7].Value));
+
+                (current?.PoseExpects ?? defaultPoses).Add(item: pose);
+
+                continue;
+            }
+
+            var band = BandLine.Match(input: line);
+
+            if (band.Success) {
+                var bandExpect = new BandExpect(
+                    N: I(text: band.Groups[1].Value),
+                    Axis: band.Groups[2].Value[0],
+                    Lo: D(text: band.Groups[3].Value),
+                    Hi: D(text: band.Groups[4].Value),
+                    Class: (band.Groups[5].Success ? band.Groups[5].Value : "default"));
+
+                (current?.BandExpects ?? defaultBands).Add(item: bandExpect);
+
+                continue;
+            }
+
+            var separation = SeparationLine.Match(input: line);
+
+            if (separation.Success) {
+                var sep = new Separation(
+                    Axis: separation.Groups[1].Value[0],
+                    ClassA: separation.Groups[2].Value,
+                    ClassB: separation.Groups[3].Value,
+                    MinGap: D(text: separation.Groups[4].Value));
+
+                (current?.Separations ?? defaultSeparations).Add(item: sep);
+
+                continue;
+            }
+
+            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "#loop-start")) {
+                loopSeen = true;
+
+                continue;
+            }
+
+            var cycleEnd = CycleEndLine.Match(input: line);
+
+            if (cycleEnd.Success) {
+                corpus.CycleEnd = D(text: cycleEnd.Groups[1].Value);
+            }
+
+            // Any other #... line is a comment.
+        }
+
+        corpus.HasLoop = loopSeen;
+
+        // No explicit #sweep-at but there ARE player.where lines: synthesize ONE final sweep at the last
+        // where time and hand it the default assertion bucket (the parade/flight/flood single-sweep shape).
+        if (corpus.Sweeps.Count == 0) {
+            var whereTimes = corpus.Commands
+                .Where(predicate: c => c.Command.StartsWith(comparisonType: StringComparison.Ordinal, value: "player.where"))
+                .Select(selector: c => c.T)
+                .ToList();
+
+            if ((whereTimes.Count > 0) || (defaultPoses.Count > 0)) {
+                var sweep = new Sweep {
+                    T = ((whereTimes.Count > 0) ? whereTimes.Max() : double.MaxValue),
+                    Name = "final",
+                };
+
+                sweep.PoseExpects.AddRange(collection: defaultPoses);
+                sweep.BandExpects.AddRange(collection: defaultBands);
+                sweep.Separations.AddRange(collection: defaultSeparations);
+                corpus.Sweeps.Add(item: sweep);
+            }
+        }
+        else {
+            // Explicit sweeps present but some assertions arrived before the first #sweep-at (unusual) — fold
+            // them into the earliest sweep so nothing is silently dropped.
+            if ((defaultPoses.Count > 0) || (defaultBands.Count > 0) || (defaultSeparations.Count > 0)) {
+                var first = corpus.Sweeps.OrderBy(keySelector: s => s.T).First();
+
+                first.PoseExpects.AddRange(collection: defaultPoses);
+                first.BandExpects.AddRange(collection: defaultBands);
+                first.Separations.AddRange(collection: defaultSeparations);
+            }
+        }
+
+        corpus.Sweeps.Sort(comparison: (a, b) => a.T.CompareTo(value: b.T));
+
+        if (corpus.CycleEnd <= 0.0) {
+            corpus.CycleEnd = ((corpus.Commands.Count > 0) ? (corpus.Commands.Max(selector: c => c.T) + 1.0) : 0.0);
+        }
+
+        return corpus;
+    }
+}
+
+// ============================================================================================
+// Generators — one method per kind
+// ============================================================================================
+
+readonly record struct GenOptions(int Population, int Seed, double DurationSeconds, int ControlRate,
+    double ArenaRadius, double CorrectionInterval);
+static class Generators {
+    // WorldBody defaults (profileless population stand-ins ride these) — the ONE source of the derived constants.
+    public const double MoveSpeed = 4.0;
+    public const double TurnSpeed = 2.5;
+
+    public static int RunGenerate(ArgMap opts) {
+        var kind = (opts.Get(name: "--kind") ?? "expo");
+        var genOptions = new GenOptions(
+            Population: Math.Clamp(opts.GetInt(fallback: 124, name: "--population"), 1, 124),
+            Seed: opts.GetInt(fallback: 128, name: "--seed"),
+            DurationSeconds: opts.GetDouble(fallback: 60.0, name: "--duration"),
+            ControlRate: Math.Clamp(opts.GetInt(fallback: 5, name: "--control-rate"), 2, 20),
+            ArenaRadius: opts.GetDouble(fallback: 40.0, name: "--arena"),
+            CorrectionInterval: opts.GetDouble(fallback: 6.0, name: "--correction-interval"));
+
+        var lines = Generate(kind: kind, o: genOptions);
+        var outPath = opts.Get(name: "--out");
+
+        if (outPath is not null) {
+            File.WriteAllLines(contents: lines, path: outPath);
+            Console.WriteLine(value: $"[generate] {kind} corpus written: {outPath} ({lines.Count} lines, population {genOptions.Population})");
+        }
+        else {
+            foreach (var line in lines) {
+                Console.WriteLine(value: line);
+            }
+        }
+
+        return 0;
+    }
+    public static List<string> Generate(string kind, GenOptions o) {
+        return kind switch {
+            "parade" => Parade(population: o.Population),
+            "flood" => Flood(o: o),
+            "flight" => Flight(population: o.Population),
+            "hop" => Hop(population: o.Population),
+            "expo" => ExpoBuilder.Build(population: o.Population, seed: o.Seed),
+            _ => throw new ArgException(message: $"unknown kind '{kind}' (expected parade|flood|flight|hop|expo)"),
+        };
+    }
+
+    // --- shared math (the codebase-wide dir(yaw) = (-sin yaw, -cos yaw) convention) ---
+
+    // Yaw (degrees, [0,360)) whose facing direction is the given unit direction: yaw = atan2(-dx, -dz).
+    public static double YawDegrees(double dirX, double dirZ) {
+        var degrees = (Math.Atan2(x: -dirZ, y: -dirX) * (180.0 / Math.PI));
+
+        return ((degrees < 0.0) ? (degrees + 360.0) : degrees);
+    }
+
+    // An angle in degrees normalized to [0,360) then rounded — matches the where echo's CompassDegrees + '0'.
+    public static int CompassInt(double degrees) {
+        var norm = (((degrees % 360.0) + 360.0) % 360.0);
+
+        return (((int)Math.Round(a: norm)) % 360);
+    }
+
+    static void Emit(List<string> lines, double t, string command) {
+        lines.Add(item: $"@{ProofApp.F(format: "0.0#", value: t)} {command}");
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // PARADE — the byte-exact machinery proof.
+    // ----------------------------------------------------------------------------------------
+    public static List<string> Parade(int population) {
+        var lines = new List<string>();
+
+        const double marchAt = 4.0, marchSeconds = 4.0;
+        const double ringAt = 10.0, ringSeconds = 8.0;
+        const double teamsAt = 20.5, teamsSeconds = 5.0;
+        const double evidenceAt = 27.0, sweepAt = 28.0, endAt = 29.0;
+
+        lines.Add(item: "# puck.world corpus v1 — the 128-player STDIN proof (generated by proof.cs generate --kind parade)");
+        lines.Add(item: $"# population {population}; one cycle spans {ProofApp.F(format: "0.0", value: endAt)}s");
+        Emit(command: "world.timing on", lines: lines, t: 0.0);
+        Emit(command: $"world.population {population} idle", lines: lines, t: 0.2);
+        lines.Add(item: "#loop-start");
+
+        // Wave A: THE MARCH — 12-wide phalanx, rows every 2 u from z=-14, marching +Z (yaw 180).
+        const int columns = 12;
+
+        for (var i = 0; (i < population); i++) {
+            var n = (i + 5);
+            var column = (i % columns);
+            var row = (i / columns);
+            var rowWidth = Math.Min(val1: columns, val2: (population - (row * columns)));
+            var x = ((column - ((rowWidth - 1) / 2.0)) * 2.0);
+            var z = (-14.0 - (2.0 * row));
+
+            Emit(lines, marchAt, $"player.warp {ProofApp.F(x)} {ProofApp.F(z)} {n}");
+            Emit(command: $"player.face 180 {n}", lines: lines, t: marchAt);
+            Emit(lines, marchAt, $"player.run 1 0 0 {ProofApp.F(marchSeconds)} {n}");
+        }
+
+        Emit(command: "world.fps", lines: lines, t: ((marchAt + marchSeconds) + 1.0));
+
+        // Wave B: THE RING — radius 22, tangent heading, orbital turn = -(v/r)/turnSpeed.
+        const double ringRadius = 22.0;
+        var orbitTurn = -((MoveSpeed / ringRadius) / TurnSpeed);
+
+        for (var i = 0; (i < population); i++) {
+            var n = (i + 5);
+            var phi = (((i * 2.0) * Math.PI) / population);
+            var x = (ringRadius * Math.Cos(d: phi));
+            var z = (ringRadius * Math.Sin(a: phi));
+            var yaw = YawDegrees(dirX: -Math.Sin(a: phi), dirZ: Math.Cos(d: phi));
+
+            Emit(lines, ringAt, $"player.warp {ProofApp.F(x)} {ProofApp.F(z)} {n}");
+            Emit(lines, ringAt, $"player.face {ProofApp.F(format: "0.##", value: yaw)} {n}");
+            Emit(lines, ringAt, $"player.run 1 0 {ProofApp.F(orbitTurn)} {ProofApp.F(ringSeconds)} {n}");
+        }
+
+        Emit(command: "world.fps", lines: lines, t: ((ringAt + ringSeconds) + 1.0));
+
+        // Wave C: THE CONVERGENCE — four wedge teams at 45/135/225/315°, radius 30 -> 10 (closed-form).
+        const double outerRadius = 30.0;
+        var innerRadius = (outerRadius - (4.0 * teamsSeconds));
+        var perTeam = (int)Math.Ceiling(a: (population / 4.0));
+        var expects = new List<string>();
+
+        for (var i = 0; (i < population); i++) {
+            var n = (i + 5);
+            var team = (i / perTeam);
+            var member = (i % perTeam);
+            var teamSize = Math.Min(val1: perTeam, val2: (population - (team * perTeam)));
+            var angleDegrees = ((45.0 + (90.0 * team)) + ((member - ((teamSize - 1) / 2.0)) * 2.0));
+            var angle = (angleDegrees * (Math.PI / 180.0));
+            var x = (outerRadius * Math.Cos(d: angle));
+            var z = (outerRadius * Math.Sin(a: angle));
+            var yaw = YawDegrees(dirX: -Math.Cos(d: angle), dirZ: -Math.Sin(a: angle));
+
+            Emit(lines, teamsAt, $"player.warp {ProofApp.F(x)} {ProofApp.F(z)} {n}");
+            Emit(lines, teamsAt, $"player.face {ProofApp.F(format: "0.##", value: yaw)} {n}");
+            Emit(lines, teamsAt, $"player.run 1 0 0 {ProofApp.F(teamsSeconds)} {n}");
+
+            var expectedX = (innerRadius * Math.Cos(d: angle));
+            var expectedZ = (innerRadius * Math.Sin(a: angle));
+
+            expects.Add(item: ($"#expect p{n} {ProofApp.F(format: "0.00", value: expectedX)} 0.00 {ProofApp.F(format: "0.00", value: expectedZ)} " +
+                $"{ProofApp.F(((int)Math.Round(a: yaw) % 360), "0")} 0 0"));
+        }
+
+        Emit(command: "world.fps", lines: lines, t: evidenceAt);
+        Emit(command: "screen.state 4", lines: lines, t: (evidenceAt + 0.1));
+        Emit(command: "world.gpu", lines: lines, t: (evidenceAt + 0.2));
+
+        for (var i = 0; (i < population); i++) {
+            Emit(command: $"player.where {(i + 5)}", lines: lines, t: sweepAt);
+        }
+
+        lines.AddRange(collection: expects);
+        lines.Add(item: $"#cycle-end {ProofApp.F(format: "0.0", value: endAt)}");
+
+        return lines;
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // FLOOD — the realism twin: a seeded offline human mixture model.
+    // ----------------------------------------------------------------------------------------
+    public static List<string> Flood(GenOptions o) {
+        var lines = new List<string>();
+
+        lines.Add(item: "# puck.world corpus v1 — THE FLOOD (generated by proof.cs generate --kind flood)");
+        lines.Add(item: $"# population {o.Population} | {ProofApp.F(format: "0", value: o.DurationSeconds)}s | {o.ControlRate} Hz control | seed {o.Seed} | arena r={ProofApp.F(o.ArenaRadius)}");
+        lines.Add(item: "# stochastic crowd: no #expect lines — the correctness bar is rerun near-identity (proof.cs compare)");
+        lines.Add(item: "@0.0 world.timing on");
+        lines.Add(item: $"@0.2 world.population {o.Population} idle");
+        lines.Add(item: "@0.3 wire.ack quiet");
+        lines.Add(item: "#loop-start");
+
+        var timed = new List<TimedCommand>();
+        var config = MixtureModel.Arena(radius: o.ArenaRadius);
+
+        for (var i = 0; (i < o.Population); i++) {
+            MixtureModel.GenerateStream(timed, index: i, entity: (i + 5), seed: o.Seed, config: config,
+                streamStart: 1.0, durationSeconds: o.DurationSeconds, controlRate: o.ControlRate,
+                bufferSeconds: 3.0, correctionInterval: o.CorrectionInterval, correctionStagger: (i % 24),
+                withJumps: false, warpAt: 0.5, finalReconcile: false);
+        }
+
+        foreach (var item in timed.OrderBy(keySelector: t => t.T)) {
+            lines.Add(item: $"@{ProofApp.F(format: "0.0##", value: item.T)} {item.Command}");
+        }
+
+        var evidenceAt = ((1.0 + o.DurationSeconds) + 2.5);
+        var sweepAt = (evidenceAt + 1.0);
+
+        lines.Add(item: $"@{ProofApp.F(format: "0.0", value: evidenceAt)} world.fps");
+        lines.Add(item: $"@{ProofApp.F(format: "0.0", value: (evidenceAt + 0.2))} world.gpu");
+
+        for (var i = 0; (i < o.Population); i++) {
+            lines.Add(item: $"@{ProofApp.F(format: "0.0", value: sweepAt)} player.where {(i + 5)}");
+        }
+
+        lines.Add(item: $"#cycle-end {ProofApp.F(format: "0.0", value: (sweepAt + 1.0))}");
+
+        return lines;
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // FLIGHT — the 6DOF proof: ascent, barrel roll, closed-form dive.
+    // ----------------------------------------------------------------------------------------
+    public static List<string> Flight(int population) {
+        var lines = new List<string>();
+
+        const double motionAt = 0.5;
+        const double ascentAt = 3.0, ascentSeconds = 3.0;
+        const double rollAt = 8.0, rollSeconds = 1.5;
+        const double diveAt = 11.5, diveSeconds = 4.0;
+        const double evidenceAt = 17.0, sweepAt = 18.0, endAt = 19.0;
+        const int columns = 12;
+
+        lines.Add(item: "# puck.world corpus v1 — FULL RANGE OF MOTION, the 6DOF flight proof (generated by proof.cs generate --kind flight)");
+        lines.Add(item: $"# population {population}; one cycle spans {ProofApp.F(format: "0.0", value: endAt)}s");
+        Emit(command: "world.timing on", lines: lines, t: 0.0);
+        Emit(command: $"world.population {population} idle", lines: lines, t: 0.2);
+        lines.Add(item: "#loop-start");
+
+        for (var i = 0; (i < population); i++) {
+            Emit(command: $"player.motion free {(i + 5)}", lines: lines, t: motionAt);
+        }
+
+        // Act A: THE ASCENT — ground lattice, each row pitched steeper, flies forward to climb.
+        for (var i = 0; (i < population); i++) {
+            var n = (i + 5);
+            var column = (i % columns);
+            var row = (i / columns);
+            var x = ((column - ((columns - 1) / 2.0)) * 3.0);
+            var z = (-10.0 - (2.0 * row));
+            var climbDeg = (10.0 + ((row % 6) * 4.0));
+
+            Emit(lines, ascentAt, $"player.pose {ProofApp.F(format: "0.##", value: x)} 0 {ProofApp.F(format: "0.##", value: z)} 0 {ProofApp.F(format: "0.#", value: climbDeg)} 0 {n}");
+            Emit(lines, ascentAt, $"player.fly 1 0 0 0 0 0 {ProofApp.F(ascentSeconds)} {n}");
+        }
+
+        Emit(command: "world.fps", lines: lines, t: ((ascentAt + ascentSeconds) + 1.0));
+
+        // Act B: THE ROLL — level at altitude, pure roll (a barrel roll).
+        for (var i = 0; (i < population); i++) {
+            var n = (i + 5);
+            var column = (i % columns);
+            var row = (i / columns);
+            var x = ((column - ((columns - 1) / 2.0)) * 3.0);
+            var z = (-10.0 - (2.0 * row));
+
+            Emit(lines, rollAt, $"player.pose {ProofApp.F(format: "0.##", value: x)} 18 {ProofApp.F(format: "0.##", value: z)} 0 0 0 {n}");
+            Emit(lines, rollAt, $"player.fly 0 0 0 0 0 1 {ProofApp.F(rollSeconds)} {n}");
+        }
+
+        Emit(command: "world.fps", lines: lines, t: ((rollAt + rollSeconds) + 1.0));
+
+        // Act C: THE DIVE — ring at altitude aimed inward + down, straight forward fly (closed-form).
+        const double ringRadius = 30.0, altitude = 22.0, divePitchDeg = -25.0;
+        var expects = new List<string>();
+
+        for (var i = 0; (i < population); i++) {
+            var n = (i + 5);
+            var phi = (((i * 2.0) * Math.PI) / population);
+            var poseX = (ringRadius * Math.Cos(d: phi));
+            var poseZ = (ringRadius * Math.Sin(a: phi));
+            var yawDeg = YawDegrees(dirX: -Math.Cos(d: phi), dirZ: -Math.Sin(a: phi));
+            var rollDeg = (20.0 * Math.Cos(d: phi));
+
+            Emit(lines, diveAt, $"player.pose {ProofApp.F(format: "0.###", value: poseX)} {ProofApp.F(altitude)} {ProofApp.F(format: "0.###", value: poseZ)} {ProofApp.F(format: "0.##", value: yawDeg)} {ProofApp.F(format: "0.#", value: divePitchDeg)} {ProofApp.F(format: "0.##", value: rollDeg)} {n}");
+            Emit(lines, diveAt, $"player.fly 1 0 0 0 0 0 {ProofApp.F(diveSeconds)} {n}");
+
+            var (endX, endY, endZ) = FreeStraightFly(pitchDeg: divePitchDeg, travel: (MoveSpeed * diveSeconds), x: poseX, y: altitude, yawDeg: yawDeg, z: poseZ);
+
+            expects.Add(item: ($"#expect p{n} {ProofApp.F(format: "0.00", value: endX)} {ProofApp.F(format: "0.00", value: endY)} {ProofApp.F(format: "0.00", value: endZ)} " +
+                $"{CompassInt(degrees: yawDeg)} {CompassInt(degrees: divePitchDeg)} {CompassInt(degrees: rollDeg)}"));
+        }
+
+        Emit(command: "world.fps", lines: lines, t: evidenceAt);
+        Emit(command: "world.gpu", lines: lines, t: (evidenceAt + 0.2));
+
+        for (var i = 0; (i < population); i++) {
+            Emit(command: $"player.where {(i + 5)}", lines: lines, t: sweepAt);
+        }
+
+        lines.AddRange(collection: expects);
+        lines.Add(item: $"#cycle-end {ProofApp.F(format: "0.0", value: endAt)}");
+
+        return lines;
+    }
+
+    // Closed-form end of a STRAIGHT forward fly (no angular input) from a pose anchor: pos = anchor +
+    // facing*travel, facing = (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch). Roll does not affect facing.
+    public static (double X, double Y, double Z) FreeStraightFly(double x, double y, double z, double yawDeg, double pitchDeg, double travel) {
+        var yaw = (yawDeg * (Math.PI / 180.0));
+        var pitch = (pitchDeg * (Math.PI / 180.0));
+        var facingX = (-Math.Sin(a: yaw) * Math.Cos(d: pitch));
+        var facingY = Math.Sin(a: pitch);
+        var facingZ = (-Math.Cos(d: yaw) * Math.Cos(d: pitch));
+
+        return ((x + (facingX * travel)), (y + (facingY * travel)), (z + (facingZ * travel)));
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // HOP — the jump action-lane proof. Two #sweep-at sweeps: the mid-air band (a) + variable-height
+    // separation (c), and the landed tableau (b).
+    // ----------------------------------------------------------------------------------------
+    public static List<string> Hop(int population) {
+        var lines = new List<string>();
+
+        // The ported jump kit (WorldBody constants) — the bands are DERIVED from these, never hard-coded.
+        const double actionScale = 0.5;
+        var jumpSpeed = (11.0 * actionScale);   // 5.5 u/s launch
+        var riseGravity = (28.0 * actionScale); // 14 u/s^2 rising
+
+        const double anchorAt = 0.5, jumpAt = 2.0, runSeconds = 0.5, midDelay = 0.20;
+        var midSweepAt = (jumpAt + midDelay);
+        var landedSweepAt = (jumpAt + 1.4);
+        var evidenceAt = (landedSweepAt + 0.4);
+        var endAt = (landedSweepAt + 1.4);
+
+        const int columns = 12;
+        const double fullHoldSeconds = 1.0, tapHoldSeconds = 0.008;
+
+        var fullApex = ((jumpSpeed * jumpSpeed) / (2.0 * riseGravity));
+
+        // Generous mid-air bands (wall-clock delivery jitter shifts the sample a few ms along a shallow arc).
+        const double fullBandLo = 0.45, fullBandHi = 1.15;
+        const double shortBandLo = 0.03, shortBandHi = 0.48;
+        const double separation = 0.15;
+
+        lines.Add(item: "# puck.world corpus v1 — THE HOPSCOTCH, the JUMP action-lane proof (generated by proof.cs generate --kind hop)");
+        lines.Add(item: $"# population {population}; full-arc apex ~ {ProofApp.F(format: "0.00", value: fullApex)} u; one pass spans {ProofApp.F(format: "0.0", value: endAt)}s");
+        Emit(command: "world.timing on", lines: lines, t: 0.0);
+        Emit(command: $"world.population {population} idle", lines: lines, t: 0.2);
+
+        var plans = new (int N, double AnchorX, double AnchorZ, bool Runs, bool FullHold, double LandedX, double LandedZ)[population];
+
+        for (var i = 0; (i < population); i++) {
+            var column = (i % columns);
+            var row = (i / columns);
+            var anchorX = ((column - ((columns - 1) / 2.0)) * 3.0);
+            var anchorZ = (-8.0 - (4.0 * row));
+            var runs = ((i % 4) >= 2);
+            var fullHold = ((i % 2) == 0);
+            var landedZ = (runs ? (anchorZ - (MoveSpeed * runSeconds)) : anchorZ);
+
+            plans[i] = ((i + 5), anchorX, anchorZ, runs, fullHold, anchorX, landedZ);
+        }
+
+        // Anchor every entity on the grid (grounded default; warp lands it at rest on y=0) and face -Z.
+        foreach (var p in plans) {
+            Emit(lines, anchorAt, $"player.warp {ProofApp.F(format: "0.##", value: p.AnchorX)} {ProofApp.F(format: "0.##", value: p.AnchorZ)} {p.N}");
+            Emit(command: $"player.face 0 {p.N}", lines: lines, t: anchorAt);
+        }
+
+        // The launch: a subset starts a forward run at the SAME instant it jumps (lane/tape independence).
+        foreach (var p in plans) {
+            if (p.Runs) {
+                Emit(lines, jumpAt, $"player.run 1 0 0 {ProofApp.F(format: "0.##", value: runSeconds)} {p.N}");
+            }
+
+            var hold = (p.FullHold ? fullHoldSeconds : tapHoldSeconds);
+
+            Emit(lines, jumpAt, $"player.press primary {ProofApp.F(format: "0.###", value: hold)} {p.N}");
+        }
+
+        // The two timed sweeps.
+        foreach (var p in plans) {
+            Emit(command: $"player.where {p.N}", lines: lines, t: midSweepAt);
+        }
+
+        foreach (var p in plans) {
+            Emit(command: $"player.where {p.N}", lines: lines, t: landedSweepAt);
+        }
+
+        Emit(command: "world.fps", lines: lines, t: evidenceAt);
+        Emit(command: "world.gpu", lines: lines, t: (evidenceAt + 0.2));
+
+        // (a) MID-AIR band + (c) variable-height separation attach to the mid sweep.
+        lines.Add(item: $"#sweep-at {ProofApp.F(format: "0.0#", value: midSweepAt)} mid-air");
+
+        foreach (var p in plans) {
+            if (p.FullHold) {
+                lines.Add(item: $"#expect-band p{p.N} y {ProofApp.F(format: "0.00", value: fullBandLo)} {ProofApp.F(format: "0.00", value: fullBandHi)} full");
+            }
+            else {
+                lines.Add(item: $"#expect-band p{p.N} y {ProofApp.F(format: "0.00", value: shortBandLo)} {ProofApp.F(format: "0.00", value: shortBandHi)} short");
+            }
+        }
+
+        lines.Add(item: $"#expect-separation y full short {ProofApp.F(format: "0.00", value: separation)}");
+
+        // (b) LANDED tableau attaches to the landed sweep: y exactly 0, x/z closed-form, grounded 0/0/0.
+        lines.Add(item: $"#sweep-at {ProofApp.F(format: "0.0#", value: landedSweepAt)} landed");
+
+        foreach (var p in plans) {
+            lines.Add(item: $"#expect p{p.N} {ProofApp.F(format: "0.00", value: p.LandedX)} 0.00 {ProofApp.F(format: "0.00", value: p.LandedZ)} 0 0 0");
+        }
+
+        lines.Add(item: $"#cycle-end {ProofApp.F(format: "0.0", value: endAt)}");
+
+        return lines;
+    }
+}
+
+// ============================================================================================
+// Behavior models — the offline generators whose intent streams the engine integrates. A seeded
+// state machine + accel ramps + boundary steering, with an offline pose mirror (integrated exactly
+// the way the grounded body model does), so every server correction targets a pose the sim
+// agrees with — the intents-forward/corrections-back shape.
+// ============================================================================================
+
+// The zone the boundary steering herds an entity within: a disc (InnerRadius 0) or an annulus.
+readonly record struct MixtureConfig(double InnerRadius, double OuterRadius, double SoftInner, double SoftOuter);
+static class MixtureModel {
+    const double MoveSpeed = Generators.MoveSpeed;
+    const double TurnSpeed = Generators.TurnSpeed;
+
+    // State table: target forward deflection + mean dwell seconds + selection weight (Demo PlatformerTuning tempo,
+    // deflections mapped onto the body's 4 u/s scale so the sprint:run ratio 1.6 is preserved).
+    static readonly (string Name, double Deflection, double MeanDwell, int Weight)[] States = {
+        ("Idle", 0.0, 1.2, 15),
+        ("Walk", 0.35, 2.5, 30),
+        ("Run", 0.625, 3.0, 35),
+        ("Sprint", 1.0, 2.0, 20),
+    };
+
+    const double AccelDeflectionRate = (90.0 / 8.0);   // ground accel / max speed (deflection units/s toward target)
+    const double DecelDeflectionRate = (110.0 / 8.0);
+
+    public static MixtureConfig Arena(double radius) {
+        return new MixtureConfig(InnerRadius: 0.0, OuterRadius: radius, SoftInner: 0.0, SoftOuter: (radius * 0.85));
+    }
+    public static MixtureConfig Annulus(double inner, double outer) {
+        var span = (outer - inner);
+
+        return new MixtureConfig(
+            InnerRadius: inner,
+            OuterRadius: outer,
+            SoftInner: (inner + (span * 0.2)),
+            SoftOuter: (inner + (span * 0.8)));
+    }
+
+    static string F3(double v) {
+        return ProofApp.F(format: "0.###", value: v);
+    }
+
+    // Generate one entity's whole intent stream into <paramref name="timed"/> (send-time, line). Movement segments
+    // are emitted bufferSeconds ahead (tape pre-buffer); reconcile corrections are sent AT their play time. The
+    // offline mirror integrates exactly the way IntegrateGrounded will (turn THEN step along the new facing with
+    // forward+strafe), so a correction snaps the sim to a pose it already agrees with.
+    public static void GenerateStream(List<TimedCommand> timed, int index, int entity, int seed, MixtureConfig config,
+        double streamStart, double durationSeconds, int controlRate, double bufferSeconds,
+        double correctionInterval, int correctionStagger, bool withJumps, double warpAt, bool finalReconcile) {
+
+        var rng = new Random(Seed: ((seed * 1000) + entity));
+        var dt = (1.0 / controlRate);
+        var ticks = (int)Math.Round(a: (durationSeconds * controlRate));
+
+        // Area-uniform spawn within [inner, outer], random initial yaw.
+        var u = rng.NextDouble();
+        var spawnAngle = ((rng.NextDouble() * 2.0) * Math.PI);
+        var spawnRadius = Math.Sqrt(d: ((config.InnerRadius * config.InnerRadius) +
+            (u * ((config.OuterRadius * config.OuterRadius) - (config.InnerRadius * config.InnerRadius)))));
+        var px = (spawnRadius * Math.Cos(d: spawnAngle));
+        var pz = (spawnRadius * Math.Sin(a: spawnAngle));
+        var pYaw = ((rng.NextDouble() * 2.0) * Math.PI);
+
+        timed.Add(item: new TimedCommand(warpAt, $"player.warp {ProofApp.F(format: "0.##", value: px)} {ProofApp.F(format: "0.##", value: pz)} {entity}", true));
+        timed.Add(item: new TimedCommand(warpAt, $"player.face {ProofApp.F(format: "0.#", value: (pYaw * (180.0 / Math.PI)))} {entity}", true));
+
+        var state = States[1];   // everyone opens walking; the first dwell roll diversifies immediately
+        var dwellLeft = 0.0;
+        var turnBias = 0.0;
+        var deflection = 0.0;
+
+        var phase = (rng.NextDouble() * dt);
+        var nextCorrection = (correctionInterval + (correctionStagger * 0.25));
+        var nextJump = (withJumps ? (2.0 + (rng.NextDouble() * 2.0)) : double.MaxValue);
+
+        for (var k = 0; (k < ticks); k++) {
+            if (dwellLeft <= 0.0) {
+                var totalWeight = 0;
+
+                foreach (var candidate in States) {
+                    totalWeight += candidate.Weight;
+                }
+
+                var roll = (rng.NextDouble() * totalWeight);
+
+                foreach (var candidate in States) {
+                    roll -= candidate.Weight;
+
+                    if (roll <= 0.0) {
+                        state = candidate;
+
+                        break;
+                    }
+                }
+
+                dwellLeft = (-state.MeanDwell * Math.Log(d: (1.0 - rng.NextDouble())));
+                var headingRoll = rng.NextDouble();
+
+                turnBias = ((headingRoll < 0.6) ? 0.0
+                    : ((headingRoll < 0.9) ? ((rng.NextDouble() * 0.5) - 0.25)
+                    : ((rng.NextDouble() * 1.2) - 0.6)));
+            }
+
+            dwellLeft -= dt;
+
+            // Accel: deflection eases toward the state target at the Demo-derived rate.
+            var target = state.Deflection;
+            var rate = ((target > deflection) ? AccelDeflectionRate : DecelDeflectionRate);
+            var maxDelta = (rate * dt);
+            var delta = (target - deflection);
+
+            if (Math.Abs(value: delta) > maxDelta) {
+                delta = (maxDelta * Math.Sign(value: delta));
+            }
+
+            deflection += delta;
+
+            // Turn = state bias + per-tick jitter + boundary steering (herd back inside the zone).
+            var turn = (turnBias + ((rng.NextDouble() * 0.1) - 0.05));
+            var radius = Math.Sqrt(d: ((px * px) + (pz * pz)));
+
+            if (deflection > 0.01) {
+                // dir(yaw) = (-sin, -cos); the signed angle from heading to the desired direction decides the sign.
+                var dirX = -Math.Sin(a: pYaw);
+                var dirZ = -Math.Cos(d: pYaw);
+
+                if ((radius > config.SoftOuter) && (config.SoftOuter > 0.0)) {
+                    turn += SteerToward(dirX, dirZ, (-px / radius), (-pz / radius),
+                        urgency: Math.Min(val1: 1.0, val2: ((radius - config.SoftOuter) / Math.Max(val1: 1e-6, val2: (config.OuterRadius - config.SoftOuter)))));
+                }
+                else if ((config.InnerRadius > 0.0) && (radius < config.SoftInner) && (radius > 1e-6)) {
+                    turn += SteerToward(dirX, dirZ, (px / radius), (pz / radius),
+                        urgency: Math.Min(val1: 1.0, val2: ((config.SoftInner - radius) / Math.Max(val1: 1e-6, val2: (config.SoftInner - config.InnerRadius)))));
+                }
+            }
+
+            turn = Math.Clamp(max: 1.0, min: -1.0, value: turn);
+
+            var playAt = ((streamStart + phase) + (k * dt));
+
+            // A jump tap on its schedule (report-only liveliness for the platformer archetype) — sent at play time.
+            if (playAt >= nextJump) {
+                var hold = ((rng.NextDouble() < 0.5) ? 0.008 : 0.6);   // a mix of hops and leaps
+
+                timed.Add(item: new TimedCommand(playAt, $"player.press primary {ProofApp.F(format: "0.###", value: hold)} {entity}", true));
+                nextJump = ((playAt + 2.5) + (rng.NextDouble() * 2.5));
+            }
+
+            // Server correction: re-anchor the sim to the offline mirror pose (ONE reconcile line).
+            if (playAt >= nextCorrection) {
+                var mirrorYawDegrees = ((pYaw * (180.0 / Math.PI)) % 360.0);
+
+                timed.Add(item: new TimedCommand(playAt, $"player.reconcile {ProofApp.F(format: "0.##", value: px)} {ProofApp.F(format: "0.##", value: pz)} {ProofApp.F(format: "0.#", value: mirrorYawDegrees)} {entity}", true));
+                nextCorrection += correctionInterval;
+            }
+
+            var sendAt = Math.Max(val1: (warpAt + 0.1), val2: (playAt - bufferSeconds));
+
+            timed.Add(item: new TimedCommand(sendAt, $"player.run {F3(v: deflection)} 0 {F3(v: turn)} {F3(v: dt)} {entity}", true));
+
+            // Advance the offline mirror the way IntegrateGrounded will: turn THEN step along the new facing.
+            pYaw += ((turn * TurnSpeed) * dt);
+            px += (((-Math.Sin(a: pYaw) * deflection) * MoveSpeed) * dt);
+            pz += (((-Math.Cos(d: pYaw) * deflection) * MoveSpeed) * dt);
+        }
+
+        // A final correction AFTER the last segment pins the entity at a deterministic resting pose so the final
+        // report-only sweep reads an identical pose across reruns (the tight rerun-envelope guarantee).
+        if (finalReconcile) {
+            var mirrorYawDegrees = ((pYaw * (180.0 / Math.PI)) % 360.0);
+            var pinAt = ((streamStart + durationSeconds) + 0.7);
+
+            timed.Add(item: new TimedCommand(pinAt, $"player.reconcile {ProofApp.F(format: "0.##", value: px)} {ProofApp.F(format: "0.##", value: pz)} {ProofApp.F(format: "0.#", value: mirrorYawDegrees)} {entity}", true));
+        }
+    }
+
+    // The turn contribution that steers a heading toward a desired inward/outward unit direction. Returns 0 when the
+    // heading already points close enough. In dir(yaw)=(-sin,-cos), a +yaw turn rotates toward the "left" vector and
+    // desired·left = -cross, so a NEGATIVE cross means turn left (+yaw). Magnitude scales with urgency (0.8 gain).
+    static double SteerToward(double dirX, double dirZ, double toX, double toZ, double urgency) {
+        var cross = ((dirX * toZ) - (dirZ * toX));
+        var dot = ((dirX * toX) + (dirZ * toZ));
+
+        if (dot >= 0.985) {
+            return 0.0;
+        }
+
+        return ((urgency * 0.8) * ((cross < 0.0) ? 1.0 : -1.0));
+    }
+}
+
+// ============================================================================================
+// The KART model — a grounded racer around an oval ring. A heading controller chases a target that
+// orbits the oval (accel toward a cruise speed, corner slowdown on the two hairpins, strafe-led drift
+// so facing decouples from velocity). An offline mirror integrates the emitted intents exactly, and a
+// reconcile every interval pins the sim to it — the correctness bar is rerun near-identity.
+// ============================================================================================
+
+static class KartModel {
+    const double MoveSpeed = Generators.MoveSpeed;
+    const double TurnSpeed = Generators.TurnSpeed;
+
+    static string F3(double v) {
+        return ProofApp.F(format: "0.###", value: v);
+    }
+    static double WrapPi(double angle) {
+        while (angle > Math.PI) {
+            angle -= (2.0 * Math.PI);
+        }
+
+        while (angle < -Math.PI) {
+            angle += (2.0 * Math.PI);
+        }
+
+        return angle;
+    }
+
+    // Generate one kart's stream. rx/rz = oval radii (rx>rz gives long straights + two hairpins at the X-axis ends).
+    public static void GenerateStream(List<TimedCommand> timed, int entity, int lane, int kartCount,
+        double rx, double rz, double streamStart, double durationSeconds, int controlRate, double bufferSeconds,
+        double correctionInterval, int correctionStagger, double warpAt) {
+
+        var dt = (1.0 / controlRate);
+        var ticks = (int)Math.Round(a: (durationSeconds * controlRate));
+        const double omega = 0.10;   // target angular rate (rad/s) — tuned so the target's linear speed ~ kart cruise
+        const double cruise = 0.9;
+        const double accelRate = 2.0; // deflection units/s toward the cruise target
+
+        // Stagger the field around the oval; each kart starts on the oval at its phase, facing the path tangent.
+        var phase = (((lane / (double)kartCount) * 2.0) * Math.PI);
+        var px = (rx * Math.Cos(d: phase));
+        var pz = (rz * Math.Sin(a: phase));
+        // Tangent of the oval at phase: d/dphi (rx cos, rz sin) = (-rx sin, rz cos).
+        var pYaw = Math.Atan2(-(-rx * Math.Sin(a: phase)), -(rz * Math.Cos(d: phase)));   // yaw = atan2(-tx, -tz)
+        var fwd = 0.0;
+        var targetPhase = phase;
+        var nextCorrection = (correctionInterval + (correctionStagger * 0.25));
+
+        timed.Add(item: new TimedCommand(warpAt, $"player.warp {ProofApp.F(format: "0.##", value: px)} {ProofApp.F(format: "0.##", value: pz)} {entity}", true));
+        timed.Add(item: new TimedCommand(warpAt, $"player.face {ProofApp.F(format: "0.#", value: (pYaw * (180.0 / Math.PI)))} {entity}", true));
+
+        for (var k = 0; (k < ticks); k++) {
+            var playAt = (streamStart + (k * dt));
+
+            // Advance the orbiting target along the oval and steer the kart's heading toward it.
+            targetPhase += (omega * dt);
+            var tx = (rx * Math.Cos(d: targetPhase));
+            var tz = (rz * Math.Sin(a: targetPhase));
+            var toX = (tx - px);
+            var toZ = (tz - pz);
+            var desiredYaw = Math.Atan2(x: -toZ, y: -toX);
+            var yawErr = WrapPi(angle: (desiredYaw - pYaw));
+            var turn = Math.Clamp(max: 1.0, min: -1.0, value: (yawErr / (TurnSpeed * dt)));
+
+            // Corner slowdown: curvature peaks at the hairpins (phase 0 / pi, where cos^2 = 1).
+            var cornerFactor = (1.0 - ((0.35 * Math.Cos(d: targetPhase)) * Math.Cos(d: targetPhase)));
+            var targetFwd = (cruise * cornerFactor);
+            var fwdDelta = (targetFwd - fwd);
+            var maxFwdDelta = (accelRate * dt);
+
+            if (Math.Abs(value: fwdDelta) > maxFwdDelta) {
+                fwdDelta = (maxFwdDelta * Math.Sign(value: fwdDelta));
+            }
+
+            fwd += fwdDelta;
+
+            // Strafe-led drift into the hairpins (leads with the steering sign) — facing decouples from velocity.
+            var strafe = Math.Clamp((((0.3 * Math.Cos(d: targetPhase)) * Math.Cos(d: targetPhase)) * Math.Sign(value: turn)), -1.0, 1.0);
+
+            if (playAt >= nextCorrection) {
+                var mirrorYawDegrees = ((pYaw * (180.0 / Math.PI)) % 360.0);
+
+                timed.Add(item: new TimedCommand(playAt, $"player.reconcile {ProofApp.F(format: "0.##", value: px)} {ProofApp.F(format: "0.##", value: pz)} {ProofApp.F(format: "0.#", value: mirrorYawDegrees)} {entity}", true));
+                nextCorrection += correctionInterval;
+            }
+
+            var sendAt = Math.Max(val1: (warpAt + 0.1), val2: (playAt - bufferSeconds));
+
+            timed.Add(item: new TimedCommand(sendAt, $"player.run {F3(v: fwd)} {F3(v: strafe)} {F3(v: turn)} {F3(v: dt)} {entity}", true));
+
+            // Advance the offline mirror (grounded: turn THEN step forward+strafe along the new facing/right).
+            pYaw += ((turn * TurnSpeed) * dt);
+            var fx = -Math.Sin(a: pYaw);
+            var fz = -Math.Cos(d: pYaw);
+            var rxv = Math.Cos(d: pYaw);
+            var rzv = -Math.Sin(a: pYaw);
+
+            px += ((((fx * fwd) + (rxv * strafe)) * MoveSpeed) * dt);
+            pz += ((((fz * fwd) + (rzv * strafe)) * MoveSpeed) * dt);
+        }
+
+        // Pin to the final mirror pose after the last segment so the report-only sweep is rerun-identical.
+        var finalYawDegrees = ((pYaw * (180.0 / Math.PI)) % 360.0);
+        var pinAt = ((streamStart + durationSeconds) + 0.7);
+
+        timed.Add(item: new TimedCommand(pinAt, $"player.reconcile {ProofApp.F(format: "0.##", value: px)} {ProofApp.F(format: "0.##", value: pz)} {ProofApp.F(format: "0.#", value: finalYawDegrees)} {entity}", true));
+    }
+}
+
+// ============================================================================================
+// THE EXPO — the primary mixed-genre corpus. Five archetypes in LAYERED ZONES of ONE shared
+// scene, an even split of the population, a ~90 s loop-capable cycle:
+//   KARTS      grounded  oval ring (rx 38 / rz 30)   offline kart model + reconcile   rerun-envelope
+//   PLATFORMERS grounded+jump  central plaza (r<=12)  run/hop show + a re-anchored     closed-form landed
+//                                                     hop showcase + landed finale     + mid-air band
+//   SHIPS      free      airspace band y 18..30       formation pass + barrel roll +   closed-form tableau
+//                                                     a closed-form dive finale
+//   SUBMARINES free      low band y 4..10             slow damped glide + pitch under-  closed-form tableau
+//                                                     ulation + straight finale
+//   WALKERS    grounded  plaza-rim annulus (r 14..22) the flood human mixture, confined  rerun-envelope
+// ============================================================================================
+
+static class ExpoBuilder {
+    const double MoveSpeed = Generators.MoveSpeed;
+
+    // --- timeline (seconds from cycle start) ---
+    const double MotionAt = 0.5;
+    const double StreamStart = 2.0;
+    const double StreamDuration = 80.0;          // karts + walkers run the whole show
+    const double PlatformerShowDuration = 50.0;  // platformers stream then re-anchor for the showcase
+    const double MidDelay = 0.2;
+    const double PlatformerAnchorAt = 56.5;
+    const double PlatformerJumpAt = 57.3;
+    const double ShipRollAt = 8.0;
+    const double ShipShowAt = 3.0;
+    const double SubShowAt = 4.0;
+    const double MidSweepAt = (PlatformerJumpAt + MidDelay);   // 57.5
+    const double EndAt = 90.0;
+    const double EvidenceAt = 84.0;
+    const double EvidenceMidAt = 40.0;
+    const double FinalSweepAt = 88.0;
+    const double PlatformerFinaleAt = 78.0;
+    const double ShipFinaleAt = 70.0;
+    const double SubFinaleAt = 72.0;
+
+    // Jump-kit bands (WorldBody constants, ActionScale 0.5) — DERIVED, never hard-coded.
+    const double FullBandLo = 0.45, FullBandHi = 1.15;
+    const double MidSeparation = 0.15;
+    const double ShortBandLo = 0.03, ShortBandHi = 0.48;
+
+    public static List<string> Build(int population, int seed) {
+        // Even archetype split (contiguous blocks): perTeam = ceil(P/5), arch = min(4, i/perTeam).
+        var perTeam = ((population + 4) / 5);
+        var karts = new List<int>();
+        var platformers = new List<int>();
+        var ships = new List<int>();
+        var subs = new List<int>();
+        var walkers = new List<int>();
+
+        for (var i = 0; (i < population); i++) {
+            var arch = Math.Min(val1: 4, val2: (i / perTeam));
+            var entity = (i + 5);
+
+            switch (arch) {
+                case 0: karts.Add(item: entity); break;
+                case 1: platformers.Add(item: entity); break;
+                case 2: ships.Add(item: entity); break;
+                case 3: subs.Add(item: entity); break;
+                default: walkers.Add(item: entity); break;
+            }
+        }
+
+        var timed = new List<TimedCommand>();       // the in-loop @t body (sorted by send time on output)
+        var midDirectives = new List<string>();      // the mid-air sweep block (#sweep-at 57.5 + bands + separation)
+        var finaleExpects = new List<string>();      // the finale sweep's closed-form pose #expects (ships/subs/platformers)
+
+        // Ships + subs go 6DOF for the whole cycle.
+        foreach (var n in ships.Concat(second: subs)) {
+            timed.Add(item: new TimedCommand(Command: $"player.motion free {n}", InLoop: true, T: MotionAt));
+        }
+
+        BuildKarts(karts: karts, timed: timed);
+        BuildWalkers(seed: seed, timed: timed, walkers: walkers);
+        BuildPlatformers(finaleExpects: finaleExpects, midDirectives: midDirectives, platformers: platformers, seed: seed, timed: timed);
+        BuildShips(directives: finaleExpects, ships: ships, timed: timed);
+        BuildSubs(directives: finaleExpects, subs: subs, timed: timed);
+
+        // Evidence reads (mid-show + cycle end).
+        timed.Add(item: new TimedCommand(Command: "world.fps", InLoop: true, T: EvidenceMidAt));
+        timed.Add(item: new TimedCommand(Command: "world.fps", InLoop: true, T: EvidenceAt));
+        timed.Add(item: new TimedCommand(Command: "screen.state 4", InLoop: true, T: (EvidenceAt + 0.1)));
+        timed.Add(item: new TimedCommand(Command: "world.gpu", InLoop: true, T: (EvidenceAt + 0.2)));
+
+        // The final tableau sweep: EVERY entity reads back (ships/subs/platformers assert closed-form; karts/
+        // walkers are captured report-only for the rerun-envelope compare).
+        foreach (var n in AllEntities(population: population)) {
+            timed.Add(item: new TimedCommand(Command: $"player.where {n}", InLoop: true, T: FinalSweepAt));
+        }
+
+        // Assemble the directive block IN ATTACH ORDER: each #sweep-at opens a context its following #expect*
+        // lines attach to. Mid-air block first (its bands/separation), then the finale sweep + its pose #expects.
+        var directives = new List<string>();
+
+        directives.AddRange(collection: midDirectives);
+        directives.Add(item: $"#sweep-at {ProofApp.F(format: "0.0#", value: FinalSweepAt)} finale");
+        directives.AddRange(collection: finaleExpects);
+
+        // --- assemble ---
+        var lines = new List<string>();
+
+        lines.Add(item: "# puck.world corpus v1 — THE EXPO, the mixed-genre render proof (generated by proof.cs generate --kind expo)");
+        lines.Add(item: $"# population {population} | karts {karts.Count} / platformers {platformers.Count} / ships {ships.Count} / subs {subs.Count} / walkers {walkers.Count} | seed {seed} | one cycle spans {ProofApp.F(format: "0.0", value: EndAt)}s");
+        lines.Add(item: "@0.0 world.timing on");
+        lines.Add(item: $"@0.2 world.population {population} idle");
+        lines.Add(item: "@0.3 wire.ack quiet");
+        lines.Add(item: "#loop-start");
+
+        foreach (var item in timed.OrderBy(keySelector: t => t.T)) {
+            lines.Add(item: $"@{ProofApp.F(format: "0.0##", value: item.T)} {item.Command}");
+        }
+
+        lines.AddRange(collection: directives);
+        lines.Add(item: $"#cycle-end {ProofApp.F(format: "0.0", value: EndAt)}");
+
+        return lines;
+    }
+
+    static IEnumerable<int> AllEntities(int population) {
+        for (var i = 0; (i < population); i++) {
+            yield return (i + 5);
+        }
+    }
+
+    // KARTS — the oval ring race. Report-only (rerun envelope via the final reconcile pin).
+    static void BuildKarts(List<TimedCommand> timed, List<int> karts) {
+        for (var lane = 0; (lane < karts.Count); lane++) {
+            KartModel.GenerateStream(timed, entity: karts[lane], lane: lane, kartCount: karts.Count,
+                rx: 38.0, rz: 30.0, streamStart: StreamStart, durationSeconds: StreamDuration, controlRate: 5,
+                bufferSeconds: 3.0, correctionInterval: 6.0, correctionStagger: (lane % 24), warpAt: 1.5);
+        }
+    }
+
+    // WALKERS — the flood human mixture confined to the plaza-rim annulus. Report-only (rerun envelope).
+    static void BuildWalkers(List<TimedCommand> timed, List<int> walkers, int seed) {
+        var config = MixtureModel.Annulus(inner: 14.0, outer: 22.0);
+
+        for (var w = 0; (w < walkers.Count); w++) {
+            MixtureModel.GenerateStream(timed, index: w, entity: walkers[w], seed: (seed + 1), config: config,
+                streamStart: StreamStart, durationSeconds: StreamDuration, controlRate: 5, bufferSeconds: 3.0,
+                correctionInterval: 6.0, correctionStagger: (w % 24), withJumps: false, warpAt: 1.5, finalReconcile: true);
+        }
+    }
+
+    // PLATFORMERS — a stochastic run/hop show in the plaza, then a re-anchored mid-air hop SHOWCASE (band +
+    // separation asserts) and a re-anchored closed-form LANDED finale.
+    static void BuildPlatformers(List<TimedCommand> timed, List<string> midDirectives, List<string> finaleExpects, List<int> platformers, int seed) {
+        var config = MixtureModel.Arena(radius: 11.0);   // a plaza disc
+
+        for (var p = 0; (p < platformers.Count); p++) {
+            MixtureModel.GenerateStream(timed, index: p, entity: platformers[p], seed: (seed + 2), config: config,
+                streamStart: StreamStart, durationSeconds: PlatformerShowDuration, controlRate: 5, bufferSeconds: 3.0,
+                correctionInterval: 6.0, correctionStagger: (p % 24), withJumps: true, warpAt: 1.5, finalReconcile: false);
+        }
+
+        // --- the mid-air hop showcase: re-anchor on a plaza grid, launch a full/short split, sweep at apex ---
+        const int cols = 5;
+
+        midDirectives.Add(item: $"#sweep-at {ProofApp.F(format: "0.0#", value: MidSweepAt)} platformer-air");
+
+        for (var p = 0; (p < platformers.Count); p++) {
+            var n = platformers[p];
+            var col = (p % cols);
+            var row = (p / cols);
+            var x = ((col - 2.0) * 2.5);
+            var z = ((row - 2.0) * 2.5);
+            var fullHold = ((p % 2) == 0);
+            var runs = ((p % 4) >= 2);   // a subset runs mid-jump (lane/tape independence)
+
+            timed.Add(item: new TimedCommand(PlatformerAnchorAt, $"player.warp {ProofApp.F(format: "0.##", value: x)} {ProofApp.F(format: "0.##", value: z)} {n}", true));
+            timed.Add(item: new TimedCommand(Command: $"player.face 0 {n}", InLoop: true, T: PlatformerAnchorAt));
+
+            if (runs) {
+                timed.Add(item: new TimedCommand(Command: $"player.run 1 0 0 0.5 {n}", InLoop: true, T: PlatformerJumpAt));
+            }
+
+            var hold = (fullHold ? 1.0 : 0.008);
+
+            timed.Add(item: new TimedCommand(PlatformerJumpAt, $"player.press primary {ProofApp.F(format: "0.###", value: hold)} {n}", true));
+            timed.Add(item: new TimedCommand(Command: $"player.where {n}", InLoop: true, T: MidSweepAt));
+
+            if (fullHold) {
+                midDirectives.Add(item: $"#expect-band p{n} y {ProofApp.F(format: "0.00", value: FullBandLo)} {ProofApp.F(format: "0.00", value: FullBandHi)} full");
+            }
+            else {
+                midDirectives.Add(item: $"#expect-band p{n} y {ProofApp.F(format: "0.00", value: ShortBandLo)} {ProofApp.F(format: "0.00", value: ShortBandHi)} short");
+            }
+        }
+
+        midDirectives.Add(item: $"#expect-separation y full short {ProofApp.F(format: "0.00", value: MidSeparation)}");
+
+        // --- the landed finale: re-anchor on a plaza grid, run a tape-timed segment to a closed-form rest ---
+        const double runSeconds = 1.0;
+
+        for (var p = 0; (p < platformers.Count); p++) {
+            var n = platformers[p];
+            var col = (p % cols);
+            var row = (p / cols);
+            var x = ((col - 2.0) * 2.4);
+            var z = ((row - 2.0) * 2.0);
+            var landedZ = (z - (MoveSpeed * runSeconds));   // face 0 -> dir(-Z), run moves -Z; x unchanged, y=0
+
+            timed.Add(item: new TimedCommand(PlatformerFinaleAt, $"player.warp {ProofApp.F(format: "0.##", value: x)} {ProofApp.F(format: "0.##", value: z)} {n}", true));
+            timed.Add(item: new TimedCommand(Command: $"player.face 0 {n}", InLoop: true, T: PlatformerFinaleAt));
+            timed.Add(item: new TimedCommand(PlatformerFinaleAt, $"player.run 1 0 0 {ProofApp.F(format: "0.##", value: runSeconds)} {n}", true));
+
+            finaleExpects.Add(item: $"#expect p{n} {ProofApp.F(format: "0.00", value: x)} 0.00 {ProofApp.F(format: "0.00", value: landedZ)} 0 0 0");
+        }
+    }
+
+    // SHIPS — a formation pass with a banked turn + a synchronized barrel roll (report-only), then a closed-form
+    // dive finale (pose on a ring at altitude, aimed inward + down, a STRAIGHT fly to a descending shell).
+    static void BuildShips(List<TimedCommand> timed, List<string> directives, List<int> ships) {
+        var count = ships.Count;
+
+        // Show: a banked formation pass across the arena.
+        for (var s = 0; (s < count); s++) {
+            var n = ships[s];
+            var x = ((s - ((count - 1) / 2.0)) * 3.0);
+
+            timed.Add(item: new TimedCommand(ShipShowAt, $"player.pose {ProofApp.F(format: "0.##", value: x)} 24 -32 0 0 0 {n}", true));
+            timed.Add(item: new TimedCommand(Command: $"player.fly 1 0 0 0.3 0 0.3 3 {n}", InLoop: true, T: ShipShowAt));
+        }
+
+        // Show: the synchronized barrel roll.
+        for (var s = 0; (s < count); s++) {
+            var n = ships[s];
+            var x = ((s - ((count - 1) / 2.0)) * 3.0);
+
+            timed.Add(item: new TimedCommand(ShipRollAt, $"player.pose {ProofApp.F(format: "0.##", value: x)} 26 -18 0 0 0 {n}", true));
+            timed.Add(item: new TimedCommand(Command: $"player.fly 0 0 0 0 0 1 1.5 {n}", InLoop: true, T: ShipRollAt));
+        }
+
+        // Finale: a ring dive (closed-form). Attitude unchanged by the straight fly; position = anchor + facing*travel.
+        const double ring = 32.0, altitude = 26.0, pitch = -18.0, seconds = 4.0;
+
+        for (var s = 0; (s < count); s++) {
+            var n = ships[s];
+            var phi = ((count > 0) ? (((s * 2.0) * Math.PI) / count) : 0.0);
+            var poseX = (ring * Math.Cos(d: phi));
+            var poseZ = (ring * Math.Sin(a: phi));
+            var yawDeg = Generators.YawDegrees(dirX: -Math.Cos(d: phi), dirZ: -Math.Sin(a: phi));
+            var rollDeg = (20.0 * Math.Cos(d: phi));
+
+            timed.Add(item: new TimedCommand(ShipFinaleAt, $"player.pose {ProofApp.F(format: "0.###", value: poseX)} {ProofApp.F(altitude)} {ProofApp.F(format: "0.###", value: poseZ)} {ProofApp.F(format: "0.##", value: yawDeg)} {ProofApp.F(format: "0.#", value: pitch)} {ProofApp.F(format: "0.##", value: rollDeg)} {n}", true));
+            timed.Add(item: new TimedCommand(ShipFinaleAt, $"player.fly 1 0 0 0 0 0 {ProofApp.F(seconds)} {n}", true));
+
+            var (endX, endY, endZ) = Generators.FreeStraightFly(pitchDeg: pitch, travel: (MoveSpeed * seconds), x: poseX, y: altitude, yawDeg: yawDeg, z: poseZ);
+            directives.Add(item: $"#expect p{n} {ProofApp.F(format: "0.00", value: endX)} {ProofApp.F(format: "0.00", value: endY)} {ProofApp.F(format: "0.00", value: endZ)} {Generators.CompassInt(degrees: yawDeg)} {Generators.CompassInt(degrees: pitch)} {Generators.CompassInt(degrees: rollDeg)}");
+        }
+    }
+
+    // SUBMARINES — a slow damped glide with gentle pitch undulation (report-only), then a closed-form straight
+    // finale on the low band. The Subnautica tempo: small deflections (<=0.4), lazy motion.
+    static void BuildSubs(List<TimedCommand> timed, List<string> directives, List<int> subs) {
+        var count = subs.Count;
+        const int cols = 6;
+
+        // Show: a gentle glide with a pitch-up rate (undulation).
+        for (var s = 0; (s < count); s++) {
+            var n = subs[s];
+            var col = (s % cols);
+            var row = (s / cols);
+            var x = ((col - ((cols - 1) / 2.0)) * 4.0);
+            var z = (-28.0 + (row * 4.0));
+
+            timed.Add(item: new TimedCommand(SubShowAt, $"player.pose {ProofApp.F(format: "0.##", value: x)} 7 {ProofApp.F(format: "0.##", value: z)} 0 0 0 {n}", true));
+            timed.Add(item: new TimedCommand(Command: $"player.fly 0.3 0 0 0 0.15 0 4 {n}", InLoop: true, T: SubShowAt));
+        }
+
+        // Finale: level on the low band, a straight forward glide (closed-form; y unchanged, yaw/pitch/roll 0).
+        const double altitude = 7.0, seconds = 3.0;
+
+        for (var s = 0; (s < count); s++) {
+            var n = subs[s];
+            var col = (s % cols);
+            var row = (s / cols);
+            var x = ((col - ((cols - 1) / 2.0)) * 4.0);
+            var z = (-6.0 + (row * 4.0));
+            var endZ = (z - (MoveSpeed * seconds));   // yaw 0 pitch 0 -> facing (0,0,-1); moves -Z
+
+            timed.Add(item: new TimedCommand(SubFinaleAt, $"player.pose {ProofApp.F(format: "0.##", value: x)} {ProofApp.F(altitude)} {ProofApp.F(format: "0.##", value: z)} 0 0 0 {n}", true));
+            timed.Add(item: new TimedCommand(SubFinaleAt, $"player.fly 1 0 0 0 0 0 {ProofApp.F(seconds)} {n}", true));
+
+            directives.Add(item: $"#expect p{n} {ProofApp.F(format: "0.00", value: x)} {ProofApp.F(format: "0.00", value: altitude)} {ProofApp.F(format: "0.00", value: endZ)} 0 0 0");
+        }
+    }
+}
+
+// ============================================================================================
+// Output collection — a reader thread per stream, timestamped (no event-queue ceiling under a
+// 37k-line flood burst).
+// ============================================================================================
+
+sealed class OutputCollector {
+    readonly ConcurrentQueue<string> m_lines = new();
+
+    public int Count => m_lines.Count;
+
+    public void Start(TextReader reader, Stopwatch stopwatch) {
+        _ = Task.Run(action: () => {
+            string? line;
+
+            while ((line = reader.ReadLine()) is not null) {
+                m_lines.Enqueue(item: string.Format(arg0: stopwatch.Elapsed.TotalSeconds, arg1: line, format: "[{0,7:0.00}s] {1}", provider: ProofApp.Inv));
+            }
+        });
+    }
+    public string[] Snapshot() {
+        return m_lines.ToArray();
+    }
+}
+readonly record struct Pose(double X, double Y, double Z, int Yaw, int Pitch, int Roll);
+
+// ============================================================================================
+// Shared player-document store paths + directory backup — used by BindingsProof and StorageProof, the two
+// suites that boot against the REAL local player-document store (WorldProfileStore has no CLI override; no
+// --user-id, no env var). Both back up the FULL world/ + profiles/ subtrees before touching anything and
+// restore them in a finally, so the owner's real catalog is never left mutated.
+// ============================================================================================
+
+// The fixed local-store identity WorldProfileStore addresses, and the per-profile split layout's paths (§2.5.3)
+// under it, mirrored from WorldProfileStore.cs's private address table.
+static class PlayerStorePaths {
+    static readonly Guid LocalProfilesId = new(g: "b1d5c0de-0002-4000-8000-000000000001");
+
+    public static string StoreRoot() {
+        return Path.Combine(
+            Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData),
+            "Puck", "World", LocalProfilesId.ToString());
+    }
+    // The current split layout: world/player.json (catalog), world/local.json (machine-local sidecar), and one
+    // world/profiles/<id>.json blob per catalog entry.
+    public static string WorldDir() {
+        return Path.Combine(path1: StoreRoot(), path2: "world");
+    }
+    public static string CatalogPath() {
+        return Path.Combine(path1: WorldDir(), path2: "player.json");
+    }
+    public static string LocalPath() {
+        return Path.Combine(path1: WorldDir(), path2: "local.json");
+    }
+    public static string ProfilesDir() {
+        return Path.Combine(path1: WorldDir(), path2: "profiles");
+    }
+    // The two retired single-file layouts, both under the shared "profiles/" directory: the Phase 3 whole-document
+    // pair (profiles/player.json + profiles/local.json) and the pre-Phase-3 puck.world.profiles.v1 catalog
+    // (profiles/profiles.json).
+    public static string PhaseThreeDir() {
+        return Path.Combine(path1: StoreRoot(), path2: "profiles");
+    }
+    public static string PhaseThreePlayerPath() {
+        return Path.Combine(path1: PhaseThreeDir(), path2: "player.json");
+    }
+    public static string PhaseThreeLocalPath() {
+        return Path.Combine(path1: PhaseThreeDir(), path2: "local.json");
+    }
+    public static string LegacyPath() {
+        return Path.Combine(path1: PhaseThreeDir(), path2: "profiles.json");
+    }
+}
+
+readonly record struct DirectorySnapshot(string Root, IReadOnlyList<(string RelativePath, byte[] Bytes)> Files);
+
+// Whole-subtree snapshot/clear/restore, byte-for-byte — the store's per-profile blob count is not known ahead of
+// time, so a proof clearing/restoring individual filenames would miss any real profile the owner has beyond the
+// four seeded defaults. Restoring means "the directory looks EXACTLY like it did" (including deleting anything the
+// proof itself created that did not exist before).
+static class DirectoryBackup {
+    public static DirectorySnapshot Snapshot(string dir) {
+        if (!Directory.Exists(path: dir)) {
+            return new DirectorySnapshot(Root: dir, Files: []);
+        }
+
+        var files = Directory.EnumerateFiles(path: dir, searchPattern: "*", searchOption: SearchOption.AllDirectories)
+            .Select(selector: file => (Path.GetRelativePath(relativeTo: dir, path: file), File.ReadAllBytes(path: file)))
+            .ToList();
+
+        return new DirectorySnapshot(Root: dir, Files: files);
+    }
+
+    public static void Clear(string dir) {
+        try {
+            if (Directory.Exists(path: dir)) {
+                Directory.Delete(path: dir, recursive: true);
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            Console.Error.WriteLine(value: $"[proof] WARNING: could not clear '{dir}' ({exception.Message})");
+        }
+    }
+
+    public static void Restore(DirectorySnapshot snapshot) {
+        try {
+            if (Directory.Exists(path: snapshot.Root)) {
+                Directory.Delete(path: snapshot.Root, recursive: true);
+            }
+
+            if (snapshot.Files.Count == 0) {
+                return;
+            }
+
+            _ = Directory.CreateDirectory(path: snapshot.Root);
+
+            foreach (var (relativePath, bytes) in snapshot.Files) {
+                var path = Path.Combine(snapshot.Root, relativePath);
+                var directory = Path.GetDirectoryName(path: path);
+
+                if (!string.IsNullOrEmpty(value: directory)) {
+                    _ = Directory.CreateDirectory(path: directory);
+                }
+
+                File.WriteAllBytes(path: path, bytes: bytes);
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            Console.Error.WriteLine(value: $"[proof] WARNING: could not restore '{snapshot.Root}' ({exception.Message}) — the real player-document store may need manual repair.");
+        }
+    }
+}
+
+// ============================================================================================
+// Feeder — build, launch, pace the corpus into stdin over the reader threads, mark each sweep, assert
+// (closed-form / band / separation where present; report-only otherwise), evidence + transcript + code.
+// ============================================================================================
+
+static class Feeder {
+    static readonly Regex FpsEcho = new(
+        options: RegexOptions.Compiled,
+        pattern: @"\[world\.fps: avg=([0-9]+(?:\.[0-9]+)?) worst=([0-9]+(?:\.[0-9]+)?) over \d+ frames");
+    static readonly Regex QueuedMachineEcho = new(
+        options: RegexOptions.Compiled,
+        pattern: @"\[screen\.state: 4 assigned advanced-gaming-brick (?:bound|unbound) frames=(\d+) pending=(\d+)/(\d+) backpressure=(\d+)");
+
+    public static int RunFeeder(ArgMap opts) {
+        var headless = opts.Flag(name: "--headless");
+        var loop = opts.Flag(name: "--loop");
+        var noBuild = opts.Flag(name: "--no-build");
+        var quality = (opts.Get(name: "--quality") ?? "low");
+        var width = opts.GetInt(fallback: 2560, name: "--width");
+        var height = opts.GetInt(fallback: 1440, name: "--height");
+        var tolerance = opts.GetDouble(fallback: 0.12, name: "--tolerance");
+        var yawTolerance = opts.GetDouble(fallback: 1.0, name: "--yaw-tolerance");
+        var minimumFps = opts.GetDouble(fallback: 60.0, name: "--min-fps");
+        var worldArg = opts.Get(name: "--world-arg");
+
+        if (!double.IsFinite(d: minimumFps) || (minimumFps < 0.0)) {
+            throw new ArgException(message: "--min-fps must be zero (disabled) or a finite positive frame rate");
+        }
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        // --- corpus ---
+        List<string> corpusLines;
+        var corpusPath = opts.Get(name: "--corpus");
+        var kind = (opts.Get(name: "--kind") ?? "expo");
+
+        if (corpusPath is not null) {
+            corpusLines = File.ReadAllLines(path: corpusPath).ToList();
+        }
+        else {
+            var genOptions = new GenOptions(
+                Population: Math.Clamp(opts.GetInt(fallback: 124, name: "--population"), 1, 124),
+                Seed: opts.GetInt(fallback: 128, name: "--seed"),
+                DurationSeconds: opts.GetDouble(fallback: 60.0, name: "--duration"),
+                ControlRate: Math.Clamp(opts.GetInt(fallback: 5, name: "--control-rate"), 2, 20),
+                ArenaRadius: opts.GetDouble(fallback: 40.0, name: "--arena"),
+                CorrectionInterval: opts.GetDouble(fallback: 6.0, name: "--correction-interval"));
+
+            corpusLines = Generators.Generate(kind: kind, o: genOptions);
+        }
+
+        var corpus = CorpusParser.Parse(lines: corpusLines);
+
+        // The quality tier is a run parameter, not choreography — inject it right after setup (non-loop).
+        corpus.Commands.Add(item: new TimedCommand(Command: $"world.quality {quality}", InLoop: false, T: 0.4));
+
+        var maxT = ((corpus.Commands.Count > 0) ? corpus.Commands.Max(selector: c => c.T) : 0.0);
+        var exitAfter = (headless ? (int)Math.Ceiling(a: (maxT + 6.0)) : 0);
+
+        // --- build ---
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        var logPath = (opts.Get(name: "--log") ?? DefaultLogPath(kind: kind));
+
+        // --- launch ---
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfter.ToString(provider: ProofApp.Inv));
+
+        if (worldArg is not null) {
+            psi.ArgumentList.Add(item: "--world");
+            psi.ArgumentList.Add(item: worldArg);
+        }
+
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var started = false;
+        var allPassed = true;
+
+        // The child owns a GPU device and must NEVER be orphaned: Ctrl+C and process-exit both kill it, and the
+        // finally below is the primary path.
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} --exit-after-seconds {exitAfter}{((worldArg is not null) ? $" --world {worldArg}" : "")}");
+        Console.WriteLine(value: $"[proof] kind {kind} | mode {(headless ? "headless" : (loop ? "live + loop" : "live (one pass)"))} | quality {quality} | {width}x{height} | min FPS {(minimumFps > 0.0 ? ProofApp.F(value: minimumFps) : "disabled")} | log {logPath}");
+        Console.WriteLine(value: $"[proof] corpus: {corpus.Commands.Count} commands, {corpus.Sweeps.Count} sweep(s)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new FeedContext(Collector: collector, Process: process, Stdin: stdin, Stopwatch: stopwatch, Tolerance: tolerance, YawTolerance: yawTolerance);
+
+            var (alive, passed) = RunCycle(ctx, corpus.Commands, corpus.Sweeps, offset: 0.0, passLabel: "pass 1");
+            allPassed &= passed;
+
+            if (alive && loop && !headless) {
+                var inLoopCommands = corpus.Commands.Where(predicate: c => c.InLoop).ToList();
+                var inLoopSweeps = corpus.Sweeps.Where(predicate: s => (s.T >= corpus.LoopStartT)).ToList();
+                var cycleLength = ((corpus.CycleEnd - corpus.LoopStartT) + 2.0);
+                var pass = 2;
+
+                Console.WriteLine(value: $"[proof] looping choreography every {ProofApp.F(format: "0.0", value: cycleLength)}s — close the window to stop");
+
+                while (!process.HasExited) {
+                    var offset = ((pass - 1) * cycleLength);
+
+                    (alive, passed) = RunCycle(ctx: ctx, events: inLoopCommands, offset: offset, passLabel: $"pass {pass}", sweeps: inLoopSweeps);
+                    allPassed &= passed;
+
+                    if (!alive) {
+                        break;
+                    }
+
+                    pass++;
+                }
+            }
+            else if (alive && !headless) {
+                Console.WriteLine(value: "[proof] corpus complete — window is live, seats 1-4 are yours (close the window to end)");
+            }
+
+            if (started && !headless) {
+                process.WaitForExit();
+            }
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+
+            Thread.Sleep(millisecondsTimeout: 300);
+            var snapshot = collector.Snapshot();
+
+            try {
+                Directory.CreateDirectory(path: Path.GetDirectoryName(path: logPath)!);
+                File.WriteAllLines(contents: snapshot, path: logPath);
+            }
+            catch (Exception ex) {
+                Console.WriteLine(value: $"[proof] (could not write transcript: {ex.Message})");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === evidence block (world.fps / world.gpu) ===");
+
+            foreach (var item in snapshot) {
+                if (Regex.IsMatch(input: item, pattern: @"\] \[(world\.(fps|gpu|population|quality)|screen\.state: 4 )")) {
+                    Console.WriteLine(value: $"[proof] {item}");
+                }
+            }
+
+            allPassed &= AssertFrameRate(lines: snapshot, minimumFps: minimumFps);
+            allPassed &= AssertQueuedMachineBacklog(lines: snapshot);
+
+            Console.WriteLine(value: $"[proof] full transcript: {logPath}");
+        }
+
+        return (allPassed ? 0 : 1);
+    }
+
+    static bool AssertFrameRate(IReadOnlyList<string> lines, double minimumFps) {
+        if (!(minimumFps > 0.0)) {
+            Console.WriteLine(value: "[proof] FPS assertion disabled (--min-fps 0)");
+
+            return true;
+        }
+
+        Match? last = null;
+
+        foreach (var line in lines) {
+            var match = FpsEcho.Match(input: line);
+
+            if (match.Success) {
+                last = match;
+            }
+        }
+
+        if (last is null) {
+            Console.WriteLine(value: $"[proof] FPS FAIL — no world.fps sample was emitted (need avg and worst >= {ProofApp.F(value: minimumFps)})");
+
+            return false;
+        }
+
+        var average = double.Parse(s: last.Groups[1].ValueSpan, provider: ProofApp.Inv);
+        var worst = double.Parse(s: last.Groups[2].ValueSpan, provider: ProofApp.Inv);
+        var passed = ((average >= minimumFps) && (worst >= minimumFps));
+
+        Console.WriteLine(value: $"[proof] FPS {(passed ? "PASS" : "FAIL")} — last rolling sample avg={ProofApp.F(format: "0.0", value: average)}, worst={ProofApp.F(format: "0.0", value: worst)}; require both >= {ProofApp.F(value: minimumFps)}");
+
+        return passed;
+    }
+
+    // When a corpus asks for the default fifth screen's state, prove render decoupling did not merely hide an emulator
+    // escaping its finite admitted pending window.
+    static bool AssertQueuedMachineBacklog(IReadOnlyList<string> lines) {
+        Match? last = null;
+
+        foreach (var line in lines) {
+            var match = QueuedMachineEcho.Match(input: line);
+
+            if (match.Success) {
+                last = match;
+            }
+        }
+
+        if (last is null) {
+            return true;
+        }
+
+        var completed = long.Parse(s: last.Groups[1].ValueSpan, provider: ProofApp.Inv);
+        var pending = long.Parse(s: last.Groups[2].ValueSpan, provider: ProofApp.Inv);
+        var capacity = int.Parse(s: last.Groups[3].ValueSpan, provider: ProofApp.Inv);
+        var backpressure = long.Parse(s: last.Groups[4].ValueSpan, provider: ProofApp.Inv);
+        var passed = ((completed > 0L) && (capacity > 0) && (pending <= capacity));
+
+        Console.WriteLine(value: $"[proof] AGB queue {(passed ? "PASS" : "FAIL")} — completed={completed}, pending={pending}/{capacity}, backpressure={backpressure}; require completed > 0 and pending <= capacity");
+
+        return passed;
+    }
+
+    sealed record FeedContext(Process Process, StreamWriter Stdin, Stopwatch Stopwatch, OutputCollector Collector,
+        double Tolerance, double YawTolerance);
+
+    // One cycle: send choreography, pausing at each sweep to mark, send its where lines, read poses, assert.
+    static (bool Alive, bool Passed) RunCycle(FeedContext ctx, IReadOnlyList<TimedCommand> events,
+        IReadOnlyList<Sweep> sweeps, double offset, string passLabel) {
+
+        bool IsWhere(TimedCommand c) => c.Command.StartsWith(comparisonType: StringComparison.Ordinal, value: "player.where");
+
+        var others = events.Where(predicate: c => !IsWhere(c: c)).OrderBy(keySelector: c => c.T).ToList();
+        var sortedSweeps = sweeps.OrderBy(keySelector: s => s.T).ToList();
+        var passed = true;
+
+        if (sortedSweeps.Count == 0) {
+            var alive = SendBatch(ctx, events.OrderBy(keySelector: c => c.T).ToList(), offset);
+
+            return (alive, passed);
+        }
+
+        var otherIndex = 0;
+
+        foreach (var sweep in sortedSweeps) {
+            var batch = new List<TimedCommand>();
+
+            while ((otherIndex < others.Count) && (others[otherIndex].T < sweep.T)) {
+                batch.Add(item: others[otherIndex++]);
+            }
+
+            if (!SendBatch(batch: batch, ctx: ctx, offset: offset)) {
+                return (false, passed);
+            }
+
+            var sweepWhere = events.Where(predicate: c => (IsWhere(c: c) && (Math.Abs(value: (c.T - sweep.T)) <= 0.3))).OrderBy(keySelector: c => c.T).ToList();
+            var mark = ctx.Collector.Count;
+            var alive = SendBatch(batch: sweepWhere, ctx: ctx, offset: offset);
+            var poses = ReadPoses(collector: ctx.Collector, count: sweepWhere.Count, sinceIndex: mark);
+
+            passed &= AssertSweep(passLabel: passLabel, poses: poses, sweep: sweep, tolerance: ctx.Tolerance, yawTolerance: ctx.YawTolerance);
+
+            if (!alive) {
+                return (false, passed);
+            }
+        }
+
+        var tail = new List<TimedCommand>();
+
+        while (otherIndex < others.Count) {
+            tail.Add(item: others[otherIndex++]);
+        }
+
+        var tailAlive = SendBatch(batch: tail, ctx: ctx, offset: offset);
+
+        return (tailAlive, passed);
+    }
+
+    // Group-write: every line already due is joined and written in one pipe write (per-line writes lag a flood burst,
+    // starving the tape pre-buffer).
+    static bool SendBatch(FeedContext ctx, List<TimedCommand> batch, double offset) {
+        var builder = new StringBuilder();
+        var index = 0;
+
+        while (index < batch.Count) {
+            var wait = ((batch[index].T + offset) - ctx.Stopwatch.Elapsed.TotalSeconds);
+
+            if (wait > 0.0) {
+                Thread.Sleep(millisecondsTimeout: (int)(wait * 1000.0));
+            }
+
+            if (ctx.Process.HasExited) {
+                return false;
+            }
+
+            _ = builder.Clear();
+            var now = ctx.Stopwatch.Elapsed.TotalSeconds;
+
+            while ((index < batch.Count) && ((batch[index].T + offset) <= (now + 0.005))) {
+                _ = builder.Append(value: batch[index].Command).Append(value: '\n');
+                index++;
+            }
+
+            try {
+                ctx.Stdin.Write(value: builder.ToString());
+            }
+            catch (IOException) {
+                return false;
+            }
+            catch (ObjectDisposedException) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Poll the collector for the player.where echoes that landed after <paramref name="sinceIndex"/> until <paramref
+    // name="count"/> distinct poses are in (or a deadline passes). The LAST echo per player wins (a stable re-scan).
+    static Dictionary<int, Pose> ReadPoses(OutputCollector collector, int sinceIndex, int count) {
+        var poses = new Dictionary<int, Pose>();
+        var deadline = DateTime.UtcNow.AddSeconds(value: 15);
+        var previousCount = -1;
+
+        while (true) {
+            poses.Clear();
+            var snapshot = collector.Snapshot();
+
+            for (var i = sinceIndex; (i < snapshot.Length); i++) {
+                var match = ProofApp.WhereEcho.Match(input: snapshot[i]);
+
+                if (match.Success) {
+                    poses[int.Parse(match.Groups[1].Value, ProofApp.Inv)] = new Pose(
+                        X: double.Parse(match.Groups[2].Value, ProofApp.Inv),
+                        Y: double.Parse(match.Groups[3].Value, ProofApp.Inv),
+                        Z: double.Parse(match.Groups[4].Value, ProofApp.Inv),
+                        Yaw: int.Parse(match.Groups[5].Value, ProofApp.Inv),
+                        Pitch: int.Parse(match.Groups[6].Value, ProofApp.Inv),
+                        Roll: int.Parse(match.Groups[7].Value, ProofApp.Inv));
+                }
+            }
+
+            // Known target (asserted corpus) -> wait for it; unknown (report-only) -> wait until stable across two polls.
+            var satisfied = ((count > 0)
+                ? (poses.Count >= count)
+                : ((poses.Count > 0) && (poses.Count == previousCount)));
+
+            if (satisfied || (DateTime.UtcNow >= deadline)) {
+                break;
+            }
+
+            previousCount = poses.Count;
+            Thread.Sleep(millisecondsTimeout: 200);
+        }
+
+        return poses;
+    }
+    static double AngleDiff(int got, int want) {
+        return Math.Abs(value: (((((got - want) % 360) + 540) % 360) - 180));
+    }
+
+    // Assert one sweep: closed-form pose #expects, per-entity #expect-band, and cross-class #expect-separation.
+    // A sweep with NO asserts is report-only (captured for compare). Returns whether every present assertion passed.
+    static bool AssertSweep(Sweep sweep, Dictionary<int, Pose> poses, double tolerance, double yawTolerance, string passLabel) {
+        if (!sweep.HasAsserts) {
+            Console.WriteLine(value: $"[proof] {passLabel} sweep '{sweep.Name}': report-only — {poses.Count} poses captured for compare");
+
+            return true;
+        }
+
+        var allPassed = true;
+
+        // --- closed-form pose tableau ---
+        if (sweep.PoseExpects.Count > 0) {
+            var failures = new List<string>();
+            var passedCount = 0;
+
+            foreach (var want in sweep.PoseExpects.OrderBy(keySelector: p => p.N)) {
+                if (!poses.TryGetValue(key: want.N, value: out var got)) {
+                    failures.Add(item: $"p{want.N}: no player.where echo captured");
+
+                    continue;
+                }
+
+                var ok = ((Math.Abs(value: (got.X - want.X)) <= tolerance)
+                    && (Math.Abs(value: (got.Y - want.Y)) <= tolerance)
+                    && (Math.Abs(value: (got.Z - want.Z)) <= tolerance)
+                    && (AngleDiff(got: got.Yaw, want: want.Yaw) <= yawTolerance)
+                    && (AngleDiff(got: got.Pitch, want: want.Pitch) <= yawTolerance)
+                    && (AngleDiff(got: got.Roll, want: want.Roll) <= yawTolerance));
+
+                if (ok) {
+                    passedCount++;
+                }
+                else {
+                    failures.Add(item: string.Format(ProofApp.Inv,
+                        "p{0}: expected ({1:0.00}, {2:0.00}, {3:0.00}) yaw={4} pitch={5} roll={6} got ({7:0.00}, {8:0.00}, {9:0.00}) yaw={10} pitch={11} roll={12}",
+                        want.N, want.X, want.Y, want.Z, want.Yaw, want.Pitch, want.Roll,
+                        got.X, got.Y, got.Z, got.Yaw, got.Pitch, got.Roll));
+                }
+            }
+
+            var verdict = ((failures.Count == 0) ? "PASS" : "FAIL");
+
+            Console.WriteLine(value: string.Format(ProofApp.Inv,
+                "[proof] {0} sweep '{1}': tableau {2} — {3}/{4} entities exact (pos ±{5} u, yaw/pitch/roll ±{6}°)",
+                passLabel, sweep.Name, verdict, passedCount, sweep.PoseExpects.Count, tolerance, yawTolerance));
+
+            foreach (var failure in failures.Take(count: 10)) {
+                Console.WriteLine(value: $"[proof]   {failure}");
+            }
+
+            if (failures.Count > 10) {
+                Console.WriteLine(value: $"[proof]   ... and {(failures.Count - 10)} more");
+            }
+
+            allPassed &= (failures.Count == 0);
+        }
+
+        // --- per-entity bands + the class buckets the separation reads ---
+        var classValues = new Dictionary<string, List<double>>(comparer: StringComparer.Ordinal);
+
+        if (sweep.BandExpects.Count > 0) {
+            var bandFailures = new List<string>();
+            var bandPassed = 0;
+
+            foreach (var band in sweep.BandExpects.OrderBy(keySelector: b => b.N)) {
+                if (!poses.TryGetValue(key: band.N, value: out var got)) {
+                    bandFailures.Add(item: $"p{band.N}: no where echo (band)");
+
+                    continue;
+                }
+
+                var value = band.Axis switch { 'x' => got.X, 'z' => got.Z, _ => got.Y };
+
+                if (!classValues.TryGetValue(key: band.Class, value: out var bucket)) {
+                    bucket = new List<double>();
+                    classValues[band.Class] = bucket;
+                }
+
+                bucket.Add(item: value);
+
+                if ((value >= band.Lo) && (value <= band.Hi)) {
+                    bandPassed++;
+                }
+                else {
+                    bandFailures.Add(item: string.Format(ProofApp.Inv,
+                        "p{0} ({1}): {2} {3:0.00} outside band [{4:0.00}, {5:0.00}]", band.N, band.Class, band.Axis, value, band.Lo, band.Hi));
+                }
+            }
+
+            var verdict = ((bandFailures.Count == 0) ? "PASS" : "FAIL");
+
+            Console.WriteLine(value: string.Format(ProofApp.Inv,
+                "[proof] {0} sweep '{1}': bands {2} — {3}/{4} in band", passLabel, sweep.Name, verdict, bandPassed, sweep.BandExpects.Count));
+
+            foreach (var failure in bandFailures.Take(count: 10)) {
+                Console.WriteLine(value: $"[proof]   {failure}");
+            }
+
+            allPassed &= (bandFailures.Count == 0);
+        }
+
+        // --- cross-class separation (the variable-height proof: min(A) - max(B) > gap) ---
+        foreach (var sep in sweep.Separations) {
+            if (classValues.TryGetValue(key: sep.ClassA, value: out var a) && classValues.TryGetValue(key: sep.ClassB, value: out var b)
+                && (a.Count > 0) && (b.Count > 0)) {
+                var minA = a.Min();
+                var maxB = b.Max();
+                var gap = (minA - maxB);
+                var ok = (gap > sep.MinGap);
+
+                Console.WriteLine(value: string.Format(ProofApp.Inv,
+                    "[proof] {0} sweep '{1}': separation {2} — min {3}({4}) {5:0.00} vs max {6}({7}) {8:0.00} (gap {9:0.00}, need > {10:0.00})",
+                    passLabel, sweep.Name, (ok ? "PASS" : "FAIL"), sep.Axis, sep.ClassA, minA, sep.Axis, sep.ClassB, maxB, gap, sep.MinGap));
+                allPassed &= ok;
+            }
+            else {
+                Console.WriteLine(value: $"[proof] {passLabel} sweep '{sweep.Name}': separation SKIP — not enough {sep.ClassA}/{sep.ClassB} poses");
+                allPassed = false;
+            }
+        }
+
+        return allPassed;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static string DefaultLogPath(string kind) {
+        var dir = Path.Combine(
+            path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData),
+            path2: "Puck", path3: "World", path4: "proof-logs");
+
+        return Path.Combine(path1: dir, path2: $"proof-{kind}-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us, but a race on exit is not an error.
+        }
+    }
+}
+
+// ============================================================================================
+// Comparer — rerun byte/near-identity of two transcripts' final sweeps + dispersion statistics
+// (the correctness bar for the stochastic karts/walkers/flood).
+// ============================================================================================
+
+static class Comparer {
+    public static int RunCompare(ArgMap opts) {
+        var referencePath = opts.GetRequired(name: "--reference");
+        var candidatePath = opts.GetRequired(name: "--candidate");
+        var tolerance = opts.GetDouble(fallback: 0.0, name: "--tolerance");
+        var yawTolerance = opts.GetDouble(fallback: 0.0, name: "--yaw-tolerance");
+
+        var reference = ReadSweep(path: referencePath);
+        var candidate = ReadSweep(path: candidatePath);
+
+        Console.WriteLine(value: $"[compare] reference: {reference.Count} poses | candidate: {candidate.Count} poses");
+
+        var mismatches = new List<string>();
+        var maxPositionDelta = 0.0;
+        var maxAngleDelta = 0;
+
+        foreach (var n in reference.Keys.OrderBy(keySelector: k => k)) {
+            if (!candidate.TryGetValue(key: n, value: out var c)) {
+                mismatches.Add(item: $"p{n}: missing from candidate");
+
+                continue;
+            }
+
+            var r = reference[n];
+            var positionDelta = Math.Sqrt(
+                d: ((((r.Pose.X - c.Pose.X) * (r.Pose.X - c.Pose.X)) +
+                ((r.Pose.Y - c.Pose.Y) * (r.Pose.Y - c.Pose.Y))) +
+                ((r.Pose.Z - c.Pose.Z) * (r.Pose.Z - c.Pose.Z))));
+            var angleDelta = Math.Max(val1: Math.Max(
+                val1: AngleDiff(a: r.Pose.Yaw, b: c.Pose.Yaw),
+                val2: AngleDiff(a: r.Pose.Pitch, b: c.Pose.Pitch)),
+                val2: AngleDiff(a: r.Pose.Roll, b: c.Pose.Roll));
+
+            maxPositionDelta = Math.Max(val1: maxPositionDelta, val2: positionDelta);
+            maxAngleDelta = Math.Max(val1: maxAngleDelta, val2: angleDelta);
+
+            var withinTolerance = ((tolerance <= 0.0)
+                ? (c.Text == r.Text)
+                : ((positionDelta <= tolerance) && (angleDelta <= yawTolerance)));
+
+            if (!withinTolerance) {
+                mismatches.Add(item: $"p{n}: '{r.Text}' vs '{c.Text}' (Δpos={Math.Round(digits: 3, value: positionDelta).ToString(provider: ProofApp.Inv)} Δang={angleDelta})");
+            }
+        }
+
+        foreach (var n in candidate.Keys.Where(predicate: k => !reference.ContainsKey(key: k))) {
+            mismatches.Add(item: $"p{n}: missing from reference");
+        }
+
+        var bar = ((tolerance <= 0.0) ? "byte-identity" : $"near-identity (±{ProofApp.F(tolerance)} u, ±{ProofApp.F(yawTolerance)}°)");
+
+        if (mismatches.Count == 0) {
+            Console.WriteLine(value: $"[compare] RERUN {bar} PASS — all {reference.Count} poses (observed max Δpos={Math.Round(digits: 3, value: maxPositionDelta).ToString(provider: ProofApp.Inv)} u, max Δang={maxAngleDelta}°)");
+        }
+        else {
+            Console.WriteLine(value: $"[compare] RERUN {bar} FAIL — {mismatches.Count} mismatches (max Δpos={Math.Round(digits: 3, value: maxPositionDelta).ToString(provider: ProofApp.Inv)} u, max Δang={maxAngleDelta}°):");
+
+            foreach (var mismatch in mismatches.Take(count: 10)) {
+                Console.WriteLine(value: $"[compare]   {mismatch}");
+            }
+        }
+
+        PrintDispersion(reference: reference);
+
+        return ((mismatches.Count == 0) ? 0 : 1);
+    }
+
+    static void PrintDispersion(Dictionary<int, (Pose Pose, string Text)> reference) {
+        if (reference.Count <= 1) {
+            return;
+        }
+
+        var xs = reference.Values.Select(selector: v => v.Pose.X).ToList();
+        var zs = reference.Values.Select(selector: v => v.Pose.Z).ToList();
+        var cx = xs.Average();
+        var cz = zs.Average();
+        var radii = reference.Values
+            .Select(selector: v => Math.Sqrt(d: (((v.Pose.X - cx) * (v.Pose.X - cx)) + ((v.Pose.Z - cz) * (v.Pose.Z - cz)))))
+            .OrderBy(keySelector: r => r)
+            .ToList();
+        var rms = Math.Sqrt(d: (radii.Select(selector: r => (r * r)).Sum() / radii.Count));
+
+        double Q(double p) => radii[(int)Math.Floor(d: ((radii.Count - 1) * p))];
+
+        Console.WriteLine(value: string.Format(ProofApp.Inv,
+            "[compare] dispersion: centroid=({0:0.0}, {1:0.0}) | radius-from-centroid q25/q50/q75/max = {2:0.0}/{3:0.0}/{4:0.0}/{5:0.0} | rms {6:0.0}",
+            cx, cz, Q(p: 0.25), Q(p: 0.5), Q(p: 0.75), radii[^1], rms));
+        Console.WriteLine(value: "[compare] (uniform disc of radius R has q50 ≈ 0.71R, rms ≈ 0.71R — compare against the corpus arena radius)");
+    }
+    static int AngleDiff(int a, int b) {
+        return Math.Abs(value: (((((a - b) % 360) + 540) % 360) - 180));
+    }
+
+    // The last where echo per player across the whole transcript — the final sweep.
+    static Dictionary<int, (Pose Pose, string Text)> ReadSweep(string path) {
+        var poses = new Dictionary<int, (Pose, string)>();
+
+        foreach (var line in File.ReadLines(path: path)) {
+            var match = ProofApp.WhereEcho.Match(input: line);
+
+            if (match.Success) {
+                var n = int.Parse(match.Groups[1].Value, ProofApp.Inv);
+                var pose = new Pose(
+                    X: double.Parse(match.Groups[2].Value, ProofApp.Inv),
+                    Y: double.Parse(match.Groups[3].Value, ProofApp.Inv),
+                    Z: double.Parse(match.Groups[4].Value, ProofApp.Inv),
+                    Yaw: int.Parse(match.Groups[5].Value, ProofApp.Inv),
+                    Pitch: int.Parse(match.Groups[6].Value, ProofApp.Inv),
+                    Roll: int.Parse(match.Groups[7].Value, ProofApp.Inv));
+                // The exact text (last occurrence wins) — the byte-identity discriminator.
+                var text = $"p{n} ({match.Groups[2].Value}, {match.Groups[3].Value}, {match.Groups[4].Value}) {match.Groups[5].Value} {match.Groups[6].Value} {match.Groups[7].Value}";
+
+                poses[n] = (pose, text);
+            }
+        }
+
+        return poses;
+    }
+}
+
+// ============================================================================================
+// WORLDDOC — the Phase 1 exit-bar proofs for the world document (puck.world.def.v1):
+//   (a) the ouroboros gate: the checked-in Assets/worlds/default.world.json round-trips
+//       world.save byte-for-byte, twice over (load->save->load reproduces the file exactly).
+//   (b) baked-default parity: booting from the checked-in file and booting from a missing
+//       --world path (the loud baked-default fallback) must simulate byte-identically over the
+//       same short corpus, with the "[world] definition: baked default (...)" line present only
+//       in the fallback run. Reuses the Feeder/Comparer machinery rather than reimplementing it.
+// ============================================================================================
+
+static class WorldDocProof {
+    public static int RunWorldDoc(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 12, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+        var checkedInPath = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds", path4: "default.world.json");
+
+        if (!File.Exists(path: checkedInPath)) {
+            return ProofApp.Fail(message: $"checked-in world file not found: {checkedInPath}");
+        }
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        Console.WriteLine(value: "[proof] === worlddoc (a): the ouroboros gate (every checked-in world) ===");
+
+        // Cover EVERY checked-in world (default, kart-remap, and — once authored — expo): a save that folds session state
+        // (§2.1) must stay byte-identity idempotent on a fresh boot for each. Missing files (e.g. expo before its first
+        // authoring) are skipped with a note rather than failing the gate.
+        var worldsDir = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds");
+        var ouroborosPassed = true;
+
+        foreach (var worldName in new[] { "default.world.json", "kart-remap.world.json", "expo.world.json" }) {
+            var worldPath = Path.Combine(path1: worldsDir, path2: worldName);
+
+            if (!File.Exists(path: worldPath)) {
+                Console.WriteLine(value: $"[proof]   (skip) {worldName} not present — author it first (proof.cs expo-author)");
+
+                continue;
+            }
+
+            Console.WriteLine(value: $"[proof]   -- {worldName} --");
+            ouroborosPassed &= RunOuroboros(checkedInPath: worldPath, exe: exe, exitAfterSeconds: exitAfterSeconds, height: height, repoRoot: repoRoot, width: width);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === worlddoc (b): baked-default parity ===");
+        var parityPassed = RunBakedDefaultParity(checkedInPath: checkedInPath);
+
+        var passed = (ouroborosPassed && parityPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] worlddoc proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // world.save(checked-in) must equal the checked-in bytes; world.save(that copy) must equal it again — the
+    // load->save byte-identity property proven twice, once from the committed source and once from its own output.
+    static bool RunOuroboros(string exe, string repoRoot, string checkedInPath, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var temp1 = Path.Combine(Path.GetTempPath(), $"puck-world-ouroboros-1-{pid}.json");
+        var temp2 = Path.Combine(Path.GetTempPath(), $"puck-world-ouroboros-2-{pid}.json");
+
+        if (!LaunchAndSave(exe: exe, repoRoot: repoRoot, worldArg: checkedInPath, savePath: temp1, width: width, height: height, exitAfterSeconds: exitAfterSeconds)) {
+            return false;
+        }
+
+        var checkedInBytes = File.ReadAllBytes(path: checkedInPath);
+        var temp1Bytes = File.ReadAllBytes(path: temp1);
+        var checkedInHash = Convert.ToHexStringLower(SHA256.HashData(source: checkedInBytes));
+        var temp1Hash = Convert.ToHexStringLower(SHA256.HashData(source: temp1Bytes));
+        var stage1Ok = string.Equals(a: checkedInHash, b: temp1Hash, comparisonType: StringComparison.Ordinal);
+
+        Console.WriteLine(value: $"[proof]   {(stage1Ok ? "PASS" : "FAIL")} checked-in == world.save(checked-in): {checkedInBytes.Length} vs {temp1Bytes.Length} bytes | sha256 {checkedInHash[..12]} vs {temp1Hash[..12]} ({temp1})");
+
+        if (!stage1Ok) {
+            return false;
+        }
+
+        if (!LaunchAndSave(exe: exe, repoRoot: repoRoot, worldArg: temp1, savePath: temp2, width: width, height: height, exitAfterSeconds: exitAfterSeconds)) {
+            return false;
+        }
+
+        var temp2Bytes = File.ReadAllBytes(path: temp2);
+        var temp2Hash = Convert.ToHexStringLower(SHA256.HashData(source: temp2Bytes));
+        var stage2Ok = string.Equals(a: temp1Hash, b: temp2Hash, comparisonType: StringComparison.Ordinal);
+
+        Console.WriteLine(value: $"[proof]   {(stage2Ok ? "PASS" : "FAIL")} world.save(checked-in) == world.save(world.save(checked-in)): {temp1Bytes.Length} vs {temp2Bytes.Length} bytes | sha256 {temp1Hash[..12]} vs {temp2Hash[..12]} ({temp2})");
+
+        return stage2Ok;
+    }
+
+    // Launch Puck.World with --world <worldArg>, wait for the console to be routing commands, issue
+    // world.save <savePath>, and confirm the echo reports a write (not an error). The child window is small and
+    // bounded by --exit-after-seconds; the whole call is a one-shot boot/save/exit.
+    static bool LaunchAndSave(string exe, string repoRoot, string worldArg, string savePath, int width, int height, int exitAfterSeconds) {
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        psi.ArgumentList.Add(item: "--world");
+        psi.ArgumentList.Add(item: worldArg);
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        var process = new Process { StartInfo = psi };
+        var collector = new OutputCollector();
+        var stopwatch = new Stopwatch();
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var mark = collector.Count;
+
+            Send(ctx: ctx, line: $"world.save {savePath}");
+
+            var line = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            return Check(name: "world.save", ok: ((line is not null) && !line.Contains(value: "could not write")), detail: (line?.Trim() ?? "(no world.save echo)"));
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+    }
+
+    // Two feeder runs of the SAME short deterministic corpus (kind hop, small population): one against the
+    // checked-in world file, one against a path that does not exist (forcing the loud baked-default fallback).
+    // Their final sweeps must compare byte-identical, and only the fallback run's transcript may carry the loud line.
+    //
+    // The gate does NOT require the feeder's own in-flight #expect-band assertion to pass: that assertion samples a
+    // ~0.2s mid-air window and is sensitive to host render throughput (it can fail identically in BOTH runs on a
+    // loaded machine, independent of the world document — see the worlddoc report). What this gate actually proves —
+    // that the two runs land in the exact same place — is the byte-identical final-sweep compare below, guarded by an
+    // explicit pose-coverage check so a crashed/empty transcript cannot vacuously pass an empty comparison.
+    static bool RunBakedDefaultParity(string checkedInPath) {
+        const int population = 8;
+        var pid = Environment.ProcessId;
+        var logA = Path.Combine(Path.GetTempPath(), $"puck-world-worlddoc-checked-in-{pid}.log");
+        var logB = Path.Combine(Path.GetTempPath(), $"puck-world-worlddoc-baked-default-{pid}.log");
+        var missingWorldPath = Path.Combine(Path.GetTempPath(), $"puck-world-worlddoc-missing-{pid}.world.json");
+
+        Console.WriteLine(value: "[proof]   run A: --world <checked-in file>");
+        var codeA = Feeder.RunFeeder(opts: new ArgMap(args: [
+            "--kind", "hop", "--population", population.ToString(provider: ProofApp.Inv), "--headless", "--no-build",
+            "--quality", "low", "--width", "640", "--height", "480", "--min-fps", "0",
+            "--log", logA, "--world-arg", checkedInPath,
+        ]));
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof]   run B: --world <nonexistent path> (forces the baked-default fallback)");
+        var codeB = Feeder.RunFeeder(opts: new ArgMap(args: [
+            "--kind", "hop", "--population", population.ToString(provider: ProofApp.Inv), "--headless", "--no-build",
+            "--quality", "low", "--width", "640", "--height", "480", "--min-fps", "0",
+            "--log", logB, "--world-arg", missingWorldPath,
+        ]));
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof]   (info) feeder exit codes — run A={codeA}, run B={codeB} (their in-flight #expect-band assertion is NOT the worlddoc gate; see comment above)");
+
+        var posesA = DistinctPoseCount(logPath: logA);
+        var posesB = DistinctPoseCount(logPath: logB);
+        var coveragePassed = ((posesA == population) && (posesB == population));
+
+        Console.WriteLine(value: $"[proof]   {(coveragePassed ? "PASS" : "FAIL")} pose coverage — run A captured {posesA}/{population}, run B captured {posesB}/{population}");
+
+        var comparePassed = (Comparer.RunCompare(opts: new ArgMap(args: ["--reference", logA, "--candidate", logB])) == 0);
+
+        var linesA = File.ReadAllLines(path: logA);
+        var linesB = File.ReadAllLines(path: logB);
+        var bakedInA = linesA.Any(predicate: l => l.Contains(value: "baked default"));
+        var bakedInB = linesB.Any(predicate: l => l.Contains(value: "baked default"));
+        var loudLinePassed = (!bakedInA && bakedInB);
+
+        Console.WriteLine(value: $"[proof]   {(loudLinePassed ? "PASS" : "FAIL")} loud-fallback line — run A (checked-in) baked-default={bakedInA} (want false), run B (missing) baked-default={bakedInB} (want true)");
+        Console.WriteLine(value: $"[proof]   transcripts: {logA} | {logB}");
+
+        return (coveragePassed && comparePassed && loudLinePassed);
+    }
+
+    // The count of distinct players whose final pose landed in the transcript (the last player.where echo per
+    // player wins, matching Comparer.ReadSweep) — a crash or an empty run reads back 0, never a silent vacuous pass.
+    static int DistinctPoseCount(string logPath) {
+        var seen = new HashSet<int>();
+
+        foreach (var line in File.ReadLines(path: logPath)) {
+            var match = ProofApp.WhereEcho.Match(input: line);
+
+            if (match.Success) {
+                _ = seen.Add(item: int.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv));
+            }
+        }
+
+        return seen.Count;
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    // Wait for the router to be live: player.stop is idempotent at boot, so its echo is the readiness signal (mirrors
+    // ScreensProof.WaitForConsole — cold shader compilation can exceed an individual assertion's deadline).
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+}
+
+// ============================================================================================
+// EXPO — the Phase 5 second world (§2.6 genre-neutrality proof artifact) + session write-back:
+//   expo-author regenerates Assets/worlds/expo.world.json THE HONEST WAY (a scripted stdin
+//     session of mutations + live session levers fed to a booted baked-default world, then
+//     world.save folds the render levers + census into the saved document).
+//   expodoc proves the artifact: (a) --world expo boots the loud definition line; (b) a
+//     distinguishing world.status fact (expo's kit/screen counts differ from the default's,
+//     zero code); (c) the write-back slice not covered by MutateProof — a live SESSION lever
+//     (world.population) survives world.save + a relaunch. Expo's own ouroboros is in worlddoc.
+// ============================================================================================
+static class ExpoProof {
+    // The distinguishing world.status counts the authoring session produces (5 default kits + "glider" = 6; 5 default
+    // screens minus indices 4 and 3 = 3) — a visibly different world with zero code, the §2.6 audit made observable.
+    const string ExpoStatusNeedle = "kits 6 screens 3";
+    // The census the authoring session bakes in (world.population 32), and the distinct value the write-back slice sets
+    // to prove a live session lever survives world.save + a relaunch (48 != 32 != the default's 124).
+    const int ExpoAuthoredNetworkPlayers = 32;
+    const int WriteBackNetworkPlayers = 48;
+
+    public static int RunExpoAuthor(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+        var scriptPath = Path.Combine(path1: projectPath, path2: "scripts", path3: "expo-world.txt");
+        var outPath = (opts.Get(name: "--out") ?? Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds", path4: "expo.world.json"));
+
+        if (!File.Exists(path: scriptPath)) {
+            return ProofApp.Fail(message: $"authoring script not found: {scriptPath}");
+        }
+
+        if (!EnsureBuilt(noBuild: noBuild, projectPath: projectPath, exe: out var exe)) {
+            return 1;
+        }
+
+        var commands = File.ReadAllLines(path: scriptPath)
+            .Select(selector: static line => line.Trim())
+            .Where(predicate: static line => ((line.Length > 0) && !line.StartsWith(value: '#')))
+            .ToArray();
+
+        Console.WriteLine(value: $"[proof] authoring {outPath} from {commands.Length} script commands (baked-default boot)...");
+
+        var authored = Author(exe: exe, repoRoot: repoRoot, commands: commands, outPath: outPath, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        if (authored) {
+            var bytes = File.ReadAllBytes(path: outPath);
+
+            Console.WriteLine(value: $"[proof] expo-author PASS — {outPath} ({bytes.Length} bytes, sha256 {Convert.ToHexStringLower(SHA256.HashData(source: bytes))[..12]})");
+
+            return 0;
+        }
+
+        Console.WriteLine(value: "[proof] expo-author FAIL");
+
+        return 1;
+    }
+
+    public static int RunExpoDoc(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+        var expoPath = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds", path4: "expo.world.json");
+
+        if (!File.Exists(path: expoPath)) {
+            return ProofApp.Fail(message: $"expo world not found: {expoPath} — author it first (proof.cs expo-author)");
+        }
+
+        if (!EnsureBuilt(noBuild: noBuild, projectPath: projectPath, exe: out var exe)) {
+            return 1;
+        }
+
+        // The authored artifact must carry the folded census (world.population 32) — the honest write-back baked into the
+        // checked-in file, read straight from the JSON.
+        var authoredNetwork = ExtractNetworkPlayers(json: File.ReadAllText(path: expoPath));
+        var authoredOk = Check(name: "authored-census-folded", ok: (authoredNetwork == ExpoAuthoredNetworkPlayers),
+            detail: $"expo networkPlayers = {(authoredNetwork?.ToString(provider: ProofApp.Inv) ?? "?")} (want {ExpoAuthoredNetworkPlayers})");
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === expodoc (a+b): expo boots, loud + visibly different ===");
+        var tempSave = Path.Combine(Path.GetTempPath(), $"puck-world-expo-writeback-{Environment.ProcessId}.json");
+        var bootOk = RunBootAndWriteBack(exe: exe, repoRoot: repoRoot, expoPath: expoPath, tempSave: tempSave, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === expodoc (c): the write-back slice survives a relaunch ===");
+        var survivalOk = (File.Exists(path: tempSave) && RunWriteBackSurvival(exe: exe, repoRoot: repoRoot, savedPath: tempSave, width: width, height: height, exitAfterSeconds: exitAfterSeconds));
+
+        if (!File.Exists(path: tempSave)) {
+            Console.WriteLine(value: $"[proof]   FAIL survival: {tempSave} was never written (write-back save did not complete)");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === expodoc (d): a runtime screen.insert folds into the screen's Machine source ===");
+        var insertOk = RunScreenInsertFold(exe: exe, repoRoot: repoRoot, expoPath: expoPath, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (authoredOk && bootOk && survivalOk && insertOk);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] expodoc proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // Boot the baked default, drive the authoring script over stdin, world.save to the artifact path. The mutation verbs
+    // are Simulation-routed (buffered, drained in FIFO order behind the stdin barrier); world.save is Immediate, so the
+    // barrier holds it until every buffered mutation has applied — the same read-after-write the mutate proof relies on.
+    static bool Author(string exe, string repoRoot, string[] commands, string outPath, int width, int height, int exitAfterSeconds) {
+        var psi = BaseStartInfo(exe: exe, repoRoot: repoRoot);
+
+        AddArg(psi: psi, name: "--width", value: width);
+        AddArg(psi: psi, name: "--height", value: height);
+        AddArg(psi: psi, name: "--exit-after-seconds", value: exitAfterSeconds);
+
+        var process = new Process { StartInfo = psi };
+        var collector = new OutputCollector();
+        var stopwatch = new Stopwatch();
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            foreach (var command in commands) {
+                Send(ctx: ctx, line: command);
+            }
+
+            var mark = collector.Count;
+
+            Send(ctx: ctx, line: $"world.save {outPath}");
+
+            var line = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 45.0);
+
+            return Check(name: "authoring-save", ok: ((line is not null) && !line.Contains(value: "could not write")), detail: (line?.Trim() ?? "(no world.save echo)"));
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+    }
+
+    // Session 1: boot --world expo, assert the loud definition line, assert the distinguishing world.status counts, then
+    // exercise the write-back — change the live census (world.population), world.save to a temp copy.
+    static bool RunBootAndWriteBack(string exe, string repoRoot, string expoPath, string tempSave, int width, int height, int exitAfterSeconds) {
+        var psi = BaseStartInfo(exe: exe, repoRoot: repoRoot);
+
+        AddArg(psi: psi, name: "--world", value: expoPath);
+        AddArg(psi: psi, name: "--width", value: width);
+        AddArg(psi: psi, name: "--height", value: height);
+        AddArg(psi: psi, name: "--exit-after-seconds", value: exitAfterSeconds);
+
+        var process = new Process { StartInfo = psi };
+        var collector = new OutputCollector();
+        var stopwatch = new Stopwatch();
+        var started = false;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --world {expoPath}");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            // (a) the loud boot line names the expo file — the loader's one-line origin.
+            var bootLine = Await(collector: collector, mark: 0, predicate: l => (l.Contains(value: "[world] definition:") && l.Contains(value: expoPath)), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "boots-from-expo", ok: (bootLine is not null), detail: (bootLine?.Trim() ?? $"(no '[world] definition: {expoPath}' boot line)"));
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // (b) the distinguishing world.status fact — expo's kit/screen counts differ from the default's, and a fresh
+            // boot has no session drift (the authored render levers/census equal the document defaults).
+            var statusMark = collector.Count;
+
+            Send(ctx: ctx, line: "world.status");
+
+            var statusLine = Await(collector: collector, mark: statusMark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "distinguishing-status", ok: ((statusLine is not null) && statusLine.Contains(value: ExpoStatusNeedle)),
+                detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+            passed &= Check(name: "fresh-boot-no-drift", ok: ((statusLine is not null) && statusLine.Contains(value: "session-drift none")),
+                detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+
+            // (c-i) change the live census (a session lever), then world.save to a temp copy — the write-back the mutate
+            // proof does not cover (it changes a JOURNALED kit; this changes SESSION state folded only at save).
+            Send(ctx: ctx, line: $"world.population {WriteBackNetworkPlayers} wander");
+
+            var saveMark = collector.Count;
+
+            Send(ctx: ctx, line: $"world.save {tempSave}");
+
+            var saveLine = Await(collector: collector, mark: saveMark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "write-back-save", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+
+            // The saved copy's networkPlayers must be the changed census (folded), NOT the authored 32.
+            if (File.Exists(path: tempSave)) {
+                var saved = ExtractNetworkPlayers(json: File.ReadAllText(path: tempSave));
+
+                passed &= Check(name: "write-back-folded-into-json", ok: (saved == WriteBackNetworkPlayers), detail: $"saved networkPlayers = {(saved?.ToString(provider: ProofApp.Inv) ?? "?")} (want {WriteBackNetworkPlayers})");
+            }
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // Session 2: relaunch --world <the write-back copy> and assert the changed census survived the fold + relaunch — the
+    // live world.population verb echoes it, no code edit, no restart of the change.
+    static bool RunWriteBackSurvival(string exe, string repoRoot, string savedPath, int width, int height, int exitAfterSeconds) {
+        var psi = BaseStartInfo(exe: exe, repoRoot: repoRoot);
+
+        AddArg(psi: psi, name: "--world", value: savedPath);
+        AddArg(psi: psi, name: "--width", value: width);
+        AddArg(psi: psi, name: "--height", value: height);
+        AddArg(psi: psi, name: "--exit-after-seconds", value: exitAfterSeconds);
+
+        var process = new Process { StartInfo = psi };
+        var collector = new OutputCollector();
+        var stopwatch = new Stopwatch();
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --world {savedPath}");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var mark = collector.Count;
+
+            Send(ctx: ctx, line: "world.population");
+
+            var line = Await(collector: collector, mark: mark, predicate: l => l.Contains(value: "[world.population:"), deadlineSeconds: 15.0);
+
+            return Check(name: "census-survived-relaunch", ok: ((line is not null) && line.Contains(value: $"{WriteBackNetworkPlayers} network-human stand-ins")),
+                detail: (line?.Trim() ?? "(no world.population echo)"));
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+    }
+
+    // The third write-back dimension, positively (expo/default are asset-free, so the ouroboros only exercises the
+    // no-live-machine no-op). Boot expo, boot a REAL joypad-echo ROM onto a declared screen via screen.insert, assert
+    // world.status now names the 'screens' drift dimension, then world.save and assert the saved JSON carries a machine
+    // source referencing that ROM — the live binder insert folded into the screen row (§2.1). One self-contained session.
+    static bool RunScreenInsertFold(string exe, string repoRoot, string expoPath, int width, int height, int exitAfterSeconds) {
+        const int insertScreen = 1;
+        var romPath = Path.Combine(Path.GetTempPath(), $"puck-world-expo-insert-{Environment.ProcessId}.gb");
+        var romBase = Path.GetFileName(path: romPath);
+        var tempSave = Path.Combine(Path.GetTempPath(), $"puck-world-expo-insert-save-{Environment.ProcessId}.json");
+
+        File.WriteAllBytes(bytes: ScreensProof.BuildJoypadEchoRom(), path: romPath);
+
+        var psi = BaseStartInfo(exe: exe, repoRoot: repoRoot);
+
+        AddArg(psi: psi, name: "--world", value: expoPath);
+        AddArg(psi: psi, name: "--width", value: width);
+        AddArg(psi: psi, name: "--height", value: height);
+        AddArg(psi: psi, name: "--exit-after-seconds", value: exitAfterSeconds);
+
+        var process = new Process { StartInfo = psi };
+        var collector = new OutputCollector();
+        var stopwatch = new Stopwatch();
+        var started = false;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --world {expoPath} (screen.insert {insertScreen} {romBase})");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Boot the ROM onto a declared expo screen (an overlay on the slot — no new surface, no envelope growth).
+            var insertMark = collector.Count;
+
+            Send(ctx: ctx, line: $"screen.insert {insertScreen} {romPath} gaming-brick");
+
+            var insertLine = Await(collector: collector, mark: insertMark, predicate: l => l.Contains(value: "[screen.insert:"), deadlineSeconds: 20.0);
+
+            passed &= Check(name: "insert-ok", ok: ((insertLine is not null) && insertLine.Contains(value: "booted")), detail: (insertLine?.Trim() ?? "(no screen.insert echo)"));
+
+            // The live insert is session state → world.status names the 'screens' drift dimension (the DescribeDrift
+            // screen branch, positively).
+            var statusMark = collector.Count;
+
+            Send(ctx: ctx, line: "world.status");
+
+            var statusLine = Await(collector: collector, mark: statusMark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "insert-drifts-screens", ok: ((statusLine is not null) && statusLine.Contains(value: "session-drift") && statusLine.Contains(value: "screens")),
+                detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+
+            // Save — the fold writes the live machine into screen row's source.
+            var saveMark = collector.Count;
+
+            Send(ctx: ctx, line: $"world.save {tempSave}");
+
+            var saveLine = Await(collector: collector, mark: saveMark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "insert-save", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+
+            if (File.Exists(path: tempSave)) {
+                // Expo carries NO machine source normally, so a machine-typed source naming this ROM proves the fold.
+                var savedJson = File.ReadAllText(path: tempSave);
+                var folded = (savedJson.Contains(value: "\"$type\": \"machine\"") && savedJson.Contains(value: "gaming-brick") && savedJson.Contains(value: romBase));
+
+                passed &= Check(name: "insert-folded-into-json", ok: folded, detail: (folded ? $"screen {insertScreen} source is a machine → {romBase}" : "no machine source naming the inserted ROM in the saved JSON"));
+            }
+            else {
+                passed &= Check(name: "insert-folded-into-json", ok: false, detail: $"{tempSave} was never written");
+            }
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+
+            try {
+                if (File.Exists(path: romPath)) {
+                    File.Delete(path: romPath);
+                }
+            }
+            catch {
+                // best-effort temp cleanup.
+            }
+        }
+
+        return passed;
+    }
+
+    // The population block's networkPlayers value — the canonical writer's stable order puts it right after localPlayers,
+    // so this first-after-"networkPlayers" number is unambiguous without a full parse (mirrors ExtractKitMoveSpeed).
+    static int? ExtractNetworkPlayers(string json) {
+        var match = Regex.Match(input: json, pattern: @"""networkPlayers""\s*:\s*(\d+)");
+
+        return (match.Success ? int.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv) : null);
+    }
+
+    static bool EnsureBuilt(bool noBuild, string projectPath, out string exe) {
+        exe = "";
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                _ = ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+
+                return false;
+            }
+        }
+
+        var found = FindExe(projectPath: projectPath);
+
+        if (found is null) {
+            _ = ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+
+            return false;
+        }
+
+        exe = found;
+
+        return true;
+    }
+
+    static ProcessStartInfo BaseStartInfo(string exe, string repoRoot) => new() {
+        FileName = exe,
+        RedirectStandardError = true,
+        RedirectStandardInput = true,
+        RedirectStandardOutput = true,
+        UseShellExecute = false,
+        WorkingDirectory = repoRoot,
+    };
+
+    static void AddArg(ProcessStartInfo psi, string name, int value) {
+        psi.ArgumentList.Add(item: name);
+        psi.ArgumentList.Add(item: value.ToString(provider: ProofApp.Inv));
+    }
+
+    static void AddArg(ProcessStartInfo psi, string name, string value) {
+        psi.ArgumentList.Add(item: name);
+        psi.ArgumentList.Add(item: value);
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+}
+
+// ============================================================================================
+// SCREENS — the diegetic-screen brick + engage-route proof. Boots a hand-assembled SM83 joypad-
+// echo ROM into a declared screen over the pipe, engages player 1 (respecting the route policy),
+// drives the SAME intent wire (tape + press) into the brick, and asserts the emulated work-RAM
+// bytes over screen.peek. Polls echoes with a deadline (engine echoes can lag 1-2.5s), never fixed
+// sleeps. This remains a World-owned live proof; the shared deterministic substrate is gated in Puck.Post Tier A.
+// ============================================================================================
+
+static class ScreensProof {
+    // The joypad-echo ROM's work-RAM contract: the combined pressed-button byte and a liveness counter.
+    const int PressedByteAddr = 0xC000;
+    const int CounterAddr = 0xC001;
+    // JoypadButtons bit layout (KEEP IN SYNC with Puck.HumbleGamingBrick.JoypadButtons): the ROM packs the pressed byte
+    // in exactly this order, so 0xC000 reads back the same byte the world fed.
+    const int BitUp = 0x04;
+    const int BitA = 0x10;
+
+    static readonly Regex PeekEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.peek: (\d+) 0x([0-9A-Fa-f]+)=0x([0-9A-Fa-f]+)\]");
+    static readonly Regex StateEcho = new(options: RegexOptions.Compiled, pattern: @"\[screen\.state: (\d+) (.+?)\]");
+    // The world.view-refresh echo carries the count of camera views registered in the offscreen pool — the CR-3b witness.
+    static readonly Regex ViewRefreshEcho = new(options: RegexOptions.Compiled, pattern: @"\[world\.view-refresh: every \d+ produced frame\(s\); (\d+) camera view\(s\) registered\]");
+
+    public static int RunScreens(ArgMap opts) {
+        const int machineScreen = 0;
+
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        // The ROM is written to a scratch path at proof time (never committed). A no-space path so the single-token
+        // screen.insert <romPath> is safe over the wire.
+        var romPath = (opts.Get(name: "--rom") ?? Path.Combine(path1: Path.GetTempPath(), path2: "puck-world-joypad-echo.gb"));
+
+        File.WriteAllBytes(bytes: BuildJoypadEchoRom(), path: romPath);
+        Console.WriteLine(value: $"[proof] joypad-echo ROM written: {romPath} (32 KiB, entry $0100 -> loop $0150)");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        // A safety exit bound: the proof drives interactively and kills the child in finally, but a crash must never
+        // orphan the GPU window.
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: "120");
+
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height}");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return 1;
+            }
+
+            // Arm GPU per-pass timing so the evidence read at the end reports the brick's added cost.
+            Send(ctx: ctx, line: "world.timing on");
+            Send(ctx: ctx, line: "world.quality low");
+
+            // (0) DEFAULT NATIVE AGB IS ASSET-FREE — the fifth screen ships with no cartridge/BIOS baked in (no
+            // owner-local path, no copyrighted dump), so a clean checkout boots it into the binder's graceful
+            // "no content configured" fault, never a crash or a silent black slab.
+            passed &= PollState(ctx: ctx, name: "default-native-agb-unconfigured", index: 4,
+                predicate: body => (body.Contains(value: "empty") && body.Contains(value: "fault=no content configured")));
+
+            // (1) NON-MACHINE ENGAGE — screen 0 starts as the overhead view, not a machine: engage errors loudly.
+            passed &= ExpectEcho(ctx: ctx, name: "engage-non-machine-errors", command: $"player.engage {machineScreen}",
+                predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "no machine")));
+
+            // (2) BOOT — overlay the ROM on screen 0, then poll screen.state until assigned + bound + stepping.
+            passed &= ExpectEcho(ctx: ctx, name: "insert-ok", command: $"screen.insert {machineScreen} {romPath} gaming-brick",
+                predicate: line => (line.Contains(value: "screen.insert") && line.Contains(value: "booted") && !line.Contains(value: "not")));
+            passed &= PollState(ctx: ctx, name: "state-assigned-bound", index: machineScreen,
+                predicate: body => (body.Contains(value: "assigned") && body.Contains(value: "bound")));
+
+            // (3) PASSIVE VIEW ENGAGE — screen 2 is the avatar-eye jumbotron, not an interactive machine: its
+            // route rejects engagement before the producer kind matters.
+            passed &= ExpectEcho(ctx: ctx, name: "engage-jumbotron-view-errors", command: "player.engage 2",
+                predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "not engageable")));
+
+            // (4) OUT-OF-RANGE ENGAGE — screen 0 has a machine but demands proximity (radius 2.5): far away errors.
+            Send(ctx: ctx, line: "player.warp 20 20 1");
+            passed &= ExpectEcho(ctx: ctx, name: "engage-out-of-range-errors", command: $"player.engage {machineScreen}",
+                predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: "engage")));
+
+            // (5) ENGAGE — warp within the radius (screen 0 origin is x=-3 z=-3), then engage succeeds.
+            Send(ctx: ctx, line: "player.warp -3 -1 1");
+            passed &= ExpectEcho(ctx: ctx, name: "engage-ok", command: $"player.engage {machineScreen}",
+                predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: $"engaged screen {machineScreen}")));
+
+            // (6) INPUT ON THE INTENT WIRE — a forward run (-> Up) plus a jump press (-> A) both reach the brick via the
+            // SAME intent wire the avatar would ride. Poll 0xC000 for the Up|A image the world fed.
+            Send(ctx: ctx, line: "player.run 1 0 0 3 1");
+            Send(ctx: ctx, line: "player.press primary 2 1");
+            passed &= PollPeek(ctx: ctx, name: "brick-reads-up-and-A", index: machineScreen, addr: PressedByteAddr,
+                until: value => (((value & BitUp) != 0) && ((value & BitA) != 0)));
+
+            // (7) LIVENESS — the ROM's counter at 0xC001 advances as the machine steps.
+            var counterA = PollPeekValue(ctx: ctx, index: machineScreen, addr: CounterAddr);
+            var counterB = PollPeekUntil(ctx: ctx, index: machineScreen, addr: CounterAddr, until: v => ((counterA is { } a) && (v != a)));
+
+            passed &= Check(name: "brick-counter-advances", ok: ((counterA is not null) && (counterB is not null) && (counterA != counterB)),
+                detail: $"0xC001 {(counterA?.ToString(provider: ProofApp.Inv) ?? "?")} -> {(counterB?.ToString(provider: ProofApp.Inv) ?? "?")}");
+
+            // (8) DISENGAGE + HELD-STATE HYGIENE — disengage, stop the tape, and the brick's buttons drop to 0x00 (no
+            // residual held input leaks across the boundary).
+            passed &= ExpectEcho(ctx: ctx, name: "disengage-ok", command: "player.disengage 1",
+                predicate: line => (line.Contains(value: "player.disengage") && line.Contains(value: "disengaged")));
+            Send(ctx: ctx, line: "player.stop 1");
+            passed &= PollPeek(ctx: ctx, name: "brick-buttons-cleared", index: machineScreen, addr: PressedByteAddr, until: value => (value == 0));
+
+            // (9) AVATAR MOVES AGAIN — a disengaged player drives its avatar: a fresh run moves it off its rest pose.
+            Send(ctx: ctx, line: "player.warp 0 0 1");
+            Send(ctx: ctx, line: "player.face 0 1");
+            var poseBefore = ReadWhere(ctx: ctx, index: 1);
+
+            Send(ctx: ctx, line: "player.run 1 0 0 1 1");
+            var poseAfter = PollWhereUntil(ctx: ctx, index: 1, until: p => ((poseBefore is { } b) && (Math.Abs(value: (p.Z - b.Z)) > 0.3)));
+
+            passed &= Check(name: "avatar-moves-after-disengage", ok: ((poseBefore is not null) && (poseAfter is not null)),
+                detail: $"z {(poseBefore?.Z.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")} -> {(poseAfter?.Z.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")}");
+
+            // (10) POPULATION LIFETIME — an engagement route belongs to one WorldBody lifetime, not merely its
+            // reusable display index. Queue deactivate + reactivate + query in one pump batch: p7's newly-minted,
+            // disengaged player must not inherit the old route or remain in screen diagnostics.
+            passed &= PopulationReactivationDropsEngagement(ctx: ctx, screenIndex: machineScreen);
+
+            // (11) EJECT — the slot reveals its declared overhead view again (no machine to peek).
+            passed &= ExpectEcho(ctx: ctx, name: "eject-ok", command: $"screen.eject {machineScreen}",
+                predicate: line => (line.Contains(value: "screen.eject") && line.Contains(value: "ejected")));
+            passed &= ExpectEcho(ctx: ctx, name: "peek-after-eject-errors", command: $"screen.peek {machineScreen} 0xC000",
+                predicate: line => (line.Contains(value: "screen.peek") && line.Contains(value: "no machine")));
+
+            // (evidence) fps / gpu with a brick running earlier — re-boot briefly so the read reflects a stepped machine.
+            Send(ctx: ctx, line: $"screen.insert {machineScreen} {romPath} gaming-brick");
+            _ = PollState(ctx: ctx, name: "state-reboot", index: machineScreen, predicate: body => body.Contains(value: "bound"));
+            ReportEvidence(ctx: ctx);
+
+            // (12) REMOVE A VIEW SCREEN (CR-3b) — screen 2 is the avatar-eye jumbotron, a pure View source whose camera
+            // render lives in the offscreen ViewStack pool (its own SDF engine spending refresh budget every few frames).
+            // Removing the last screen wired to that camera must RELEASE its view, witnessed by the registered camera-view
+            // count in world.view-refresh dropping by one (the co-existing 'overhead' view survives, so it drops 2 -> 1).
+            passed &= RemoveViewScreenReleasesCameraView(ctx: ctx, viewScreen: 2);
+
+            // (13) REMOVE AN ENGAGED MACHINE SCREEN (CR-3) — engage p1 on the running brick, then world.screen.remove the
+            // whole screen row: the binder must disengage the player (avatar resumes normal intent), dispose the slot, and
+            // drop its provider entry, so every screen command reports the index absent.
+            passed &= RemoveEngagedScreenDropsEverything(ctx: ctx, screenIndex: machineScreen);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] screens proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // The 32 KiB ROM-ONLY joypad-echo cartridge: zero-filled (a lenient boot, per W1) with an entry at $0100 that jumps
+    // to a loop at $0150 which reads BOTH joypad lines and stores the combined pressed-button byte at 0xC000 (in
+    // JoypadButtons order) plus a liveness counter at 0xC001. Internal so ExpoProof can reuse this valid bootable ROM
+    // for its positive screen-insert write-back check (a machine must actually BOOT for the insert to fold).
+    internal static byte[] BuildJoypadEchoRom() {
+        var rom = new byte[0x8000];
+        var p = 0x0100;
+
+        void Emit(params byte[] bytes) {
+            foreach (var b in bytes) {
+                rom[p++] = b;
+            }
+        }
+
+        // Entry $0100: jump over the header region to the program.
+        Emit(0xC3, 0x50, 0x01);              // JP $0150
+
+        // Program $0150 (the loop).
+        p = 0x0150;
+        Emit(0x3E, 0x20);                    // LD A,$20      ; P15=1 (deselect actions), P14=0 (select d-pad)
+        Emit(0xE0, 0x00);                    // LDH ($00),A   ; write P1/JOYP
+        Emit(0xF0, 0x00);                    // LDH A,($00)   ; read (settle)
+        Emit(0xF0, 0x00);                    // LDH A,($00)   ; read d-pad lines (0 = pressed)
+        Emit(0x2F);                          // CPL           ; -> 1 = pressed
+        Emit(0xE6, 0x0F);                    // AND $0F       ; Right/Left/Up/Down -> bits 0..3
+        Emit(0x47);                          // LD B,A
+        Emit(0x3E, 0x10);                    // LD A,$10      ; P14=1 (deselect d-pad), P15=0 (select actions)
+        Emit(0xE0, 0x00);                    // LDH ($00),A
+        Emit(0xF0, 0x00);                    // LDH A,($00)
+        Emit(0xF0, 0x00);                    // LDH A,($00)   ; read action lines (0 = pressed)
+        Emit(0x2F);                          // CPL
+        Emit(0xE6, 0x0F);                    // AND $0F       ; A/B/Select/Start -> bits 0..3
+        Emit(0xCB, 0x37);                    // SWAP A        ; -> bits 4..7
+        Emit(0xB0);                          // OR B          ; combine d-pad | actions (== JoypadButtons byte layout)
+        Emit(0xEA, 0x00, 0xC0);              // LD ($C000),A  ; store the pressed-button byte
+        Emit(0xFA, 0x01, 0xC0);              // LD A,($C001)  ; liveness counter
+        Emit(0x3C);                          // INC A
+        Emit(0xEA, 0x01, 0xC0);              // LD ($C001),A
+        Emit(0xC3, 0x50, 0x01);              // JP $0150      ; loop forever
+
+        return rom;
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
+    // Establish that stdin has reached the command router AND a fixed-step snapshot has applied before starting the
+    // behavioral proof, so the first simulation-routed assertion tests semantics rather than racing initialization.
+    // player.stop is idempotent at boot and leaves the player at the authored spawn.
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(
+            collector: ctx.Collector,
+            mark: mark,
+            predicate: candidate => candidate.Contains(value: "[player.stop:"),
+            deadlineSeconds: 30.0
+        );
+
+        return Check(
+            name: "simulation-ready",
+            ok: (line is not null),
+            detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds")
+        );
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    // Send a command and poll the output stream for a line the predicate accepts, with a deadline (echoes can lag under
+    // load). Prints the PASS/FAIL verdict and the matched line.
+    static bool ExpectEcho(Ctx ctx, string name, string command, Func<string, bool> predicate) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: command);
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: predicate, deadlineSeconds: 12.0);
+
+        return Check(name: name, ok: (line is not null), detail: (line?.Trim() ?? $"(no echo matched for '{command}')"));
+    }
+
+    static bool PopulationReactivationDropsEngagement(Ctx ctx, int screenIndex) {
+        var passed = ExpectEcho(ctx: ctx, name: "population-route-activate", command: "world.population 60 idle",
+            predicate: line => (line.Contains(value: "[world.population:") && line.Contains(value: "60 network-human")));
+
+        Send(ctx: ctx, line: "player.warp -3 -1 7");
+        passed &= ExpectEcho(ctx: ctx, name: "population-route-engage", command: $"player.engage {screenIndex} 7",
+            predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: $"engaged screen {screenIndex}")));
+        passed &= PollState(ctx: ctx, name: "population-route-visible", index: screenIndex,
+            predicate: body => body.Contains(value: "engaged=p7"));
+
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.population 2");
+        Send(ctx: ctx, line: "world.population 60");
+        Send(ctx: ctx, line: $"screen.state {screenIndex}");
+
+        var line = Await(
+            collector: ctx.Collector,
+            mark: mark,
+            predicate: candidate => StateEcho.IsMatch(input: candidate),
+            deadlineSeconds: 12.0
+        );
+        var body = ((line is not null) ? StateEcho.Match(input: line).Groups[2].Value : null);
+
+        passed &= Check(
+            name: "population-reactivation-drops-engagement",
+            ok: (body is not null && body.Contains(value: "engaged=none")),
+            detail: (body ?? "(no screen.state echo after population reactivation)")
+        );
+
+        return passed;
+    }
+
+    // (CR-3) Engage p1 on a running machine screen, remove the whole screen row, and assert the binder torn everything
+    // down: the mutation applies, every screen command then reports the index absent (slot + provider entry gone), and
+    // the disengaged avatar resumes normal intent (it is not held idle against a machine that no longer exists).
+    static bool RemoveEngagedScreenDropsEverything(Ctx ctx, int screenIndex) {
+        // Engage p1 within the screen's radius (origin x=-3 z=-3) on the re-inserted brick.
+        Send(ctx: ctx, line: "player.warp -3 -1 1");
+
+        var passed = ExpectEcho(ctx: ctx, name: "remove-engage-ok", command: $"player.engage {screenIndex}",
+            predicate: line => (line.Contains(value: "player.engage") && line.Contains(value: $"engaged screen {screenIndex}")));
+
+        passed &= PollState(ctx: ctx, name: "remove-engaged-visible", index: screenIndex, predicate: body => body.Contains(value: "engaged=p1"));
+
+        // Remove the whole screen row (a Simulation-routed mutation; the server prints the applied line at the boundary).
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"world.screen.remove {screenIndex}");
+
+        var removed = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: $"[world.mutation: RemoveScreen {screenIndex} applied]"), deadlineSeconds: 15.0);
+
+        passed &= Check(name: "remove-mutation-applied", ok: (removed is not null), detail: (removed?.Trim() ?? "(no '[world.mutation: RemoveScreen ...]' line)"));
+
+        // The binder reconciles the removal on the next client frame: every screen command now reports the index absent.
+        passed &= PollAbsent(ctx: ctx, name: "state-reports-absent", index: screenIndex);
+        passed &= ExpectEcho(ctx: ctx, name: "peek-reports-absent", command: $"screen.peek {screenIndex} 0xC000",
+            predicate: line => (line.Contains(value: "screen.peek") && line.Contains(value: $"no screen {screenIndex}")));
+        passed &= ExpectEcho(ctx: ctx, name: "insert-reports-absent", command: $"screen.insert {screenIndex} nonexistent.gb gaming-brick",
+            predicate: line => (line.Contains(value: "screen.insert") && line.Contains(value: $"no screen {screenIndex} declared")));
+
+        // The engaged player was disengaged cleanly: a fresh run drives the avatar again (not held idle against the
+        // vanished machine).
+        Send(ctx: ctx, line: "player.warp 0 0 1");
+        Send(ctx: ctx, line: "player.face 0 1");
+
+        var before = ReadWhere(ctx: ctx, index: 1);
+
+        Send(ctx: ctx, line: "player.run 1 0 0 1 1");
+
+        var after = PollWhereUntil(ctx: ctx, index: 1, until: p => ((before is { } b) && (Math.Abs(value: (p.Z - b.Z)) > 0.3)));
+
+        passed &= Check(name: "avatar-resumes-after-screen-removed",
+            ok: ((before is { } bb) && (after is { } aa) && (Math.Abs(value: (aa.Z - bb.Z)) > 0.3)),
+            detail: $"z {(before?.Z.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")} -> {(after?.Z.ToString(format: "0.00", provider: ProofApp.Inv) ?? "?")}");
+
+        return passed;
+    }
+
+    // (CR-3b) Remove a View screen and prove its offscreen camera render is released: the registered camera-view count
+    // (read off world.view-refresh) drops by one, and screen.state reports the removed index absent. The camera's
+    // offscreen SDF engine was spending refresh budget until the removal; the count is the pipe-observable witness that
+    // it stopped (a surviving jumbotron sharing a DIFFERENT camera keeps its own view, so the count drops by exactly one).
+    static bool RemoveViewScreenReleasesCameraView(Ctx ctx, int viewScreen) {
+        var before = PollCameraViewCount(ctx: ctx);
+        var passed = Check(name: "view-count-before-removal", ok: ((before is { } b) && (b > 0)),
+            detail: $"registered camera views = {(before?.ToString(provider: ProofApp.Inv) ?? "?")}");
+
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"world.screen.remove {viewScreen}");
+
+        var removed = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: $"[world.mutation: RemoveScreen {viewScreen} applied]"), deadlineSeconds: 15.0);
+
+        passed &= Check(name: "view-remove-mutation-applied", ok: (removed is not null), detail: (removed?.Trim() ?? "(no '[world.mutation: RemoveScreen ...]' line)"));
+
+        // The binder reconciles the removal on the next client frame, releasing the orphaned camera view. Poll the count
+        // until it drops to exactly (before - 1).
+        var target = ((before is { } bc) ? (bc - 1) : -1);
+        var after = PollCameraViewCountUntil(ctx: ctx, until: c => (c == target));
+
+        passed &= Check(name: "camera-view-released-after-removal", ok: ((after is { } a) && (a == target)),
+            detail: $"registered camera views {(before?.ToString(provider: ProofApp.Inv) ?? "?")} -> {(after?.ToString(provider: ProofApp.Inv) ?? "?")} (want {target})");
+
+        passed &= PollAbsent(ctx: ctx, name: "view-screen-reports-absent", index: viewScreen);
+
+        return passed;
+    }
+
+    // One world.view-refresh round trip parsed for the registered camera-view count, or null when the echo did not land.
+    static int? PollCameraViewCount(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.view-refresh");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => ViewRefreshEcho.IsMatch(input: l), deadlineSeconds: 6.0);
+
+        return ((line is not null) ? int.Parse(s: ViewRefreshEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv) : null);
+    }
+    // Poll the camera-view count until it satisfies `until` (or a deadline passes); returns the last read value.
+    static int? PollCameraViewCountUntil(Ctx ctx, Func<int, bool> until) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: 15.0);
+        int? last = null;
+
+        while (DateTime.UtcNow < deadline) {
+            if (PollCameraViewCount(ctx: ctx) is { } count) {
+                last = count;
+
+                if (until(arg: count)) {
+                    return count;
+                }
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return last;
+    }
+
+    // Poll screen.state <index> until it reports the index ABSENT (the removed-slot echo), or a deadline passes.
+    static bool PollAbsent(Ctx ctx, string name, int index) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: 15.0);
+
+        while (DateTime.UtcNow < deadline) {
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: $"screen.state {index}");
+
+            var line = Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: "[screen.state:") && l.Contains(value: $"no screen {index} declared")), deadlineSeconds: 3.0);
+
+            if (line is not null) {
+                return Check(name: name, ok: true, detail: line.Trim());
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return Check(name: name, ok: false, detail: $"screen.state never reported screen {index} absent");
+    }
+
+    // Poll screen.state <index> until its body satisfies the predicate (or a deadline passes).
+    static bool PollState(Ctx ctx, string name, int index, Func<string, bool> predicate) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: 15.0);
+        string? lastBody = null;
+
+        while (DateTime.UtcNow < deadline) {
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: $"screen.state {index}");
+
+            var line = Await(collector: ctx.Collector, mark: mark, predicate: l => StateEcho.IsMatch(input: l), deadlineSeconds: 3.0);
+
+            if (line is not null) {
+                lastBody = StateEcho.Match(input: line).Groups[2].Value;
+
+                if (predicate(arg: lastBody)) {
+                    return Check(name: name, ok: true, detail: lastBody);
+                }
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return Check(name: name, ok: false, detail: (lastBody ?? "(no screen.state echo)"));
+    }
+
+    // Poll screen.peek until its value satisfies `until` (or a deadline). Prints the verdict + last value.
+    static bool PollPeek(Ctx ctx, string name, int index, int addr, Func<int, bool> until) {
+        var value = PollPeekUntil(ctx: ctx, index: index, addr: addr, until: until);
+
+        return Check(name: name, ok: (value is not null), detail: ((value is { } v) ? $"0x{addr:X4}=0x{v:X2}" : $"0x{addr:X4} never satisfied"));
+    }
+    static int? PollPeekUntil(Ctx ctx, int index, int addr, Func<int, bool> until) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: 12.0);
+        int? last = null;
+
+        while (DateTime.UtcNow < deadline) {
+            var value = PollPeekValue(ctx: ctx, index: index, addr: addr);
+
+            if (value is { } v) {
+                last = v;
+
+                if (until(arg: v)) {
+                    return v;
+                }
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return last;
+    }
+
+    // One screen.peek round trip: send, await the echo, parse the hex value.
+    static int? PollPeekValue(Ctx ctx, int index, int addr) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"screen.peek {index} 0x{addr:X4}");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => PeekEcho.IsMatch(input: l), deadlineSeconds: 3.0);
+
+        if (line is null) {
+            return null;
+        }
+
+        var match = PeekEcho.Match(input: line);
+
+        return int.Parse(s: match.Groups[3].Value, style: NumberStyles.HexNumber, provider: ProofApp.Inv);
+    }
+    static Pose? ReadWhere(Ctx ctx, int index) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"player.where {index}");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => ProofApp.WhereEcho.IsMatch(input: l), deadlineSeconds: 6.0);
+
+        return ((line is not null) ? ParsePose(line: line) : null);
+    }
+    static Pose? PollWhereUntil(Ctx ctx, int index, Func<Pose, bool> until) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: 8.0);
+        Pose? last = null;
+
+        while (DateTime.UtcNow < deadline) {
+            if (ReadWhere(ctx: ctx, index: index) is { } pose) {
+                last = pose;
+
+                if (until(arg: pose)) {
+                    return pose;
+                }
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return last;
+    }
+    static Pose? ParsePose(string line) {
+        var match = ProofApp.WhereEcho.Match(input: line);
+
+        return (match.Success
+            ? new Pose(
+                X: double.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv),
+                Y: double.Parse(s: match.Groups[3].Value, provider: ProofApp.Inv),
+                Z: double.Parse(s: match.Groups[4].Value, provider: ProofApp.Inv),
+                Yaw: int.Parse(s: match.Groups[5].Value, provider: ProofApp.Inv),
+                Pitch: int.Parse(s: match.Groups[6].Value, provider: ProofApp.Inv),
+                Roll: int.Parse(s: match.Groups[7].Value, provider: ProofApp.Inv))
+            : null);
+    }
+
+    // Read and print the world.fps + world.gpu evidence with the brick running (a stepped machine per frame is new load).
+    static void ReportEvidence(Ctx ctx) {
+        foreach (var verb in new[] { "world.fps", "world.gpu" }) {
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: verb);
+
+            var line = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: verb), deadlineSeconds: 6.0);
+
+            if (line is not null) {
+                Console.WriteLine(value: $"[proof] evidence: {line.Trim()}");
+            }
+        }
+    }
+
+    // Poll the collector's snapshot for a line the predicate accepts after <paramref name="mark"/>, until a deadline.
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+}
+
+// ============================================================================================
+// MUTATE — the Phase 2a scripted mutation round-trip proof: world.kit.tune / world.undo / world.save
+// journal discipline (dirty = journal length), rejection honesty (the defaultSeatKit invariant), and
+// survival through a relaunch against the saved file. This is a SEPARATE session per (a)+(b) vs. (c):
+// session A drives the round-trip and saves to a temp file; session B relaunches --world <that file>
+// to prove the boot line and the on-disk JSON actually carry the edit.
+// ============================================================================================
+static class MutateProof {
+    public static int RunMutate(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        var pid = Environment.ProcessId;
+        var temp1 = Path.Combine(Path.GetTempPath(), $"puck-world-mutate-1-{pid}.json");
+
+        Console.WriteLine(value: "[proof] === mutate (a): world.kit.tune / world.undo / world.save journal round-trip ===");
+        var roundTripPassed = RunRoundTrip(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, savePath: temp1, rejectionPassed: out var rejectionPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === mutate (b): rejection honesty — the defaultSeatKit invariant ===");
+        Console.WriteLine(value: $"[proof]   {(rejectionPassed ? "PASS" : "FAIL")} (asserted inline with (a) — same session, see above)");
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === mutate (c): survival through a relaunch (--world <saved file>) ===");
+        var survivalPassed = (File.Exists(path: temp1) && RunSurvival(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: temp1));
+
+        if (!File.Exists(path: temp1)) {
+            Console.WriteLine(value: $"[proof]   FAIL survival: {temp1} was never written (round-trip did not reach world.save)");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === mutate (d): protocol-version handshake ===");
+        Console.WriteLine(value: "[proof]   SKIPPED by design — no scripted Join path exists over stdin (SessionRequest.Join is not a console");
+        Console.WriteLine(value: "[proof]            verb), and this brief forbids inventing a debug verb to exercise it. The rejecting handshake");
+        Console.WriteLine(value: "[proof]            (Accepted: false + reason on a version mismatch) was proven by the implementing session.");
+
+        var passed = (roundTripPassed && rejectionPassed && survivalPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] mutate proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // Session A: boot the baked-default world (no --world), drive the tune/status/undo/tune/save round-trip plus the
+    // kit-removal rejection, asserting the journal-length dirty counter and the server's loud accept/reject/undo lines
+    // at every step. Never asserts the in-flight #expect-band shape this file's other proofs use — this is a pure
+    // console-echo proof, no pose corpus.
+    static bool RunRoundTrip(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string savePath, out bool rejectionPassed) {
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        rejectionPassed = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (baked-default world)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // (0) baseline — nothing molded yet.
+            passed &= ExpectStatus(ctx: ctx, name: "status-clean", dirty: 0);
+
+            // (1) tune runner.moveSpeed 4 -> 6: applied + dirty 1.
+            passed &= MutateAndExpectStatus(ctx: ctx, name: "tune-applies", command: "world.kit.tune runner moveSpeed 6",
+                appliedNeedle: "[world.mutation: UpsertKit 'runner' applied]", dirty: 1);
+
+            // (2) undo: dropped + dirty back to 0.
+            passed &= MutateAndExpectStatus(ctx: ctx, name: "undo-reverts", command: "world.undo",
+                appliedNeedle: "[world.undo: dropped 1, 0 remaining]", dirty: 0);
+
+            // (3) tune again — the edit that survives to the save below.
+            passed &= MutateAndExpectStatus(ctx: ctx, name: "tune-reapplies", command: "world.kit.tune runner moveSpeed 6",
+                appliedNeedle: "[world.mutation: UpsertKit 'runner' applied]", dirty: 1);
+
+            // (4) save compacts the journal: dirty -> 0 (the saved definition becomes the new base).
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: $"world.save {savePath}");
+
+            var saveLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "save-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+            passed &= ExpectStatus(ctx: ctx, name: "status-clean-after-save", dirty: 0);
+
+            // (b) rejection honesty: removing the defaultSeatKit fails validation loudly, and the document is unchanged.
+            rejectionPassed = ExpectRejectedKitRemoval(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // world.kit.remove runner targets the definition-designated DefaultSeatKit ('runner' in the baked default): the
+    // composed candidate passes TryCompose (the row exists) but fails WorldDefinitionValidator (defaultSeatKit names no
+    // kit row), so the server rejects loudly and the definition — and therefore world.status's kit count — is unchanged.
+    static bool ExpectRejectedKitRemoval(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.kit.remove runner");
+        Send(ctx: ctx, line: "world.status");
+
+        var statusLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+        var statusOk = Check(name: "status-unchanged-after-rejected-remove", ok: ((statusLine is not null) && statusLine.Contains(value: "kits 5")),
+            detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+
+        var snapshot = ctx.Collector.Snapshot();
+        var rejectedFound = false;
+
+        for (var i = mark; (i < snapshot.Length); i++) {
+            if (snapshot[i].Contains(value: "[world.mutation rejected:") && snapshot[i].Contains(value: "RemoveKit 'runner'") && snapshot[i].Contains(value: "defaultSeatKit")) {
+                rejectedFound = true;
+
+                break;
+            }
+        }
+
+        var rejectedOk = Check(name: "remove-runner-rejected", ok: rejectedFound, detail: (rejectedFound ? "seen" : "missing '[world.mutation rejected: RemoveKit ...defaultSeatKit...]'"));
+
+        return (statusOk && rejectedOk);
+    }
+
+    // Session B: relaunch against the file session A saved and assert the boot line names it (the loader's one-line
+    // origin) — the loud opposite of the worlddoc proof's baked-default-fallback line.
+    static bool RunSurvival(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string worldPath) {
+        var runnerMoveSpeed = ExtractKitMoveSpeed(json: File.ReadAllText(path: worldPath), kitName: "runner");
+        var flyerMoveSpeed = ExtractKitMoveSpeed(json: File.ReadAllText(path: worldPath), kitName: "flyer");
+
+        var jsonPassed = Check(name: "saved-json-runner-tuned", ok: (runnerMoveSpeed == 6.0), detail: $"runner moveSpeed = {(runnerMoveSpeed?.ToString(provider: ProofApp.Inv) ?? "?")} (want 6)");
+
+        jsonPassed &= Check(name: "saved-json-other-kits-untouched", ok: (flyerMoveSpeed == 4.0), detail: $"flyer moveSpeed = {(flyerMoveSpeed?.ToString(provider: ProofApp.Inv) ?? "?")} (want 4)");
+
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        psi.ArgumentList.Add(item: "--world");
+        psi.ArgumentList.Add(item: worldPath);
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var started = false;
+        var bootPassed = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --world {worldPath} --width {width} --height {height}");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var bootLine = Await(collector: collector, mark: 0, predicate: l => (l.Contains(value: "[world] definition:") && l.Contains(value: worldPath)), deadlineSeconds: 30.0);
+
+            bootPassed = Check(name: "boots-from-saved-file", ok: (bootLine is not null), detail: (bootLine?.Trim() ?? $"(no '[world] definition: {worldPath}' boot line)"));
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return (jsonPassed && bootPassed);
+    }
+
+    // The first "moveSpeed" number following a kit row's "name": "<kitName>" — the canonical writer's stable member
+    // order puts tuning.moveSpeed as the tuning block's first field, immediately after model, so this is unambiguous
+    // without a full JSON parse.
+    static double? ExtractKitMoveSpeed(string json, string kitName) {
+        var match = Regex.Match(input: json, pattern: $@"""name""\s*:\s*""{Regex.Escape(kitName)}""[\s\S]*?""moveSpeed""\s*:\s*(-?[0-9.]+)");
+
+        return (match.Success ? double.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv) : null);
+    }
+
+    // A mutation verb (Simulation-routed, quiet ack) followed by a world.status read: the stdin drain barrier holds the
+    // Immediate world.status behind the pending Simulation submission, so its answer reflects the applied (or rejected)
+    // state for free — no polling needed. Also asserts the server's own loud line appeared somewhere in the same window.
+    static bool MutateAndExpectStatus(Ctx ctx, string name, string command, string appliedNeedle, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: command);
+        Send(ctx: ctx, line: "world.status");
+
+        var statusLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+        var statusOk = Check(name: $"{name}-status", ok: ((statusLine is not null) && statusLine.Contains(value: $"dirty {dirty} undoable {dirty}]")), detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+
+        var snapshot = ctx.Collector.Snapshot();
+        var appliedFound = false;
+
+        for (var i = mark; (i < snapshot.Length); i++) {
+            if (snapshot[i].Contains(value: appliedNeedle)) {
+                appliedFound = true;
+
+                break;
+            }
+        }
+
+        var appliedOk = Check(name: $"{name}-echo", ok: appliedFound, detail: (appliedFound ? "seen" : $"missing '{appliedNeedle}'"));
+
+        return (statusOk && appliedOk);
+    }
+
+    static bool ExpectStatus(Ctx ctx, string name, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.status");
+
+        var statusLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+
+        return Check(name: name, ok: ((statusLine is not null) && statusLine.Contains(value: $"dirty {dirty} undoable {dirty}]")), detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
+    // player.stop is idempotent at boot and leaves the player at the authored spawn.
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+}
+
+// ============================================================================================
+// GRANTS — the Phase 2b principals/grants keystone proof (§2.7 criterion 4, the plan's exit-bar
+// criterion 4): mount an authored autopilot addon as a data-side WorldAddonRow, grant it Drive
+// over a body and watch it move, revoke mid-run and watch the server's edge-latched denial freeze
+// it, then prove Mutate-section enforcement (console loses/regains world.kit.tune) with
+// world.status's dirty counter as the honest witness. Two sessions, mirroring MutateProof's shape:
+// session A mounts + saves (world.addon.set is DATA-only — WorldAddonDriver only mounts ENABLED
+// rows from the definition it was constructed with, at boot), session B relaunches
+// --world <saved file> to actually mount the addon and drives the grant/revoke/mutate-denial
+// sequence. The engagement-view regression (WorldEngagement as a view over the same grant table)
+// is covered by proof.cs screens — not duplicated here.
+// ============================================================================================
+static class GrantsProof {
+    const string AutopilotName = "autopilot";
+    const string AutopilotModulePath = "Assets/addons/autopilot.wat";
+    const int AutopilotBodyIndex = 9;               // 0-based entity index — a network stand-in, never a seat
+    const int AutopilotPlayerIndex = (AutopilotBodyIndex + 1); // player.where's 1-based index
+    const int OrdinaryBodyIndex = 11;               // ordinary-then-exclusive order test body (an active network stand-in)
+    const int ExclusiveBodyIndex = 12;              // exclusive-then-ordinary + sole-driver test body
+    const int ExclusivePlayerIndex = (ExclusiveBodyIndex + 1); // player.run's 1-based index for the sole-driver test
+    const double MovedEpsilon = 0.5;                // u — the addon's steady walk covers ~2.6 u over 1 s, far past ambient wander drift
+    const double FrozenEpsilon = 0.02;               // u — a revoked, un-driven body must not move at all (2-decimal echo precision)
+
+    public static int RunGrants(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        var pid = Environment.ProcessId;
+        var worldPath = Path.Combine(Path.GetTempPath(), $"puck-world-grants-{pid}.world.json");
+
+        Console.WriteLine(value: "[proof] === grants (a): world.addon.set autopilot + world.save (data-only; the driver mounts at boot) ===");
+        var mountedSaved = RunMountAndSave(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === grants (b)-(d): relaunch --world <saved> — mount, drive/revoke, mutate-denial ===");
+        var sessionPassed = (File.Exists(path: worldPath) && RunGrantSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: worldPath));
+
+        if (!File.Exists(path: worldPath)) {
+            Console.WriteLine(value: $"[proof]   FAIL relaunch: {worldPath} was never written (grants (a) did not reach world.save)");
+        }
+
+        var passed = (mountedSaved && sessionPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] grants proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // Session A: boot the baked-default world, upsert the autopilot WorldAddonRow (world.addon.set is a document
+    // mutation like any other — buffered, journaled, revalidated) and save it. world.addon.set never hot-mounts;
+    // WorldAddonDriver.Create only reads ENABLED addon rows off the definition it is constructed with, at boot — so
+    // session B's relaunch is what actually proves the saved row boots the addon.
+    static bool RunMountAndSave(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string worldPath) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (baked-default world)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var addonJson = $"{{\"name\":\"{AutopilotName}\",\"modulePath\":\"{AutopilotModulePath}\",\"hash\":\"\",\"fuel\":100000,\"enabled\":true}}";
+
+            passed &= MutateAndExpectStatus(ctx: ctx, name: "addon-row-upserts", command: $"world.addon.set {addonJson}",
+                appliedNeedle: $"[world.mutation: UpsertAddon '{AutopilotName}' applied]", dirty: 1);
+
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: $"world.save {worldPath}");
+
+            var saveLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "save-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // Session B: relaunch against the file session A saved — THIS boot actually mounts the addon (WorldAddonDriver
+    // reads the definition's addons section at construction, once). Drives (b) grant+movement, (c) revoke+frozen, and
+    // (d) the console Mutate/kits denial-then-recovery, all in one running session.
+    static bool RunGrantSession(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string worldPath) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: worldPath);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --world {worldPath} --width {width} --height {height}");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            var mountLine = Await(collector: ctx.Collector, mark: 0, predicate: l => l.Contains(value: $"[world.addon: mounted {AutopilotName}"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "addon-mounted-at-boot", ok: (mountLine is not null), detail: (mountLine?.Trim() ?? $"(no '[world.addon: mounted {AutopilotName} ...]' boot line)"));
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // (b) grant Drive over a network stand-in body: the addon starts driving through the SAME wire a seat
+            // uses, and the driver flips the body's IntentSource to Live, so the movement below is unambiguously
+            // the addon's — not the ambient wander producer it superseded.
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: $"world.grant addon:{AutopilotName} drive body:{AutopilotBodyIndex} exclusive");
+
+            var grantLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: $"[world.grant: addon:{AutopilotName} drive body:{AutopilotBodyIndex} exclusive]"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "grant-drive-accepted", ok: (grantLine is not null), detail: (grantLine?.Trim() ?? "(no '[world.grant: ...]' echo)"));
+
+            // Give the driver a couple of ticks to discover the grant and flip IntentSource before the first sample.
+            Thread.Sleep(millisecondsTimeout: 300);
+
+            var beforeMove = ReadWhere(ctx: ctx, index: AutopilotPlayerIndex);
+
+            Thread.Sleep(millisecondsTimeout: 1000);
+
+            var afterMove = ReadWhere(ctx: ctx, index: AutopilotPlayerIndex);
+            var moveDistance = Distance(a: beforeMove, b: afterMove);
+
+            passed &= Check(name: "addon-drives-body", ok: ((beforeMove is not null) && (afterMove is not null) && (moveDistance > MovedEpsilon)),
+                detail: $"p{AutopilotPlayerIndex} {Fmt(pose: beforeMove)} -> {Fmt(pose: afterMove)} (delta {moveDistance:0.000} u, want > {MovedEpsilon})");
+
+            // (c) revoke mid-run: the server drops the addon's next submitted intent — loud ONCE — and the body idles
+            // (IntentSource stays Live, so it never resumes wander; nothing else drives it).
+            mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: $"world.revoke addon:{AutopilotName} drive body:{AutopilotBodyIndex}");
+
+            var revokeLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: $"[world.revoke: addon:{AutopilotName} drive body:{AutopilotBodyIndex}]"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "revoke-accepted", ok: (revokeLine is not null), detail: (revokeLine?.Trim() ?? "(no '[world.revoke: ...]' echo)"));
+
+            var deniedLine = Await(collector: ctx.Collector, mark: mark,
+                predicate: l => (l.Contains(value: "[world.grant denied:") && l.Contains(value: $"addon:{AutopilotName}") && l.Contains(value: $"body:{AutopilotBodyIndex}")),
+                deadlineSeconds: 15.0);
+
+            passed &= Check(name: "revoke-denies-next-intent", ok: (deniedLine is not null), detail: (deniedLine?.Trim() ?? "(no edge-latched '[world.grant denied: ...]' line)"));
+
+            var beforeFreeze = ReadWhere(ctx: ctx, index: AutopilotPlayerIndex);
+
+            Thread.Sleep(millisecondsTimeout: 1000);
+
+            var afterFreeze = ReadWhere(ctx: ctx, index: AutopilotPlayerIndex);
+            var freezeDrift = Distance(a: beforeFreeze, b: afterFreeze);
+
+            passed &= Check(name: "revoked-body-frozen", ok: ((beforeFreeze is not null) && (afterFreeze is not null) && (freezeDrift <= FrozenEpsilon)),
+                detail: $"p{AutopilotPlayerIndex} {Fmt(pose: beforeFreeze)} -> {Fmt(pose: afterFreeze)} (delta {freezeDrift:0.000} u, want <= {FrozenEpsilon})");
+
+            // (d) denied-mutation honesty: strip console's Mutate/kits grant, prove the tune is rejected AND the
+            // document (world.status's dirty counter) is genuinely unchanged, then re-grant and prove it applies.
+            passed &= RunMutateDenialRoundTrip(ctx: ctx);
+
+            // (e) EXCLUSIVITY (§CR-1): the two grant orders both reject a conflicting second grant, and an exclusively
+            // held body has exactly one effective driver — the exclusive holder overrides even the console's Drive/all.
+            passed &= RunExclusivityOrders(ctx: ctx);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // (d): revoke console's Mutate/kits grant, prove world.kit.tune is rejected loudly with world.status's dirty
+    // counter unchanged (this session's journal is fresh off a file load, so the baseline is 0), re-grant, and prove
+    // the identical command now applies (dirty -> 1).
+    static bool RunMutateDenialRoundTrip(Ctx ctx) {
+        var passed = true;
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.revoke console mutate section:kits");
+
+        var revokeLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.revoke: console mutate section:kits]"), deadlineSeconds: 15.0);
+
+        passed &= Check(name: "console-loses-kits-mutate", ok: (revokeLine is not null), detail: (revokeLine?.Trim() ?? "(no '[world.revoke: ...]' echo)"));
+        passed &= ExpectStatus(ctx: ctx, name: "status-baseline-before-denied-tune", dirty: 0);
+
+        mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.kit.tune runner moveSpeed 6");
+        Send(ctx: ctx, line: "world.status");
+
+        var statusLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+
+        passed &= Check(name: "tune-denied-status-unchanged", ok: ((statusLine is not null) && statusLine.Contains(value: "dirty 0 undoable 0]")), detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+
+        var snapshot = ctx.Collector.Snapshot();
+        var deniedFound = false;
+
+        for (var i = mark; (i < snapshot.Length); i++) {
+            if (snapshot[i].Contains(value: "[world.grant denied:") && snapshot[i].Contains(value: "console") && snapshot[i].Contains(value: "section:kits") && snapshot[i].Contains(value: "UpsertKit 'runner' dropped")) {
+                deniedFound = true;
+
+                break;
+            }
+        }
+
+        passed &= Check(name: "tune-denied-line", ok: deniedFound, detail: (deniedFound ? "seen" : "missing '[world.grant denied: console ... section:kits ... UpsertKit ...runner... dropped]'"));
+
+        mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.grant console mutate section:kits");
+
+        var grantLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.grant: console mutate section:kits]"), deadlineSeconds: 15.0);
+
+        passed &= Check(name: "console-regains-kits-mutate", ok: (grantLine is not null), detail: (grantLine?.Trim() ?? "(no '[world.grant: ...]' echo)"));
+        passed &= MutateAndExpectStatus(ctx: ctx, name: "tune-reapplies-after-regrant", command: "world.kit.tune runner moveSpeed 6",
+            appliedNeedle: "[world.mutation: UpsertKit 'runner' applied]", dirty: 1);
+
+        return passed;
+    }
+
+    // (e): exclusivity must actually exclude, in BOTH grant orders, and the exclusive holder must be the SOLE effective
+    // driver (§CR-1). The addon holds no Drive body here at entry (grant (b)'s body:9 was revoked in (c)), so m_exclusive
+    // starts clean; the two order tests use fresh bodies so they never interfere with each other.
+    static bool RunExclusivityOrders(Ctx ctx) {
+        var passed = true;
+
+        // Order 1 — ORDINARY-then-EXCLUSIVE: seat2 takes body:11 with an ordinary grant, then a DIFFERENT principal's
+        // exclusive acquisition of that same concrete body is rejected. (A concrete ordinary holder blocks; the seeded
+        // console Drive/all wildcard deliberately does NOT — that is what keeps the addon flow in (b) possible.)
+        passed &= ExpectGrant(ctx: ctx, name: "ordinary-grant-accepted", line: $"world.grant seat2 drive body:{OrdinaryBodyIndex}",
+            needle: $"[world.grant: seat2 drive body:{OrdinaryBodyIndex}]");
+        // The reject echo omits the trailing "exclusive" (only the ACCEPT line carries it), so the needle stops at the
+        // subject.
+        passed &= ExpectGrant(ctx: ctx, name: "exclusive-after-ordinary-rejected", line: $"world.grant addon:{AutopilotName} drive body:{OrdinaryBodyIndex} exclusive",
+            needle: $"[world.grant rejected: addon:{AutopilotName} drive body:{OrdinaryBodyIndex} ");
+
+        Send(ctx: ctx, line: $"world.revoke seat2 drive body:{OrdinaryBodyIndex}");
+
+        // Order 2 — EXCLUSIVE-then-ORDINARY: the addon takes body:12 exclusively (which SUCCEEDS despite the console's
+        // seeded Drive/all — the wildcard is not a blocker at acquisition), then a different principal's ordinary grant
+        // of that same body is rejected.
+        passed &= ExpectGrant(ctx: ctx, name: "exclusive-grant-accepted", line: $"world.grant addon:{AutopilotName} drive body:{ExclusiveBodyIndex} exclusive",
+            needle: $"[world.grant: addon:{AutopilotName} drive body:{ExclusiveBodyIndex} exclusive]");
+        passed &= ExpectGrant(ctx: ctx, name: "ordinary-after-exclusive-rejected", line: $"world.grant seat3 drive body:{ExclusiveBodyIndex}",
+            needle: $"[world.grant rejected: seat3 drive body:{ExclusiveBodyIndex}");
+
+        // Sole-driver enforcement: while the addon holds body:12 exclusively, the console — which holds the seeded
+        // Drive/all wildcard — is OVERRIDDEN at the intent boundary, so its command to that body is denied. Exactly one
+        // principal (the addon) can drive an exclusively-held body; the wildcard cannot.
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"player.run 0 0 0 1 {ExclusivePlayerIndex}");
+
+        var deniedLine = Await(collector: ctx.Collector, mark: mark,
+            predicate: l => (l.Contains(value: "[world.grant denied:") && l.Contains(value: "console") && l.Contains(value: $"body:{ExclusiveBodyIndex}")),
+            deadlineSeconds: 15.0);
+
+        passed &= Check(name: "exclusive-overrides-console-wildcard", ok: (deniedLine is not null),
+            detail: (deniedLine?.Trim() ?? $"(no '[world.grant denied: console ... body:{ExclusiveBodyIndex} ...]' line — the wildcard was not overridden)"));
+
+        Send(ctx: ctx, line: $"world.revoke addon:{AutopilotName} drive body:{ExclusiveBodyIndex}");
+
+        // (f) EXCLUSIVE WILDCARD (§CR-1b): an "exclusively own everything" claim is rejected OUTRIGHT — an exclusive
+        // reservation must name a concrete subject. First on a table with only the seeded defaults (a fresh table must
+        // ALSO reject per the new rule), then in the reviewer's exact order with a concrete ordinary hold present (where
+        // it previously slipped past acquisition and then denied every seat at enforcement). Both orders reject now.
+        passed &= ExpectGrant(ctx: ctx, name: "exclusive-all-rejected-fresh-table",
+            line: $"world.grant addon:{AutopilotName} drive all exclusive",
+            needle: $"[world.grant rejected: addon:{AutopilotName} drive all — ");
+
+        passed &= ExpectGrant(ctx: ctx, name: "ordinary-concrete-hold-for-wildcard-order", line: $"world.grant seat2 drive body:{OrdinaryBodyIndex}",
+            needle: $"[world.grant: seat2 drive body:{OrdinaryBodyIndex}]");
+        passed &= ExpectGrant(ctx: ctx, name: "exclusive-all-rejected-after-concrete-hold",
+            line: $"world.grant addon:{AutopilotName} drive all exclusive",
+            needle: $"[world.grant rejected: addon:{AutopilotName} drive all — ");
+        Send(ctx: ctx, line: $"world.revoke seat2 drive body:{OrdinaryBodyIndex}");
+
+        return passed;
+    }
+
+    // Submit a grant/revoke line and assert a settled accept/reject echo appears (the server prints it synchronously).
+    static bool ExpectGrant(Ctx ctx, string name, string line, string needle) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: line);
+
+        var hit = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: 15.0);
+
+        return Check(name: name, ok: (hit is not null), detail: (hit?.Trim() ?? $"(no line containing '{needle}')"));
+    }
+
+    // A mutation verb (Simulation-routed, quiet ack) followed by a world.status read: the stdin drain barrier holds the
+    // Immediate world.status behind the pending Simulation submission, so its answer reflects the applied state for
+    // free — no polling needed. Also asserts the server's own loud accept line appeared somewhere in the same window.
+    static bool MutateAndExpectStatus(Ctx ctx, string name, string command, string appliedNeedle, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: command);
+        Send(ctx: ctx, line: "world.status");
+
+        var statusLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+        var statusOk = Check(name: $"{name}-status", ok: ((statusLine is not null) && statusLine.Contains(value: $"dirty {dirty} undoable {dirty}]")), detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+
+        var snapshot = ctx.Collector.Snapshot();
+        var appliedFound = false;
+
+        for (var i = mark; (i < snapshot.Length); i++) {
+            if (snapshot[i].Contains(value: appliedNeedle)) {
+                appliedFound = true;
+
+                break;
+            }
+        }
+
+        var appliedOk = Check(name: $"{name}-echo", ok: appliedFound, detail: (appliedFound ? "seen" : $"missing '{appliedNeedle}'"));
+
+        return (statusOk && appliedOk);
+    }
+
+    static bool ExpectStatus(Ctx ctx, string name, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "world.status");
+
+        var statusLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.status:"), deadlineSeconds: 15.0);
+
+        return Check(name: name, ok: ((statusLine is not null) && statusLine.Contains(value: $"dirty {dirty} undoable {dirty}]")), detail: (statusLine?.Trim() ?? "(no world.status echo)"));
+    }
+
+    static Pose? ReadWhere(Ctx ctx, int index) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"player.where {index}");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => ProofApp.WhereEcho.IsMatch(input: l), deadlineSeconds: 6.0);
+
+        return ((line is not null) ? ParsePose(line: line) : null);
+    }
+    static Pose? ParsePose(string line) {
+        var match = ProofApp.WhereEcho.Match(input: line);
+
+        return (match.Success
+            ? new Pose(
+                X: double.Parse(s: match.Groups[2].Value, provider: ProofApp.Inv),
+                Y: double.Parse(s: match.Groups[3].Value, provider: ProofApp.Inv),
+                Z: double.Parse(s: match.Groups[4].Value, provider: ProofApp.Inv),
+                Yaw: int.Parse(s: match.Groups[5].Value, provider: ProofApp.Inv),
+                Pitch: int.Parse(s: match.Groups[6].Value, provider: ProofApp.Inv),
+                Roll: int.Parse(s: match.Groups[7].Value, provider: ProofApp.Inv))
+            : null);
+    }
+    // Euclidean distance between two samples, or NaN when either read failed (a NaN then fails BOTH the "moved beyond
+    // epsilon" and "frozen within epsilon" comparisons — the correct behavior for a missing sample, not a vacuous pass).
+    static double Distance(Pose? a, Pose? b) {
+        if ((a is not { } pa) || (b is not { } pb)) {
+            return double.NaN;
+        }
+
+        var dx = (pb.X - pa.X);
+        var dy = (pb.Y - pa.Y);
+        var dz = (pb.Z - pa.Z);
+
+        return Math.Sqrt(d: ((dx * dx) + (dy * dy) + (dz * dz)));
+    }
+    static string Fmt(Pose? pose) {
+        return (pose is { } p ? $"({p.X:0.00}, {p.Y:0.00}, {p.Z:0.00})" : "(?)");
+    }
+
+    static ProcessStartInfo BuildPsi(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string? worldArg) {
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        if (worldArg is not null) {
+            psi.ArgumentList.Add(item: "--world");
+            psi.ArgumentList.Add(item: worldArg);
+        }
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        return psi;
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
+    // player.stop is idempotent at boot and leaves the player at the authored spawn.
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+}
+
+// ============================================================================================
+// BINDINGS — the Phase 3 exit-bar proof for the player document + layered binding resolution
+// (§2.4: engine default ⊕ world overlay ⊕ profile ⊕ session), its console rebind surface
+// (player.bind / player.bindings / profile.save / profile.doc), persistence through
+// puck.world.player.v1, and the one-time migration off the retired puck.world.profiles.v1. Four
+// sessions against the REAL local player-document store — there is no CLI override for its path
+// (WorldProfileStore addresses a fixed %LOCALAPPDATA% location) — so this proof backs up whatever
+// the owner's real player.json/local.json/profiles.json hold (or their absence) before touching
+// anything, and restores them in a finally no matter how the sessions finish. Never delete or
+// revert files this proof did not itself create.
+// ============================================================================================
+static class BindingsProof {
+    public static int RunBindings(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        // The current split layout (world/) plus the shared directory the two retired single-file layouts land in
+        // (profiles/ — the Phase 3 whole-document pair AND the pre-Phase-3 puck.world.profiles.v1 catalog).
+        var worldDir = PlayerStorePaths.WorldDir();
+        var phaseDir = PlayerStorePaths.PhaseThreeDir();
+        var catalogPath = PlayerStorePaths.CatalogPath();
+        var worldLocalPath = PlayerStorePaths.LocalPath();
+        var legacyPath = PlayerStorePaths.LegacyPath();
+        var phaseThreePlayerPath = PlayerStorePaths.PhaseThreePlayerPath();
+
+        // Snapshot whatever the owner's REAL catalog holds today (the whole world/ + profiles/ subtrees, byte-for
+        // -byte) before this proof touches anything.
+        var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
+        var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
+        var passed = true;
+
+        try {
+            DirectoryBackup.Clear(dir: worldDir);
+            DirectoryBackup.Clear(dir: phaseDir);
+
+            Console.WriteLine(value: "[proof] === bindings (a): session A — engine defaults, a live rebind, profile.save ===");
+
+            var (sessionAPassed, revisionAfterSave) = RunSessionA(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+            passed &= sessionAPassed;
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === bindings (b): session B — the rebind survives a relaunch ===");
+            passed &= RunSessionB(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, revisionAfterSave: revisionAfterSave);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === bindings (b2): the identity/motion/preferences SetPlayerSection variants (positive + malformed) ===");
+            passed &= RunSectionEditSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === bindings (b3): the section edits survive a relaunch ===");
+            passed &= RunSectionSurvives(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === bindings (c): session C — a per-world binding overlay merges, then live-removes ===");
+
+            var kartRemapPath = Path.Combine(path1: projectPath, path2: "Assets", path3: "worlds", path4: "kart-remap.world.json");
+
+            passed &= RunSessionC(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldPath: kartRemapPath);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === bindings (d): the pre-Phase-3 puck.world.profiles.v1 migration ===");
+            passed &= RunMigrationLegacy(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
+                worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, legacyPath: legacyPath);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === bindings (e): the Phase 3 single-file player.json migration ===");
+            passed &= RunMigrationPhaseThree(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds,
+                worldDir: worldDir, phaseDir: phaseDir, catalogPath: catalogPath, worldLocalPath: worldLocalPath, phaseThreePlayerPath: phaseThreePlayerPath);
+        }
+        finally {
+            DirectoryBackup.Restore(snapshot: worldBackup);
+            DirectoryBackup.Restore(snapshot: phaseBackup);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] bindings proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // Session A: boot the baked-default world against a freshly-cleared store (seeds the built-in default catalog —
+    // amber/cobalt/moss/violet, revision 1, boot=amber). Asserts the engine-default composed mapping, a live rebind
+    // through player.bind, and a profile.save fold-and-persist (revision bumps, read back through profile.doc).
+    static (bool Passed, long RevisionAfterSave) RunSessionA(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+        var revisionAfterSave = -1L;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (baked-default world, fresh player-document store)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return (false, revisionAfterSave);
+            }
+
+            var revision0 = ReadRevision(ctx: ctx, name: "revision-baseline");
+
+            passed &= Check(name: "revision-baseline-present", ok: (revision0 is not null), detail: (revision0?.ToString(provider: ProofApp.Inv) ?? "(no profile.doc echo)"));
+
+            // The engine-default composed mapping (no overlay, no profile, no session layer yet): spot-check three
+            // sources across the base page.
+            passed &= ExpectBindingsContains(ctx: ctx, name: "defaults-w-forward", seat: 1, needle: "keyboard.w→player.forward", wantPresent: true);
+            passed &= ExpectBindingsContains(ctx: ctx, name: "defaults-space-primary", seat: 1, needle: "keyboard.space→player.primary", wantPresent: true);
+            passed &= ExpectBindingsContains(ctx: ctx, name: "defaults-east-secondary", seat: 1, needle: "gamepad.buttonEast→player.secondary", wantPresent: true);
+
+            // A live session rebind: keyboard.e -> player.forward, unsaved until profile.save.
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "player.bind 1 keyboard.e player.forward");
+
+            var bindLine = Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[player.bind: seat 1 'keyboard.e' → 'player.forward'"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "bind-echo", ok: (bindLine is not null), detail: (bindLine?.Trim() ?? "(no '[player.bind: ...]' echo)"));
+            passed &= ExpectBindingsContains(ctx: ctx, name: "session-rebind-visible", seat: 1, needle: "keyboard.e→player.forward", wantPresent: true);
+
+            // profile.save folds the session rebind into the boot profile ('amber' on a freshly seeded catalog) and
+            // persists it through the server-owned player document.
+            mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "profile.save 1");
+
+            var saveLine = Await(collector: ctx.Collector, mark: mark,
+                predicate: l => l.Contains(value: "[profile.save: seat 1 → profile 'amber' bindings saved]"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "profile-save-echo", ok: (saveLine is not null), detail: (saveLine?.Trim() ?? "(no '[profile.save: ...]' echo)"));
+
+            var revision1 = ReadRevision(ctx: ctx, name: "revision-after-save");
+
+            passed &= Check(name: "revision-bumped-by-save", ok: ((revision0 is { } r0) && (revision1 is { } r1) && (r1 > r0)),
+                detail: $"{revision0?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revision1?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
+
+            revisionAfterSave = (revision1 ?? -1L);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return (passed, revisionAfterSave);
+    }
+
+    // Session B: relaunch against the SAME real store session A just saved (no --world). Asserts the rebind survived
+    // (puck.world.player.v1 persistence) and that a plain boot does not itself bump the revision.
+    static bool RunSessionB(string exe, string repoRoot, int width, int height, int exitAfterSeconds, long revisionAfterSave) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (baked-default world, persisted player-document store)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= ExpectBindingsContains(ctx: ctx, name: "rebind-survives-relaunch", seat: 1, needle: "keyboard.e→player.forward", wantPresent: true);
+
+            var revisionB = ReadRevision(ctx: ctx, name: "revision-after-relaunch");
+
+            passed &= Check(name: "revision-unchanged-by-plain-boot", ok: (revisionB == revisionAfterSave),
+                detail: $"{revisionB?.ToString(provider: ProofApp.Inv) ?? "?"} (want == {revisionAfterSave})");
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // Session C: boot --world <kart-remap> (the checked-in bindingOverlays example) and assert its lane remap merges
+    // over the engine default from tick 0, then world.bindings.remove live-recomposes every seat back to it.
+    static bool RunSessionC(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string worldPath) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: worldPath);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --world {worldPath} --width {width} --height {height}");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // The overlay merges from boot (WorldSeatBindings is constructed with the world's bindingOverlays before
+            // the first tick): East now fires player.primary, and no longer the engine-default player.secondary.
+            passed &= ExpectBindingsContains(ctx: ctx, name: "overlay-merges-east-primary", seat: 1, needle: "gamepad.buttonEast→player.primary", wantPresent: true);
+            passed &= ExpectBindingsContains(ctx: ctx, name: "overlay-supersedes-east-secondary", seat: 1, needle: "gamepad.buttonEast→player.secondary", wantPresent: false);
+
+            // Live removal: a Simulation-routed mutation, so the stdin barrier holds the following Immediate
+            // player.bindings read until it applies (and WorldSimulation.Step's SyncOverlays recomposes in the same
+            // tick) — the same read-after-write guarantee MutateProof's world.status pattern relies on.
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "world.bindings.remove kart-remap");
+
+            var removedLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.mutation: RemoveBindingOverlay 'kart-remap' applied]"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "overlay-remove-applied", ok: (removedLine is not null), detail: (removedLine?.Trim() ?? "(no '[world.mutation: RemoveBindingOverlay ...]' echo)"));
+            passed &= ExpectBindingsContains(ctx: ctx, name: "removal-recomposes-east-secondary", seat: 1, needle: "gamepad.buttonEast→player.secondary", wantPresent: true);
+            passed &= ExpectBindingsContains(ctx: ctx, name: "removal-drops-east-primary", seat: 1, needle: "gamepad.buttonEast→player.primary", wantPresent: false);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // Session D: synthesize a PRE-PHASE-3 puck.world.profiles.v1 profiles.json (world/ + profiles/player.json absent —
+    // the store's migration precondition), boot, and assert the one-time migration: the loud "... retired
+    // puck.world.profiles.v1 ..." boot line, the split world/ layout written (world/player.json + world/local.json),
+    // profiles/profiles.json deleted, and profile.list showing the migrated names.
+    static bool RunMigrationLegacy(string exe, string repoRoot, int width, int height, int exitAfterSeconds,
+        string worldDir, string phaseDir, string catalogPath, string worldLocalPath, string legacyPath) {
+        DirectoryBackup.Clear(dir: worldDir);
+        DirectoryBackup.Clear(dir: phaseDir);
+        _ = Directory.CreateDirectory(path: phaseDir);
+
+        const string legacyJson = """
+            {
+              "version": "puck.world.profiles.v1",
+              "lastUsed": "crimson",
+              "profiles": [
+                { "name": "crimson", "color": "#CC3333", "moveSpeed": 5, "turnSpeed": 3, "invertLookX": true },
+                { "name": "azure", "color": "#3355CC" }
+              ]
+            }
+            """;
+
+        File.WriteAllText(path: legacyPath, contents: legacyJson);
+
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized pre-Phase-3 profiles.json at {legacyPath})");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            var migratedLine = Await(collector: ctx.Collector, mark: 0, predicate: l => l.Contains(value: "retired puck.world.profiles.v1"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "migration-boot-line-legacy", ok: (migratedLine is not null), detail: (migratedLine?.Trim() ?? "(no '... retired puck.world.profiles.v1 ...' boot line)"));
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= Check(name: "catalog-json-written-legacy", ok: File.Exists(path: catalogPath), detail: catalogPath);
+            passed &= Check(name: "local-json-written-legacy", ok: File.Exists(path: worldLocalPath), detail: worldLocalPath);
+            passed &= Check(name: "legacy-profiles-json-deleted", ok: !File.Exists(path: legacyPath), detail: legacyPath);
+
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "profile.list");
+
+            var listLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[profile.list:"), deadlineSeconds: 15.0);
+            var listText = (listLine ?? string.Empty);
+
+            passed &= Check(name: "profile-list-has-crimson", ok: listText.Contains(value: "crimson", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
+            passed &= Check(name: "profile-list-has-azure", ok: listText.Contains(value: "azure", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // Session E: synthesize a PHASE 3 single-file profiles/player.json (world/ absent — the store's migration
+    // precondition once the catalog blob and the pre-Phase-3 legacy file are both cleared), boot, and assert the
+    // OTHER migration path: the loud "... Phase 3 single-file layout ..." boot line, the split world/ layout written,
+    // and profiles/player.json deleted.
+    static bool RunMigrationPhaseThree(string exe, string repoRoot, int width, int height, int exitAfterSeconds,
+        string worldDir, string phaseDir, string catalogPath, string worldLocalPath, string phaseThreePlayerPath) {
+        DirectoryBackup.Clear(dir: worldDir);
+        DirectoryBackup.Clear(dir: phaseDir);
+        _ = Directory.CreateDirectory(path: phaseDir);
+
+        const string phaseThreeJson = """
+            {
+              "schema": "puck.world.player.v1",
+              "revision": 3,
+              "updatedAtUtc": "2026-01-01T00:00:00.0000000+00:00",
+              "profiles": [
+                { "id": "goldenrod", "identity": { "name": "goldenrod", "color": "#DAA520" }, "motion": { "moveSpeed": 4, "turnSpeed": 2.5, "invertLookX": false } },
+                { "id": "seafoam", "identity": { "name": "seafoam", "color": "#93E9BE" }, "motion": { "moveSpeed": 4, "turnSpeed": 2.5, "invertLookX": false } }
+              ]
+            }
+            """;
+
+        File.WriteAllText(path: phaseThreePlayerPath, contents: phaseThreeJson);
+
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (synthesized Phase 3 player.json at {phaseThreePlayerPath})");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            var migratedLine = Await(collector: ctx.Collector, mark: 0, predicate: l => l.Contains(value: "Phase 3 single-file layout"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "migration-boot-line-phase-three", ok: (migratedLine is not null), detail: (migratedLine?.Trim() ?? "(no '... Phase 3 single-file layout ...' boot line)"));
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= Check(name: "catalog-json-written-phase-three", ok: File.Exists(path: catalogPath), detail: catalogPath);
+            passed &= Check(name: "local-json-written-phase-three", ok: File.Exists(path: worldLocalPath), detail: worldLocalPath);
+            passed &= Check(name: "phase-three-player-json-deleted", ok: !File.Exists(path: phaseThreePlayerPath), detail: phaseThreePlayerPath);
+
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "profile.list");
+
+            var listLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[profile.list:"), deadlineSeconds: 15.0);
+            var listText = (listLine ?? string.Empty);
+
+            passed &= Check(name: "profile-list-has-goldenrod", ok: listText.Contains(value: "goldenrod", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
+            passed &= Check(name: "profile-list-has-seafoam", ok: listText.Contains(value: "seafoam", comparisonType: StringComparison.OrdinalIgnoreCase), detail: listText.Trim());
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // (b2): the identity/motion/preferences SetPlayerSection variants (CR-2). Boots against the persisted store from
+    // session A/B (boot profile = amber), and drives every declared section through the raw profile.section reflection:
+    // each POSITIVE edit applies + bumps the revision + shows up in profile.doc, an IDENTITY edit LIVE-refreshes the
+    // seated participant (profile.show reads the roster's shared handle — not stale), and each MALFORMED payload rejects
+    // with a reason while leaving the revision untouched. The candidate-document validator is exercised directly by the
+    // cross-profile duplicate-name rejection.
+    static bool RunSectionEditSession(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (persisted player-document store)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // --- IDENTITY (positive): rename+recolor the seated boot profile 'amber' ---
+            var revBeforeIdentity = ReadRevision(ctx: ctx, name: "rev-before-identity");
+
+            passed &= Check(name: "rev-before-identity-present", ok: (revBeforeIdentity is not null), detail: (revBeforeIdentity?.ToString(provider: ProofApp.Inv) ?? "(no profile.doc echo)"));
+            passed &= ExpectSection(ctx: ctx, name: "identity-applies", line: "profile.section amber identity {\"name\":\"amberedit\",\"color\":\"#0A141E\"}", needle: "amber identity applied");
+
+            var revAfterIdentity = ReadRevision(ctx: ctx, name: "rev-after-identity");
+
+            passed &= Check(name: "identity-bumps-revision", ok: ((revBeforeIdentity is { } r0) && (revAfterIdentity is { } r1) && (r1 > r0)),
+                detail: $"{revBeforeIdentity?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revAfterIdentity?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
+            passed &= ExpectDocContains(ctx: ctx, name: "doc-has-new-name", needle: "\"name\":\"amberedit\"");
+            passed &= ExpectDocContains(ctx: ctx, name: "doc-has-new-color", needle: "\"color\":\"#0A141E\"");
+            // The live SEAT refresh: profile.show reads the roster's shared handle (the participant path), so the rename
+            // and recolor are visible on the seated player — no stale cached identity survives the edit.
+            passed &= ExpectShowContains(ctx: ctx, name: "seat-identity-refreshed", index: 1, needles: ["amberedit", "#0A141E"]);
+
+            // --- IDENTITY (malformed: bad JSON) rejects and does not bump ---
+            var revBeforeBadIdentity = ReadRevision(ctx: ctx, name: "rev-before-bad-identity");
+
+            passed &= ExpectSection(ctx: ctx, name: "identity-malformed-rejects", line: "profile.section amber identity {oops", needle: "did not parse");
+            passed &= ExpectRevisionUnchanged(ctx: ctx, name: "identity-malformed-no-bump", before: revBeforeBadIdentity);
+
+            // --- IDENTITY (validation: a cross-profile duplicate name) rejects through the WHOLE-document thick gate ---
+            passed &= ExpectSection(ctx: ctx, name: "identity-duplicate-rejects", line: "profile.section cobalt identity {\"name\":\"amberedit\",\"color\":\"#334455\"}", needle: "duplicated");
+
+            // --- MOTION (positive) ---
+            var revBeforeMotion = ReadRevision(ctx: ctx, name: "rev-before-motion");
+
+            passed &= ExpectSection(ctx: ctx, name: "motion-applies", line: "profile.section amber motion {\"moveSpeed\":9,\"turnSpeed\":3,\"invertLookX\":true}", needle: "amber motion applied");
+
+            var revAfterMotion = ReadRevision(ctx: ctx, name: "rev-after-motion");
+
+            passed &= Check(name: "motion-bumps-revision", ok: ((revBeforeMotion is { } m0) && (revAfterMotion is { } m1) && (m1 > m0)),
+                detail: $"{revBeforeMotion?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revAfterMotion?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
+            passed &= ExpectDocContains(ctx: ctx, name: "doc-has-new-speed", needle: "\"moveSpeed\":9");
+            passed &= ExpectShowContains(ctx: ctx, name: "seat-motion-refreshed", index: 1, needles: ["speed=9"]);
+
+            // --- MOTION (malformed: a non-positive speed) rejects at the thick gate and does not bump ---
+            var revBeforeBadMotion = ReadRevision(ctx: ctx, name: "rev-before-bad-motion");
+
+            passed &= ExpectSection(ctx: ctx, name: "motion-malformed-rejects", line: "profile.section amber motion {\"moveSpeed\":-5,\"turnSpeed\":3,\"invertLookX\":false}", needle: "positive");
+            passed &= ExpectRevisionUnchanged(ctx: ctx, name: "motion-malformed-no-bump", before: revBeforeBadMotion);
+
+            // --- PREFERENCES (positive) ---
+            var revBeforePrefs = ReadRevision(ctx: ctx, name: "rev-before-prefs");
+
+            passed &= ExpectSection(ctx: ctx, name: "preferences-applies", line: "profile.section amber preferences {\"theme\":\"dark\",\"hud\":true}", needle: "amber preferences applied");
+
+            var revAfterPrefs = ReadRevision(ctx: ctx, name: "rev-after-prefs");
+
+            passed &= Check(name: "preferences-bumps-revision", ok: ((revBeforePrefs is { } p0) && (revAfterPrefs is { } p1) && (p1 > p0)),
+                detail: $"{revBeforePrefs?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revAfterPrefs?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
+            passed &= ExpectDocContains(ctx: ctx, name: "doc-has-pref", needle: "\"theme\":\"dark\"");
+
+            // --- PREFERENCES (malformed: not a JSON object) rejects and does not bump ---
+            var revBeforeBadPrefs = ReadRevision(ctx: ctx, name: "rev-before-bad-prefs");
+
+            passed &= ExpectSection(ctx: ctx, name: "preferences-malformed-rejects", line: "profile.section amber preferences [1,2,3]", needle: "did not parse");
+            passed &= ExpectRevisionUnchanged(ctx: ctx, name: "preferences-malformed-no-bump", before: revBeforeBadPrefs);
+
+            // --- BINDINGS (positive, §CR-5): a raw profile.section bindings edit on the SEATED profile 'amber' must reach
+            // seat 1's ACTIVE mapping LIVE — no reseat, no restart. keyboard.q is unbound by default; this remaps it to
+            // player.forward through the durable section, and player.bindings 1 must show it IMMEDIATELY afterwards. This
+            // is the gap the closure commit left: the generic section handler persisted the edit but did not refresh the
+            // per-seat compiled layer, so a seated player kept old controls until reseat.
+            passed &= ExpectBindingsContains(ctx: ctx, name: "bindings-section-absent-before", seat: 1, needle: "keyboard.q→player.forward", wantPresent: false);
+
+            var revBeforeBindings = ReadRevision(ctx: ctx, name: "rev-before-bindings");
+
+            passed &= ExpectSection(ctx: ctx, name: "bindings-section-applies",
+                line: "profile.section amber bindings {\"version\":\"puck.bindings.v7\",\"modifiers\":[],\"pages\":[{\"id\":\"base\",\"chord\":[],\"entries\":[{\"source\":\"keyboard.q\",\"command\":\"player.forward\",\"anyModifiers\":true}]}]}",
+                needle: "amber bindings applied");
+
+            var revAfterBindings = ReadRevision(ctx: ctx, name: "rev-after-bindings");
+
+            passed &= Check(name: "bindings-bumps-revision", ok: ((revBeforeBindings is { } bb0) && (revAfterBindings is { } bb1) && (bb1 > bb0)),
+                detail: $"{revBeforeBindings?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revAfterBindings?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
+            // THE CR-5 WITNESS: the seated player's composed mapping now carries the durable rebind, with no reseat.
+            passed &= ExpectBindingsContains(ctx: ctx, name: "bindings-section-live-no-reseat", seat: 1, needle: "keyboard.q→player.forward", wantPresent: true);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // (b3): relaunch against the same real store and assert the identity/motion/preferences edits all survived (the
+    // durable puck.world.player.v1 persistence path, not just the live handle).
+    static bool RunSectionSurvives(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (persisted player-document store — section edits survive)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= ExpectDocContains(ctx: ctx, name: "survives-identity-name", needle: "\"name\":\"amberedit\"");
+            passed &= ExpectDocContains(ctx: ctx, name: "survives-identity-color", needle: "\"color\":\"#0A141E\"");
+            passed &= ExpectDocContains(ctx: ctx, name: "survives-motion-speed", needle: "\"moveSpeed\":9");
+            passed &= ExpectDocContains(ctx: ctx, name: "survives-preferences", needle: "\"theme\":\"dark\"");
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // Send a profile.section edit and assert its accept/reject echo contains a needle (both echoes start with
+    // "[profile.section:"; the needle distinguishes an "... applied" from a rejection reason).
+    static bool ExpectSection(Ctx ctx, string name, string line, string needle) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: line);
+
+        var echo = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[profile.section:"), deadlineSeconds: 15.0);
+
+        return Check(name: name, ok: ((echo is not null) && echo.Contains(value: needle, comparisonType: StringComparison.Ordinal)),
+            detail: (echo?.Trim() ?? $"(no '[profile.section: ...]' echo containing '{needle}')"));
+    }
+
+    // profile.doc is the whole-document JSON echo; assert a needle appears (a section value survived into the document).
+    static bool ExpectDocContains(Ctx ctx, string name, string needle) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "profile.doc");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "puck.world.player.v1"), deadlineSeconds: 15.0);
+
+        return Check(name: name, ok: ((line is not null) && line.Contains(value: needle, comparisonType: StringComparison.Ordinal)),
+            detail: (((line is not null) && line.Contains(value: needle, comparisonType: StringComparison.Ordinal)) ? $"has '{needle}'" : $"missing '{needle}' in {(line?.Trim() ?? "(no profile.doc echo)")}"));
+    }
+
+    // profile.show <index> reads the SEATED handle through the roster — asserts every needle appears (the live refresh).
+    static bool ExpectShowContains(Ctx ctx, string name, int index, string[] needles) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"profile.show {index}");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: $"[profile.show: player {index}"), deadlineSeconds: 15.0);
+        var text = (line ?? string.Empty);
+        var all = (line is not null) && needles.All(predicate: n => text.Contains(value: n, comparisonType: StringComparison.Ordinal));
+
+        return Check(name: name, ok: all, detail: (all ? text.Trim() : $"missing one of [{string.Join(separator: ", ", values: needles)}] in {(text.Length > 0 ? text.Trim() : "(no '[profile.show: ...]' echo)")}"));
+    }
+
+    static bool ExpectRevisionUnchanged(Ctx ctx, string name, long? before) {
+        var after = ReadRevision(ctx: ctx, name: $"{name}-read");
+
+        return Check(name: name, ok: ((before is { } b) && (after is { } a) && (a == b)),
+            detail: $"{before?.ToString(provider: ProofApp.Inv) ?? "?"} -> {after?.ToString(provider: ProofApp.Inv) ?? "?"} (want unchanged)");
+    }
+
+    // player.bindings <seat> is an Immediate read; asserts a source->command needle is present (or absent) in the
+    // composed active mapping.
+    static bool ExpectBindingsContains(Ctx ctx, string name, int seat, string needle, bool wantPresent) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: $"player.bindings {seat}");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: $"[player.bindings: seat {seat}"), deadlineSeconds: 15.0);
+        var text = (line ?? string.Empty);
+        var present = text.Contains(value: needle, comparisonType: StringComparison.Ordinal);
+
+        return Check(name: name, ok: (line is not null) && (present == wantPresent),
+            detail: $"{(present ? "has" : "missing")} '{needle}' (want {(wantPresent ? "present" : "absent")}): {(text.Length > 0 ? text.Trim() : "(no '[player.bindings: ...]' echo)")}");
+    }
+
+    // profile.doc is an Immediate echo of the whole server-owned puck.world.player.v1 document as compact JSON (one
+    // line, no "[profile.doc: ...]" wrapper) — extracts its top-level "revision" field.
+    static long? ReadRevision(Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "profile.doc");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "puck.world.player.v1"), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = Check(name: name, ok: false, detail: "(no profile.doc echo)");
+
+            return null;
+        }
+
+        var match = Regex.Match(input: line, pattern: @"""revision""\s*:\s*(-?\d+)");
+
+        return (match.Success ? long.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv) : null);
+    }
+
+    static ProcessStartInfo BuildPsi(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string? worldArg) {
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        if (worldArg is not null) {
+            psi.ArgumentList.Add(item: "--world");
+            psi.ArgumentList.Add(item: worldArg);
+        }
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        return psi;
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    // Shader compilation and first-device startup can exceed an individual assertion's deadline on a cold machine.
+    // player.stop is idempotent at boot and leaves the player at the authored spawn.
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+}
+
+// ============================================================================================
+// Phase 4 exit-bar proof: cloud-readiness (§2.5), proven against the local backend only. storage.status is the
+// control surface; the honest baseline (cloud unwired, identity declined/override, endpoint reflection) and the
+// Revision/version-token ordering + clobber-guard fields (§2.5.1/.2) it reports are the whole surface this arc ships.
+// ============================================================================================
+
+static class StorageProof {
+    public static int RunStorage(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 120, name: "--exit-after-seconds");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        var worldDir = PlayerStorePaths.WorldDir();
+        var phaseDir = PlayerStorePaths.PhaseThreeDir();
+        var catalogPath = PlayerStorePaths.CatalogPath();
+        var worldLocalPath = PlayerStorePaths.LocalPath();
+        var profilesDir = PlayerStorePaths.ProfilesDir();
+
+        // Snapshot whatever the owner's REAL catalog holds today (the whole world/ + profiles/ subtrees, byte-for
+        // -byte) before this proof touches anything.
+        var worldBackup = DirectoryBackup.Snapshot(dir: worldDir);
+        var phaseBackup = DirectoryBackup.Snapshot(dir: phaseDir);
+        var passed = true;
+
+        try {
+            DirectoryBackup.Clear(dir: worldDir);
+            DirectoryBackup.Clear(dir: phaseDir);
+
+            Console.WriteLine(value: "[proof] === storage (a): fresh boot — honest baseline, a revision-bumping mutation, the on-disk split layout ===");
+
+            var (basePassed, revisionAfterSet) = RunBaselineAndMutate(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+            passed &= basePassed;
+            passed &= Check(name: "catalog-json-on-disk", ok: File.Exists(path: catalogPath), detail: catalogPath);
+            passed &= Check(name: "local-json-on-disk", ok: File.Exists(path: worldLocalPath), detail: worldLocalPath);
+
+            var profileBlobs = (Directory.Exists(path: profilesDir) ? Directory.GetFiles(path: profilesDir, searchPattern: "*.json") : []);
+
+            passed &= Check(name: "profile-blobs-on-disk", ok: (profileBlobs.Length > 0), detail: $"{profileBlobs.Length} blob(s) under {profilesDir}");
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === storage (b): relaunch — the persisted revision survives ===");
+            passed &= RunRelaunchPersists(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, expectedRevision: revisionAfterSet);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === storage (c): --user-id <a valid oid Guid> — explicit override ===");
+            passed &= RunUserIdOverride(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+            Console.WriteLine();
+            Console.WriteLine(value: "[proof] === storage (d): --user-id not-a-guid — declines loudly ===");
+            passed &= RunUserIdDeclines(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+        }
+        finally {
+            DirectoryBackup.Restore(snapshot: worldBackup);
+            DirectoryBackup.Restore(snapshot: phaseBackup);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] storage proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // Session (a): boot against the freshly-cleared REAL store. Asserts storage.status's honest baseline (local
+    // authoritative/cloud unwired, identity declined, endpoint none, a present catalog revision + version token), then
+    // the cheapest revision-bumping verb (profile.set) is asserted to bump the revision, change the version token, and
+    // flip dirty on.
+    static (bool Passed, long RevisionAfterSet) RunBaselineAndMutate(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null, userIdArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+        var revisionAfterSet = -1L;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (fresh player-document store, no identity override)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return (false, revisionAfterSet);
+            }
+
+            var (baseline, baselineOk) = ReadStorageStatus(ctx: ctx, tag: "baseline");
+
+            passed &= baselineOk;
+            passed &= Check(name: "tier-local-authoritative", ok: baseline.Contains(value: "tier local (authoritative); cloud unwired"), detail: baseline);
+            passed &= Check(name: "identity-declined-baseline", ok: baseline.Contains(value: "identity declined"), detail: baseline);
+            passed &= Check(name: "endpoint-none-baseline", ok: baseline.Contains(value: "endpoint none"), detail: baseline);
+
+            var revision0 = ExtractLong(text: baseline, pattern: @"catalog revision (-?\d+)");
+            var token0 = ExtractToken(text: baseline);
+
+            passed &= Check(name: "catalog-revision-present-baseline", ok: (revision0 is not null), detail: baseline);
+            passed &= Check(name: "version-token-present-baseline", ok: (!string.IsNullOrEmpty(value: token0) && (token0 != "none")), detail: baseline);
+
+            // profile.set speed 7 1 — the cheapest revision-bumping verb (ProfileCommandModule.SetFloat calls
+            // WorldProfiles.Save directly): boot profile 'amber' defaults to speed 4, so old -> new is deterministic.
+            var mark = ctx.Collector.Count;
+
+            Send(ctx: ctx, line: "profile.set speed 7 1");
+
+            var setLine = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[profile.set:"), deadlineSeconds: 15.0);
+
+            passed &= Check(name: "profile-set-echo", ok: (setLine is not null), detail: (setLine?.Trim() ?? "(no '[profile.set: ...]' echo)"));
+
+            var (afterSet, afterSetOk) = ReadStorageStatus(ctx: ctx, tag: "after-set");
+
+            passed &= afterSetOk;
+
+            var revision1 = ExtractLong(text: afterSet, pattern: @"catalog revision (-?\d+)");
+            var token1 = ExtractToken(text: afterSet);
+
+            passed &= Check(name: "revision-bumped-by-mutation", ok: ((revision0 is { } r0) && (revision1 is { } r1) && (r1 > r0)),
+                detail: $"{revision0?.ToString(provider: ProofApp.Inv) ?? "?"} -> {revision1?.ToString(provider: ProofApp.Inv) ?? "?"} (want strictly greater)");
+            passed &= Check(name: "version-token-changed-by-mutation", ok: ((token0 is not null) && (token1 is not null) && (token0 != token1)),
+                detail: $"{token0 ?? "?"} -> {token1 ?? "?"} (want different)");
+            passed &= Check(name: "dirty-on-after-mutation", ok: afterSet.Contains(value: "dirty on"), detail: afterSet);
+
+            revisionAfterSet = (revision1 ?? -1L);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return (passed, revisionAfterSet);
+    }
+
+    // Session (b): relaunch against the SAME real store session (a) just saved (no --world, no --user-id). Asserts
+    // storage.status reports the same persisted revision — cross-session persistence on the local backend.
+    static bool RunRelaunchPersists(string exe, string repoRoot, int width, int height, int exitAfterSeconds, long expectedRevision) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null, userIdArg: null);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (persisted player-document store)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var (status, ok) = ReadStorageStatus(ctx: ctx, tag: "relaunch");
+
+            passed &= ok;
+
+            var revision = ExtractLong(text: status, pattern: @"catalog revision (-?\d+)");
+
+            passed &= Check(name: "revision-persisted-across-relaunch", ok: (revision == expectedRevision),
+                detail: $"{revision?.ToString(provider: ProofApp.Inv) ?? "?"} (want == {expectedRevision.ToString(provider: ProofApp.Inv)})");
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // Session (c): boot with --user-id <a valid oid-shaped Guid>. Asserts the explicit-override identity echo
+    // (§2.5.4's ExplicitOverridePlayerStorageIdentityResolver path).
+    static bool RunUserIdOverride(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        const string userId = "11112222-3333-4444-5555-666677778888";
+
+        return RunUserIdSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, userId: userId,
+            name: "identity-explicit-override", needle: $"identity explicit override userId={userId}", label: $"--user-id {userId}");
+    }
+
+    // Session (d): boot with --user-id not-a-guid. Asserts the resolver declines loudly rather than inventing a
+    // container (§2.5.4's non-Guid-override branch).
+    static bool RunUserIdDeclines(string exe, string repoRoot, int width, int height, int exitAfterSeconds) {
+        const string userId = "not-a-guid";
+
+        return RunUserIdSession(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, userId: userId,
+            name: "identity-declined-bad-user-id", needle: $"identity declined — explicit override userId '{userId}' is not a container Guid; declining (local-only)",
+            label: $"--user-id {userId}");
+    }
+
+    static bool RunUserIdSession(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string userId, string name, string needle, string label) {
+        var psi = BuildPsi(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, worldArg: null, userIdArg: userId);
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} ({label})");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var (status, ok) = ReadStorageStatus(ctx: ctx, tag: name);
+
+            passed &= ok;
+            passed &= Check(name: name, ok: status.Contains(value: needle, comparisonType: StringComparison.Ordinal), detail: status);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        return passed;
+    }
+
+    // storage.status is an Immediate echo of the honest local storage state (§2.5.6) — one line, "[storage.status: ...]".
+    static (string Text, bool Ok) ReadStorageStatus(Ctx ctx, string tag) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "storage.status");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[storage.status:"), deadlineSeconds: 15.0);
+        var ok = Check(name: $"storage-status-echo-{tag}", ok: (line is not null), detail: (line?.Trim() ?? "(no '[storage.status: ...]' echo)"));
+
+        return ((line ?? string.Empty), ok);
+    }
+
+    static long? ExtractLong(string text, string pattern) {
+        var match = Regex.Match(input: text, pattern: pattern);
+
+        return (match.Success ? long.Parse(s: match.Groups[1].Value, provider: ProofApp.Inv) : null);
+    }
+
+    // storage.status's "token <value> lastWrite ..." segment — <value> is a hex digest, "none", or (theoretically)
+    // never whitespace, so a non-whitespace run up to " lastWrite" isolates it.
+    static string? ExtractToken(string text) {
+        var match = Regex.Match(input: text, pattern: @"token (\S+) lastWrite");
+
+        return (match.Success ? match.Groups[1].Value : null);
+    }
+
+    // player.stop is idempotent at boot and leaves the player at the authored spawn; its echo proves the simulation
+    // (and the console dispatch behind the stdin barrier) is ready.
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 30.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 30 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+            // best-effort — the child must never outlive us.
+        }
+    }
+    static ProcessStartInfo BuildPsi(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string? worldArg, string? userIdArg) {
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        if (worldArg is not null) {
+            psi.ArgumentList.Add(item: "--world");
+            psi.ArgumentList.Add(item: worldArg);
+        }
+
+        if (userIdArg is not null) {
+            psi.ArgumentList.Add(item: "--user-id");
+            psi.ArgumentList.Add(item: userIdArg);
+        }
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        return psi;
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+}
+
+// ============================================================================================
+// record — native-capture proof (the recording arc)
+// ============================================================================================
+static class RecordProof {
+    public static int RunRecord(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var seconds = Math.Clamp(opts.GetInt(fallback: 4, name: "--seconds"), 2, 60);
+        var outPath = opts.Get(name: "--out");
+
+        var repoRoot = ProofApp.RepoRoot();
+        var projectPath = Path.Combine(path1: repoRoot, path2: "src", path3: "Puck.World");
+
+        if (!noBuild) {
+            Console.WriteLine(value: "[proof] building Puck.World (Release)...");
+
+            var build = Process.Start(startInfo: new ProcessStartInfo {
+                Arguments = $"build \"{projectPath}\" -c Release --nologo -v q",
+                FileName = "dotnet",
+                UseShellExecute = false,
+            })!;
+
+            build.WaitForExit();
+
+            if (build.ExitCode != 0) {
+                return ProofApp.Fail(message: $"build failed ({build.ExitCode})");
+            }
+        }
+
+        var exe = FindExe(projectPath: projectPath);
+
+        if (exe is null) {
+            return ProofApp.Fail(message: "Puck.World.exe not found under bin/Release — build first");
+        }
+
+        var exitAfterSeconds = (seconds + 20);
+        var psi = new ProcessStartInfo {
+            FileName = exe,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+
+        psi.ArgumentList.Add(item: "--width");
+        psi.ArgumentList.Add(item: width.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--height");
+        psi.ArgumentList.Add(item: height.ToString(provider: ProofApp.Inv));
+        psi.ArgumentList.Add(item: "--exit-after-seconds");
+        psi.ArgumentList.Add(item: exitAfterSeconds.ToString(provider: ProofApp.Inv));
+
+        var process = new Process { StartInfo = psi };
+        var stopwatch = new Stopwatch();
+        var collector = new OutputCollector();
+        var passed = true;
+        var started = false;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        Console.WriteLine(value: $"[proof] launching: {exe} --width {width} --height {height} (native-capture proof, {seconds}s)");
+
+        try {
+            _ = process.Start();
+            started = true;
+            stopwatch.Start();
+            collector.Start(reader: process.StandardOutput, stopwatch: stopwatch);
+            collector.Start(reader: process.StandardError, stopwatch: stopwatch);
+
+            var stdin = process.StandardInput;
+
+            stdin.AutoFlush = true;
+
+            var ctx = new Ctx(Collector: collector, Process: process, Stdin: stdin);
+
+            if (!WaitForConsole(ctx: ctx)) {
+                return 1;
+            }
+
+            // The recording document the world resolved at boot (the checked-in asset or the baked default).
+            var docLine = Await(collector: collector, mark: 0, predicate: l => l.Contains(value: "[recording] document:"), deadlineSeconds: 5.0);
+
+            passed &= Check(name: "recording-document-resolved", ok: (docLine is not null), detail: (docLine?.Trim() ?? "(no [recording] document: boot line)"));
+            passed &= CheckOverlayPresence(docLine: docLine);
+
+            // (a) idle before start.
+            passed &= ExpectStatus(ctx: ctx, needle: "idle", name: "status-idle-before-start");
+
+            // (b) start — arm the session; echo names the landed codec + resolved path (declines are loud).
+            var startMark = collector.Count;
+
+            Send(ctx: ctx, line: "capture.start");
+
+            var startLine = Await(collector: collector, mark: startMark, predicate: l => l.Contains(value: "[capture.start:"), deadlineSeconds: 30.0);
+            var startOk = ((startLine is not null) && startLine.Contains(value: "recording ->"));
+
+            passed &= Check(name: "capture-start-recording", ok: startOk, detail: (startLine?.Trim() ?? "(no capture.start echo)"));
+
+            if (!startOk) {
+                return Finish(passed: false, process: process, started: started);
+            }
+
+            var recordingPath = Extract(line: startLine!, after: "recording -> ", until: " |");
+            var codec = Extract(line: startLine!, after: "codec ", until: " |");
+
+            Console.WriteLine(value: $"[proof]   landed codec: {codec} | path: {recordingPath}");
+
+            // (c) ~seconds of the autonomous crowd moving.
+            Thread.Sleep(millisecondsTimeout: (seconds * 1000));
+
+            // (d) still recording mid-run.
+            passed &= ExpectStatus(ctx: ctx, needle: "recording ->", name: "status-recording-midrun");
+
+            // (e) stop — finalize the container.
+            var stopMark = collector.Count;
+
+            Send(ctx: ctx, line: "capture.stop");
+
+            var stopLine = Await(collector: collector, mark: stopMark, predicate: l => l.Contains(value: "[capture.stop:"), deadlineSeconds: 30.0);
+
+            passed &= Check(name: "capture-stop-wrote", ok: ((stopLine is not null) && stopLine.Contains(value: "wrote ")), detail: (stopLine?.Trim() ?? "(no capture.stop echo)"));
+
+            // (f) idle again after stop.
+            passed &= ExpectStatus(ctx: ctx, needle: "idle", name: "status-idle-after-stop");
+
+            // (g) the produced container on disk.
+            var fullPath = (Path.IsPathRooted(path: recordingPath) ? recordingPath : Path.Combine(path1: repoRoot, path2: recordingPath));
+
+            passed &= AssertContainer(fullPath: fullPath, codec: codec, outPath: outPath);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+
+            if (started && !process.HasExited) {
+                KillQuietly(process: process);
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] record proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static int Finish(bool passed, Process process, bool started) {
+        if (started && !process.HasExited) {
+            KillQuietly(process: process);
+        }
+
+        Console.WriteLine(value: $"[proof] record proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    // The recording document must carry the capture-only overlay the owner asked for — read the resolved file and assert
+    // a text overlay row is present. A baked-default fallback (no file) has no overlays; that is a FAIL of this proof's
+    // premise (the checked-in asset should have loaded), reported honestly.
+    static bool CheckOverlayPresence(string? docLine) {
+        if ((docLine is null) || docLine.Contains(value: "baked default")) {
+            return Check(name: "overlay-present-in-document", ok: false, detail: "recording document fell back to the baked default (no overlays) - the checked-in asset did not load");
+        }
+
+        var marker = "[recording] document: ";
+        var index = docLine.IndexOf(value: marker, comparisonType: StringComparison.Ordinal);
+        var path = ((index >= 0) ? docLine[(index + marker.Length)..].Trim() : "");
+        var ok = (File.Exists(path: path) && File.ReadAllText(path: path).Contains(value: "\"overlays\""));
+
+        return Check(name: "overlay-present-in-document", ok: ok, detail: (ok ? $"overlays present in {Path.GetFileName(path: path)}" : $"no overlays in {path}"));
+    }
+
+    static bool AssertContainer(string fullPath, string codec, string? outPath) {
+        var exists = File.Exists(path: fullPath);
+        var ok = Check(name: "file-exists", ok: exists, detail: fullPath);
+
+        if (!exists) {
+            return false;
+        }
+
+        var bytes = File.ReadAllBytes(path: fullPath);
+
+        ok &= Check(name: "file-non-trivial", ok: (bytes.Length > 8000), detail: $"{bytes.Length} bytes");
+
+        var walk = MiniEbml.Walk(data: bytes);
+        var audioOnly = codec.Contains(value: "audio only");
+        var expectDocType = (string.Equals(a: codec, b: "V_AV1", comparisonType: StringComparison.Ordinal) ? "webm" : "matroska");
+
+        ok &= Check(name: "ebml-doctype-matches-codec", ok: string.Equals(a: walk.DocType, b: expectDocType, comparisonType: StringComparison.Ordinal), detail: $"docType={walk.DocType} codec={codec} (want {expectDocType})");
+        ok &= Check(name: "audio-track-present", ok: walk.HasAudioTrack, detail: (walk.HasAudioTrack ? "A_OPUS track present" : "no audio track"));
+
+        if (!audioOnly) {
+            ok &= Check(name: "video-track-present", ok: walk.HasVideoTrack, detail: (walk.HasVideoTrack ? $"video track {walk.VideoCodecId}" : "no video track"));
+        }
+
+        if (outPath is not null) {
+            try {
+                Directory.CreateDirectory(path: Path.GetDirectoryName(path: Path.GetFullPath(path: outPath))!);
+                File.Copy(sourceFileName: fullPath, destFileName: outPath, overwrite: true);
+                Console.WriteLine(value: $"[proof]   copied artifact -> {outPath} ({bytes.Length} bytes)");
+            } catch (Exception exception) {
+                Console.WriteLine(value: $"[proof]   (could not copy to {outPath}: {exception.Message})");
+            }
+        }
+
+        return ok;
+    }
+
+    static bool ExpectStatus(Ctx ctx, string needle, string name) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "capture.status");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[capture.status:"), deadlineSeconds: 15.0);
+
+        return Check(name: name, ok: ((line is not null) && line.Contains(value: needle)), detail: (line?.Trim() ?? "(no capture.status echo)"));
+    }
+
+    static string Extract(string line, string after, string until) {
+        var start = line.IndexOf(value: after, comparisonType: StringComparison.Ordinal);
+
+        if (start < 0) {
+            return "";
+        }
+
+        start += after.Length;
+
+        var end = line.IndexOf(value: until, startIndex: start, comparisonType: StringComparison.Ordinal);
+
+        return ((end < 0) ? line[start..].Trim() : line[start..end].Trim());
+    }
+
+    sealed record Ctx(Process Process, StreamWriter Stdin, OutputCollector Collector);
+
+    static bool WaitForConsole(Ctx ctx) {
+        var mark = ctx.Collector.Count;
+
+        Send(ctx: ctx, line: "player.stop 1");
+
+        var line = Await(collector: ctx.Collector, mark: mark, predicate: candidate => candidate.Contains(value: "[player.stop:"), deadlineSeconds: 45.0);
+
+        return Check(name: "simulation-ready", ok: (line is not null), detail: (line?.Trim() ?? "player.stop did not apply within 45 seconds"));
+    }
+
+    static void Send(Ctx ctx, string line) {
+        try {
+            ctx.Stdin.Write(value: line);
+            ctx.Stdin.Write(value: '\n');
+        }
+        catch (IOException) {
+        }
+        catch (ObjectDisposedException) {
+        }
+    }
+
+    static string? Await(OutputCollector collector, int mark, Func<string, bool> predicate, double deadlineSeconds) {
+        var deadline = DateTime.UtcNow.AddSeconds(value: deadlineSeconds);
+
+        while (true) {
+            var snapshot = collector.Snapshot();
+
+            for (var i = mark; (i < snapshot.Length); i++) {
+                if (predicate(arg: snapshot[i])) {
+                    return snapshot[i];
+                }
+            }
+
+            if (DateTime.UtcNow >= deadline) {
+                return null;
+            }
+
+            Thread.Sleep(millisecondsTimeout: 100);
+        }
+    }
+
+    static bool Check(string name, bool ok, string detail) {
+        Console.WriteLine(value: $"[proof]   {(ok ? "PASS" : "FAIL")} {name}: {detail}");
+
+        return ok;
+    }
+
+    static string? FindExe(string projectPath) {
+        var binRelease = Path.Combine(path1: projectPath, path2: "bin", path3: "Release");
+
+        if (!Directory.Exists(path: binRelease)) {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(path: binRelease, searchOption: SearchOption.AllDirectories, searchPattern: "Puck.World.exe")
+            .OrderByDescending(keySelector: File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+
+    static void KillQuietly(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch {
+        }
+    }
+}
+
+// A minimal reader-side EBML walker (independent of the muxer) for the record proof: doc type + which track types are
+// present. Mirrors the mux-check walker's primitives; it only reads what the container assertions need.
+sealed class MiniEbml {
+    public string DocType = "";
+    public bool HasVideoTrack;
+    public bool HasAudioTrack;
+    public string VideoCodecId = "";
+
+    public static MiniEbml Walk(byte[] data) {
+        var walker = new MiniEbml();
+        var position = 0;
+
+        while (position < data.Length) {
+            var id = ReadId(data: data, position: ref position);
+            var size = ReadSize(data: data, position: ref position);
+            var contentStart = position;
+            var contentEnd = ((size < 0) ? data.Length : (int)(position + size));
+
+            if (id == 0x1A45DFA3) {
+                walker.ParseEbmlHeader(data: data, start: contentStart, end: contentEnd);
+            } else if (id == 0x18538067) {
+                walker.ParseSegment(data: data, start: contentStart, end: contentEnd);
+            }
+
+            position = contentEnd;
+        }
+
+        return walker;
+    }
+
+    void ParseEbmlHeader(byte[] data, int start, int end) {
+        var position = start;
+
+        while (position < end) {
+            var id = ReadId(data: data, position: ref position);
+            var size = ReadSize(data: data, position: ref position);
+
+            if (id == 0x4282) {
+                DocType = System.Text.Encoding.ASCII.GetString(bytes: data, index: position, count: (int)size);
+            }
+
+            position += (int)size;
+        }
+    }
+
+    void ParseSegment(byte[] data, int start, int end) {
+        var position = start;
+
+        while (position < end) {
+            var id = ReadId(data: data, position: ref position);
+            var size = ReadSize(data: data, position: ref position);
+            var contentStart = position;
+            var contentEnd = ((size < 0) ? end : (int)(position + size));
+
+            if (id == 0x1654AE6B) {
+                ParseTracks(data: data, start: contentStart, end: contentEnd);
+            }
+
+            position = contentEnd;
+        }
+    }
+
+    void ParseTracks(byte[] data, int start, int end) {
+        var position = start;
+
+        while (position < end) {
+            var id = ReadId(data: data, position: ref position);
+            var size = ReadSize(data: data, position: ref position);
+
+            if (id == 0xAE) {
+                ParseTrackEntry(data: data, start: position, end: (int)(position + size));
+            }
+
+            position += (int)size;
+        }
+    }
+
+    void ParseTrackEntry(byte[] data, int start, int end) {
+        var position = start;
+        var type = 0;
+        var codecId = "";
+
+        while (position < end) {
+            var id = ReadId(data: data, position: ref position);
+            var size = ReadSize(data: data, position: ref position);
+
+            if (id == 0x83) {
+                type = (int)ReadUInt(data: data, position: position, length: (int)size);
+            } else if (id == 0x86) {
+                codecId = System.Text.Encoding.ASCII.GetString(bytes: data, index: position, count: (int)size);
+            }
+
+            position += (int)size;
+        }
+
+        if (type == 1) {
+            HasVideoTrack = true;
+            VideoCodecId = codecId;
+        } else if (type == 2) {
+            HasAudioTrack = true;
+        }
+    }
+
+    static uint ReadId(byte[] data, ref int position) {
+        var first = data[position];
+        var length = (((first & 0x80) != 0) ? 1 : ((first & 0x40) != 0) ? 2 : ((first & 0x20) != 0) ? 3 : 4);
+        var id = 0u;
+
+        for (var index = 0; (index < length); index++) {
+            id = ((id << 8) | data[position + index]);
+        }
+
+        position += length;
+
+        return id;
+    }
+
+    static long ReadSize(byte[] data, ref int position) {
+        var first = data[position];
+        var length = (((first & 0x80) != 0) ? 1 : ((first & 0x40) != 0) ? 2 : ((first & 0x20) != 0) ? 3 : ((first & 0x10) != 0) ? 4 : ((first & 0x08) != 0) ? 5 : ((first & 0x04) != 0) ? 6 : ((first & 0x02) != 0) ? 7 : 8);
+        long value = (first & (0xFF >> length));
+        var allOnes = (value == (0xFFL >> length));
+
+        for (var index = 1; (index < length); index++) {
+            value = ((value << 8) | data[position + index]);
+
+            if (data[position + index] != 0xFF) {
+                allOnes = false;
+            }
+        }
+
+        position += length;
+
+        return (allOnes ? -1L : value);
+    }
+
+    static long ReadUInt(byte[] data, int position, int length) {
+        var value = 0L;
+
+        for (var index = 0; (index < length); index++) {
+            value = ((value << 8) | data[position + index]);
+        }
+
+        return value;
+    }
+}

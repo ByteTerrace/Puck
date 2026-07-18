@@ -1,0 +1,15 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Carve-bake gate leg: the overworld with sdf.carve-bake forced ON (and Path B's shadow-proxy OFF, the recommended pairing) so a headless --bench standard measures the baked steady state. Run with: Puck.Demo --run docs/examples/overworld-carvebake-on.json --bench standard",
+    "host": {
+        "features": {
+            "sdf.carve-bake": "on",
+            "sdf.shadow-proxy": "off"
+        }
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld"
+    }
+}

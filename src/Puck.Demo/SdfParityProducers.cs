@@ -41,7 +41,7 @@ internal static class SdfParityProducers {
     // Internal so other demo nodes load their overlay bytecode through the same validated path.
     internal static ReadOnlyMemory<byte> LoadShader(IShaderModuleLoader loader, string directory, string fileName, ShaderStage stage) {
         return loader
-            .ValidateShader(stage: stage, path: Path.Combine(directory, fileName))
+            .ValidateShader(stage: stage, path: Path.Combine(path1: directory, path2: fileName))
             .Content;
     }
 }

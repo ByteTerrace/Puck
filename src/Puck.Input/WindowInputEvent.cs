@@ -19,6 +19,10 @@ public enum WindowInputKind {
 
     /// <summary>An absolute pointer position in client space (<see cref="WindowInputEvent.Vector"/>).</summary>
     PointerPosition,
+
+    /// <summary>A pointer button transition (button index in <see cref="WindowInputEvent.Vector"/>.X: 0=left,
+    /// 1=right, 2=middle), with the edge in <see cref="WindowInputEvent.Phase"/>.</summary>
+    PointerButton,
 }
 
 /// <summary>
@@ -31,9 +35,9 @@ public enum WindowInputKind {
 /// <param name="Key">The neutral key for a <see cref="WindowInputKind.Key"/> event; <see cref="KeyCode.None"/> otherwise.</param>
 /// <param name="Character">The letter for a <see cref="KeyCode.Letter"/> event; <c>'\0'</c> otherwise.</param>
 /// <param name="Text">The typed or pasted text for a <see cref="WindowInputKind.Text"/> event; <see langword="null"/> otherwise.</param>
-/// <param name="Vector">The relative delta (<see cref="WindowInputKind.PointerMove"/>) or absolute position (<see cref="WindowInputKind.PointerPosition"/>); <see cref="Vector2.Zero"/> otherwise.</param>
+/// <param name="Vector">The relative delta (<see cref="WindowInputKind.PointerMove"/>), absolute position (<see cref="WindowInputKind.PointerPosition"/>), or button index in <c>X</c> (<see cref="WindowInputKind.PointerButton"/>); <see cref="Vector2.Zero"/> otherwise.</param>
 /// <param name="Modifiers">The modifier keys held when the event fired (for chords); <see cref="InputModifiers.None"/> when the backend reports none.</param>
-/// <param name="Phase">The transition the event represents: <see cref="CommandPhase.Started"/> for a key-down, <see cref="CommandPhase.Completed"/> for a key-up, <see cref="CommandPhase.Active"/> for pointer events.</param>
+/// <param name="Phase">The transition the event represents: <see cref="CommandPhase.Started"/> for a key-down or pointer button-down, <see cref="CommandPhase.Completed"/> for a key-up or pointer button-up, <see cref="CommandPhase.Active"/> for a pointer move/position.</param>
 public readonly record struct WindowInputEvent(
     WindowInputKind Kind,
     KeyCode Key = KeyCode.None,
@@ -72,5 +76,11 @@ public readonly record struct WindowInputEvent(
     /// <summary>A neutral absolute pointer position.</summary>
     public static WindowInputEvent PointerAbsolute(Vector2 position) {
         return new WindowInputEvent(Kind: WindowInputKind.PointerPosition, Vector: position, Phase: CommandPhase.Active);
+    }
+    /// <summary>A neutral pointer-button transition (0=left, 1=right, 2=middle), with the edge in <paramref name="phase"/>
+    /// (<see cref="CommandPhase.Started"/> for down, <see cref="CommandPhase.Completed"/> for up — the same convention
+    /// as <see cref="KeyDown"/>/<see cref="KeyUp"/>).</summary>
+    public static WindowInputEvent PointerButton(int button, CommandPhase phase) {
+        return new WindowInputEvent(Kind: WindowInputKind.PointerButton, Vector: new Vector2(x: button, y: 0f), Phase: phase);
     }
 }

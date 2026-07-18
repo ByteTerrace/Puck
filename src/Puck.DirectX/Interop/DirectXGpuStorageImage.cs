@@ -57,7 +57,7 @@ public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
         );
         m_resource = (nint)resource;
 
-        m_imageViewToken = GCHandle.Alloc(new DirectXImageView {
+        m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
             Format = format,
             ResourceHandle = m_resource,
         });
@@ -66,7 +66,7 @@ public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
     /// <inheritdoc/>
     public nint ImageHandle => m_resource;
     /// <inheritdoc/>
-    public nint ImageViewHandle => GCHandle.ToIntPtr(m_imageViewToken);
+    public nint ImageViewHandle => GCHandle.ToIntPtr(value: m_imageViewToken);
     /// <inheritdoc/>
     public uint Height { get; }
     /// <inheritdoc/>

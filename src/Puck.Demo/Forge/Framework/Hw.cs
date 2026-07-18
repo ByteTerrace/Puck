@@ -14,6 +14,11 @@ internal static class Hw {
     public const byte PortSerialData = 0x01;
     /// <summary>SC — the serial link cable's control register (matches <c>MemoryMap.SerialControl</c>).</summary>
     public const byte PortSerialControl = 0x02;
+    /// <summary>DIV — the free-running divider register (the upper byte of the 16-bit divider counter). Reading it is a
+    /// cheap deterministic-yet-hard-to-predict entropy source: two machines that reached the same code point after
+    /// different amounts of execution hold different DIV values, so a link protocol seeds a symmetry-breaking backoff
+    /// from it (see <see cref="LinkProtocolModule"/>). Writing any value resets the whole counter to zero.</summary>
+    public const byte PortDivider = 0x04;
     /// <summary>IF — the interrupt request flags.</summary>
     public const byte PortInterruptFlag = 0x0F;
     /// <summary>NR10 — pulse 1's frequency sweep.</summary>
@@ -128,6 +133,6 @@ internal static class Hw {
             throw new ArgumentOutOfRangeException(paramName: nameof(row), message: $"Map cell ({row}, {column}) is outside the 32×32 background map.");
         }
 
-        return (ushort)(VramBackgroundMap + (row * 32) + column);
+        return (ushort)((VramBackgroundMap + (row * 32)) + column);
     }
 }

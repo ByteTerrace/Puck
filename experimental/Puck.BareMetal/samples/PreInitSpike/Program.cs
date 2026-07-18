@@ -16,50 +16,47 @@
 using System;
 using System.Runtime.InteropServices;
 
-internal static class Config
-{
+internal static class Config {
     internal static readonly int[] Values = { 0x11, 0x22, 0x33 };
 }
-
-internal static unsafe class Program
-{
+internal static unsafe class Program {
     private const int STD_OUTPUT_HANDLE = -11;
 
     [DllImport("kernel32"), SuppressGCTransition]
     private static extern IntPtr GetStdHandle(int nStdHandle);
-
     [DllImport("kernel32"), SuppressGCTransition]
     private static extern int WriteFile(IntPtr hFile, byte* buffer, int numberOfBytesToWrite, int* numberOfBytesWritten, IntPtr overlapped);
-
-    private static int Main()
-    {
+    private static int Main() {
         int[] values = Config.Values;
 
-        if (values == null)
+        if (values is null)
             return 1;
 
         if (values.Length != 3)
             return 2;
 
         int sum = 0;
-        for (int i = 0; i < values.Length; i++)
+
+        for (int i = 0; (i < values.Length); i++)
             sum += values[i];
-        if (sum != 0x11 + 0x22 + 0x33)
+        if (sum != ((0x11 + 0x22) + 0x33))
             return 3;
 
-        if (values[0] != 0x11 || values[1] != 0x22 || values[2] != 0x33)
+        if ((values[0] != 0x11) || (values[1] != 0x22) || (values[2] != 0x33))
             return 4;
 
         const string message = "Puck.BareMetal: frozen constant GC static reads correctly (sum=0x66).\r\n";
 
         int length = message.Length;
         byte[] line = new byte[length];
-        for (int i = 0; i < length; i++)
+
+        for (int i = 0; (i < length); i++)
             line[i] = (byte)message[i];
 
         int written;
+
         fixed (byte* p = line)
-            WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), p, length, &written, default);
+            WriteFile(GetStdHandle(nStdHandle: STD_OUTPUT_HANDLE), p, length, &written, default);
 
         return 0;
     }

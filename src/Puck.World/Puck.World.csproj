@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        Puck.World — the definitive Puck game. A launcher-based windowed app for up to four networked local players —
+        keyboard, gamepads, and console-scripted alike (every player is a networked player; a local device is just one
+        at zero latency) — each with a persisted profile (color + speeds + look-invert), a chased over-the-shoulder
+        camera, its own colored avatar, and its own viewport on the layout ladder (fullscreen → side-by-side →
+        big-top/two-bottom → 2×2 quad as players join). The scene is a grass ground plane with a loose cluster of
+        smooth-blended stone boulders, rendered through the shared SDF render assembly. Profiles persist locally
+        through Puck.Storage (cloud-ready behind the same seam). Its authoritative simulation uses the Hosting/Launcher
+        fixed-step easy path, per-tick command snapshots, and Puck.Maths fixed point. World-specific behavior has no
+        Post stage or validate flag and is verified by running; the shared engine contracts are Post Tier-A gated. The GPU-host composition block is COPIED/adapted from the
+        demo's GpuHostComposition rather than referenced, so Puck.World never depends on Puck.Demo. It ships no shaders
+        of its own; the SDF kernels come from Puck.SdfVm's content (copied transitively into this output).
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- Dynamic PGO's mid-session tier transition repeatedly suspended the 120 Hz pump for 15-18 ms around
+             26-30 seconds into this executable. Keep ordinary optimized tiering, but trade speculative profile-guided
+             re-JIT throughput for stable game-frame latency; measured World CPU work has ample headroom. -->
+        <TieredPGO>false</TieredPGO>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- scripts/ holds standalone .NET 10 file-based programs (dotnet run <script>.cs); they are not part of this
+             assembly and their '#:' directives fail the project compile if swept in. -->
+        <Compile Remove="scripts/**/*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The world document (puck.world.def.v1): the loader reads Assets/worlds/default.world.json beside the
+             executable (AppContext.BaseDirectory) at boot, so copy the Assets tree next to the output. The default file
+             itself is authored in a follow-up change; until then the glob matches nothing and boot falls back to the
+             baked default (a loud line). -->
+        <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
+        <ProjectReference Include="..\Puck.Cameras\Puck.Cameras.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
+        <!-- The D3D12-host GPU capture transport (WorldScreenBinder) constructs DirectXGpuSurfaceExportFactory and reads
+             the render adapter LUID off IDirectXDeviceContext; the concrete simultaneous-access opener is not on a
+             neutral seam, so World takes the backend directly (already transitive via Puck.DirectX.Presentation). -->
+        <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
+        <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+        <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
+        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
+        <!-- The recording graph (puck.recording.v1): the capture verbs build a RecordingSession from the recording
+             document and the Puck.Platform encoder/audio factories, wired to the CapturingRenderNode tap. -->
+        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
+        <ProjectReference Include="..\Puck.Scene\Puck.Scene.csproj" />
+        <!-- Phase 2b: the addon-as-principal keystone. Puck.Scripting is CONSUMED, never modified — WorldAddonDriver
+             mounts the world document's addon rows through its AddonHost and drives them over IServerLink. The pinned
+             Wasmtime [44.0.0] native engine flows transitively. -->
+        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
+        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
+        <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
+        <PackageReference Include="System.CommandLine" Version="[2.*,)" />
+    </ItemGroup>
+</Project>

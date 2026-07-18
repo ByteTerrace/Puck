@@ -21,7 +21,10 @@ namespace Puck.Post;
 /// calibrated <c>WorldComposite</c> thresholds — AND a Vulkan-only "no source bound" control render of the identical
 /// scene must clearly DIFFER inside the screen's on-screen footprint, so the feature cannot silently no-op (a broken
 /// binding that always falls back to the material would otherwise still pass the cross-backend diff, since both
-/// backends would agree on the WRONG picture).
+/// backends would agree on the WRONG picture). A THIRD check declares+binds the identical panel at the LAST screen
+/// slot (<c>SdfProgramBuilder.MaxScreenSurfaces - 1</c>) and requires it to render byte-for-byte like slot 0 — proving
+/// the full 32-surface combined-image-sampler binding run (screenSource0..31 / t5..t36) and the sampler-switch's last
+/// case, not just slot 0's descriptor.
 /// </summary>
 internal sealed class WorldScreenStage : IPostStage {
     private const int ChildPushByteLength = 16; // ChildParams { uint2 extent; float time; uint pad; }
@@ -32,7 +35,8 @@ internal sealed class WorldScreenStage : IPostStage {
     private const uint WorkgroupEdge = 8;
     private const uint WorldHeight = 600;
     private const uint WorldWidth = 960;
-    private static readonly Vector3 ScreenOrigin = new(0f, 1.2f, 0f);
+
+    private static readonly Vector3 ScreenOrigin = new(x: 0f, y: 1.2f, z: 0f);
 
     /// <inheritdoc/>
     public string Name => "world-screen";
@@ -52,27 +56,29 @@ internal sealed class WorldScreenStage : IPostStage {
     // A ground plane plus a screen slab centered at ScreenOrigin, front face toward +Z (the camera side): no
     // rotation is applied before the ScreenSlab, so its local axes ARE the world axes, and worldRight/worldUp below
     // (+X, +Y) are exactly its actual local X/Y — the simplest frame that keeps geometry and shading trivially in
-    // agreement. Screen index 0; halfExtents.z gives the slab some depth so its silhouette reads against the ground.
-    internal static SdfProgram BuildScreenScene() {
+    // agreement. halfExtents.z gives the slab some depth so its silhouette reads against the ground. The screen index
+    // is a parameter so the HIGH-slot equivalence check can declare the identical panel at the last slot (proving the
+    // 32-surface binding run, not just slot 0).
+    internal static SdfProgram BuildScreenScene(int screenIndex = 0) {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.35f, 0.4f, 0.45f)));
-        var bezel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.08f, 0.08f, 0.1f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.35f, y: 0.4f, z: 0.45f)));
+        var bezel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.08f, y: 0.08f, z: 0.1f)));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // The bezel: a slightly larger, inset box behind the screen slab so the slab reads as a "panel" and not
             // a bare rectangle floating in space — never sampled (a plain material box, no screen surface).
             .Translate(offset: ScreenOrigin)
-            .Box(halfExtents: new Vector3((ScreenHalfWidth + 0.08f), (ScreenHalfHeight + 0.08f), 0.08f), round: 0.02f, material: bezel)
+            .Box(halfExtents: new Vector3(x: (ScreenHalfWidth + 0.08f), y: (ScreenHalfHeight + 0.08f), z: 0.08f), round: 0.02f, material: bezel)
             .ResetPoint()
             .Translate(offset: ScreenOrigin)
             .ScreenSlab(
-                halfExtents: new Vector3(ScreenHalfWidth, ScreenHalfHeight, 0.1f),
+                halfExtents: new Vector3(x: ScreenHalfWidth, y: ScreenHalfHeight, z: 0.1f),
                 round: 0f,
                 worldOrigin: ScreenOrigin,
                 worldRight: Vector3.UnitX,
                 worldUp: Vector3.UnitY,
-                screenIndex: 0
+                screenIndex: screenIndex
             )
             .Build();
     }
@@ -84,16 +90,16 @@ internal sealed class WorldScreenStage : IPostStage {
     // contract documents (axes not swapped/flipped, normalization a no-op for a unit quaternion).
     internal static SdfProgram BuildRotatedScreenScene(bool quaternionAuthored) {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.35f, 0.4f, 0.45f)));
-        var bezel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.08f, 0.08f, 0.1f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.35f, y: 0.4f, z: 0.45f)));
+        var bezel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.08f, y: 0.08f, z: 0.1f)));
         var orientation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: 0.35f);
-        var halfExtents = new Vector3(ScreenHalfWidth, ScreenHalfHeight, 0.1f);
+        var halfExtents = new Vector3(x: ScreenHalfWidth, y: ScreenHalfHeight, z: 0.1f);
 
         _ = builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             .Translate(offset: ScreenOrigin)
             .Rotate(rotation: orientation)
-            .Box(halfExtents: new Vector3((ScreenHalfWidth + 0.08f), (ScreenHalfHeight + 0.08f), 0.08f), round: 0.02f, material: bezel)
+            .Box(halfExtents: new Vector3(x: (ScreenHalfWidth + 0.08f), y: (ScreenHalfHeight + 0.08f), z: 0.08f), round: 0.02f, material: bezel)
             .ResetPoint()
             .Translate(offset: ScreenOrigin)
             .Rotate(rotation: orientation);
@@ -116,7 +122,7 @@ internal sealed class WorldScreenStage : IPostStage {
     /// full-region viewport looking squarely at the screen slab.</summary>
     internal static SdfFrame BuildScreenFrame(SdfProgram program, uint width, uint height) {
         var camera = CameraSnapshot.LookAt(
-            position: new Vector3(0f, 1.4f, 5.5f),
+            position: new Vector3(x: 0f, y: 1.4f, z: 5.5f),
             target: ScreenOrigin,
             fieldOfViewRadians: (50f * (MathF.PI / 180f)),
             viewportWidth: width,
@@ -193,11 +199,11 @@ internal sealed class WorldScreenStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-screen-diff.png");
+        var diffPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-screen-diff.png");
 
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-screen-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-screen-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-screen-nosource.png"), rgba: vulkanNoSourcePixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-screen-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-screen-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-screen-nosource.png"), rgba: vulkanNoSourcePixels, width: (int)WorldWidth);
         ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
 
         var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
@@ -224,9 +230,41 @@ internal sealed class WorldScreenStage : IPostStage {
             var quaternionPixels = RenderRotatedScene(device: vulkanDevice, gpu: vulkanGpu, program: BuildRotatedScreenScene(quaternionAuthored: true), sourceView: equivalenceSource.ImageViewHandle);
 
             if (!explicitPixels.AsSpan().SequenceEqual(other: quaternionPixels)) {
-                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-screen-quaternion-explicit.png"), rgba: explicitPixels, width: (int)WorldWidth);
-                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-screen-quaternion-authored.png"), rgba: quaternionPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-screen-quaternion-explicit.png"), rgba: explicitPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-screen-quaternion-authored.png"), rgba: quaternionPixels, width: (int)WorldWidth);
                 failures.Add(item: "the quaternion-authored screen slab rendered differently from the equivalent explicit-frame slab (same device, same source) — the authoring convenience moved pixels");
+            }
+        }
+
+        // The HIGH-SLOT binding equivalence (the 32-surface run's proof): the IDENTICAL panel declared at the LAST
+        // screen slot (SdfProgramBuilder.MaxScreenSurfaces - 1) with the SAME synthetic source bound there must render
+        // byte-for-byte identically to the slot-0 render on the same Vulkan device — the screen index only selects which
+        // of the 32 combined-image-sampler bindings (screenSource0..31 / registers t5..t36) the source rides, so with
+        // the same pattern bound it may not move a pixel. This exercises the high end of the binding run AND the
+        // sampleScreenSource switch's last case; a broken high-slot binding (a mis-shifted register, a filler bound
+        // instead of the source) would diverge here even though slot 0 still passes. A no-op-guard is unnecessary — the
+        // slot-0 render this compares against already carries one.
+        var highSlot = (SdfProgramBuilder.MaxScreenSurfaces - 1);
+
+        using (var highSlotSource = RenderScreenSource(device: vulkanDevice, gpu: vulkanGpu, bytecodeExtension: ".spv")) {
+            var highSlotProgram = BuildScreenScene(screenIndex: highSlot);
+            byte[] highSlotPixels;
+
+            using (var highSlotRenderer = new SdfWorldEngine(
+                device: vulkanDevice,
+                gpu: vulkanGpu,
+                height: WorldHeight,
+                kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
+                options: new SdfWorldEngineOptions(Program: highSlotProgram),
+                width: WorldWidth
+            )) {
+                highSlotRenderer.SetScreenSource(screenIndex: highSlot, imageViewHandle: highSlotSource.ImageViewHandle);
+                highSlotPixels = highSlotRenderer.RenderFrame(frame: BuildScreenFrame(program: highSlotProgram, width: WorldWidth, height: WorldHeight));
+            }
+
+            if (!highSlotPixels.AsSpan().SequenceEqual(other: vulkanPixels)) {
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-screen-highslot.png"), rgba: highSlotPixels, width: (int)WorldWidth);
+                failures.Add(item: $"the screen slab declared+bound at slot {highSlot} rendered differently from the identical slot-0 panel (same device, same source) — the high end of the 32-surface binding run is mis-wired");
             }
         }
 
@@ -234,7 +272,7 @@ internal sealed class WorldScreenStage : IPostStage {
             return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} | center Δ{centerDelta} — {string.Join(separator: "; ", values: failures)}");
         }
 
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} diegetic screen (synthetic sdf-child source) | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldComposite thresholds | center pixel Δ{centerDelta} vs no-source control | quaternion-authored slab == explicit-frame slab bit-identical | {ParityCheck.Describe(metrics: metrics)}");
+        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} diegetic screen (synthetic sdf-child source) | Vulkan (SPIR-V) vs Direct3D 12 (DXIL) within WorldComposite thresholds | center pixel Δ{centerDelta} vs no-source control | quaternion-authored slab == explicit-frame slab bit-identical | slot {(SdfProgramBuilder.MaxScreenSurfaces - 1)} == slot 0 bit-identical (32-surface binding run) | {ParityCheck.Describe(metrics: metrics)}");
     }
 
     // One Vulkan render of a rotated-panel program with the synthetic source bound at screen index 0 — the
@@ -306,13 +344,12 @@ internal sealed class WorldScreenStage : IPostStage {
             gpu.DescriptorAllocator.DestroyPool(deviceHandle: deviceHandle, poolHandle: pool);
         }
     }
-
     private static (byte R, byte G, byte B) ReadPixel(byte[] pixels, int width, int x, int y) {
         var offset = (((y * width) + x) * 4);
 
-        return (pixels[offset], pixels[offset + 1], pixels[offset + 2]);
+        return (pixels[offset], pixels[(offset + 1)], pixels[(offset + 2)]);
     }
     private static int MaxChannelDelta((byte R, byte G, byte B) a, (byte R, byte G, byte B) b) {
-        return Math.Max(Math.Abs(a.R - b.R), Math.Max(Math.Abs(a.G - b.G), Math.Abs(a.B - b.B)));
+        return Math.Max(val1: Math.Abs(value: (a.R - b.R)), val2: Math.Max(val1: Math.Abs(value: (a.G - b.G)), val2: Math.Abs(value: (a.B - b.B))));
     }
 }

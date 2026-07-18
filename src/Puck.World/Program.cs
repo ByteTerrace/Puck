@@ -1,0 +1,393 @@
+using System.CommandLine;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Puck.Abstractions.Capture;
+using Puck.Abstractions.Machines;
+using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Windowing;
+using Puck.AdvancedGamingBrick;
+using Puck.Commands;
+using Puck.Hosting;
+using Puck.HumbleGamingBrick;
+using Puck.Input;
+using Puck.Launcher;
+using Puck.Platform;
+using Puck.Platform.Windows;
+using Puck.Platform.Windows.Gamepad;
+using Puck.Platform.Windows.Hid;
+using Puck.SdfVm;
+using Puck.World;
+using Puck.World.Client;
+using Puck.World.Protocol;
+using Puck.World.Server;
+
+var backendOption = new Option<string>(name: "--backend") {
+    DefaultValueFactory = static _ => (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240) ? "directx" : "vulkan"),
+    Description = "The graphics backend: directx (the Windows default) or vulkan.",
+};
+var widthOption = new Option<int>(name: "--width") {
+    DefaultValueFactory = static _ => 1280,
+    Description = "The window client width in pixels.",
+};
+var heightOption = new Option<int>(name: "--height") {
+    DefaultValueFactory = static _ => 800,
+    Description = "The window client height in pixels.",
+};
+var exitAfterSecondsOption = new Option<int>(name: "--exit-after-seconds") {
+    DefaultValueFactory = static _ => 0,
+    Description = "Seconds before the world auto-exits; 0 or less runs until the window is closed.",
+};
+var presentModeOption = new Option<string>(name: "--present-mode") {
+    DefaultValueFactory = static _ => "immediate",
+    Description = "Swapchain presentation algorithm: vsync, mailbox, immediate, or adaptive. Immediate is the measured World default under VRR.",
+};
+var worldOption = new Option<string?>(name: "--world") {
+    DefaultValueFactory = static _ => null,
+    Description = "The world definition file (puck.world.def.v1) to load; a missing or invalid file falls back loudly to the baked default. Default: Assets/worlds/default.world.json beside the executable.",
+};
+var recordingOption = new Option<string?>(name: "--recording") {
+    DefaultValueFactory = static _ => null,
+    Description = "The recording document (puck.recording.v1) the capture verbs use; a missing or invalid file falls back loudly to the baked default. Default: Assets/recordings/default.recording.json beside the executable.",
+};
+var storageUriOption = new Option<string?>(name: "--storage-uri") {
+    DefaultValueFactory = static _ => null,
+    Description = "Reserved (§2.5.5): the per-user blob endpoint, overriding the world doc's storage.endpoint. RESERVED this arc — nothing constructs an Azure target from it; storage.status echoes it.",
+};
+var userIdOption = new Option<string?>(name: "--user-id") {
+    DefaultValueFactory = static _ => null,
+    Description = "The explicit storage user-id override (an Entra oid Guid), overriding the world doc's storage.userId. Feeds the identity resolver's explicit-override source (§2.5.4); storage.status reports the resolution.",
+};
+var launchCommand = new RootCommand(description: "Puck World") {
+    backendOption,
+    exitAfterSecondsOption,
+    heightOption,
+    presentModeOption,
+    recordingOption,
+    storageUriOption,
+    userIdOption,
+    widthOption,
+    worldOption,
+};
+var parseResult = launchCommand.Parse(args);
+
+// Fail loudly on an unrecognized/invalid option (a typo, a bad value) rather than silently falling through to a live
+// window with defaults.
+if (parseResult.Errors.Count > 0) {
+    foreach (var error in parseResult.Errors) {
+        Console.Error.WriteLine(value: error.Message);
+    }
+
+    return 1;
+}
+var exitAfterSeconds = parseResult.GetValue(option: exitAfterSecondsOption);
+var backendName = parseResult.GetValue(option: backendOption)!;
+bool? backendIsDirectX = backendName.ToUpperInvariant() switch {
+    "DIRECTX" => true,
+    "VULKAN" => false,
+    _ => null,
+};
+
+if (backendIsDirectX is not { } hostsOnDirectX) {
+    Console.Error.WriteLine(value: $"Unknown --backend '{backendName}'; expected directx or vulkan.");
+
+    return 1;
+}
+
+if (hostsOnDirectX && !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+    Console.Error.WriteLine(value: "The Direct3D 12 backend requires Windows 10 or newer; use --backend vulkan on this platform.");
+
+    return 1;
+}
+
+var height = (uint)Math.Max(val1: 1, val2: parseResult.GetValue(option: heightOption));
+var presentModeName = parseResult.GetValue(option: presentModeOption)!;
+PresentMode? presentMode = presentModeName.ToUpperInvariant() switch {
+    "VSYNC" => PresentMode.Vsync,
+    "MAILBOX" => PresentMode.Mailbox,
+    "IMMEDIATE" => PresentMode.Immediate,
+    "ADAPTIVE" => PresentMode.Adaptive,
+    _ => null,
+};
+
+if (presentMode is not { } resolvedPresentMode) {
+    Console.Error.WriteLine(value: $"Unknown --present-mode '{presentModeName}'; expected vsync, mailbox, immediate, or adaptive.");
+
+    return 1;
+}
+
+var width = (uint)Math.Max(val1: 1, val2: parseResult.GetValue(option: widthOption));
+var builder = Host.CreateApplicationBuilder(args: args);
+var services = builder.Services;
+services.Configure<NativeWindowOptions>(configureOptions: options => {
+    options.Height = height;
+    options.Mode = NativeWindowMode.PlatformWindow;
+    options.Title = WorldApplicationDefaults.WindowTitle;
+    options.Width = width;
+});
+// Registered before the launcher terminal block (AddWorldGpuHost → AddLauncherTerminal) so the launcher's
+// TryAddSingleton<LauncherOptions> defers to this one. A null target selects automatic display pacing from verified
+// VRR capabilities or active signal timing; the world.fps verb observes the result.
+services.AddSingleton(implementationInstance: new LauncherOptions {
+    ExitAfter = ((exitAfterSeconds > 0) ? TimeSpan.FromSeconds(value: exitAfterSeconds) : null),
+    TargetRenderRate = null,
+});
+services.AddSingleton(implementationInstance: new PresentationOptions {
+    PresentMode = resolvedPresentMode,
+    SurfaceFormat = SurfaceFormat.R8G8B8A8Unorm,
+});
+// The world definition (see WorldDefinition) — a --world file, or Assets/worlds/default.world.json beside the
+// executable, loaded / schema-checked / validated with a loud baked-default fallback on ANY failure (see
+// WorldDefinitionLoader). Read by DI from the roster, population, frame source, render settings, and the world.quality
+// verb. The resolved source is registered so world.save knows its default target (null SourcePath when baked/fallback).
+var worldSource = WorldDefinitionLoader.Load(explicitPath: parseResult.GetValue(option: worldOption));
+services.AddSingleton(implementationInstance: worldSource);
+services.AddSingleton(implementationInstance: worldSource.Definition);
+
+// The storage host-section (§2.5.5): the world doc's reserved endpoint + user-id, overlaid by the --storage-uri /
+// --user-id CLI reflection. RESERVED this arc — nothing constructs an Azure target from these. The identity resolver
+// maps an explicit user-id to a per-user container Guid, or DECLINES (local-only); its result feeds storage.status.
+var storageSettings = WorldStorageSettings.Resolve(
+    defaults: worldSource.Definition.Storage,
+    endpointOverride: parseResult.GetValue(option: storageUriOption),
+    userIdOverride: parseResult.GetValue(option: userIdOption)
+);
+services.AddSingleton(implementationInstance: storageSettings);
+services.AddSingleton(implementationInstance: IPlayerStorageIdentityResolver.Create(settings: storageSettings));
+
+// The player's controls as DATA (§2.4): the engine-default binding document (the data-file successor of the former
+// hard-coded inputBindingTable — WASD/arrows movement, Space/South/East gestures, Enter/F1-F4 roster, sticks, Start),
+// composed per seat with the world's binding overlays, the seat's profile bindings, and its live session rebinds. One
+// WorldSeatBindings resolves every seat's input; both input consumers derive from the same composed documents — the
+// per-seat sim-fold (the IInputBindings handed to AddFixedStepSimulation) and the slot-blind console dispatch
+// (BindingCommandSource, built from the composed base; in World the router owns all physical input, so this consumer
+// is dormant). Constructed here (before the container builds) with the engine default and boot overlays; the roster,
+// the rebind verbs, and the post-step overlay sync push the per-seat and overlay layers in as they change.
+var seatBindings = new WorldSeatBindings(engineDefault: WorldDefaultBindings.BuildDocument(), overlays: worldSource.Definition.BindingOverlays);
+services.AddSingleton(implementationInstance: seatBindings);
+services.AddSingleton(implementationFactory: _ => new BindingCommandSource(bindings: seatBindings.ConsoleBaseTable()));
+
+// The player-profile catalog (persisted locally, cloud-ready behind the same storage seam): loaded once at startup,
+// version-mismatch reseeded, malformed-doc fallback — the roster and the settings verbs read it live.
+services.AddWorldProfiles();
+
+// The participant roster (up to four players, one avatar + viewport each; player 1 always joined, seated on the boot
+// profile) and its console/keyboard verb surface, plus the real-time profile/settings verbs (aggregated into the
+// CommandRegistry with every other module).
+services.AddSingleton<PlayerRoster>();
+services.AddSingleton<IInputSlotResolver>(implementationFactory: static sp => sp.GetRequiredService<PlayerRoster>());
+services.AddSingleton<ICommandModule, PlayerCommandModule>();
+services.AddSingleton<ICommandModule, ProfileCommandModule>();
+// The rebind surface — player.bind (live session remap) / player.bindings (echo the composed active mapping) /
+// profile.save (fold session rebinds into the seat's profile through the server-owned player document). A SEPARATE
+// module to keep each class under its analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldBindingCommandModule>();
+
+// The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
+// activates — the one body system the snapshot reports (up to 128 avatars: the scale target).
+services.AddSingleton<WorldPopulation>();
+
+// The render-capacity oracle the server consults before applying a scene/screen mutation — configured by the frame
+// source once it has probed the boot envelope, so an over-envelope edit is rejected loudly at apply time.
+services.AddSingleton<WorldRenderEnvelope>();
+
+// The authoritative world server and the in-process loopback fronting it: the client submits intents, commands,
+// session requests, and buffered live edits (mutations, definition swaps, journal undo) over IServerLink; the server
+// applies them at its step boundary, answers queries, and pushes each tick's snapshot (and, after an applied edit, the
+// new definition) to the bound client sink.
+services.AddSingleton<WorldServer>();
+services.AddSingleton<LoopbackTransport>();
+services.AddSingleton<IServerLink>(implementationFactory: static sp => sp.GetRequiredService<LoopbackTransport>());
+
+// The addon principals — the §2.7 keystone: mounts the world document's enabled addon rows through a Puck.Scripting
+// AddonHost (consumed, never modified) and drives each granted addon over the SAME IServerLink as a seat. Ticked by
+// WorldSimulation between the seat-intent submit and the server step. DI disposes it (the owned Wasmtime engine/stores).
+services.AddSingleton(implementationFactory: static sp => WorldAddonDriver.Create(
+    definition: sp.GetRequiredService<WorldDefinition>(),
+    link: sp.GetRequiredService<IServerLink>(),
+    server: sp.GetRequiredService<WorldServer>()
+));
+
+// The client half: the snapshot-fed entity view + per-tick seat-intent submitter, bound to the loopback at
+// construction (the bind delivers a primer snapshot so the render path sees the boot state before the first tick).
+services.AddSingleton(implementationFactory: static sp => {
+    var client = new WorldClient(
+        roster: sp.GetRequiredService<PlayerRoster>(),
+        link: sp.GetRequiredService<IServerLink>(),
+        definition: sp.GetRequiredService<WorldDefinition>()
+    );
+
+    sp.GetRequiredService<LoopbackTransport>().Bind(sink: client);
+
+    return client;
+});
+
+// The engagement route — the seat/entry → screen table (where a player's intent GOES). Shared by the screen binder
+// (pulls each engaged screen's OR-merged joypad buttons per frame), the player.engage/disengage verbs, and the
+// world.screens / screen.state echoes.
+services.AddSingleton<WorldEngagement>();
+
+// The frame-rate witness, the live render settings (console-mutated in real time — the graphics-options verbs), the
+// render probe (the world.gpu verb reads the live engine's per-pass GPU times through it), and the world's own verb
+// surface (world.fps/.shadows/.ao/.render-scale/.target/.quality/.timing/.gpu — the graphics menu over the pipe).
+services.AddSingleton<FrameRateMonitor>();
+// The live render settings boot from the definition's render-lever defaults (then the console verbs move them live).
+services.AddSingleton(implementationFactory: static sp => new WorldRenderSettings(defaults: sp.GetRequiredService<WorldDefinition>().Render));
+services.AddSingleton<WorldRenderProbe>();
+// The live-content platform seams the screen binder pulls CPU pixels through: the webcam (Media Foundation on Windows,
+// the CPU tier — the dormant GPU zero-copy tier is untouched) and compositor-owned desktop-window capture. Registered here so a
+// camera/capture screen resolves them from DI rather than self-constructing a backend.
+services.AddCameraCapture();
+services.AddSingleton<INativeImageCaptureService>(implementationFactory: static _ =>
+    (OperatingSystem.IsWindows()
+        ? new Win32NativeImageCaptureService()
+        : new NullNativeImageCaptureService()));
+
+// The screen-machine engines — the ONLY concrete-machine composition-root wiring in World. A declared or inserted
+// machine screen resolves against this DI-collected set by engine id; the world speaks the neutral IScreenMachine
+// contract everywhere else. The Advanced engine is the native ARM7TDMI tier, not the SM83 adapter's AGB costume.
+services.AddSingleton<IScreenMachineEngine, GamingBrickEngine>();
+services.AddSingleton<IScreenMachineEngine, AdvancedGamingBrickEngine>();
+
+// The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, booted machines, the shared webcam,
+// window captures); shared by the render factory (its provider maps feed the render spec, and the frame source publishes
+// through it each frame) and the world.screens verb.
+services.AddSingleton(implementationFactory: sp => new WorldScreenBinder(
+    screens: sp.GetRequiredService<WorldDefinition>().Screens,
+    engagement: sp.GetRequiredService<WorldEngagement>(),
+    engines: sp.GetServices<IScreenMachineEngine>(),
+    cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
+    windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
+    cameras: sp.GetRequiredService<WorldDefinition>().Cameras,
+    anchors: sp.GetRequiredService<WorldClient>(),
+    // On the D3D12 host the window/monitor capture feeds publish GPU-side into shared textures the screens sample
+    // directly; the Vulkan host keeps the CPU-pixel transport. Camera stays CPU everywhere.
+    hostsOnDirectX: hostsOnDirectX
+));
+services.AddSingleton<ICommandModule, WorldCommandModule>();
+// The world-mutation verb surface — the dev reflection of the WorldMutation protocol (world.kit.*/screen.*/scene.*/…,
+// world.load/undo/status/save). A SEPARATE module from WorldCommandModule to keep that class under its analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldMutationCommandModule>();
+// The capability-grant verb surface — world.grant/world.revoke/world.grants (the §2.7 principal/grant control plane).
+// A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldGrantCommandModule>();
+// The diegetic screens' verb surface — screen.insert/eject boot cabinets over the wire, screen.state/peek make the
+// emulated brick state pipe-assertable.
+services.AddSingleton<ICommandModule, ScreenCommandModule>();
+// The storage verb surface — storage.status, the honest echo of the player-catalog persistence state (tier, identity,
+// reserved endpoint, per-catalog revision/sync/token). A SEPARATE module to keep every class under its analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldStorageCommandModule>();
+
+// The recording graph (puck.recording.v1) — native capture for YouTube, defined as data. The recording document is
+// HOST-scope data (like the storage host-section): resolved once at boot from --recording (or the checked-in
+// Assets/recordings/default.recording.json), it describes the encoder ladder, audio topology, and capture-only overlays.
+// AddRecordingPlatform registers the Media Foundation encoder ladder + WASAPI loopback/microphone sources (declining
+// factories off Windows) and the shared session clock. The RecordingTap is the swappable sink the capture render node is
+// wired to for its whole lifetime; capture.start/stop arm and finalize a RecordingSession through it.
+services.AddRecordingPlatform();
+services.AddSingleton(implementationInstance: RecordingDocumentLoader.Load(explicitPath: parseResult.GetValue(option: recordingOption)));
+services.AddSingleton<RecordingTap>();
+services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
+
+// Controllers, first-class beside the keyboard: the hardware manager (HID + the Xbox XInput/GameInput poll thread),
+// the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the hosted service that
+// governs device lifetime (hotplug rescans every ~1.5 s). A new pad reserves a logical lane during capture without
+// changing sim state; the first tick snapshot commits the local routing annotation and performs any join from that
+// recorded lane. Each pad drives its own avatar; the first pad shares player one's avatar with the keyboard.
+if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+    services.AddSingleton(implementationFactory: static sp => new GamepadManager(
+        acquisitionSource: new Win32XboxAcquisitionSource(diagnostics: static message => Console.Error.WriteLine(value: message)),
+        clock: sp.GetService<IInputClock>(),
+        diagnostics: static message => Console.Error.WriteLine(value: message),
+        hidSource: new Win32HidDeviceSource()
+    ));
+    services.AddSingleton<IInputArbiter>(implementationFactory: static sp => new InputArbiter(manager: sp.GetRequiredService<GamepadManager>()));
+    services.AddSingleton<ISnapshotInputCapture>(implementationFactory: static sp => new GamepadSnapshotInputCapture(
+        arbiter: sp.GetRequiredService<IInputArbiter>(),
+        router: sp.GetRequiredService<InputRouter>(),
+        clock: sp.GetRequiredService<IInputClock>(),
+        isActiveFor: sp.GetRequiredService<IInputFocus>().IsActiveFor
+    ));
+    services.AddHostedService<GamepadHostedService>();
+}
+
+// The shared easy path owns the one fixed-step accumulator, turns every physical/console input into a per-tick snapshot,
+// applies it, and invokes WorldSimulation. Rendering below only consumes interpolation state.
+services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
+
+// The trimmed GPU host (windowing, allocator, one complete launch-selected backend), adapted from the demo's
+// GpuHostComposition minus the demo-only camera-capture concern. Registering only the selected backend ensures the
+// neutral compute services and presenter name the same physical device and shader format.
+WorldHost.AddWorldGpuHost(services: services, hostsOnDirectX: hostsOnDirectX);
+
+// The render root: the shared SDF world assembly over the grass-and-boulders scene. The built Producer (the live
+// SdfEngineNode) is stashed on the WorldRenderProbe so the world.gpu verb can read its per-pass GPU times. The frame
+// source emits active avatars only (declared-but-parked instances widen the per-pixel shadow mask walk), so the
+// 128-avatar worst case is held by the capacity floors a construction-time probe measured, plus the viewport floor for
+// the join-later split screen.
+services.AddSingleton<IRenderNode>(implementationFactory: sp => {
+    var binder = sp.GetRequiredService<WorldScreenBinder>();
+    var frameSource = new WorldFrameSource(
+        frameRate: sp.GetRequiredService<FrameRateMonitor>(),
+        client: sp.GetRequiredService<WorldClient>(),
+        simulation: sp.GetRequiredService<WorldSimulation>(),
+        settings: sp.GetRequiredService<WorldRenderSettings>(),
+        binder: binder,
+        envelope: sp.GetRequiredService<WorldRenderEnvelope>()
+    );
+
+    // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a
+    // persistent offscreen camera render sized to these worst-case capacities, using the selected host's bytecode.
+    // A no-op when the world declares no View screen.
+    binder.ConfigureViews(
+        services: sp,
+        hostsOnDirectX: hostsOnDirectX,
+        programWordCapacity: frameSource.ProgramWordCapacity,
+        instanceCapacity: frameSource.InstanceCapacity,
+        dynamicTransformCapacity: frameSource.DynamicTransformCapacity
+    );
+    var render = SdfWorldRenderBuilder.Build(
+        serviceProvider: sp,
+        spec: new SdfWorldRenderSpec(
+            FrameSource: frameSource,
+            Width: width,
+            Height: height
+        ) {
+            DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
+            HostsOnDirectX = hostsOnDirectX,
+            InstanceCapacity = frameSource.InstanceCapacity,
+            ProgramWordCapacity = frameSource.ProgramWordCapacity,
+            // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its room glow;
+            // an unbound screen has no provider (the engine's procedural fallback lights it).
+            ScreenLights = binder.ScreenLights,
+            ScreenSources = binder.ScreenSources,
+            ViewportCapacity = PlayerRoster.MaxSlots,
+        }
+    );
+
+    var probe = sp.GetRequiredService<WorldRenderProbe>();
+
+    probe.Node = render.Producer;
+
+    // The native-capture present tap: wrap the render root once, for the world's whole lifetime, in the backend-neutral
+    // CapturingRenderNode. The live windowed present path hands GPU surfaces, so the tap reads each captured frame back
+    // to CPU pixels through the SDF engine (probe.Node.ReadOutputPixels) — a synchronous GPU readback that runs ONLY
+    // while a session is armed (the RecordingTap.WantsFrames gate), so the tap is free until capture.start. The capture
+    // cadence keeps roughly the recording document's frame rate out of the desktop 120 Hz target.
+    var recordingDocument = sp.GetRequiredService<RecordingDocumentSource>().Document;
+    var tap = sp.GetRequiredService<RecordingTap>();
+
+    return new CapturingRenderNode(
+        inner: render.Root,
+        sink: tap,
+        options: new CaptureOptions {
+            Enabled = true,
+            FrameRate = (recordingDocument.Video?.FrameRate ?? 60),
+            MaxFrames = 0,
+            SourceFrameRate = 120,
+        },
+        captureGate: () => tap.WantsFrames,
+        cpuReadback: () => (probe.Node?.ReadOutputPixels() ?? default)
+    );
+});
+await builder.Build().RunAsync();
+return 0;

@@ -67,4 +67,14 @@ public interface IHidDevice : IDisposable {
     /// <param name="buffer">The buffer whose first byte is the requested report id and which receives the report.</param>
     /// <returns><see langword="true"/> if the report was read; otherwise <see langword="false"/>.</returns>
     bool TryGetFeatureReport(Span<byte> buffer);
+
+    /// <summary>
+    /// Writes a HID feature report (a synchronous control transfer, for one-time setup such as putting a device
+    /// into a full-input mode or enabling its sensors). The caller sets <c>buffer[0]</c> to the target report id
+    /// (<c>0</c> for an unnumbered collection); the buffer is normally sized to
+    /// <see cref="FeatureReportByteLength"/>, which the HID stack requires for the write to be accepted.
+    /// </summary>
+    /// <param name="buffer">The feature report payload, whose first byte is the target report id.</param>
+    /// <returns><see langword="true"/> if the report was written; otherwise <see langword="false"/>.</returns>
+    bool TrySetFeatureReport(ReadOnlySpan<byte> buffer);
 }

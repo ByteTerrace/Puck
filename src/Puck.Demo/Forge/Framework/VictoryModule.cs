@@ -1,7 +1,7 @@
 namespace Puck.Demo.Forge.Framework;
 
 /// <summary>
-/// The 128-bit META VICTORY seam every framework game shares (Stage 2 of the self-editing arcade arc): on a game's win
+/// The 128-bit victory-metadata seam shared by framework games: on a game's win
 /// edge it copies this cabinet's authored 16-byte "share" — seeded by the host into the framework's
 /// <see cref="FrameworkMemoryMap.VictoryShareSource"/> work-RAM slot at boot — verbatim into the TOP 16 bytes of the
 /// cartridge's external (battery) RAM, the region the host's meta gate reads and XORs across cabinets
@@ -68,14 +68,11 @@ internal sealed class VictoryModule {
     }
 
     private void EmitRamEnable() => EmitRamEnableInto(emitter: m_emitter);
-
     private void EmitRamDisable() => EmitRamDisableInto(emitter: m_emitter);
-
     private static void EmitRamEnableInto(Sm83Emitter emitter) {
         emitter.LoadAImmediate(value: RamEnableValue);
         emitter.StoreAToAddress(address: RamEnableAddress);
     }
-
     private static void EmitRamDisableInto(Sm83Emitter emitter) {
         emitter.XorA();
         emitter.StoreAToAddress(address: RamEnableAddress);

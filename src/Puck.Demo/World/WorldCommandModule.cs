@@ -16,12 +16,12 @@ namespace Puck.Demo.World;
 internal sealed class WorldCommandModule(IRenderNode rootNode) : ICommandModule {
     private readonly Overworld.ICreatorModeHost? m_host = (rootNode as Overworld.ICreatorModeHost);
 
-    private WorldScene? Scene => m_host?.CreatorFrameSource?.WorldScene;
     private EditHistory<WorldScene.Snapshot>? History => m_host?.CreatorFrameSource?.WorldHistory;
+    private WorldScene? Scene => m_host?.CreatorFrameSource?.WorldScene;
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return Plain(description: "Toggles world-sculpt mode (the town authoring surface; mutually exclusive with creator/tracker).", handler: _ => new CommandResult(m_host?.ToggleWorldSculptMode() ?? "[world: unavailable — the overworld is not the active root]"), name: "world");
+        yield return Plain(description: "Toggles world-sculpt mode (the town authoring surface; mutually exclusive with creator/tracker).", handler: _ => new CommandResult((m_host?.ToggleWorldSculptMode() ?? "[world: unavailable — the overworld is not the active root]")), name: "world");
 
         yield return Plain(description: "Lists the saved worlds under ./worlds/.", handler: _ => new CommandResult(WorldCommands.List()), name: "world.list");
         yield return WithArgs(description: "Loads a saved world by handle or path: world.load <name>.", handler: WithSceneArgs(handler: static (scene, store, args) => ((args.Length == 0) ? "[world.load: give a name — world.list shows what's saved]" : WorldCommands.Load(nameOrPath: args[0], scene: scene, store: store))), name: "world.load");
@@ -45,12 +45,11 @@ internal sealed class WorldCommandModule(IRenderNode rootNode) : ICommandModule 
         yield return WithArgs(description: "Sets the walk grid tessellation the next save bakes: world.grid <square|hex>.", handler: WithSceneArgs(handler: (scene, _, args) => WorldCommands.Grid(args: args, history: History, scene: scene)), name: "world.grid");
         yield return WithArgs(description: "Grid-locking: world.snap on|off | pitch <x y z>|<n> | rot <90|45|off> | ref [<id>]|clear | grid <show|hide>.", handler: WithSceneArgs(handler: static (scene, _, args) => WorldCommands.Snap(args: args, scene: scene)), name: "world.snap");
         yield return WithArgs(description: "Places/deletes/lists diegetic camera eyes: world.camera add [x y z] [yaw°] [pitch°] | del <id> | list.", handler: WithSceneArgs(handler: (scene, _, args) => WorldCommands.Camera(args: args, history: History, scene: scene)), name: "world.camera");
-        yield return WithArgs(description: "Wires a screen to a source: world.wire <brick:N|feed:N|named:NAME|none> <screen> | world.wire list | world.wire clear <screen>.", handler: WithSceneArgs(handler: (scene, _, args) => WorldCommands.Wire(args: args, history: History, scene: scene)), name: "world.wire");
+        yield return WithArgs(description: "Wires a screen to a source: world.wire <guest:N|camera:N|named:NAME|none> <screen> | world.wire list | world.wire clear <screen>.", handler: WithSceneArgs(handler: (scene, _, args) => WorldCommands.Wire(args: args, history: History, scene: scene)), name: "world.wire");
     }
 
     private static CommandDefinition Plain(string description, Func<CommandContext, CommandResult> handler, string name) =>
         CommandDefinition.Verb(description: description, handler: handler, name: name, valueKind: CommandValueKind.Digital);
-
     private CommandDefinition WithArgs(string description, Func<CommandContext, string[], CommandResult> handler, string name) {
         var rest = new Argument<string[]>(name: "args") {
             Arity = ArgumentArity.ZeroOrMore,
@@ -77,7 +76,6 @@ internal sealed class WorldCommandModule(IRenderNode rootNode) : ICommandModule 
             handler: scene => handler(arg1: scene, arg2: WorldCommands.OpenStore()),
             unavailableMessage: "[world: unavailable — the overworld is not the active root]"
         );
-
     private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<WorldScene, Puck.Assets.ContentAddressedStore, string[], string> handler) =>
         CommandAvailability.WithTargetArgs<WorldScene>(
             getTarget: () => Scene,

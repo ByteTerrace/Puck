@@ -22,7 +22,7 @@ namespace Puck.Post;
 /// DXIL codegen, the documented benign ±1 signature); (b) DETERMINISM — the same program + the same transforms
 /// rendered twice produce bit-identical pixels on BOTH backends; (c) the instanced render holds Vulkan/Direct3D 12
 /// cross-backend parity within the calibrated <see cref="ParityThresholds.WorldComposite"/> thresholds. The Vulkan
-/// renders run with the opt-in GPU timestamp bracketing (the PUCK_TIMING plumbing GpuBudgetStage proves), and the
+/// renders run with the opt-in GPU timestamp bracketing (the GPU-timing plumbing GpuBudgetStage proves), and the
 /// pass detail reports the beam/views/composite GPU-ms of the flat and instanced swarm renders — informational
 /// evidence, no budget (per GpuBudgetStage, a tight budget needs a per-machine calibration that does not exist yet).</para>
 /// </summary>
@@ -57,7 +57,7 @@ internal sealed class WorldSwarmStage : IPostStage {
 
         for (var mover = 0; (mover < MoverCount); mover++) {
             transforms[mover] = new DynamicTransform(
-                Position: new Vector3((-4f + (0.8f * (mover % MoverColumns))), 1.5f, (-3.4f - (1.2f * (mover / MoverColumns)))),
+                Position: new Vector3(x: (-4f + (0.8f * (mover % MoverColumns))), y: 1.5f, z: (-3.4f - (1.2f * (mover / MoverColumns)))),
                 Orientation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (0.35f * mover))
             );
         }
@@ -72,6 +72,7 @@ internal sealed class WorldSwarmStage : IPostStage {
     // the corridor field values under the camera's height (3.2), the same sizing the world-instanced stage measured.
     private static SdfProgram BuildScene(bool instanced) {
         var builder = new SdfProgramBuilder();
+
         var (ground, crimson, azure, amber, jade) = WorldStage.AddHeroPalette(builder: builder);
         Span<int> palette = [crimson, azure, amber, jade];
 
@@ -84,7 +85,7 @@ internal sealed class WorldSwarmStage : IPostStage {
             for (var column = 0; (column < FieldColumns); column++) {
                 var index = ((row * FieldColumns) + column);
                 var material = palette[(index % palette.Length)];
-                var position = new Vector3((-6f + (0.8f * column)), 0f, (-2.5f - (0.8f * row)));
+                var position = new Vector3(x: (-6f + (0.8f * column)), y: 0f, z: (-2.5f - (0.8f * row)));
 
                 if (instanced) {
                     _ = builder.BeginInstance(boundCenter: position, boundRadius: 4f);
@@ -95,18 +96,18 @@ internal sealed class WorldSwarmStage : IPostStage {
                 switch (index % 3) {
                     case 0:
                         _ = builder
-                            .Translate(offset: (position + new Vector3(0f, 0.18f, 0f)))
+                            .Translate(offset: (position + new Vector3(x: 0f, y: 0.18f, z: 0f)))
                             .Sphere(radius: 0.18f, material: material);
                         break;
                     case 1:
                         _ = builder
-                            .Translate(offset: (position + new Vector3(0f, 0.16f, 0f)))
-                            .Box(halfExtents: new Vector3(0.16f, 0.16f, 0.16f), round: 0.03f, material: material);
+                            .Translate(offset: (position + new Vector3(x: 0f, y: 0.16f, z: 0f)))
+                            .Box(halfExtents: new Vector3(x: 0.16f, y: 0.16f, z: 0.16f), round: 0.03f, material: material);
                         break;
                     default:
                         _ = builder
-                            .Translate(offset: (position + new Vector3(0f, 0.12f, 0f)))
-                            .Capsule(endpoint: new Vector3(0f, 0.32f, 0f), radius: 0.12f, material: material);
+                            .Translate(offset: (position + new Vector3(x: 0f, y: 0.12f, z: 0f)))
+                            .Capsule(endpoint: new Vector3(x: 0f, y: 0.32f, z: 0f), radius: 0.12f, material: material);
                         break;
                 }
 
@@ -135,10 +136,10 @@ internal sealed class WorldSwarmStage : IPostStage {
                     _ = builder.Sphere(radius: 0.24f, material: material);
                     break;
                 case 1:
-                    _ = builder.Box(halfExtents: new Vector3(0.2f, 0.2f, 0.2f), round: 0.04f, material: material);
+                    _ = builder.Box(halfExtents: new Vector3(x: 0.2f, y: 0.2f, z: 0.2f), round: 0.04f, material: material);
                     break;
                 default:
-                    _ = builder.Capsule(endpoint: new Vector3(0.3f, 0f, 0f), radius: 0.14f, material: material);
+                    _ = builder.Capsule(endpoint: new Vector3(x: 0.3f, y: 0f, z: 0f), radius: 0.14f, material: material);
                     break;
             }
 
@@ -149,7 +150,6 @@ internal sealed class WorldSwarmStage : IPostStage {
 
         return builder.Build();
     }
-
     [SupportedOSPlatform("windows10.0.10240")]
     private static PostStageOutcome RunCore(PostContext context) {
         var flatProgram = BuildScene(instanced: false);
@@ -178,18 +178,14 @@ internal sealed class WorldSwarmStage : IPostStage {
             vulkanFlatPixels = flatRenderer.RenderFrame(frame: flatFrame);
             vulkanFlatPixelsRepeat = flatRenderer.RenderFrame(frame: flatFrame);
 
-            if (flatRenderer.TryReadPassTimings(beam: out var beam, views: out var views, composite: out var composite, frame: out var frameMs)) {
-                flatTimingDigest = $"beam {beam:0.###} + views {views:0.###} + composite {composite:0.###} = {frameMs:0.###} ms";
-            }
+            flatTimingDigest = DescribePassTimings(renderer: flatRenderer);
         }
 
         using (var instancedRenderer = CreateEngine(program: instancedProgram, device: vulkanDevice, gpu: vulkanGpu, bytecodeExtension: ".spv", timingFactory: timingFactory, timingRecorder: timingRecorder)) {
             vulkanInstancedPixels = instancedRenderer.RenderFrame(frame: instancedFrame);
             vulkanInstancedPixelsRepeat = instancedRenderer.RenderFrame(frame: instancedFrame);
 
-            if (instancedRenderer.TryReadPassTimings(beam: out var beam, views: out var views, composite: out var composite, frame: out var frameMs)) {
-                instancedTimingDigest = $"beam {beam:0.###} + views {views:0.###} + composite {composite:0.###} = {frameMs:0.###} ms";
-            }
+            instancedTimingDigest = DescribePassTimings(renderer: instancedRenderer);
         }
 
         // Direct3D 12: both variants on the shared Tier-C device (DXIL kernels), the instanced one twice (the
@@ -215,10 +211,10 @@ internal sealed class WorldSwarmStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-swarm-diff.png");
+        var diffPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-swarm-diff.png");
 
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-swarm-vulkan.png"), rgba: vulkanInstancedPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-swarm-directx.png"), rgba: directXInstancedPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-swarm-vulkan.png"), rgba: vulkanInstancedPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-swarm-directx.png"), rgba: directXInstancedPixels, width: (int)WorldWidth);
         ParityCheck.WriteDiffImage(comparand: directXInstancedPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanInstancedPixels, width: (int)WorldWidth);
 
         // (a) Determinism, PER BACKEND: the same program + the same transforms rendered twice on the same engine are
@@ -257,9 +253,8 @@ internal sealed class WorldSwarmStage : IPostStage {
             return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"{ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");
         }
 
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} {(FieldColumns * FieldRows) + MoverCount}-instance swarm ({instancedProgram.InstanceMaskWordCount} mask words, {MoverCount} dynamic slots) | deterministic on both backends | instanced == flat bit-identical on Vulkan, within WorldLsbExact on Direct3D 12 | cross-backend within WorldComposite thresholds | {ParityCheck.Describe(metrics: metrics)} | Vulkan GPU-ms flat: {flatTimingDigest}; instanced: {instancedTimingDigest}");
+        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} {((FieldColumns * FieldRows) + MoverCount)}-instance swarm ({instancedProgram.InstanceMaskWordCount} mask words, {MoverCount} dynamic slots) | deterministic on both backends | instanced == flat bit-identical on Vulkan, within WorldLsbExact on Direct3D 12 | cross-backend within WorldComposite thresholds | {ParityCheck.Describe(metrics: metrics)} | Vulkan GPU-ms flat: {flatTimingDigest}; instanced: {instancedTimingDigest}");
     }
-
     private static SdfWorldEngine CreateEngine(SdfProgram program, IGpuDeviceContext device, IGpuComputeServices gpu, string bytecodeExtension, IGpuTimingPoolFactory? timingFactory, IGpuTimingRecorder? timingRecorder) {
         return new SdfWorldEngine(
             device: device,
@@ -269,5 +264,24 @@ internal sealed class WorldSwarmStage : IPostStage {
             options: new SdfWorldEngineOptions(DynamicTransformCapacity: MoverCount, Program: program, TimingFactory: timingFactory, TimingRecorder: timingRecorder),
             width: WorldWidth
         );
+    }
+
+    // The previous frame's per-pass GPU ms as one "label ms + label ms ... = frame ms" digest, iterating
+    // SdfWorldEngine.PassTimingLabels so a future pass appears with no edit here. "n/a" when timing is off.
+    private static string DescribePassTimings(SdfWorldEngine renderer) {
+        Span<double> passMilliseconds = stackalloc double[SdfWorldEngine.PassTimingCount];
+
+        if (!renderer.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frameMs)) {
+            return "n/a";
+        }
+
+        var builder = new System.Text.StringBuilder();
+        var labels = SdfWorldEngine.PassTimingLabels;
+
+        for (var index = 0; (index < passCount); index++) {
+            _ = builder.Append(value: ((index == 0) ? string.Empty : " + ")).Append(value: labels[index]).Append(value: ' ').Append(value: passMilliseconds[index].ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return builder.Append(value: " = ").Append(value: frameMs.ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)).Append(value: " ms").ToString();
     }
 }

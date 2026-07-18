@@ -42,7 +42,7 @@ public static class FuzzSdfProgram {
         }
 
         // A ground plane gives every frame a floor — real signal for the differential oracle and the content-sanity check.
-        _ = builder.ResetPoint().Plane(normal: new Vector3(0f, 1f, 0f), offset: 1f, material: materials[0]);
+        _ = builder.ResetPoint().Plane(normal: new Vector3(x: 0f, y: 1f, z: 0f), offset: 1f, material: materials[0]);
 
         var primitiveCount = random.Next(minValue: 1, maxValue: (bounds.MaxPrimitives + 1));
 

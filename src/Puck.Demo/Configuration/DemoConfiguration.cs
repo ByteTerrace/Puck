@@ -7,11 +7,8 @@ namespace Puck.Demo.Configuration;
 /// <summary>
 /// The demo's configuration composition root: it layers the run's configuration sources in the required precedence
 /// (scenario / <c>appsettings.json</c> &lt; environment variables &lt; command line) and binds the typed options
-/// (<see cref="ScenarioOptions"/> and the launcher's <c>PUCK_*</c> runtime toggles).
-/// <para>The demo's entire <c>Demo:*</c> / <c>PUCK_OVERWORLD_*</c> / <c>PUCK_COMPANION_*</c> option surface was REMOVED
-/// in the unification arc — every former env var is now a console verb (the scripted-console control plane) or a
-/// run-document field (<c>OverworldNode.World</c> / <c>OverworldNode.Cell</c> / per-console <c>startCart</c>). The env
-/// map below carries only the three LAUNCHER/engine diagnostic toggles that remain
+/// (<see cref="ScenarioOptions"/> and the launcher's supported <c>PUCK_*</c> runtime toggles).
+/// <para>The environment map carries the launcher and engine diagnostic toggles
 /// (<c>PUCK_PRESENT_TIMING</c>/<c>PUCK_GENLOCK</c>/<c>PUCK_TEST_DEVICE_LOSS</c>): a small explicit map turns each into
 /// its configuration key, added as an in-memory source ABOVE the JSON files (so environment overrides file config) and
 /// BELOW the command-line <c>--scenario-set</c> overrides (so the command line wins).</para>
@@ -24,7 +21,7 @@ namespace Puck.Demo.Configuration;
 /// keeps the <c>*Settings</c> name to signal that difference rather than pretending to be a POCO a binder produced.
 /// There is exactly one direction between the environment and typed config: <c>PUCK_*</c> environment variables flow
 /// INTO configuration here (env→config); nothing flows back out (no config→env re-push) — a deep reader that still
-/// wants an env var (e.g. <see cref="Puck.SdfVm.SdfEngineNode"/>'s <c>PUCK_TIMING</c>/<c>PUCK_RAY_QUERY</c> reads)
+/// wants an env var (e.g. <see cref="Puck.SdfVm.SdfEngineNode"/>'s <c>PUCK_RAY_QUERY</c> read)
 /// gets an optional constructor argument that falls back to the environment read when the caller has nothing
 /// resolved to pass, rather than the reverse plumbing. A static accessor over an options object for a
 /// coupling-ceiling escape (<see cref="ScenarioAccessor"/>) is neither of the above — it owns no state — and is
@@ -39,8 +36,8 @@ namespace Puck.Demo.Configuration;
 /// </para>
 /// </summary>
 internal static class DemoConfiguration {
-    // Each known PUCK_* environment variable -> the configuration key it feeds. Booleans that historically meant
-    // "=1 turns it on" are normalized to "true"/"false" as they are copied in (see ReadEnvironmentOverrides).
+    // Each supported PUCK_* environment variable maps to the configuration key it feeds. Boolean values are
+    // normalized to "true" or "false" as they are copied in (see ReadEnvironmentOverrides).
     private static readonly (string Env, string Key, bool Boolean)[] s_environmentMap = [
         ("PUCK_PRESENT_TIMING", "Launcher:LogPresentTiming", true),
         ("PUCK_GENLOCK", "Launcher:Genlock", false),
@@ -81,7 +78,7 @@ internal static class DemoConfiguration {
         if (scenarioPath is not null) {
             _ = configuration.AddJsonFile(path: scenarioPath, optional: false, reloadOnChange: false);
             // The flag path is authoritative: a resolved scenario is active regardless of what the file says.
-            _ = configuration.AddInMemoryCollection(initialData: [new("Scenario:Active", "true")]);
+            _ = configuration.AddInMemoryCollection(initialData: [new(key: "Scenario:Active", value: "true")]);
         }
 
         // Environment overrides the file config (added above the JSON so its values win).
@@ -91,8 +88,7 @@ internal static class DemoConfiguration {
         _ = configuration.AddInMemoryCollection(initialData: ParseScenarioSets(scenarioSets: scenarioSets));
     }
 
-    // Binds the scenario options from configuration into the container (the demo's whole Demo:* option surface was
-    // removed in the unification arc; only the --scenario review harness's options remain).
+    // Binds the scenario review harness options from configuration into the container.
     private static void AddScenarioOptions(IServiceCollection services, IConfiguration configuration) {
         _ = services.Configure<ScenarioOptions>(config: configuration.GetSection(key: ScenarioOptions.Section));
     }
@@ -130,7 +126,6 @@ internal static class DemoConfiguration {
             );
         }
     }
-
     private static IEnumerable<KeyValuePair<string, string?>> ParseScenarioSets(IReadOnlyList<string> scenarioSets) {
         foreach (var pair in scenarioSets) {
             if (string.IsNullOrWhiteSpace(value: pair)) {

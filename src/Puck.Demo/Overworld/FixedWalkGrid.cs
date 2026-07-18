@@ -73,8 +73,7 @@ public sealed class FixedWalkGrid {
 
         try {
             bytes = (string.IsNullOrEmpty(value: document.Cells) ? [] : Convert.FromBase64String(s: document.Cells));
-        }
-        catch (FormatException) {
+        } catch (FormatException) {
             return null;
         }
         var cells = new ulong[wordCount];
@@ -118,7 +117,7 @@ public sealed class FixedWalkGrid {
 
         var cellIndex = ((cellZ * m_width) + cellX);
         var word = (cellIndex >> 6);
-        var bit = (cellIndex & 63);
+        var bit = cellIndex & 63;
 
         return (0UL != (m_cells[word] & (1UL << bit)));
     }
@@ -167,7 +166,7 @@ public sealed class FixedWalkGrid {
 
         var cellIndex = ((((int)bestRow) * m_width) + ((int)bestColumn));
 
-        return (0UL != (m_cells[cellIndex >> 6] & (1UL << (cellIndex & 63))));
+        return (0UL != (m_cells[(cellIndex >> 6)] & (1UL << (cellIndex & 63))));
     }
 
     /// <summary>Resolves ONE axis of the per-axis grid clamp <see cref="PlatformerBody.Step"/> applies after the wall

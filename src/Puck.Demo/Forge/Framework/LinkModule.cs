@@ -10,7 +10,7 @@ namespace Puck.Demo.Forge.Framework;
 /// caller-provided label so the game can narrate the disconnect (e.g. "NO LINK") instead of freezing.
 /// <para>
 /// The module owns no WRAM of its own: every helper here reads or writes a caller-supplied address, so a consumer
-/// (a future link-fed game) reserves its own bytes in its <see cref="FrameworkMemoryMap.GameRam"/> region for
+/// A link-fed game reserves its own bytes in its <see cref="FrameworkMemoryMap.GameRam"/> region for
 /// send/receive staging, retry counters, or protocol state. This module is stateless plumbing only — vocabulary
 /// ("link", "cable"), never a protocol.
 /// </para>

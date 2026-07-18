@@ -16,12 +16,8 @@ namespace Puck.Platform.Windows;
 /// memory.
 /// <para>Two-phase: the constructor negotiates (device + reader + output size); <see cref="Start"/> hands over the
 /// shared targets and begins streaming.</para>
-/// <para>BUILT-AHEAD, NOT YET WIRED (by design): hardware-verified end to end (1920x1080 MJPEG on a Logitech C920)
-/// during the camera epic, but its consumer — the per-viewport camera child render node — was retired when rendering
-/// centralized into <c>SdfWorldEngine</c>/<c>SdfEngineNode</c>, and nothing constructs this class today (its only
-/// caller, <c>ICameraCaptureService.TryOpenSharedDefault</c>, has zero call sites — confirmed via Roslyn
-/// <c>SymbolFinder</c>). Kept for the re-host that would make <c>LiveCameraSource</c> buildable on the GPU tier
-/// again; do not delete on a dead-code sweep without re-checking that re-host hasn't landed.</para>
+/// <para>This built-ahead GPU tier is hardware-verified for 1920×1080 MJPEG on a Logitech C920. Its opener,
+/// <see cref="ICameraCaptureService.TryOpenSharedDefault"/>, currently has no call sites.</para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCaptureSession {
@@ -31,7 +27,6 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private readonly int m_requestedWidth;
     private readonly ManualResetEventSlim m_startSignal = new(initialState: false);
     private readonly Thread m_thread;
-
     private bool m_disposed;
     private volatile bool m_ended;
     private int m_height;
@@ -191,7 +186,6 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
             }
         }
     }
-
     private IMFSourceReader OpenReader(IMFDXGIDeviceManager manager) {
         // Enumerate video capture devices, pick the first (shared with the CPU-tier session).
         var (mediaSource, deviceName) = ActivateDefaultVideoSource();
@@ -260,7 +254,6 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
 
         return reader.SetCurrentMediaType(dwStreamIndex: MfInterop.FirstVideoStream, pdwReserved: IntPtr.Zero, pMediaType: outputType);
     }
-
     private void ReadLoop(Win32D3D11VideoDevice device, IMFSourceReader reader, nint[] targets) {
         var next = 0;
         var texture2dIid = global::Windows.Win32.Graphics.Direct3D11.ID3D11Texture2D.IID_Guid;

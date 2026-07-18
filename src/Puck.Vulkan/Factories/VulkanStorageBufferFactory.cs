@@ -44,7 +44,8 @@ public sealed class VulkanStorageBufferFactory : IVulkanStorageBufferFactory {
             deviceHandle: logicalDevice.Handle,
             memoryHandle: handles.MemoryHandle,
             sizeBytes: sizeBytes,
-            storageBufferApi: m_storageBufferApi
+            storageBufferApi: m_storageBufferApi,
+            deviceLocal: deviceLocal
         );
     }
 }

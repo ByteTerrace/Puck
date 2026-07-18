@@ -41,9 +41,9 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
 
         if (hasDescriptorTable) {
             layout.DescriptorTableParamIndex = 0;
-            layout.RootConstantsParamIndex = hasRootConstants ? 1 : -1;
+            layout.RootConstantsParamIndex = (hasRootConstants ? 1 : -1);
         } else {
-            layout.RootConstantsParamIndex = hasRootConstants ? 0 : -1;
+            layout.RootConstantsParamIndex = (hasRootConstants ? 0 : -1);
         }
 
         if (hasRootConstants) {
@@ -83,10 +83,10 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         var maxBindingIndex = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
-            maxBindingIndex = Math.Max(maxBindingIndex, bindings[index].Binding);
+            maxBindingIndex = Math.Max(val1: maxBindingIndex, val2: bindings[index].Binding);
         }
 
-        var slotByBinding = new uint[(bindings.Count > 0) ? (maxBindingIndex + 1) : 0];
+        var slotByBinding = new uint[((bindings.Count > 0) ? (maxBindingIndex + 1) : 0)];
         var nextSlot = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
@@ -111,7 +111,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
     ) {
         var rangeCount = bindings.Count;
         var paramCount = ((hasDescriptorTable ? 1 : 0) + (hasRootConstants ? 1 : 0));
-        var ranges = stackalloc D3D12_DESCRIPTOR_RANGE[(rangeCount > 0) ? rangeCount : 1];
+        var ranges = stackalloc D3D12_DESCRIPTOR_RANGE[((rangeCount > 0) ? rangeCount : 1)];
         var parameters = stackalloc D3D12_ROOT_PARAMETER[2];
         var paramIndex = 0;
         var nextSrvRegister = 0u;
@@ -127,9 +127,9 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             // SRV, and a sampled image is an SRV read through the static sampler added to the root signature below.
             var isSrv = ((binding.Kind == GpuComputeBindingKind.StorageBufferRead) || (binding.Kind == GpuComputeBindingKind.AccelerationStructure) || (binding.Kind == GpuComputeBindingKind.SampledImage));
             var count = ((binding.Count > 0) ? binding.Count : 1);
-            var rangeType = isSrv
+            var rangeType = (isSrv
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
-                : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV);
             var baseRegister = (isSrv ? nextSrvRegister : nextUavRegister);
 
             if (isSrv) {
@@ -191,7 +191,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             }
         }
 
-        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[(sampledImageCount > 0) ? (int)sampledImageCount : 1];
+        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((sampledImageCount > 0) ? (int)sampledImageCount : 1)];
         var samplerRegister = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
@@ -224,8 +224,8 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE,
             NumParameters = (uint)paramCount,
             NumStaticSamplers = sampledImageCount,
-            pParameters = (0 < paramCount) ? parameters : null,
-            pStaticSamplers = (sampledImageCount > 0) ? staticSamplers : null,
+            pParameters = ((0 < paramCount) ? parameters : null),
+            pStaticSamplers = ((sampledImageCount > 0) ? staticSamplers : null),
         };
 
         return SerializeAndCreate(device: device, desc: in desc);

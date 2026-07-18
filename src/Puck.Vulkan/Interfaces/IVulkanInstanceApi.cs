@@ -12,6 +12,13 @@ public interface IVulkanInstanceApi {
     /// <param name="instanceHandle">When this method returns, the created native <c>VkInstance</c> handle.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the instance was created successfully.</returns>
     VkResult CreateInstance(VulkanInstanceCreateRequest request, out nint instanceHandle);
+    /// <summary>Reports whether the Vulkan loader advertises the named instance extension (queried across the core
+    /// and implicit-layer extensions via <c>vkEnumerateInstanceExtensionProperties</c>). Lets the factory enable an
+    /// optional instance extension only when it is present. Best-effort: returns <see langword="false"/> when the
+    /// enumeration entry point is unavailable.</summary>
+    /// <param name="extensionName">The extension name to probe (e.g. <c>VK_EXT_debug_utils</c>).</param>
+    /// <returns><see langword="true"/> when the extension is supported; otherwise <see langword="false"/>.</returns>
+    bool HasInstanceExtension(string extensionName);
     /// <summary>Destroys a Vulkan instance.</summary>
     /// <param name="instanceHandle">The native <c>VkInstance</c> handle to destroy.</param>
     void DestroyInstance(nint instanceHandle);

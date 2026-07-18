@@ -19,11 +19,68 @@ internal sealed class OverworldBrickTimeline {
 
     private readonly List<JoypadSegment> m_segments = [];
     private readonly int[] m_cursors;
+    // The scripted-input driver behind the `press` verb (one tape slot per cabinet — host-side driving bookkeeping the
+    // sim hash never sees). Owned HERE, the input-stream domain, because both classes that would otherwise name it
+    // (OverworldRenderNode, OverworldFrameSource) sit at their exact CA1506 class-coupling ceilings — the node reaches
+    // it only through the primitive-typed Press* forwarders below.
+    private readonly OverworldPressDriver m_pressDriver;
 
     /// <summary>Initializes the timeline for <paramref name="consoleCount"/> consoles (one cursor each).</summary>
     public OverworldBrickTimeline(int consoleCount) {
         m_cursors = new int[consoleCount];
+        m_pressDriver = new OverworldPressDriver(consoleCount: consoleCount);
     }
+
+    /// <summary>Publishes this frame's tick budget to the press driver (each emitted tape segment is one frame-budget
+    /// slice — the same size the classic per-frame path stages).</summary>
+    /// <param name="ticks">The frame's fixed-step tick budget.</param>
+    public void PressSetDeltaTicks(ulong ticks) =>
+        m_pressDriver.SetDeltaTicks(ticks: ticks);
+
+    /// <summary>Whether cabinet <paramref name="console"/> currently has an active scripted-input tape.</summary>
+    /// <param name="console">The cabinet index.</param>
+    public bool PressIsScripted(int console) =>
+        m_pressDriver.IsScripted(console: console);
+
+    /// <summary>Cancels a cabinet's active tape (takeover / cart-change pre-emption). A no-op when none runs.</summary>
+    /// <param name="console">The cabinet index.</param>
+    public void PressCancel(int console) =>
+        m_pressDriver.Cancel(console: console);
+
+    /// <summary>The total frame length of a cabinet's active (or just-completed) tape; zero when none.</summary>
+    /// <param name="console">The cabinet index.</param>
+    public int PressLengthOf(int console) =>
+        m_pressDriver.LengthOf(console: console);
+
+    /// <summary>Reports (and clears) whether a cabinet's tape just reached its end. True at most once per tape.</summary>
+    /// <param name="console">The cabinet index.</param>
+    public bool PressTryTakeCompleted(int console) =>
+        m_pressDriver.TryTakeCompleted(console: console);
+
+    /// <summary>Compiles a press script and installs it on a cabinet. On failure <paramref name="error"/> carries the
+    /// one-line grammar reason.</summary>
+    /// <param name="console">The cabinet index.</param>
+    /// <param name="script">The raw script text.</param>
+    /// <param name="frameCount">The compiled tape length, for the start echo.</param>
+    /// <param name="error">The parse failure, when any.</param>
+    /// <returns>Whether a tape was installed.</returns>
+    public bool PressTryInstall(int console, string script, out int frameCount, out string error) {
+        frameCount = 0;
+
+        if (!OverworldPressDriver.TryCompile(script: script, frames: out var frames, error: out error)) {
+            return false;
+        }
+
+        m_pressDriver.Install(console: console, frames: frames);
+        frameCount = frames.Length;
+
+        return true;
+    }
+
+    /// <summary>The segment filler a scripted cabinet consumes (exactly one frame-budget segment per frame).</summary>
+    /// <param name="console">The cabinet index.</param>
+    public JoypadSegmentFiller PressFillerFor(int console) =>
+        m_pressDriver.FillerFor(console: console);
 
     /// <summary>Appends one engine frame's segment (called once per advanced frame, from the first boot onward).</summary>
     /// <param name="ticks">The frame's fixed-step tick budget.</param>
@@ -41,10 +98,10 @@ internal sealed class OverworldBrickTimeline {
     /// <returns>The number of segments written.</returns>
     public int Fill(int consoleIndex, Span<JoypadSegment> destination) {
         var cursor = m_cursors[consoleIndex];
-        var count = Math.Min(m_segments.Count - cursor, destination.Length);
+        var count = Math.Min(val1: (m_segments.Count - cursor), val2: destination.Length);
 
         for (var index = 0; (index < count); index++) {
-            destination[index] = m_segments[cursor + index];
+            destination[index] = m_segments[(cursor + index)];
         }
 
         m_cursors[consoleIndex] = (cursor + count);
@@ -71,7 +128,7 @@ internal sealed class OverworldBrickTimeline {
         var consumed = int.MaxValue;
 
         foreach (var cursor in m_cursors) {
-            consumed = Math.Min(consumed, cursor);
+            consumed = Math.Min(val1: consumed, val2: cursor);
         }
 
         if (consumed < TrimThreshold) {

@@ -16,8 +16,9 @@ public enum PresentMode {
     /// <summary>No synchronization; lowest latency, may tear (Vulkan <c>IMMEDIATE</c>; Direct3D 12
     /// <c>Present(0, ALLOW_TEARING)</c> where the display supports it, otherwise <c>Present(0, 0)</c>).</summary>
     Immediate,
-    /// <summary>Adaptive vsync for variable-refresh-rate (VRR) displays: synchronize when on time, tear when a frame is
-    /// late, so a missed frame does not stutter (Vulkan <c>FIFO_RELAXED</c>; Direct3D 12 <c>Present(0, ALLOW_TEARING)</c>
-    /// where the display supports tearing, otherwise a graceful fall back).</summary>
+    /// <summary>Adaptive presentation: synchronize when on time where the backend supports that distinction, but permit
+    /// tearing rather than stuttering when late (Vulkan <c>FIFO_RELAXED</c>; Direct3D 12
+    /// <c>Present(0, ALLOW_TEARING)</c> where supported, otherwise a graceful fall back). This policy is independent of
+    /// whether the display advertises variable-refresh capability.</summary>
     Adaptive,
 }

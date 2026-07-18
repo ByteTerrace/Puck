@@ -2,7 +2,7 @@ namespace Puck.Demo.Forge.Framework;
 
 /// <summary>
 /// The framework font and text printers. The font is ~40 hand-authored glyphs (space, the digits 0-9, A-Z, the '&gt;'
-/// cursor, and '-'), authored in the forge's ASCII-row style ('#' = colour index 3 on a transparent index-0 field)
+/// cursor, '-', and the sentence '.'), authored in the forge's ASCII-row style ('#' = colour index 3 on a transparent index-0 field)
 /// and encoded to 2bpp tiles at build time; a game appends <see cref="BuildFontTiles"/> to its tile set at any base
 /// id and tells the module where via <c>fontTileBase</c>. Strings are encoded to tile ids at BUILD time (there is no
 /// runtime character mapping), printed either through the background write queue (any time) or directly (LCD off /
@@ -10,7 +10,7 @@ namespace Puck.Demo.Forge.Framework;
 /// </summary>
 internal sealed class TextModule {
     /// <summary>The number of glyphs in the framework font.</summary>
-    public const int GlyphCount = 39;
+    public const int GlyphCount = 40;
 
     private readonly BgModule m_bg;
     private readonly Sm83Emitter m_emitter;
@@ -125,7 +125,7 @@ internal sealed class TextModule {
     /// '&gt;', '-'. Append to the game's tile data at the <c>fontTileBase</c> given to the constructor.</summary>
     /// <returns>The tile bytes.</returns>
     public static byte[] BuildFontTiles() {
-        var tiles = new byte[GlyphCount * 16];
+        var tiles = new byte[(GlyphCount * 16)];
 
         for (var glyph = 0; (glyph < GlyphCount); glyph++) {
             EncodeGlyph(rows: Glyphs[glyph]).CopyTo(array: tiles, index: (glyph * 16));
@@ -152,7 +152,6 @@ internal sealed class TextModule {
         m_emitter.Increment(pair: Reg16.De);
         m_emitter.JumpRelative(label: loop);
     }
-
     private void EmitPrintDirectSubroutine() {
         var loop = m_emitter.NewLabel();
 
@@ -167,7 +166,6 @@ internal sealed class TextModule {
         m_emitter.Increment(pair: Reg16.De);
         m_emitter.JumpRelative(label: loop);
     }
-
     private void EmitPrintBcdQueuedSubroutine() {
         var loop = m_emitter.NewLabel();
 
@@ -195,7 +193,6 @@ internal sealed class TextModule {
         m_emitter.JumpRelative(condition: Condition.NotZero, label: loop);
         m_emitter.Return();
     }
-
     private void EmitPrintBcdDirectSubroutine() {
         var loop = m_emitter.NewLabel();
 
@@ -229,7 +226,6 @@ internal sealed class TextModule {
         m_emitter.Pop(pair: StackPair.De);
         m_emitter.Pop(pair: StackPair.Bc);
     }
-
     private static int GlyphIndexOf(char character) =>
         character switch {
             ' ' => 0,
@@ -237,7 +233,8 @@ internal sealed class TextModule {
             (>= 'A') and (<= 'Z') => (11 + (character - 'A')),
             '>' => 37,
             '-' => 38,
-            _ => throw new ArgumentException(message: $"The framework font has no glyph for '{character}' (supported: space, 0-9, A-Z, '>', '-').", paramName: nameof(character)),
+            '.' => 39,
+            _ => throw new ArgumentException(message: $"The framework font has no glyph for '{character}' (supported: space, 0-9, A-Z, '>', '-', '.').", paramName: nameof(character)),
         };
 
     // Encodes an 8-row ASCII pattern ('#' = colour index 3, anything else = 0) to the 16-byte 2bpp tile form.
@@ -248,7 +245,7 @@ internal sealed class TextModule {
             var line = rows[row];
 
             for (var column = 0; (column < 8); column++) {
-                indices[(row * 8) + column] = (byte)(((column < line.Length) && (line[column] == '#')) ? 3 : 0);
+                indices[((row * 8) + column)] = (byte)(((column < line.Length) && (line[column] == '#')) ? 3 : 0);
             }
         }
 
@@ -299,5 +296,7 @@ internal sealed class TextModule {
         // '>' and '-'.
         [ ".#......", "..#.....", "...#....", "....#...", "...#....", "..#.....", ".#......", "........" ],
         [ "........", "........", "........", ".####...", "........", "........", "........", "........" ],
+        // '.' — the sentence full stop.
+        [ "........", "........", "........", "........", "........", "...##...", "...##...", "........" ],
     ];
 }

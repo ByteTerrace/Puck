@@ -193,7 +193,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 1,
@@ -222,7 +224,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 2,
@@ -251,7 +255,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 3,
@@ -280,7 +286,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 4,
@@ -309,7 +317,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 5,
@@ -338,7 +348,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 6,
@@ -367,7 +379,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 7,
@@ -396,7 +410,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 8,
@@ -425,7 +441,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 9,
@@ -454,7 +472,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 10,
@@ -483,7 +503,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 11,
@@ -512,7 +534,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 12,
@@ -541,7 +565,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 13,
@@ -570,7 +596,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 14,
@@ -599,7 +627,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 15,
@@ -628,7 +658,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 16,
@@ -657,7 +689,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 17,
@@ -686,69 +720,34 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
-    },
-    {
-      "id": 18,
-      "name": "roofVentL",
-      "type": "Box",
-      "position": {
-        "x": -0.5,
-        "y": 2.14,
-        "z": -0.3
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.5294118,
-        "y": 0.4705882,
-        "z": 0.5294118
-      },
-      "material": 0,
-      "blend": "Union",
-      "smooth": 0,
-      "group": 0,
-      "mirror": false,
-      "twist": 0,
-      "onion": 0
-    },
-    {
-      "id": 19,
-      "name": "roofVentR",
-      "type": "Box",
-      "position": {
-        "x": 0.5,
-        "y": 2.14,
-        "z": -0.3
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.5294118,
-        "y": 0.4705882,
-        "z": 0.5294118
-      },
-      "material": 0,
-      "blend": "Union",
-      "smooth": 0,
-      "group": 0,
-      "mirror": false,
-      "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     }
   ],
   "frames": null,
   "chains": null,
   "cameras": null,
-  "behavior": null
+  "behavior": null,
+  "textRuns": [
+    {
+      "text": "ARCADE",
+      "position": {
+        "x": 0,
+        "y": 1.62,
+        "z": 0.82
+      },
+      "rotation": {
+        "isIdentity": true,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "emHeight": 0.26,
+      "depth": 0.05,
+      "mode": "engrave",
+      "material": 2
+    }
+  ]
 }

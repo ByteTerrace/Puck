@@ -33,42 +33,39 @@ internal sealed class WorldWarpStage : IPostStage {
 
     internal static SdfProgram BuildWarpScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.52f, 0.58f)));
-        var brick = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.8f, 0.35f, 0.25f)));
-        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.7f, 0.7f)));
-        var honey = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.7f, 0.3f)));
-        var slate = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.4f, 0.45f, 0.6f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.52f, z: 0.58f)));
+        var brick = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.8f, y: 0.35f, z: 0.25f)));
+        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.7f, z: 0.7f)));
+        var honey = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.7f, z: 0.3f)));
+        var slate = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.4f, y: 0.45f, z: 0.6f)));
 
         return builder
             // The ONIONED SPHERE GOES FIRST, against the empty accumulator. Onion is a FIELD op: it rewrites the running
-            // distance as abs(d) - t, so it shells EVERY solid accumulated so far, not just the shape before it. Emitted
-            // where it used to sit (after the plane and two other solids) it moved every outer surface out by 0.06 and
-            // hollowed the lot — the ground plane became a 0.12-thick slab, the twisted column and the bent capsule grew
-            // 0.06 fatter. Nothing looked wrong, because an onion's failure mode is INFLATION, not deletion. Emitted
-            // first, it shells exactly its own sphere; the Subtraction box then carves an opening that reveals the shell.
-            .Translate(offset: new Vector3(2.6f, 0.8f, -0.4f))
+            // distance as abs(d) - t, so it shells every solid accumulated so far. Emitting this subject first scopes
+            // the field operation to its sphere; the subtraction box then opens the shell.
+            .Translate(offset: new Vector3(x: 2.6f, y: 0.8f, z: -0.4f))
             .Sphere(radius: 0.65f, material: slate)
             .Onion(thickness: 0.06f)
             .ResetPoint()
-            .Translate(offset: new Vector3(2.6f, 1.3f, -0.4f))
-            .Box(halfExtents: new Vector3(0.8f, 0.5f, 0.8f), round: 0f, material: honey, blend: SdfBlendOp.Subtraction)
+            .Translate(offset: new Vector3(x: 2.6f, y: 1.3f, z: -0.4f))
+            .Box(halfExtents: new Vector3(x: 0.8f, y: 0.5f, z: 0.8f), round: 0f, material: honey, blend: SdfBlendOp.Subtraction)
             // Everything below unions on top of the finished shell.
             .ResetPoint()
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // A twisted box column (the twist rotates its cross-section along Y).
             .ResetPoint()
-            .Translate(offset: new Vector3(-2.6f, 1.0f, 0.0f))
+            .Translate(offset: new Vector3(x: -2.6f, y: 1.0f, z: 0.0f))
             .TwistY(rate: 1.5f)
-            .Box(halfExtents: new Vector3(0.45f, 1.0f, 0.45f), round: 0.06f, material: brick)
+            .Box(halfExtents: new Vector3(x: 0.45f, y: 1.0f, z: 0.45f), round: 0.06f, material: brick)
             // A bent capsule arch.
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.9f, 0.35f, -0.9f))
+            .Translate(offset: new Vector3(x: -0.9f, y: 0.35f, z: -0.9f))
             .BendX(rate: 0.9f)
-            .Capsule(endpoint: new Vector3(1.2f, 0.0f, 0.0f), radius: 0.28f, material: teal)
+            .Capsule(endpoint: new Vector3(x: 1.2f, y: 0.0f, z: 0.0f), radius: 0.28f, material: teal)
             // The classic: a sphere elongated into a rounded bar.
             .ResetPoint()
-            .Translate(offset: new Vector3(0.9f, 0.32f, 1.1f))
-            .Elongate(extents: new Vector3(0.55f, 0.0f, 0.15f))
+            .Translate(offset: new Vector3(x: 0.9f, y: 0.32f, z: 1.1f))
+            .Elongate(extents: new Vector3(x: 0.55f, y: 0.0f, z: 0.15f))
             .Sphere(radius: 0.3f, material: honey)
             // An XOR pair: solid where exactly one sphere is, hollow in the lens where both are. Xor also composes
             // against the WHOLE accumulator, not the sphere before it — only ONE cluster in a flat-accumulator program
@@ -76,19 +73,19 @@ internal sealed class WorldWarpStage : IPostStage {
             // sphere (y = 1.9, r = 0.42) overlaps nothing but its brick partner; slide it into the ground and it would
             // punch a hole there. That placement dependence is the cost of a global op, not a property of Xor.
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.2f, 1.9f, 0.6f))
+            .Translate(offset: new Vector3(x: -0.2f, y: 1.9f, z: 0.6f))
             .Sphere(radius: 0.42f, material: brick)
             .ResetPoint()
-            .Translate(offset: new Vector3(0.25f, 1.9f, 0.6f))
+            .Translate(offset: new Vector3(x: 0.25f, y: 1.9f, z: 0.6f))
             .Sphere(radius: 0.42f, material: teal, blend: SdfBlendOp.Xor)
             // A smooth-subtraction carve: a filleted scoop out of a box. Subtraction composes against the whole
             // accumulator too, but it is LOCAL by construction — max(acc, -candidate) only bites inside the subtrahend —
             // so it may sit anywhere.
             .ResetPoint()
-            .Translate(offset: new Vector3(1.0f, 0.45f, -1.6f))
-            .Box(halfExtents: new Vector3(0.55f, 0.45f, 0.55f), round: 0.05f, material: slate)
+            .Translate(offset: new Vector3(x: 1.0f, y: 0.45f, z: -1.6f))
+            .Box(halfExtents: new Vector3(x: 0.55f, y: 0.45f, z: 0.55f), round: 0.05f, material: slate)
             .ResetPoint()
-            .Translate(offset: new Vector3(1.0f, 1.1f, -1.6f))
+            .Translate(offset: new Vector3(x: 1.0f, y: 1.1f, z: -1.6f))
             .Sphere(radius: 0.5f, material: honey, blend: SdfBlendOp.SmoothSubtraction, smooth: 0.15f)
             .Build();
     }

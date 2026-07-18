@@ -22,6 +22,21 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
         ).ThrowIfFailed(operation: "vkEndCommandBuffer");
     }
     /// <inheritdoc/>
+    public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) {
+        commandBufferRecordingApi.BeginDebugLabel(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle,
+            label: label
+        );
+    }
+    /// <inheritdoc/>
+    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) {
+        commandBufferRecordingApi.EndDebugLabel(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
+        );
+    }
+    /// <inheritdoc/>
     public void BeginRenderPass(nint deviceHandle, nint commandBufferHandle, nint renderPassHandle, nint framebufferHandle, uint width, uint height) {
         commandBufferRecordingApi.StartRenderPass(request: new VulkanCommandBufferRecordRequest(
             CommandBufferHandle: commandBufferHandle,

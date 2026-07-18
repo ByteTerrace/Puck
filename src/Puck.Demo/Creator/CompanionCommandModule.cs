@@ -2,7 +2,7 @@ using System.CommandLine;
 using Puck.Assets;
 using Puck.Commands;
 using Puck.Hosting;
-using static Puck.Demo.CommandArgs;
+using static Puck.Commands.CommandArgs;
 
 namespace Puck.Demo.Creator;
 
@@ -85,10 +85,8 @@ internal sealed class CompanionCommandModule(IRenderNode rootNode) : ICommandMod
 
     private Func<CommandContext, CommandResult> WithHost(Func<ICompanionHost, string> handler) =>
         CommandAvailability.WithTarget(getTarget: () => m_host, handler: handler, unavailableMessage: HostUnavailable);
-
     private Func<CommandContext, string[], CommandResult> WithHostArgs(Func<ICompanionHost, string[], string> handler) =>
         CommandAvailability.WithTargetArgs(getTarget: () => m_host, handler: handler, unavailableMessage: HostUnavailable);
-
     private static string Add(ICompanionHost host, string[] args) {
         if (host is not { Companions: { } roster, CompanionStore: { } store, CompanionBounds: { } bounds }) {
             return HostUnavailable;
@@ -116,12 +114,10 @@ internal sealed class CompanionCommandModule(IRenderNode rootNode) : ICommandMod
             return (roster.Add(companion: companion)
                 ? $"[companion.add: '{document.Name}' joined the room ({roster.Companions.Count}/{CompanionState.MaxCompanions}){(companion.IsSwimmer ? " — swimming" : "")}]"
                 : $"[companion.add: the room already has {CompanionState.MaxCompanions} companions — companion.del one first]");
-        }
-        catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+        } catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
             return $"[companion.add: '{args[0]}' is unreadable — {exception.Message}]";
         }
     }
-
     private static string Delete(ICompanionHost host, string[] args) {
         if (host is not { Companions: { } roster }) {
             return HostUnavailable;
@@ -143,7 +139,6 @@ internal sealed class CompanionCommandModule(IRenderNode rootNode) : ICommandMod
             ? $"[companion.del: removed #{oneBased}]"
             : $"[companion.del: no companion at #{oneBased} — companion.list shows what's loaded]");
     }
-
     private static string List(ICompanionHost host) {
         if (host is not { Companions: { } roster }) {
             return HostUnavailable;
@@ -158,12 +153,11 @@ internal sealed class CompanionCommandModule(IRenderNode rootNode) : ICommandMod
         for (var index = 0; (index < roster.Companions.Count); index++) {
             var companion = roster.Companions[index];
 
-            lines.Add(item: $"#{index + 1} '{companion.Document.Name}'{(companion.IsSwimmer ? " (swim)" : "")}{(companion.HasFace ? $" [face:{companion.CurrentFaceFeed}{(companion.PinnedFaceFeed is { } pinned ? $" pinned:{pinned}" : " auto")}]" : "")}");
+            lines.Add(item: $"#{(index + 1)} '{companion.Document.Name}'{(companion.IsSwimmer ? " (swim)" : "")}{(companion.HasFace ? $" [face:{companion.CurrentFaceFeed}{((companion.PinnedFaceFeed is { } pinned) ? $" pinned:{pinned}" : " auto")}]" : "")}");
         }
 
         return $"[companion.list: {string.Join(separator: ", ", values: lines)}]";
     }
-
     private static string Face(ICompanionHost host, string[] args) {
         if (host is not { Companions: { } roster }) {
             return HostUnavailable;

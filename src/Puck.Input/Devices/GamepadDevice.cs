@@ -17,6 +17,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private const int StartupPollMilliseconds = 100;    // bound reads before streaming starts so the watchdog can fire
 
     private static readonly long StreamingDeadlineTicks = (5L * Stopwatch.Frequency);  // fault if never streaming
+    private readonly bool m_activateOnStream;
     private readonly GamepadCoalescer m_coalescer = new();
     private readonly CancellationTokenSource m_cancellation = new();
     private readonly IInputClock? m_clock;
@@ -27,6 +28,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private readonly IGamepadParser m_parser;
     private readonly byte[] m_readBuffer;
     private volatile bool m_faulted;
+    private volatile bool m_hasStream;
     private bool m_rumbleActive;
     private long m_rumbleExpiry = long.MaxValue;
     private bool m_scheduledTriggerActive;
@@ -42,7 +44,8 @@ internal sealed class GamepadDevice : IGamepadConnection {
         InputDeviceId deviceId,
         int playerIndex,
         Action<string>? diagnostics = null,
-        IInputClock? clock = null
+        IInputClock? clock = null,
+        bool activateOnStream = false
     ) {
         ArgumentNullException.ThrowIfNull(hid);
         ArgumentNullException.ThrowIfNull(parser);
@@ -51,6 +54,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
         DeviceId = deviceId;
         PlayerIndex = playerIndex;
+        m_activateOnStream = activateOnStream;
         m_clock = clock;
         m_diagnostics = diagnostics;
         m_hid = hid;
@@ -62,7 +66,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
         m_parser = parser;
         // Size the read buffer from the device's declared input report length (Bluetooth reports exceed 64);
         // over-sizing is harmless since ReadAsync returns the actual byte count.
-        m_readBuffer = new byte[(inputLength > 0) ? inputLength : ReportBufferSize];
+        m_readBuffer = new byte[((inputLength > 0) ? inputLength : ReportBufferSize)];
     }
 
     public GamepadCoalescer Coalescer => m_coalescer;
@@ -71,8 +75,24 @@ internal sealed class GamepadDevice : IGamepadConnection {
     public string Key => m_hid.DevicePath;
     /// <summary>Whether the device's I/O loop has stopped due to a disconnect or I/O error (eligible for pruning).</summary>
     public bool IsFaulted => m_faulted;
-    /// <summary>The zero-based player slot assigned to this device (drives its indicator LEDs).</summary>
-    public int PlayerIndex { get; }
+    /// <summary>
+    /// The zero-based player slot assigned to this device (drives its indicator LEDs), or <c>-1</c> while a
+    /// deferred-activation device (an idle wireless-receiver slot) is dormant.
+    /// </summary>
+    public int PlayerIndex { get; private set; }
+    /// <summary>
+    /// Whether this device claims its player slot lazily — on first streamed state — rather than at open: a
+    /// wireless-receiver slot may sit empty indefinitely, so it parks dormant (watchdog-exempt, invisible to
+    /// consumers) instead of holding a player identity nothing is behind.
+    /// </summary>
+    internal bool ActivateOnStream => m_activateOnStream;
+    /// <summary>
+    /// Whether the device is currently streaming parsed state. Set on the I/O thread by the first parsed report;
+    /// cleared when the receiver announces the controller left the slot. The manager reconciles deferred devices'
+    /// player slots against this.
+    /// </summary>
+    internal bool HasStream => m_hasStream;
+
     public IGamepadOutput Output => m_output;
     public GamepadType Type => m_parser.Type;
     /// <summary>The optional input features this device provides, from its parser.</summary>
@@ -99,17 +119,36 @@ internal sealed class GamepadDevice : IGamepadConnection {
         return capabilities;
     }
 
+    /// <summary>Assigns the player slot (manager-owned, called under its gate) when a deferred-activation device
+    /// begins streaming.</summary>
+    /// <param name="playerIndex">The zero-based player slot to assign.</param>
+    internal void AssignPlayerSlot(int playerIndex) {
+        PlayerIndex = playerIndex;
+    }
+    /// <summary>Releases the player slot (manager-owned, called under its gate) when the controller leaves its
+    /// receiver slot, returning the device to dormancy.</summary>
+    internal void ReleasePlayerSlot() {
+        PlayerIndex = -1;
+    }
+
     /// <summary>Starts the device's I/O loop on a background task.</summary>
     public void Start() {
         m_loop = Task.Run(function: () => RunAsync(cancellationToken: m_cancellation.Token));
     }
 
+    // A dormant receiver slot has no player identity yet, and the lifecycle diagnostics should say so instead of
+    // printing a bogus "player 0".
+    private string SlotLabel() {
+        var playerIndex = PlayerIndex;
+
+        return ((playerIndex >= 0) ? $"player {(playerIndex + 1)}" : "dormant receiver slot");
+    }
     private async Task RunAsync(CancellationToken cancellationToken) {
         var firstParsed = false;
         var loggedUnparsed = false;
 
         try {
-            m_diagnostics?.Invoke($"[gamepad] {Type} init starting (player {PlayerIndex + 1})");
+            m_diagnostics?.Invoke($"[gamepad] {Type} init starting ({SlotLabel()})");
 
             await m_parser.InitializeAsync(playerIndex: PlayerIndex, cancellationToken: cancellationToken);
 
@@ -147,7 +186,19 @@ internal sealed class GamepadDevice : IGamepadConnection {
                 }
 
                 if (0 < read) {
-                    if (m_parser.TryParse(report: buffer.AsSpan(start: 0, length: read), state: out var state)) {
+                    bool parsed;
+                    GamepadState state;
+
+                    try {
+                        parsed = m_parser.TryParse(report: buffer.AsSpan(start: 0, length: read), state: out state);
+                    } catch (Exception parseException) {
+                        // A parser must never throw on hostile bytes — when one does, the report payload IS the
+                        // bug report. Dump it before the fault machinery eats the evidence.
+                        m_diagnostics?.Invoke($"[gamepad] {Type} parser THREW on report id=0x{buffer[0]:x2} len={read} head={Convert.ToHexString(buffer, 0, Math.Min(val1: read, val2: 24))}: {parseException}");
+                        throw;
+                    }
+
+                    if (parsed) {
                         // Stamp the report's arrival on the I/O thread — the earliest accurate point — and a
                         // per-device sequence, so the coalescer can carry true sub-frame edge times forward and a
                         // drain can order what it folded. The parser stays pure; timing is layered on here.
@@ -157,23 +208,50 @@ internal sealed class GamepadDevice : IGamepadConnection {
                         };
                         m_coalescer.Update(state: in state);
 
+                        if (!m_hasStream) {
+                            m_hasStream = true;
+                        }
+
                         if (!firstParsed) {
                             firstParsed = true;
                             m_diagnostics?.Invoke($"[gamepad] {Type} streaming (first parsed report, len={read})");
                         }
-                    } else if (!loggedUnparsed) {
-                        // Data is arriving but not in the expected report shape — e.g. the report-mode subcommand
-                        // didn't take and the controller is still sending its simple (0x3F) report.
-                        loggedUnparsed = true;
-                        m_diagnostics?.Invoke($"[gamepad] {Type} unparsed report id=0x{buffer[0]:x2} len={read}");
+                    } else {
+                        var slotEvent = ((m_parser is IWirelessSlotParser slotParser)
+                            ? slotParser.ClassifySlotEvent(report: buffer.AsSpan(start: 0, length: read))
+                            : WirelessSlotEvent.None);
+
+                        if (WirelessSlotEvent.Connected == slotEvent) {
+                            // A controller just paired into this slot. The open-time initialization addressed an
+                            // empty slot, so run it again for the pad that's actually here; its first state report
+                            // then claims a player slot (via HasStream, reconciled by the manager).
+                            m_diagnostics?.Invoke($"[gamepad] {Type} receiver slot paired; initializing the controller");
+
+                            await m_parser.InitializeAsync(playerIndex: PlayerIndex, cancellationToken: cancellationToken);
+                        } else if (WirelessSlotEvent.Disconnected == slotEvent) {
+                            // The controller left the slot: back to dormant. The manager releases the player slot
+                            // when it sees HasStream drop; resetting firstParsed returns the loop to bounded reads
+                            // (and the refreshed deadline keeps a non-deferred device's watchdog honest).
+                            m_hasStream = false;
+                            firstParsed = false;
+                            streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
+                            m_diagnostics?.Invoke($"[gamepad] {Type} receiver slot unpaired; parking");
+                        } else if (!loggedUnparsed) {
+                            // Data is arriving but not in the expected report shape — e.g. the report-mode
+                            // subcommand didn't take and the controller is still sending its simple (0x3F) report.
+                            loggedUnparsed = true;
+                            m_diagnostics?.Invoke($"[gamepad] {Type} unparsed report id=0x{buffer[0]:x2} len={read}");
+                        }
                     }
                 }
 
-                if (!firstParsed && (Stopwatch.GetTimestamp() > streamingDeadline)) {
+                // A deferred-activation device is a receiver slot that may legitimately sit empty forever, so
+                // stream silence is not a fault for it; everything else must prove liveness within the deadline.
+                if (!firstParsed && !m_activateOnStream && (Stopwatch.GetTimestamp() > streamingDeadline)) {
                     // Initialized but never produced a parseable report (a stuck handshake, or a controller still
                     // on its simple 0x3F report). Fault so the manager prunes it and the rescan reopens and
                     // re-initializes it, instead of leaving a zombie that holds a player slot forever.
-                    throw new TimeoutException(message: $"{Type} did not begin streaming within {StreamingDeadlineTicks / Stopwatch.Frequency}s of init");
+                    throw new TimeoutException(message: $"{Type} did not begin streaming within {(StreamingDeadlineTicks / Stopwatch.Frequency)}s of init");
                 }
             }
         } catch (OperationCanceledException) {
@@ -183,7 +261,11 @@ internal sealed class GamepadDevice : IGamepadConnection {
             // Mark it faulted so the manager prunes it instead of leaving a zombie that replays stale state.
             m_faulted = true;
             m_output.Kill();
-            m_diagnostics?.Invoke($"[gamepad] {Type} read error: {exception.GetType().Name}: {exception.Message}");
+            // A timeout is the routine empty-slot/asleep-pad case — keep it terse. Anything else is unexpected,
+            // and an unexpected exception without its stack is a debugging session nobody can start.
+            m_diagnostics?.Invoke(((exception is TimeoutException)
+                ? $"[gamepad] {Type} read error: {exception.GetType().Name}: {exception.Message}"
+                : $"[gamepad] {Type} read error: {exception}"));
         }
     }
     private static int RemainingMilliseconds(long expiryTimestamp) {
@@ -281,6 +363,12 @@ internal sealed class GamepadDevice : IGamepadConnection {
         }
 
         m_cancellation.Dispose();
+
+        // Give a parser that holds device state a chance to restore it (e.g. a controller that was switched out of
+        // its built-in keyboard/mouse emulation on open) while the handle is still open, before the transport is
+        // torn down. The I/O loop has already stopped, so this cannot race a concurrent read/write.
+        (m_parser as IDisposable)?.Dispose();
+
         m_hid.Dispose();
     }
 }

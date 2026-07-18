@@ -1,0 +1,13 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Carve-bake gate sweep host: immediate present + automatic display pacing + armed timing so a single-process bench.sweep sdf.carve-bake=off,on scores honestly. Drive over stdin: bench.sweep sdf.carve-bake=off,on then quit.",
+    "host": {
+        "presentMode": "immediate",
+        "timing": true
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld"
+    }
+}

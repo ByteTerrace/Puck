@@ -25,11 +25,11 @@ public sealed class DirectXGpuVertexBuffer : IGpuVertexBuffer {
             StrideBytes = inner.StrideBytes,
         };
 
-        m_token = GCHandle.Alloc(view);
+        m_token = GCHandle.Alloc(value: view);
     }
 
     /// <inheritdoc/>
-    public nint BufferHandle => GCHandle.ToIntPtr(m_token);
+    public nint BufferHandle => GCHandle.ToIntPtr(value: m_token);
 
     /// <inheritdoc/>
     public void Dispose() {

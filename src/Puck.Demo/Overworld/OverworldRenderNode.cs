@@ -3,7 +3,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Demo.BindingBar;
-using Puck.Demo.DevConsole;
 using Puck.Hosting;
 using Puck.HumbleGamingBrick;
 using Puck.Input;
@@ -44,11 +43,22 @@ namespace Puck.Demo.Overworld;
 /// players keep their machines until they release with interact, exactly like any takeover.
 /// Every capture/driving hook is now an in-session console verb (the scripted-console control plane —
 /// <c>boot</c>/<c>cart</c>/<c>reveal</c>/<c>link</c>/<c>player.add</c>/<c>capture</c>/<c>step</c>/<c>state</c>), not an
-/// env var; a piped stdin script drives the whole run and reads the echoed results (the demo's <c>PUCK_*</c> surface
-/// was removed in the unification arc).
+/// environment switch; a piped stdin script drives the whole run and reads the echoed results.
 /// </summary>
 internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICreatorModeHost {
     private const float MirrorThreshold = 0.5f;
+    // The overworld cart-type index of the SHOWCASE cart (the pre-inserted RomPath cartridge) — see EnsureResources'
+    // cart-type map. Named here so the per-console ROM/save resolution reads intent rather than a bare 2.
+    private const int ShowcaseCartType = 2;
+    // The overworld cart-type index of the CRITTER-SWAP cart (the link-trading toy) — see EnsureResources' cart-type
+    // map. Named here so the load path's per-cabinet default-critter seeding reads intent rather than a bare 12.
+    private const int CritterSwapCartType = 12;
+    // The link-cable glow's decay: a serial-transfer sighting relights it to full and it eases out over this many
+    // produced frames, so brief back-to-back transfers read as a steady pulse instead of a flicker (presentation-only).
+    private const int LinkGlowDecayFrames = 20;
+    // How often (in produced frames) the linked-pair freeze diagnostic may narrate, so a persistent mismatch does not
+    // flood stderr.
+    private const int LinkedFreezeNarrationInterval = 120;
 
     private readonly IServiceProvider m_serviceProvider;
     // The console sources — a MUTABLE copy of the document's list (the document itself stays immutable). Read as an
@@ -71,16 +81,21 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     private int m_producedFrames;
     private readonly bool m_hostsOnDirectX;
     private readonly bool m_immersed;
-    // The document's world handle (OverworldNode.World, formerly the PUCK_OVERWORLD_WORLD env var): the saved world the
+    // The document's world handle (OverworldNode.World): the saved world the
     // overworld resolves + commits at boot so the room — and the immersed reveal's target — is that sculpted world, not
     // the bare default room. Null = the plain room (the default demo, byte-unchanged). Threaded to InstallScenario →
     // LoadBootWorld on the frame source. The live mid-session path is the world.load console verb.
     private readonly string? m_bootWorld;
-    // The FAR spawn cell (OverworldNode.Cell, formerly the PUCK_OVERWORLD_CELL env var): the whole room is placed at
+    // The far spawn cell (OverworldNode.Cell): the whole room is placed at
     // this cell on BOTH the X and Z axes to demonstrate the planet-scale coordinate path — the sim is cell-agnostic
     // (identical local motion) and the floating-origin render seam keeps it crisp. Null (the default) is the origin
     // cell (0), so the default demo is byte-unchanged.
     private readonly long m_spawnCell;
+    // The world render-scale quality tier NAME (OverworldNode.RevealedRenderScale) the run pins for the settled revealed
+    // room — a durable graphics option applied to the director at boot (SetRenderScaleTier). Kept as the raw string so
+    // THIS node (at its analyzer coupling ceiling) names no render-scale type; the frame source resolves the name → the
+    // director's float scale. Null (the default) leaves native / full resolution, so the default demo is byte-unchanged.
+    private readonly string? m_revealedRenderScale;
     // The WORLD-LENS immersed mode (the reshaped default "game"): every console runs the built-in world-lens cart
     // (peripheral "world") and players WALK the room (never seated/owned) while each pane mirrors its own player;
     // reaching the goal breaks the fourth wall. Distinct from the --rom immersed boot, where players are seated and
@@ -92,10 +107,21 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     );
     private OverworldWorld? m_world;
     private OverworldFrameSource? m_frameSource;
+    // The document's WASM-addon runtime (the sim-tick scripting seam), pre-built by the graph builder — null for a run
+    // that declares no addons (the default demo path is then byte-unchanged). Each addon owns an exclusive roster slot:
+    // the human pad sampler and the console roster reconcile SKIP addon-owned slots (m_addons.OwnsSlot), and each
+    // console-mode tick the runtime overwrites those slots' intent rows (m_addons.Apply) between the human fill and the
+    // world.Advance loop. The ONE addon type this node names — all scripting-type coupling lives behind it.
+    private readonly IAddonControlHost? m_addons;
     private BindingBarAdapter? m_bindingBarAdapter;
     private ScreenLayoutDirector? m_director;
-    private IPlayerIntentSource? m_intentSource;
+    private IIntentSource<PlayerIntent>? m_intentSource;
     private PagedInputBindings? m_pagedBindings;
+    // The whole assembled render host (already built and locally typed in EnsureResources as `render` — retaining
+    // it costs this node no NEW class coupling). Its RequestCapture routes to the outermost overlay decorator when
+    // one exists, else the bare producer, so `capture <png>` sees what the player sees without this node itself
+    // ever naming the overlay-capture interface (it sits at its CA1506 ceiling — see the analyzer-ceiling playbook).
+    private SdfWorldRender? m_render;
     private IRenderNode? m_root;
     private IRosterEventSource? m_rosterSource;
     private RouterIntentSource? m_routerSource;
@@ -103,6 +129,13 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     private GamingBrickPadService? m_padService;
     private OverworldBrickTimeline? m_timeline;
     private GamingBrickChildNode[] m_bricks = [];
+    // Fleet-stepping work units (SdfEngineNode.StepChildren's shape, mirrored here — machine-fleet-plan.md lever 7):
+    // one slot per unit ready to ExecuteStep this frame, either a solo brick (m_stepPartners[i] null) or a linked
+    // pair (m_stepPartners[i] is the primary's partner, stepped TOGETHER via ExecuteLinkedStep). Sized once to the
+    // cabinet count — an upper bound units can never exceed since each unit consumes at least one brick — and never
+    // resized, so a frozen unit index can never fall outside it.
+    private GamingBrickChildNode[] m_stepPrimaries = [];
+    private GamingBrickChildNode?[] m_stepPartners = [];
     private int[] m_choirLeaders = [];
     private ChoirState[] m_choirStates = [];
     // The cooperative META win watch (cabinets whose top-16 SRAM regions XOR to a shared target), built from the console
@@ -124,6 +157,25 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // ASSEMBLED (-1 = empty), so the per-frame reconcile can tell insert / eject / swap apart.
     private string?[] m_cartTypeSaves = [];
     private int[] m_consoleAssembledType = [];
+    // Per-console SHOWCASE (type 2) ROM images — each cabinet's OWN pre-inserted RomPath, honored over the shared
+    // showcase so two cabinets can each hold their own cartridge (the distinctness a two-cabinet link trade needs); a
+    // console with no RomPath falls back to the shared showcase ROM (m_cartTypeRoms[2]). Null slot = that console named
+    // no RomPath. Loaded eagerly in EnsureResources, pure-CPU. Parallel per-console save-slot suffixes
+    // (GamingBrickSource.SaveSlot, -1 = none) derive per-cabinet save paths so same-type/same-ROM cabinets keep
+    // distinct battery saves.
+    private byte[]?[] m_consoleShowcaseRoms = [];
+    private int[] m_consoleSaveSlots = [];
+    // The scripted-input driver behind the `press` verb lives in OverworldBrickTimeline (host-side driving only; the
+    // sim hash never sees it) — this node, at its analyzer coupling ceiling, reaches it exclusively through the
+    // timeline's primitive-typed Press* forwarders and never names the driver type.
+    // The produced-frame index the linked-pair FREEZE diagnostic last narrated on, PER PRIMARY console (sized lazily to
+    // the cabinet count), so a persistent segment-count mismatch (a would-be silent lockstep stall) narrates at most
+    // once per interval per pair instead of spamming stderr — and one frozen pair never mutes another's narration.
+    private int[] m_lastLinkedFreezeFrames = [];
+    // The link-cable GLOW decay (presentation-only whimsy): refreshed to full whenever either linked port has its serial
+    // transfer bit set after a step, and eased down each frame — so the diegetic cable lights up while a linked pair is
+    // exchanging bytes and fades when idle. Frames-remaining count; the frame source reads the normalized 0..1 intensity.
+    private int m_linkGlowFrames;
     // Console mode's per-player page adapters, indexed by player slot (created lazily as a slot becomes active;
     // slot 0 from frame 0). Empty outside the binding-page path.
     private OverworldPageInput?[] m_pageInputs = [];
@@ -146,9 +198,17 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // rejoining pad re-seats at its stand).
     private readonly bool[] m_immersedSeated = new bool[OverworldWorld.MaxPlayers];
     private GamepadManager? m_gamepadManager;
+    // The run's single-drainer mechanism (see InputArbiter): every gamepad sampler below — the pad service, the
+    // per-slot page adapters, the bare-room intent sources — reads through this instead of touching
+    // GamepadManager.Drain itself. Null only for a headless document with no gamepad service registered.
+    private IInputArbiter? m_arbiter;
     private int m_debugCaptureCounter;
     // The link verb's half-open cable: the console marked by the first Link press, awaiting a partner (-1 = none).
     private int m_pendingLinkConsole = -1;
+    // The cabinets whose completed serial transfers stream to stdout (the `serial.watch` verb), one bit per console
+    // index. Pure host observation: the observer is never serialized and the sim hash never learns it fires. Re-applied
+    // when a watched cabinet re-assembles (its old SerialComponent died with the swapped-out machine).
+    private uint m_serialWatchMask;
     private bool[] m_jumpHeldLastBySlot = new bool[OverworldWorld.MaxPlayers];
     private bool[] m_cycleHeldLastBySlot = new bool[OverworldWorld.MaxPlayers];
     private bool m_interactHeldLast;
@@ -173,7 +233,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // NEUTRAL commit generalizes that: `forge scene` (the creator's scene cart) and `tracker.forge` (the tune cart) queue
     // a commit of ANY forged subject type into m_commitSubjectMask — the node forges it and, avatar-style, installs it
     // into the authoring player's nearest cabinet. m_forgeCartsNeedMask holds the forged types a cabinet has WANTED but
-    // whose default has not been baked yet (the lazy first-forge, generalizing the old avatar-only flag). Both are
+    // whose default has not been baked yet. Both are
     // BITMASKS (bit c set == cart type c pending) so the node names no collection type at its analyzer coupling ceiling.
     // Start edge tracked for slot 0.
     private bool m_commitAvatarRequested;
@@ -183,7 +243,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // deterministic subject throw, or IGpuComputeServices unregistered) leaves its ROM slot null; without this,
     // AssignPendingCartridges would re-arm the need mask and re-run an SDF render+readback + a stderr line EVERY frame
     // until the player cart-cycles off. The bit makes a failed default retry at most once; a working GPU forges on the
-    // first try and a later successful commit fills the ROM slot, so the shipped default is byte-unchanged.
+    // first try and a later successful commit fills the ROM slot.
     private int m_forgeCartsAttemptedMask;
     private bool m_startHeldLast;
 
@@ -214,11 +274,19 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     /// <param name="spawnCell">The document's far spawn cell (<see cref="OverworldNode.Cell"/>): the whole room is
     /// placed at this cell on both the X and Z axes (the planet-scale coordinate-stability demo). Null (the default) is
     /// the origin cell.</param>
+    /// <param name="addons">The document's WASM-addon runtime (built from <c>document.Addons</c>): the sim-tick
+    /// scripting seam the node drives, each addon owning an exclusive roster slot. Null (the default) declares none —
+    /// the default demo path is then byte-unchanged.</param>
+    /// <param name="revealedRenderScale">The world render-scale quality tier name (<see cref="OverworldNode.RevealedRenderScale"/>)
+    /// applied to the director at boot — a named tier (<see cref="WorldRenderScaleTiers.Names"/>) that scales the settled
+    /// revealed room. Null (the default) leaves native / full resolution, so the default demo is byte-unchanged.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public OverworldRenderNode(IServiceProvider serviceProvider, IReadOnlyList<GamingBrickSource> consoles, IReadOnlyList<CartridgeSource> library, uint width, uint height, string? capturePath, bool hostsOnDirectX = false, bool immersed = false, string? bootWorld = null, long? spawnCell = null) {
+    public OverworldRenderNode(IServiceProvider serviceProvider, IReadOnlyList<GamingBrickSource> consoles, IReadOnlyList<CartridgeSource> library, uint width, uint height, string? capturePath, IAddonControlHost? addons = null, bool hostsOnDirectX = false, bool immersed = false, string? bootWorld = null, long? spawnCell = null, string? revealedRenderScale = null) {
         ArgumentNullException.ThrowIfNull(consoles);
         ArgumentNullException.ThrowIfNull(library);
         ArgumentNullException.ThrowIfNull(serviceProvider);
+
+        m_addons = addons;
 
         // A NATIVE AGB stand (GamingBrickSource.Native) hosts the real ARM7TDMI core, not the SM83 machinery: capture
         // its ROM to auto-boot the fullscreen AGB scene on the first frame, and hand the SM83 cabinet side a RomPath-less
@@ -243,6 +311,9 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         m_bootWorld = (string.IsNullOrWhiteSpace(value: bootWorld) ? null : bootWorld);
         // Normalize the nullable-optional cell at consumption (the add-a-field ritual): an omitted field is the origin.
         m_spawnCell = (spawnCell ?? 0L);
+        // The render-scale tier name (validated at parse; null = native). Applied to the director once the frame source
+        // is built (see BuildProgram) — kept as the raw string so this node names no render-scale type at its ceiling.
+        m_revealedRenderScale = revealedRenderScale;
         m_worldLens = (immersed && (consoles.Count > 0) && consoles.All(predicate: static c => string.Equals(a: c.Peripheral, b: "world", comparisonType: StringComparison.OrdinalIgnoreCase)));
         // The two console-mode binding-bar callbacks capture only instance state (m_contextIcons / m_pageInputs), so
         // cache them ONCE here instead of allocating a fresh closure+delegate each frame in AdvancePagedSlots' Publish.
@@ -272,6 +343,9 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     public OverworldFrameSource? CreatorFrameSource => m_frameSource;
 
     /// <inheritdoc/>
+    public IAddonControlHost? AddonControl => m_addons;
+
+    /// <inheritdoc/>
     public bool ToggleCreatorMode() {
         if (m_frameSource is null) {
             return false;
@@ -292,7 +366,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             return "[forge: enter creator mode first (console: creator), build a creation, then forge [avatar|scene]]";
         }
 
-        // The subject word chooses which cart the SAME creator creation forges into: `avatar` (default, back-compat) —
+        // The subject word chooses which cart the SAME creator creation forges into: `avatar` (default) —
         // the walker overworld written to disk under ./forged-avatars, exactly as before; `scene` — the SDF-art creature
         // cart forged + hot-swapped into the nearest cabinet in-session. Both bake the full puck.creation.v1 document.
         if (string.IsNullOrWhiteSpace(value: subject) || string.Equals(a: subject, b: "avatar", comparisonType: StringComparison.OrdinalIgnoreCase)) {
@@ -361,11 +435,56 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             : "[world] EXIT — the sculpted scene stays visible; world.save writes it, world (the verb) re-enters.");
     }
 
-    // The creating slot's authoring takeovers (creator / tracker / world-sculpt), extracted from the paged-slot loop
-    // for the CA1502 ceiling. Returns true when a takeover CONSUMED the slot's input this frame (the caller skips
+    // The creating slot's previous-frame raw button mask, carried for the workbench hub's own edge detection (the hub
+    // is not fed by the paged binding profile, so it cannot lean on OverworldPageInput.WasPressed). Refreshed every
+    // frame the creating slot is advanced, so an edge is always measured against the immediately prior frame.
+    private GamepadButtons m_hubButtonsLast;
+
+    // True on the RISING edge of a button (held this frame, not the last). The hub's edge detector — stateful by way of
+    // m_hubButtonsLast, never a stale global.
+    private static bool EdgePressed(GamepadButtons now, GamepadButtons last, GamepadButtons button) =>
+        ((0 != (now & button)) && (0 == (last & button)));
+
+    // The creating slot's authoring takeovers (hub / creator / tracker / world-sculpt), extracted from the paged-slot
+    // loop for the CA1502 ceiling. Returns true when a takeover CONSUMED the slot's input this frame (the caller skips
     // normal walking); world-sculpt returns false — the player keeps walking (they ARE the placement cursor) while
     // the sculptor consumes only the buttons/axes its chord pages bind.
     private bool AdvanceCreatingSlotTakeovers(in FrameContext context, ref GamepadButtons creatorButtons, PlayerIntent[] firstTickIntents, PlayerIntent[] heldIntents, GamingBrickPadService pads, in GamepadState raw, int slot) {
+        // The workbench authoring HUB owns the creating slot the instant it is up — checked FIRST, ahead of the creator
+        // hotkey and every mode takeover, exactly like a live creator/world surface. D-pad L/R cycle the highlighted
+        // mode, South enters it (the registry's Toggle*-from-off == Enter), East closes. Everything here names only
+        // m_frameSource, ForgeCommands, GamepadButtons, and this (all already coupled) — zero new node coupling.
+        if (m_frameSource is { HubActive: true }) {
+            var buttons = raw.Buttons;
+
+            if (EdgePressed(now: buttons, last: m_hubButtonsLast, button: GamepadButtons.DpadRight)) {
+                m_frameSource.AdvanceHubSelection(delta: 1, count: Puck.Demo.Forge.ForgeCommands.AuthoringModeCount);
+            }
+            if (EdgePressed(now: buttons, last: m_hubButtonsLast, button: GamepadButtons.DpadLeft)) {
+                m_frameSource.AdvanceHubSelection(delta: -1, count: Puck.Demo.Forge.ForgeCommands.AuthoringModeCount);
+            }
+            if (EdgePressed(now: buttons, last: m_hubButtonsLast, button: GamepadButtons.ButtonSouth)) {
+                var selection = m_frameSource.HubSelection;
+
+                m_frameSource.SetHubActive(active: false);
+                Console.Error.WriteLine(value: $"[hub] enter {Puck.Demo.Forge.ForgeCommands.AuthoringModeLabel(index: selection)}.");
+                Puck.Demo.Forge.ForgeCommands.ActivateAuthoringMode(host: this, index: selection);
+            } else if (EdgePressed(now: buttons, last: m_hubButtonsLast, button: GamepadButtons.ButtonEast)) {
+                m_frameSource.SetHubActive(active: false);
+                Console.Error.WriteLine(value: "[hub] closed.");
+            }
+
+            m_hubButtonsLast = buttons;
+            pads.PublishPlayerJoypad(playerIndex: slot, joypad: default);
+            creatorButtons = buttons;
+            heldIntents[slot] = PlayerIntent.None;
+            firstTickIntents[slot] = PlayerIntent.None;
+            m_jumpHeldLastBySlot[slot] = false;
+
+            return true;
+        }
+
+        m_hubButtonsLast = raw.Buttons;
         AdvanceCreatorHotkey(raw: in raw);
 
         // Creator mode: its controller edits SDF shapes instead of walking the room, its avatar freezes, and its
@@ -385,11 +504,20 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             return true;
         }
 
-        // Tracker mode: exactly like creator above (mutually exclusive — the toggles force-exit one another); the
-        // whole surface lives behind ForgeCommands' primitive-typed forwarders (never a Tracker.* type here). The
-        // console IS tracker's display, so there is no binding-bar publish branch.
-        if (Puck.Demo.Forge.ForgeCommands.TrackerAdvanceInput(services: m_serviceProvider, raw: in raw)) {
+        // Tracker mode: exactly like creator above (mutually exclusive — the toggles force-exit one another). The
+        // console stays tracker's detailed display, but it now also publishes an honest minimal bar (the dispatch's
+        // TrackerModeActive arm) so the mode is a real hub sibling and never leaves a stale bar frozen on screen.
+        var tracker = Puck.Demo.Forge.ForgeCommands.TrackerModeInstance(services: m_serviceProvider);
+
+        if (tracker.Active) {
+            tracker.AdvanceInput(raw: in raw);
+
+            if (tracker.ConsumeExitRequest()) {
+                Puck.Demo.Forge.ForgeCommands.TrackerSetActive(services: m_serviceProvider, active: false);
+            }
+
             pads.PublishPlayerJoypad(playerIndex: slot, joypad: default);
+            creatorButtons = raw.Buttons;
             heldIntents[slot] = PlayerIntent.None;
             firstTickIntents[slot] = PlayerIntent.None;
             m_jumpHeldLastBySlot[slot] = false;
@@ -464,13 +592,18 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     }
 
     /// <inheritdoc/>
-    public bool TryReadSdfPassTimings(out double beam, out double views, out double composite, out double frame) {
-        beam = 0.0;
-        views = 0.0;
-        composite = 0.0;
+    public bool TryReadSdfPassTimings(Span<double> passMilliseconds, out int passCount, out double frame) {
+        passCount = 0;
         frame = 0.0;
 
-        return (m_producer?.TryReadPassTimings(beam: out beam, composite: out composite, frame: out frame, views: out views) ?? false);
+        return (m_producer?.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out passCount, frame: out frame) ?? false);
+    }
+
+    /// <inheritdoc/>
+    public bool TryReadSdfCadenceDiagnostics(out SdfCadenceDiagnostics diagnostics) {
+        diagnostics = default;
+
+        return (m_producer?.TryReadCadenceDiagnostics(out diagnostics) ?? false);
     }
 
     // Enters/leaves SDF-DEBUG mode on the frame source — the fullscreen single-shape debug tool, the FOURTH creating-
@@ -586,13 +719,12 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             service.SetJoypad(buttons: (m_padService?.SampleSharedStream(frameKey: context.RenderTicks) ?? default));
             service.ProduceFrame(context: in context);
             frameSource.SetAgbDebugScreen(active: true, handle: service.ViewHandle, glow: service.Glow);
-        }
-        else if (frameSource.AgbDebugActive) {
+        } else if (frameSource.AgbDebugActive) {
             frameSource.SetAgbDebugScreen(active: false, handle: 0, glow: Vector3.Zero);
         }
     }
 
-    // THE GATED WORKBENCH ENTRY (Stage 3 of the self-editing arc): the DIEGETIC door into world-sculpt. Once the editor
+    // The gated workbench entry is the diegetic door into world-sculpt. Once the editor
     // reveal has LIT the workbench (OverworldFrameSource.EditorRevealed), the creating slot's player walking up to it and
     // pressing North (the same interact edge cabinets boot on) ENTERS world-sculpt — matching the narration "you can
     // shape this world." While the workbench is DARK (locked), interact prints a one-line hint and does nothing. This is
@@ -606,9 +738,12 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             return;
         }
 
-        if (m_frameSource is { EditorRevealed: true, WorldSculptActive: false }) {
-            SetWorldSculptMode(active: true);
-            Console.Error.WriteLine(value: "[workbench] the terminal is live — world-sculpt is open. Walk to aim the ghost; South places. (Left bumper / the `world` verb exits.)");
+        if (m_frameSource is { EditorRevealed: true, HubActive: false, WorldSculptActive: false }) {
+            // The lit workbench is now a HUB door, not a straight shot to world-sculpt: which authoring surface you land
+            // in is a hub choice. The hub opens highlighting WORLD. Routed through m_frameSource (already coupled) —
+            // zero new node coupling.
+            m_frameSource.SetHubActive(active: true);
+            Console.Error.WriteLine(value: "[workbench] the terminal is live — the authoring hub is open. D-pad left/right picks a mode (WORLD / SCULPT / TRACKER), South enters it, East closes.");
         } else if (m_frameSource is { EditorRevealed: false }) {
             Console.Error.WriteLine(value: "[workbench] the terminal is dark — complete the arcade (or `reveal editor`) to open the workshop.");
         }
@@ -780,7 +915,11 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
         // The diegetic camera feeds + the procedural face feed (a live GPU device here) — composed inside the frame
         // source too, so this node names no feed type. Renders the previous frame's planned feeds (the diegetic lag).
+        var frameTimingTickFeedsStart = OverworldFrameTiming.Mark();
+
         m_frameSource?.TickFeeds(context: in context);
+
+        var frameTimingTickFeedsTicks = OverworldFrameTiming.Elapsed(start: frameTimingTickFeedsStart);
 
         // The tracker's headless "hear it" preview: one machine frame per rendered frame while playing, exactly like
         // a booted cabinet's own PumpAudio cadence — behind ForgeCommands so this node stays coupling-flat.
@@ -793,19 +932,19 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
         // The scripted-console control plane (IOverworldControlHost, implemented on the frame source — the render node
         // is at its analyzer coupling ceiling): push this frame's produced-frame count / immersed / revealed scalars
-        // to the host, then drain the node-only requests the verbs queued (reveal, link, capture) — each routes through
-        // the SAME machinery its former PUCK_* hook / debug bind used.
+        // to the host, then drain the node-only requests the verbs queued (reveal, link, capture).
         DrainControlRequests();
 
         // The scenario harness (settle-then-capture, completion-driven): advance the frame source's per-angle state
         // machine one produced frame (settle timing only — it never touches a rendered value; it also holds THIS frame's
-        // verbatim shot pose). When it returns a path, the active shot has settled — arm the producer's one-shot readback
-        // (written this same produced frame, since the frame source's CaptureFrame runs inside m_root.ProduceFrame
-        // below). Once every shot is written, request a GRACEFUL shutdown exactly once — the completion-driven exit; the
-        // scenario's ExitAfterSeconds is only a safety net that reports a loud short-count if it ever races ahead.
+        // verbatim shot pose). When it returns a path, the active shot has settled — arm the outermost node's one-shot
+        // readback (written this same produced frame, since the frame source's CaptureFrame runs inside m_root.ProduceFrame
+        // below, and every node in the chain is produced within that one call). Once every shot is written, request a
+        // GRACEFUL shutdown exactly once — the completion-driven exit; the scenario's ExitAfterSeconds is only a safety
+        // net that reports a loud short-count if it ever races ahead.
         if (m_scenarioActive && (m_frameSource is { } scenarioSource)) {
             if (scenarioSource.ScenarioTick(deltaSeconds: (float)context.DeltaSeconds) is { } armPath) {
-                m_producer?.RequestCapture(path: armPath);
+                RequestCaptureOnOutermostNode(path: armPath);
             }
 
             if (scenarioSource.ScenarioComplete && !m_scenarioExitRequested) {
@@ -824,7 +963,11 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         ApplyWorldRevealIfRequested();
         ApplyEditorRevealIfRequested();
 
+        var frameTimingAdvanceSimulationStart = OverworldFrameTiming.Mark();
+
         AdvanceSimulation(context: in context);
+
+        var frameTimingAdvanceSimulationTicks = OverworldFrameTiming.Elapsed(start: frameTimingAdvanceSimulationStart);
 
         // The machines are decoupled from the compositor slots, so THIS node steps + uploads them each frame (before
         // the SDF render reads their framebuffers for the diegetic screens). One serial pass — four machines is well
@@ -837,8 +980,24 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             Console.Error.WriteLine(value: ToggleAgbDebugMode(romPath: agbBootRom));
         }
 
+        var frameTimingProduceMachinesStart = OverworldFrameTiming.Mark();
+
         ProduceMachines(context: in context);
+
+        var frameTimingProduceMachinesTicks = OverworldFrameTiming.Elapsed(start: frameTimingProduceMachinesStart);
+
         ProduceAgbDebug(context: in context);
+
+        if (OverworldFrameTiming.Enabled) {
+            OverworldFrameTiming.Report(
+                advanceSimulationTicks: frameTimingAdvanceSimulationTicks,
+                bootedCount: CountBootedCabinets(),
+                cabinetCount: m_bricks.Length,
+                produceMachinesTicks: frameTimingProduceMachinesTicks,
+                producedFrames: (ulong)m_producedFrames,
+                tickFeedsTicks: frameTimingTickFeedsTicks
+            );
+        }
 
         // The room-level meta (cooperative XOR) win, polled after the machines stepped this frame. Immersed only — the
         // reveal is the fourth-wall break, exactly like the exit/solo triggers that also only fire in immersed mode.
@@ -850,10 +1009,30 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // GPU ms and the render info its report names, BEFORE this frame's CaptureFrame (so a config change this step
         // rebuilds the program to the new workload this same frame). The node owns the producer's timings; the frame
         // source stays coupling-flat behind AdvanceSdfBench. No new type is named here.
-        if (m_frameSource is { } benchSource && benchSource.SdfBenchRunning) {
-            var hasTimings = TryReadSdfPassTimings(beam: out var beam, views: out var views, composite: out var composite, frame: out var frame);
+        if ((m_frameSource is { } benchSource) && benchSource.SdfBenchRunning) {
+            Span<double> passMilliseconds = stackalloc double[SdfEngineNode.PassTimingCount];
+            var hasTimings = TryReadSdfPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frame);
+            // The bench keeps its FIXED four columns (frame + beam/views/composite) so the ladder tables stay comparable
+            // run to run; a pass added to PassTimingLabels surfaces in sdf.info / [world-timing] but not as a new column.
+            // The "beam" column FOLDS IN the instance-mask pass (split out of the beam kernel for occupancy), so the
+            // column covers everything between frame start and views.
+            // Resolved through SdfEngineNode (already coupled) so the node stays under its CA1506 class-coupling ceiling.
+            var beam = (SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "beam")
+                + SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "mask"));
+            var views = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "views");
+            var composite = SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "composite");
 
             benchSource.AdvanceSdfBench(hasTimings: hasTimings, beam: beam, views: views, composite: composite, frame: frame, width: m_width, height: m_height, backendIsDirectX: m_hostsOnDirectX);
+        }
+
+        // The REVEALED-ROOM fixed-camera perf bench (room.bench, async, per-frame): while a run is in flight, feed it
+        // the PREVIOUS frame's per-pass GPU ms — no program-swap coupling here, it measures the room exactly as it
+        // already renders. See RoomBenchScene; the frame source stays coupling-flat behind AdvanceRoomBench.
+        if ((m_frameSource is { } roomBenchSource) && roomBenchSource.RoomBenchRunning) {
+            Span<double> roomBenchPassMilliseconds = stackalloc double[SdfEngineNode.PassTimingCount];
+            var roomBenchHasTimings = TryReadSdfPassTimings(passMilliseconds: roomBenchPassMilliseconds, passCount: out var roomBenchPassCount, frame: out var roomBenchFrame);
+
+            roomBenchSource.AdvanceRoomBench(hasTimings: roomBenchHasTimings, passMilliseconds: roomBenchPassMilliseconds, passCount: roomBenchPassCount, frame: roomBenchFrame, backendIsDirectX: m_hostsOnDirectX);
         }
 
         return m_root!.ProduceFrame(context: in context);
@@ -872,26 +1051,238 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             TargetWidth = GamingBrickChildNode.NativeScreenWidth,
         });
 
-        // Linked pairs first: both cabinets stage this frame's inputs, then the pair advances TOGETHER through the
-        // shared link session (one budget, deterministic instruction interleave) — a linked pair is ONE step unit,
-        // exactly the shape the parallel fleet split needs. Their ProduceFrame below then sees the prepared/executed
-        // flags and performs only the GPU work; unlinked bricks keep the classic inline path.
-        foreach (var brick in m_bricks) {
-            if (brick.IsLinkPrimary && (brick.LinkPartner is { } partner)) {
-                var primaryPending = brick.PrepareStep(context: in machineContext);
-                var partnerPending = partner.PrepareStep(context: in machineContext);
-
-                if (primaryPending && partnerPending) {
-                    brick.ExecuteLinkedStep(partner: partner);
-                }
-            }
+        // Scripted-input driving (the `press` verb): publish this frame's budget so a tape emits one frame-budget slice
+        // (a linked primary's slice then sets the pair's budget), and keep any scripted cabinet pinned at the shared
+        // timeline head — a takeover's off-stream posture — so it seats at the head the moment its tape ends.
+        if (m_timeline is { } pressTimeline) {
+            pressTimeline.PressSetDeltaTicks(ticks: machineContext.DeltaTicks);
+            PinScriptedConsolesAtHead(pressTimeline: pressTimeline);
         }
+
+        StepMachines(machineContext: in machineContext);
 
         foreach (var brick in m_bricks) {
             _ = brick.ProduceFrame(context: in machineContext);
         }
+
+        // Every cabinet above has now folded its motor line into the pad service's per-device aggregate
+        // (ForwardMotorToHaptics → GamingBrickPadService.ReportMotor); this is the one point per produced frame
+        // where every cabinet is known to have reported, so it is the honest place to send the mixed result — H-08's
+        // fix, closing the loop FlushMotorHaptics documents (max-mix, one command per device, decay-driven refresh).
+        m_padService?.FlushMotorHaptics();
+
+        // A press tape that reached its end this frame seats its cabinet back at the timeline head and echoes; then the
+        // presentation-only link-cable glow refreshes from the linked ports' live transfer state.
+        FinishCompletedPressScripts();
+        UpdateLinkGlow();
     }
 
+    // Fleet stepping, task-per-unit (mirrors SdfEngineNode.StepChildren — machine-fleet-plan.md lever 7). The split
+    // enforces the SAME timeline-access rule: PrepareStep runs SERIALLY here on the render thread (a SegmentSource
+    // fill advances a shared-timeline cursor and the pad service is a shared drainer, neither may run concurrently),
+    // then ExecuteStep/ExecuteLinkedStep — the emulation itself — fans out one task per independent unit. Linked
+    // pairs first: both cabinets stage this frame's inputs, then the pair advances TOGETHER through the shared link
+    // session (one budget, deterministic instruction interleave) — a linked pair is ONE unit, never split across
+    // tasks (the session itself is not thread-safe). A pair that cannot advance this frame (not exactly one staged
+    // segment each, or only ONE end pending — the ends' cursors already moved, so the pending end's staged segment is
+    // dropped) narrates rather than stalling silently (the report's seam #2). Unlinked bricks each stage their own
+    // unit. Units share no state once prepared, and Parallel.For is a barrier, so every unit's output is staged
+    // before ProduceFrame's serial GPU pass below reads it — GPU submission order is unchanged and never depends on
+    // task scheduling. A single ready unit just runs inline — no point paying the fork.
+    private void StepMachines(in FrameContext machineContext) {
+        var ready = 0;
+
+        for (var console = 0; (console < m_bricks.Length); console++) {
+            var brick = m_bricks[console];
+
+            if (brick.IsLinkPrimary && (brick.LinkPartner is { } partner)) {
+                var primaryPending = brick.PrepareStep(context: in machineContext);
+                var partnerPending = partner.PrepareStep(context: in machineContext);
+
+                if (primaryPending && partnerPending && (brick.PendingSegmentCount == 1) && (partner.PendingSegmentCount == 1)) {
+                    ready = StageStepUnit(primary: brick, partner: partner, ready: ready);
+                } else if (primaryPending || partnerPending) {
+                    NarrateLinkedFreeze(primaryConsole: console, primary: brick, partner: partner);
+                }
+            } else if (!brick.IsLinked && brick.PrepareStep(context: in machineContext)) {
+                ready = StageStepUnit(primary: brick, partner: null, ready: ready);
+            }
+        }
+
+        if (ready == 1) {
+            ExecuteStepUnit(index: 0);
+        } else if (ready > 1) {
+            Parallel.For(fromInclusive: 0, toExclusive: ready, body: ExecuteStepUnit);
+        }
+    }
+    private int StageStepUnit(GamingBrickChildNode primary, GamingBrickChildNode? partner, int ready) {
+        if (m_stepPrimaries.Length < m_bricks.Length) {
+            m_stepPrimaries = new GamingBrickChildNode[m_bricks.Length];
+            m_stepPartners = new GamingBrickChildNode?[m_bricks.Length];
+        }
+
+        m_stepPrimaries[ready] = primary;
+        m_stepPartners[ready] = partner;
+
+        return (ready + 1);
+    }
+
+    // The parallel half's task body: a solo brick's own ExecuteStep, or a linked pair's ONE shared ExecuteLinkedStep
+    // (called once, on the primary, exactly as the prior inline path did).
+    private void ExecuteStepUnit(int index) {
+        if (m_stepPartners[index] is { } partner) {
+            m_stepPrimaries[index].ExecuteLinkedStep(partner: partner);
+        } else {
+            m_stepPrimaries[index].ExecuteStep();
+        }
+    }
+
+    // [frame-timing]'s "booted N/M" readout — how many of the room's cabinets are actually powered on this frame, not
+    // just present. Bare-room mode (no consoles, m_world unbuilt) never reaches this (ProduceMachines returns early
+    // when m_bricks is empty), but the null-conditional keeps it correct-by-construction regardless.
+    private int CountBootedCabinets() {
+        var booted = 0;
+
+        for (var console = 0; (console < m_bricks.Length); console++) {
+            if (m_world?.IsBooted(consoleIndex: console) == true) {
+                booted++;
+            }
+        }
+
+        return booted;
+    }
+
+    // Loads each cabinet's OWN pre-inserted RomPath as its showcase (type 2) ROM image, and caches its SaveSlot suffix —
+    // so two cabinets can each hold their own cartridge with distinct battery saves (the general (console, type)
+    // save/ROM distinctness a link trade and the critter-swap cart ride). A console with no RomPath keeps a null slot
+    // (it falls back to the shared showcase ROM), a null SaveSlot keeps the shared-per-type save. Isolated from
+    // EnsureResources for that method's coupling ceiling; eager + pure-CPU like every other cart load.
+    // Sources the shared SHOWCASE cart (type 2) from the first console's pre-inserted romPath. A missing file DEGRADES
+    // (the slot stays null and the cabinet refuses to load it, exactly as the cart-type comment promises) — narrated,
+    // never a crash. Extracted so EnsureResources, at its method coupling ceiling, carries none of this block's
+    // coupling.
+    private void SourceShowcaseCart() {
+        var showcaseRom = m_consoles.Select(selector: static c => c.RomPath).FirstOrDefault(predicate: static p => (p is not null));
+
+        if (showcaseRom is null) {
+            return;
+        }
+
+        if (File.Exists(path: showcaseRom)) {
+            m_cartTypeRoms[2] = File.ReadAllBytes(path: showcaseRom);
+            m_cartTypeSaves[2] = $"{showcaseRom}.sav";
+        } else {
+            Console.Error.WriteLine(value: $"[overworld] showcase romPath '{showcaseRom}' not found — the showcase cart slot stays empty.");
+        }
+    }
+    private void LoadPerConsoleShowcaseRoms() {
+        m_consoleShowcaseRoms = new byte[]?[m_consoles.Count];
+        m_consoleSaveSlots = new int[m_consoles.Count];
+
+        for (var index = 0; (index < m_consoles.Count); index++) {
+            m_consoleSaveSlots[index] = (m_consoles[index].SaveSlot ?? -1);
+
+            // A missing pre-inserted cartridge DEGRADES (the document doctrine: validate bounds, degrade at
+            // consumption) — the cabinet falls back to the shared showcase cart with a narration, never a crash.
+            if (m_consoles[index].RomPath is { } consoleRom) {
+                if (File.Exists(path: consoleRom)) {
+                    m_consoleShowcaseRoms[index] = File.ReadAllBytes(path: consoleRom);
+                } else {
+                    Console.Error.WriteLine(value: $"[overworld] console {index}: pre-inserted romPath '{consoleRom}' not found — the cabinet falls back to the shared showcase cart.");
+                }
+            }
+        }
+    }
+
+    // Keeps every scripted cabinet's shared-timeline cursor at the head while a press tape drives it — the off-stream
+    // posture a takeover holds — so on completion the cabinet seats at the head (ReleaseConsole's contract) and the
+    // timeline keeps trimming its consumed prefix. The tape feeds the input; this only advances the (unused-while-
+    // scripted) cursor.
+    private void PinScriptedConsolesAtHead(OverworldBrickTimeline pressTimeline) {
+        for (var console = 0; (console < m_bricks.Length); console++) {
+            if (pressTimeline.PressIsScripted(console: console)) {
+                pressTimeline.SkipToHead(consoleIndex: console);
+            }
+        }
+    }
+
+    // Finalizes any press tape that reached its end this frame: seat the cabinet at the shared timeline head and restore
+    // its prior input source — null for an OWNED cabinet (pad-driven), the timeline fill otherwise — mirroring
+    // ReleaseConsole, then echo completion to STDOUT so a piped agent sees the tape finish.
+    private void FinishCompletedPressScripts() {
+        if (m_timeline is not { } pressTimeline) {
+            return;
+        }
+
+        for (var console = 0; (console < m_bricks.Length); console++) {
+            var length = pressTimeline.PressLengthOf(console: console);
+
+            if (!pressTimeline.PressTryTakeCompleted(console: console)) {
+                continue;
+            }
+
+            m_timeline!.SkipToHead(consoleIndex: console);
+            m_bricks[console].SegmentSource = ((m_consoleOwner[console] >= 0) ? null : TimelineFillFor(consoleIndex: console));
+            Console.Out.WriteLine(value: $"[press] console {console}: script complete ({length} frame(s)) — seated at the shared timeline head.");
+        }
+    }
+
+    // The would-be-SILENT linked-pair freeze (the report's seam #2): the pair cannot advance in lockstep this frame —
+    // the ends staged unequal segment counts (a fast-forwarding late boot draining history, a paused stream), or only
+    // ONE end had pending work at all (its staged segment is dropped: the cursor already advanced and next frame's
+    // prepare overwrites the stage). Narrate it — rate-limited PER PAIR so two simultaneously-frozen pairs each get
+    // their own line — instead of stalling invisibly. Diagnostic only; the ordinals come from each end's
+    // partner-ordinal (a brick exposes its partner's, not its own).
+    private void NarrateLinkedFreeze(int primaryConsole, GamingBrickChildNode primary, GamingBrickChildNode partner) {
+        if (m_lastLinkedFreezeFrames.Length != m_bricks.Length) {
+            m_lastLinkedFreezeFrames = new int[m_bricks.Length];
+            Array.Fill(array: m_lastLinkedFreezeFrames, value: int.MinValue);
+        }
+
+        if ((m_producedFrames - m_lastLinkedFreezeFrames[primaryConsole]) < LinkedFreezeNarrationInterval) {
+            return;
+        }
+
+        m_lastLinkedFreezeFrames[primaryConsole] = m_producedFrames;
+        Console.Error.WriteLine(value: $"[link] pair {partner.LinkPartnerOrdinal}↔{primary.LinkPartnerOrdinal} cannot step this frame — staged {primary.PendingSegmentCount}+{partner.PendingSegmentCount} segments (a linked pair advances only when BOTH stage exactly one; a lone staged segment is dropped). One end is fast-forwarding, paused, or unpowered; the pair holds until both converge.");
+    }
+
+    // Refreshes the presentation-only link-cable glow: while EITHER end of a linked pair has a serial transfer in flight
+    // (SC bit 7 set after this frame's step), relight to full; otherwise ease down. A pure read of emulated state — the
+    // simulation hash never learns it is polled.
+    private void UpdateLinkGlow() {
+        var transferring = false;
+
+        for (var index = 0; (index < m_bricks.Length); index++) {
+            if (m_bricks[index].IsLinked && m_bricks[index].SerialTransferActive) {
+                transferring = true;
+
+                break;
+            }
+        }
+
+        if (transferring) {
+            m_linkGlowFrames = LinkGlowDecayFrames;
+        } else if (m_linkGlowFrames > 0) {
+            --m_linkGlowFrames;
+        }
+    }
+
+    // Per-console GamingBrickSource.StartCart overrides (rank 32), range-clamped HERE (0..CartTypeCount-1) since
+    // Puck.Scene cannot see CartTypeCount — an out-of-range or absent value becomes -1 ("no override"), the same
+    // sentinel the single global startCartType already uses. Extracted to its own method (rather than inlined into
+    // EnsureResources) so that already near its own CA1506 method-coupling budget gains no further reference here.
+    private int[] PerConsoleStartCartOverrides() {
+        var overrides = new int[m_consoles.Count];
+
+        for (var index = 0; (index < m_consoles.Count); index++) {
+            var startCart = (m_consoles[index].StartCart ?? -1);
+
+            overrides[index] = (((startCart >= 0) && (startCart < OverworldWorld.CartTypeCount)) ? startCart : -1);
+        }
+
+        return overrides;
+    }
     private void EnsureResources(in FrameContext context) {
         if (m_world is not null) {
             return;
@@ -906,23 +1297,18 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
         // The cartridge TYPES a cabinet can hold, in cycle order: 0 = WORLD-LENS (a real ROM that reads a work-RAM sensor
         // page and mirrors the room it sits in — the world→machine membrane, fed the room player each frame; see
-        // OverworldWorldLens), 1 = CAMERA (the Pocket Camera viewfinder, driven by the PC webcam), 2 = the SHOWCASE ROM
+        // OverworldWorldLens), 1 = CAMERA (the camera cartridge viewfinder, driven by the PC webcam), 2 = the SHOWCASE ROM
         // (the pre-inserted cartridge; a missing showcase leaves that slot null and the cabinet refuses to load it),
-        // 4/5/6/7/8 = the five framework games (VOLLEY / BRICKFALL / CHROMA / SOLITAIRE / POKER). Types 3 (AVATAR walker),
+        // 4/5/6/7/8 = the five framework games (VOLLEY / BRICKFALL / CHROMA / SOLITAIRE / POKER), 11 = ORACLE (a sixth,
+        // spare framework game — a text-only fortune cart, pure-CPU, no GPU title bake). Types 3 (AVATAR walker),
         // 9 (JUKEBOX tune) and 10 (SDF-ART SCENE) are the three in-session FORGED subjects — baked LAZILY the first time a
         // cabinet wants one (see AssignPendingCartridges + TryHandleForgeWork), so those three slots stay NULL here. All
         // the rest are sourced pure-CPU, eagerly.
-        var showcaseRom = m_consoles.Select(selector: static c => c.RomPath).FirstOrDefault(predicate: static p => p is not null);
-
         m_cartTypeRoms = new byte[]?[OverworldWorld.CartTypeCount];
         m_cartTypeSaves = new string?[OverworldWorld.CartTypeCount];
         m_cartTypeRoms[0] = BuildWorldLensCartRom(context: in context);
         m_cartTypeRoms[1] = Puck.Demo.Forge.CameraRom.Build(title: "PUCKCAM");
-
-        if (showcaseRom is not null) {
-            m_cartTypeRoms[2] = File.ReadAllBytes(path: showcaseRom);
-            m_cartTypeSaves[2] = $"{showcaseRom}.sav";
-        }
+        SourceShowcaseCart();
 
         // Types 4–8: the five five-star framework games — genuine SM83 ROMs assembled eagerly beside the camera cart.
         // Self-contained games with no host feed; cycle to them at any cabinet. Each SDF-bakes its title screen on the
@@ -933,6 +1319,17 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         m_cartTypeRoms[6] = BuildChromaCartRom(context: in context);
         m_cartTypeRoms[7] = BuildSolitaireCartRom(context: in context);
         m_cartTypeRoms[8] = BuildPokerCartRom(context: in context);
+
+        // Type 11: ORACLE — a spare, pure-CPU framework game (no GPU title bake, no battery); eagerly sourced like the
+        // other games, so a cabinet can Cycle to it and boot it.
+        m_cartTypeRoms[11] = BuildOracleCartRom(context: in context);
+
+        // Type 12: CRITTER-SWAP — a pure-CPU, battery-backed link-trading toy (no GPU title bake); eagerly sourced. Two
+        // cabinets Cycled to it and linked swap their held critters over the cable. Its battery save is per-(console,
+        // slot) like the games (each cabinet's SaveSlot derives a distinct path), and the load path seeds a DISTINCT
+        // starting critter into each cabinet's save (see AssignPendingCartridges) so a fresh pair holds different critters.
+        m_cartTypeRoms[12] = BuildCritterSwapCartRom(context: in context);
+        m_cartTypeSaves[12] = PrepareCritterSwapSavePath();
 
         // All five are battery-backed (their high-score tables live in cartridge SRAM); persist them beside the
         // demo's other local state (the bindings profile store's %LOCALAPPDATA%\Puck\Demo convention).
@@ -945,6 +1342,11 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         m_consoleAssembledType = new int[m_consoles.Count];
         Array.Fill(array: m_consoleAssembledType, value: -1);
 
+        // Honor each console's OWN pre-inserted RomPath for the showcase cart + cache its save slot (a helper so
+        // EnsureResources, at its method coupling ceiling, names no extra type) — the general (console, type) save/ROM
+        // distinctness a link trade and the critter-swap cart ride.
+        LoadPerConsoleShowcaseRoms();
+
         // The overworld opens with EMPTY cabinets (insert a cart to bring one alive); an immersed boot starts every cabinet
         // loaded — the WORLD-LENS default with cart type 0 (each player opens inside their own lens on the room), the
         // --rom boot with the showcase cart (each player opens inside the running game). spawnAtConsoles seats immersed
@@ -953,37 +1355,48 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // default starts EMPTY and boots cabinet i when player i joins (seating-boot), so the number of lens panes
         // tracks the number of players — each player boots their OWN instance. startCartType 0 makes the seating-boot
         // insert the world-lens cart (the built-in world-lens membrane).
-        m_world = new OverworldWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u, spawnAtConsoles: m_immersed, spawnCellX: farCell, spawnCellZ: farCell, startLoaded: (m_immersed && !m_worldLens), startCartType: (m_worldLens ? 0 : -1));
+        m_world = new OverworldWorld(room: room, tuning: PlatformerTuning.Default, tickSeconds: tickSeconds, seed: 1u, spawnAtConsoles: m_immersed, spawnCellX: farCell, spawnCellZ: farCell, startLoaded: (m_immersed && !m_worldLens), startCartType: (m_worldLens ? 0 : -1), perConsoleStartCartType: PerConsoleStartCartOverrides());
+
+        // The run's single-drainer mechanism (see the field doc) — resolved once, ahead of the console/bare-room
+        // split, since every branch below reads through it rather than GamepadManager.Drain directly.
+        m_arbiter = (m_serviceProvider.GetService(serviceType: typeof(IInputArbiter)) as IInputArbiter);
 
         if (m_consoles.Count > 0) {
             // Console mode: ONE permanent room player from the first frame (the room is never empty), driven through
-            // the shared pad-routing service — the run's sole gamepad drainer, shared with the brick panes it also
+            // the shared pad-routing service — sampled through the arbiter, shared with the brick panes it also
             // feeds. Additional connected pads join as players 1..N each frame (UpdateConsoleRoster).
             _ = m_world.AddPlayer(playerId: RoomPlayerId());
             m_gamepadManager = (m_serviceProvider.GetService(serviceType: typeof(GamepadManager)) as GamepadManager);
             m_padService = (m_serviceProvider.GetService(serviceType: typeof(GamingBrickPadService)) as GamingBrickPadService);
+            // The timeline also owns the `press` verb's scripted-input driver (one tape slot per cabinet) — this node,
+            // at its coupling ceiling, reaches it only through the timeline's primitive-typed Press* forwarders.
             m_timeline = new OverworldBrickTimeline(consoleCount: m_consoles.Count);
             // The takeover maps start all-unowned: every brick rides the shared timeline until a player claims it.
             m_consoleOwner = new int[m_consoles.Count];
             m_slotConsole = new int[OverworldWorld.MaxPlayers];
             Array.Fill(array: m_consoleOwner, value: -1);
             Array.Fill(array: m_slotConsole, value: -1);
-            // The binding-page system rides console mode too: the pad service stays the sole drainer and one page
-            // adapter PER PLAYER SLOT replays that player's state into the paged resolver (jump/interact/context +
-            // the debug pages). Slot 0 exists from frame 0; later slots are created as their pads join.
+            // The binding-page system rides console mode too: one page adapter PER PLAYER SLOT holds its own
+            // arbiter lane and replays that player's state into the paged resolver (jump/interact/context + the
+            // debug pages). Slot 0 exists from frame 0; later slots are created as their pads join.
             m_pagedBindings = (m_serviceProvider.GetService(serviceType: typeof(PagedInputBindings)) as PagedInputBindings);
 
-            if (m_pagedBindings is not null) {
+            if ((m_pagedBindings is not null) && (m_arbiter is not null)) {
                 m_pageInputs = new OverworldPageInput?[OverworldWorld.MaxPlayers];
-                m_pageInputs[0] = new OverworldPageInput(bindings: m_pagedBindings, slot: 0);
+                m_pageInputs[0] = new OverworldPageInput(arbiter: m_arbiter, bindings: m_pagedBindings, slot: 0);
             }
         } else if (m_serviceProvider.GetService(serviceType: typeof(GamepadManager)) is GamepadManager manager) {
             // Live bare-room: controllers join/leave at runtime; each binds to a player and drives it per-device. Input
             // flows through the engine's deterministic router (RouterIntentSource) when the capture clock is
-            // available; LocalIntentSource (the direct manager drain) remains the fallback.
+            // available; LocalIntentSource (the arbiter-drained per-device route) remains the fallback.
             var registry = new ControllerPlayerRegistry();
 
-            if (m_serviceProvider.GetService(serviceType: typeof(IInputClock)) is IInputClock clock) {
+            if (m_arbiter is null) {
+                // No arbiter registered (should not happen given AddDemoGamepad's unconditional registration) — an
+                // empty room (overview camera) rather than a null-reference crash, matching the no-gamepad-service
+                // fallback below.
+                m_intentSource = new ScriptedIntentSource<PlayerIntent>(script: static (_, _) => PlayerIntent.None);
+            } else if (m_serviceProvider.GetService(serviceType: typeof(IInputClock)) is IInputClock clock) {
                 // The loaded binding-page profile layers over the engine default (sticks stay always-bound in
                 // the fallback); without one the default table alone keeps move/jump/interact working.
                 m_pagedBindings = (m_serviceProvider.GetService(serviceType: typeof(PagedInputBindings)) as PagedInputBindings);
@@ -992,16 +1405,16 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                     ? new LayeredInputBindings(Fallback: OverworldInput.DefaultBindings, Primary: m_pagedBindings)
                     : null);
 
-                m_routerSource = new RouterIntentSource(bindings: bindings, clock: clock, manager: manager, registry: registry, world: m_world);
+                m_routerSource = new RouterIntentSource(arbiter: m_arbiter, bindings: bindings, clock: clock, registry: registry, world: m_world);
                 m_intentSource = m_routerSource;
             } else {
-                m_intentSource = new LocalIntentSource(manager: manager, registry: registry, world: m_world);
+                m_intentSource = new LocalIntentSource(arbiter: m_arbiter, registry: registry, world: m_world);
             }
 
             m_rosterSource = new LocalRosterEventSource(manager: manager, registry: registry);
         } else {
             // No gamepad service: an empty room (overview camera) until input is available.
-            m_intentSource = new ScriptedIntentSource(script: static (_, _) => PlayerIntent.None);
+            m_intentSource = new ScriptedIntentSource<PlayerIntent>(script: static (_, _) => PlayerIntent.None);
             m_rosterSource = new ScriptedRosterEventSource(schedule: []);
         }
 
@@ -1040,6 +1453,13 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // frame source's authoring pool. Presentation only — the simulation never learns creator mode exists.
         m_frameSource = frameSource;
 
+        // The durable render-scale tier (run-doc revealedRenderScale) applied through the SAME seam the live verb uses,
+        // so boot config and mid-session change share one path. Only when the run names a tier — a null leaves the
+        // director at its native default, so the default demo stays byte-unchanged (no call, no divergence).
+        if (m_revealedRenderScale is { } renderScaleTier) {
+            _ = frameSource.SetRenderScaleTier(name: renderScaleTier);
+        }
+
         // The headless capture aids + the --scenario driver compose on the frame source (this node is at its coupling
         // ceiling, so the scenario types live there). Resolve the delayed one-shot capture frame and read the scenario
         // shot schedule — both are needed BEFORE the render builds (the spec's CapturePath suppresses the frame-0
@@ -1060,6 +1480,10 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // the brick→world avatar-follow (WorldLensAvatarOverride) is deliberately NOT wired: playing the game does not
         // drag the avatar around the room; the avatar waits at the machine until the player disengages after the reveal.
 
+        // The document's RayQuery/Timing toggles — threaded straight into the spec (the builder no longer resolves
+        // HostSettings itself).
+        var (rayQuery, timing) = DiegeticUiInstaller.ResolveTimingToggles(services: m_serviceProvider);
+
         // The render assembly is DATA now (the shared builder owns every backend-specific choice — kernel bytecode,
         // decorator availability); this node keeps only the simulation and the spec's overworld-specific inputs.
         var render = SdfWorldRenderBuilder.Build(
@@ -1079,9 +1503,13 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 // SDF-backed — slot 0 the room, slots 1..4 per-cabinet cameras. That is what lets a pane be a 3D shot of
                 // a cabinet (immersed close-up / break-out) instead of being locked to a brick child surface.
                 Children = null,
-                // The console overlay wraps the binding-bar overlay so the developer console draws OVER everything
-                // (including the bar) when it is open; both degrade to the bare producer if their resources are absent.
-                Decorate = producer => BuildConsoleOverlay(inner: BuildBindingBarOverlay(inner: producer, frameSource: frameSource)),
+                // The console overlay wraps the overlay-panels node (toast/hub/tracker/plaque), which wraps the
+                // binding-bar overlay — so the developer console draws OVER everything when it is open; each layer
+                // degrades to its inner if its resources are absent.
+                Decorate = producer => BuildConsoleOverlay(inner: BuildOverlayPanels(inner: BuildBindingBarOverlay(inner: producer, frameSource: frameSource), frameSource: frameSource)),
+                // THE DIEGETIC UI (Tier 2): the director + its installer wiring live in the demo-side
+                // DiegeticUiInstaller (same namespace — no new coupling to name it directly).
+                DecorateFrameSource = fs => DiegeticUiInstaller.Install(services: m_serviceProvider, frameSource: fs),
                 HostsOnDirectX = m_hostsOnDirectX,
                 // The worst-case capacity envelope: the largest program the frame source can ever build (every screen
                 // lit, the creator pool in its biggest emission form) — the engine reserves these floors up front so
@@ -1089,14 +1517,21 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 // change forgets to grow the probe with it.
                 InstanceCapacity = frameSource.WorstCaseInstanceCapacity,
                 ProgramWordCapacity = frameSource.WorstCaseProgramWordCapacity,
+                // The dynamic-transform slot floor: the room's own movers, raised to the SDF-debug storm bench's motion
+                // ceiling so a `sdf.bench storm` motion rung (up to 4096 per-frame-moving instances) fits the engine's
+                // once-sized dynamic-transform buffer.
+                DynamicTransformCapacity = frameSource.WorstCaseDynamicTransformCapacity,
+                RayQuery = rayQuery,
                 ScreenSources = BuildScreenSources(),
                 ScreenLights = BuildScreenLights(),
+                Timing = timing,
                 // Screen-surface transforms: the frame source implements ISdfFrameSource.ScreenSurfaceTransforms
                 // directly (SdfWorldRenderBuilder reads it straight off FrameSource) — this node never spells out
                 // that provider dictionary's type itself, keeping its own coupling flat.
             }
         );
 
+        m_render = render;
         m_producer = render.Producer;
         m_producer.DebugMode = m_debugMode;
         m_root = render.Root;
@@ -1107,6 +1542,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // The diegetic-feed director (the camera-feed pool + procedural face feed + named-feed registry) composes on
         // the frame source too — the render node stays coupling-flat; it only drives the render-thread tick below.
         frameSource.InstallFeeds(hostsOnDirectX: m_hostsOnDirectX, services: m_serviceProvider);
+        RegisterGuestViews(frameSource: frameSource);
         ConnectLinkCable(frameSource: frameSource);
         ApplyCreatorStartupHooks(frameSource: frameSource);
     }
@@ -1121,8 +1557,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
     // The --scenario review harness's creator hook: an active scenario (Scenario:Creation) loads its creation into the
     // scene and opens straight into creator mode so the turntable shots frame the loaded workpiece. The live in-session
-    // path to the same state is the `creator` / `creator.load` console verbs (the former PUCK_OVERWORLD_CREATOR /
-    // PUCK_CREATOR_LOAD env aids were removed — this scenario branch is all that remains).
+    // path to the same state is the `creator` / `creator.load` console verbs.
     private void ApplyCreatorStartupHooks(OverworldFrameSource frameSource) {
         var scenarioCreation = Puck.Demo.Configuration.ScenarioAccessor.ScenarioCreation(services: m_serviceProvider);
 
@@ -1141,6 +1576,8 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     private void ConnectLinkCable(OverworldFrameSource frameSource) {
         frameSource.LinkedConsoleASource = LinkedCableConsoleA;
         frameSource.LinkedConsoleBSource = LinkedCableConsoleB;
+        // The transfer glow: normalize the decayed sighting counter to 0..1 for the cable's emissive (presentation only).
+        frameSource.LinkCableGlowSource = () => (m_linkGlowFrames / (float)LinkGlowDecayFrames);
     }
 
     // Wraps the world producer with the binding-bar overlay when the paged profile is live on EITHER input path —
@@ -1176,27 +1613,23 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         );
     }
 
-    // Wraps the producer with the on-screen developer console overlay (open with the backtick console, type 'creator'
-    // to enter creator mode). Degrades to the bare producer if the console store, the shader loader, or the GDI glyph
-    // atlas is unavailable (e.g. a non-Windows host) — the terminal console still works either way.
-    private IRenderNode BuildConsoleOverlay(IRenderNode inner) {
-        if ((m_serviceProvider.GetService(serviceType: typeof(ConsoleTextStore)) is not ConsoleTextStore store) ||
-            (m_serviceProvider.GetService(serviceType: typeof(IShaderModuleLoader)) is not IShaderModuleLoader shaderLoader) ||
-            (ConsoleGlyphFont.TryCreate() is not { } font)) {
-            return inner;
-        }
+    // Wraps the chain with the token-chrome overlay panels (the toast/hub/tracker/plaque surfaces) UNDER the console
+    // overlay, so the console still draws last. The WHOLE composition (stores, the per-frame feed, shaders, the
+    // shared glyph pack) lives in Ui.OverlayComposition — this node sits at its exact CA1506 class-coupling ceiling,
+    // so it references only that one seam type for BOTH overlay wraps (the console overlay's construction moved
+    // there in the same change, paying for this addition); anything missing degrades to the bare inner with a skip
+    // notice there.
+    private IRenderNode BuildOverlayPanels(IRenderNode inner, OverworldFrameSource frameSource) =>
+        Puck.Demo.Ui.OverlayComposition.WrapPanels(frameSource: frameSource, height: m_height, inner: inner, services: m_serviceProvider, width: m_width);
 
-        return new ConsoleOverlayNode(
-            font: font,
-            fragmentBytecode: SdfParityProducers.LoadShader(directory: DemoShaders.OverlayDirectory, fileName: "console-overlay.frag.spv", loader: shaderLoader, stage: ShaderStage.Fragment),
-            height: m_height,
-            inner: inner,
-            services: SdfParityProducers.BuildVulkanServices(serviceProvider: m_serviceProvider, width: m_width, height: m_height),
-            source: store,
-            vertexBytecode: SdfParityProducers.LoadShader(directory: DemoShaders.SdfDirectory, fileName: "fullscreen.vert.spv", loader: shaderLoader, stage: ShaderStage.Vertex),
-            width: m_width
-        );
-    }
+    // Wraps the producer with the on-screen developer console overlay (open with the backtick console, type 'creator'
+    // to enter creator mode). Composed by Ui.OverlayComposition (see BuildOverlayPanels' note); degrades to the bare
+    // producer with a skip notice there if the console store, the shader loader, or the shared atlas is unavailable
+    // (e.g. a non-Windows host) — the terminal console still works either way. The overlay's title band is draggable:
+    // the node resolves PointerStore/DemoConsole itself through the passed-through service provider, so this node
+    // names no new type here.
+    private IRenderNode BuildConsoleOverlay(IRenderNode inner) =>
+        Puck.Demo.Ui.OverlayComposition.WrapConsole(height: m_height, inner: inner, services: m_serviceProvider, width: m_width);
 
     // One dark brick pane per console, at the view slot the screen director lays out for it (1 + console index). Each
     // allocates its output ONCE at the full frame extent (its pane region animates every frame of a boot transition)
@@ -1252,7 +1685,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 brick.VictoryConditionMet = () => RequestWorldReveal(consoleIndex: consoleIndex);
             }
 
-            children[1 + index] = brick;
+            children[(1 + index)] = brick;
             m_bricks[index] = brick;
             // Carts are inserted live, so a machine's identity is only known at insert time — no build-time choir grouping.
             m_choirLeaders[index] = -1;
@@ -1273,8 +1706,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         }
 
         // Publish BOTH ladder rungs so `state` and the reveal guards see live values (the editor latch lives on the
-        // frame source itself, so it needs no republish). worldRevealed drives everything that used to mean "is the room
-        // visible / can I disengage".
+        // frame source itself, so it needs no republish). worldRevealed drives room visibility and disengagement.
         source.PublishControlSnapshot(immersed: m_immersed, producedFrames: m_producedFrames, worldRevealed: m_worldRevealed);
 
         // reveal world: the frame source can't reach the reveal handshake, so it flags a request the node routes through
@@ -1283,7 +1715,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             RequestWorldReveal(consoleIndex: 0);
         }
 
-        // reveal editor: the dev/agent `reveal editor` verb forces rung 3 (a later arc drives it from meta-victory). Not
+        // reveal editor: the dev/agent `reveal editor` verb forces rung 3. It is not
         // immersion-gated — the editor unlock is a session state, not a fourth-wall camera moment; the apply is idempotent.
         if (source.ConsumePendingEditorReveal()) {
             RequestEditorReveal();
@@ -1296,10 +1728,39 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             ApplyControlLink(world: linkWorld, first: link.First, second: link.Second);
         }
 
-        // capture: arm the producer's one-shot readback on the path the verb queued — the SAME in-flight readback the
-        // Right-Shoulder debug capture uses (written THIS produced frame). The frame source created the directory.
+        // press: compile + install each queued scripted-input tape onto its cabinet (the node owns the bricks + timeline
+        // + the joypad grammar). A batch may script several cabinets — drain them all.
+        if (m_world is { } pressWorld) {
+            while (source.TryConsumePress(index: out var pressConsole, script: out var pressScript)) {
+                ApplyPress(world: pressWorld, console: pressConsole, script: pressScript);
+            }
+        }
+
+        // serial.watch: toggle each queued cabinet's completed-transfer stdout stream (the node owns the bricks + their
+        // SerialComponent hooks). A batch may toggle several cabinets — drain them all.
+        while (source.TryConsumeSerialWatch(index: out var watchConsole)) {
+            ApplySerialWatch(console: watchConsole);
+        }
+
+        // rewind / rewind.status / runahead / fastforward: apply each queued machine-neutral time-travel operation to
+        // its cabinet (the node owns the bricks). Runs here on the render thread, between step fan-outs, so a rewind's
+        // restore+replay touches only the target cabinet's idle machine — never racing the parallel fleet threads.
+        while (source.TryConsumeTimeTravel(index: out var timeTravelConsole, op: out var timeTravelOp, argument: out var timeTravelArgument)) {
+            ApplyTimeTravel(console: timeTravelConsole, op: timeTravelOp, argument: timeTravelArgument);
+        }
+
+        // hgb.*: apply each queued SM83 debug operation to its cabinet (peek/poke/regs/step/watch/dis/...). Like the
+        // time-travel drain, runs here on the render thread between step fan-outs so single-stepping and inspection
+        // touch only the target cabinet's idle machine; the full (possibly multi-line) output echoes to stdout.
+        while (source.TryConsumeDebug(index: out var debugConsole, op: out var debugOp, args: out var debugArgs)) {
+            ApplyDebug(console: debugConsole, op: debugOp, args: debugArgs);
+        }
+
+        // capture: arm the outermost overlay's (or, absent one, the producer's) one-shot readback on the path the
+        // verb queued — the SAME in-flight readback the Right-Shoulder debug capture uses (written THIS produced
+        // frame). The frame source created the directory.
         if (source.ConsumePendingCapture() is { } capturePath) {
-            m_producer?.RequestCapture(path: capturePath);
+            RequestCaptureOnOutermostNode(path: capturePath);
         }
 
         // win: force each queued cabinet's game to its win — the frame source can't reach the bricks/cartridges, so it
@@ -1324,6 +1785,14 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // MetaVictoryWatch (static) so this node names no extra type.
         PublishConditionSnapshotIfDirty(source: source);
     }
+
+    // Arms a one-shot capture on the OUTERMOST node the render chain has, so `capture <path>` and the debug capture
+    // bind read back what the player actually sees: the 2D overlay decorators composite AFTER the SDF producer, so
+    // reading the producer alone (the old, and still the ONLY, path for the startup --capture flag — see
+    // SdfWorldRenderSpec.CapturePath) misses the console panel and the binding bar whenever either is drawn. The
+    // outermost-vs-producer routing decision lives on SdfWorldRender itself (SdfWorldRenderBuilder.cs) so this node
+    // never names the overlay-capture interface — it is at its CA1506 class-coupling ceiling.
+    private void RequestCaptureOnOutermostNode(string path) => m_render?.RequestCapture(path: path);
 
     // Stores the (possibly rebuilt) meta watch a live condition edit produced, re-arming the condition.show snapshot when
     // the watch REBUILT — the signal of an applied VICTORY edit (whose nested description is the costliest to rebuild). An
@@ -1358,6 +1827,15 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             return;
         }
 
+        // TOGGLE: re-issuing `link i j` on a pair already linked TO EACH OTHER unplugs the cable (the console mirror of
+        // the in-game Link verb's toggle), so a piped script can boot → link → press → UNLINK entirely over stdin.
+        if (m_bricks[first].IsLinked && (m_bricks[first].LinkPartnerOrdinal == second)) {
+            GamingBrickChildNode.Unlink(node: m_bricks[first]);
+            Console.Error.WriteLine(value: $"[control] link: consoles {first}↔{second} UNLINKED — both step independently again.");
+
+            return;
+        }
+
         if (!LinkReady(world: world, console: first) || !LinkReady(world: world, console: second)) {
             Console.Error.WriteLine(value: $"[control] link: consoles {first}+{second} not linkable — both must be booted and at the shared timeline's head (or player-owned).");
 
@@ -1370,6 +1848,99 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         Console.Error.WriteLine(value: (GamingBrickChildNode.TryLink(first: m_bricks[first], second: m_bricks[second])
             ? $"[control] link: consoles {first}↔{second} connected by the serial cable (console {first} is the primary)."
             : $"[control] link: consoles {first}+{second} refused the cable (already linked, parked, or empty)."));
+    }
+
+    // Toggles a cabinet's completed-transfer stdout stream (the node half of the `serial.watch` verb — the frame source
+    // lacks the bricks + their SerialComponent hooks). A pure host observer per SerialComponent.TransferCompleted: it
+    // fires on EITHER link role with the byte finally shifted through, echoing one stdout line as it lands; it never
+    // touches sim state and is never serialized. Re-issuing on the same cabinet detaches it (the link-toggle idiom).
+    private void ApplySerialWatch(int console) {
+        if ((console < 0) || (console >= m_bricks.Length)) {
+            Console.Error.WriteLine(value: $"[serial.watch] console {console}: refused — no such cabinet.");
+
+            return;
+        }
+
+        if ((m_serialWatchMask & (1u << console)) != 0) {
+            m_serialWatchMask &= ~(1u << console);
+            _ = m_bricks[console].SetSerialWatch(consoleLabel: console, on: false);
+            Console.Error.WriteLine(value: $"[serial.watch] console {console}: STOPPED.");
+
+            return;
+        }
+
+        m_serialWatchMask |= (1u << console);
+
+        Console.Error.WriteLine(value: (m_bricks[console].SetSerialWatch(consoleLabel: console, on: true)
+            ? $"[serial.watch] console {console}: WATCHING — completed transfers stream to stdout."
+            : $"[serial.watch] console {console}: armed — the cabinet is dark; the stream starts when it boots."));
+    }
+
+    // Installs a scripted-input tape onto a cabinet (the node half of the `press` verb — the frame source lacks the
+    // bricks/timeline). Refuses an OWNED cabinet (a player's pad drives it — a tape would fight the human) and an
+    // unbooted/unassigned one (no machine to drive), narrating the refusal to stderr like the other control verbs; on
+    // success the cabinet's SegmentSource becomes the tape filler (replacing its timeline fill) and the drive is echoed
+    // to STDOUT so a piped agent sees it start. On completion FinishCompletedPressScripts restores the timeline fill.
+    private void ApplyPress(OverworldWorld world, int console, string script) {
+        if ((console < 0) || (console >= m_bricks.Length)) {
+            Console.Error.WriteLine(value: $"[press] console {console}: refused — no such cabinet.");
+
+            return;
+        }
+
+        if (m_timeline is not { } pressTimeline) {
+            return;
+        }
+
+        if (m_consoleOwner[console] >= 0) {
+            Console.Error.WriteLine(value: $"[press] console {console}: refused — owned by player {m_consoleOwner[console]} (release it first).");
+
+            return;
+        }
+
+        if (!world.IsBooted(consoleIndex: console) || !m_bricks[console].IsAssigned) {
+            Console.Error.WriteLine(value: $"[press] console {console}: refused — not booted (insert a cart and boot it first).");
+
+            return;
+        }
+
+        if (!pressTimeline.PressTryInstall(console: console, script: script, frameCount: out var frameCount, error: out var error)) {
+            Console.Error.WriteLine(value: $"[press] console {console}: refused — {error}. Grammar: keys a/b/start/select/up/down/left/right joined by '+', '*N' holds N frames, 'xN' repeats, none/- releases (e.g. 'up a*4' or 'a - a - a').");
+
+            return;
+        }
+
+        m_bricks[console].SegmentSource = pressTimeline.PressFillerFor(console: console);
+        Console.Out.WriteLine(value: $"[press] console {console}: driving {frameCount} frame(s) of scripted input{(m_bricks[console].IsLinked ? " (linked — its pair steps in lockstep)" : "")}.");
+    }
+
+    // Applies one queued machine-neutral time-travel operation (the node half of the rewind/rewind.status/runahead/
+    // fastforward cabinet verbs — the frame source can't reach the bricks). The whole operation lives on the brick
+    // (GamingBrickChildNode.ApplyTimeTravel, string-typed), so this node names no new type; the outcome echoes to
+    // STDOUT so a piped agent can assert the landed frame counter / ring status, mirroring the press verb's echo.
+    private void ApplyTimeTravel(int console, string op, string argument) {
+        var verb = (string.Equals(a: op, b: "status", comparisonType: StringComparison.OrdinalIgnoreCase) ? "rewind.status" : op);
+
+        if ((console < 0) || (console >= m_bricks.Length)) {
+            Console.Error.WriteLine(value: $"[{verb}] console {console}: refused — no such cabinet.");
+
+            return;
+        }
+
+        Console.Out.WriteLine(value: $"[{verb} {console}] {m_bricks[console].ApplyTimeTravel(op: op, argument: argument)}");
+    }
+
+    // Applies one queued SM83 debug operation (the node half of the hgb.* cabinet verbs — the frame source can't reach
+    // the bricks). The whole operation lives on the brick (GamingBrickChildNode.ApplyDebug, string-typed), so this node
+    // names no new type; the outcome echoes to STDOUT so a piped agent can read the dump / register state / disassembly.
+    private void ApplyDebug(int console, string op, string[] args) {
+        if ((console < 0) || (console >= m_bricks.Length)) {
+            Console.Error.WriteLine(value: $"[hgb.{op}] console {console}: refused — no such cabinet.");
+
+            return;
+        }
+
+        Console.Out.WriteLine(value: $"[hgb.{op} {console}] {m_bricks[console].ApplyDebug(op: op, args: args)}");
     }
 
     // Applies the queued `win` verbs (the node half of the control host's win mask — the frame source can't reach the
@@ -1386,7 +1957,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 continue;
             }
 
-            Console.Error.WriteLine(value: (m_bricks[index].ForceVictoryWin() is { } reason
+            Console.Error.WriteLine(value: ((m_bricks[index].ForceVictoryWin() is { } reason)
                 ? $"[control] win: console {index} could not be won — {reason}."
                 : $"[control] win: console {index} — authored victory bytes written to the win region; the room's meta XOR now counts it."));
         }
@@ -1450,8 +2021,8 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         var trigger = watch.Poll(bricks: m_bricks);
 
         if (trigger >= 0) {
-            // The meta XOR completion is the RUNG-3 hook: a later arc gates the editor reveal on completing X games, and
-            // the room-level meta victory is exactly that "complete X games" signal — so the meta win drives the EDITOR
+            // The meta XOR completion is the rung-3 hook: the room-level meta victory is the "complete X games"
+            // signal, so the meta win drives the editor
             // reveal. The intro's per-brick exit/solo win keeps driving the WORLD reveal (rung 2) independently.
             RequestEditorReveal();
         }
@@ -1481,7 +2052,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // built once, at construction, with fixed keys.
     private const int ScreenMuxHeadroomStart = 4;
 
-    // One screen-source provider per console (the diegetic-screen seam, prototype-arc item 1): screenIndex ==
+    // One screen-source provider per console: screenIndex ==
     // console index, matching OverworldFrameSource.BuildProgram's declared SdfScreenSurface. A provider returns the
     // brick's native (unresampled) framebuffer view only while the stand is BOTH booted and assigned — an
     // unbooted/unassigned stand's screen slab falls back to the flat/procedural material exactly as before
@@ -1500,6 +2071,24 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // and now also has to register/withdraw a claimant as cabinets boot/eject) — pure relocation, not decoupling. The
     // cabinet already has a clean Anchored ledger CLAIM for slot arbitration; its SOURCE stays a direct provider. Only
     // the headroom slots ride the full claimant seam, because their content genuinely comes from elsewhere.
+    // The immersed-emulator guest view registers each cabinet's raw framebuffer under a
+    // stable "guest:{index}" name on the frame source's ViewStack — the SAME closure shape BuildScreenSources
+    // already wraps a GamingBrickChildNode in directly (booted AND assigned, else 0), just handed to a second,
+    // NAMED path so world.wire named:guest:N (the existing wiring grammar) and the reveal's guest→room
+    // ViewTransition can resolve a cabinet's pane by name, alongside (never replacing) its direct screen-source
+    // wiring. Registered ONCE, right after InstallFeeds — a booted cabinet already re-resolves this closure fresh
+    // every frame the view stack renders it (see ViewStack.RenderFrame's budget), so no per-boot re-registration is
+    // needed.
+    private void RegisterGuestViews(OverworldFrameSource frameSource) {
+        var world = m_world!;
+
+        for (var index = 0; (index < m_bricks.Length); index++) {
+            var brick = m_bricks[index];
+            var consoleIndex = index;
+
+            _ = frameSource.RegisterGuestView(consoleIndex: consoleIndex, source: () => ((world.IsBooted(consoleIndex: consoleIndex) && brick.IsAssigned) ? brick.NativeImageViewHandle : 0));
+        }
+    }
     private IReadOnlyDictionary<int, Func<nint>>? BuildScreenSources() {
         var world = m_world!;
         var sources = new Dictionary<int, Func<nint>>(capacity: (m_bricks.Length + 5));
@@ -1531,15 +2120,20 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 ? frameSource.CreatorPreviewHandle
                 : (cabinetSource?.Invoke() ?? 0));
 
-            // The headroom slots (4..7): generically delegated — 0 (the flat/procedural fallback) when nothing
-            // registered a claim on the slot this frame. The AGB debug slot additionally returns the native AGB
-            // framebuffer while its fullscreen scene is up (the frame source's pushed primitive state — no AGB type here).
+            // The headroom slots (4..): generically delegated — 0 (the flat/procedural fallback) when nothing wired
+            // or claimed the slot this frame. A `world.wire named:<name> <screen>` onto a headroom slot (the replay
+            // museum's/Droste door's own screens — MuseumRenderer.ScreenSlotBase.. — bind through exactly this path)
+            // WINS over a ledger-registered claimant's own source, mirroring the cabinet loop above (the fish's lure
+            // convention, extended to headroom); the AGB debug slot additionally returns the native AGB framebuffer
+            // while its fullscreen scene is up (the frame source's pushed primitive state — no AGB type here).
             for (var index = ScreenMuxHeadroomStart; (index < OverworldFrameSource.MaxScreenSurfaceCount); index++) {
                 var slot = index;
 
-                sources[slot] = () => ((slot == OverworldFrameSource.AgbDebugScreenSlot) && frameSource.AgbDebugActive)
-                    ? frameSource.AgbDebugScreenHandle
-                    : frameSource.ResolveDynamicSource(slot: slot);
+                sources[slot] = () => ((frameSource.ResolveWiredFeedOverride(screenIndex: slot) is { } wired and not 0)
+                    ? wired
+                    : (((slot == OverworldFrameSource.AgbDebugScreenSlot) && frameSource.AgbDebugActive)
+                        ? frameSource.AgbDebugScreenHandle
+                        : frameSource.ResolveDynamicSource(slot: slot)));
             }
         }
 
@@ -1580,9 +2174,9 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             for (var index = ScreenMuxHeadroomStart; (index < OverworldFrameSource.MaxScreenSurfaceCount); index++) {
                 var slot = index;
 
-                lights[slot] = () => (((slot == OverworldFrameSource.AgbDebugScreenSlot) && frameSource.AgbDebugActive)
+                lights[slot] = () => ((((slot == OverworldFrameSource.AgbDebugScreenSlot) && frameSource.AgbDebugActive)
                     ? frameSource.AgbDebugScreenGlow
-                    : frameSource.ResolveDynamicLight(slot: slot)) * (m_director?.RoomLightFactor ?? 1f);
+                    : frameSource.ResolveDynamicLight(slot: slot)) * (m_director?.RoomLightFactor ?? 1f));
             }
         }
 
@@ -1602,14 +2196,34 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 continue;
             }
 
+            // A cart swap or eject pre-empts a running press tape: the machine the tape was authored against is being
+            // rebuilt or removed, and an ejected cabinet's power-gated prepare would otherwise leave the tape armed
+            // forever (its completion echo never firing, a piped agent waiting on it indefinitely).
+            CancelPressScriptForCartChange(console: index);
+
             var brick = m_bricks[index];
 
             if (wantType < 0) {
                 brick.Eject();
                 m_consoleAssembledType[index] = -1;
-            } else if ((wantType < m_cartTypeRoms.Length) && (m_cartTypeRoms[wantType] is { } rom)) {
-                brick.LoadCartridge(cartridgeRom: rom, savePath: m_cartTypeSaves[wantType], peripheral: CartPeripheral(cartType: wantType));
+            } else if (ResolveCartRom(consoleIndex: index, cartType: wantType) is { } rom) {
+                var savePath = SavePathFor(consoleIndex: index, cartType: wantType);
+
+                // CRITTER-SWAP: seed this cabinet's DISTINCT starting critter (keyed off its save slot) into its own save
+                // before boot, so a fresh pair of linked cabinets holds different critters and the swap is visible. A
+                // no-op once the save exists (the player's own held critter is never overwritten).
+                if ((wantType == CritterSwapCartType) && (savePath is not null)) {
+                    Puck.Demo.Forge.ForgeCommands.SeedCritterSwapDefaultSave(path: savePath, slot: m_consoleSaveSlots[index]);
+                }
+
+                brick.LoadCartridge(cartridgeRom: rom, savePath: savePath, peripheral: CartPeripheral(cartType: wantType));
                 m_consoleAssembledType[index] = wantType;
+
+                // A cabinet under `serial.watch` re-installs its completed-transfer stream on the fresh machine (the old
+                // machine's SerialComponent died with the swap), so a watch survives a cart swap / re-boot.
+                if ((m_serialWatchMask & (1u << index)) != 0) {
+                    _ = brick.SetSerialWatch(consoleLabel: index, on: true);
+                }
             } else if (Puck.Demo.Forge.ForgeCommands.IsForgedCartType(cartType: wantType) && ((m_forgeCartsAttemptedMask & (1 << wantType)) == 0)) {
                 // A FORGED type (avatar/tune/scene) is baked LAZILY the first time a cabinet wants it — flag the next
                 // ProduceFrame (which has the live GPU device) to bake its default; the cabinet stays dark for that
@@ -1621,8 +2235,8 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     }
 
     // Forces every cabinet currently running the given FORGED cart type to reassemble on the next AssignPendingCartridges
-    // pass (a sentinel that never equals a real want type), so a freshly re-forged ROM swaps in live after a commit —
-    // the subject-neutral generalization of the old avatar-only reload (any subject: avatar/tune/scene).
+    // pass (a sentinel that never equals a real want type), so a freshly re-forged ROM swaps in live after a commit
+    // for any subject: avatar, tune, or scene.
     private void MarkForgedCabinetsForReload(int cartType) {
         for (var index = 0; (index < m_consoleAssembledType.Length); index++) {
             if (m_consoleAssembledType[index] == cartType) {
@@ -1631,13 +2245,50 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         }
     }
 
+    // The cart ROM a cabinet loads for a type: the SHOWCASE type honors THIS console's own pre-inserted RomPath (so two
+    // cabinets can each hold their own cartridge — the distinctness a link trade needs), falling back to the shared
+    // showcase; every other type is the shared-per-type image. Null when the type could not be sourced on this machine.
+    private byte[]? ResolveCartRom(int consoleIndex, int cartType) {
+        if ((cartType == ShowcaseCartType) && (m_consoleShowcaseRoms[consoleIndex] is { } own)) {
+            return own;
+        }
+
+        return ((cartType < m_cartTypeRoms.Length) ? m_cartTypeRoms[cartType] : null);
+    }
+
+    // The battery-save path a cabinet's cart writes to (the per-(console, type) resolution). The base is this console's
+    // OWN showcase-ROM save when it named a RomPath, else the shared-per-type save. A cabinet with a SaveSlot then
+    // derives a per-cabinet path off that base, so two cabinets running the same cart type (or the same pre-inserted
+    // ROM) keep DISTINCT battery saves — the general seam the link trade and the critter-swap cart ride; no slot
+    // keeps the shared-per-type path (byte-unchanged default).
+    private string? SavePathFor(int consoleIndex, int cartType) {
+        var basePath = (((cartType == ShowcaseCartType) && (m_consoles[consoleIndex].RomPath is { } romPath))
+            ? $"{romPath}.sav"
+            : ((cartType < m_cartTypeSaves.Length) ? m_cartTypeSaves[cartType] : null));
+
+        if (basePath is null) {
+            return null;
+        }
+
+        var slot = m_consoleSaveSlots[consoleIndex];
+
+        return ((slot >= 0) ? DeriveSlotSavePath(basePath: basePath, slot: slot) : basePath);
+    }
+
+    // Inserts a save-slot suffix before a trailing ".sav" ("foo.sav" -> "foo.s0.sav"), else appends it — the per-cabinet
+    // derivation a SaveSlot cabinet uses so its battery save never collides with a sibling running the same cart.
+    private static string DeriveSlotSavePath(string basePath, int slot) =>
+        (basePath.EndsWith(value: ".sav", comparisonType: StringComparison.OrdinalIgnoreCase)
+            ? $"{basePath[..^4]}.s{slot}.sav"
+            : $"{basePath}.s{slot}");
+
     // The peripheral feed a cart TYPE binds: type 0 = the world-lens sensor page (world→machine membrane), type 1 = the
-    // Pocket Camera webcam. Other types are self-contained ROMs with no host feed.
+    // camera cartridge webcam. Other types are self-contained ROMs with no host feed.
     private static string? CartPeripheral(int cartType) =>
         cartType switch {
             0 => "world",
             1 => "camera",
-            _ => null, // showcase (2), avatar (3), the framework games (4-8), the tune (9) + scene (10) are self-contained ROMs
+            _ => null, // showcase (2), avatar (3), the framework games (4-8), the tune (9), scene (10), oracle (11) + critter-swap (12) are self-contained ROMs
         };
 
     // Builds the world-lens cart (type 0). The two-worlds romance: SDF-FORGE the room background on the overworld's own GPU
@@ -1652,22 +2303,31 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     // EnsureResources for the same coupling-budget reason as the world-lens cart above.
     private byte[] BuildVolleyCartRom(in FrameContext context) =>
         Puck.Demo.Forge.ForgeCommands.BuildVolleyCart(context: in context, services: m_serviceProvider);
-
     private byte[] BuildBrickfallCartRom(in FrameContext context) =>
         Puck.Demo.Forge.ForgeCommands.BuildBrickfallCart(context: in context, services: m_serviceProvider);
 
+    // Builds the ORACLE cart (type 11): a pure-CPU framework game with no GPU title bake (unlike the five games above),
+    // routed through the same ForgeCommands facade so the node names no new type against its coupling budget.
+    private byte[] BuildOracleCartRom(in FrameContext context) =>
+        Puck.Demo.Forge.ForgeCommands.BuildOracleCart(context: in context, services: m_serviceProvider);
+
+    // Builds the CRITTER-SWAP cart (type 12): a pure-CPU, battery-backed link-trading toy with no GPU title bake (like
+    // ORACLE), routed through the same ForgeCommands facade so the node names no new type against its coupling budget.
+    private byte[] BuildCritterSwapCartRom(in FrameContext context) =>
+        Puck.Demo.Forge.ForgeCommands.BuildCritterSwapCart(context: in context, services: m_serviceProvider);
+
+    // The CRITTER-SWAP cart's battery save path — a node method (like PrepareSolitaireSavePath/PreparePokerSavePath) so
+    // EnsureResources, at its coupling ceiling, names the ForgeCommands facade only here, not in that method's body.
+    private static string PrepareCritterSwapSavePath() =>
+        Puck.Demo.Forge.ForgeCommands.PrepareCritterSwapSavePath();
     private byte[] BuildChromaCartRom(in FrameContext context) =>
         Puck.Demo.Forge.ForgeCommands.BuildChromaCart(context: in context, services: m_serviceProvider);
-
     private byte[] BuildSolitaireCartRom(in FrameContext context) =>
         Puck.Demo.Forge.ForgeCommands.BuildSolitaireCart(context: in context, services: m_serviceProvider);
-
     private static string PrepareSolitaireSavePath() =>
         Puck.Demo.Forge.ForgeCommands.PrepareSolitaireSavePath();
-
     private byte[] BuildPokerCartRom(in FrameContext context) =>
         Puck.Demo.Forge.ForgeCommands.BuildPokerCart(context: in context, services: m_serviceProvider);
-
     private static string PreparePokerSavePath() =>
         Puck.Demo.Forge.ForgeCommands.PreparePokerSavePath();
 
@@ -1687,13 +2347,12 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
         return -1;
     }
-
     private static bool MachineKeyEquals(GamingBrickSource a, GamingBrickSource b) =>
-        string.Equals(a: a.RomPath, b: b.RomPath, comparisonType: StringComparison.OrdinalIgnoreCase) &&
+        (string.Equals(a: a.RomPath, b: b.RomPath, comparisonType: StringComparison.OrdinalIgnoreCase) &&
         (GamingBrickChildNode.ParseModel(value: (a.RunAs ?? a.Model)) == GamingBrickChildNode.ParseModel(value: (b.RunAs ?? b.Model))) &&
-        (string.Equals(a: a.Speed, b: "dmg", comparisonType: StringComparison.OrdinalIgnoreCase) == string.Equals(a: b.Speed, b: "dmg", comparisonType: StringComparison.OrdinalIgnoreCase));
+        (string.Equals(a: a.Speed, b: "dmg", comparisonType: StringComparison.OrdinalIgnoreCase) == string.Equals(a: b.Speed, b: "dmg", comparisonType: StringComparison.OrdinalIgnoreCase)));
 
-    // The debug pages' verbs (the machine-fleet plan's buff/debuff arc), dispatched DIRECTLY: console mode's input
+    // The debug pages' verbs are dispatched directly: console mode's input
     // deliberately does not ride the router's command dispatch, and these verbs mutate brick presentation state
     // that is not part of the deterministic world — a machine stays a pure function of (configuration, consumed
     // stream); the verbs change the configuration, and the sim's state hash never sees any of it. Dispatched PER
@@ -1757,7 +2416,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             var directory = Path.Combine(path1: "artifacts", path2: "overworld");
 
             Directory.CreateDirectory(path: directory);
-            m_producer?.RequestCapture(path: Path.Combine(path1: directory, path2: $"debug-capture-{m_debugCaptureCounter++}.png"));
+            RequestCaptureOnOutermostNode(path: Path.Combine(path1: directory, path2: $"debug-capture-{m_debugCaptureCounter++}.png"));
         }
 
         for (var mode = 0; (mode < DebugViewModes.Count); mode++) {
@@ -1767,7 +2426,6 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             }
         }
     }
-
     private void TryModelVerb(OverworldPageInput pages, OverworldWorld world, string command, ConsoleModel model, int slot) {
         if (!pages.WasPressed(command: command)) {
             return;
@@ -1776,15 +2434,24 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         var target = world.NearestConsoleForSlot(slot: slot, booted: true);
 
         if (target < 0) {
-            Console.Error.WriteLine(value: $"[debug] mode {model}: no booted console in range.");
+            Console.Error.WriteLine(value: $"[mode] {model}: no booted console in range.");
 
             return;
         }
 
-        if (m_bricks[target].PresentationModel == model) {
-            Console.Error.WriteLine(value: $"[debug] console {target}: already presenting as {model}; no change.");
+        Console.Error.WriteLine(value: SwapConsoleModelInternal(target: target, model: model));
+    }
 
-            return;
+    // The shared live device-swap path — the proximity Bricks-page chord (TryModelVerb) and the explicit-index console
+    // verb (SwapConsoleModel) both land here, so both take the identical ChangeModel snapshot-migrate route. Names only
+    // already-coupled types (m_bricks / ConsoleModel / DissolveChoirFor), so it costs the ceilinged node nothing.
+    private string SwapConsoleModelInternal(int target, ConsoleModel model) {
+        if ((target < 0) || (target >= m_bricks.Length)) {
+            return $"[mode] console {target}: out of range.";
+        }
+
+        if (m_bricks[target].PresentationModel == model) {
+            return $"[mode] console {target}: already presenting as {model}; no change.";
         }
 
         // With a per-ROM recipe the swap GENUINELY diverges the machine (its render model changes and its detection
@@ -1794,8 +2461,13 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // step for itself. A no-op for the demo's dmg/cgb/agb stands (distinct boot models never choir).
         DissolveChoirFor(console: target);
         m_bricks[target].ChangeModel(model: model);
-        Console.Error.WriteLine(value: $"[debug] console {target}: live device swap to {model} — game keeps running, no boot.");
+
+        return $"[mode] console {target}: live device swap to {model} — game keeps running, no boot.";
     }
+
+    /// <inheritdoc/>
+    public string SwapConsoleModel(int consoleIndex, string model) =>
+        SwapConsoleModelInternal(target: consoleIndex, model: GamingBrickChildNode.ParseModel(value: model));
 
     // The serial link cable verb (Bricks page): press near a booted console to mark it as the pending link end; a
     // second press near a DIFFERENT booted console connects the two as a linked pair; near a LINKED console it
@@ -1897,12 +2569,34 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         }
     }
 
+    // Cancels a cabinet's running press tape because its cartridge is changing (swap or eject): seat the cabinet at
+    // the shared timeline head and restore the prior input source — mirroring the completion path — then echo to
+    // STDOUT (the stream a piped agent watches for tape completion), so the agent sees the pre-emption instead of
+    // waiting forever. A no-op when the cabinet is not scripted.
+    private void CancelPressScriptForCartChange(int console) {
+        if ((m_timeline is not { } pressTimeline) || !pressTimeline.PressIsScripted(console: console)) {
+            return;
+        }
+
+        pressTimeline.PressCancel(console: console);
+        m_timeline!.SkipToHead(consoleIndex: console);
+        m_bricks[console].SegmentSource = ((m_consoleOwner[console] >= 0) ? null : TimelineFillFor(consoleIndex: console));
+        Console.Out.WriteLine(value: $"[press] console {console}: scripted tape canceled — the cartridge changed under it.");
+    }
+
     // The proximity TAKEOVER (host-side ownership, never sim state): the owned machine diverges from the shared
     // stream exactly like the debug verbs do — choir membership dissolves first — then its SegmentSource clears so
     // the brick falls back to per-frame pad sampling, which the pad service's ownership override routes to the
     // OWNER's pad alone.
     private void TakeOverConsole(int console, int slot) {
         DissolveChoirFor(console: console);
+
+        // A press tape driving this cabinet is pre-empted by the takeover — the pad now owns the input, so cancel the
+        // tape and narrate, so a scripted agent sees the human take the wheel.
+        if ((m_timeline is { } pressTimeline) && pressTimeline.PressIsScripted(console: console)) {
+            pressTimeline.PressCancel(console: console);
+            Console.Error.WriteLine(value: $"[press] console {console}: scripted tape canceled — player {slot} took over.");
+        }
 
         m_bricks[console].SegmentSource = null;
         m_padService?.SetBrickOwner(brickOrdinal: console, playerIndex: slot);
@@ -1943,10 +2637,20 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         var padCount = Math.Clamp(value: Math.Max(val1: connectedPads, val2: (1 + scriptedPlayers)), min: 1, max: OverworldWorld.MaxPlayers);
 
         for (var index = 1; (index < padCount); index++) {
+            // An addon ghost owns its slot exclusively (seated by EnsureRoster) — never seat a pad player over it.
+            if (m_addons?.OwnsSlot(slot: index) ?? false) {
+                continue;
+            }
+
             _ = world.AddPlayer(playerId: DeterministicGuid(salt: (uint)index));
         }
 
         for (var slot = padCount; (slot < OverworldWorld.MaxPlayers); slot++) {
+            // Addon ghosts are padless roster occupants — never pad-evicted (a low pad count must not remove a ghost).
+            if (m_addons?.OwnsSlot(slot: slot) ?? false) {
+                continue;
+            }
+
             if (world.Slots[slot] is not { } player) {
                 continue;
             }
@@ -2001,7 +2705,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
     // The per-console accent colors the frame source paints the stands with, by costume.
     private IReadOnlyList<Vector3> ConsoleAccents() {
-        var accents = new Vector3[Math.Max(1, m_consoles.Count)];
+        var accents = new Vector3[Math.Max(val1: 1, val2: m_consoles.Count)];
 
         for (var index = 0; (index < accents.Length); index++) {
             accents[index] = (((index < m_consoles.Count) ? m_consoles[index].Model.ToLowerInvariant() : "cgb") switch {
@@ -2013,7 +2717,6 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
 
         return accents;
     }
-
     private void AdvanceSimulation(in FrameContext context) {
         if (context.StepTicks == 0UL) {
             return;
@@ -2039,7 +2742,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     private void AdvanceConsoleMode(in FrameContext context, int tickCount) {
         var world = m_world!;
         // Two fixed-width intent rows: press/release edges land on the frame's first tick only (the first row);
-        // held state carries across the rest — the same frame-sampled discipline IPlayerIntentSource documents. Reused
+        // held state carries across the rest — the same frame-sampled discipline IIntentSource<PlayerIntent> documents. Reused
         // across frames and cleared to default(PlayerIntent) here (exactly what a fresh new[] gave), so an inactive or
         // unfilled slot reads back None before the samplers below overwrite the active ones.
         var firstTickIntents = m_firstTickIntents;
@@ -2054,6 +2757,10 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         var roomMove = Vector2.Zero;
 
         pendingTakeover.Fill(value: -1);
+
+        // Seat each addon ghost's padless roster occupant before the human samplers run (both paths), so its slot has a
+        // live body to read and the samplers below leave it alone (they skip addon-owned slots).
+        m_addons?.EnsureRoster(world: world);
 
         if ((m_pagedBindings is { } bindings) && (m_padService is { } pads) && (m_pageInputs.Length > 0)) {
             AdvancePagedSlots(context: in context, world: world, bindings: bindings, pads: pads, firstTickIntents: firstTickIntents, heldIntents: heldIntents, pendingTakeover: pendingTakeover, roomMove: ref roomMove, roomJumpHeld: ref roomJumpHeld);
@@ -2106,6 +2813,12 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         if ((m_frameSource?.ConsumePendingWorldLoad()) is { } worldNarration) {
             Console.Error.WriteLine(value: worldNarration);
         }
+
+        // The addon pump — AFTER the human intent fill, BEFORE the Advance loop: each enabled ghost ticks against its
+        // slot's live local position and OVERWRITES that slot's intent rows with its returned virtual-pad commands.
+        // Console mode never consults IIntentSource<PlayerIntent>, so this is the ghost's only hook; its slot is skipped by the
+        // human sampler and never pad-evicted, so there is no last-writer-wins race.
+        m_addons?.Apply(firstTickIntents: firstTickIntents, heldIntents: heldIntents, world: world);
 
         for (var index = 0; (index < tickCount); index++) {
             world.Advance(intentsBySlot: ((index == 0) ? firstTickIntents : heldIntents));
@@ -2163,6 +2876,17 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         }
     }
 
+    // The dpad's unbound-direction fallback, lifted out of AdvancePagedSlots' per-slot loop: a debug page that claims a
+    // dpad button owns it while its chord is held, so movement only reads a direction the ACTIVE page leaves unbound.
+    private static Vector2 ApplyUnboundDpadMove(OverworldPageInput pages, GamepadButtons buttons, Vector2 move) {
+        if (!pages.Binds(source: InputSources.Gamepad.DpadLeft) && (0 != (buttons & GamepadButtons.DpadLeft))) { move.X = -1f; }
+        if (!pages.Binds(source: InputSources.Gamepad.DpadRight) && (0 != (buttons & GamepadButtons.DpadRight))) { move.X = 1f; }
+        if (!pages.Binds(source: InputSources.Gamepad.DpadUp) && (0 != (buttons & GamepadButtons.DpadUp))) { move.Y = 1f; }
+        if (!pages.Binds(source: InputSources.Gamepad.DpadDown) && (0 != (buttons & GamepadButtons.DpadDown))) { move.Y = -1f; }
+
+        return move;
+    }
+
     // The binding-page path's per-slot half of AdvanceConsoleMode: one page adapter per active slot replays that
     // player's drained pad into the paged resolver, then reads the commands by NAME — the on-disk profile is the
     // source of truth for which button does what. Fills both intent rows, stages the boot-press takeover claims,
@@ -2191,10 +2915,19 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 continue;
             }
 
-            var pages = (m_pageInputs[slot] ??= new OverworldPageInput(bindings: bindings, slot: slot));
-            var raw = pads.SamplePlayerRaw(playerIndex: slot, frameKey: context.RenderTicks);
+            // An addon-owned slot is driven exclusively by its ghost (m_addons.Apply overwrites its intent rows after
+            // this loop): skip the human sampler so it never stomps the ghost, and keep it off the binding bar.
+            if (m_addons?.OwnsSlot(slot: slot) ?? false) {
+                continue;
+            }
 
-            pages.BeginFrame(state: in raw);
+            // m_pageInputs is only allocated once the arbiter resolved (see EnsureResources), so it is non-null here.
+            var pages = (m_pageInputs[slot] ??= new OverworldPageInput(arbiter: m_arbiter!, bindings: bindings, slot: slot));
+
+            pages.BeginFrame(frameKey: context.RenderTicks);
+
+            var raw = pages.Raw;
+
             pads.SetPlayerBrickInputEnabled(playerIndex: slot, enabled: pages.AllowsBrickInput);
 
             // START (slot 0) drives the create→commit→play loop and hosts the three authoring takeovers — extracted
@@ -2203,15 +2936,10 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 continue;
             }
 
-            var move = raw.LeftStick;
-
-            // The sticks are always-on; the dpad moves the player only where the ACTIVE page leaves that
-            // direction unbound (a debug page that claims a dpad button owns it while its chord is held).
-            if (!pages.Binds(source: InputSources.Gamepad.DpadLeft) && (0 != (raw.Buttons & GamepadButtons.DpadLeft))) { move.X = -1f; }
-            if (!pages.Binds(source: InputSources.Gamepad.DpadRight) && (0 != (raw.Buttons & GamepadButtons.DpadRight))) { move.X = 1f; }
-            if (!pages.Binds(source: InputSources.Gamepad.DpadUp) && (0 != (raw.Buttons & GamepadButtons.DpadUp))) { move.Y = 1f; }
-            if (!pages.Binds(source: InputSources.Gamepad.DpadDown) && (0 != (raw.Buttons & GamepadButtons.DpadDown))) { move.Y = -1f; }
-
+            // The sticks are always-on; the dpad moves the player only where the ACTIVE page leaves that direction
+            // unbound. Extracted into a helper so this loop's cyclomatic weight stays under the CA1502 ceiling
+            // (AdvancePagedSlots sits AT it) — the call site adds no branch of its own.
+            var move = ApplyUnboundDpadMove(buttons: raw.Buttons, move: raw.LeftStick, pages: pages);
             var jumpHeld = pages.IsHeld(command: OverworldInput.JumpCommand);
 
             // The command switchboard's feed: publish THIS player's command-derived joypad so their brick (owned, or
@@ -2302,23 +3030,32 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             });
         }
 
-        // While creator mode is up, the overlay shows the single creator bar (its physical buttons remapped to the
-        // active verb PAGE's authoring verbs); while WORLD-SCULPT is up, the world bar (same chord model, the
-        // sculptor's own pages); otherwise one 12-slot bar per active player, each joined against ITS page state
-        // and context.
-        if (m_frameSource is { CreatorActive: true } creatorSource) {
+        PublishActiveBar(creatorButtons: creatorButtons);
+    }
+
+    // The per-frame bar publish, extracted from AdvancePagedSlots (which sits AT its CA1502 ceiling) so the added
+    // authoring-surface arms cost that method no branches. Most-specific surface first: the workbench HUB picker, then
+    // the creator bar (its physical buttons remapped to the active verb PAGE), then WORLD-SCULPT's bar (same chord
+    // model, the sculptor's pages), then TRACKER's honest minimal bar; otherwise one 12-slot bar per active player
+    // joined against ITS page state. Names only already-coupled types (m_frameSource / m_bindingBarAdapter / the cached
+    // callbacks), so the node's coupling count is unchanged.
+    private void PublishActiveBar(GamepadButtons creatorButtons) {
+        if (m_frameSource is { HubActive: true } hubSource) {
+            m_bindingBarAdapter?.PublishHub(heldButtons: creatorButtons, selection: hubSource.HubSelection);
+        } else if (m_frameSource is { CreatorActive: true } creatorSource) {
             m_bindingBarAdapter?.PublishCreator(heldButtons: creatorButtons, page: creatorSource.CreatorBarPage);
         } else if (m_frameSource is { WorldSculptActive: true } worldSource) {
             m_bindingBarAdapter?.PublishWorld(heldButtons: worldSource.WorldSculptHeldButtons, page: worldSource.WorldSculptBarPage);
+        } else if (TrackerModeActive) {
+            m_bindingBarAdapter?.PublishTracker(heldButtons: creatorButtons);
         } else {
             m_bindingBarAdapter?.Publish(
-                activeSlots: activeSlots,
+                activeSlots: m_activeSlots,
                 contextIconForSlot: m_contextIconForSlot,
                 isHeldForSlot: m_isHeldForSlot
             );
         }
     }
-
     private void AdvanceBareRoom(int tickCount) {
         var world = m_world!;
 
@@ -2344,7 +3081,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
                 }
             }
 
-            var intents = m_intentSource.CollectTick(tick: tick, players: world.RosterBySlot());
+            var intents = m_intentSource.CollectTick(tick: tick, participants: world.RosterBySlot());
 
             world.Advance(intentsBySlot: intents);
         }
@@ -2366,7 +3103,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         (CouplingFor(consoleIndex: consoleIndex) is BrickCoupling.BrickDrives or BrickCoupling.Parallel);
 
     // How CLOSE a console's pane camera sits (0 = the wide room, 1 = the screen filling the pane natively). Every
-    // visible pane sits fully close so its diegetic screen reads like a real GB/GBA panel: before the reveal the
+    // visible pane sits fully close so its diegetic screen reads like a real handheld panel: before the reveal the
     // immersed "inside the ROM" look, and after the reveal an ENGAGED (BrickDrives) cabinet's game fills its secondary
     // slice so the standing player can actually play it. A non-driven cabinet stays on the room camera (hidden anyway).
     private float PaneClosenessFor(int consoleIndex) {
@@ -2439,7 +3176,6 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
             }
         }
     }
-
     private static JoypadButtons MirrorOf(Vector2 move, bool jumpHeld) {
         var buttons = default(JoypadButtons);
 
@@ -2509,7 +3245,7 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
     private static Guid DeterministicGuid(uint salt) {
         var bytes = new byte[16];
 
-        BitConverter.TryWriteBytes(destination: bytes, value: (0xA571_0000u | salt));
+        BitConverter.TryWriteBytes(destination: bytes, value: 0xA571_0000u | salt);
 
         return new Guid(b: bytes);
     }
@@ -2550,6 +3286,9 @@ internal sealed class OverworldRenderNode : IRenderNode, IDebugViewTarget, ICrea
         // The native AGB scene's machine + framebuffer upload (a DI singleton, but its GPU upload must fall before the
         // device is destroyed, exactly like the bricks above).
         (m_agbService ?? AgbService())?.Shutdown();
+
+        // The WASM addon runtime owns one Wasmtime store + the engine per addon (native resources) — dispose with the node.
+        m_addons?.Dispose();
     }
 }
 
@@ -2568,12 +3307,17 @@ internal interface ICreatorModeHost {
     /// the <c>creator.*</c> console verbs reach the authored scene through it.</summary>
     OverworldFrameSource? CreatorFrameSource { get; }
 
+    /// <summary>The WASM-addon runtime seam the <c>addon</c> console verbs drive (list / enable / disable), or
+    /// <see langword="null"/> when the run declares no addons — available from the first frame (built by the graph
+    /// builder, not lazily like the frame source).</summary>
+    IAddonControlHost? AddonControl { get; }
+
     /// <summary>Toggles creator mode and returns the new state (false if the root is not yet ready).</summary>
     bool ToggleCreatorMode();
 
     /// <summary>Queues a FORGE of the current creator creation into a cart on the next frame (the live GPU device is
-    /// there). The <paramref name="subject"/> word chooses which cart the SAME creation forges: <c>avatar</c> (default,
-    /// back-compat) — the walker overworld <c>.gbc</c> written to disk under <c>./forged-avatars</c>; <c>scene</c> — the
+    /// there). The <paramref name="subject"/> word chooses which cart the SAME creation forges: <c>avatar</c> (default)
+    /// — the walker overworld <c>.gbc</c> written to disk under <c>./forged-avatars</c>; <c>scene</c> — the
     /// SDF-art creature cart forged + hot-swapped into the nearest cabinet in-session. Returns a status line.</summary>
     /// <param name="subject">The forge subject: <c>avatar</c> (default) or <c>scene</c>.</param>
     string RequestCreatorForge(string subject);
@@ -2601,11 +3345,21 @@ internal interface ICreatorModeHost {
     /// through <see cref="CreatorFrameSource"/>, every authoring surface's composition point.</summary>
     string ToggleSdfDebugMode();
 
-    /// <summary>Reads the previous frame's per-pass GPU times (beam/views/composite/frame milliseconds) for
-    /// <c>sdf.info</c> — a primitive-typed passthrough of the producer's <c>SdfEngineNode.TryReadPassTimings</c> so the
-    /// node names no engine type it does not already. False when the producer is absent or timing is off
-    /// (<c>PUCK_TIMING=1</c> / the spec Timing flag).</summary>
-    bool TryReadSdfPassTimings(out double beam, out double views, out double composite, out double frame);
+    /// <summary>Reads the previous frame's per-pass GPU times for <c>sdf.info</c> — a passthrough of the producer's
+    /// <c>SdfEngineNode.TryReadPassTimings</c> that fills <paramref name="passMilliseconds"/> (one entry per
+    /// <c>SdfWorldEngine.PassTimingLabels</c>, in order) and the whole-frame span, so the node names no engine type it
+    /// does not already. False when the producer is absent or timing is off (arm it live via the gpu.timing switch /
+    /// the world.timing verb, or the run-doc <c>host.timing</c> field).</summary>
+    /// <param name="passMilliseconds">Receives each render pass's milliseconds; size it to <c>SdfWorldEngine.PassTimingCount</c>.</param>
+    /// <param name="passCount">The number of pass entries written (0 when unavailable).</param>
+    /// <param name="frame">The whole-frame milliseconds.</param>
+    bool TryReadSdfPassTimings(Span<double> passMilliseconds, out int passCount, out double frame);
+
+    /// <summary>Reads the cadence gate's per-span diagnostics for <c>sdf.info</c> — a passthrough of the producer's
+    /// <c>SdfEngineNode.TryReadCadenceDiagnostics</c>, mirroring <see cref="TryReadSdfPassTimings"/>. False when the
+    /// producer is absent.</summary>
+    /// <param name="diagnostics">Receives the latest diagnostics.</param>
+    bool TryReadSdfCadenceDiagnostics(out SdfCadenceDiagnostics diagnostics);
 
     /// <summary>Starts or stops the headless preview of the working tune. Returns a status line for the console.</summary>
     /// <param name="play"><see langword="true"/> to (re)start the preview, <see langword="false"/> to stop it.</param>
@@ -2620,6 +3374,14 @@ internal interface ICreatorModeHost {
     /// <c>AgbDebugService</c>; the <c>agb.*</c> execution-control verbs drive that service directly.</summary>
     /// <param name="romPath">An optional explicit cartridge ROM path.</param>
     string ToggleAgbDebugMode(string? romPath);
+
+    /// <summary>Live device swap by EXPLICIT console index — the <c>mode &lt;i&gt; &lt;dmg|cgb|agb&gt;</c> console verb's
+    /// parity with the proximity Bricks-page chord. Both land on the identical snapshot-preserving <c>ChangeModel</c>
+    /// costume change (the game keeps running, no reboot). String-typed so the console module stays primitive; an
+    /// unrecognized model word parses to CGB. Returns a status line.</summary>
+    /// <param name="consoleIndex">The target console index.</param>
+    /// <param name="model">The desired costume: <c>dmg</c> | <c>cgb</c> | <c>agb</c>.</param>
+    string SwapConsoleModel(int consoleIndex, string model);
 }
 
 /// <summary>How a player's input is coupled to their world-lens cabinet — the switchboard's per-connection setting.</summary>

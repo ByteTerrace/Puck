@@ -38,12 +38,12 @@ public static class VulkanPresenterServiceRegistration {
         // The swapchain renderer, its surface-blit compositor, and the seam the host drives. The application
         // name is a cosmetic Vulkan instance label; it defaults to the running app, and a consumer may
         // register its own VulkanRendererOptions before calling this to override it.
-        services.TryAddSingleton(new VulkanRendererOptions {
+        services.TryAddSingleton(instance: new VulkanRendererOptions {
             ApplicationName = AppDomain.CurrentDomain.FriendlyName,
         });
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).
-        services.TryAddSingleton(new PresentationOptions());
+        services.TryAddSingleton(instance: new PresentationOptions());
         services.TryAddSingleton<VulkanRenderer>();
         // Publish the device context as a public interface so a consumer can compose its own root host
         // context (e.g. adding a DirectX device) without referencing the renderer type.
@@ -73,32 +73,33 @@ public static class VulkanPresenterServiceRegistration {
 
         // Backend-neutral GPU abstractions: adapters that wrap the Vulkan-specific services above and
         // implement the IGpu* interfaces the render nodes (the compute world producer, and future nodes) drive.
-        services.TryAddSingleton<IGpuCommandRecorder>(static sp => new VulkanGpuCommandRecorder(
+        services.TryAddSingleton<IGpuCommandRecorder>(implementationFactory: static sp => new VulkanGpuCommandRecorder(
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()
         ));
-        services.TryAddSingleton<IGpuDescriptorAllocator>(static sp => new VulkanGpuDescriptorAllocator(
+        services.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static sp => new VulkanGpuDescriptorAllocator(
             allocator: sp.GetRequiredService<VulkanDescriptorAllocator>()
         ));
-        services.TryAddSingleton<IGpuPipelineFactory>(static sp => new VulkanGpuPipelineFactory(
+        services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static sp => new VulkanGpuPipelineFactory(
             pipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>()
         ));
         services.TryAddSingleton<IGpuQueueSubmitter>(static sp => new VulkanGpuQueueSubmitter(
+            frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>()
         ));
-        services.TryAddSingleton<IGpuRenderTargetFactory>(static sp => new VulkanGpuRenderTargetFactory(
+        services.TryAddSingleton<IGpuRenderTargetFactory>(implementationFactory: static sp => new VulkanGpuRenderTargetFactory(
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
             renderPassApi: sp.GetRequiredService<IVulkanRenderPassApi>()
         ));
-        services.TryAddSingleton<IGpuShaderModuleFactory>(static sp => new VulkanGpuShaderModuleFactory(
+        services.TryAddSingleton<IGpuShaderModuleFactory>(implementationFactory: static sp => new VulkanGpuShaderModuleFactory(
             shaderModuleFactory: sp.GetRequiredService<IVulkanShaderModuleFactory>()
         ));
         // Optional capability: a Vulkan host can export a render target in shared device memory (an opaque Win32 NT
         // handle) for ANOTHER Vulkan instance to import zero-copy. A host resolves this when present and falls back
         // to the CPU-pixel transport otherwise. Unlike Direct3D 12's export, an opaque-Vulkan handle is not
         // importable by D3D12 — this is a Vulkan-to-Vulkan capability.
-        services.TryAddSingleton<IGpuSurfaceExportFactory>(static sp => new VulkanGpuSurfaceExportFactory(
+        services.TryAddSingleton<IGpuSurfaceExportFactory>(implementationFactory: static sp => new VulkanGpuSurfaceExportFactory(
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
@@ -106,10 +107,10 @@ public static class VulkanPresenterServiceRegistration {
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),
             renderPassApi: sp.GetRequiredService<IVulkanRenderPassApi>()
         ));
-        services.TryAddSingleton<IGpuStorageBufferFactory>(static sp => new VulkanGpuStorageBufferFactory(
+        services.TryAddSingleton<IGpuStorageBufferFactory>(implementationFactory: static sp => new VulkanGpuStorageBufferFactory(
             storageBufferFactory: sp.GetRequiredService<IVulkanStorageBufferFactory>()
         ));
-        services.TryAddSingleton<IGpuSurfaceTransferFactory>(static sp => new VulkanGpuSurfaceTransferFactory(
+        services.TryAddSingleton<IGpuSurfaceTransferFactory>(implementationFactory: static sp => new VulkanGpuSurfaceTransferFactory(
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
@@ -120,7 +121,7 @@ public static class VulkanPresenterServiceRegistration {
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),
             storageBufferFactory: sp.GetRequiredService<IVulkanStorageBufferFactory>()
         ));
-        services.TryAddSingleton<IGpuVertexBufferFactory>(static sp => new VulkanGpuVertexBufferFactory(
+        services.TryAddSingleton<IGpuVertexBufferFactory>(implementationFactory: static sp => new VulkanGpuVertexBufferFactory(
             vertexBufferFactory: sp.GetRequiredService<IVulkanVertexBufferFactory>()
         ));
 
@@ -144,27 +145,27 @@ public static class VulkanPresenterServiceRegistration {
     /// <summary>Registers one native API per Vulkan capability the renderer, compositor, and engine use.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
-        services.TryAddSingleton<IVulkanCommandBufferRecordingApi>(static sp => new VulkanNativeCommandBufferRecordingApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanCommandResourcesApi>(static _ => new VulkanNativeCommandResourcesApi());
-        services.TryAddSingleton<IVulkanComputePipelineApi>(static sp => new VulkanNativeComputePipelineApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanDescriptorApi>(static _ => new VulkanNativeDescriptorApi());
-        services.TryAddSingleton<IVulkanExternalMemoryApi>(static _ => new VulkanNativeExternalMemoryApi());
-        services.TryAddSingleton<IVulkanFramebufferSetApi>(static sp => new VulkanNativeFramebufferSetApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanFrameReadbackApi>(static _ => new VulkanNativeFrameReadbackApi());
-        services.TryAddSingleton<IVulkanFramePresentationApi>(static sp => new VulkanNativeFramePresentationApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanFrameSynchronizationApi>(static _ => new VulkanNativeFrameSynchronizationApi());
-        services.TryAddSingleton<IVulkanGraphicsPipelineApi>(static sp => new VulkanNativeGraphicsPipelineApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanInstanceApi>(static sp => new VulkanNativeInstanceApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanQueryPoolApi>(static _ => new VulkanNativeQueryPoolApi());
-        services.TryAddSingleton<IVulkanLogicalDeviceApi>(static sp => new VulkanNativeLogicalDeviceApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanOffscreenImageApi>(static _ => new VulkanNativeOffscreenImageApi());
-        services.TryAddSingleton<IVulkanPhysicalDeviceApi>(static sp => new VulkanNativePhysicalDeviceApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanRenderPassApi>(static sp => new VulkanNativeRenderPassApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanShaderModuleApi>(static _ => new VulkanNativeShaderModuleApi());
-        services.TryAddSingleton<IVulkanStorageBufferApi>(static _ => new VulkanNativeStorageBufferApi());
-        services.TryAddSingleton<IVulkanSurfaceApi>(static _ => new VulkanNativeSurfaceApi());
-        services.TryAddSingleton<IVulkanSwapchainApi>(static sp => new VulkanNativeSwapchainApi(sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanVertexBufferApi>(static _ => new VulkanNativeVertexBufferApi());
+        services.TryAddSingleton<IVulkanCommandBufferRecordingApi>(implementationFactory: static sp => new VulkanNativeCommandBufferRecordingApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanCommandResourcesApi>(implementationFactory: static _ => new VulkanNativeCommandResourcesApi());
+        services.TryAddSingleton<IVulkanComputePipelineApi>(implementationFactory: static sp => new VulkanNativeComputePipelineApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanDescriptorApi>(implementationFactory: static _ => new VulkanNativeDescriptorApi());
+        services.TryAddSingleton<IVulkanExternalMemoryApi>(implementationFactory: static _ => new VulkanNativeExternalMemoryApi());
+        services.TryAddSingleton<IVulkanFramebufferSetApi>(implementationFactory: static sp => new VulkanNativeFramebufferSetApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanFrameReadbackApi>(implementationFactory: static _ => new VulkanNativeFrameReadbackApi());
+        services.TryAddSingleton<IVulkanFramePresentationApi>(implementationFactory: static sp => new VulkanNativeFramePresentationApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanFrameSynchronizationApi>(implementationFactory: static _ => new VulkanNativeFrameSynchronizationApi());
+        services.TryAddSingleton<IVulkanGraphicsPipelineApi>(implementationFactory: static sp => new VulkanNativeGraphicsPipelineApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanInstanceApi>(implementationFactory: static sp => new VulkanNativeInstanceApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanQueryPoolApi>(implementationFactory: static _ => new VulkanNativeQueryPoolApi());
+        services.TryAddSingleton<IVulkanLogicalDeviceApi>(implementationFactory: static sp => new VulkanNativeLogicalDeviceApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanOffscreenImageApi>(implementationFactory: static _ => new VulkanNativeOffscreenImageApi());
+        services.TryAddSingleton<IVulkanPhysicalDeviceApi>(implementationFactory: static sp => new VulkanNativePhysicalDeviceApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanRenderPassApi>(implementationFactory: static sp => new VulkanNativeRenderPassApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanShaderModuleApi>(implementationFactory: static _ => new VulkanNativeShaderModuleApi());
+        services.TryAddSingleton<IVulkanStorageBufferApi>(implementationFactory: static _ => new VulkanNativeStorageBufferApi());
+        services.TryAddSingleton<IVulkanSurfaceApi>(implementationFactory: static _ => new VulkanNativeSurfaceApi());
+        services.TryAddSingleton<IVulkanSwapchainApi>(implementationFactory: static sp => new VulkanNativeSwapchainApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanVertexBufferApi>(implementationFactory: static _ => new VulkanNativeVertexBufferApi());
 
         return services;
     }
@@ -173,35 +174,35 @@ public static class VulkanPresenterServiceRegistration {
     /// renderer and compositor compose over the native APIs.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanFactories(this IServiceCollection services) {
-        services.TryAddSingleton<IVulkanInstanceFactory>(static sp => new VulkanInstanceFactory(sp.GetRequiredService<IVulkanInstanceApi>()));
-        services.TryAddSingleton<IVulkanSurfaceFactory>(static sp => new VulkanSurfaceFactory(sp.GetRequiredService<IVulkanSurfaceApi>()));
-        services.TryAddSingleton<IVulkanPhysicalDeviceSelector>(static sp => new VulkanPhysicalDeviceSelector(sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
-        services.TryAddSingleton<IVulkanLogicalDeviceFactory>(static sp =>
+        services.TryAddSingleton<IVulkanInstanceFactory>(implementationFactory: static sp => new VulkanInstanceFactory(instanceApi: sp.GetRequiredService<IVulkanInstanceApi>()));
+        services.TryAddSingleton<IVulkanSurfaceFactory>(implementationFactory: static sp => new VulkanSurfaceFactory(surfaceApi: sp.GetRequiredService<IVulkanSurfaceApi>()));
+        services.TryAddSingleton<IVulkanPhysicalDeviceSelector>(implementationFactory: static sp => new VulkanPhysicalDeviceSelector(physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
+        services.TryAddSingleton<IVulkanLogicalDeviceFactory>(implementationFactory: static sp =>
             new VulkanLogicalDeviceFactory(
-                sp.GetRequiredService<IVulkanLogicalDeviceApi>(),
-                sp.GetRequiredService<IVulkanPhysicalDeviceApi>()
+                logicalDeviceApi: sp.GetRequiredService<IVulkanLogicalDeviceApi>(),
+                physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>()
             ));
-        services.TryAddSingleton<IVulkanSwapchainSupportApi>(static sp => new VulkanSwapchainSupportApi(sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
-        services.TryAddSingleton<IVulkanSwapchainFactory>(static sp => new VulkanSwapchainFactory(sp.GetRequiredService<IVulkanSwapchainApi>()));
-        services.TryAddSingleton<IVulkanRenderPassFactory>(static sp => new VulkanRenderPassFactory(sp.GetRequiredService<IVulkanRenderPassApi>()));
-        services.TryAddSingleton<IVulkanFramebufferSetFactory>(static sp => new VulkanFramebufferSetFactory(sp.GetRequiredService<IVulkanFramebufferSetApi>()));
-        services.TryAddSingleton<IVulkanCommandResourcesFactory>(static sp => new VulkanCommandResourcesFactory(sp.GetRequiredService<IVulkanCommandResourcesApi>(), sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanFrameSynchronizationFactory>(static sp => new VulkanFrameSynchronizationFactory(sp.GetRequiredService<IVulkanFrameSynchronizationApi>()));
-        services.TryAddSingleton<IVulkanFramePresenter>(static sp =>
+        services.TryAddSingleton<IVulkanSwapchainSupportApi>(implementationFactory: static sp => new VulkanSwapchainSupportApi(physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
+        services.TryAddSingleton<IVulkanSwapchainFactory>(implementationFactory: static sp => new VulkanSwapchainFactory(swapchainApi: sp.GetRequiredService<IVulkanSwapchainApi>()));
+        services.TryAddSingleton<IVulkanRenderPassFactory>(implementationFactory: static sp => new VulkanRenderPassFactory(renderPassApi: sp.GetRequiredService<IVulkanRenderPassApi>()));
+        services.TryAddSingleton<IVulkanFramebufferSetFactory>(implementationFactory: static sp => new VulkanFramebufferSetFactory(framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>()));
+        services.TryAddSingleton<IVulkanCommandResourcesFactory>(implementationFactory: static sp => new VulkanCommandResourcesFactory(sp.GetRequiredService<IVulkanCommandResourcesApi>(), sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanFrameSynchronizationFactory>(implementationFactory: static sp => new VulkanFrameSynchronizationFactory(frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>()));
+        services.TryAddSingleton<IVulkanFramePresenter>(implementationFactory: static sp =>
             new VulkanFramePresenter(
-                sp.GetRequiredService<IVulkanFramePresentationApi>(),
-                sp.GetRequiredService<IVulkanFrameSynchronizationApi>()
+                framePresentationApi: sp.GetRequiredService<IVulkanFramePresentationApi>(),
+                frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>()
             ));
-        services.TryAddSingleton<IVulkanGraphicsPipelineFactory>(static sp => new VulkanGraphicsPipelineFactory(sp.GetRequiredService<IVulkanGraphicsPipelineApi>()));
-        services.TryAddSingleton<IVulkanShaderModuleFactory>(static sp => new VulkanShaderModuleFactory(sp.GetRequiredService<IVulkanShaderModuleApi>()));
-        services.TryAddSingleton<IVulkanStorageBufferFactory>(static sp => new VulkanStorageBufferFactory(sp.GetRequiredService<IVulkanStorageBufferApi>()));
-        services.TryAddSingleton<IVulkanVertexBufferFactory>(static sp => new VulkanVertexBufferFactory(sp.GetRequiredService<IVulkanVertexBufferApi>()));
+        services.TryAddSingleton<IVulkanGraphicsPipelineFactory>(implementationFactory: static sp => new VulkanGraphicsPipelineFactory(graphicsPipelineApi: sp.GetRequiredService<IVulkanGraphicsPipelineApi>()));
+        services.TryAddSingleton<IVulkanShaderModuleFactory>(implementationFactory: static sp => new VulkanShaderModuleFactory(shaderModuleApi: sp.GetRequiredService<IVulkanShaderModuleApi>()));
+        services.TryAddSingleton<IVulkanStorageBufferFactory>(implementationFactory: static sp => new VulkanStorageBufferFactory(storageBufferApi: sp.GetRequiredService<IVulkanStorageBufferApi>()));
+        services.TryAddSingleton<IVulkanVertexBufferFactory>(implementationFactory: static sp => new VulkanVertexBufferFactory(vertexBufferApi: sp.GetRequiredService<IVulkanVertexBufferApi>()));
 
         // The renderer's command-buffer recorder, the content-addressed asset source, and the shader loader.
-        services.TryAddSingleton<IVulkanCommandBufferRecorder>(static sp => new VulkanCommandBufferRecorder(sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()));
+        services.TryAddSingleton<IVulkanCommandBufferRecorder>(implementationFactory: static sp => new VulkanCommandBufferRecorder(commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()));
         services.TryAddSingleton<IAssetSource, FileSystemAssetSource>();
         services.TryAddSingleton<IShaderModuleLoader, ShaderModuleLoader>();
-        services.TryAddSingleton(static sp => new VulkanDescriptorAllocator(sp.GetRequiredService<IVulkanDescriptorApi>()));
+        services.TryAddSingleton(implementationFactory: static sp => new VulkanDescriptorAllocator(descriptorApi: sp.GetRequiredService<IVulkanDescriptorApi>()));
 
         return services;
     }

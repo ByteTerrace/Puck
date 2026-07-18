@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SdfVm.Queries;
 
 namespace Puck.Demo.Overworld;
 
@@ -40,19 +41,28 @@ public enum MovementLock {
 /// </para>
 /// </summary>
 public sealed class OverworldWorld {
+    /// <summary>One planted garden: a seed and the tick it was planted, plus the room-local X/Z it was planted at —
+    /// the WHOLE of a garden's sim state (see <see cref="PlantGarden"/>). Deliberately NOT the tree geometry itself:
+    /// growth is a pure function of <c>(Seed, CurrentTick − PlantedTick)</c>, recomputed fresh every frame by
+    /// <c>Puck.Demo.Garden.GardenTreeGenerator</c>/<c>GardenRenderer</c> — never sim state, so replaying the SAME
+    /// plant/tick stream always regrows the SAME tree.</summary>
+    public readonly record struct GardenPlant(uint Seed, ulong PlantedTick, FixedQ4816 LocalX, FixedQ4816 LocalZ);
+
     /// <summary>The maximum concurrent players — also the fixed dynamic-transform slot count for player boxes. Matches
     /// the room's console capacity (one pane per player under the compositor's room-plus-panes viewport budget);
     /// growing past it is a later phase.</summary>
     public const int MaxPlayers = 4;
 
     /// <summary>The number of cartridge TYPES a cabinet can hold (world-lens / camera / showcase / AVATAR / VOLLEY / BRICKFALL
-    /// / CHROMA / SOLITAIRE / POKER / JUKEBOX / SCENE), cycled at the cabinet. Types 4–8 are the five five-star framework
-    /// games (genuine SM83 ROMs). Types 3 (AVATAR walker), 9 (JUKEBOX tune) and 10 (SDF-ART SCENE creature) are the three
-    /// in-session FORGED subjects (the create/author→forge→hot-swap loop — see <see cref="Forge.ForgeSubject"/>); each is
-    /// baked LAZILY the first time a cabinet wants it, so a forged type is Cycle-reachable but never a boot default.
-    /// Purely a count; the sim never learns what bytes a type maps to (that is host-side, in the render node's ROM
-    /// table).</summary>
-    public const int CartTypeCount = 11;
+    /// / CHROMA / SOLITAIRE / POKER / JUKEBOX / SCENE / ORACLE / CRITTER-SWAP), cycled at the cabinet. Types 4–8 are the
+    /// five five-star framework games (genuine SM83 ROMs); type 11 (ORACLE) is a sixth, spare framework game (a text-only
+    /// fortune cart, eagerly sourced like the other games); type 12 (CRITTER-SWAP) is a link-trading toy (a genuine SM83
+    /// cart with battery-backed SRAM whose whole point is the link cable — two cabinets Cycled to it and linked swap their
+    /// held critters). Types 3 (AVATAR walker), 9 (JUKEBOX tune) and 10 (SDF-ART SCENE creature) are the three in-session
+    /// FORGED subjects (the create/author→forge→hot-swap loop — see <see cref="Forge.ForgeSubject"/>); each is baked LAZILY
+    /// the first time a cabinet wants it, so a forged type is Cycle-reachable but never a boot default. Purely a count; the
+    /// sim never learns what bytes a type maps to (that is host-side, in the render node's ROM table).</summary>
+    public const int CartTypeCount = 13;
 
     /// <summary>The SHOWCASE cart type — the pre-inserted <c>--rom</c> cartridge's slot in the host ROM table. It is the
     /// LOADED default for an immersed non-world-lens (<c>--rom</c>) boot: a plain, always-sourced ROM (never a forged
@@ -60,14 +70,57 @@ public sealed class OverworldWorld {
     /// forged type a cabinet's boot default. Host-side mapping only; the sim just carries the index.</summary>
     public const int ShowcaseCartType = 2;
 
+    /// <summary>The maximum concurrently planted gardens (the deterministic-garden feature) — a fixed capacity pool,
+    /// exactly like <see cref="MaxPlayers"/>/the console arrays, so the presentation side's capacity probe (see
+    /// <c>Puck.Demo.Garden.GardenRenderer</c>) can freeze a worst-case envelope from it.</summary>
+    public const int MaxGardens = 6;
+
+    /// <summary>One RTS unit's fully fixed-point simulation state. Like every other body
+    /// here. Unlike <see cref="GardenPlant"/> (write-once, never mutated after planting) a unit's fields change
+    /// every tick it has a live order, so occupancy is an explicit <see cref="Active"/> flag on a plain struct array
+    /// rather than a nullable-entry pool.</summary>
+    public readonly record struct RtsUnit(bool Active, bool Selected, bool HasTarget, FixedQ4816 X, FixedQ4816 Y, FixedQ4816 Z, FixedQ4816 TargetX, FixedQ4816 TargetZ);
+
+    /// <summary>A read-only snapshot of the gravity scenario's <see cref="FieldWalkerBody"/> — the
+    /// presentation/console-facing echo of its state, mirroring <see cref="RtsUnit"/>'s role for the RTS pool but for
+    /// a SINGLE body rather than a pool (the proof is one avatar circumnavigating one planetoid, not many). Default
+    /// (<c>Active</c> false) when no walker has been spawned yet.</summary>
+    public readonly record struct FieldWalkerSnapshot(bool Active, WorldCoord3 Position, FixedVector3 Velocity, FixedVector3 Up, FixedQ4816 FacingAngle, bool Grounded);
+
+    /// <summary>The outcome of <see cref="MovePlayer"/> — distinguishes "no such slot" from "refused, blocked" from
+    /// "moved", so the console verb's echo is exact.</summary>
+    public enum PlayerMoveResult {
+        /// <summary>The slot index is out of range.</summary>
+        SlotOutOfRange,
+        /// <summary>The slot is empty — no player occupies it.</summary>
+        SlotEmpty,
+        /// <summary>The destination is blocked (a console/shelf keep-out or a baked walk-grid cell); the slot's body
+        /// is left untouched.</summary>
+        Blocked,
+        /// <summary>The slot's body now sits at the requested destination.</summary>
+        Moved,
+    }
+
+    /// <summary>The maximum concurrent RTS units — a fixed capacity pool, exactly like <see cref="MaxGardens"/>, so
+    /// the presentation side's capacity probe (<c>Puck.Demo.Rts.RtsUnitInstanceEmitter</c>) can freeze a worst-case
+    /// envelope from it.</summary>
+    public const int MaxRtsUnits = 12;
+
+    // Straight-line move speed (world units/sec) and the ground-height probe half-range (world units) either side of
+    // a unit's current Y — generous enough for a flat arena with a couple of raised terrain patches. A spawn is
+    // rejected only when it overlaps BLOCKED geometry within this radius (never the ground itself).
+    private static readonly FixedQ4816 RtsUnitSpeedRaw = FixedQ4816.FromDouble(value: 2.5);
+    private static readonly FixedQ4816 RtsGroundProbeRaw = FixedQ4816.FromDouble(value: 4.0);
+    private static readonly FixedQ4816 RtsUnitSpawnRadiusRaw = FixedQ4816.FromDouble(value: 0.35);
+
     // The movement direction sets, as compile-time raw Q48.16 unit components — each irrational rounded ONCE, here,
     // and documented as a settled contract fact: One = 65536 (1.0, exact), Half = 32768 (0.5, exact),
     // InvSqrt2 = 46341 (1/√2 = 0.7071067811… × 2^16 = 46340.95… → 46341), HexVertical = 56756
     // (√3/2 = 0.8660254038… × 2^16 = 56755.84… → 56756).
     private const long DirectionOneRaw = 65536L;
     private const long DirectionHalfRaw = 32768L;
-    private const long DirectionInvSqrt2Raw = 46341L;
     private const long DirectionHexVerticalRaw = 56756L;
+    private const long DirectionInvSqrt2Raw = 46341L;
 
     // The per-mode direction sets, in their DOCUMENTED enumeration order (see MovementLock) — the order IS the
     // deterministic tie-break: the selection loop keeps the first-seen maximum.
@@ -123,20 +176,40 @@ public sealed class OverworldWorld {
     private readonly int[] m_consoleLoadedType;
     private readonly int[] m_consoleSelectedType;
 
+    // The planted-garden pool (null == empty slot) — a fixed capacity, like the console arrays above. Deterministic
+    // state (see PlantGarden/HashState): a slot's Seed/PlantedTick/position never change once planted, only the
+    // GROWN GEOMETRY the presentation side derives from them (never stored, never hashed).
+    private readonly GardenPlant?[] m_gardens = new GardenPlant?[MaxGardens];
+
+    // The RTS scenario's fixed-capacity unit pool, like the garden pool above.
+    // m_rtsQuery is sim CONFIG (like m_collision — see ConfigureRtsQuery), never folded into the hash.
+    private readonly RtsUnit[] m_rtsUnits = new RtsUnit[MaxRtsUnits];
+    private IWorldQuery? m_rtsQuery;
+
+    // The gravity scenario's field walker — null until planet.spawn seats it (mirrors the garden
+    // pool's null-slot convention, just for a singular body rather than a fixed array). m_fieldEvaluator is sim
+    // CONFIG (like m_rtsQuery — see ConfigureFieldEvaluator), never folded into the hash. The queued-walk fields
+    // (m_fieldWalkerWalkTicks/m_fieldWalkerWalkMove) ARE real sim state (like an RTS unit's HasTarget/TargetX/Z move
+    // order) — see AdvanceFieldWalker/HashState.
+    private FieldWalkerBody? m_fieldWalker;
+    private IFieldEvaluator? m_fieldEvaluator;
+    private readonly FieldWalkerTuning m_fieldWalkerTuning = FieldWalkerTuning.Default;
+    private int m_fieldWalkerWalkTicks;
+    private FixedVector2 m_fieldWalkerWalkMove = new(X: FixedQ4816.Zero, Y: FixedQ4816.One); // forward (X=strafe, Y=forward — see PlayerIntent.Move)
+
     /// <summary>Initializes the world. <paramref name="seed"/> seeds the PRNG so generated content is reproducible;
     /// <paramref name="tickSeconds"/> is the fixed simulation step (the host's <c>StepTicks</c> as seconds). The optional
     /// spawn cell (<paramref name="spawnCellX"/>/<paramref name="spawnCellY"/>/<paramref name="spawnCellZ"/>) places the
     /// whole room at an arbitrary world cell (default the origin cell); the simulation is cell-agnostic, so a far cell
     /// reproduces the SAME per-tick local motion while proving the planet-scale coordinate seam.
-    /// <paramref name="preInsertedConsoles"/> marks which consoles (by index, length must equal the room's console
-    /// count) start with a cartridge already seated — the unified cartridge table's first indices, assigned in console
-    /// order to exactly those consoles. <paramref name="libraryCount"/> is the shelf's cartridge count (must equal the
-    /// room's shelf-slot count); library cartridges occupy the remaining unified indices, one per shelf slot, and start
-    /// located there. <paramref name="spawnAtConsoles"/> moves player slot i's spawn (for i below the console count) to
+    /// <paramref name="spawnAtConsoles"/> moves player slot i's spawn (for i below the console count) to
     /// standing in front of console stand i — the IMMERSED start's seating positions; slots past the console count keep
     /// the default grid. Pure configuration (the spawn stays a deterministic function of the slot), and the default
-    /// keeps every pre-existing hash byte-identical.</summary>
-    public OverworldWorld(OverworldRoom room, PlatformerTuning tuning, float tickSeconds, uint seed, long spawnCellX = 0L, long spawnCellY = 0L, long spawnCellZ = 0L, bool startLoaded = false, bool spawnAtConsoles = false, int startCartType = -1) {
+    /// preserves the default configuration's state hash. <paramref name="perConsoleStartCartType"/> overrides a SPECIFIC
+    /// console's boot cart type (index i overrides console i; a value outside 0..<see cref="CartTypeCount"/>-1,
+    /// including the default -1, means "no override for this console" — it falls through to the SAME policy
+    /// <paramref name="startCartType"/> already drives). Null (the default) applies no override.</summary>
+    public OverworldWorld(OverworldRoom room, PlatformerTuning tuning, float tickSeconds, uint seed, long spawnCellX = 0L, long spawnCellY = 0L, long spawnCellZ = 0L, bool startLoaded = false, bool spawnAtConsoles = false, int startCartType = -1, IReadOnlyList<int>? perConsoleStartCartType = null) {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(tuning);
 
@@ -173,13 +246,19 @@ public sealed class OverworldWorld {
         var bootType = (uniform ? startCartType : ShowcaseCartType);
 
         for (var console = 0; (console < consoleCount); console++) {
+            // A per-console override (already range-clamped by the caller) wins over the global policy outright —
+            // it is UNIFORM for this one console regardless of whether the global startCartType is set.
+            var overrideType = (((perConsoleStartCartType is { } overrides) && (console < overrides.Count)) ? overrides[console] : -1);
+            var consoleUniform = (uniform || ((overrideType >= 0) && (overrideType < CartTypeCount)));
+            var consoleBootType = (((overrideType >= 0) && (overrideType < CartTypeCount)) ? overrideType : bootType);
+
             // Empty by default (the overworld: you insert a cart to bring a cabinet alive). The selected type is uniform
-            // when a startCartType is set, else staggered so the overworld's cabinets each offer a different cart by
-            // default (world-lens / camera / showcase / world-lens).
-            m_consoleSelectedType[console] = (uniform ? bootType : (startLoaded ? bootType : (console % CartTypeCount)));
+            // when a startCartType (global or per-console) is set, else staggered so the overworld's cabinets each offer
+            // a different cart by default (world-lens / camera / showcase / world-lens).
+            m_consoleSelectedType[console] = (consoleUniform ? consoleBootType : (startLoaded ? bootType : (console % CartTypeCount)));
 
             if (startLoaded) {
-                m_consoleLoadedType[console] = bootType;
+                m_consoleLoadedType[console] = consoleBootType;
                 m_bootedMask |= (1u << console);
                 m_bootOrder.Add(item: console);
             } else {
@@ -190,6 +269,13 @@ public sealed class OverworldWorld {
 
     /// <summary>The number of fixed ticks simulated so far.</summary>
     public ulong CurrentTick => m_tick;
+    /// <summary>Observation-only hook fired once per <see cref="Advance"/> call, AFTER the tick completes:
+    /// <c>(tick, hashBefore, hashAfter)</c>, where the hashes bracket the step with <see cref="StateHash"/> samples
+    /// taken immediately before intents apply and immediately after. Exists so a console-facing tick transcript
+    /// (<see cref="Puck.Commands.TickTranscript"/>) can narrate "what did this tick do to the hash" without the sim
+    /// exposing anything new to READ: both samples are computed ONLY when a subscriber is attached, and the hook
+    /// itself never mutates simulation state.</summary>
+    public Action<ulong, ulong, ulong>? OnTickAdvanced { get; set; }
     /// <summary>The number of occupied slots.</summary>
     public int ActivePlayerCount { get; private set; }
     /// <summary>The slot array (null == free), for the renderer to read positions in slot order. Presentation only.</summary>
@@ -226,6 +312,19 @@ public sealed class OverworldWorld {
         var fractionZ = ((maxZ > minZ) ? (((double)local.Z - minZ) / (maxZ - minZ)) : 0.5);
 
         return new Vector2(x: (float)Math.Clamp(value: fractionX, min: 0d, max: 1d), y: (float)Math.Clamp(value: fractionZ, min: 0d, max: 1d));
+    }
+
+    /// <summary>The local-space position of the body at <paramref name="slot"/>, or the origin when the slot is free —
+    /// the narrow, least-privilege read the addon host feeds a scripted ghost each tick (never the whole body). A
+    /// presentation-side read only; it never feeds back into the simulation, so the determinism hash is untouched.</summary>
+    /// <param name="slot">The roster slot to read.</param>
+    /// <returns>The slot body's local position, or <see cref="FixedVector3.Zero"/> when the slot is empty.</returns>
+    public FixedVector3 LocalPositionForSlot(int slot) {
+        if ((slot < 0) || (slot >= MaxPlayers) || (m_slots[slot] is not { } player)) {
+            return FixedVector3.Zero;
+        }
+
+        return player.Body.Position.Local;
     }
 
     /// <summary>The inverse of <see cref="PlayerRoomFraction"/>: a normalized room fraction (X,Z each in [0,1]) back to a
@@ -401,6 +500,40 @@ public sealed class OverworldWorld {
         );
     }
 
+    /// <summary>Seats a padless occupant at a SPECIFIC slot — an addon-driven ghost's exclusive slot, distinct from
+    /// <see cref="AddPlayer"/>'s lowest-free seating. Idempotent for the same identity. The spawn is the slot's
+    /// deterministic spawn point, so a re-seated ghost respawns identically.</summary>
+    /// <param name="playerId">The occupant's external identity.</param>
+    /// <param name="slot">The exact slot to seat at.</param>
+    /// <returns><see langword="true"/> when the slot holds <paramref name="playerId"/> after the call; <see langword="false"/>
+    /// when the slot is out of range, already holds a different identity, or the identity is seated elsewhere.</returns>
+    public bool AddPlayerAtSlot(Guid playerId, int slot) {
+        if ((slot < 0) || (slot >= MaxPlayers)) {
+            return false;
+        }
+
+        if (m_slots[slot] is { } occupant) {
+            return (occupant.Id == playerId);
+        }
+
+        if (m_slotByPlayer.ContainsKey(key: playerId)) {
+            return false;
+        }
+
+        var spawn = new WorldCoord3(
+            CellX: m_spawnCellX,
+            CellY: m_spawnCellY,
+            CellZ: m_spawnCellZ,
+            Local: SpawnLocalFor(slot: slot)
+        ).Normalize();
+
+        m_slots[slot] = new PlayerSlot(Id: playerId, Body: new PlatformerBody(position: spawn));
+        m_slotByPlayer[playerId] = slot;
+        ActivePlayerCount++;
+
+        return true;
+    }
+
     /// <summary>Removes a player, freeing its slot for recycling. Idempotent: an absent id returns -1. Returns the freed slot.</summary>
     public int RemovePlayer(Guid playerId) {
         if (!m_slotByPlayer.TryGetValue(key: playerId, value: out var slot)) {
@@ -419,6 +552,64 @@ public sealed class OverworldWorld {
         return (m_slotByPlayer.TryGetValue(key: playerId, value: out var slot) ? slot : -1);
     }
 
+    /// <summary>Teleports player <paramref name="slot"/>'s body to room-local XZ (<paramref name="x"/>,
+    /// <paramref name="z"/>), holding Y at the room's floor height — a TICK-BOUNDARY authoring op, like
+    /// <see cref="PlantGarden(uint, FixedQ4816, FixedQ4816)"/> / <see cref="LoadWorld"/>'s own direct
+    /// <c>player.Body.Position</c> write. The destination is first clamped into the room's wall bounds (never
+    /// teleports outside the walls — the same authority <see cref="PlatformerBody.Step"/> defers to), then checked
+    /// against the console/shelf keep-outs and the baked walk grid (when one is loaded): a blocked destination
+    /// REFUSES the move outright (the body is left exactly where it was) rather than creeping to the nearest free
+    /// cell — a teleport has no "known-safe previous tick" to creep from the way <see cref="PlatformerBody.Step"/>'s
+    /// per-axis clamp does, so a silent partial move would be a worse surprise than a clean refusal. Velocity resets
+    /// to zero and the body lands Grounded (a teleport is not a shove — it sets the player down standing).</summary>
+    /// <param name="slot">The player slot to move.</param>
+    /// <param name="x">The room-local destination X.</param>
+    /// <param name="z">The room-local destination Z.</param>
+    /// <returns>The outcome — <see cref="PlayerMoveResult.Moved"/> only when the body actually relocated.</returns>
+    public PlayerMoveResult MovePlayer(int slot, FixedQ4816 x, FixedQ4816 z) {
+        if ((slot < 0) || (slot >= MaxPlayers)) {
+            return PlayerMoveResult.SlotOutOfRange;
+        }
+
+        if (m_slots[slot] is not { } player) {
+            return PlayerMoveResult.SlotEmpty;
+        }
+
+        var clampedX = FixedQ4816.Clamp(value: x, minimum: m_collision.MinX, maximum: m_collision.MaxX);
+        var clampedZ = FixedQ4816.Clamp(value: z, minimum: m_collision.MinZ, maximum: m_collision.MaxZ);
+
+        foreach (var obstacle in m_collision.Consoles) {
+            if (IsInsideObstacle(obstacle: obstacle, x: clampedX, z: clampedZ)) {
+                return PlayerMoveResult.Blocked;
+            }
+        }
+
+        foreach (var obstacle in m_collision.Shelf) {
+            if (IsInsideObstacle(obstacle: obstacle, x: clampedX, z: clampedZ)) {
+                return PlayerMoveResult.Blocked;
+            }
+        }
+
+        if ((m_collision.WalkGrid is { } grid) && grid.IsBlocked(x: clampedX, z: clampedZ)) {
+            return PlayerMoveResult.Blocked;
+        }
+
+        var body = player.Body;
+        var local = new FixedVector3(X: clampedX, Y: m_collision.FloorTop, Z: clampedZ);
+
+        body.Position = body.Position.WithLocal(local: local);
+        body.Velocity = FixedVector3.Zero;
+        body.Grounded = true;
+
+        return PlayerMoveResult.Moved;
+    }
+
+    // Mirrors PlatformerBody.ResolveAgainstObstacle's containment test (a STRICT "inside" check — a destination
+    // resting exactly on an obstacle's face is not itself considered blocked, matching the resolver's own
+    // early-return on the boundary).
+    private static bool IsInsideObstacle(FixedConsole obstacle, FixedQ4816 x, FixedQ4816 z) =>
+        ((x > obstacle.MinX) && (x < obstacle.MaxX) && (z > obstacle.MinZ) && (z < obstacle.MaxZ));
+
     /// <summary>The slot→identity map, fixed width <see cref="MaxPlayers"/> (free slots are <see cref="Guid.Empty"/>).</summary>
     public Guid[] RosterBySlot() {
         var roster = new Guid[MaxPlayers];
@@ -433,6 +624,9 @@ public sealed class OverworldWorld {
     /// <summary>Advances the simulation one fixed tick. <paramref name="intentsBySlot"/> is a fixed-width
     /// <see cref="MaxPlayers"/> row; free slots' entries are ignored.</summary>
     public void Advance(IReadOnlyList<PlayerIntent> intentsBySlot) {
+        var tickObserver = OnTickAdvanced;
+        var hashBefore = ((tickObserver is null) ? 0UL : StateHash());
+
         for (var slot = 0; (slot < MaxPlayers); slot++) {
             var player = m_slots[slot];
 
@@ -461,7 +655,12 @@ public sealed class OverworldWorld {
             player.Body.Step(intent: intent, tuning: m_tuning, dt: m_dt, room: m_collision);
         }
 
+        AdvanceRtsUnits();
+        AdvanceFieldWalker();
+
         m_tick++;
+
+        tickObserver?.Invoke(m_tick, hashBefore, ((tickObserver is null) ? 0UL : StateHash()));
     }
 
     /// <summary>Loads a sculpted world's collision surfaces into the running simulation — the ONE legal
@@ -498,7 +697,7 @@ public sealed class OverworldWorld {
                 Z: FixedQ4816.Clamp(value: local.Z, minimum: m_collision.MinZ, maximum: m_collision.MaxZ)
             );
 
-            player.Body.Position = (player.Body.Position with { Local = clampedLocal }).Normalize();
+            player.Body.Position = player.Body.Position.WithLocal(local: clampedLocal);
         }
     }
 
@@ -523,6 +722,338 @@ public sealed class OverworldWorld {
         if (string.Equals(a: value, b: "hex", comparisonType: StringComparison.OrdinalIgnoreCase)) { return MovementLock.Hex; }
 
         return MovementLock.Free;
+    }
+
+    // ---- The deterministic garden (a seed unfolds into a tree over sim ticks) --------------------------------------
+    // Sim state is deliberately THIN: a seed + the tick it was planted + where. The GROWN TREE is never stored — it is
+    // a pure function of (Seed, CurrentTick − PlantedTick), recomputed every frame by the presentation side
+    // (Puck.Demo.Garden.GardenTreeGenerator/GardenRenderer). That keeps this class's determinism contract exactly as
+    // narrow as every other authoring op below (LoadWorld/SetMovementLock): a tick-boundary write of a few integers.
+
+    /// <summary>Plants a new garden — a TICK-BOUNDARY authoring op (like <see cref="LoadWorld"/>), never called
+    /// mid-<see cref="Advance"/>. Recycles the lowest free slot (mirrors <see cref="LowestFreeSlot"/>'s player-slot
+    /// policy).</summary>
+    /// <param name="seed">The PRNG seed the presentation side expands into a tree.</param>
+    /// <param name="localX">The room-local X to plant at.</param>
+    /// <param name="localZ">The room-local Z to plant at.</param>
+    /// <returns>The slot index the garden was planted into, or -1 when every <see cref="MaxGardens"/> slot is
+    /// occupied (the caller/console verb reports "the garden is full").</returns>
+    public int PlantGarden(uint seed, FixedQ4816 localX, FixedQ4816 localZ) {
+        for (var slot = 0; (slot < MaxGardens); slot++) {
+            if (m_gardens[slot] is not null) {
+                continue;
+            }
+
+            m_gardens[slot] = new GardenPlant(Seed: seed, PlantedTick: m_tick, LocalX: localX, LocalZ: localZ);
+
+            return slot;
+        }
+
+        return -1;
+    }
+
+    /// <summary>Plants a new garden near player slot 0 (offset so it doesn't overlap their body), or at a fixed spot
+    /// near the workbench when that slot is empty — fully fixed-point (the stored position never passes through a
+    /// presentation float), so a script's replay never depends on interpolation timing. Wraps
+    /// <see cref="PlantGarden(uint, FixedQ4816, FixedQ4816)"/>.</summary>
+    /// <param name="seed">The seed to plant, or <see langword="null"/> to derive one deterministically from the
+    /// current tick (never wall-clock, never <see cref="System.Random"/> — see <see cref="DeriveGardenSeed"/>).</param>
+    /// <returns>The slot index, or -1 when the garden is full.</returns>
+    public int PlantGardenNearPlayer(uint? seed = null) {
+        var offset = FixedQ4816.FromDouble(value: 0.9);
+        var margin = FixedQ4816.FromDouble(value: 0.6);
+
+        var (rawX, rawZ) = ((m_slots[0] is { } player)
+            ? ((player.Body.Position.Local.X + offset), (player.Body.Position.Local.Z + offset))
+            : ((WorkbenchCenterX - FixedQ4816.FromDouble(value: 1.8)), FixedQ4816.FromDouble(value: -2.4)));
+        var clampedX = FixedQ4816.Clamp(value: rawX, minimum: (m_collision.MinX + margin), maximum: (m_collision.MaxX - margin));
+        var clampedZ = FixedQ4816.Clamp(value: rawZ, minimum: (m_collision.MinZ + margin), maximum: (m_collision.MaxZ - margin));
+
+        return PlantGarden(seed: (seed ?? DeriveGardenSeed()), localX: clampedX, localZ: clampedZ);
+    }
+
+    /// <summary>Uproots every planted garden — a tick-boundary op, like <see cref="PlantGarden(uint, FixedQ4816, FixedQ4816)"/>.</summary>
+    public void ClearGardens() {
+        Array.Clear(array: m_gardens);
+    }
+
+    /// <summary>The planted-garden slots (null == empty), for the presentation side to read seeds/plant ticks/positions.
+    /// Read-only — growth itself is never sim state (see the section remarks).</summary>
+    public IReadOnlyList<GardenPlant?> Gardens => m_gardens;
+
+    // A deterministic default seed for garden.plant with no argument: folds the current tick and how many gardens are
+    // already planted through the SAME FNV-1a fold StateHash uses — never wall-clock, never System.Random, so a
+    // scripted replay that never passes an explicit seed still reproduces bit-for-bit.
+    private uint DeriveGardenSeed() {
+        var occupied = 0u;
+
+        for (var slot = 0; (slot < MaxGardens); slot++) {
+            occupied += ((m_gardens[slot] is null) ? 0u : 1u);
+        }
+
+        var hash = Fnv1aHash.Create();
+
+        hash.Add(value: m_tick);
+        hash.Add(value: occupied);
+
+        return (uint)hash.Value;
+    }
+
+    // ---- The RTS scenario's fixed-point unit simulation --------------------------------------------------------------
+    // Sim state per unit: position, an optional live move-order target, selection. AdvanceRtsUnits (called from
+    // Advance, once per tick) is a pure straight-line move-to-target integrator, ground-snapped through the
+    // configured IWorldQuery — the SAME "sim binds only the query interface" contract Puck.Demo.Rts.RtsScenario's
+    // remarks describe. The query binding is sim CONFIG (see ConfigureRtsQuery), like LoadWorld's collision swap:
+    // never folded into StateHash.
+
+    /// <summary>Binds (or clears) the deterministic world-query provider the RTS scenario's ground-snap and spawn
+    /// checks consult — a tick-boundary CONFIG op, like <see cref="LoadWorld"/>'s collision swap. Never folded into
+    /// <see cref="StateHash"/>: two runs binding equivalent providers hash identically.</summary>
+    /// <param name="query">The provider to bind, or <see langword="null"/> to fall back to the room's floor height.</param>
+    public void ConfigureRtsQuery(IWorldQuery? query) {
+        m_rtsQuery = query;
+    }
+
+    /// <summary>Spawns a new RTS unit at the given room-local XZ — a TICK-BOUNDARY authoring op, like
+    /// <see cref="PlantGarden(uint, FixedQ4816, FixedQ4816)"/>. Recycles the lowest free slot. Rejected (returns -1)
+    /// when the spawn point overlaps blocked geometry per the bound query (never rejected on the ground height
+    /// itself — a query with no blocked layer never rejects a spawn).</summary>
+    /// <param name="x">The room-local X to spawn at.</param>
+    /// <param name="z">The room-local Z to spawn at.</param>
+    /// <returns>The slot index the unit was spawned into, or -1 when every <see cref="MaxRtsUnits"/> slot is
+    /// occupied, or the spawn point is blocked.</returns>
+    public int SpawnRtsUnit(FixedQ4816 x, FixedQ4816 z) {
+        var groundY = m_collision.FloorTop;
+
+        if ((m_rtsQuery is { } query)) {
+            if (query.Overlap(center: WorldCoord3.FromLocal(local: new FixedVector3(X: x, Y: groundY, Z: z)), radius: RtsUnitSpawnRadiusRaw)) {
+                return -1;
+            }
+
+            if (query.TryGroundHeight(position: WorldCoord3.FromLocal(local: new FixedVector3(X: x, Y: groundY, Z: z)), probeUp: RtsGroundProbeRaw, probeDown: RtsGroundProbeRaw, groundY: out var sampled)) {
+                groundY = sampled;
+            }
+        }
+
+        for (var slot = 0; (slot < MaxRtsUnits); slot++) {
+            if (m_rtsUnits[slot].Active) {
+                continue;
+            }
+
+            m_rtsUnits[slot] = new RtsUnit(Active: true, HasTarget: false, Selected: false, TargetX: x, TargetZ: z, X: x, Y: groundY, Z: z);
+
+            return slot;
+        }
+
+        return -1;
+    }
+
+    /// <summary>Selects every active unit whose current XZ lies inside the given box (and deselects every active
+    /// unit outside it) — a TICK-BOUNDARY op, like <see cref="SpawnRtsUnit"/>. A fresh box selection always replaces
+    /// the previous one (there is no additive/shift-select in this proof scenario).</summary>
+    /// <param name="minX">The box's minimum X.</param>
+    /// <param name="minZ">The box's minimum Z.</param>
+    /// <param name="maxX">The box's maximum X.</param>
+    /// <param name="maxZ">The box's maximum Z.</param>
+    /// <returns>How many units are now selected.</returns>
+    public int SelectRtsUnitsInBox(FixedQ4816 minX, FixedQ4816 minZ, FixedQ4816 maxX, FixedQ4816 maxZ) {
+        var count = 0;
+
+        for (var slot = 0; (slot < MaxRtsUnits); slot++) {
+            var unit = m_rtsUnits[slot];
+
+            if (!unit.Active) {
+                continue;
+            }
+
+            var inside = ((unit.X >= minX) && (unit.X <= maxX) && (unit.Z >= minZ) && (unit.Z <= maxZ));
+
+            m_rtsUnits[slot] = (unit with { Selected = inside });
+
+            if (inside) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>Orders every currently-selected active unit to move to the given room-local XZ (straight-line —
+    /// see <see cref="AdvanceRtsUnits"/>) — a TICK-BOUNDARY op.</summary>
+    /// <param name="targetX">The order's target X.</param>
+    /// <param name="targetZ">The order's target Z.</param>
+    /// <returns>How many units received the order.</returns>
+    public int MoveSelectedRtsUnits(FixedQ4816 targetX, FixedQ4816 targetZ) {
+        var count = 0;
+
+        for (var slot = 0; (slot < MaxRtsUnits); slot++) {
+            var unit = m_rtsUnits[slot];
+
+            if (!unit.Active || !unit.Selected) {
+                continue;
+            }
+
+            m_rtsUnits[slot] = (unit with { HasTarget = true, TargetX = targetX, TargetZ = targetZ });
+            count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>Despawns every RTS unit — a tick-boundary op, like <see cref="ClearGardens"/>.</summary>
+    public void ClearRtsUnits() {
+        Array.Clear(array: m_rtsUnits);
+    }
+
+    /// <summary>The RTS unit pool, for the presentation side (and console verbs) to read.</summary>
+    public IReadOnlyList<RtsUnit> RtsUnits => m_rtsUnits;
+
+    // The per-tick unit integrator: a pure straight-line move-to-target (no pathfinding, no separation — the
+    // deliberately minimal proof-wave sim), ground-snapped through the bound query every tick (falls back to the
+    // room's floor when no query is bound, or the query has no heightfield layer for this cell). Distance/step are
+    // both FixedQ4816 — one Sqrt per moving unit per tick, no trig.
+    private void AdvanceRtsUnits() {
+        var step = (RtsUnitSpeedRaw * m_dt);
+
+        for (var slot = 0; (slot < MaxRtsUnits); slot++) {
+            var unit = m_rtsUnits[slot];
+
+            if (!unit.Active) {
+                continue;
+            }
+
+            var x = unit.X;
+            var z = unit.Z;
+
+            if (unit.HasTarget) {
+                var dx = (unit.TargetX - x);
+                var dz = (unit.TargetZ - z);
+                var distance = new FixedVector3(X: dx, Y: FixedQ4816.Zero, Z: dz).Length;
+
+                if (distance <= step) {
+                    x = unit.TargetX;
+                    z = unit.TargetZ;
+                    unit = (unit with { HasTarget = false });
+                } else {
+                    var inverse = (FixedQ4816.One / distance);
+
+                    x += ((dx * inverse) * step);
+                    z += ((dz * inverse) * step);
+                }
+            }
+
+            var y = m_collision.FloorTop;
+
+            if ((m_rtsQuery is { } query) && query.TryGroundHeight(position: WorldCoord3.FromLocal(local: new FixedVector3(X: x, Y: unit.Y, Z: z)), probeUp: RtsGroundProbeRaw, probeDown: RtsGroundProbeRaw, groundY: out var sampled)) {
+                y = sampled;
+            }
+
+            m_rtsUnits[slot] = (unit with { X = x, Y = y, Z = z });
+        }
+    }
+
+    // ---- The gravity scenario's FieldWalkerBody on a live SDF field ---------------------------------------------------
+    // The evaluator binding is sim CONFIG (see ConfigureFieldEvaluator), exactly like ConfigureRtsQuery's m_rtsQuery:
+    // never folded into StateHash. The walker BODY itself, and its queued scripted-walk order, ARE real sim state
+    // (folded into HashState below), mirroring the RTS pool's Active/HasTarget/Target fields.
+
+    /// <summary>Binds (or clears) the deterministic field evaluator the walker's <see cref="FieldWalkerBody.Step"/>
+    /// consults every tick — a tick-boundary CONFIG op, like <see cref="ConfigureRtsQuery"/>. Never folded into
+    /// <see cref="StateHash"/>: two runs binding equivalent programs hash identically.</summary>
+    /// <param name="evaluator">The field to walk, or <see langword="null"/> to freeze the walker (a bound-less
+    /// walker takes no gravity/ground step — see <see cref="AdvanceFieldWalker"/>).</param>
+    public void ConfigureFieldEvaluator(IFieldEvaluator? evaluator) {
+        m_fieldEvaluator = evaluator;
+    }
+
+    /// <summary>Spawns (or respawns) the one field walker at <paramref name="position"/> with an initial "up" guess —
+    /// a TICK-BOUNDARY authoring op, like <see cref="PlantGarden(uint, FixedQ4816, FixedQ4816)"/>. Re-issuing this
+    /// while a walker already exists RESETS it (position/velocity/queued walk order), the same "spawn always seats
+    /// fresh" contract <see cref="SpawnRtsUnit"/> gives a recycled slot.</summary>
+    /// <param name="position">The spawn position.</param>
+    /// <param name="up">The initial up guess (see <see cref="FieldWalkerBody"/>'s ctor remarks).</param>
+    public void SpawnFieldWalker(WorldCoord3 position, FixedVector3 up) {
+        m_fieldWalker = new FieldWalkerBody(position: position, up: up);
+        m_fieldWalkerWalkTicks = 0;
+    }
+
+    /// <summary>Despawns the field walker — a tick-boundary op, like <see cref="ClearRtsUnits"/>.</summary>
+    public void ClearFieldWalker() {
+        m_fieldWalker = null;
+        m_fieldWalkerWalkTicks = 0;
+    }
+
+    /// <summary>Whether a walker is currently spawned.</summary>
+    public bool FieldWalkerActive => (m_fieldWalker is not null);
+
+    /// <summary>Queues <paramref name="ticks"/> ticks of constant tangent-plane move intent — the scripted-driving
+    /// seam a console verb (<c>planet.walk</c>) uses to circumnavigate the field without a pad: one tick of
+    /// <paramref name="move"/> is consumed per <see cref="Advance"/> call (regardless of real produced-frame pacing —
+    /// see <see cref="AdvanceFieldWalker"/>), so the resulting arc length is an EXACT function of sim ticks, not
+    /// wall-clock. A fresh call REPLACES any still-queued order (mirrors <see cref="MoveSelectedRtsUnits"/>'s
+    /// replace-not-append order semantics). No-op when no walker is spawned.</summary>
+    /// <param name="ticks">How many ticks to apply <paramref name="move"/> for (clamped to at least 0).</param>
+    /// <param name="move">The tangent-plane move vector (X = strafe, Y = forward — <see cref="PlayerIntent.Move"/>'s
+    /// own convention), each component conventionally in [-1, 1]. Fixed-point, like <see cref="MoveSelectedRtsUnits"/>'s
+    /// <c>targetX</c>/<c>targetZ</c> — the float-to-fixed conversion happens at the console-verb boundary
+    /// (<see cref="OverworldFrameSource.WalkGravityWalker"/>), never inside sim state.</param>
+    public void WalkFieldWalker(int ticks, FixedVector2 move) {
+        if (m_fieldWalker is null) {
+            return;
+        }
+
+        m_fieldWalkerWalkTicks = Math.Max(val1: 0, val2: ticks);
+        m_fieldWalkerWalkMove = move;
+    }
+
+    /// <summary>A read-only snapshot of the walker's current state, for the presentation side (and console verbs) to
+    /// read — <see langword="default"/> (<c>Active</c> false) when no walker is spawned.</summary>
+    public FieldWalkerSnapshot FieldWalkerState() {
+        if (m_fieldWalker is not { } body) {
+            return default;
+        }
+
+        return new FieldWalkerSnapshot(Active: true, Position: body.Position, Velocity: body.Velocity, Up: body.Up, FacingAngle: body.FacingAngle, Grounded: body.Grounded);
+    }
+
+    /// <summary>The walker's render transform, REBASED by <paramref name="renderOrigin"/> and INTERPOLATED by
+    /// <paramref name="alpha"/> — the gravity presentation's own <see cref="DynamicTransforms"/> sibling, for exactly
+    /// one body instead of <see cref="MaxPlayers"/>. Returns a transform parked at <paramref name="renderOrigin"/>'s
+    /// own cell, far below, when no walker is spawned (mirrors <see cref="m_hiddenPosition"/>'s convention) — the
+    /// caller (<c>Gravity.WalkerInstanceEmitter</c>) also gates the instance's <c>active</c> flag on
+    /// <see cref="FieldWalkerActive"/>, so this fallback value is never actually visible.</summary>
+    /// <param name="renderOrigin">The per-frame world anchor every position is expressed relative to.</param>
+    /// <param name="alpha">The interpolation fraction in <c>[0, 1)</c> between the previous and current fixed tick.</param>
+    public DynamicTransform FieldWalkerTransform(WorldCoord3 renderOrigin, float alpha) {
+        if (m_fieldWalker is not { } body) {
+            return new DynamicTransform(Position: new Vector3(x: 0f, y: -1000f, z: 0f), Orientation: Quaternion.Identity);
+        }
+
+        return new DynamicTransform(Position: body.RenderRelativePositionAt(renderOrigin: renderOrigin, alpha: alpha), Orientation: body.OrientationAt(alpha: alpha));
+    }
+
+    // The per-tick walker step: consumes one tick of the queued walk order (see WalkFieldWalker), then steps the
+    // body against the bound field. A walker with no bound evaluator or no queued order simply idles in place (its
+    // OWN gravity/ground-snap still applies via a zero-move Step — Grounded settles exactly like a player standing
+    // still). No-op when nothing is spawned.
+    private void AdvanceFieldWalker() {
+        if ((m_fieldWalker is not { } body) || (m_fieldEvaluator is not { } field)) {
+            return;
+        }
+
+        var move = ((m_fieldWalkerWalkTicks > 0) ? m_fieldWalkerWalkMove : FixedVector2.Zero);
+
+        if (m_fieldWalkerWalkTicks > 0) {
+            m_fieldWalkerWalkTicks--;
+        }
+
+        // The one float boundary: PlayerIntent.Move is float BY CONVENTION (the source-agnostic per-tick input type
+        // every intent source — pad/network/AI/recording — produces), never itself sim state; the fixed-point queued
+        // order above IS sim state and stays fixed-point right up to this conversion.
+        var intentMove = new Vector2(x: (float)(double)move.X, y: (float)(double)move.Y);
+        var intent = new PlayerIntent(Move: intentMove, JumpHeld: false, JumpPressed: false, JumpReleased: false);
+
+        body.Step(intent: intent, tuning: m_fieldWalkerTuning, dt: m_dt, field: field);
     }
 
     // Quantizes an intent's move vector onto a lock mode's direction set: the direction with the MAXIMUM dot product
@@ -745,6 +1276,72 @@ public sealed class OverworldWorld {
             hash.Add(value: (uint)m_consoleSelectedType[console]);
         }
 
+        // The planted-garden pool folds in too: an occupied bit per slot, plus its seed/plant-tick/position when
+        // occupied — a plant/clear changes the hash even though no player body moved, and the GROWN tree (a pure
+        // function of Seed and the tick already hashed above) never needs its own contribution.
+        for (var slot = 0; (slot < m_gardens.Length); slot++) {
+            var garden = m_gardens[slot];
+
+            hash.Add(value: ((garden is null) ? 0u : 1u));
+
+            if (garden is { } planted) {
+                hash.Add(value: planted.Seed);
+                hash.Add(value: planted.PlantedTick);
+                hash.Add(value: planted.LocalX.Value);
+                hash.Add(value: planted.LocalZ.Value);
+            }
+        }
+
+        // The RTS unit pool folds in too: an active bit per slot, plus its selection/order/
+        // position when active — spawn/select/move/clear and every tick's ground-snapped integration all change the
+        // hash exactly like a player body moving.
+        for (var slot = 0; (slot < m_rtsUnits.Length); slot++) {
+            var unit = m_rtsUnits[slot];
+
+            hash.Add(value: (unit.Active ? 1u : 0u));
+
+            if (!unit.Active) {
+                continue;
+            }
+
+            hash.Add(value: (unit.Selected ? 1u : 0u));
+            hash.Add(value: (unit.HasTarget ? 1u : 0u));
+            hash.Add(value: unit.X.Value);
+            hash.Add(value: unit.Y.Value);
+            hash.Add(value: unit.Z.Value);
+            hash.Add(value: unit.TargetX.Value);
+            hash.Add(value: unit.TargetZ.Value);
+        }
+
+        // The gravity scenario's field walker folds in too: an active bit, plus its queued scripted-walk
+        // order (mirrors the RTS unit's HasTarget/Target fields) and its full body state when spawned — the same
+        // cell-index/local-offset split every other body's fold uses (see includeCell's remarks above).
+        hash.Add(value: ((m_fieldWalker is null) ? 0u : 1u));
+
+        if (m_fieldWalker is { } walker) {
+            hash.Add(value: (uint)m_fieldWalkerWalkTicks);
+            hash.Add(value: m_fieldWalkerWalkMove.X.Value);
+            hash.Add(value: m_fieldWalkerWalkMove.Y.Value);
+
+            if (includeCell) {
+                hash.Add(value: walker.Position.CellX);
+                hash.Add(value: walker.Position.CellY);
+                hash.Add(value: walker.Position.CellZ);
+            }
+
+            hash.Add(value: walker.Position.Local.X.Value);
+            hash.Add(value: walker.Position.Local.Y.Value);
+            hash.Add(value: walker.Position.Local.Z.Value);
+            hash.Add(value: walker.Velocity.X.Value);
+            hash.Add(value: walker.Velocity.Y.Value);
+            hash.Add(value: walker.Velocity.Z.Value);
+            hash.Add(value: walker.Up.X.Value);
+            hash.Add(value: walker.Up.Y.Value);
+            hash.Add(value: walker.Up.Z.Value);
+            hash.Add(value: walker.FacingAngle.Value);
+            hash.Add(value: (walker.Grounded ? 1u : 0u));
+        }
+
         for (var slot = 0; (slot < MaxPlayers); slot++) {
             var player = m_slots[slot];
 
@@ -778,7 +1375,6 @@ public sealed class OverworldWorld {
 
         return hash.Value;
     }
-
     private int LowestFreeSlot() {
         for (var slot = 0; (slot < MaxPlayers); slot++) {
             if (m_slots[slot] is null) {

@@ -12,9 +12,12 @@ public static class ProbabilityFunctions {
     /// </summary>
     /// <param name="probability">The cumulative probability. Values must be in the inclusive range [0, 1].</param>
     /// <returns>The standard normal deviate <c>z</c> such that <c>Φ(z) = probability</c>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is less than 0 or greater than 1.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is NaN, or is less than 0 or greater than 1.</exception>
     /// <remarks>
-    /// This implementation is essentially a direct translation of <see href="https://www.jstor.org/stable/2347330">Algorithm AS 241: The Percentage Points of the Normal Distribution</see>.
+    /// Computes the normal quantile via minimax rational (polynomial-ratio) approximations over three regions of
+    /// <c>q = probability - 0.5</c>: a central region (<c>|q| &lt;= 0.425</c>), and two tail regions split at
+    /// <c>r &lt;= 5</c> for progressively more extreme probabilities, each region using its own fitted numerator/
+    /// denominator coefficients evaluated by Horner's method with fused multiply-adds.
     /// </remarks>
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     public static double InverseStandardNormalCdf(this double probability) {
@@ -23,7 +26,9 @@ public static class ProbabilityFunctions {
         const double One = 1.0d;
         const double Zero = 0.0d;
 
-        if ((Zero > probability) || (One < probability)) {
+        // !(>= && <=) rejects NaN (both ordered comparisons are false for NaN) alongside out-of-range values in
+        // one branch, so the valid-range path keeps a single comparison.
+        if (!((Zero <= probability) && (probability <= One))) {
             throw new ArgumentOutOfRangeException(
                 message: "probability must be between the inclusive range [0, 1]",
                 paramName: nameof(probability)
@@ -60,39 +65,71 @@ public static class ProbabilityFunctions {
             const double B6 = 2.8729085735721942674e+04d;
             const double B7 = 5.2264952788528545610e+03d;
 
-            r = Math.FusedMultiplyAdd(-q, q, 0.180625d);
+            r = Math.FusedMultiplyAdd(
+                x: -q,
+                y: q,
+                z: 0.180625d
+            );
             v = (
-                q
+                (q
                 * Math.FusedMultiplyAdd(
-                    Math.FusedMultiplyAdd(
-                        Math.FusedMultiplyAdd(
-                            Math.FusedMultiplyAdd(
-                                Math.FusedMultiplyAdd(
-                                    Math.FusedMultiplyAdd(
-                                        Math.FusedMultiplyAdd(A7,
-                                            r, A6),
-                                        r, A5),
-                                    r, A4),
-                                r, A3),
-                            r, A2),
-                        r, A1),
-                    r, A0
-                )
+                x: Math.FusedMultiplyAdd(
+                    x: Math.FusedMultiplyAdd(
+                        x: Math.FusedMultiplyAdd(
+                            x: Math.FusedMultiplyAdd(
+                                x: Math.FusedMultiplyAdd(
+                                    x: Math.FusedMultiplyAdd(
+                                        x: A7,
+                                        y: r,
+                                        z: A6
+                                    ),
+                                    y: r,
+                                    z: A5
+                                ),
+                                y: r,
+                                z: A4
+                            ),
+                            y: r,
+                            z: A3
+                        ),
+                        y: r,
+                        z: A2
+                    ),
+                    y: r,
+                    z: A1
+                ),
+                y: r,
+                z: A0
+            ))
                 / Math.FusedMultiplyAdd(
-                    Math.FusedMultiplyAdd(
-                        Math.FusedMultiplyAdd(
-                            Math.FusedMultiplyAdd(
-                                Math.FusedMultiplyAdd(
-                                    Math.FusedMultiplyAdd(
-                                        Math.FusedMultiplyAdd(B7,
-                                            r, B6),
-                                        r, B5),
-                                    r, B4),
-                                r, B3),
-                            r, B2),
-                        r, B1),
-                    r, One
-                )
+                x: Math.FusedMultiplyAdd(
+                    x: Math.FusedMultiplyAdd(
+                        x: Math.FusedMultiplyAdd(
+                            x: Math.FusedMultiplyAdd(
+                                x: Math.FusedMultiplyAdd(
+                                    x: Math.FusedMultiplyAdd(
+                                        x: B7,
+                                        y: r,
+                                        z: B6
+                                    ),
+                                    y: r,
+                                    z: B5
+                                ),
+                                y: r,
+                                z: B4
+                            ),
+                            y: r,
+                            z: B3
+                        ),
+                        y: r,
+                        z: B2
+                    ),
+                    y: r,
+                    z: B1
+                ),
+                y: r,
+                z: One
+            )
             );
         } else {
             const double C0 = 1.42343711074968357734e+00d;
@@ -126,80 +163,141 @@ public static class ProbabilityFunctions {
             const double F6 = 1.42151175831644588870e-07d;
             const double F7 = 2.04426310338993978564e-15d;
 
-            r = ((q < Zero) ? probability : (One - probability));
+            r = ((q < Zero)
+                ? probability
+                : (One - probability));
             r = Math.Sqrt(d: -Math.Log(d: r));
 
             if (r <= Five) {
                 r -= 1.6d;
                 v = (
                     Math.FusedMultiplyAdd(
-                        Math.FusedMultiplyAdd(
-                            Math.FusedMultiplyAdd(
-                                Math.FusedMultiplyAdd(
-                                    Math.FusedMultiplyAdd(
-                                        Math.FusedMultiplyAdd(
-                                            Math.FusedMultiplyAdd(C7,
-                                                r, C6),
-                                            r, C5),
-                                        r, C4),
-                                    r, C3),
-                                r, C2),
-                            r, C1),
-                        r, C0
-                    )
+                    x: Math.FusedMultiplyAdd(
+                        x: Math.FusedMultiplyAdd(
+                            x: Math.FusedMultiplyAdd(
+                                x: Math.FusedMultiplyAdd(
+                                    x: Math.FusedMultiplyAdd(
+                                        x: Math.FusedMultiplyAdd(
+                                            x: C7,
+                                            y: r,
+                                            z: C6
+                                        ),
+                                        y: r,
+                                        z: C5
+                                    ),
+                                    y: r,
+                                    z: C4
+                                ),
+                                y: r,
+                                z: C3
+                            ),
+                            y: r,
+                            z: C2
+                        ),
+                        y: r,
+                        z: C1
+                    ),
+                    y: r,
+                    z: C0
+                )
                     / Math.FusedMultiplyAdd(
-                        Math.FusedMultiplyAdd(
-                            Math.FusedMultiplyAdd(
-                                Math.FusedMultiplyAdd(
-                                    Math.FusedMultiplyAdd(
-                                        Math.FusedMultiplyAdd(
-                                            Math.FusedMultiplyAdd(D7,
-                                                r, D6),
-                                            r, D5),
-                                        r, D4),
-                                    r, D3),
-                                r, D2),
-                            r, D1),
-                        r, One
-                    )
+                    x: Math.FusedMultiplyAdd(
+                        x: Math.FusedMultiplyAdd(
+                            x: Math.FusedMultiplyAdd(
+                                x: Math.FusedMultiplyAdd(
+                                    x: Math.FusedMultiplyAdd(
+                                        x: Math.FusedMultiplyAdd(
+                                            x: D7,
+                                            y: r,
+                                            z: D6
+                                        ),
+                                        y: r,
+                                        z: D5
+                                    ),
+                                    y: r,
+                                    z: D4
+                                ),
+                                y: r,
+                                z: D3
+                            ),
+                            y: r,
+                            z: D2
+                        ),
+                        y: r,
+                        z: D1
+                    ),
+                    y: r,
+                    z: One
+                )
                 );
             } else {
                 r -= Five;
                 v = (
                     Math.FusedMultiplyAdd(
-                        Math.FusedMultiplyAdd(
-                            Math.FusedMultiplyAdd(
-                                Math.FusedMultiplyAdd(
-                                    Math.FusedMultiplyAdd(
-                                        Math.FusedMultiplyAdd(
-                                            Math.FusedMultiplyAdd(E7,
-                                                r, E6),
-                                            r, E5),
-                                        r, E4),
-                                    r, E3),
-                                r, E2),
-                            r, E1),
-                        r, E0
-                    )
+                    x: Math.FusedMultiplyAdd(
+                        x: Math.FusedMultiplyAdd(
+                            x: Math.FusedMultiplyAdd(
+                                x: Math.FusedMultiplyAdd(
+                                    x: Math.FusedMultiplyAdd(
+                                        x: Math.FusedMultiplyAdd(
+                                            x: E7,
+                                            y: r,
+                                            z: E6
+                                        ),
+                                        y: r,
+                                        z: E5
+                                    ),
+                                    y: r,
+                                    z: E4
+                                ),
+                                y: r,
+                                z: E3
+                            ),
+                            y: r,
+                            z: E2
+                        ),
+                        y: r,
+                        z: E1
+                    ),
+                    y: r,
+                    z: E0
+                )
                     / Math.FusedMultiplyAdd(
-                        Math.FusedMultiplyAdd(
-                            Math.FusedMultiplyAdd(
-                                Math.FusedMultiplyAdd(
-                                    Math.FusedMultiplyAdd(
-                                        Math.FusedMultiplyAdd(
-                                            Math.FusedMultiplyAdd(F7,
-                                                r, F6),
-                                            r, F5),
-                                        r, F4),
-                                    r, F3),
-                                r, F2),
-                            r, F1),
-                        r, One
-                    )
+                    x: Math.FusedMultiplyAdd(
+                        x: Math.FusedMultiplyAdd(
+                            x: Math.FusedMultiplyAdd(
+                                x: Math.FusedMultiplyAdd(
+                                    x: Math.FusedMultiplyAdd(
+                                        x: Math.FusedMultiplyAdd(
+                                            x: F7,
+                                            y: r,
+                                            z: F6
+                                        ),
+                                        y: r,
+                                        z: F5
+                                    ),
+                                    y: r,
+                                    z: F4
+                                ),
+                                y: r,
+                                z: F3
+                            ),
+                            y: r,
+                            z: F2
+                        ),
+                        y: r,
+                        z: F1
+                    ),
+                    y: r,
+                    z: One
+                )
                 );
             }
 
-            v = Math.CopySign(x: v, y: q);
+            v = Math.CopySign(
+                x: v,
+                y: q
+            );
         }
 
         return v;
@@ -207,17 +305,32 @@ public static class ProbabilityFunctions {
     /// <summary>
     /// Returns the inverse cumulative distribution function of a normal distribution.
     /// </summary>
-    /// <param name="mean">The mean of the normal distribution.</param>
+    /// <param name="mean">The mean of the normal distribution. Must be finite.</param>
     /// <param name="probability">The cumulative probability. Values must be in the inclusive range [0, 1].</param>
-    /// <param name="standardDeviation">The standard deviation of the normal distribution.</param>
+    /// <param name="standardDeviation">The standard deviation of the normal distribution. Must be finite and strictly positive.</param>
     /// <returns>The value <c>x</c> such that <c>Φ((x - mean) / standardDeviation) = probability</c>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is less than 0 or greater than 1.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is NaN, or is less than 0 or greater than 1.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mean"/> is not finite, or <paramref name="standardDeviation"/> is not finite or is not strictly positive.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static double InverseNormalCdf(
         this double probability,
         double mean,
         double standardDeviation
     ) {
+        if (!double.IsFinite(d: mean)) {
+            throw new ArgumentOutOfRangeException(
+                message: "mean must be finite",
+                paramName: nameof(mean)
+            );
+        }
+
+        if (!(double.IsFinite(d: standardDeviation) && (0.0d < standardDeviation))) {
+            throw new ArgumentOutOfRangeException(
+                message: "standardDeviation must be finite and strictly positive",
+                paramName: nameof(standardDeviation)
+            );
+        }
+
         return (mean + (standardDeviation * InverseStandardNormalCdf(probability: probability)));
     }
 }

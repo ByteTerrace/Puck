@@ -27,26 +27,24 @@ internal static class HgbCartridge {
     // needs far more than the original 0x0150..0x0300 slot. Tiles cap at (TileMapAddress − TileDataAddress) = 0x1400
     // bytes = 320 tiles.
     private const ushort TileDataAddress = 0x0400;
-    private const ushort TileMapAddress = 0x1800;
     private const ushort BackgroundPaletteAddress = 0x1C00;
-    private const ushort ObjectPaletteAddress = 0x1C08;
     private const ushort ObjectAttributeAddress = 0x1C10;
-
-    private const ushort VramTiles = 0x8000;
+    private const ushort ObjectPaletteAddress = 0x1C08;
+    private const ushort TileMapAddress = 0x1800;
     private const ushort VramBackgroundMap = 0x9800;
+    private const ushort VramTiles = 0x8000;
     private const ushort VramAttributeMapBank1 = 0x9800; // Same address, read with VBK = 1.
     private const ushort ObjectAttributeMemory = 0xFE00;
-
     private const byte PortJoypad = 0x00; // P1/JOYP: write 0x20 to select the direction keys, then read them (active-low).
     private const byte PortLcdControl = 0x40;
-    private const byte PortScrollY = 0x42;
     private const byte PortScrollX = 0x43;
+    private const byte PortScrollY = 0x42;
     private const byte PortScanline = 0x44; // LY.
-    private const byte PortVramBank = 0x4F;
-    private const byte PortBackgroundPaletteIndex = 0x68;
     private const byte PortBackgroundPaletteData = 0x69;
-    private const byte PortObjectPaletteIndex = 0x6A;
+    private const byte PortBackgroundPaletteIndex = 0x68;
     private const byte PortObjectPaletteData = 0x6B;
+    private const byte PortObjectPaletteIndex = 0x6A;
+    private const byte PortVramBank = 0x4F;
 
     // LCDC bases: LCD on (0x80) | BG tile data at 0x8000 (0x10) | OBJ on (0x02) | BG on (0x01). The static scene uses
     // 8×8 objects (0x93); the world-lens uses 8×16 (adds 0x04 → 0x97) so one OAM entry is a 2-tile-tall character.
@@ -58,23 +56,23 @@ internal static class HgbCartridge {
     // The OVERWORLD routine's work-RAM state + layout — the single source of truth is OverworldProtocol (shared with
     // the forge's self-verification). Aliased here so the routine below reads locally.
     private const ushort OverworldPlayerX = OverworldProtocol.PlayerXAddress;
-    private const ushort OverworldPlayerY = OverworldProtocol.PlayerYAddress;
-    private const ushort OverworldFacing = OverworldProtocol.FacingAddress;
-    private const ushort OverworldAnimTimer = OverworldProtocol.AnimTimerAddress;
-    private const ushort OverworldMoving = OverworldProtocol.MovingAddress;
-    private const ushort OverworldTileScratch = OverworldProtocol.TileScratchAddress;
-    private const byte OverworldMinX = OverworldProtocol.MinX;
-    private const byte OverworldMaxX = OverworldProtocol.MaxX;
-    private const byte OverworldMinY = OverworldProtocol.MinY;
-    private const byte OverworldMaxY = OverworldProtocol.MaxY;
-    private const byte OverworldStartX = OverworldProtocol.StartX;
-    private const byte OverworldStartY = OverworldProtocol.StartY;
-    private const byte OverworldWalkSpeed = OverworldProtocol.WalkSpeed;
     private const byte FacingDown = OverworldProtocol.FacingDown;
-    private const byte FacingUp = OverworldProtocol.FacingUp;
     private const byte FacingLeft = OverworldProtocol.FacingLeft;
     private const byte FacingRight = OverworldProtocol.FacingRight;
+    private const byte FacingUp = OverworldProtocol.FacingUp;
+    private const ushort OverworldAnimTimer = OverworldProtocol.AnimTimerAddress;
+    private const ushort OverworldFacing = OverworldProtocol.FacingAddress;
+    private const byte OverworldMaxX = OverworldProtocol.MaxX;
+    private const byte OverworldMaxY = OverworldProtocol.MaxY;
+    private const byte OverworldMinX = OverworldProtocol.MinX;
+    private const byte OverworldMinY = OverworldProtocol.MinY;
+    private const ushort OverworldMoving = OverworldProtocol.MovingAddress;
+    private const ushort OverworldPlayerY = OverworldProtocol.PlayerYAddress;
+    private const byte OverworldStartX = OverworldProtocol.StartX;
+    private const byte OverworldStartY = OverworldProtocol.StartY;
+    private const ushort OverworldTileScratch = OverworldProtocol.TileScratchAddress;
     private const int OverworldTilesPerPose = OverworldProtocol.TilesPerPose;
+    private const byte OverworldWalkSpeed = OverworldProtocol.WalkSpeed;
 
     private static readonly byte[] BootLogo = [
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
@@ -156,16 +154,16 @@ internal static class HgbCartridge {
 
         // Entry point (0x0100): nop; jp MainRoutine.
         rom[EntryPoint] = 0x00;
-        rom[EntryPoint + 1] = 0xC3;
-        rom[EntryPoint + 2] = (byte)(MainRoutine & 0xFF);
-        rom[EntryPoint + 3] = (byte)((MainRoutine >> 8) & 0xFF);
+        rom[(EntryPoint + 1)] = 0xC3;
+        rom[(EntryPoint + 2)] = (byte)(MainRoutine & 0xFF);
+        rom[(EntryPoint + 3)] = (byte)((MainRoutine >> 8) & 0xFF);
 
         BootLogo.CopyTo(array: rom, index: 0x0104);
 
         var titleBytes = Encoding.ASCII.GetBytes(s: title.ToUpperInvariant());
 
         for (var index = 0; ((index < titleBytes.Length) && (index < 15)); index++) {
-            rom[0x0134 + index] = titleBytes[index];
+            rom[(0x0134 + index)] = titleBytes[index];
         }
 
         rom[0x0143] = 0xC0; // CGB flag: Color REQUIRED.
@@ -177,7 +175,6 @@ internal static class HgbCartridge {
 
         return rom;
     }
-
     private static void PlaceData(byte[] rom, byte[] backgroundPalette, byte[] objectPalette, byte[] tileData, byte[] tileMap) {
         ArgumentNullException.ThrowIfNull(backgroundPalette);
         ArgumentNullException.ThrowIfNull(objectPalette);
@@ -192,7 +189,7 @@ internal static class HgbCartridge {
             throw new ArgumentException(message: "The tilemap is a full 32x32 = 1024 bytes.", paramName: nameof(tileMap));
         }
 
-        if ((int)TileDataAddress + tileData.Length > TileMapAddress) {
+        if (((int)TileDataAddress + tileData.Length) > TileMapAddress) {
             throw new ArgumentException(message: $"The tile data ({tileData.Length} bytes) overruns the fixed tilemap slot at 0x{TileMapAddress:X4}.", paramName: nameof(tileData));
         }
 
@@ -201,20 +198,18 @@ internal static class HgbCartridge {
         tileData.CopyTo(array: rom, index: TileDataAddress);
         tileMap.CopyTo(array: rom, index: TileMapAddress);
     }
-
     private static void PlaceRoutine(byte[] rom, byte[] routine) {
-        if ((int)MainRoutine + routine.Length > TileDataAddress) {
+        if (((int)MainRoutine + routine.Length) > TileDataAddress) {
             throw new InvalidOperationException(message: $"The display routine ({routine.Length} bytes) overran the tile-data region at 0x{TileDataAddress:X4}.");
         }
 
         routine.CopyTo(array: rom, index: MainRoutine);
     }
-
     private static void Finalize(byte[] rom) {
         byte headerChecksum = 0;
 
         for (var address = 0x0134; (address <= 0x014C); address++) {
-            headerChecksum = (byte)(headerChecksum - rom[address] - 1);
+            headerChecksum = (byte)((headerChecksum - rom[address]) - 1);
         }
 
         rom[0x014D] = headerChecksum;
@@ -266,7 +261,6 @@ internal static class HgbCartridge {
         emitter.XorA();
         emitter.StoreAToHighPage(port: PortVramBank); // Back to bank 0.
     }
-
     private static byte[] BuildStaticRoutine(int tileByteCount, int objectByteCount) {
         var emitter = new Sm83Emitter();
 
@@ -365,17 +359,17 @@ internal static class HgbCartridge {
         emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
         emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
         emitter.ArithmeticImmediate(op: AluOp.Add, value: 16);
-        emitter.StoreAToAddress(address: ObjectAttributeMemory + 0);
+        emitter.StoreAToAddress(address: (ObjectAttributeMemory + 0));
         emitter.LoadAFromAddress(address: WorldLensProtocol.GameTileXAddress);
         emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
         emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
         emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);
         emitter.ArithmeticImmediate(op: AluOp.Add, value: 8);
-        emitter.StoreAToAddress(address: ObjectAttributeMemory + 1);
+        emitter.StoreAToAddress(address: (ObjectAttributeMemory + 1));
         emitter.LoadAImmediate(value: playerTileBase);
-        emitter.StoreAToAddress(address: ObjectAttributeMemory + 2);
+        emitter.StoreAToAddress(address: (ObjectAttributeMemory + 2));
         emitter.XorA();
-        emitter.StoreAToAddress(address: ObjectAttributeMemory + 3);
+        emitter.StoreAToAddress(address: (ObjectAttributeMemory + 3));
 
         // Win check on the game tile: reaching the goal from EITHER authority raises the flag.
         emitter.LoadAFromAddress(address: WorldLensProtocol.GameTileXAddress);
@@ -631,7 +625,6 @@ internal static class HgbCartridge {
         emitter.LoadAImmediate(value: 1);
         emitter.StoreAToAddress(address: OverworldMoving);
     }
-
     private static void EmitHexAxisStep(Sm83Emitter emitter, ushort address, byte delta, bool negative) {
         if (delta == 0) {
             return;
@@ -713,7 +706,6 @@ internal static class HgbCartridge {
         emitter.StoreAToAddress(address: address);
         emitter.MarkLabel(label: skip);
     }
-
     private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort) {
         var loop = emitter.NewLabel();
 
@@ -725,7 +717,6 @@ internal static class HgbCartridge {
         emitter.Decrement(register: Reg8.B);
         emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
-
     private static void EmitBlockCopy(Sm83Emitter emitter, ushort sourceAddress, ushort destinationAddress, ushort byteCount) {
         var loop = emitter.NewLabel();
 
@@ -741,7 +732,6 @@ internal static class HgbCartridge {
         emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
         emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
-
     private static void EmitBlockFill(Sm83Emitter emitter, ushort destinationAddress, ushort byteCount) {
         var loop = emitter.NewLabel();
 

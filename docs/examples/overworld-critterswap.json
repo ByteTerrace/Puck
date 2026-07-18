@@ -1,0 +1,16 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Two CRITTER-SWAP cabinets, ready to link and trade. Each console names startCart 12 (the critter-swap cart) and a distinct saveSlot, so the two cabinets hold DIFFERENT default critters ({base}.s0.sav gets PUCKLING, {base}.s1.sav gets BLIPMOUSE) and the swap is visible at a glance — the general (console, type) save-distinctness seam W3 built and the critter-swap cart rides. Boot it with `Puck.Demo --run docs/examples/overworld-critterswap.json`, then pipe over stdin: `boot 0` / `boot 1` / `serial.watch 0` / `link 0 1` / `press 0 start` / `press 1 start` — the two carts negotiate a boot-order-proof handshake over the cable, swap critters, commit both SRAMs, and land on their NEW-FRIEND arrival screens while the diegetic cable glows and every completed transfer byte streams to stdout. A null saveSlot (the default, every other example) keeps the shared-per-type save, byte-unchanged.",
+    "host": {
+        "presentMode": "vsync"
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld",
+        "consoles": [
+            { "model": "cgb", "startCart": 12, "saveSlot": 0 },
+            { "model": "cgb", "startCart": 12, "saveSlot": 1 }
+        ]
+    }
+}

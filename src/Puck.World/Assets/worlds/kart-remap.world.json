@@ -1,0 +1,798 @@
+{
+  "motion": {
+    "moveSpeed": 4,
+    "turnSpeed": 2.5,
+    "groundY": 0,
+    "jumpSpeed": 5.5,
+    "riseGravity": 14,
+    "fallGravity": 23,
+    "maxFallSpeed": 20,
+    "jumpCutMultiplier": 0.45,
+    "coyoteTime": 0.09,
+    "jumpBufferTime": 0.1
+  },
+  "wander": {
+    "driftSpeed": 1.5,
+    "softRadius": 45,
+    "spawnRadius": 40,
+    "weaveAmplitude": 0.5,
+    "inwardGain": 1.6,
+    "goldenAngle": 2.399963,
+    "weaveFrequencyBase": 0.3,
+    "weaveFrequencyRange": 0.2
+  },
+  "scene": {
+    "groundAlbedo": [
+      0.33,
+      0.52,
+      0.24
+    ],
+    "stoneAlbedo": [
+      0.55,
+      0.55,
+      0.58
+    ],
+    "boulders": [
+      {
+        "id": "boulder-1",
+        "center": [
+          -1.2,
+          0.72,
+          -0.3
+        ],
+        "radius": 0.9,
+        "smooth": 0.5
+      },
+      {
+        "id": "boulder-2",
+        "center": [
+          0.6,
+          0.88,
+          0.5
+        ],
+        "radius": 1.1,
+        "smooth": 0.5
+      },
+      {
+        "id": "boulder-3",
+        "center": [
+          1.9,
+          0.48,
+          -0.7
+        ],
+        "radius": 0.6,
+        "smooth": 0.4
+      },
+      {
+        "id": "boulder-4",
+        "center": [
+          -0.3,
+          0.38,
+          1.3
+        ],
+        "radius": 0.45,
+        "smooth": 0.35
+      },
+      {
+        "id": "boulder-5",
+        "center": [
+          2.4,
+          0.62,
+          0.7
+        ],
+        "radius": 0.75,
+        "smooth": 0.4
+      }
+    ]
+  },
+  "spawnPoints": [
+    {
+      "id": "seat-1",
+      "position": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "seat-2",
+      "position": [
+        -3,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "seat-3",
+      "position": [
+        3,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "seat-4",
+      "position": [
+        0,
+        0,
+        4
+      ]
+    }
+  ],
+  "render": {
+    "shadows": "Off",
+    "shadowCrowdRadius": 15,
+    "ambientOcclusion": false,
+    "renderScale": "Half",
+    "upscaleSharpness": 0,
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "renderScale": "Half"
+    },
+    "medium": {
+      "shadows": "Medium",
+      "ambientOcclusion": true,
+      "renderScale": "ThreeQuarter"
+    },
+    "high": {
+      "shadows": "High",
+      "ambientOcclusion": true,
+      "renderScale": "Native"
+    }
+  },
+  "screens": [
+    {
+      "index": 0,
+      "origin": [
+        -3,
+        1.2,
+        -3
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 1.3,
+      "halfHeight": 1,
+      "halfDepth": 0.12,
+      "round": 0.08,
+      "source": {
+        "$type": "view",
+        "cameraName": "overhead"
+      },
+      "route": {
+        "engageable": true,
+        "engageRadius": 2.5
+      }
+    },
+    {
+      "index": 1,
+      "origin": [
+        3,
+        1.2,
+        -3
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 1.3,
+      "halfHeight": 1,
+      "halfDepth": 0.12,
+      "round": 0.08,
+      "source": {
+        "$type": "capture",
+        "windowTitle": "Puck: World",
+        "profile": {
+          "width": 256,
+          "height": 192,
+          "refreshRateHz": 10
+        },
+        "monitorIndex": null
+      },
+      "route": {
+        "engageable": false,
+        "engageRadius": 0
+      }
+    },
+    {
+      "index": 2,
+      "origin": [
+        0,
+        3.8,
+        -7
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 2.6,
+      "halfHeight": 1.4,
+      "halfDepth": 0.14,
+      "round": 0.1,
+      "source": {
+        "$type": "view",
+        "cameraName": "avatar-eye"
+      },
+      "route": {
+        "engageable": false,
+        "engageRadius": 0
+      }
+    },
+    {
+      "index": 3,
+      "origin": [
+        -4.4,
+        3.6,
+        -6.5
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 1.6,
+      "halfHeight": 1.2,
+      "halfDepth": 0.14,
+      "round": 0.1,
+      "source": {
+        "$type": "camera",
+        "profile": {
+          "width": 320,
+          "height": 240,
+          "refreshRateHz": 15
+        }
+      },
+      "route": {
+        "engageable": false,
+        "engageRadius": 0
+      }
+    },
+    {
+      "index": 4,
+      "origin": [
+        4.4,
+        3.6,
+        -6.5
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 1.6,
+      "halfHeight": 1.0666667,
+      "halfDepth": 0.14,
+      "round": 0.1,
+      "source": {
+        "$type": "machine",
+        "engine": "advanced-gaming-brick",
+        "contentPath": "",
+        "options": "direct"
+      },
+      "route": {
+        "engageable": false,
+        "engageRadius": 0
+      }
+    }
+  ],
+  "cameras": [
+    {
+      "$type": "avatarEye",
+      "avatarIndex": 0,
+      "eyeOffset": [
+        -0.012012234,
+        1.4752654,
+        -0.15992874
+      ],
+      "name": "avatar-eye",
+      "renderWidth": 256,
+      "renderHeight": 144,
+      "fieldOfViewRadians": 1.1868238
+    },
+    {
+      "$type": "fixed",
+      "position": [
+        0,
+        15,
+        7
+      ],
+      "lookAt": [
+        0,
+        0.5,
+        -2.5
+      ],
+      "name": "overhead",
+      "renderWidth": 256,
+      "renderHeight": 144,
+      "fieldOfViewRadians": 0.9599311
+    }
+  ],
+  "population": {
+    "localPlayers": 4,
+    "networkPlayers": 124,
+    "defaultPeerSource": "Wander"
+  },
+  "kits": [
+    {
+      "name": "flyer",
+      "model": "Free",
+      "tuning": {
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "groundY": 0,
+        "jumpSpeed": 5.5,
+        "riseGravity": 14,
+        "fallGravity": 23,
+        "maxFallSpeed": 20,
+        "jumpCutMultiplier": 0.45,
+        "coyoteTime": 0.09,
+        "jumpBufferTime": 0.1
+      },
+      "flavor": {
+        "forward": 0.62,
+        "driftForward": false,
+        "strafeWave": 0.18,
+        "turnWave": 0,
+        "upWave": 0.1,
+        "pitchWave": 0.14,
+        "rollTurn": 0.32,
+        "primaryThreshold": 0,
+        "altitudeBase": 4.5,
+        "altitudeRange": 3
+      },
+      "primaryAction": null,
+      "secondaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "cooldownElapsed"
+          },
+          "latchSeconds": 0.05,
+          "effects": [
+            {
+              "$type": "setVerticalVelocity",
+              "velocity": 5.5
+            },
+            {
+              "$type": "startCooldown",
+              "seconds": 1.5
+            }
+          ]
+        },
+        "onRelease": null
+      }
+    },
+    {
+      "name": "swimmer",
+      "model": "Free",
+      "tuning": {
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "groundY": 0,
+        "jumpSpeed": 5.5,
+        "riseGravity": 14,
+        "fallGravity": 23,
+        "maxFallSpeed": 20,
+        "jumpCutMultiplier": 0.45,
+        "coyoteTime": 0.09,
+        "jumpBufferTime": 0.1
+      },
+      "flavor": {
+        "forward": 0.38,
+        "driftForward": false,
+        "strafeWave": 0.28,
+        "turnWave": 0,
+        "upWave": 0.16,
+        "pitchWave": 0.22,
+        "rollTurn": 0.18,
+        "primaryThreshold": 0,
+        "altitudeBase": 0.8,
+        "altitudeRange": 1.2
+      },
+      "primaryAction": null,
+      "secondaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "cooldownElapsed"
+          },
+          "latchSeconds": 0.05,
+          "effects": [
+            {
+              "$type": "setVerticalVelocity",
+              "velocity": 5.5
+            },
+            {
+              "$type": "startCooldown",
+              "seconds": 1.5
+            }
+          ]
+        },
+        "onRelease": null
+      }
+    },
+    {
+      "name": "jumper",
+      "model": "Grounded",
+      "tuning": {
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "groundY": 0,
+        "jumpSpeed": 5.5,
+        "riseGravity": 14,
+        "fallGravity": 23,
+        "maxFallSpeed": 20,
+        "jumpCutMultiplier": 0.45,
+        "coyoteTime": 0.09,
+        "jumpBufferTime": 0.1
+      },
+      "flavor": {
+        "forward": 0,
+        "driftForward": true,
+        "strafeWave": 0,
+        "turnWave": 0,
+        "upWave": 0,
+        "pitchWave": 0,
+        "rollTurn": 0,
+        "primaryThreshold": 0.45,
+        "altitudeBase": 0,
+        "altitudeRange": 0
+      },
+      "primaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "all",
+            "predicates": [
+              {
+                "$type": "recently",
+                "fact": "Grounded",
+                "windowSeconds": 0.09
+              },
+              {
+                "$type": "usesBelow",
+                "limit": 1
+              }
+            ]
+          },
+          "latchSeconds": 0.1,
+          "effects": [
+            {
+              "$type": "setVerticalVelocity",
+              "velocity": 5.5
+            },
+            {
+              "$type": "consumeUse"
+            }
+          ]
+        },
+        "onRelease": {
+          "gate": {
+            "$type": "now",
+            "fact": "Rising"
+          },
+          "latchSeconds": 0,
+          "effects": [
+            {
+              "$type": "scaleVerticalVelocity",
+              "factor": 0.45
+            }
+          ]
+        }
+      },
+      "secondaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "all",
+            "predicates": [
+              {
+                "$type": "now",
+                "fact": "Grounded"
+              },
+              {
+                "$type": "cooldownElapsed"
+              }
+            ]
+          },
+          "latchSeconds": 0.05,
+          "effects": [
+            {
+              "$type": "planarImpulse",
+              "bodyDirection": [
+                0,
+                0,
+                -1
+              ],
+              "speed": 10,
+              "durationSeconds": 0.25
+            },
+            {
+              "$type": "startCooldown",
+              "seconds": 1.5
+            }
+          ]
+        },
+        "onRelease": null
+      }
+    },
+    {
+      "name": "runner",
+      "model": "Grounded",
+      "tuning": {
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "groundY": 0,
+        "jumpSpeed": 5.5,
+        "riseGravity": 14,
+        "fallGravity": 23,
+        "maxFallSpeed": 20,
+        "jumpCutMultiplier": 0.45,
+        "coyoteTime": 0.09,
+        "jumpBufferTime": 0.1
+      },
+      "flavor": {
+        "forward": 0,
+        "driftForward": true,
+        "strafeWave": 0,
+        "turnWave": 0,
+        "upWave": 0,
+        "pitchWave": 0,
+        "rollTurn": 0,
+        "primaryThreshold": 0,
+        "altitudeBase": 0,
+        "altitudeRange": 0
+      },
+      "primaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "all",
+            "predicates": [
+              {
+                "$type": "recently",
+                "fact": "Grounded",
+                "windowSeconds": 0.09
+              },
+              {
+                "$type": "usesBelow",
+                "limit": 1
+              }
+            ]
+          },
+          "latchSeconds": 0.1,
+          "effects": [
+            {
+              "$type": "setVerticalVelocity",
+              "velocity": 5.5
+            },
+            {
+              "$type": "consumeUse"
+            }
+          ]
+        },
+        "onRelease": {
+          "gate": {
+            "$type": "now",
+            "fact": "Rising"
+          },
+          "latchSeconds": 0,
+          "effects": [
+            {
+              "$type": "scaleVerticalVelocity",
+              "factor": 0.45
+            }
+          ]
+        }
+      },
+      "secondaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "all",
+            "predicates": [
+              {
+                "$type": "now",
+                "fact": "Grounded"
+              },
+              {
+                "$type": "cooldownElapsed"
+              }
+            ]
+          },
+          "latchSeconds": 0.05,
+          "effects": [
+            {
+              "$type": "planarImpulse",
+              "bodyDirection": [
+                0,
+                0,
+                -1
+              ],
+              "speed": 10,
+              "durationSeconds": 0.25
+            },
+            {
+              "$type": "startCooldown",
+              "seconds": 1.5
+            }
+          ]
+        },
+        "onRelease": null
+      }
+    },
+    {
+      "name": "kart",
+      "model": "Grounded",
+      "tuning": {
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "groundY": 0,
+        "jumpSpeed": 5.5,
+        "riseGravity": 14,
+        "fallGravity": 23,
+        "maxFallSpeed": 20,
+        "jumpCutMultiplier": 0.45,
+        "coyoteTime": 0.09,
+        "jumpBufferTime": 0.1
+      },
+      "flavor": {
+        "forward": 0.88,
+        "driftForward": false,
+        "strafeWave": 0.24,
+        "turnWave": 0.42,
+        "upWave": 0,
+        "pitchWave": 0,
+        "rollTurn": 0,
+        "primaryThreshold": 0,
+        "altitudeBase": 0,
+        "altitudeRange": 0
+      },
+      "primaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "all",
+            "predicates": [
+              {
+                "$type": "recently",
+                "fact": "Grounded",
+                "windowSeconds": 0.09
+              },
+              {
+                "$type": "usesBelow",
+                "limit": 1
+              }
+            ]
+          },
+          "latchSeconds": 0.1,
+          "effects": [
+            {
+              "$type": "setVerticalVelocity",
+              "velocity": 5.5
+            },
+            {
+              "$type": "consumeUse"
+            }
+          ]
+        },
+        "onRelease": {
+          "gate": {
+            "$type": "now",
+            "fact": "Rising"
+          },
+          "latchSeconds": 0,
+          "effects": [
+            {
+              "$type": "scaleVerticalVelocity",
+              "factor": 0.45
+            }
+          ]
+        }
+      },
+      "secondaryAction": {
+        "onPress": {
+          "gate": {
+            "$type": "all",
+            "predicates": [
+              {
+                "$type": "now",
+                "fact": "Grounded"
+              },
+              {
+                "$type": "cooldownElapsed"
+              }
+            ]
+          },
+          "latchSeconds": 0.05,
+          "effects": [
+            {
+              "$type": "planarImpulse",
+              "bodyDirection": [
+                0,
+                0,
+                -1
+              ],
+              "speed": 10,
+              "durationSeconds": 0.25
+            },
+            {
+              "$type": "startCooldown",
+              "seconds": 1.5
+            }
+          ]
+        },
+        "onRelease": null
+      }
+    }
+  ],
+  "defaultSeatKit": "runner",
+  "assignment": {
+    "policy": "hash",
+    "table": []
+  },
+  "addons": [],
+  "bindingOverlays": [
+    {
+      "id": "kart-remap",
+      "document": {
+        "version": "puck.bindings.v7",
+        "modifiers": [],
+        "pages": [
+          {
+            "id": "base",
+            "chord": [],
+            "entries": [
+              {
+                "source": "gamepad.buttonEast",
+                "command": "player.primary",
+                "activateOn": null,
+                "label": null,
+                "icon": null,
+                "anyModifiers": true
+              },
+              {
+                "source": "gamepad.buttonEast",
+                "command": "player.primary",
+                "activateOn": "Completed",
+                "label": null,
+                "icon": null,
+                "anyModifiers": true
+              }
+            ],
+            "label": null,
+            "icon": null
+          }
+        ]
+      }
+    }
+  ],
+  "storage": {
+    "endpoint": null,
+    "userId": null
+  },
+  "schema": "puck.world.def.v1"
+}

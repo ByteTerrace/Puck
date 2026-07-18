@@ -41,20 +41,21 @@ internal sealed class WorldCellJitterStage : IPostStage {
     // + prototype bounding radius (~0.214) = ~0.36 < min(spacing)/2 (0.5), so no placement crosses a cell boundary.
     internal static SdfProgram BuildCellJitterScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
         // Three CONTIGUOUS material rows: the shape names the first (rose); the hashed variant (0..2) reaches the two
         // that follow (lime, azure). All are never-named except rose — the stride is the only path to lime/azure.
-        var rose = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.3f, 0.4f), Emissive: 0.25f));
-        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.35f, 0.9f, 0.35f), Emissive: 0.25f));
-        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.3f, 0.55f, 0.95f), Emissive: 0.25f));
+        var rose = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.3f, z: 0.4f), Emissive: 0.25f));
+
+        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.35f, y: 0.9f, z: 0.35f), Emissive: 0.25f));
+        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.3f, y: 0.55f, z: 0.95f), Emissive: 0.25f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // Lift the lattice so the single populated row floats at ~y=1.0 above the ground plane.
-            .Translate(offset: new Vector3(0f, 1.0f, 0f))
-            .CellJitter(spacing: new Vector3(1.0f, 6.0f, 1.0f), jitter: 0.3f, seed: 1337u, tumble: 0.4f, materialVariants: 3)
+            .Translate(offset: new Vector3(x: 0f, y: 1.0f, z: 0f))
+            .CellJitter(spacing: new Vector3(x: 1.0f, y: 6.0f, z: 1.0f), jitter: 0.3f, seed: 1337u, tumble: 0.4f, materialVariants: 3)
             // The asymmetric round box: distinct half-extents on every axis so a hashed tumble visibly reorients it.
-            .Box(halfExtents: new Vector3(0.16f, 0.1f, 0.1f), round: 0.02f, material: rose)
+            .Box(halfExtents: new Vector3(x: 0.16f, y: 0.1f, z: 0.1f), round: 0.02f, material: rose)
             .Build();
     }
 

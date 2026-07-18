@@ -37,14 +37,14 @@ public sealed unsafe class DirectXGpuComputeCommandPool : IGpuComputeCommandPool
         );
         ((ID3D12GraphicsCommandList*)commandList)->Close();
 
-        m_token = GCHandle.Alloc(new DirectXCommandBufferState {
+        m_token = GCHandle.Alloc(value: new DirectXCommandBufferState {
             Allocator = (nint)commandAllocator,
             CommandList = (nint)commandList,
         });
     }
 
     /// <inheritdoc/>
-    public nint CommandBufferHandle => GCHandle.ToIntPtr(m_token);
+    public nint CommandBufferHandle => GCHandle.ToIntPtr(value: m_token);
 
     /// <inheritdoc/>
     public void Dispose() {

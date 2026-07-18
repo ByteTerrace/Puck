@@ -91,6 +91,7 @@ namespace Puck.Tools
             }
 
             var commandArguments = args[1..];
+
             switch (args[0].ToLowerInvariant())
             {
                 case "parity":
@@ -123,9 +124,11 @@ namespace Puck.Tools
         private static int Parity(string[] arguments)
         {
             var noBuild = arguments.Any(static argument => string.Equals(argument, "-NoBuild", StringComparison.OrdinalIgnoreCase));
+
             if (!noBuild)
             {
                 var buildExit = EngineRun.Build("Release");
+
                 if (buildExit != 0)
                 {
                     Console.Error.WriteLine("ERROR: build failed.");
@@ -141,7 +144,7 @@ namespace Puck.Tools
         // positional argument overrides the output path (default schema/run.schema.json); -NoBuild skips the build.
         private static int SchemaCommand(string[] arguments)
         {
-            var output = arguments.FirstOrDefault(static argument => !argument.StartsWith("-", StringComparison.Ordinal)) ?? Path.Combine(EngineRun.RepositoryRoot, "schema", "run.schema.json");
+            var output = (arguments.FirstOrDefault(static argument => !argument.StartsWith("-", StringComparison.Ordinal)) ?? Path.Combine(EngineRun.RepositoryRoot, "schema", "run.schema.json"));
 
             if (!ToolsNoBuild(arguments) && (EngineRun.Build("Debug") != 0))
             {
@@ -151,7 +154,6 @@ namespace Puck.Tools
 
             return EngineRun.RunDemo("--emit-schema", output);
         }
-
         private static bool ToolsNoBuild(string[] arguments) =>
             arguments.Any(static argument => string.Equals(argument, "-NoBuild", StringComparison.OrdinalIgnoreCase));
 
@@ -173,6 +175,7 @@ namespace Puck.Tools
             if (!noBuild)
             {
                 var buildExit = EngineRun.Build(configuration);
+
                 if (buildExit != 0)
                 {
                     Console.Error.WriteLine("ERROR: build failed.");
@@ -181,6 +184,7 @@ namespace Puck.Tools
             }
 
             var sweepExecutable = Path.Combine(EngineRun.RepositoryRoot, "src", "Puck.Post", "bin", configuration, "net10.0", "Puck.Post.exe");
+
             if (!File.Exists(sweepExecutable))
             {
                 Console.Error.WriteLine($"ERROR: sweep executable not found at {sweepExecutable} (build first).");
@@ -188,6 +192,7 @@ namespace Puck.Tools
             }
 
             var fuzzDirectory = Path.Combine(EngineRun.RepositoryRoot, "artifacts", "fuzz");
+
             Directory.CreateDirectory(fuzzDirectory);
 
             var timeoutMilliseconds = (timeoutSeconds * 1000);
@@ -205,10 +210,12 @@ namespace Puck.Tools
                 var seed = (start + index);
                 var seedText = seed.ToString(CultureInfo.InvariantCulture);
                 var sweepArguments = new[] { "--stage", "fuzz", "--fuzz-seed", seedText };
+
                 var (exitCode, timedOut, output) = ToolProcess.RunWithTimeout(timeoutMilliseconds, sweepExecutable, sweepArguments);
 
                 string classification;
                 var finding = true;
+
                 if (timedOut)
                 {
                     classification = "TIMEOUT (hang/TDR)";
@@ -239,6 +246,7 @@ namespace Puck.Tools
                 }
 
                 var verdictLine = FuzzVerdictLine(output);
+
                 Console.WriteLine($"  seed {seed,7}: {classification,-18} {verdictLine}");
 
                 if (finding)
@@ -251,19 +259,19 @@ namespace Puck.Tools
 
             var summary =
                 $"FUZZ summary | {count} runs from {start} | pass {passes} | divergence {divergences} | timeout {timeouts} | crash {crashes} | infra {infra} | findings {findings.Count}";
+
             Console.WriteLine(summary);
             File.WriteAllText(
                 Path.Combine(fuzzDirectory, "findings.txt"),
-                (summary + Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, findings))
+                (((summary + Environment.NewLine) + Environment.NewLine) + string.Join(Environment.NewLine, findings))
             );
             return ((findings.Count == 0) ? 0 : 1);
         }
-
         private static int FuzzIntArg(string[] arguments, string name, int fallback)
         {
             for (var index = 0; (index < (arguments.Length - 1)); index++)
             {
-                if (string.Equals(arguments[index], name, StringComparison.OrdinalIgnoreCase) && int.TryParse(arguments[index + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+                if (string.Equals(arguments[index], name, StringComparison.OrdinalIgnoreCase) && int.TryParse(arguments[(index + 1)], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
                 {
                     return value;
                 }
@@ -277,7 +285,7 @@ namespace Puck.Tools
             {
                 if (string.Equals(arguments[index], name, StringComparison.OrdinalIgnoreCase))
                 {
-                    return arguments[index + 1];
+                    return arguments[(index + 1)];
                 }
             }
 
@@ -311,13 +319,13 @@ namespace Puck.Tools
             foreach (var (source, suffix) in sources)
             {
                 var sourcePath = Path.Combine(EngineRun.RepositoryRoot, "artifacts", source);
+
                 if (File.Exists(sourcePath))
                 {
                     File.Copy(sourcePath, Path.Combine(fuzzDirectory, $"seed-{seed}-{suffix}.png"), overwrite: true);
                 }
             }
         }
-
         private static int CompareFrames(string[] arguments)
         {
             if (arguments.Length != 2)
@@ -327,21 +335,22 @@ namespace Puck.Tools
             }
 
             var result = ApngFrameExtractor.CompareCaptures(Path.GetFullPath(arguments[0]), Path.GetFullPath(arguments[1]));
+
             foreach (var frame in result.Diffs)
             {
                 Console.WriteLine($"frame {frame.FrameIndex}: diffPixels={frame.DiffPixelCount} maxChannelDelta={frame.MaxChannelDelta}");
             }
 
-            var overallMaxDelta = result.Diffs.Count == 0 ? 0 : result.Diffs.Max(static frame => frame.MaxChannelDelta);
+            var overallMaxDelta = ((result.Diffs.Count == 0) ? 0 : result.Diffs.Max(static frame => frame.MaxChannelDelta));
+
             Console.WriteLine(
                 $"frames compared: {result.FrameCount} ({result.Width}x{result.Height}); frames with diffs: {result.Diffs.Count}; max channel delta: {overallMaxDelta}"
             );
             return 0;
         }
-
         private static int ExtractFrame(string[] arguments)
         {
-            if (arguments.Length != 3 || !int.TryParse(arguments[1], out var frameIndex))
+            if ((arguments.Length != 3) || !int.TryParse(arguments[1], out var frameIndex))
             {
                 Console.Error.WriteLine("ERROR: usage: extract-frame <capture.png> <frameIndex> <out.png>");
                 return 2;
@@ -351,7 +360,6 @@ namespace Puck.Tools
             Console.WriteLine($"frame {frameIndex} -> {Path.GetFullPath(arguments[2])} ({width}x{height})");
             return 0;
         }
-
         private static int FrameCount(string[] arguments)
         {
             if (arguments.Length != 1)
@@ -363,7 +371,6 @@ namespace Puck.Tools
             Console.WriteLine(ApngFrameExtractor.GetFrameCount(Path.GetFullPath(arguments[0])));
             return 0;
         }
-
         private static void PrintUsage()
         {
             Console.Error.WriteLine("usage: dotnet run tools/Tools.cs -- <command> [options]");
@@ -411,7 +418,7 @@ namespace Puck.Tools
         {
             ParseApng(apngPathA, out var widthA, out var heightA, out var colorTypeA, out var paletteA, out var framesA);
             ParseApng(apngPathB, out var widthB, out var heightB, out var colorTypeB, out var paletteB, out var framesB);
-            if (widthA != widthB || heightA != heightB)
+            if ((widthA != widthB) || (heightA != heightB))
             {
                 throw new InvalidDataException($"Capture canvases differ: {widthA}x{heightA} vs {widthB}x{heightB}.");
             }
@@ -421,25 +428,28 @@ namespace Puck.Tools
                 throw new InvalidDataException($"Capture frame counts differ: {framesA.Count} vs {framesB.Count}.");
             }
 
-            var bytesPerPixelA = colorTypeA == 6 ? 4 : 1;
-            var bytesPerPixelB = colorTypeB == 6 ? 4 : 1;
-            var canvasA = new byte[widthA * heightA * bytesPerPixelA];
-            var canvasB = new byte[widthB * heightB * bytesPerPixelB];
+            var bytesPerPixelA = ((colorTypeA == 6) ? 4 : 1);
+            var bytesPerPixelB = ((colorTypeB == 6) ? 4 : 1);
+            var canvasA = new byte[((widthA * heightA) * bytesPerPixelA)];
+            var canvasB = new byte[((widthB * heightB) * bytesPerPixelB)];
             var diffs = new List<FrameDiff>();
-            for (var index = 0; index < framesA.Count; index++)
+
+            for (var index = 0; (index < framesA.Count); index++)
             {
                 ApplyFrame(canvasA, framesA[index], index, widthA, bytesPerPixelA);
                 ApplyFrame(canvasB, framesB[index], index, widthB, bytesPerPixelB);
-                var rgbaA = colorTypeA == 6 ? canvasA : ExpandIndexed(canvasA, paletteA!);
-                var rgbaB = colorTypeB == 6 ? canvasB : ExpandIndexed(canvasB, paletteB!);
+                var rgbaA = ((colorTypeA == 6) ? canvasA : ExpandIndexed(canvasA, paletteA!));
+                var rgbaB = ((colorTypeB == 6) ? canvasB : ExpandIndexed(canvasB, paletteB!));
                 var diffPixelCount = 0;
                 var maxChannelDelta = 0;
-                for (var pixelOffset = 0; pixelOffset < rgbaA.Length; pixelOffset += 4)
+
+                for (var pixelOffset = 0; (pixelOffset < rgbaA.Length); pixelOffset += 4)
                 {
                     var delta = 0;
-                    for (var channel = 0; channel < 4; channel++)
+
+                    for (var channel = 0; (channel < 4); channel++)
                     {
-                        delta = Math.Max(delta, Math.Abs(rgbaA[pixelOffset + channel] - rgbaB[pixelOffset + channel]));
+                        delta = Math.Max(delta, Math.Abs((rgbaA[(pixelOffset + channel)] - rgbaB[(pixelOffset + channel)])));
                     }
 
                     if (delta > 0)
@@ -457,7 +467,6 @@ namespace Puck.Tools
 
             return new CaptureComparison(widthA, heightA, framesA.Count, diffs);
         }
-
         public static int GetFrameCount(string apngPath)
         {
             ParseApng(apngPath, out _, out _, out _, out _, out var frames);
@@ -469,19 +478,21 @@ namespace Puck.Tools
         public static (int Width, int Height) ExtractFrame(string apngPath, int frameIndex, string outputPngPath)
         {
             ParseApng(apngPath, out var width, out var height, out var colorType, out var palette, out var frames);
-            if (frameIndex < 0 || frameIndex >= frames.Count)
+            if ((frameIndex < 0) || (frameIndex >= frames.Count))
             {
                 throw new ArgumentOutOfRangeException(nameof(frameIndex), frameIndex, $"APNG holds {frames.Count} frames.");
             }
 
-            var bytesPerPixel = colorType == 6 ? 4 : 1;
-            var canvas = new byte[width * height * bytesPerPixel];
-            for (var index = 0; index <= frameIndex; index++)
+            var bytesPerPixel = ((colorType == 6) ? 4 : 1);
+            var canvas = new byte[((width * height) * bytesPerPixel)];
+
+            for (var index = 0; (index <= frameIndex); index++)
             {
                 ApplyFrame(canvas, frames[index], index, width, bytesPerPixel);
             }
 
-            var rgba = colorType == 6 ? canvas : ExpandIndexed(canvas, palette!);
+            var rgba = ((colorType == 6) ? canvas : ExpandIndexed(canvas, palette!));
+
             WritePng(outputPngPath, width, height, rgba);
             return (width, height);
         }
@@ -491,43 +502,46 @@ namespace Puck.Tools
         private static void ApplyFrame(byte[] canvas, FrameRecord frame, int index, int width, int bytesPerPixel)
         {
             var raw = Inflate(frame.CompressedParts);
-            var rowByteLength = frame.Width * bytesPerPixel;
-            var expectedLength = (rowByteLength + 1) * frame.Height;
+            var rowByteLength = (frame.Width * bytesPerPixel);
+            var expectedLength = ((rowByteLength + 1) * frame.Height);
+
             if (raw.Length != expectedLength)
             {
                 throw new InvalidDataException($"Frame {index}: inflated {raw.Length} bytes, expected {expectedLength}.");
             }
 
-            for (var row = 0; row < frame.Height; row++)
+            for (var row = 0; (row < frame.Height); row++)
             {
-                var rowOffset = row * (rowByteLength + 1);
+                var rowOffset = (row * (rowByteLength + 1));
+
                 if (raw[rowOffset] != 0)
                 {
                     throw new InvalidDataException($"Frame {index} row {row}: filter {raw[rowOffset]} unsupported (writer emits 0).");
                 }
 
-                Array.Copy(raw, rowOffset + 1, canvas, (((frame.Top + row) * width) + frame.Left) * bytesPerPixel, rowByteLength);
+                Array.Copy(raw, (rowOffset + 1), canvas, ((((frame.Top + row) * width) + frame.Left) * bytesPerPixel), rowByteLength);
             }
         }
-
         private static byte[] ExpandIndexed(byte[] indexed, byte[] palette)
         {
-            var rgba = new byte[indexed.Length * 4];
-            for (var index = 0; index < indexed.Length; index++)
+            var rgba = new byte[(indexed.Length * 4)];
+
+            for (var index = 0; (index < indexed.Length); index++)
             {
-                var paletteOffset = indexed[index] * 3;
-                rgba[index * 4] = palette[paletteOffset];
-                rgba[(index * 4) + 1] = palette[paletteOffset + 1];
-                rgba[(index * 4) + 2] = palette[paletteOffset + 2];
-                rgba[(index * 4) + 3] = byte.MaxValue;
+                var paletteOffset = (indexed[index] * 3);
+
+                rgba[(index * 4)] = palette[paletteOffset];
+                rgba[((index * 4) + 1)] = palette[(paletteOffset + 1)];
+                rgba[((index * 4) + 2)] = palette[(paletteOffset + 2)];
+                rgba[((index * 4) + 3)] = byte.MaxValue;
             }
 
             return rgba;
         }
-
         private static byte[] Inflate(List<byte[]> compressedParts)
         {
             using var concatenated = new MemoryStream();
+
             foreach (var part in compressedParts)
             {
                 concatenated.Write(part, 0, part.Length);
@@ -536,10 +550,10 @@ namespace Puck.Tools
             concatenated.Position = 0;
             using var zlibStream = new ZLibStream(concatenated, CompressionMode.Decompress);
             using var inflated = new MemoryStream();
+
             zlibStream.CopyTo(inflated);
             return inflated.ToArray();
         }
-
         private static void ParseApng(
             string apngPath,
             out int width,
@@ -550,6 +564,7 @@ namespace Puck.Tools
         )
         {
             var bytes = File.ReadAllBytes(apngPath);
+
             width = 0;
             height = 0;
             colorType = 0;
@@ -557,18 +572,20 @@ namespace Puck.Tools
             frames = [];
             FrameRecord? currentFrame = null;
             var offset = 8;
-            while (offset + 8 <= bytes.Length)
+
+            while ((offset + 8) <= bytes.Length)
             {
                 var length = (int)BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset, 4));
-                var type = Encoding.ASCII.GetString(bytes, offset + 4, 4);
-                var data = bytes.AsSpan(offset + 8, length);
+                var type = Encoding.ASCII.GetString(bytes, (offset + 4), 4);
+                var data = bytes.AsSpan((offset + 8), length);
+
                 switch (type)
                 {
                     case "IHDR":
                         width = (int)BinaryPrimitives.ReadUInt32BigEndian(data[..4]);
                         height = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(4, 4));
                         colorType = data[9];
-                        if (data[8] != 8 || (colorType != 6 && colorType != 3))
+                        if ((data[8] != 8) || ((colorType != 6) && (colorType != 3)))
                         {
                             throw new InvalidDataException($"Unsupported PNG: bit depth {data[8]}, color type {colorType}.");
                         }
@@ -583,7 +600,7 @@ namespace Puck.Tools
                             Width = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(4, 4)),
                             Height = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(8, 4)),
                             Left = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(12, 4)),
-                            Top = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(16, 4))
+                            Top = (int)BinaryPrimitives.ReadUInt32BigEndian(data.Slice(16, 4)),
                         };
                         frames.Add(currentFrame);
                         break;
@@ -595,17 +612,18 @@ namespace Puck.Tools
                         break;
                 }
 
-                offset += 12 + length;
+                offset += (12 + length);
             }
         }
-
         private static void WriteChunk(Stream stream, string type, ReadOnlySpan<byte> data)
         {
             Span<byte> lengthBytes = stackalloc byte[4];
+
             BinaryPrimitives.WriteUInt32BigEndian(lengthBytes, (uint)data.Length);
             stream.Write(lengthBytes);
             Span<byte> typeBytes = stackalloc byte[4];
-            for (var index = 0; index < 4; index++)
+
+            for (var index = 0; (index < 4); index++)
             {
                 typeBytes[index] = (byte)type[index];
             }
@@ -613,18 +631,20 @@ namespace Puck.Tools
             stream.Write(typeBytes);
             stream.Write(data);
             var crc = 0xFFFFFFFFu;
+
             crc = UpdateCrc(crc, typeBytes);
             crc = UpdateCrc(crc, data);
             BinaryPrimitives.WriteUInt32BigEndian(lengthBytes, crc ^ 0xFFFFFFFFu);
             stream.Write(lengthBytes);
         }
-
         private static void WritePng(string path, int width, int height, byte[] rgba)
         {
             using var stream = File.Create(path);
+
             stream.Write([137, 80, 78, 71, 13, 10, 26, 10]);
 
             Span<byte> ihdr = stackalloc byte[13];
+
             BinaryPrimitives.WriteUInt32BigEndian(ihdr[..4], (uint)width);
             BinaryPrimitives.WriteUInt32BigEndian(ihdr.Slice(4, 4), (uint)height);
             ihdr[8] = 8;
@@ -632,35 +652,35 @@ namespace Puck.Tools
             WriteChunk(stream, "IHDR", ihdr);
 
             using var compressed = new MemoryStream();
+
             using (var zlibStream = new ZLibStream(compressed, CompressionLevel.Fastest, leaveOpen: true))
             {
-                var rowByteLength = width * 4;
-                for (var row = 0; row < height; row++)
+                var rowByteLength = (width * 4);
+
+                for (var row = 0; (row < height); row++)
                 {
                     zlibStream.WriteByte(0);
-                    zlibStream.Write(rgba, row * rowByteLength, rowByteLength);
+                    zlibStream.Write(rgba, (row * rowByteLength), rowByteLength);
                 }
             }
 
             WriteChunk(stream, "IDAT", compressed.ToArray());
             WriteChunk(stream, "IEND", []);
         }
-
         private static uint UpdateCrc(uint crc, ReadOnlySpan<byte> data)
         {
             foreach (var value in data)
             {
                 crc ^= value;
-                for (var bit = 0; bit < 8; bit++)
+                for (var bit = 0; (bit < 8); bit++)
                 {
-                    crc = (crc & 1) == 1 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+                    crc = (((crc & 1) == 1) ? 0xEDB88320u ^ (crc >> 1) : (crc >> 1));
                 }
             }
 
             return crc;
         }
     }
-
     internal sealed class CommentAnalyzer : ISourceAnalyzer
     {
         // One JSONL record per non-XML comment (the SingleLine // and MultiLine /* */
@@ -683,25 +703,27 @@ namespace Puck.Tools
             foreach (var parsed in corpus.Files)
             {
                 var relative = parsed.Relative;
+
                 foreach (var trivia in parsed.Root.DescendantTrivia())
                 {
                     var kind = trivia.Kind();
-                    var isSingle = kind == SyntaxKind.SingleLineCommentTrivia;
-                    if (!isSingle && kind != SyntaxKind.MultiLineCommentTrivia)
+                    var isSingle = (kind == SyntaxKind.SingleLineCommentTrivia);
+
+                    if (!isSingle && (kind != SyntaxKind.MultiLineCommentTrivia))
                     {
                         continue;
                     }
 
                     var span = trivia.GetLocation().GetLineSpan();
-                    var startLine = span.StartLinePosition.Line + 1;
-                    var endLine = span.EndLinePosition.Line + 1;
+                    var startLine = (span.StartLinePosition.Line + 1);
+                    var endLine = (span.EndLinePosition.Line + 1);
                     var text = trivia.ToString().Trim();
 
                     jsonl.Append('{')
                         .Append("\"file\":").Append(ScanJsonl.JsonString(relative)).Append(',')
                         .Append("\"line\":").Append(startLine).Append(',')
                         .Append("\"endLine\":").Append(endLine).Append(',')
-                        .Append("\"kind\":").Append(isSingle ? "\"single\"" : "\"multi\"").Append(',')
+                        .Append("\"kind\":").Append((isSingle ? "\"single\"" : "\"multi\"")).Append(',')
                         .Append("\"text\":").Append(ScanJsonl.JsonString(text))
                         .Append("}\n");
 
@@ -714,7 +736,7 @@ namespace Puck.Tools
                         multi++;
                     }
 
-                    perFile[relative] = perFile.GetValueOrDefault(relative) + 1;
+                    perFile[relative] = (perFile.GetValueOrDefault(relative) + 1);
                     if (!byFile.TryGetValue(relative, out var lines))
                     {
                         lines = [];
@@ -725,7 +747,8 @@ namespace Puck.Tools
                 }
             }
 
-            var total = single + multi;
+            var total = (single + multi);
+
             Console.Error.WriteLine(
                 $"scan[comments]: {total} inline comments ({single} single-line, {multi} block) across {perFile.Count} files (of {corpus.FileCount} scanned)."
             );
@@ -800,8 +823,9 @@ namespace Puck.Tools
                 foreach (var trivia in parsed.Root.DescendantTrivia())
                 {
                     var kind = trivia.Kind();
-                    var isSingle = kind == SyntaxKind.SingleLineCommentTrivia;
-                    if (!isSingle && kind != SyntaxKind.MultiLineCommentTrivia)
+                    var isSingle = (kind == SyntaxKind.SingleLineCommentTrivia);
+
+                    if (!isSingle && (kind != SyntaxKind.MultiLineCommentTrivia))
                     {
                         continue;
                     }
@@ -809,20 +833,23 @@ namespace Puck.Tools
                     var text = trivia.ToString().Trim();
                     var body = StripMarkers(text);
                     var bucket = Classify(body);
-                    bucketCounts[bucket] = bucketCounts.GetValueOrDefault(bucket) + 1;
+
+                    bucketCounts[bucket] = (bucketCounts.GetValueOrDefault(bucket) + 1);
                     var references = ResolveReferences(body, haystack, shaderFileNames, out var anyUnresolved);
+
                     if (anyUnresolved)
                     {
                         unresolved++;
                     }
 
                     var span = trivia.GetLocation().GetLineSpan();
-                    var startLine = span.StartLinePosition.Line + 1;
+                    var startLine = (span.StartLinePosition.Line + 1);
+
                     jsonl.Append('{')
                         .Append("\"file\":").Append(ScanJsonl.JsonString(parsed.Relative)).Append(',')
                         .Append("\"line\":").Append(startLine).Append(',')
-                        .Append("\"endLine\":").Append(span.EndLinePosition.Line + 1).Append(',')
-                        .Append("\"kind\":").Append(isSingle ? "\"single\"" : "\"multi\"").Append(',')
+                        .Append("\"endLine\":").Append((span.EndLinePosition.Line + 1)).Append(',')
+                        .Append("\"kind\":").Append((isSingle ? "\"single\"" : "\"multi\"")).Append(',')
                         .Append("\"bucket\":").Append(ScanJsonl.JsonString(bucket)).Append(',')
                         .Append("\"text\":").Append(ScanJsonl.JsonString(text));
                     if (references.Length > 0)
@@ -843,6 +870,7 @@ namespace Puck.Tools
             }
 
             var total = bucketCounts.Values.Sum();
+
             Console.Error.WriteLine(
                 $"scan[comment-smells]: {total} inline comments classified across {byFile.Count} files (of {corpus.FileCount} scanned)."
             );
@@ -885,12 +913,12 @@ namespace Puck.Tools
         // bare expression statement does not.
         private static bool LooksLikeCode(string body)
         {
-            if (body.Length == 0 || !CodeSignalPattern.IsMatch(body))
+            if ((body.Length == 0) || !CodeSignalPattern.IsMatch(body))
             {
                 return false;
             }
 
-            return !SyntaxFactory.ParseStatement(body).GetDiagnostics().Any(static d => d.Severity == DiagnosticSeverity.Error);
+            return !SyntaxFactory.ParseStatement(body).GetDiagnostics().Any(static d => (d.Severity == DiagnosticSeverity.Error));
         }
 
         // The comment text without its // or /* */ delimiters, so the classifiers see only
@@ -898,6 +926,7 @@ namespace Puck.Tools
         private static string StripMarkers(string text)
         {
             var trimmed = text;
+
             if (trimmed.StartsWith("//", StringComparison.Ordinal))
             {
                 trimmed = trimmed[2..];
@@ -920,6 +949,7 @@ namespace Puck.Tools
         private static string BuildReferentHaystack(SourceCorpus corpus, out HashSet<string> shaderFileNames)
         {
             var builder = new StringBuilder();
+
             shaderFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var parsed in corpus.Files)
             {
@@ -927,6 +957,7 @@ namespace Puck.Tools
             }
 
             var sourceRoot = Path.Combine(EngineRun.RepositoryRoot, "src");
+
             if (Directory.Exists(sourceRoot))
             {
                 foreach (var path in Directory.EnumerateFiles(sourceRoot, "*.*", SearchOption.AllDirectories))
@@ -949,6 +980,7 @@ namespace Puck.Tools
             anyUnresolved = false;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var parts = new List<string>();
+
             foreach (Match match in ShaderFilePattern.Matches(body))
             {
                 if (!seen.Add(match.Value))
@@ -957,6 +989,7 @@ namespace Puck.Tools
                 }
 
                 var resolved = shaderFileNames.Contains(match.Value);
+
                 anyUnresolved |= !resolved;
                 parts.Add(Reference(match.Value, "file", resolved));
             }
@@ -969,13 +1002,13 @@ namespace Puck.Tools
                 }
 
                 var resolved = haystack.Contains(match.Value, StringComparison.Ordinal);
+
                 anyUnresolved |= !resolved;
                 parts.Add(Reference(match.Value, "symbol", resolved));
             }
 
             return string.Join(",", parts);
         }
-
         private static string Reference(string token, string kind, bool resolved) =>
             $"{{\"token\":{ScanJsonl.JsonString(token)},\"kind\":\"{kind}\",\"resolved\":{(resolved ? "true" : "false")}}}";
     }
@@ -990,10 +1023,12 @@ namespace Puck.Tools
         {
             var builder = new StringBuilder("[");
             var firstChunk = true;
+
             foreach (var (file, sites) in byFile.OrderByDescending(static pair => pair.Value.Count))
             {
-                var chunkCount = (sites.Count + maxPerChunk - 1) / maxPerChunk;
-                for (var offset = 0; offset < sites.Count; offset += maxPerChunk)
+                var chunkCount = (((sites.Count + maxPerChunk) - 1) / maxPerChunk);
+
+                for (var offset = 0; (offset < sites.Count); offset += maxPerChunk)
                 {
                     if (!firstChunk)
                     {
@@ -1003,11 +1038,12 @@ namespace Puck.Tools
                     firstChunk = false;
                     builder.Append('{')
                         .Append("\"file\":").Append(JsonString(file)).Append(',')
-                        .Append("\"chunk\":").Append(offset / maxPerChunk).Append(',')
+                        .Append("\"chunk\":").Append((offset / maxPerChunk)).Append(',')
                         .Append("\"chunks\":").Append(chunkCount).Append(',')
                         .Append("\"lines\":[");
-                    var end = Math.Min(offset + maxPerChunk, sites.Count);
-                    for (var lineIndex = offset; lineIndex < end; lineIndex++)
+                    var end = Math.Min((offset + maxPerChunk), sites.Count);
+
+                    for (var lineIndex = offset; (lineIndex < end); lineIndex++)
                     {
                         if (lineIndex > offset)
                         {
@@ -1037,6 +1073,7 @@ namespace Puck.Tools
         public static string JsonString(string value)
         {
             var builder = new StringBuilder("\"");
+
             foreach (var character in value)
             {
                 switch (character)
@@ -1073,7 +1110,6 @@ namespace Puck.Tools
             return builder.Append('"').ToString();
         }
     }
-
     internal sealed class LockAnalyzer : ISourceAnalyzer
     {
         // Roslyn-backed synchronization-primitive inventory — the concurrency-audit
@@ -1099,7 +1135,7 @@ namespace Puck.Tools
         private static readonly Dictionary<string, string> StaticLockClasses = new(StringComparer.Ordinal)
         {
             ["Monitor"] = "monitor",
-            ["Interlocked"] = "interlocked"
+            ["Interlocked"] = "interlocked",
         };
 
         // Instance synchronization types, recorded where they are DECLARED.
@@ -1110,9 +1146,8 @@ namespace Puck.Tools
             ["Mutex"] = "mutex",
             ["ReaderWriterLock"] = "rwlock",
             ["ReaderWriterLockSlim"] = "rwlock-slim",
-            ["SpinLock"] = "spinlock"
+            ["SpinLock"] = "spinlock",
         };
-
         private static readonly Regex WhitespaceRun = new("\\s+");
 
         public string Name => "locks";
@@ -1127,6 +1162,7 @@ namespace Puck.Tools
             foreach (var parsed in corpus.Files)
             {
                 var relative = parsed.Relative;
+
                 foreach (var node in parsed.Root.DescendantNodes())
                 {
                     if (!Classify(node, out var kind, out var text, out var startLine, out var endLine))
@@ -1142,8 +1178,8 @@ namespace Puck.Tools
                         .Append("\"text\":").Append(ScanJsonl.JsonString(text))
                         .Append("}\n");
 
-                    kindCounts[kind] = kindCounts.GetValueOrDefault(kind) + 1;
-                    perFile[relative] = perFile.GetValueOrDefault(relative) + 1;
+                    kindCounts[kind] = (kindCounts.GetValueOrDefault(kind) + 1);
+                    perFile[relative] = (perFile.GetValueOrDefault(relative) + 1);
                     if (!byFile.TryGetValue(relative, out var sites))
                     {
                         sites = [];
@@ -1155,7 +1191,8 @@ namespace Puck.Tools
             }
 
             var total = kindCounts.Values.Sum();
-            var breakdown = total == 0 ? "none" : string.Join(", ", kindCounts.Select(static pair => $"{pair.Value} {pair.Key}"));
+            var breakdown = ((total == 0) ? "none" : string.Join(", ", kindCounts.Select(static pair => $"{pair.Value} {pair.Key}")));
+
             Console.Error.WriteLine($"scan[locks]: {total} lock sites ({breakdown}) across {perFile.Count} files (of {corpus.FileCount} scanned).");
             foreach (var line in ScanJsonl.TopFiles(perFile))
             {
@@ -1188,8 +1225,8 @@ namespace Puck.Tools
                 // Monitor.Enter(...) / Interlocked.Increment(...), including a qualified
                 // receiver like System.Threading.Monitor.Enter (rightmost name is matched).
                 case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess } invocation
-                    when ReceiverTypeName(memberAccess.Expression) is { } receiver
-                        && StaticLockClasses.TryGetValue(receiver, out var staticKind):
+                    when ((ReceiverTypeName(memberAccess.Expression) is { } receiver)
+                        && StaticLockClasses.TryGetValue(receiver, out var staticKind)):
                     kind = staticKind;
                     text = Condense(invocation.ToString());
                     SetSpan(invocation.GetLocation(), out startLine, out endLine);
@@ -1214,8 +1251,8 @@ namespace Puck.Tools
 
                 // [MethodImpl(MethodImplOptions.Synchronized)] — a whole-method monitor lock.
                 case AttributeSyntax attribute
-                    when SimpleTypeName(attribute.Name) is "MethodImpl" or "MethodImplAttribute"
-                        && attribute.ToString().Contains("Synchronized", StringComparison.Ordinal):
+                    when ((SimpleTypeName(attribute.Name) is "MethodImpl" or "MethodImplAttribute")
+                        && attribute.ToString().Contains("Synchronized", StringComparison.Ordinal)):
                     kind = "synchronized-method";
                     text = Condense(attribute.ToString());
                     SetSpan(attribute.GetLocation(), out startLine, out endLine);
@@ -1243,6 +1280,7 @@ namespace Puck.Tools
         {
             var name = type.ToString();
             var lastDot = name.LastIndexOf('.');
+
             if (lastDot >= 0)
             {
                 name = name[(lastDot + 1)..];
@@ -1256,23 +1294,22 @@ namespace Puck.Tools
         private static string Condense(string text)
         {
             var condensed = WhitespaceRun.Replace(text.Trim(), " ");
-            return condensed.Length <= 200 ? condensed : string.Concat(condensed.AsSpan(0, 197), "...");
-        }
 
+            return ((condensed.Length <= 200) ? condensed : string.Concat(condensed.AsSpan(0, 197), "..."));
+        }
         private static void SetSpan(Location location, out int startLine, out int endLine)
         {
             var span = location.GetLineSpan();
-            startLine = span.StartLinePosition.Line + 1;
-            endLine = span.EndLinePosition.Line + 1;
-        }
 
+            startLine = (span.StartLinePosition.Line + 1);
+            endLine = (span.EndLinePosition.Line + 1);
+        }
         private static void SetSpan(Location start, Location end, out int startLine, out int endLine)
         {
-            startLine = start.GetLineSpan().StartLinePosition.Line + 1;
-            endLine = end.GetLineSpan().EndLinePosition.Line + 1;
+            startLine = (start.GetLineSpan().StartLinePosition.Line + 1);
+            endLine = (end.GetLineSpan().EndLinePosition.Line + 1);
         }
     }
-
     internal sealed class CloneAnalyzer : ISourceAnalyzer
     {
         // Roslyn-backed duplicate-code detector — the refactor-target sibling of the
@@ -1311,18 +1348,19 @@ namespace Puck.Tools
             var unitBodies = new HashSet<SyntaxNode>();
             var units = CollectUnits(trees, unitBodies);
             var unitClusters = units
-                .Where(member => member.Weight >= options.MinTokens)
+                .Where(member => (member.Weight >= options.MinTokens))
                 .GroupBy(static member => member.Structural, StringComparer.Ordinal)
-                .Where(static group => group.Count() >= 2)
+                .Where(static group => (group.Count() >= 2))
                 .Select(static group => group.ToList())
                 .ToList();
 
             var clusteredBodies = BodySpansByFile(unitClusters);
-            var blockClusters = options.IncludeBlocks
+            var blockClusters = (options.IncludeBlocks
                 ? CollectBlockClusters(trees, unitBodies, clusteredBodies, options.MinStatements, options.MinTokens)
-                : [];
+                : []);
 
             var clusters = new List<Cluster>();
+
             foreach (var group in unitClusters)
             {
                 clusters.Add(BuildCluster("unit", group));
@@ -1344,11 +1382,13 @@ namespace Puck.Tools
         private static List<Member> CollectUnits(List<(string Relative, SyntaxNode Root)> trees, HashSet<SyntaxNode> unitBodies)
         {
             var units = new List<Member>();
+
             foreach (var (relative, treeRoot) in trees)
             {
                 foreach (var node in treeRoot.DescendantNodes())
                 {
                     var body = UnitBody(node);
+
                     if (body is null)
                     {
                         continue;
@@ -1372,6 +1412,7 @@ namespace Puck.Tools
         private static Dictionary<string, List<(int Start, int End)>> BodySpansByFile(List<List<Member>> clusters)
         {
             var spansByFile = new Dictionary<string, List<(int Start, int End)>>(StringComparer.Ordinal);
+
             foreach (var cluster in clusters)
             {
                 foreach (var member in cluster)
@@ -1401,19 +1442,22 @@ namespace Puck.Tools
         )
         {
             var candidates = new List<(SyntaxNode Node, Member Member)>();
+
             foreach (var (relative, treeRoot) in trees)
             {
                 var bodies = clusteredBodies.GetValueOrDefault(relative);
+
                 foreach (var block in treeRoot.DescendantNodes().OfType<BlockSyntax>())
                 {
-                    if (unitBodies.Contains(block) || block.Statements.Count < minStatements)
+                    if (unitBodies.Contains(block) || (block.Statements.Count < minStatements))
                     {
                         continue;
                     }
 
                     var start = block.Span.Start;
                     var end = block.Span.End;
-                    if (bodies is not null && bodies.Any(span => span.Start <= start && end <= span.End))
+
+                    if ((bodies is not null) && bodies.Any(span => ((span.Start <= start) && (end <= span.End))))
                     {
                         continue;
                     }
@@ -1429,12 +1473,14 @@ namespace Puck.Tools
             }
 
             var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+
             foreach (var candidate in candidates)
             {
-                counts[candidate.Member.Structural] = counts.GetValueOrDefault(candidate.Member.Structural) + 1;
+                counts[candidate.Member.Structural] = (counts.GetValueOrDefault(candidate.Member.Structural) + 1);
             }
 
             var clusteredNodes = new HashSet<SyntaxNode>();
+
             foreach (var candidate in candidates)
             {
                 if (counts[candidate.Member.Structural] >= 2)
@@ -1444,9 +1490,10 @@ namespace Puck.Tools
             }
 
             var survivors = new List<Member>();
+
             foreach (var candidate in candidates)
             {
-                if (counts[candidate.Member.Structural] >= 2 && !candidate.Node.Ancestors().Any(clusteredNodes.Contains))
+                if ((counts[candidate.Member.Structural] >= 2) && !candidate.Node.Ancestors().Any(clusteredNodes.Contains))
                 {
                     survivors.Add(candidate.Member);
                 }
@@ -1454,7 +1501,7 @@ namespace Puck.Tools
 
             return survivors
                 .GroupBy(static member => member.Structural, StringComparer.Ordinal)
-                .Where(static group => group.Count() >= 2)
+                .Where(static group => (group.Count() >= 2))
                 .Select(static group => group.ToList())
                 .ToList();
         }
@@ -1464,26 +1511,28 @@ namespace Puck.Tools
         private static List<Cluster> OrderAndNumber(List<Cluster> clusters)
         {
             var ordered = clusters
-                .OrderByDescending(static cluster => (cluster.Members.Count - 1) * cluster.Weight)
+                .OrderByDescending(static cluster => ((cluster.Members.Count - 1) * cluster.Weight))
                 .ThenByDescending(static cluster => cluster.Members.Count)
                 .ThenBy(static cluster => cluster.Fingerprint, StringComparer.Ordinal)
                 .ToList();
-            for (var clusterIndex = 0; clusterIndex < ordered.Count; clusterIndex++)
+
+            for (var clusterIndex = 0; (clusterIndex < ordered.Count); clusterIndex++)
             {
                 ordered[clusterIndex] = ordered[clusterIndex] with { Id = clusterIndex };
             }
 
             return ordered;
         }
-
         private static string BuildJsonl(List<Cluster> clusters)
         {
             var jsonl = new StringBuilder();
+
             foreach (var cluster in clusters)
             {
                 var exactByHash = cluster.Members
                     .GroupBy(static member => member.Exact, StringComparer.Ordinal)
                     .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
+
                 jsonl.Append('{')
                     .Append("\"id\":").Append(cluster.Id).Append(',')
                     .Append("\"kind\":").Append(ScanJsonl.JsonString(cluster.Kind)).Append(',')
@@ -1491,11 +1540,11 @@ namespace Puck.Tools
                     .Append("\"memberCount\":").Append(cluster.Members.Count).Append(',')
                     .Append("\"exactCount\":").Append(cluster.ExactCount).Append(',')
                     .Append("\"tokenWeight\":").Append(cluster.Weight).Append(',')
-                    .Append("\"redundantMass\":").Append((cluster.Members.Count - 1) * cluster.Weight).Append(',')
-                    .Append("\"abiTainted\":").Append(cluster.Abi ? "true" : "false").Append(',')
+                    .Append("\"redundantMass\":").Append(((cluster.Members.Count - 1) * cluster.Weight)).Append(',')
+                    .Append("\"abiTainted\":").Append((cluster.Abi ? "true" : "false")).Append(',')
                     .Append("\"label\":").Append(ScanJsonl.JsonString(cluster.Label)).Append(',')
                     .Append("\"members\":[");
-                for (var memberIndex = 0; memberIndex < cluster.Members.Count; memberIndex++)
+                for (var memberIndex = 0; (memberIndex < cluster.Members.Count); memberIndex++)
                 {
                     if (memberIndex > 0)
                     {
@@ -1503,12 +1552,13 @@ namespace Puck.Tools
                     }
 
                     var member = cluster.Members[memberIndex];
+
                     jsonl.Append('{')
                         .Append("\"file\":").Append(ScanJsonl.JsonString(member.File)).Append(',')
                         .Append("\"line\":").Append(member.StartLine).Append(',')
                         .Append("\"endLine\":").Append(member.EndLine).Append(',')
                         .Append("\"unit\":").Append(ScanJsonl.JsonString(member.Unit)).Append(',')
-                        .Append("\"exact\":").Append(exactByHash[member.Exact] >= 2 ? "true" : "false")
+                        .Append("\"exact\":").Append(((exactByHash[member.Exact] >= 2) ? "true" : "false"))
                         .Append('}');
                 }
 
@@ -1517,24 +1567,25 @@ namespace Puck.Tools
 
             return jsonl.ToString();
         }
-
         private static void PrintSummary(List<Cluster> clusters, int minTokens, int minStatements, bool includeBlocks, int filesScanned)
         {
-            var unitClusterCount = clusters.Count(static cluster => cluster.Kind == "unit");
-            var blockClusterCount = clusters.Count(static cluster => cluster.Kind == "block");
+            var unitClusterCount = clusters.Count(static cluster => (cluster.Kind == "unit"));
+            var blockClusterCount = clusters.Count(static cluster => (cluster.Kind == "block"));
             var siteCount = clusters.Sum(static cluster => cluster.Members.Count);
-            var redundantMass = clusters.Sum(static cluster => (cluster.Members.Count - 1) * cluster.Weight);
+            var redundantMass = clusters.Sum(static cluster => ((cluster.Members.Count - 1) * cluster.Weight));
             var abiClusters = clusters.Count(static cluster => cluster.Abi);
+
             Console.Error.WriteLine(
                 $"scan[clones]: {clusters.Count} clone clusters ({unitClusterCount} unit, {blockClusterCount} block; {abiClusters} abi-tainted) over {siteCount} sites; redundant token mass ~{redundantMass} (minTokens={minTokens}, minStatements={minStatements}, blocks={(includeBlocks ? "on" : "off")}, files scanned={filesScanned})."
             );
             foreach (var cluster in clusters.Take(30))
             {
                 var fileCount = cluster.Members.Select(static member => member.File).Distinct(StringComparer.Ordinal).Count();
-                var abiTag = cluster.Abi ? "[abi] " : "";
-                var exactTag = cluster.ExactCount == cluster.Members.Count ? "exact" : $"{cluster.ExactCount}/{cluster.Members.Count} exact";
+                var abiTag = (cluster.Abi ? "[abi] " : "");
+                var exactTag = ((cluster.ExactCount == cluster.Members.Count) ? "exact" : $"{cluster.ExactCount}/{cluster.Members.Count} exact");
+
                 Console.Error.WriteLine(
-                    $"{(cluster.Members.Count - 1) * cluster.Weight,7}  x{cluster.Members.Count} w{cluster.Weight} {abiTag}{cluster.Kind} ({exactTag}) {cluster.Label} [{fileCount} file{(fileCount == 1 ? "" : "s")}]"
+                    $"{((cluster.Members.Count - 1) * cluster.Weight),7}  x{cluster.Members.Count} w{cluster.Weight} {abiTag}{cluster.Kind} ({exactTag}) {cluster.Label} [{fileCount} file{((fileCount == 1) ? "" : "s")}]"
                 );
             }
         }
@@ -1545,10 +1596,12 @@ namespace Puck.Tools
         {
             var builder = new StringBuilder("[");
             var firstChunk = true;
+
             foreach (var cluster in clusters)
             {
-                var chunkCount = (cluster.Members.Count + maxPerChunk - 1) / maxPerChunk;
-                for (var offset = 0; offset < cluster.Members.Count; offset += maxPerChunk)
+                var chunkCount = (((cluster.Members.Count + maxPerChunk) - 1) / maxPerChunk);
+
+                for (var offset = 0; (offset < cluster.Members.Count); offset += maxPerChunk)
                 {
                     if (!firstChunk)
                     {
@@ -1559,13 +1612,14 @@ namespace Puck.Tools
                     builder.Append('{')
                         .Append("\"cluster\":").Append(cluster.Id).Append(',')
                         .Append("\"kind\":").Append(ScanJsonl.JsonString(cluster.Kind)).Append(',')
-                        .Append("\"chunk\":").Append(offset / maxPerChunk).Append(',')
+                        .Append("\"chunk\":").Append((offset / maxPerChunk)).Append(',')
                         .Append("\"chunks\":").Append(chunkCount).Append(',')
-                        .Append("\"abiTainted\":").Append(cluster.Abi ? "true" : "false").Append(',')
+                        .Append("\"abiTainted\":").Append((cluster.Abi ? "true" : "false")).Append(',')
                         .Append("\"label\":").Append(ScanJsonl.JsonString(cluster.Label)).Append(',')
                         .Append("\"members\":[");
-                    var end = Math.Min(offset + maxPerChunk, cluster.Members.Count);
-                    for (var memberIndex = offset; memberIndex < end; memberIndex++)
+                    var end = Math.Min((offset + maxPerChunk), cluster.Members.Count);
+
+                    for (var memberIndex = offset; (memberIndex < end); memberIndex++)
                     {
                         if (memberIndex > offset)
                         {
@@ -1573,6 +1627,7 @@ namespace Puck.Tools
                         }
 
                         var member = cluster.Members[memberIndex];
+
                         builder.Append('{')
                             .Append("\"file\":").Append(ScanJsonl.JsonString(member.File)).Append(',')
                             .Append("\"line\":").Append(member.StartLine).Append(',')
@@ -1587,32 +1642,34 @@ namespace Puck.Tools
 
             return builder.Append(']').ToString();
         }
-
         private static Cluster BuildCluster(string kind, List<Member> members)
         {
             members.Sort(
                 static (left, right) =>
             {
                 var byFile = string.CompareOrdinal(left.File, right.File);
-                return byFile != 0 ? byFile : left.StartLine.CompareTo(right.StartLine);
+
+                return ((byFile != 0) ? byFile : left.StartLine.CompareTo(right.StartLine));
             }
             );
             var exactCount = members
                 .GroupBy(static member => member.Exact, StringComparer.Ordinal)
                 .Max(static group => group.Count());
             var abi = members.Any(static member => member.Abi);
+
             return new Cluster(-1, kind, members[0].Structural, members[0].Weight, exactCount, abi, members[0].Unit, members);
         }
-
         private static Member CreateMember(string relative, SyntaxNode node, SyntaxNode body, string structural, string exact, int weight)
         {
             var lineSpan = node.GetLocation().GetLineSpan();
+
             var (typeName, memberName) = Describe(node);
-            var unit = typeName.Length == 0 ? memberName : $"{typeName}.{memberName}";
+            var unit = ((typeName.Length == 0) ? memberName : $"{typeName}.{memberName}");
+
             return new Member(
                 relative,
-                lineSpan.StartLinePosition.Line + 1,
-                lineSpan.EndLinePosition.Line + 1,
+                (lineSpan.StartLinePosition.Line + 1),
+                (lineSpan.EndLinePosition.Line + 1),
                 body.Span.Start,
                 body.Span.End,
                 structural,
@@ -1628,31 +1685,31 @@ namespace Puck.Tools
         // an auto-property accessor has no body and is not a clone candidate).
         private static SyntaxNode? UnitBody(SyntaxNode node) => node switch
         {
-            MethodDeclarationSyntax method => (SyntaxNode?)method.Body ?? method.ExpressionBody,
-            ConstructorDeclarationSyntax constructor => (SyntaxNode?)constructor.Body ?? constructor.ExpressionBody,
-            DestructorDeclarationSyntax destructor => (SyntaxNode?)destructor.Body ?? destructor.ExpressionBody,
-            OperatorDeclarationSyntax op => (SyntaxNode?)op.Body ?? op.ExpressionBody,
-            ConversionOperatorDeclarationSyntax conversion => (SyntaxNode?)conversion.Body ?? conversion.ExpressionBody,
-            AccessorDeclarationSyntax accessor => (SyntaxNode?)accessor.Body ?? accessor.ExpressionBody,
-            LocalFunctionStatementSyntax local => (SyntaxNode?)local.Body ?? local.ExpressionBody,
+            MethodDeclarationSyntax method => ((SyntaxNode?)method.Body ?? method.ExpressionBody),
+            ConstructorDeclarationSyntax constructor => ((SyntaxNode?)constructor.Body ?? constructor.ExpressionBody),
+            DestructorDeclarationSyntax destructor => ((SyntaxNode?)destructor.Body ?? destructor.ExpressionBody),
+            OperatorDeclarationSyntax op => ((SyntaxNode?)op.Body ?? op.ExpressionBody),
+            ConversionOperatorDeclarationSyntax conversion => ((SyntaxNode?)conversion.Body ?? conversion.ExpressionBody),
+            AccessorDeclarationSyntax accessor => ((SyntaxNode?)accessor.Body ?? accessor.ExpressionBody),
+            LocalFunctionStatementSyntax local => ((SyntaxNode?)local.Body ?? local.ExpressionBody),
             _ => null
         };
-
-        private static bool IsUnitNode(SyntaxNode node) => node
+        private static bool IsUnitNode(SyntaxNode node) => (node
             is MethodDeclarationSyntax
             or ConstructorDeclarationSyntax
             or DestructorDeclarationSyntax
             or OperatorDeclarationSyntax
             or ConversionOperatorDeclarationSyntax
             or AccessorDeclarationSyntax
-            or LocalFunctionStatementSyntax;
+            or LocalFunctionStatementSyntax);
 
         // A human label for a node: (enclosing type, member). For a block it is the
         // enclosing callable's member name plus the block's line, so two block clones are
         // distinguishable in the report.
         private static (string Type, string Member) Describe(SyntaxNode node)
         {
-            var typeName = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText ?? "";
+            var typeName = (node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText ?? "");
+
             switch (node)
             {
                 case MethodDeclarationSyntax method:
@@ -1671,17 +1728,16 @@ namespace Puck.Tools
                     return (typeName, $"local:{local.Identifier.ValueText}");
                 case BlockSyntax block:
                     var owner = block.Ancestors().FirstOrDefault(IsUnitNode);
-                    var ownerName = owner is null ? "" : Describe(owner).Member;
-                    var line = block.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                    var ownerName = ((owner is null) ? "" : Describe(owner).Member);
+                    var line = (block.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
                     return (typeName, $"{ownerName} block@{line}");
                 default:
                     return (typeName, "");
             }
         }
-
         private static string AccessorName(AccessorDeclarationSyntax accessor)
         {
-            var owner = accessor.Ancestors().FirstOrDefault(static node => node is BasePropertyDeclarationSyntax);
+            var owner = accessor.Ancestors().FirstOrDefault(static node => (node is BasePropertyDeclarationSyntax));
             var ownerName = owner switch
             {
                 PropertyDeclarationSyntax property => property.Identifier.ValueText,
@@ -1689,15 +1745,16 @@ namespace Puck.Tools
                 EventDeclarationSyntax @event => @event.Identifier.ValueText,
                 _ => ""
             };
+
             return $"{ownerName}.{accessor.Keyword.ValueText}";
         }
 
         // True when a member lives in a marshalling/ABI context the NEVER-list guards, so
         // triage can separate deliberate Vulkan mirrors from real copy-paste.
         private static bool IsAbi(string relative, string typeName) =>
-            relative.Contains("VulkanNative", StringComparison.OrdinalIgnoreCase)
+            (relative.Contains("VulkanNative", StringComparison.OrdinalIgnoreCase)
             || relative.Contains("Vulkan/Bindings", StringComparison.OrdinalIgnoreCase)
-            || typeName.StartsWith("Vk", StringComparison.Ordinal);
+            || typeName.StartsWith("Vk", StringComparison.Ordinal));
 
         // Two hashes over the body's token stream (trivia excluded, so whitespace and
         // comments never matter): STRUCTURAL abstracts identifiers and literals to a
@@ -1707,6 +1764,7 @@ namespace Puck.Tools
             var structural = new StringBuilder();
             var exact = new StringBuilder();
             var weight = 0;
+
             foreach (var token in body.DescendantTokens())
             {
                 structural.Append(CanonicalToken(token)).Append('\u0001');
@@ -1735,11 +1793,9 @@ namespace Puck.Tools
             SyntaxKind.InterpolatedStringTextToken => "\u0002T",
             _ => token.Text
         };
-
         private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
         private sealed record Cluster(int Id, string Kind, string Fingerprint, int Weight, int ExactCount, bool Abi, string Label, List<Member> Members);
-
         private sealed record Member(
             string File,
             int StartLine,
@@ -1765,28 +1821,25 @@ namespace Puck.Tools
     internal sealed class MemberSpacingRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitClassDeclaration(node)!);
-
         public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitStructDeclaration(node)!);
-
         public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node)!);
-
         public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitRecordDeclaration(node)!);
-
         public override SyntaxNode? VisitCompilationUnit(CompilationUnitSyntax node)
         {
             var visited = (CompilationUnitSyntax)base.VisitCompilationUnit(node)!;
+
             return visited.WithMembers(Normalize(visited.Members));
         }
-
         public override SyntaxNode? VisitNamespaceDeclaration(NamespaceDeclarationSyntax node)
         {
             var visited = (NamespaceDeclarationSyntax)base.VisitNamespaceDeclaration(node)!;
+
             return visited.WithMembers(Normalize(visited.Members));
         }
-
         public override SyntaxNode? VisitFileScopedNamespaceDeclaration(FileScopedNamespaceDeclarationSyntax node)
         {
             var visited = (FileScopedNamespaceDeclarationSyntax)base.VisitFileScopedNamespaceDeclaration(node)!;
+
             return visited.WithMembers(Normalize(visited.Members));
         }
 
@@ -1802,15 +1855,14 @@ namespace Puck.Tools
             member.Modifiers
                 .Where(
                     static m =>
-                    m.IsKind(SyntaxKind.PublicKeyword)
+                    (m.IsKind(SyntaxKind.PublicKeyword)
                     || m.IsKind(SyntaxKind.PrivateKeyword)
                     || m.IsKind(SyntaxKind.ProtectedKeyword)
-                    || m.IsKind(SyntaxKind.InternalKeyword)
+                    || m.IsKind(SyntaxKind.InternalKeyword))
                 )
                 .Select(static m => m.ValueText)
                 .OrderBy(static text => text, StringComparer.Ordinal)
         );
-
         private static SyntaxList<MemberDeclarationSyntax> Normalize(SyntaxList<MemberDeclarationSyntax> members)
         {
             if (members.Count < 2)
@@ -1819,42 +1871,46 @@ namespace Puck.Tools
             }
 
             var result = new List<MemberDeclarationSyntax> { members[0] };
-            for (var i = 1; i < members.Count; i++)
+
+            for (var i = 1; (i < members.Count); i++)
             {
-                var previous = members[i - 1];
+                var previous = members[(i - 1)];
                 var current = members[i];
                 var lead = current.GetLeadingTrivia();
+
                 if (lead.Any(
                     static t =>
-                    t.IsKind(SyntaxKind.SingleLineCommentTrivia)
+                    (t.IsKind(SyntaxKind.SingleLineCommentTrivia)
                     || t.IsKind(SyntaxKind.MultiLineCommentTrivia)
                     || t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
                     || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia)
-                    || t.IsDirective
+                    || t.IsDirective)
                 ))
                 {
                     result.Add(current);
                     continue;
                 }
 
-                var sameSubject = Bucket(previous) == Bucket(current) && Scope(previous) == Scope(current);
-                result.Add(current.WithLeadingTrivia(SetBlankLines(lead, sameSubject ? 0 : 1)));
+                var sameSubject = ((Bucket(previous) == Bucket(current)) && (Scope(previous) == Scope(current)));
+
+                result.Add(current.WithLeadingTrivia(SetBlankLines(lead, (sameSubject ? 0 : 1))));
             }
 
             return SyntaxFactory.List(result);
         }
-
         private static SyntaxTriviaList SetBlankLines(SyntaxTriviaList lead, int desired)
         {
             var trivia = lead.ToList();
             var start = 0;
-            while (start < trivia.Count && trivia[start].IsKind(SyntaxKind.EndOfLineTrivia))
+
+            while ((start < trivia.Count) && trivia[start].IsKind(SyntaxKind.EndOfLineTrivia))
             {
                 start++;
             }
 
             var rebuilt = new List<SyntaxTrivia>();
-            for (var k = 0; k < desired; k++)
+
+            for (var k = 0; (k < desired); k++)
             {
                 rebuilt.Add(SyntaxFactory.CarriageReturnLineFeed);
             }
@@ -1862,10 +1918,9 @@ namespace Puck.Tools
             rebuilt.AddRange(trivia.Skip(start));
             return SyntaxFactory.TriviaList(rebuilt);
         }
-
         private static string Bucket(MemberDeclarationSyntax member) => member switch
         {
-            FieldDeclarationSyntax field => field.Modifiers.Any(static m => m.IsKind(SyntaxKind.ConstKeyword)) ? "const" : "field",
+            FieldDeclarationSyntax field => (field.Modifiers.Any(static m => m.IsKind(SyntaxKind.ConstKeyword)) ? "const" : "field"),
             EventFieldDeclarationSyntax => "event",
             PropertyDeclarationSyntax => "property",
             IndexerDeclarationSyntax => "indexer",
@@ -1893,15 +1948,11 @@ namespace Puck.Tools
     internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitClassDeclaration(node)!);
-
         public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitStructDeclaration(node)!);
-
         public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node)!);
-
         public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix((TypeDeclarationSyntax)base.VisitRecordDeclaration(node)!);
 
         private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) => node.WithMembers(Reorder(node.Members));
-
         private static SyntaxList<MemberDeclarationSyntax> Reorder(SyntaxList<MemberDeclarationSyntax> members)
         {
             if (members.Count < 2)
@@ -1912,10 +1963,12 @@ namespace Puck.Tools
             var result = new List<MemberDeclarationSyntax>(members.Count);
             var run = new List<MemberDeclarationSyntax>();
             string? runKey = null;
+
             foreach (var member in members)
             {
-                var key = HasCommentOrDirective(member) ? null : GroupKey(member);
-                if (key is not null && key == runKey)
+                var key = (HasCommentOrDirective(member) ? null : GroupKey(member));
+
+                if ((key is not null) && (key == runKey))
                 {
                     run.Add(member);
                     continue;
@@ -1936,7 +1989,6 @@ namespace Puck.Tools
             FlushRun(result, run);
             return SyntaxFactory.List(result);
         }
-
         private static void FlushRun(List<MemberDeclarationSyntax> result, List<MemberDeclarationSyntax> run)
         {
             if (run.Count == 1)
@@ -1948,7 +2000,7 @@ namespace Puck.Tools
                 // A property initializer is evaluated in declaration order (in the constructor);
                 // if any in the run has a side effect, reordering would change that order, so the
                 // run is left as written. (const initializers are compile-time — always safe.)
-                if (run.Any(static member => member is PropertyDeclarationSyntax { Initializer.Value: { } value } && ExpressionSafety.HasSideEffect(value)))
+                if (run.Any(static member => ((member is PropertyDeclarationSyntax { Initializer.Value: { } value }) && ExpressionSafety.HasSideEffect(value))))
                 {
                     result.AddRange(run);
                 }
@@ -1959,7 +2011,8 @@ namespace Puck.Tools
                     // declarations move.
                     var slots = run.Select(static member => (member.GetLeadingTrivia(), member.GetTrailingTrivia())).ToArray();
                     var sorted = run.OrderBy(SortKey, StringComparer.Ordinal).ToArray();
-                    for (var slot = 0; slot < sorted.Length; slot++)
+
+                    for (var slot = 0; (slot < sorted.Length); slot++)
                     {
                         result.Add(sorted[slot].WithLeadingTrivia(slots[slot].Item1).WithTrailingTrivia(slots[slot].Item2));
                     }
@@ -1979,38 +2032,36 @@ namespace Puck.Tools
                 PropertyDeclarationSyntax => "property",
                 _ => null
             };
-            return kind is null ? null : (kind + " " + Scope(member));
-        }
 
+            return ((kind is null) ? null : ((kind + " ") + Scope(member)));
+        }
         private static string SortKey(MemberDeclarationSyntax member) => member switch
         {
             FieldDeclarationSyntax field => field.Declaration.Variables[0].Identifier.ValueText,
             PropertyDeclarationSyntax property => property.Identifier.ValueText,
             _ => ""
         };
-
         private static string Scope(MemberDeclarationSyntax member) => string.Join(
             ' ',
             member.Modifiers
                 .Where(
                     static m =>
-                    m.IsKind(SyntaxKind.PublicKeyword)
+                    (m.IsKind(SyntaxKind.PublicKeyword)
                     || m.IsKind(SyntaxKind.PrivateKeyword)
                     || m.IsKind(SyntaxKind.ProtectedKeyword)
-                    || m.IsKind(SyntaxKind.InternalKeyword)
+                    || m.IsKind(SyntaxKind.InternalKeyword))
                 )
                 .Select(static m => m.ValueText)
                 .OrderBy(static text => text, StringComparer.Ordinal)
         );
-
         private static bool HasCommentOrDirective(MemberDeclarationSyntax member) =>
             member.GetLeadingTrivia().Concat(member.GetTrailingTrivia()).Any(
                 static t =>
-                t.IsKind(SyntaxKind.SingleLineCommentTrivia)
+                (t.IsKind(SyntaxKind.SingleLineCommentTrivia)
                 || t.IsKind(SyntaxKind.MultiLineCommentTrivia)
                 || t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
                 || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia)
-                || t.IsDirective
+                || t.IsDirective)
             );
     }
 
@@ -2022,37 +2073,21 @@ namespace Puck.Tools
     internal sealed class AttrRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node) => Reorder((MethodDeclarationSyntax)base.VisitMethodDeclaration(node)!);
-
         public override SyntaxNode? VisitConstructorDeclaration(ConstructorDeclarationSyntax node) => Reorder((ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node)!);
-
         public override SyntaxNode? VisitDestructorDeclaration(DestructorDeclarationSyntax node) => Reorder((DestructorDeclarationSyntax)base.VisitDestructorDeclaration(node)!);
-
         public override SyntaxNode? VisitOperatorDeclaration(OperatorDeclarationSyntax node) => Reorder((OperatorDeclarationSyntax)base.VisitOperatorDeclaration(node)!);
-
         public override SyntaxNode? VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node) => Reorder((ConversionOperatorDeclarationSyntax)base.VisitConversionOperatorDeclaration(node)!);
-
         public override SyntaxNode? VisitPropertyDeclaration(PropertyDeclarationSyntax node) => Reorder((PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node)!);
-
         public override SyntaxNode? VisitIndexerDeclaration(IndexerDeclarationSyntax node) => Reorder((IndexerDeclarationSyntax)base.VisitIndexerDeclaration(node)!);
-
         public override SyntaxNode? VisitEventDeclaration(EventDeclarationSyntax node) => Reorder((EventDeclarationSyntax)base.VisitEventDeclaration(node)!);
-
         public override SyntaxNode? VisitEventFieldDeclaration(EventFieldDeclarationSyntax node) => Reorder((EventFieldDeclarationSyntax)base.VisitEventFieldDeclaration(node)!);
-
         public override SyntaxNode? VisitFieldDeclaration(FieldDeclarationSyntax node) => Reorder((FieldDeclarationSyntax)base.VisitFieldDeclaration(node)!);
-
         public override SyntaxNode? VisitDelegateDeclaration(DelegateDeclarationSyntax node) => Reorder((DelegateDeclarationSyntax)base.VisitDelegateDeclaration(node)!);
-
         public override SyntaxNode? VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node) => Reorder((EnumMemberDeclarationSyntax)base.VisitEnumMemberDeclaration(node)!);
-
         public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Reorder((ClassDeclarationSyntax)base.VisitClassDeclaration(node)!);
-
         public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Reorder((StructDeclarationSyntax)base.VisitStructDeclaration(node)!);
-
         public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Reorder((InterfaceDeclarationSyntax)base.VisitInterfaceDeclaration(node)!);
-
         public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Reorder((RecordDeclarationSyntax)base.VisitRecordDeclaration(node)!);
-
         public override SyntaxNode? VisitEnumDeclaration(EnumDeclarationSyntax node) => Reorder((EnumDeclarationSyntax)base.VisitEnumDeclaration(node)!);
 
         // Moves each attribute (with its own trailing newline) into its alphabetical slot
@@ -2060,7 +2095,8 @@ namespace Puck.Tools
         private static T Reorder<T>(T node) where T : MemberDeclarationSyntax
         {
             var lists = node.AttributeLists;
-            if (lists.Count <= 1 || lists.Any(static l => l.Attributes.Count != 1))
+
+            if ((lists.Count <= 1) || lists.Any(static l => (l.Attributes.Count != 1)))
             {
                 return node;
             }
@@ -2068,20 +2104,21 @@ namespace Puck.Tools
             var order = Enumerable.Range(0, lists.Count)
                 .OrderBy(i => SimpleName(lists[i].Attributes[0]), StringComparer.Ordinal)
                 .ToList();
+
             if (order.SequenceEqual(Enumerable.Range(0, lists.Count)))
             {
                 return node;
             }
 
             var newLists = new List<AttributeListSyntax>();
-            for (var slot = 0; slot < lists.Count; slot++)
+
+            for (var slot = 0; (slot < lists.Count); slot++)
             {
                 newLists.Add(lists[order[slot]].WithLeadingTrivia(lists[slot].GetLeadingTrivia()));
             }
 
             return (T)node.WithAttributeLists(SyntaxFactory.List(newLists));
         }
-
         private static string SimpleName(AttributeSyntax attribute) => attribute.Name switch
         {
             QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
@@ -2102,6 +2139,7 @@ namespace Puck.Tools
         {
             var visited = (BinaryExpressionSyntax)base.VisitBinaryExpression(node)!;
             var kind = visited.Kind();
+
             if (kind is not (SyntaxKind.EqualsExpression or SyntaxKind.NotEqualsExpression))
             {
                 return visited;
@@ -2109,13 +2147,15 @@ namespace Puck.Tools
 
             var leftIsNull = visited.Left.IsKind(SyntaxKind.NullLiteralExpression);
             var rightIsNull = visited.Right.IsKind(SyntaxKind.NullLiteralExpression);
+
             if (leftIsNull == rightIsNull)
             {
                 return visited;
             }
 
-            var subject = rightIsNull ? visited.Left : visited.Right;
+            var subject = (rightIsNull ? visited.Left : visited.Right);
             PatternSyntax pattern = SyntaxFactory.ConstantPattern(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression));
+
             if (kind is SyntaxKind.NotEqualsExpression)
             {
                 pattern = SyntaxFactory.UnaryPattern(SyntaxFactory.Token(SyntaxKind.NotKeyword).WithTrailingTrivia(SyntaxFactory.Space), pattern);
@@ -2124,6 +2164,7 @@ namespace Puck.Tools
             var isToken = SyntaxFactory.Token(SyntaxKind.IsKeyword)
                 .WithLeadingTrivia(SyntaxFactory.Space)
                 .WithTrailingTrivia(SyntaxFactory.Space);
+
             return SyntaxFactory.IsPatternExpression(subject.WithoutTrivia(), isToken, pattern)
                 .WithLeadingTrivia(visited.GetLeadingTrivia())
                 .WithTrailingTrivia(visited.GetTrailingTrivia());
@@ -2143,10 +2184,8 @@ namespace Puck.Tools
     {
         public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node)
             => MaybeWrap(node, (ExpressionSyntax)base.VisitBinaryExpression(node)!);
-
         public override SyntaxNode? VisitConditionalExpression(ConditionalExpressionSyntax node)
             => MaybeWrap(node, (ExpressionSyntax)base.VisitConditionalExpression(node)!);
-
         public override SyntaxNode? VisitIsPatternExpression(IsPatternExpressionSyntax node)
             => MaybeWrap(node, (ExpressionSyntax)base.VisitIsPatternExpression(node)!);
 
@@ -2158,7 +2197,8 @@ namespace Puck.Tools
         public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node)
         {
             var visited = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node)!;
-            if (visited.Expression is BinaryExpressionSyntax inner
+
+            if ((visited.Expression is BinaryExpressionSyntax inner)
                 && IsBitwise(inner.Kind())
                 && (IsLooseContext(node.Parent) || IsSameOperatorChain(inner.Kind(), node.Parent)))
             {
@@ -2176,6 +2216,7 @@ namespace Puck.Tools
             }
 
             var inner = visited.WithoutLeadingTrivia().WithoutTrailingTrivia();
+
             return SyntaxFactory.ParenthesizedExpression(inner)
                 .WithLeadingTrivia(visited.GetLeadingTrivia())
                 .WithTrailingTrivia(visited.GetTrailingTrivia());
@@ -2185,17 +2226,18 @@ namespace Puck.Tools
         private static bool NeedsParens(ExpressionSyntax node)
         {
             var parent = node.Parent;
+
             if (parent is null or ParenthesizedExpressionSyntax)
             {
                 return false;
             }
 
             // Statement/expression slots whose own keyword parentheses already delimit.
-            if ((parent is IfStatementSyntax ifStatement && ifStatement.Condition == node)
-                || (parent is WhileStatementSyntax whileStatement && whileStatement.Condition == node)
-                || (parent is DoStatementSyntax doStatement && doStatement.Condition == node)
-                || (parent is SwitchStatementSyntax switchStatement && switchStatement.Expression == node)
-                || (parent is LockStatementSyntax lockStatement && lockStatement.Expression == node))
+            if (((parent is IfStatementSyntax ifStatement) && (ifStatement.Condition == node))
+                || ((parent is WhileStatementSyntax whileStatement) && (whileStatement.Condition == node))
+                || ((parent is DoStatementSyntax doStatement) && (doStatement.Condition == node))
+                || ((parent is SwitchStatementSyntax switchStatement) && (switchStatement.Expression == node))
+                || ((parent is LockStatementSyntax lockStatement) && (lockStatement.Expression == node)))
             {
                 return false;
             }
@@ -2208,7 +2250,7 @@ namespace Puck.Tools
                 // a single flat group instead of re-nesting (its leaf operands still wrap).
                 if (kind is SyntaxKind.LogicalAndExpression or SyntaxKind.LogicalOrExpression)
                 {
-                    return parent is not BinaryExpressionSyntax parentBinary || parentBinary.Kind() != kind;
+                    return ((parent is not BinaryExpressionSyntax parentBinary) || (parentBinary.Kind() != kind));
                 }
 
                 // Flag-combining bitwise gets clarity parens only where precedence against a
@@ -2216,31 +2258,29 @@ namespace Puck.Tools
                 // the gold standard's bare `a | b` in plain value position.
                 if (IsBitwise(kind))
                 {
-                    return parent is BinaryExpressionSyntax comparison && IsComparison(comparison.Kind());
+                    return ((parent is BinaryExpressionSyntax comparison) && IsComparison(comparison.Kind()));
                 }
             }
 
             return true;
         }
-
-        private static bool IsBitwise(SyntaxKind kind) => kind
-            is SyntaxKind.BitwiseAndExpression or SyntaxKind.BitwiseOrExpression or SyntaxKind.ExclusiveOrExpression;
+        private static bool IsBitwise(SyntaxKind kind) => (kind
+            is SyntaxKind.BitwiseAndExpression or SyntaxKind.BitwiseOrExpression or SyntaxKind.ExclusiveOrExpression);
 
         // A bitwise paren whose parent is the SAME bitwise operator is redundant (the op is
         // associative): `(a | b) | c` == `a | b | c`. Mixed operators keep their parens.
         private static bool IsSameOperatorChain(SyntaxKind innerKind, SyntaxNode? parent)
-            => parent is BinaryExpressionSyntax parentBinary && parentBinary.Kind() == innerKind;
-
-        private static bool IsComparison(SyntaxKind kind) => kind is SyntaxKind.EqualsExpression
+            => ((parent is BinaryExpressionSyntax parentBinary) && (parentBinary.Kind() == innerKind));
+        private static bool IsComparison(SyntaxKind kind) => (kind is SyntaxKind.EqualsExpression
             or SyntaxKind.NotEqualsExpression or SyntaxKind.LessThanExpression or SyntaxKind.LessThanOrEqualExpression
-            or SyntaxKind.GreaterThanExpression or SyntaxKind.GreaterThanOrEqualExpression;
+            or SyntaxKind.GreaterThanExpression or SyntaxKind.GreaterThanOrEqualExpression);
 
         // Constructs that bind looser than a bitwise operator, so wrapping its result adds
         // nothing: a redundant bitwise paren in any of these can be dropped safely.
-        private static bool IsLooseContext(SyntaxNode? parent) => parent is ArgumentSyntax
+        private static bool IsLooseContext(SyntaxNode? parent) => (parent is ArgumentSyntax
             or AttributeArgumentSyntax or EqualsValueClauseSyntax or ReturnStatementSyntax
             or ArrowExpressionClauseSyntax or AssignmentExpressionSyntax or ConditionalExpressionSyntax
-            or InitializerExpressionSyntax or ExpressionStatementSyntax;
+            or InitializerExpressionSyntax or ExpressionStatementSyntax);
     }
 
     // Reorder-safety for the passes that alphabetize EVALUATED expressions (named-args,
@@ -2253,16 +2293,16 @@ namespace Puck.Tools
     internal static class ExpressionSafety
     {
         public static bool HasSideEffect(SyntaxNode expression) => expression.DescendantNodesAndSelf().Any(static node =>
-            node is InvocationExpressionSyntax
+            ((node is InvocationExpressionSyntax
                 or ObjectCreationExpressionSyntax
                 or ImplicitObjectCreationExpressionSyntax
                 or AwaitExpressionSyntax
                 or AssignmentExpressionSyntax
-                or ElementAccessExpressionSyntax
+                or ElementAccessExpressionSyntax)
             || node.IsKind(SyntaxKind.PreIncrementExpression)
             || node.IsKind(SyntaxKind.PreDecrementExpression)
             || node.IsKind(SyntaxKind.PostIncrementExpression)
-            || node.IsKind(SyntaxKind.PostDecrementExpression));
+            || node.IsKind(SyntaxKind.PostDecrementExpression)));
     }
 
     // The named-argument normalizer (the `named-args` format pass). SEMANTIC: it resolves
@@ -2286,19 +2326,20 @@ namespace Puck.Tools
         public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
         {
             var visited = (InvocationExpressionSyntax)base.VisitInvocationExpression(node)!;
-            return Rebuild(node, visited.ArgumentList) is { } rebuilt ? visited.WithArgumentList(rebuilt) : visited;
-        }
 
+            return ((Rebuild(node, visited.ArgumentList) is { } rebuilt) ? visited.WithArgumentList(rebuilt) : visited);
+        }
         public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
         {
             var visited = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node)!;
-            return visited.ArgumentList is { } list && Rebuild(node, list) is { } rebuilt ? visited.WithArgumentList(rebuilt) : visited;
-        }
 
+            return (((visited.ArgumentList is { } list) && (Rebuild(node, list) is { } rebuilt)) ? visited.WithArgumentList(rebuilt) : visited);
+        }
         public override SyntaxNode? VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node)
         {
             var visited = (ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(node)!;
-            return Rebuild(node, visited.ArgumentList) is { } rebuilt ? visited.WithArgumentList(rebuilt) : visited;
+
+            return ((Rebuild(node, visited.ArgumentList) is { } rebuilt) ? visited.WithArgumentList(rebuilt) : visited);
         }
 
         // The ORIGINAL node carries the symbol (the rewritten copy is detached from the
@@ -2306,22 +2347,23 @@ namespace Puck.Tools
         // Returns the reordered+named list, or null to leave the call alone.
         private ArgumentListSyntax? Rebuild(SyntaxNode originalCall, ArgumentListSyntax? visitedList)
         {
-            if (visitedList is null || visitedList.Arguments.Count == 0)
+            if ((visitedList is null) || (visitedList.Arguments.Count == 0))
             {
                 return null;
             }
 
-            if (m_model.GetSymbolInfo(originalCall).Symbol is not IMethodSymbol method
-                || method.MethodKind is MethodKind.FunctionPointerSignature or MethodKind.DelegateInvoke)
+            if ((m_model.GetSymbolInfo(originalCall).Symbol is not IMethodSymbol method)
+                || (method.MethodKind is MethodKind.FunctionPointerSignature or MethodKind.DelegateInvoke))
             {
                 return null;
             }
 
             var arguments = visitedList.Arguments;
             var parameters = method.Parameters;
-            if (arguments.Count != parameters.Length
+
+            if ((arguments.Count != parameters.Length)
                 || parameters.Any(static parameter => parameter.IsParams)
-                || arguments.Any(static argument => argument.NameColon is not null))
+                || arguments.Any(static argument => (argument.NameColon is not null)))
             {
                 return null;
             }
@@ -2330,6 +2372,7 @@ namespace Puck.Tools
             // move is real AND any argument is side-effecting, leave the call positional — C#
             // evaluates arguments left-to-right, so reordering would change evaluation order.
             var parameterNames = parameters.Select(static parameter => parameter.Name);
+
             if (!parameterNames.SequenceEqual(parameterNames.OrderBy(static name => name, StringComparer.Ordinal))
                 && arguments.Any(static argument => ExpressionSafety.HasSideEffect(argument.Expression)))
             {
@@ -2341,23 +2384,26 @@ namespace Puck.Tools
             // single-line or one-argument-per-line layout survives the reorder unchanged. An
             // out/ref/in keyword is carried with its argument (named args allow it: `value: out x`).
             var entries = new (string Name, ArgumentSyntax Argument)[arguments.Count];
-            for (var index = 0; index < arguments.Count; index++)
+
+            for (var index = 0; (index < arguments.Count); index++)
             {
                 var argument = arguments[index];
                 var nameColon = SyntaxFactory
                     .NameColon(SyntaxFactory.IdentifierName(parameters[index].Name))
                     .WithColonToken(SyntaxFactory.Token(SyntaxKind.ColonToken).WithTrailingTrivia(SyntaxFactory.Space));
-                var refKind = argument.RefKindKeyword.IsKind(SyntaxKind.None)
+                var refKind = (argument.RefKindKeyword.IsKind(SyntaxKind.None)
                     ? default
-                    : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space);
+                    : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space));
                 var bareExpression = argument.Expression.WithoutLeadingTrivia().WithoutTrailingTrivia();
+
                 entries[index] = (parameters[index].Name, SyntaxFactory.Argument(nameColon, refKind, bareExpression));
             }
 
             var ordered = entries.OrderBy(static entry => entry.Name, StringComparer.Ordinal).Select(static entry => entry.Argument).ToArray();
             var separators = arguments.GetSeparators().ToArray();
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(arguments.Count * 2);
-            for (var slot = 0; slot < ordered.Length; slot++)
+            var nodesAndTokens = new List<SyntaxNodeOrToken>((arguments.Count * 2));
+
+            for (var slot = 0; (slot < ordered.Length); slot++)
             {
                 nodesAndTokens.Add(
                     ordered[slot]
@@ -2393,6 +2439,7 @@ namespace Puck.Tools
         public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node)
         {
             var visited = (ArgumentListSyntax)base.VisitArgumentList(node)!;
+
             if (visited.Arguments.Count < 1)
             {
                 return visited;
@@ -2412,13 +2459,14 @@ namespace Puck.Tools
             }
 
             var lineIndent = WrappedIndent(node);
-            var argumentTrivia = SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(new string(' ', lineIndent + 4)));
+            var argumentTrivia = SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(new string(' ', (lineIndent + 4))));
 
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(visited.Arguments.Count * 2);
-            for (var index = 0; index < visited.Arguments.Count; index++)
+            var nodesAndTokens = new List<SyntaxNodeOrToken>((visited.Arguments.Count * 2));
+
+            for (var index = 0; (index < visited.Arguments.Count); index++)
             {
                 nodesAndTokens.Add(visited.Arguments[index].WithLeadingTrivia(argumentTrivia).WithTrailingTrivia());
-                if (index < visited.Arguments.Count - 1)
+                if (index < (visited.Arguments.Count - 1))
                 {
                     nodesAndTokens.Add(SyntaxFactory.Token(SyntaxKind.CommaToken));
                 }
@@ -2442,14 +2490,15 @@ namespace Puck.Tools
         // so a second pass reproduces the same value exactly.
         private static int WrappedIndent(ArgumentListSyntax node)
         {
-            var anchor = node.FirstAncestorOrSelf<StatementSyntax>() as SyntaxNode
-                ?? node.FirstAncestorOrSelf<MemberDeclarationSyntax>() as SyntaxNode
-                ?? node;
+            var anchor = ((node.FirstAncestorOrSelf<StatementSyntax>() as SyntaxNode)
+                ?? ((node.FirstAncestorOrSelf<MemberDeclarationSyntax>() as SyntaxNode)
+                ?? node));
             var anchorLine = node.SyntaxTree.GetText().Lines.GetLineFromPosition(anchor.GetFirstToken().SpanStart).ToString();
-            var baseIndent = anchorLine.Length - anchorLine.TrimStart().Length;
+            var baseIndent = (anchorLine.Length - anchorLine.TrimStart().Length);
 
             var depth = 0;
-            for (var ancestor = node.Parent; ancestor is not null && ancestor != anchor; ancestor = ancestor.Parent)
+
+            for (var ancestor = node.Parent; ((ancestor is not null) && (ancestor != anchor)); ancestor = ancestor.Parent)
             {
                 if (ancestor is ArgumentListSyntax { Arguments.Count: > 1 })
                 {
@@ -2457,7 +2506,7 @@ namespace Puck.Tools
                 }
             }
 
-            return baseIndent + (4 * depth);
+            return (baseIndent + (4 * depth));
         }
     }
 
@@ -2472,9 +2521,10 @@ namespace Puck.Tools
         public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node)
         {
             var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(node)!;
+
             if (!visited.IsKind(SyntaxKind.ObjectInitializerExpression)
-                || visited.Expressions.Count < 2
-                || !visited.Expressions.All(static expression => expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax }))
+                || (visited.Expressions.Count < 2)
+                || !visited.Expressions.All(static expression => (expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax })))
             {
                 return visited;
             }
@@ -2484,6 +2534,7 @@ namespace Puck.Tools
             // would change evaluation order).
             var memberNames = visited.Expressions.Select(static expression =>
                 ((IdentifierNameSyntax)((AssignmentExpressionSyntax)expression).Left).Identifier.ValueText);
+
             if (memberNames.SequenceEqual(memberNames.OrderBy(static name => name, StringComparer.Ordinal))
                 || visited.Expressions.Any(static expression => ExpressionSafety.HasSideEffect(((AssignmentExpressionSyntax)expression).Right)))
             {
@@ -2497,8 +2548,9 @@ namespace Puck.Tools
                 )
                 .ToArray();
             var separators = visited.Expressions.GetSeparators().ToArray();
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(visited.Expressions.Count * 2);
-            for (var slot = 0; slot < ordered.Length; slot++)
+            var nodesAndTokens = new List<SyntaxNodeOrToken>((visited.Expressions.Count * 2));
+
+            for (var slot = 0; (slot < ordered.Length); slot++)
             {
                 nodesAndTokens.Add(
                     ordered[slot]
@@ -2538,38 +2590,41 @@ namespace Puck.Tools
         public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
         {
             var visited = (IfStatementSyntax)base.VisitIfStatement(node)!;
-            if (visited.Condition is not BinaryExpressionSyntax binary || !IsLogical(binary))
+
+            if ((visited.Condition is not BinaryExpressionSyntax binary) || !IsLogical(binary))
             {
                 return visited;
             }
 
             var indent = LineIndentAt(node, node.IfKeyword.SpanStart);
+
             return visited
                 .WithOpenParenToken(visited.OpenParenToken.WithTrailingTrivia())
-                .WithCondition(Layout(binary, indent + "    "))
+                .WithCondition(Layout(binary, (indent + "    ")))
                 .WithCloseParenToken(visited.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(indent)));
         }
-
         public override SyntaxNode? VisitWhileStatement(WhileStatementSyntax node)
         {
             var visited = (WhileStatementSyntax)base.VisitWhileStatement(node)!;
-            if (visited.Condition is not BinaryExpressionSyntax binary || !IsLogical(binary))
+
+            if ((visited.Condition is not BinaryExpressionSyntax binary) || !IsLogical(binary))
             {
                 return visited;
             }
 
             var indent = LineIndentAt(node, node.WhileKeyword.SpanStart);
+
             return visited
                 .WithOpenParenToken(visited.OpenParenToken.WithTrailingTrivia())
-                .WithCondition(Layout(binary, indent + "    "))
+                .WithCondition(Layout(binary, (indent + "    ")))
                 .WithCloseParenToken(visited.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(indent)));
         }
-
         public override SyntaxNode? VisitReturnStatement(ReturnStatementSyntax node)
         {
             var visited = (ReturnStatementSyntax)base.VisitReturnStatement(node)!;
-            if (visited.Expression is not ParenthesizedExpressionSyntax paren
-                || paren.Expression is not BinaryExpressionSyntax binary
+
+            if ((visited.Expression is not ParenthesizedExpressionSyntax paren)
+                || (paren.Expression is not BinaryExpressionSyntax binary)
                 || !IsLogical(binary))
             {
                 return visited;
@@ -2578,13 +2633,14 @@ namespace Puck.Tools
             var indent = LineIndentAt(node, node.ReturnKeyword.SpanStart);
             var laidOut = paren
                 .WithOpenParenToken(paren.OpenParenToken.WithTrailingTrivia())
-                .WithExpression(Layout(binary, indent + "    "))
+                .WithExpression(Layout(binary, (indent + "    ")))
                 .WithCloseParenToken(paren.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(indent)));
+
             return visited.WithExpression(laidOut);
         }
 
         private static bool IsLogical(BinaryExpressionSyntax binary)
-            => binary.Kind() is SyntaxKind.LogicalAndExpression or SyntaxKind.LogicalOrExpression;
+            => (binary.Kind() is SyntaxKind.LogicalAndExpression or SyntaxKind.LogicalOrExpression);
 
         // Rebuilds a same-operator logical chain with each operand on its own indented line
         // and the operator hugging the end of the previous operand's line.
@@ -2593,14 +2649,17 @@ namespace Puck.Tools
             var kind = binary.Kind();
             var operands = new List<ExpressionSyntax>();
             var operators = new List<SyntaxToken>();
+
             Flatten(binary, kind, operands, operators);
 
             var operandLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(innerIndent) };
             var result = operands[0].WithLeadingTrivia(operandLead).WithTrailingTrivia();
-            for (var index = 0; index < operators.Count; index++)
+
+            for (var index = 0; (index < operators.Count); index++)
             {
                 var operatorToken = operators[index].WithLeadingTrivia(SyntaxFactory.Space).WithTrailingTrivia();
-                var right = operands[index + 1].WithLeadingTrivia(operandLead).WithTrailingTrivia();
+                var right = operands[(index + 1)].WithLeadingTrivia(operandLead).WithTrailingTrivia();
+
                 result = SyntaxFactory.BinaryExpression(kind, result, operatorToken, right);
             }
 
@@ -2612,7 +2671,7 @@ namespace Puck.Tools
         // in which case it is a ParenthesizedExpression and stays a single operand).
         private static void Flatten(BinaryExpressionSyntax binary, SyntaxKind kind, List<ExpressionSyntax> operands, List<SyntaxToken> operators)
         {
-            if (binary.Left is BinaryExpressionSyntax leftBinary && leftBinary.Kind() == kind)
+            if ((binary.Left is BinaryExpressionSyntax leftBinary) && (leftBinary.Kind() == kind))
             {
                 Flatten(leftBinary, kind, operands, operators);
             }
@@ -2624,10 +2683,10 @@ namespace Puck.Tools
             operators.Add(binary.OperatorToken);
             operands.Add(binary.Right);
         }
-
         private static string LineIndentAt(SyntaxNode node, int position)
         {
             var line = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(position).ToString();
+
             return line[..(line.Length - line.TrimStart().Length)];
         }
     }
@@ -2655,8 +2714,8 @@ namespace Puck.Tools
 
             // A conditional that is a branch of another conditional is a link in a `? : ? :`
             // chain — its root lays it out (one level deeper), so leave it alone here.
-            if (node.Parent is ConditionalExpressionSyntax parent
-                && (parent.WhenTrue == node || parent.WhenFalse == node))
+            if ((node.Parent is ConditionalExpressionSyntax parent)
+                && ((parent.WhenTrue == node) || (parent.WhenFalse == node)))
             {
                 return visited;
             }
@@ -2666,15 +2725,15 @@ namespace Puck.Tools
 
         private static ConditionalExpressionSyntax Layout(ConditionalExpressionSyntax conditional, string conditionIndent)
         {
-            var branchIndent = conditionIndent + "    ";
+            var branchIndent = (conditionIndent + "    ");
             var branchLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(branchIndent) };
 
-            var whenTrue = conditional.WhenTrue is ConditionalExpressionSyntax trueChain
+            var whenTrue = ((conditional.WhenTrue is ConditionalExpressionSyntax trueChain)
                 ? Layout(trueChain, branchIndent).WithLeadingTrivia()
-                : conditional.WhenTrue.WithLeadingTrivia().WithTrailingTrivia();
-            var whenFalse = conditional.WhenFalse is ConditionalExpressionSyntax falseChain
+                : conditional.WhenTrue.WithLeadingTrivia().WithTrailingTrivia());
+            var whenFalse = ((conditional.WhenFalse is ConditionalExpressionSyntax falseChain)
                 ? Layout(falseChain, branchIndent).WithLeadingTrivia()
-                : conditional.WhenFalse.WithLeadingTrivia().WithTrailingTrivia();
+                : conditional.WhenFalse.WithLeadingTrivia().WithTrailingTrivia());
 
             return conditional
                 .WithCondition(conditional.Condition.WithTrailingTrivia())
@@ -2693,23 +2752,24 @@ namespace Puck.Tools
         // is the same on every run.
         private static string ConditionIndent(ConditionalExpressionSyntax node)
         {
-            var anchor = node.FirstAncestorOrSelf<StatementSyntax>() as SyntaxNode
-                ?? node.FirstAncestorOrSelf<MemberDeclarationSyntax>() as SyntaxNode
-                ?? node;
+            var anchor = ((node.FirstAncestorOrSelf<StatementSyntax>() as SyntaxNode)
+                ?? ((node.FirstAncestorOrSelf<MemberDeclarationSyntax>() as SyntaxNode)
+                ?? node));
             var anchorLine = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(anchor.GetFirstToken().SpanStart).ToString();
-            var baseIndent = anchorLine.Length - anchorLine.TrimStart().Length;
+            var baseIndent = (anchorLine.Length - anchorLine.TrimStart().Length);
 
             var depth = 0;
             var child = (SyntaxNode)node;
-            for (var ancestor = node.Parent; ancestor is not null && ancestor != anchor; child = ancestor, ancestor = ancestor.Parent)
+
+            for (var ancestor = node.Parent; ((ancestor is not null) && (ancestor != anchor)); child = ancestor, ancestor = ancestor.Parent)
             {
-                if (ancestor is ConditionalExpressionSyntax cond && (cond.WhenTrue == child || cond.WhenFalse == child))
+                if ((ancestor is ConditionalExpressionSyntax cond) && ((cond.WhenTrue == child) || (cond.WhenFalse == child)))
                 {
                     depth++;
                 }
             }
 
-            return new string(' ', baseIndent + (4 * depth));
+            return new string(' ', (baseIndent + (4 * depth)));
         }
     }
 
@@ -2731,7 +2791,8 @@ namespace Puck.Tools
             var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(node)!;
             var expressions = visited.Expressions;
             var separators = expressions.GetSeparators().ToList();
-            if (expressions.Count == 0 || separators.Count >= expressions.Count)
+
+            if ((expressions.Count == 0) || (separators.Count >= expressions.Count))
             {
                 return visited;
             }
@@ -2739,6 +2800,7 @@ namespace Puck.Tools
             var text = node.SyntaxTree!.GetText();
             var lastExpressionLine = text.Lines.IndexOf(node.Expressions[^1].Span.End);
             var closeBraceLine = text.Lines.IndexOf(node.CloseBraceToken.SpanStart);
+
             if (lastExpressionLine == closeBraceLine)
             {
                 return visited;
@@ -2746,11 +2808,12 @@ namespace Puck.Tools
 
             var last = expressions[^1];
             var trailingComma = SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(last.GetTrailingTrivia());
-            var nodesAndTokens = new List<SyntaxNodeOrToken>(expressions.Count * 2);
-            for (var index = 0; index < expressions.Count; index++)
+            var nodesAndTokens = new List<SyntaxNodeOrToken>((expressions.Count * 2));
+
+            for (var index = 0; (index < expressions.Count); index++)
             {
-                nodesAndTokens.Add(index == expressions.Count - 1 ? last.WithTrailingTrivia() : expressions[index]);
-                nodesAndTokens.Add(index < separators.Count ? separators[index] : trailingComma);
+                nodesAndTokens.Add(((index == (expressions.Count - 1)) ? last.WithTrailingTrivia() : expressions[index]));
+                nodesAndTokens.Add(((index < separators.Count) ? separators[index] : trailingComma));
             }
 
             return visited.WithExpressions(SyntaxFactory.SeparatedList<ExpressionSyntax>(nodesAndTokens));
@@ -2774,23 +2837,26 @@ namespace Puck.Tools
         {
             var visited = (BlockSyntax)base.VisitBlock(node)!;
             var statements = visited.Statements;
+
             if (statements.Count < 2)
             {
                 return visited;
             }
 
             var rebuilt = new List<StatementSyntax> { statements[0] };
-            for (var index = 1; index < statements.Count; index++)
+
+            for (var index = 1; (index < statements.Count); index++)
             {
-                var previous = statements[index - 1];
+                var previous = statements[(index - 1)];
                 var current = statements[index];
+
                 rebuilt.Add(
-                    previous is LocalDeclarationStatementSyntax
-                    && current is not LocalDeclarationStatementSyntax
+                    (((previous is LocalDeclarationStatementSyntax)
+                    && (current is not LocalDeclarationStatementSyntax)
                     && OnSeparateLines(previous, current)
-                    && !HasCommentOrDirective(current.GetLeadingTrivia())
+                    && !HasCommentOrDirective(current.GetLeadingTrivia()))
                     ? WithLeadingBlankLine(current)
-                    : current
+                    : current)
                 );
             }
 
@@ -2801,16 +2867,15 @@ namespace Puck.Tools
         // (`{ int n = f(); return n; }`) must not be blown open — and splitting it was also the
         // source of a non-idempotent run, since the inserted newline retriggered the rule.
         private static bool OnSeparateLines(StatementSyntax previous, StatementSyntax current) =>
-            previous.GetTrailingTrivia().Any(static trivia => trivia.IsKind(SyntaxKind.EndOfLineTrivia))
-            || current.GetLeadingTrivia().Any(static trivia => trivia.IsKind(SyntaxKind.EndOfLineTrivia));
-
+            (previous.GetTrailingTrivia().Any(static trivia => trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+            || current.GetLeadingTrivia().Any(static trivia => trivia.IsKind(SyntaxKind.EndOfLineTrivia)));
         private static bool HasCommentOrDirective(SyntaxTriviaList lead) => lead.Any(
             static trivia =>
-            trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
+            (trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
             || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia)
             || trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
             || trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia)
-            || trivia.IsDirective
+            || trivia.IsDirective)
         );
 
         // Forces exactly one blank line: the indentation whitespace (and any non-newline lead)
@@ -2819,12 +2884,14 @@ namespace Puck.Tools
         {
             var lead = statement.GetLeadingTrivia().ToList();
             var start = 0;
-            while (start < lead.Count && lead[start].IsKind(SyntaxKind.EndOfLineTrivia))
+
+            while ((start < lead.Count) && lead[start].IsKind(SyntaxKind.EndOfLineTrivia))
             {
                 start++;
             }
 
             var rebuilt = new List<SyntaxTrivia> { SyntaxFactory.CarriageReturnLineFeed };
+
             rebuilt.AddRange(lead.Skip(start));
             return statement.WithLeadingTrivia(SyntaxFactory.TriviaList(rebuilt));
         }
@@ -2844,6 +2911,7 @@ namespace Puck.Tools
         public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node)
         {
             var visited = (LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(node)!;
+
             if (!visited.UsingKeyword.IsKind(SyntaxKind.None)
                 || visited.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.ConstKeyword)))
             {
@@ -2851,25 +2919,28 @@ namespace Puck.Tools
             }
 
             var declaration = visited.Declaration;
-            if (declaration.Type is not PredefinedTypeSyntax predefined
-                || SuffixFor(predefined.Keyword.Kind()) is not { } suffix
-                || declaration.Variables.Count != 1)
+
+            if ((declaration.Type is not PredefinedTypeSyntax predefined)
+                || (SuffixFor(predefined.Keyword.Kind()) is not { } suffix)
+                || (declaration.Variables.Count != 1))
             {
                 return visited;
             }
 
             var variable = declaration.Variables[0];
-            if (variable.Initializer?.Value is not LiteralExpressionSyntax literal
+
+            if ((variable.Initializer?.Value is not LiteralExpressionSyntax literal)
                 || !literal.Token.IsKind(SyntaxKind.NumericLiteralToken))
             {
                 return visited;
             }
 
             var literalText = literal.Token.Text;
+
             if (literalText.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                 || literalText.StartsWith("0b", StringComparison.OrdinalIgnoreCase)
                 || HasTypeSuffix(literalText)
-                || SyntaxFactory.ParseExpression(literalText + suffix) is not LiteralExpressionSyntax suffixed)
+                || (SyntaxFactory.ParseExpression((literalText + suffix)) is not LiteralExpressionSyntax suffixed))
             {
                 return visited;
             }
@@ -2881,6 +2952,7 @@ namespace Puck.Tools
             var newType = SyntaxFactory.IdentifierName("var")
                 .WithLeadingTrivia(predefined.GetLeadingTrivia())
                 .WithTrailingTrivia(predefined.GetTrailingTrivia());
+
             return visited.WithDeclaration(
                 declaration
                 .WithType(newType)
@@ -2898,9 +2970,8 @@ namespace Puck.Tools
             SyntaxKind.DecimalKeyword => "M",
             _ => null
         };
-
         private static bool HasTypeSuffix(string text)
-            => text.Length > 0 && text[^1] is 'u' or 'U' or 'l' or 'L' or 'f' or 'F' or 'd' or 'D' or 'm' or 'M';
+            => ((text.Length > 0) && (text[^1] is 'u' or 'U' or 'l' or 'L' or 'f' or 'F' or 'd' or 'D' or 'm' or 'M'));
     }
 
     // format umbrella: the source rewriters applied in one parse/write per file.
@@ -2944,6 +3015,7 @@ namespace Puck.Tools
         public static int Run(string[] args)
         {
             var scanner = new ArgScanner().Flag("WhatIf").Flag("Verify").Value("Only");
+
             if (!scanner.Parse(args))
             {
                 Console.Error.WriteLine($"ERROR: {scanner.Error}");
@@ -2952,6 +3024,7 @@ namespace Puck.Tools
 
             var known = Passes.Select(static pass => pass.Name).Append(NamedArgsPassName).ToHashSet(StringComparer.Ordinal);
             var selected = DefaultPassNames.ToHashSet(StringComparer.Ordinal);
+
             if (scanner.Get("Only") is { } only)
             {
                 selected = only.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -2962,21 +3035,23 @@ namespace Puck.Tools
                     if (!known.Contains(name))
                     {
                         var knownNames = string.Join(", ", Passes.Select(static pass => pass.Name).Append(NamedArgsPassName));
+
                         Console.Error.WriteLine($"ERROR: unknown format pass '{name}' (known: {knownNames}).");
                         return 2;
                     }
                 }
             }
 
-            var root = scanner.Positionals.Count > 0 ? scanner.Positionals[0] : "src";
+            var root = ((scanner.Positionals.Count > 0) ? scanner.Positionals[0] : "src");
             var whatIf = scanner.Has("WhatIf");
             var verify = scanner.Has("Verify");
 
             // Phase 0: `dotnet format whitespace` establishes the .editorconfig baseline (spacing,
             // alignment, newlines) the custom passes then layer bespoke conventions onto. Disjoint
             // concerns — the result is a fixed point of both — so running it first is safe.
-            var result = DotnetFormatPhase.Run(root, whatIf || verify);
+            var result = DotnetFormatPhase.Run(root, (whatIf || verify));
             var syntacticPasses = Passes.Where(pass => selected.Contains(pass.Name)).ToList();
+
             if (syntacticPasses.Count > 0)
             {
                 result = Math.Max(result, SourceRewrite.Run("format", root, whatIf, verify, syntacticPasses));
@@ -3006,19 +3081,21 @@ namespace Puck.Tools
             }
 
             var projects = Directory.EnumerateFiles(scanRoot, "*.csproj", SearchOption.AllDirectories)
-                .Where(static path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                .Where(static path => (!path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
                 .OrderBy(static path => path, StringComparer.Ordinal);
             var result = 0;
+
             foreach (var project in projects)
             {
                 Console.Error.WriteLine($"dotnet format whitespace: {Path.GetRelativePath(EngineRun.RepositoryRoot, project).Replace('\\', '/')}");
-                var code = verifyOnly
+                var code = (verifyOnly
                     ? ToolProcess.RunStreamed(null, "dotnet", "format", "whitespace", project, "--no-restore", "--verify-no-changes")
-                    : ToolProcess.RunStreamed(null, "dotnet", "format", "whitespace", project, "--no-restore");
+                    : ToolProcess.RunStreamed(null, "dotnet", "format", "whitespace", project, "--no-restore"));
+
                 if (code != 0)
                 {
-                    result = Math.Max(result, verifyOnly ? 1 : 2);
+                    result = Math.Max(result, (verifyOnly ? 1 : 2));
                 }
             }
 
@@ -3037,6 +3114,7 @@ namespace Puck.Tools
             var scanner = new ArgScanner()
                 .Value("Only").Value("OutDir").Flag("Grouped")
                 .Value("MaxPerChunk").Value("MinTokens").Value("MinStatements").Flag("NoBlocks");
+
             if (!scanner.Parse(args))
             {
                 Console.Error.WriteLine($"ERROR: {scanner.Error}");
@@ -3044,6 +3122,7 @@ namespace Puck.Tools
             }
 
             var selected = ResolveSelection(scanner.Get("Only"));
+
             if (selected is null)
             {
                 return 2;
@@ -3051,19 +3130,20 @@ namespace Puck.Tools
 
             var options = new ScanOptions
             {
-                OutDirectory = scanner.Get("OutDir") is { } outDir
+                OutDirectory = ((scanner.Get("OutDir") is { } outDir)
                     ? Path.GetFullPath(outDir)
-                    : Path.Combine(EngineRun.RepositoryRoot, "artifacts", "scan"),
+                    : Path.Combine(EngineRun.RepositoryRoot, "artifacts", "scan")),
                 Grouped = scanner.Has("Grouped"),
-                MaxPerChunk = scanner.TryGetInt("MaxPerChunk", out var maxPerChunk) && maxPerChunk > 0 ? maxPerChunk : 40,
-                MinTokens = scanner.TryGetInt("MinTokens", out var minTokens) && minTokens > 0 ? minTokens : 30,
-                MinStatements = scanner.TryGetInt("MinStatements", out var minStatements) && minStatements > 0 ? minStatements : 4,
+                MaxPerChunk = ((scanner.TryGetInt("MaxPerChunk", out var maxPerChunk) && (maxPerChunk > 0)) ? maxPerChunk : 40),
+                MinTokens = ((scanner.TryGetInt("MinTokens", out var minTokens) && (minTokens > 0)) ? minTokens : 30),
+                MinStatements = ((scanner.TryGetInt("MinStatements", out var minStatements) && (minStatements > 0)) ? minStatements : 4),
                 IncludeBlocks = !scanner.Has("NoBlocks"),
-                SingleStdout = selected.Count == 1 && !scanner.Has("OutDir") && !scanner.Has("Grouped")
+                SingleStdout = ((selected.Count == 1) && !scanner.Has("OutDir") && !scanner.Has("Grouped")),
             };
 
-            var root = scanner.Positionals.Count > 0 ? scanner.Positionals[0] : "src";
+            var root = ((scanner.Positionals.Count > 0) ? scanner.Positionals[0] : "src");
             var corpus = SourceCorpus.TryLoad(root);
+
             if (corpus is null)
             {
                 return 2;
@@ -3079,6 +3159,7 @@ namespace Puck.Tools
                     "clones" => new CloneAnalyzer(),
                     _ => throw new InvalidOperationException(name)
                 };
+
                 var (jsonl, grouped) = analyzer.Analyze(corpus, options);
                 ScanSink.Emit(name, jsonl, grouped, options);
             }
@@ -3098,6 +3179,7 @@ namespace Puck.Tools
             var requested = only.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(static name => name.ToLowerInvariant())
                 .ToHashSet(StringComparer.Ordinal);
+
             foreach (var name in requested)
             {
                 if (!AllAnalyzers.Contains(name))
@@ -3124,9 +3206,9 @@ namespace Puck.Tools
     {
         public static bool TryEnumerate(string rootArgument, out string scanRoot, out string[] files)
         {
-            scanRoot = Path.IsPathRooted(rootArgument)
+            scanRoot = (Path.IsPathRooted(rootArgument)
                 ? rootArgument
-                : Path.Combine(EngineRun.RepositoryRoot, rootArgument);
+                : Path.Combine(EngineRun.RepositoryRoot, rootArgument));
             files = [];
             if (!Directory.Exists(scanRoot))
             {
@@ -3139,7 +3221,8 @@ namespace Puck.Tools
                     static path =>
                 {
                     var normalized = path.Replace('\\', '/');
-                    return !normalized.Contains("/obj/") && !normalized.Contains("/bin/");
+
+                    return (!normalized.Contains("/obj/") && !normalized.Contains("/bin/"));
                 }
                 )
                 .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
@@ -3158,9 +3241,9 @@ namespace Puck.Tools
             Files = files;
         }
 
-        public string ScanRoot { get; }
-        public IReadOnlyList<ParsedFile> Files { get; }
         public int FileCount => Files.Count;
+        public IReadOnlyList<ParsedFile> Files { get; }
+        public string ScanRoot { get; }
 
         public static SourceCorpus? TryLoad(string rootArgument)
         {
@@ -3170,11 +3253,13 @@ namespace Puck.Tools
             }
 
             var parsed = new List<ParsedFile>(files.Length);
+
             foreach (var file in files)
             {
                 var text = File.ReadAllText(file);
                 var root = CSharpSyntaxTree.ParseText(text).GetRoot();
                 var relative = Path.GetRelativePath(scanRoot, file).Replace('\\', '/');
+
                 parsed.Add(new ParsedFile(file, relative, root, text));
             }
 
@@ -3201,18 +3286,17 @@ namespace Puck.Tools
             m_spec[Canonical(name)] = false;
             return this;
         }
-
         public ArgScanner Value(string name)
         {
             m_spec[Canonical(name)] = true;
             return this;
         }
-
         public bool Parse(string[] args)
         {
-            for (var index = 0; index < args.Length; index++)
+            for (var index = 0; (index < args.Length); index++)
             {
                 var argument = args[index];
+
                 if (!argument.StartsWith('-'))
                 {
                     m_positionals.Add(argument);
@@ -3220,6 +3304,7 @@ namespace Puck.Tools
                 }
 
                 var name = Canonical(argument);
+
                 if (!m_spec.TryGetValue(name, out var takesValue))
                 {
                     Error = $"unknown argument '{argument}'.";
@@ -3232,7 +3317,7 @@ namespace Puck.Tools
                     continue;
                 }
 
-                if (index + 1 >= args.Length)
+                if ((index + 1) >= args.Length)
                 {
                     Error = $"argument '{argument}' requires a value.";
                     return false;
@@ -3244,17 +3329,11 @@ namespace Puck.Tools
 
             return true;
         }
-
         public bool Has(string name) => m_present.Contains(Canonical(name));
-
-        public string? Get(string name) => m_values.TryGetValue(Canonical(name), out var value) ? value : null;
-
-        public string Get(string name, string fallback) => Get(name) ?? fallback;
-
+        public string? Get(string name) => (m_values.TryGetValue(Canonical(name), out var value) ? value : null);
+        public string Get(string name, string fallback) => (Get(name) ?? fallback);
         public bool TryGetInt(string name, out int value) => int.TryParse(Get(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
-
         public bool TryGetDouble(string name, out double value) => double.TryParse(Get(name), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
-
         public bool TryGetUInt(string name, out uint value) => uint.TryParse(Get(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
 
         private static string Canonical(string name) => name.TrimStart('-').Replace("-", string.Empty).ToLowerInvariant();
@@ -3263,15 +3342,14 @@ namespace Puck.Tools
     // The knobs a scan analyzer may read; only the ones an analyzer uses matter to it.
     internal sealed class ScanOptions
     {
-        public string OutDirectory { get; init; } = "";
         public bool Grouped { get; init; }
-        public bool SingleStdout { get; init; }
-        public int MaxPerChunk { get; init; } = 40;
-        public int MinTokens { get; init; } = 30;
-        public int MinStatements { get; init; } = 4;
         public bool IncludeBlocks { get; init; } = true;
+        public int MaxPerChunk { get; init; } = 40;
+        public int MinStatements { get; init; } = 4;
+        public int MinTokens { get; init; } = 30;
+        public string OutDirectory { get; init; } = "";
+        public bool SingleStdout { get; init; }
     }
-
     internal interface ISourceAnalyzer
     {
         string Name { get; }
@@ -3297,11 +3375,13 @@ namespace Puck.Tools
 
             Directory.CreateDirectory(options.OutDirectory);
             var jsonlPath = Path.Combine(options.OutDirectory, $"{name}.jsonl");
+
             File.WriteAllText(jsonlPath, jsonl);
             Console.Error.WriteLine($"scan: wrote {jsonlPath}");
             if (options.Grouped)
             {
                 var groupedPath = Path.Combine(options.OutDirectory, $"{name}.grouped.json");
+
                 File.WriteAllText(groupedPath, grouped);
                 Console.Error.WriteLine($"scan: wrote {groupedPath}");
             }
@@ -3319,7 +3399,6 @@ namespace Puck.Tools
 
         public static string DemoProject =>
             Path.Combine(RepositoryRoot, "src", "Puck.Demo", "Puck.Demo.csproj");
-
         public static string PostProject =>
             Path.Combine(RepositoryRoot, "src", "Puck.Post", "Puck.Post.csproj");
 
@@ -3380,13 +3459,13 @@ namespace Puck.Tools
         // Newline-insensitive equality, so a pass that only reflows whitespace reads as a no-op
         // regardless of the working tree's line endings.
         public static bool ContentEquals(string a, string b) =>
-            a.ReplaceLineEndings("\n") == b.ReplaceLineEndings("\n");
+            (a.ReplaceLineEndings("\n") == b.ReplaceLineEndings("\n"));
 
         // The write guard: a pass must never leave a file with MORE syntax errors than it had.
         // If it would, the rewrite is dropped and the file reported as corrupt, so a misfiring
         // pass fails the run loudly instead of silently overwriting source with broken code.
         public static bool IntroducesErrors(string original, string rewritten) =>
-            ErrorCount(rewritten) > ErrorCount(original);
+            (ErrorCount(rewritten) > ErrorCount(original));
 
         // Source is committed CRLF; ReplaceLineEndings normalizes any mix (incl. lone \r) first.
         public static void WriteCrlf(string file, string text) =>
@@ -3398,9 +3477,9 @@ namespace Puck.Tools
         public static int Report(string label, int fileCount, IReadOnlyList<string> drifted, bool whatIf, params ReadOnlySpan<(string Reason, IReadOnlyList<string> Files)> problems)
         {
             Console.Error.WriteLine(
-                whatIf
-                ? (drifted.Count == 0 ? $"{label}: consistent across {fileCount} files." : $"{label}: {drifted.Count} file(s) drifted from the convention:")
-                : $"{label}: normalized {drifted.Count} of {fileCount} files."
+                (whatIf
+                ? ((drifted.Count == 0) ? $"{label}: consistent across {fileCount} files." : $"{label}: {drifted.Count} file(s) drifted from the convention:")
+                : $"{label}: normalized {drifted.Count} of {fileCount} files.")
             );
             foreach (var path in drifted)
             {
@@ -3408,6 +3487,7 @@ namespace Puck.Tools
             }
 
             var hadProblem = false;
+
             foreach (var (reason, files) in problems)
             {
                 if (files.Count == 0)
@@ -3423,13 +3503,12 @@ namespace Puck.Tools
                 }
             }
 
-            return hadProblem || (whatIf && drifted.Count > 0) ? 1 : 0;
+            return ((hadProblem || (whatIf && (drifted.Count > 0))) ? 1 : 0);
         }
 
         private static int ErrorCount(string text) =>
-            CSharpSyntaxTree.ParseText(text).GetDiagnostics().Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+            CSharpSyntaxTree.ParseText(text).GetDiagnostics().Count(static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
     }
-
     internal static class SourceRewrite
     {
         public static int Run(string label, string rootArgument, bool whatIf, bool verify, IReadOnlyList<(string Name, Func<SyntaxNode, SyntaxNode> Apply)> passes)
@@ -3441,21 +3520,24 @@ namespace Puck.Tools
 
             // -Verify audits the passes without touching the tree: it asserts every rewrite is
             // a fixed point (a formatter run twice must equal running it once), never writes.
-            var writing = !whatIf && !verify;
+            var writing = (!whatIf && !verify);
             var repositoryRoot = EngineRun.RepositoryRoot;
             var drifted = new List<string>();
             var corrupted = new List<string>();
             var nonConvergent = new List<string>();
+
             foreach (var file in files)
             {
                 var original = File.ReadAllText(file);
                 var current = ApplyAll(original, passes);
+
                 if (RewriteIo.ContentEquals(current, original))
                 {
                     continue;
                 }
 
                 var relative = Path.GetRelativePath(repositoryRoot, file).Replace('\\', '/');
+
                 if (RewriteIo.IntroducesErrors(original, current))
                 {
                     corrupted.Add(relative);
@@ -3479,7 +3561,7 @@ namespace Puck.Tools
                 label,
                 files.Length,
                 drifted,
-                whatIf || verify,
+                (whatIf || verify),
                 ("would introduce syntax errors — SKIPPED", corrupted),
                 ("do not converge (a pass is not idempotent) — SKIPPED", nonConvergent)
             );
@@ -3491,6 +3573,7 @@ namespace Puck.Tools
             foreach (var pass in passes)
             {
                 var node = CSharpSyntaxTree.ParseText(text).GetRoot();
+
                 text = pass.Apply(node).ToFullString();
             }
 
@@ -3528,9 +3611,10 @@ namespace Puck.Tools
             {
                 using var stream = File.OpenRead(path);
                 using var peReader = new System.Reflection.PortableExecutable.PEReader(stream);
-                return peReader.HasMetadata ? MetadataReference.CreateFromFile(path) : null;
+
+                return (peReader.HasMetadata ? MetadataReference.CreateFromFile(path) : null);
             }
-            catch (Exception exception) when (exception is BadImageFormatException or IOException)
+            catch (Exception exception) when ((exception is BadImageFormatException or IOException))
             {
                 return null;
             }
@@ -3543,6 +3627,7 @@ namespace Puck.Tools
         private static IEnumerable<string> PackageReferences(string projectRoot)
         {
             var assetsPath = Path.Combine(projectRoot, "obj", "project.assets.json");
+
             if (!File.Exists(assetsPath))
             {
                 return [];
@@ -3550,6 +3635,7 @@ namespace Puck.Tools
 
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(assetsPath));
             var root = document.RootElement;
+
             if (!root.TryGetProperty("packageFolders", out var folders)
                 || !root.TryGetProperty("targets", out var targets)
                 || !root.TryGetProperty("libraries", out var libraries))
@@ -3559,6 +3645,7 @@ namespace Puck.Tools
 
             var packageRoots = folders.EnumerateObject().Select(static folder => folder.Name).ToList();
             var results = new List<string>();
+
             foreach (var target in targets.EnumerateObject())
             {
                 foreach (var library in target.Value.EnumerateObject())
@@ -3581,6 +3668,7 @@ namespace Puck.Tools
                         var resolved = packageRoots
                             .Select(packageRoot => Path.Combine(packageRoot, libraryPath.GetString()!, relative))
                             .FirstOrDefault(File.Exists);
+
                         if (resolved is not null)
                         {
                             results.Add(resolved);
@@ -3603,11 +3691,11 @@ namespace Puck.Tools
         private static CSharpCompilation BuildProjectCompilation(string projectRoot, IEnumerable<SyntaxTree> trees, CSharpParseOptions parseOptions, out bool degraded)
         {
             var objDirectory = Path.Combine(projectRoot, "obj");
-            var globalUsingsFile = Directory.Exists(objDirectory)
+            var globalUsingsFile = (Directory.Exists(objDirectory)
                 ? Directory.EnumerateFiles(objDirectory, "*.GlobalUsings.g.cs", SearchOption.AllDirectories).FirstOrDefault()
-                : null;
+                : null);
             var globalUsings = CSharpSyntaxTree.ParseText(
-                globalUsingsFile is not null ? File.ReadAllText(globalUsingsFile) : DefaultGlobalUsings,
+                ((globalUsingsFile is not null) ? File.ReadAllText(globalUsingsFile) : DefaultGlobalUsings),
                 parseOptions
             );
 
@@ -3615,31 +3703,31 @@ namespace Puck.Tools
             // and is absent from disk unless the project sets EmitCompilerGeneratedFiles. When it
             // IS emitted (obj/**/generated/**/*.cs), include it so calls into generated types
             // resolve too; otherwise those calls are reported as unresolved and left positional.
-            var generatedTrees = Directory.Exists(objDirectory)
+            var generatedTrees = (Directory.Exists(objDirectory)
                 ? Directory.EnumerateFiles(objDirectory, "*.cs", SearchOption.AllDirectories)
                     .Where(static path => path.Contains($"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
                     .Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), parseOptions, path: path))
-                : Enumerable.Empty<SyntaxTree>();
+                : Enumerable.Empty<SyntaxTree>());
 
             var frameworkDlls = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
                 .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
                 .Where(static path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
-            var projectName = Path.GetFileNameWithoutExtension(Directory.EnumerateFiles(projectRoot, "*.csproj").FirstOrDefault() ?? "");
+            var projectName = Path.GetFileNameWithoutExtension((Directory.EnumerateFiles(projectRoot, "*.csproj").FirstOrDefault() ?? ""));
             var binDirectory = Path.Combine(projectRoot, "bin");
-            var outputDlls = Directory.Exists(binDirectory)
+            var outputDlls = (Directory.Exists(binDirectory)
                 ? Directory.EnumerateFiles(binDirectory, "*.dll", SearchOption.AllDirectories)
-                    .Where(path => !string.Equals(Path.GetFileNameWithoutExtension(path), projectName, StringComparison.OrdinalIgnoreCase)
-                        && !path.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-                : Enumerable.Empty<string>();
+                    .Where(path => (!string.Equals(Path.GetFileNameWithoutExtension(path), projectName, StringComparison.OrdinalIgnoreCase)
+                        && !path.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)))
+                : Enumerable.Empty<string>());
             // Built dependency assemblies and NuGet package assemblies win over the framework on a
             // name clash — they are the exact versions the project compiles against.
             var references = outputDlls.Concat(PackageReferences(projectRoot)).Concat(frameworkDlls)
                 .GroupBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
                 .Select(static group => TryReference(group.First()))
-                .Where(static reference => reference is not null)
+                .Where(static reference => (reference is not null))
                 .Select(static reference => reference!);
 
-            degraded = globalUsingsFile is null || !Directory.Exists(binDirectory);
+            degraded = ((globalUsingsFile is null) || !Directory.Exists(binDirectory));
             return CSharpCompilation.Create(
                 "named-args",
                 trees.Append(globalUsings).Concat(generatedTrees),
@@ -3655,9 +3743,9 @@ namespace Puck.Tools
         // excluded — counting it would be a false positive.
         private static int CountUnresolvedCalls(SyntaxNode root, SemanticModel model) =>
             root.DescendantNodes().Count(node =>
-                node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
-                && node is not InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } }
-                && model.GetSymbolInfo(node) is { Symbol: null, CandidateSymbols.IsEmpty: true });
+                ((node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax)
+                && (node is not InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
+                && (model.GetSymbolInfo(node) is { Symbol: null, CandidateSymbols.IsEmpty: true })));
 
         public static int Run(string rootArgument, bool whatIf, bool verify)
         {
@@ -3672,7 +3760,7 @@ namespace Puck.Tools
             // against that project's compilation; each real method call then gets named.
             var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
             var byProject = targetFiles.GroupBy(
-                static file => FindProjectDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!) ?? "",
+                static file => (FindProjectDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!) ?? ""),
                 StringComparer.OrdinalIgnoreCase
             );
 
@@ -3680,9 +3768,10 @@ namespace Puck.Tools
             var corrupted = new List<string>();
             var degradedProjects = new List<string>();
             var unresolved = 0;
+
             foreach (var projectGroup in byProject)
             {
-                if (projectGroup.Key.Length == 0 || !SourceFiles.TryEnumerate(projectGroup.Key, out _, out var compilationFiles))
+                if ((projectGroup.Key.Length == 0) || !SourceFiles.TryEnumerate(projectGroup.Key, out _, out var compilationFiles))
                 {
                     continue;
                 }
@@ -3704,7 +3793,7 @@ namespace Puck.Tools
                 "named-args",
                 targetFiles.Length,
                 drifted,
-                whatIf || verify,
+                (whatIf || verify),
                 ("would introduce syntax errors — SKIPPED", corrupted)
             );
         }
@@ -3715,18 +3804,21 @@ namespace Puck.Tools
         private static int ProcessProject(string projectRoot, IEnumerable<string> targets, string[] compilationFiles, CSharpParseOptions parseOptions, bool whatIf, bool verify, List<string> drifted, List<string> corrupted, List<string> degradedProjects)
         {
             var treesByPath = new Dictionary<string, SyntaxTree>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var file in compilationFiles)
             {
                 treesByPath[Path.GetFullPath(file)] = CSharpSyntaxTree.ParseText(File.ReadAllText(file), parseOptions, path: file);
             }
 
             var compilation = BuildProjectCompilation(projectRoot, treesByPath.Values, parseOptions, out var degraded);
+
             if (degraded)
             {
                 degradedProjects.Add(Path.GetFileName(projectRoot));
             }
 
             var unresolved = 0;
+
             foreach (var file in targets)
             {
                 if (!treesByPath.TryGetValue(Path.GetFullPath(file), out var tree))
@@ -3735,15 +3827,18 @@ namespace Puck.Tools
                 }
 
                 var model = compilation.GetSemanticModel(tree);
+
                 unresolved += CountUnresolvedCalls(tree.GetRoot(), model);
                 var rewritten = new NamedArgsRewriter(model).Visit(tree.GetRoot())!.ToFullString();
                 var original = File.ReadAllText(file);
+
                 if (RewriteIo.ContentEquals(rewritten, original))
                 {
                     continue;
                 }
 
                 var relative = Path.GetRelativePath(EngineRun.RepositoryRoot, file).Replace('\\', '/');
+
                 if (RewriteIo.IntroducesErrors(original, rewritten))
                 {
                     corrupted.Add(relative);
@@ -3766,7 +3861,7 @@ namespace Puck.Tools
         // owning project whose trees form the compilation.
         private static string? FindProjectDirectory(string scanRoot)
         {
-            for (var directory = new DirectoryInfo(scanRoot); directory is not null; directory = directory.Parent)
+            for (var directory = new DirectoryInfo(scanRoot); (directory is not null); directory = directory.Parent)
             {
                 if (directory.EnumerateFiles("*.csproj").Any())
                 {
@@ -3777,7 +3872,6 @@ namespace Puck.Tools
             return null;
         }
     }
-
     internal static class ToolProcess
     {
         // Child inherits this console (output streams live); the environment overlay
@@ -3785,6 +3879,7 @@ namespace Puck.Tools
         public static int RunStreamed(IReadOnlyDictionary<string, string>? environment, string fileName, params string[] arguments)
         {
             var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false };
+
             foreach (var argument in arguments)
             {
                 startInfo.ArgumentList.Add(argument);
@@ -3798,7 +3893,8 @@ namespace Puck.Tools
                 }
             }
 
-            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {fileName}.");
+            using var process = (Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {fileName}."));
+
             process.WaitForExit();
             return process.ExitCode;
         }
@@ -3816,6 +3912,7 @@ namespace Puck.Tools
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
             };
+
             foreach (var argument in arguments)
             {
                 startInfo.ArgumentList.Add(argument);
@@ -3823,6 +3920,7 @@ namespace Puck.Tools
 
             var output = new StringBuilder();
             using var process = new Process { StartInfo = startInfo };
+
             process.OutputDataReceived += (_, eventArguments) =>
             {
                 if (eventArguments.Data is not null)
@@ -3879,17 +3977,18 @@ namespace Puck.Tools
                 return (process.ExitCode, false, output.ToString());
             }
         }
-
         public static string RunCaptured(string fileName, params string[] arguments)
         {
-            var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false, RedirectStandardOutput = true };
+            var startInfo = new ProcessStartInfo { FileName = fileName, RedirectStandardOutput = true, UseShellExecute = false };
+
             foreach (var argument in arguments)
             {
                 startInfo.ArgumentList.Add(argument);
             }
 
-            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {fileName}.");
+            using var process = (Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {fileName}."));
             var output = process.StandardOutput.ReadToEnd();
+
             process.WaitForExit();
             return output;
         }
@@ -3904,6 +4003,7 @@ namespace Puck.Tools
             }
 
             var directory = new DirectoryInfo(Environment.CurrentDirectory);
+
             while (directory is not null)
             {
                 if (File.Exists(Path.Combine(directory.FullName, "Puck.slnx")))

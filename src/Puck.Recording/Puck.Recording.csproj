@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <!-- scripts/ holds standalone .NET 10 file-based programs (dotnet run <script>.cs); they are not part of this
+             assembly and their '#:' directives fail the project compile if swept in. -->
+        <Compile Remove="scripts/**/*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Concentus" Version="[2.*, )" />
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+    </ItemGroup>
+</Project>

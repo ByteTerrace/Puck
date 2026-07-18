@@ -107,7 +107,7 @@ internal sealed class PixelateStage : IPostStage {
             var source = readback.Read(bytesPerPixel: 4, deviceContext: device, format: Format, height: RenderSize, sourceImageHandle: sourceImage.ImageHandle, width: RenderSize).ToArray();
             var actual = readback.Read(bytesPerPixel: 4, deviceContext: device, format: Format, height: RenderSize, sourceImageHandle: outputImage.ImageHandle, width: RenderSize).ToArray();
 
-            var artifactPath = Path.Combine(context.ArtifactsDirectory, "pixelate.png");
+            var artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "pixelate.png");
 
             _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
             PngEncoder.Write(height: (int)RenderSize, path: artifactPath, rgba: actual, width: (int)RenderSize);
@@ -116,23 +116,23 @@ internal sealed class PixelateStage : IPostStage {
             var maxDelta = 0;
 
             for (var y = 0u; (y < RenderSize); y++) {
-                var cellY = Math.Min(((y / CellSize) * CellSize) + (CellSize / 2), (RenderSize - 1));
+                var cellY = Math.Min(val1: (((y / CellSize) * CellSize) + (CellSize / 2)), val2: (RenderSize - 1));
 
                 for (var x = 0u; (x < RenderSize); x++) {
-                    var cellX = Math.Min(((x / CellSize) * CellSize) + (CellSize / 2), (RenderSize - 1));
+                    var cellX = Math.Min(val1: (((x / CellSize) * CellSize) + (CellSize / 2)), val2: (RenderSize - 1));
                     var sourceOffset = (int)(((cellY * RenderSize) + cellX) * 4);
                     var actualOffset = (int)(((y * RenderSize) + x) * 4);
 
                     for (var channel = 0; (channel < 3); channel++) {
-                        var normalized = (source[sourceOffset + channel] / 255f);
+                        var normalized = (source[(sourceOffset + channel)] / 255f);
                         var quantized = (MathF.Round(x: (normalized * (QuantizeLevels - 1f)), mode: MidpointRounding.AwayFromZero) / (QuantizeLevels - 1f));
                         var expected = (int)MathF.Round(x: (quantized * 255f), mode: MidpointRounding.AwayFromZero);
 
-                        maxDelta = Math.Max(maxDelta, Math.Abs(value: (actual[actualOffset + channel] - expected)));
+                        maxDelta = Math.Max(val1: maxDelta, val2: Math.Abs(value: (actual[(actualOffset + channel)] - expected)));
                     }
 
-                    if (actual[actualOffset + 3] != 255) {
-                        return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"pixelate({x},{y}) alpha {actual[actualOffset + 3]} != 255");
+                    if (actual[(actualOffset + 3)] != 255) {
+                        return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"pixelate({x},{y}) alpha {actual[(actualOffset + 3)]} != 255");
                     }
                 }
             }

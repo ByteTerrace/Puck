@@ -6,6 +6,7 @@ using Puck.Demo.Overworld;
 using Puck.Hosting;
 using Puck.Input;
 using Puck.Input.Output;
+using Puck.SdfVm;
 
 namespace Puck.Demo;
 
@@ -78,11 +79,39 @@ internal sealed class DemoCommandModule(
             valueKind: CommandValueKind.Digital
         );
 
+        yield return ModeCommand();
         yield return MagicWordCommand();
     }
 
+    // The `mode <console-index> <dmg|cgb|agb>` verb: an explicit-index live device swap, giving an agent/script parity
+    // with the proximity Bricks-page chord — both land on the identical snapshot-preserving ChangeModel costume change
+    // (the game keeps running, no reboot). The model word is optional (defaults to cgb); an unrecognized word parses cgb.
+    private CommandDefinition ModeCommand() {
+        const string description = "Live device swap: mode <console-index> <dmg|cgb|agb> — a snapshot-preserving costume change, no reboot. Explicit-index parity with the proximity Cycle/Mode chord.";
+        var indexArg = new Argument<int>(name: "console");
+        var modelArg = new Argument<string>(name: "model") {
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = "dmg | cgb | agb (default cgb)",
+        };
+
+        return new CommandDefinition(
+            Description: description,
+            Handler: context => new CommandResult(((m_creatorHost is null)
+                ? "[mode: unavailable — the overworld is not the active root]"
+                : m_creatorHost.SwapConsoleModel(
+                    consoleIndex: (context.Parse?.GetValue(argument: indexArg) ?? 0),
+                    model: (context.Parse?.GetValue(argument: modelArg) ?? "cgb")))),
+            Name: "mode",
+            TextCommand: new Command(description: description, name: "mode") {
+                indexArg,
+                modelArg,
+            },
+            ValueKind: CommandValueKind.Digital
+        );
+    }
+
     // The `forge [avatar|scene]` verb: forges the current creator creation into a cart. The optional subject word picks
-    // which cart the SAME creation forges — `avatar` (default, back-compat) writes the walker overworld .gbc to disk;
+    // which cart the SAME creation forges — `avatar` (default) writes the walker overworld .gbc to disk;
     // `scene` forges + hot-swaps the SDF-art creature cart into the nearest cabinet in-session. Takes one optional token.
     private CommandDefinition ForgeCommand() {
         const string description = "FORGES your creator-mode creation into a cart: forge [avatar|scene]. avatar (default) writes a playable walker overworld .gbc (+ creation JSON, sheet + boot previews) under ./forged-avatars; scene forges the SDF-art creature cart and hot-swaps it into the nearest cabinet in-session. Enter creator mode and place some shapes first.";
@@ -93,9 +122,9 @@ internal sealed class DemoCommandModule(
 
         return new CommandDefinition(
             Description: description,
-            Handler: context => new CommandResult((m_creatorHost is null)
+            Handler: context => new CommandResult(((m_creatorHost is null)
                 ? "[forge: unavailable — the overworld is not the active root]"
-                : m_creatorHost.RequestCreatorForge(subject: ((context.Parse?.GetValue(argument: subject) is { Length: > 0 } tokens) ? tokens[0] : "avatar"))),
+                : m_creatorHost.RequestCreatorForge(subject: ((context.Parse?.GetValue(argument: subject) is { Length: > 0 } tokens) ? tokens[0] : "avatar")))),
             Name: "forge",
             TextCommand: new Command(description: description, name: "forge") {
                 subject,
@@ -113,7 +142,6 @@ internal sealed class DemoCommandModule(
         name: "xyzzy",
         valueKind: CommandValueKind.Digital
     );
-
     private static string MagicWordResponse(int count) => count switch {
         1 => "[xyzzy] A hollow voice says, \"Fool.\" ...yet the nearest cabinet's CRT seems to warm half a shade, as if the room heard you. Nothing is teleported - this is a deterministic machine, with no twisty little maze to lose you in. It only remembers that you asked.",
         2 => "[xyzzy] The hollow voice returns, quieter: \"Still here, then.\" A marquee somewhere flickers a knowing amber.",
@@ -121,6 +149,34 @@ internal sealed class DemoCommandModule(
         _ => "[xyzzy] The word has worn smooth from use; the hollow voice only chuckles now - a soft glitch in the bloom - and nudges you back toward your machines.",
     };
 
+    // The `console.move <x> <y>` verb: the scriptable mirror of dragging the on-screen panel by its title band
+    // (ConsoleOverlayNode.UpdatePanelPosition writes back through the SAME DemoConsole.SetPanelPosition seam) — an
+    // agent/script can position the panel without a pointer. Client px, top-left; clamped to non-negative
+    // coordinates (see SetPanelPosition's remarks for why the fuller screen-aware clamp lives at render time
+    // instead). Works even when the panel never renders (headless/no window) — it only touches DemoConsole/the
+    // published ConsoleTextFrame, never the GPU overlay.
+    private CommandDefinition ConsoleMoveCommand() {
+        const string description = "Moves the on-screen console panel: console.move <x> <y> (client px, top-left). Clamped to non-negative coordinates; echoes the resolved position. Works even when the panel isn't rendering.";
+        var xArg = new Argument<int>(name: "x");
+        var yArg = new Argument<int>(name: "y");
+
+        return new CommandDefinition(
+            Description: description,
+            Handler: context => {
+                var x = (context.Parse?.GetValue(argument: xArg) ?? 0);
+                var y = (context.Parse?.GetValue(argument: yArg) ?? 0);
+                var resolved = console.SetPanelPosition(position: new Vector2(x: x, y: y));
+
+                return new CommandResult($"[console.move] panel -> ({resolved.X:0}, {resolved.Y:0})");
+            },
+            Name: "console.move",
+            TextCommand: new Command(description: description, name: "console.move") {
+                xArg,
+                yArg,
+            },
+            ValueKind: CommandValueKind.Digital
+        );
+    }
     private IEnumerable<CommandDefinition> GetConsoleCommands() {
         yield return CommandDefinition.Verb(
             description: "Deletes the last character of the console line.",
@@ -151,6 +207,17 @@ internal sealed class DemoCommandModule(
                 return new CommandResult($"[console {(active ? "closed" : "open")}]");
             },
             name: "console",
+            valueKind: CommandValueKind.Digital
+        );
+        yield return ConsoleMoveCommand();
+        yield return CommandDefinition.Verb(
+            description: "Resets the on-screen console panel to its default token-derived position.",
+            handler: _ => {
+                console.ClearPanelPosition();
+
+                return new CommandResult("[console.reset] panel position reset to default");
+            },
+            name: "console.reset",
             valueKind: CommandValueKind.Digital
         );
         yield return CommandDefinition.Verb(
@@ -279,7 +346,7 @@ internal sealed class DemoCommandModule(
                     LowFrequency: 0.6f
                 ));
 
-                return new CommandResult(accepted ? "[rumble]" : "[rumble: rejected]");
+                return new CommandResult((accepted ? "[rumble]" : "[rumble: rejected]"));
             },
             name: "gamepad.rumble",
             valueKind: CommandValueKind.Digital
@@ -300,7 +367,7 @@ internal sealed class DemoCommandModule(
                         Right: 0.8f
                     ));
 
-                    return new CommandResult(accepted ? "[trigger-rumble]" : "[trigger-rumble: rejected]");
+                    return new CommandResult((accepted ? "[trigger-rumble]" : "[trigger-rumble: rejected]"));
                 }
 
                 var fallback = output.Rumble(effect: new RumbleEffect(
@@ -309,7 +376,7 @@ internal sealed class DemoCommandModule(
                     LowFrequency: 0.4f
                 ));
 
-                return new CommandResult(fallback ? "[trigger-rumble: dual-motor fallback]" : "[trigger-rumble: unsupported]");
+                return new CommandResult((fallback ? "[trigger-rumble: dual-motor fallback]" : "[trigger-rumble: unsupported]"));
             },
             name: "gamepad.trigger-rumble",
             valueKind: CommandValueKind.Digital
@@ -327,7 +394,7 @@ internal sealed class DemoCommandModule(
 
                 var accepted = output.SetLed(color: new LedColor(Red: 0x00, Green: 0x80, Blue: 0x80));
 
-                return new CommandResult(accepted ? "[led: cyan]" : "[led: rejected]");
+                return new CommandResult((accepted ? "[led: cyan]" : "[led: rejected]"));
             },
             name: "gamepad.led",
             valueKind: CommandValueKind.Digital
@@ -347,7 +414,7 @@ internal sealed class DemoCommandModule(
                 var resistance = TriggerEffectSpec.Feedback(position: 3, strength: 8);
                 var accepted = output.SetTriggerEffect(left: resistance, right: resistance);
 
-                return new CommandResult(accepted ? "[trigger-effect: resistance armed]" : "[trigger-effect: rejected]");
+                return new CommandResult((accepted ? "[trigger-effect: resistance armed]" : "[trigger-effect: rejected]"));
             },
             name: "gamepad.trigger-effect",
             valueKind: CommandValueKind.Digital
@@ -365,7 +432,7 @@ internal sealed class DemoCommandModule(
 
                 var accepted = output.SetTriggerEffect(left: TriggerEffectSpec.Off, right: TriggerEffectSpec.Off);
 
-                return new CommandResult(accepted ? "[trigger-effect: cleared]" : "[trigger-effect: rejected]");
+                return new CommandResult((accepted ? "[trigger-effect: cleared]" : "[trigger-effect: rejected]"));
             },
             name: "gamepad.trigger-effect-off",
             valueKind: CommandValueKind.Digital
@@ -386,7 +453,7 @@ internal sealed class DemoCommandModule(
                 var buzz = TriggerEffectSpec.Vibration(position: 2, amplitude: 6, frequency: 30);
                 var accepted = output.SetTriggerEffectAt(left: buzz, right: buzz, fireAtTick: (inputClock.NowTicks + EngineTicks.PerSecond));
 
-                return new CommandResult(accepted ? "[trigger-schedule: buzz in 1s]" : "[trigger-schedule: rejected]");
+                return new CommandResult((accepted ? "[trigger-schedule: buzz in 1s]" : "[trigger-schedule: rejected]"));
             },
             name: "gamepad.trigger-schedule",
             valueKind: CommandValueKind.Digital

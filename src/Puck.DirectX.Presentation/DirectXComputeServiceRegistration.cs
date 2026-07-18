@@ -17,13 +17,13 @@ public static class DirectXComputeServiceRegistration {
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddDirectXComputeApis(this IServiceCollection services) {
-        services.TryAddSingleton<IGpuComputeCommandPoolFactory>(static _ => new DirectXGpuComputeCommandPoolFactory());
-        services.TryAddSingleton<IGpuComputePipelineFactory>(static _ => new DirectXGpuComputePipelineFactory());
-        services.TryAddSingleton<IGpuComputeRecorder>(static _ => new DirectXGpuComputeRecorder());
-        services.TryAddSingleton<IGpuStorageImageFactory>(static _ => new DirectXGpuStorageImageFactory());
+        services.TryAddSingleton<IGpuComputeCommandPoolFactory>(implementationFactory: static _ => new DirectXGpuComputeCommandPoolFactory());
+        services.TryAddSingleton<IGpuComputePipelineFactory>(implementationFactory: static _ => new DirectXGpuComputePipelineFactory());
+        services.TryAddSingleton<IGpuComputeRecorder>(implementationFactory: static _ => new DirectXGpuComputeRecorder());
+        services.TryAddSingleton<IGpuStorageImageFactory>(implementationFactory: static _ => new DirectXGpuStorageImageFactory());
         // GPU performance counters: the timestamp query-pool factory + recorder (the neutral timing seam, D3D12 peer).
-        services.TryAddSingleton<IGpuTimingPoolFactory>(static _ => new DirectXGpuTimingPoolFactory());
-        services.TryAddSingleton<IGpuTimingRecorder>(static _ => new DirectXGpuTimingRecorder());
+        services.TryAddSingleton<IGpuTimingPoolFactory>(implementationFactory: static _ => new DirectXGpuTimingPoolFactory());
+        services.TryAddSingleton<IGpuTimingRecorder>(implementationFactory: static _ => new DirectXGpuTimingRecorder());
         // The compute-services bundle composes the nine granular compute factories/services a compute node drives
         // (the four above plus the descriptor allocator, queue submitter, shader-module, storage-buffer, and
         // surface-transfer factories the presenter registers). Resolved lazily, so order with those is immaterial.

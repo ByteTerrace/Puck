@@ -46,7 +46,7 @@ static const float ShadowBias = 0.02;
 static const float ShadowSharpness = 9.0;
 static const float ShadowAmbient = 0.30;    // residual light in shadow (ambient term keeps shadows from going black)
 // The soft-shadow march's per-step advance clamp — MIRRORS sdf-world.hlsli's ShadowStepMin / ShadowStepMax (same values,
-// same IQ semantics: the floor keeps a near-tangent march from stalling, the ceiling keeps the penumbra from
+// same semantics: the floor keeps a near-tangent march from stalling, the ceiling keeps the penumbra from
 // over-marching a grazing silhouette). Declared locally because this ray-query kernel cannot include sdf-world.hlsli.
 static const float ShadowStepMin = 0.02;
 static const float ShadowStepMax = 0.6;
@@ -59,9 +59,9 @@ float3 calculateNormal(float3 p) {
     float2 e = float2(NormalProbeEpsilon, 0.0);
 
     return normalize(float3(
-        (map(p + e.xyy).distance - map(p - e.xyy).distance),
-        (map(p + e.yxy).distance - map(p - e.yxy).distance),
-        (map(p + e.yyx).distance - map(p - e.yyx).distance)
+        (mapDistance(p + e.xyy) - mapDistance(p - e.xyy)),
+        (mapDistance(p + e.yxy) - mapDistance(p - e.yxy)),
+        (mapDistance(p + e.yyx) - mapDistance(p - e.yyx))
     ));
 }
 // A DELIBERATELY brighter, higher-contrast gradient than sdf-world.hlsli's sky (0.04,0.05,0.07 -> 0.10,0.13,0.20): this
@@ -133,7 +133,7 @@ float traceGroundPlane(float3 rayOrigin, float3 rayDirection) {
 
 // RT-accelerated soft shadow toward the (directional) light. The TLAS answers "could anything occlude this point?":
 // if the shadow ray pierces no instance bound, the point is fully lit and the occlusion march is SKIPPED (the cull);
-// otherwise an IQ-style soft-shadow march of map() runs, fast-forwarded to the occluder bound. The light is above, so
+// otherwise a soft-shadow march of map() runs, fast-forwarded to the occluder bound. The light is above, so
 // the infinite floor never occludes an upward shadow ray and is left out of the test.
 float lightShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection) {
     float3 origin = (surfacePoint + (surfaceNormal * ShadowBias));
@@ -149,7 +149,7 @@ float lightShadow(float3 surfacePoint, float3 surfaceNormal, float3 lightDirecti
     [loop]
     for (int step = 0; (step < ShadowSteps); step++) {
         // `clearance`, not `distance`: a local named `distance` shadows the HLSL distance() intrinsic.
-        float clearance = map(origin + (lightDirection * traveled)).distance;
+        float clearance = mapDistance(origin + (lightDirection * traveled));
 
         if (clearance < SurfaceEpsilon) {
             return 0.0; // hard occlusion
@@ -187,6 +187,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The symmetry-LOD origin: the camera; shadow rays inherit it, so an instance's LOD level stays self-consistent.
     sdfLodOrigin = rayOrigin;
+    // The per-invocation program-layout cache (sdf-vm.hlsli) — the primary march (<=MaxSteps), lightShadow's march
+    // (<=ShadowSteps), and calculateNormal's taps all call map()/mapDistance() per step, so the decode must happen
+    // exactly once here, before any of them run.
+    sdfProgramLayout = sdfLoadProgramLayout();
     float3 rayDirection = normalize(
         params.cameraForward.xyz +
         (((ndc.x * aspect) * tanHalfFov) * params.cameraRight.xyz) +

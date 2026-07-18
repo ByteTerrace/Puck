@@ -7,7 +7,7 @@ Every verb's result echoes to **stdout**. So an agent — or a deterministic tes
 drives the whole engine by piping a list of verbs in and reading the echoed
 results back, no GUI or controller required. This is the demo's verification
 story (the demo is greenfield; verify by RUNNING it, now reproducibly), per the
-[unification contract](../../overworld-demo-plan.md#the-unification-contract).
+[experience contract](../../overworld-demo-plan.md#experience-contract).
 
 The scripts here are runnable, self-documenting examples of that.
 
@@ -40,7 +40,7 @@ verbs.
 
 ## The observability + sequencing verbs
 
-Scripted determinism hinges on three verbs (added with the unification arc):
+Scripted determinism hinges on three verbs:
 
 - **`state`** — echoes a one-line summary (`hash`, layout `mode`, `booted` mask,
   `players`, `frame`/`tick`) for assertions.
@@ -69,9 +69,38 @@ Two more verbs drive the reveal ladder and its recursion end to end:
 | [`smoke.console`](smoke.console) | The basic control loop: `help`, `state`, boot a cabinet, `step`, `capture`. | *(the default run)* |
 | [`reveal-ladder.console`](reveal-ladder.console) | Rungs 1→2 of the reveal ladder: open immersed, then break the fourth wall and reveal INTO the data-file world (Puckton). | `--run docs/examples/overworld-town.json` (materialize the town first: `--forge-town`) |
 | [`author-forge.console`](author-forge.console) | In-game authoring over stdin: enter the creator, sculpt SDF primitives, forge a cartridge. | *(the default run)* |
+| [`creator-modifiers.console`](creator-modifiers.console) | Every per-shape modifier verb (`creator.mirror`/`.twist`/`.onion` plus the new `.dilate`/`.bend`), on both the ghost and a selected shape, then a save/reload round-trip. | *(the default run)* |
 | [`editor-gate.console`](editor-gate.console) | Rung 3: the meta-victory group that unlocks the editor. | `--run docs/examples/overworld-editor-gate.json` |
 | [`condition-recursion.console`](condition-recursion.console) | The recursion: re-forge a cabinet's win/reveal conditions live. | `--run docs/examples/overworld-editor-gate.json` |
-| [**`grand-tour.console`**](grand-tour.console) | **The whole arc in one narrated session**: cart-cycle the games, preview the recursion, complete the arcade to open the editor (a dark→lit capture montage), then forge a tune + a scene cart. | `--run docs/examples/overworld-editor-gate.json --exit-after-seconds 30` |
-| [`robustness.console`](robustness.console) | **The UNHAPPY paths**: malformed document loads, unwritable capture paths, and out-of-range/garbled verb args — asserts the control plane echoes a clean error and SURVIVES every one (the crash class the pump used to let through). The final `state` printing is the pass condition. | `--run docs/examples/overworld-editor-gate.json` |
-| [`sdf-debug.console`](sdf-debug.console) | Tours the fullscreen SDF debugger: pick shapes, stack modifier ops, the termination/slice views, the scoped-vs-flat field accumulator contrast. | *(the default run; `PUCK_TIMING=1` for GPU ms)* |
-| [`notch-repro.console`](notch-repro.console) | Deliberate repro of the SDF ground-notch defect (`docs/sdf-vm-briefing.md` Live defects): grazing debug scenes that REFUTE the occluder attribution, then the overworld far-ground where the 16 px tile-quantization actually reproduces (depth + termination pair). Uses the `sdf.cam` pose verb. | *(the default run)* |
+| [**`grand-tour.console`**](grand-tour.console) | **The whole experience in one narrated session**: cart-cycle the games, preview the recursion, complete the arcade to open the editor (a dark→lit capture montage), then forge a tune + a scene cart. | `--run docs/examples/overworld-editor-gate.json --exit-after-seconds 30` |
+| [`robustness.console`](robustness.console) | **The unhappy paths**: malformed document loads, unwritable capture paths, and out-of-range or malformed verb arguments. The script asserts that each operation reports a clean error and the control plane remains responsive; the final `state` output is the pass condition. | `--run docs/examples/overworld-editor-gate.json` |
+| [`sdf-debug.console`](sdf-debug.console) | Tours the fullscreen SDF debugger: pick shapes, stack modifier ops, the termination/slice views, the scoped-vs-flat field accumulator contrast. | *(the default run; `gpu.timing on` for GPU ms)* |
+| [`notch-repro.console`](notch-repro.console) | Reproduces the SDF ground-notch defect with grazing debug scenes and the overworld far-ground case where 16 px tile quantization exposes it. Uses the `sdf.cam` pose verb and captures depth and termination views. | *(the default run)* |
+| [`world-camera.console`](world-camera.console) | Exercises `world.camera add`/`list`/`del` and `world.wire` with the `guest:N`/`camera:N` wiring grammar. | *(the default run)* |
+| [`museum-tour.console`](museum-tour.console) | The Replay Museum + the Droste door: wires two exhibits' real `NestedWorldView` content, walks the player up to each with `player.move` for a real establishing/close shot, and captures both (`museum-tour-hall.png`/`-door.png`). | *(the default run)* |
+| [`replay-roundtrip.console`](replay-roundtrip.console) | The persisted-replay verbs (the `Puck.Replay` seed): `replay.capture` a deterministic scripted walk, `replay.list` it, `replay.verify` it TWICE and assert the SAME hash both times — a saved moment re-happening bit-for-bit. | *(the default run)* |
+| [**`planetoid-proof.console`**](planetoid-proof.console) | `planet.spawn` seats a walker on a small planetoid (down = `-grad(SDF)` from the live `SdfFieldEvaluator`); `planet.walk` circumnavigates it in quarter-turn stages, `planet.list` reports Up through all four quadrants, and the script captures each stage before a persisted-replay round trip. | *(the default run)* |
+| [`carve-bake-proof.console`](carve-bake-proof.console) | The carve-bake pipeline (`docs/carve-bake-plan.md`): spawns a settled 20-carve cluster, flips `sdf.carve-bake on`, forces an immediate settle with `sdf.bake now`, verifies the bin swaps to a baked `SampledRegion` brick with `sdf.bake status`, then proves the invalidation (an edit falls back to analytic) and the disable round-trip (back to the identical analytic field). The throughput gate itself (`sdf.carves` >= 60 fps) is `bench.sweep sdf.carve-bake=off,on`, a separate headless proof. | *(the default run)* |
+
+[`../museum-walk.puckreplay`](../museum-walk.puckreplay) is an `OverworldRecording` of a ~3-second
+captured tape (720 ticks), the same bytes `replay-roundtrip.console`'s `replay.capture museum-walk` regenerates. It
+persists under the demo's local-data home when captured live (`%LOCALAPPDATA%\Puck\Demo\Replays\`, see
+`OverworldReplayStore`); the repo copy is a reference artifact, not something a verb loads directly by path.
+
+## Smoke scripts
+
+A starter set that checks the engine-library surfaces behaviorally rather than by hash: each script verifies the
+expected stdout responses, with no captures required.
+
+| Script | What it drives | Run with |
+|---|---|---|
+| [`smoke-sdf-debug.console`](smoke-sdf-debug.console) | Enters the SDF debugger, exercises `sdf.shape`/`sdf.op`/`sdf.shape2`/`sdf.blend`, tours the gallery (list + a jump straight to `drift-monolith`, exhibit 8), touches `sdf.bench`, then exits the mode cleanly. | *(the default run)* |
+| [`smoke-overworld-control.console`](smoke-overworld-control.console) | The scripted-control basics: `state`, `terminal`/`ui.diegetic` toggles, `cart`, `boot`, `step`/`settle`, and a `press` tape — on console 1, since a connected pad auto-takes-over console 0 on boot and `press` refuses an owned cabinet. | *(the default run)* |
+| [`smoke-help-surface.console`](smoke-help-surface.console) | Proves the verb-registry surface itself: the built-in `help` listing, plus one demonstration that `help <verb>` is NOT supported (a clean parse error, not a crash). | *(the default run)* |
+| [`introspection-tour.console`](introspection-tour.console) | The engine narrating itself: `tick.watch on`, drive real state-mutating activity (`boot`/`press`), `tick.explain` reads back the tick history (commands dispatched + hash before→after, short and full), `hash.mark`/`hash.marks` bisect a change over the pipe. | *(the default run)* |
+
+**Run and check**: pipe a script into the demo exactly like any other script here (see [Running one](#running-one)
+above), give `--exit-after-seconds` enough headroom for its `step`/`settle` waits, and watch stdout for the bracketed
+`[verb: …]` echoes — one per line the script drives. A clean run prints an echo for every verb (including a `state`
+as the final line) and the process exits 0; a non-zero exit, an unhandled exception, or a bare `Unrecognized command`
+/ `unavailable` line where a verb was expected to succeed means the surface it protects broke.

@@ -25,10 +25,10 @@ public sealed class CaptureSink : ICaptureSink {
                 break;
             case SurfaceFormat.B8G8R8A8Unorm:
                 for (var index = 0; (index < rgba.Length); index += 4) {
-                    rgba[index + 0] = pixels[index + 2];
-                    rgba[index + 1] = pixels[index + 1];
-                    rgba[index + 2] = pixels[index + 0];
-                    rgba[index + 3] = pixels[index + 3];
+                    rgba[(index + 0)] = pixels[(index + 2)];
+                    rgba[(index + 1)] = pixels[(index + 1)];
+                    rgba[(index + 2)] = pixels[(index + 0)];
+                    rgba[(index + 3)] = pixels[(index + 3)];
                 }
 
                 break;

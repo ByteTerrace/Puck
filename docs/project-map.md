@@ -1,168 +1,140 @@
 # Puck project map
 
-What each project is for, how they layer, and the dependency rules that keep
-the architecture honest. Companion docs: [capability-catalog.md](capability-catalog.md)
-(what the engine can do) and [agent-guide.md](agent-guide.md) (how to work on it).
+This map describes the current responsibility and dependency boundary of each
+project. See [capability-catalog.md](capability-catalog.md) for the feature
+inventory and [agent-guide.md](agent-guide.md) for verification procedures.
 
-## Ground rules
+## Dependency rules
 
-1. **No monolith.** `src/Puck` and `src/Puck.Avatars` are inspiration-only
-   and live in git history, not the tree. Never reintroduce references to
-   those paths; all real functionality lives in the split `Puck.*` projects
-   below.
-2. **Backends are leaves, not roots.** Nothing outside a backend pair may
-   reference Vulkan or DirectX types; everything flows through the neutral
-   seams in `Puck.Abstractions`.
-3. **The launcher is generic.** `Puck.Launcher` imports nothing platform- or
-   backend-specific; the composition root (today `Puck.Demo`) wires
-   `AddPlatformWindowing` and named `SurfacePresenterDescriptor`s.
-4. **Experimental stays decoupled.** Nothing under `experimental/` is
-   referenced by `src/Puck.*` (and vice versa) until it graduates.
+1. All production code lives in split `Puck.*` projects. The former
+   `src/Puck` and `src/Puck.Avatars` monoliths are not part of the repository.
+2. GPU API types remain inside their backend projects. Shared code depends on
+   the neutral contracts in `Puck.Abstractions`.
+3. `Puck.Launcher` is backend- and platform-neutral. A composition root
+   registers windowing, presenters, and content.
+4. `Puck.HumbleGamingBrick` and `Puck.AdvancedGamingBrick` split internally: the
+   core emulator depends only on leaf contract/data projects (`Puck.Maths` for
+   deterministic numerics, `Puck.Snapshots` for the shared state-serialization
+   substrate) — never on shared substrate, backends, or composition roots. Each
+   project's `Hosting/` folder carries its screen-machine engine adapter
+   (`GamingBrickEngine`/`AdvancedGamingBrickEngine`,
+   `MachineHost`/`AdvancedMachineHost`) — the one place the project touches
+   shared substrate, bridging to `Puck.Hosting`'s `QueuedMachineWorker` and the
+   neutral screen-machine contracts in `Puck.Abstractions`. `Puck.Demo` and
+   `Puck.World` consume both cores through their `Hosting/` adapters or through
+   composition-root debug hosts.
+5. `Puck.Demo` and `Puck.World` are composition roots. Neither defines shared
+   engine contracts.
 
 ## Stability
 
-Not everything here is equally settled. Treat these tiers as the honest
-calcification map — stable things deserve caution before reshaping; fluid
-things should not be treated as load-bearing precedent.
-
-**Stable** — reshape only with strong cause:
-
-- `Puck.Vulkan` and `Puck.DirectX` low-level bindings and internal layering
-  (Bindings → Apis → Factories → Interop, mirrored across both). Zero open
-  TODO markers; the parity table classifies every remaining backend delta as
-  *by design*; hardened by Post Tiers B–D plus the 64-seed differential
-  fuzzer. The hardware campaigns (device-lost, VRR, zero-copy) fit *within*
-  this architecture without reshaping it.
-- `Puck.Maths`, `Puck.Assets` — small, contract-heavy, consumer-proven.
-
-**Mostly settled** — architecture fixed; remaining work is additive:
-
-- `Puck.Input` — the transport seam, parsers, coalescer, and capture flow are
-  hardware-proven across three controller families. What remains (Switch/Xbox
-  Bluetooth handshakes, Linux hidraw transport, per-device calibration) adds
-  transports and data, not architecture.
-- `Puck.Abstractions` — namespaces and enum vocabularies are settled
-  (project split rejected — do not relitigate), **but** a deliberate deferred
-  backlog will still rename/reshape parts of the GPU seam (e.g. barrier-enum
-  renames, a graphics-pipeline descriptor, `IGpuRenderTarget` is
-  Vulkan-shaped). Backend *implementations* are stable; some seam
-  *names* are not frozen yet.
-- `Puck.Commands` — the deterministic snapshot path (`InputRouter`,
-  `CommandSnapshot`, recording) is the settled direction, and it coexists
-  with the older registry path (`GamepadInputSource` →
-  `BindingCommandSource` → `CommandRegistry`), which the Input README labels
-  *legacy*. Absorbing or blessing that duality is an open decision; the
-  recording layer also self-describes as the seed of a future `Puck.Replay`
-  project.
-
-**Fluid** — expect churn; don't calcify:
-
-- **`Puck.Demo` is GREENFIELD — the playground.** It is expected to churn and be
-  rewritten; treat nothing in it as settled precedent. Demo changes are NOT
-  engine changes: verify them by RUNNING the demo, never by gating them, and
-  never promote a demo feature into Post unless the user explicitly asks
-  ([agent-guide.md](agent-guide.md#anti-calcification-doctrine) rule 5).
-- `Puck.Scene` document surface (additive-by-design via `Extensions`), the
-  viewport/content-source typing (capture sources not yet in the document), and
-  everything under `experimental/`.
+- **Stable:** the Vulkan and Direct3D 12 backend implementations,
+  `Puck.Maths`, and `Puck.Assets`.
+- **Mostly settled:** the neutral GPU and hosting seams, command snapshots,
+  input transport architecture, the SDF instruction contract, and the run
+  document validation funnel. Changes require contract-level verification.
+- **Fluid:** `Puck.Demo`, `Puck.World`, document additions, authoring tools,
+  and emulator integration. Treat these as consumers, not architectural
+  precedent.
 
 ## Layering
 
-```
-                        ┌─────────────────────────────┐
-   composition root     │          Puck.Demo          │  CLI ⇒ run document ⇒ node graph
-                        └──────┬───────────┬──────────┘
-                               │           │
-   validation           Puck.Post     Puck.Scene         puck.run.v1 documents
-                               │           │
-                        ┌──────┴───────────┴──────────┐
-   engine services      │ Puck.Launcher   Puck.SdfVm  │  run loop · SDF VM · text
-                        │ Puck.Text       Puck.Capture│
-                        └──────┬───────────┬──────────┘
-                               │           │
-   presentation         Puck.Vulkan.Presentation   Puck.DirectX.Presentation
-   backends                    │                            │
-                          Puck.Vulkan                  Puck.DirectX
-                               │                            │
-                        ┌──────┴────────────────────────────┴──────┐
-   shared substrate     │ Puck.Hosting  Puck.Compositing           │
-                        │ Puck.Commands Puck.Input  Puck.Cameras   │
-                        │ Puck.Shaders  Puck.Assets Puck.Platform  │
-                        └──────────────────┬───────────────────────┘
-                                           │
-   leaves (no Puck deps)     Puck.Abstractions · Puck.Maths · Puck.Storage
+```text
+Composition roots     Puck.Demo                 Puck.World
+Validation            Puck.Post                 emulator .Post projects
+Engine services       Puck.Launcher  Puck.Scene  Puck.SdfVm  Puck.Bench
+                      Puck.Text      Puck.Capture Puck.Recording
+                      Puck.HumbleGamingBrick    Puck.AdvancedGamingBrick
+Presentation          Puck.Vulkan.Presentation  Puck.DirectX.Presentation
+Backends              Puck.Vulkan               Puck.DirectX
+Shared substrate      Puck.Hosting  Puck.Commands  Puck.Input  Puck.Platform
+                      Puck.Compositing  Puck.Cameras  Puck.Shaders
+                      Puck.Scripting
+Leaf contracts/data   Puck.Abstractions  Puck.Maths  Puck.Assets  Puck.Storage
+                      Puck.Snapshots
 ```
 
-(Arrows point downward: a project may depend on anything below its row.)
+Dependencies normally point downward. A same-row dependency is acceptable
+when it does not introduce a backend or composition-root dependency. Each
+GamingBrick project's `Hosting/` folder is the deliberate internal exception:
+it is the one place the core emulator's project touches shared substrate,
+bridging to `Puck.Hosting` and the neutral screen-machine contracts in
+`Puck.Abstractions`.
 
-## `src/` projects
+## Contracts and data
 
-### Contracts and numerics (leaf layer — no Puck dependencies)
-
-| Project | Purpose |
+| Project | Responsibility |
 |---|---|
-| `Puck.Abstractions` | The neutral seam every backend implements: GPU device/recorder/pipeline contracts, presentation lifecycle (`ISurfacePresenter`), windowing (`NativeSurfaceBinding`, `NativeDisplayKind`), capture contracts, allocator. Zero dependencies; no Windows-only types. |
-| `Puck.Maths` | Deterministic numeric substrate: unsigned fixed-point (`UFixedQ4816`, `UFixedQ0016/32`), `WorldCoord3`/`FixedVector*`, branchless generic-integer routines. Culture/CPU-independent by contract. |
-| `Puck.Storage` | Object blob storage (local file + Azure Blob behind one routing abstraction), JSON wrapper. |
-| `Puck.Assets` | Content-addressed byte store, 64-bit content hashes, LRU cache. Moves and identifies bytes; never decodes. |
+| `Puck.Abstractions` | Backend-neutral GPU, presentation, capture, timing, machine, lighting, and window contracts. It has no Puck dependencies and exposes no platform-native types. |
+| `Puck.Maths` | Deterministic fixed-point numerics, world coordinates, vectors, and integer algorithms used by authoritative simulation. |
+| `Puck.Assets` | Content-addressed byte sources, hashes, and a fixed-capacity LRU cache. It identifies and moves bytes; it does not decode them. |
+| `Puck.Storage` | Local and Azure object-blob stores, JSON and profile-document helpers, and a version-token seam (opaque read token + optional if-match write) for conditional overwrites. |
+| `Puck.Snapshots` | The shared deterministic state-serialization substrate both GamingBrick cores build snapshots on: `StateWriter`/`StateReader` (little-endian widths + `WriteBlock<T>` memcpy + `Reset` reuse), `SnapshotSection`, the FNV-1a `StateFingerprint`, `ISnapshotable`, the flat `SnapshotImage`, and the `SnapshotDivergence` localizer. Per-core snapshot identity fields and component orders stay in each core. |
 
-### Shared substrate
+## Shared substrate
 
-| Project | Purpose |
+| Project | Responsibility |
 |---|---|
-| `Puck.Hosting` | The recursive node tree: every level implements `IRenderNode` (produce a `Surface`, host children, `OnDeviceLost`). Dual capability model — *inherited* capabilities (device context) flow to all descendants, *held* capabilities (terminal control, input focus) go to one holder. Engine tick clocks. |
-| `Puck.Commands` | The command system: every input modality (keyboard, gamepad, console text, AI, replay, network) becomes typed named commands. Deterministic per-tick `CommandSnapshot`s (interned ids, per-slot lanes) enable bit-identical replay. |
-| `Puck.Input` | Controller input: HID protocols for Switch Pro / Xbox / DualSense, hotplug, IMU fusion, haptics, sub-frame timing. OS transports are injected from `Puck.Platform`. **Read [its README](../src/Puck.Input/README.md) before touching it** — it is the handoff doc. |
-| `Puck.Cameras` | Tiny virtual-camera abstraction (`ICamera` → immutable `CameraSnapshot` basis+projection). Pure math. |
-| `Puck.Shaders` | Compiled-bytecode loading/validation: sniffs SPIR-V vs DXBC/DXIL containers behind one `ShaderStageInfo` contract. |
-| `Puck.Compositing` | Backend-neutral compositor: replays `GpuDrawCommand` lists through `IGpuCommandRecorder`; pipeline identity is the shader asset's content hash. |
-| `Puck.Platform` | Platform implementations: native windowing (Win32 today; Wayland/Xcb/Vi stubs behind `NativeDisplayKind`), Media Foundation camera capture, Win32 HID/XInput/GameInput transports. CsWin32-generated interop, `[SupportedOSPlatform]`-guarded. |
+| `Puck.Hosting` | Recursive `IRenderNode` hosting, capability propagation, terminal ownership, fixed-step simulation context, frame timing, cross-thread publish buffers, and the machine-neutral queued-host substrate (`QueuedMachineWorker` + `IQueuedMachineCore` adapter: worker thread, bounded FIFO with backpressure, triple-buffer publication with the upload lease, native-frame-keyed save-flush debounce, and the vectorized framebuffer repack; `QueuedHostContractProbe` proves its observable contract for both cores' batteries). |
+| `Puck.Commands` | Typed commands, deterministic per-tick `CommandSnapshot`s, recordings, console dispatch, binding profiles and sessions, feature switches, intent sources, and determinism helpers. |
+| `Puck.Input` | Controller discovery and protocols, hotplug, routing arbitration, HID parsing, IMU fusion, haptics, and LampArray bind legends. Platform transports are injected. |
+| `Puck.Platform` | Win32 windowing, HID and controller transports, Media Foundation camera capture, Windows Graphics Capture feeds, the Media Foundation hardware video-encoder ladder (AV1→H.264) and WASAPI loopback/microphone capture sources behind `AddRecordingPlatform` (`Puck.Recording`'s Windows backend), and generated native interop. |
+| `Puck.Cameras` | Immutable virtual-camera snapshots and projection math. |
+| `Puck.Shaders` | Compiled shader-bytecode loading, format detection, and validation. |
+| `Puck.Compositing` | Backend-neutral draw-command replay and shader-asset pipeline identity. |
+| `Puck.Scripting` | Deterministic, fuel-metered WASM addons that convert fixed-point tick input into neutral virtual-pad commands. |
 
-### Backends (one pair per API)
+## GPU backends and presentation
 
-| Project | Purpose |
+| Project | Responsibility |
 |---|---|
-| `Puck.Vulkan` | From-scratch, hand-mirrored Vulkan bindings (no generator, no wrapper library): Bindings → Apis → Factories → Interop layers. No windowing, no shader compilation. |
-| `Puck.Vulkan.Presentation` | Wraps `Puck.Vulkan` into the `ISurfacePresenter`/compute-services contracts; compiles presentation HLSL to SPIR-V via DXC at build time. |
-| `Puck.DirectX` | Direct3D 12 + DXGI via CsWin32 (AOT-friendly, unmarshaled COM). |
-| `Puck.DirectX.Presentation` | The D3D12 mirror of Vulkan.Presentation: presenter, command-list recorder, compute services. |
+| `Puck.Vulkan` | Vulkan bindings, device and resource factories, command recording, sharing, and synchronization. It contains no windowing or shader compiler. |
+| `Puck.Vulkan.Presentation` | Vulkan presenter and compute-service adapters for the neutral hosting contracts. |
+| `Puck.DirectX` | Direct3D 12 and DXGI device, resource, command, sharing, and synchronization implementation. |
+| `Puck.DirectX.Presentation` | Direct3D 12 presenter and compute-service adapters. |
 
-Both backends are at functional parity across the showcase path — see
-[feature-parity-summary.md](feature-parity-summary.md).
+Backend parity is summarized in
+[feature-parity-summary.md](feature-parity-summary.md) and detailed in
+[feature-parity-table.md](feature-parity-table.md).
 
-### Engine services
+## Engine services
 
-| Project | Purpose |
+| Project | Responsibility |
 |---|---|
-| `Puck.SdfVm` | The SDF engine, whole: the ISA (shapes/blends/warps/wallpaper folds), the program builder (with host-baked derived constants), frame sources, AND the GPU host that runs it — `SdfWorldEngine` (device-explicit pipeline core: beam cull → per-view render → split-screen composite; harness and live submission modes) and `SdfEngineNode` (the host-model `IRenderNode`). Backend-neutral by construction (only `Puck.Abstractions` seams). The C# half of a C#/HLSL pair — the HLSL (`sdf-vm` shaders, compiled to SPIR-V **and** DXIL) must stay in sync with the C# ISA. |
-| `Puck.Scene` | Everything-as-data: `PuckRunDocument` (`puck.run.v1`) parse → validate → build; viewports and content sources; validation/fuzzing sections; JSON Schema export (`schema/run.schema.json`). Backend-neutral — resolving GPU services happens in the composition root. |
-| `Puck.Text` | Font atlas model (MTSDF/MSDF/SDF/masks) + em-space text layout. Render-agnostic. |
-| `Puck.Capture` | Frame capture sink: observer hooks (hashing) then dependency-free PNG encode. GPU readback happens upstream. |
-| `Puck.Launcher` | The generic host: window run loop, terminal control (held-capability baton), command pump, `BackendSwitcher`, genlock registry. |
+| `Puck.Launcher` | Generic application host: window loop, command pump, fixed-step accumulator, terminal control, genlock, and backend switching. Composition roots register platform and backend services. |
+| `Puck.Scene` | The `puck.run.v1` object model, parser, validator, graph documents, fuzzing and validation roots, and JSON Schema export. |
+| `Puck.SdfVm` | SDF program model and builder, C#↔HLSL instruction contract, world renderer, frame sources, render assembly, debug tools, composition and anchor seams, camera views, and deterministic world queries. |
+| `Puck.Text` | Font-atlas models, text layout, and deterministic coverage-to-distance atlas generation. It is render-agnostic. |
+| `Puck.Capture` | Frame observers, hashing, and dependency-free PNG encoding. GPU readback occurs upstream. |
+| `Puck.Recording` | The `puck.recording.v1` capture graph: frame source → data-defined overlay compositor → encoder ladder → hand-rolled Matroska/WebM muxer, plus the managed-Opus (Concentus) audio lane and the `RecordingSession` that implements the engine's `ICaptureSink`. It defines the recording document, muxer, overlays, and session; the Media Foundation video-encoder ladder and WASAPI audio sources are the platform backend. Depends only on `Puck.Abstractions`. |
+| `Puck.Bench` | Content-blind benchmark orchestration, timing collection, feature-switch sweeps, scoring, and versioned reports. Content is registered through attach seams. |
+| `Puck.HumbleGamingBrick` | Deterministic shared GB/GBC/AGB-costume SM83 machine (snapshots, forks, cartridges, link cable, PPU, APU, peripherals). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.Hosting`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (pad mapping, KEY1-aware tick conversion, framebuffer, save persistence) plus the host shell and work-RAM peek. Inherits the substrate's queued/backpressure behavior. |
+| `Puck.AdvancedGamingBrick` | Deterministic GBA-native ARM7TDMI machine (cycle-level bus, DMA, timers, PPU, APU, cartridges, snapshots, link cable). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.Hosting`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (KEYINPUT mapping, exact tick conversion, framebuffer, save persistence, direct boot) plus optional explicit BIOS images and the host shell. |
 
-### Composition root and validation
+## Composition roots and validation
 
-| Project | Purpose |
+| Project | Responsibility |
 |---|---|
-| `Puck.Demo` | The game prototype / overworld composition root — Puck.Demo IS the overworld: a controller-driven player in a room with four bootable console cabinets (empty by default; North inserts/ejects, the Cycle bumper rotates the selected cart type); each boot lights a GamingBrick pane and the screen layout walks its staged split (fullscreen → side-by-side → big-top/two-bottom → 2×2 quad). The only composition root: parses CLI flags (or loads a `--run` document), synthesizes/loads a run document, resolves the node graph against real GPU services, wires platform windowing + presenters. `overworld` is the one game graph kind — the in-session experience per the unification contract ([overworld-demo-plan.md](overworld-demo-plan.md#the-unification-contract)); `--rom <path>` synthesizes an immersed `overworld` document (four cabinets, the booted ROM inserted) rather than a bare render target. The `world` graph kind (the document's scene + viewports run LIVE on the host backend, e.g. `--run docs/examples/world-*.json`) is a documented DEVELOPER/CI launch affordance for the example corpus — a document renderer, not a second product mode — sharing the same render assembly (`SdfWorldRenderBuilder`) for engineering reasons, not parity of intent. Deferred `world` affordances (cross-backend `produce`, the `child` boolean, `live-camera` sources) are pre-flighted rejections with attributed errors, exit 2. The demo is a game, not a test suite — verification lives in Puck.Post; the demo keeps exactly one self-gate, `--validate-overworld`, because Puck.Post cannot reference the demo. |
-| `Puck.Post` | The engine's power-on self-test: fail-isolated stages across Tier A (CPU pre-flight) / B (same-device GPU) / C (cross-backend) / D (live subsystems) — run it for the current stage count in its own summary line, don't trust a hardcoded number. The canonical "is the engine healthy" answer — see [agent-guide.md](agent-guide.md). |
+| `Puck.Demo` | Greenfield overworld and creator experience, run-document composition, console control plane, ROM forge, and developer proof surfaces. Verify changes by running the demo. |
+| `Puck.World` | Document-driven (`puck.world.def.v1`, three checked-in worlds, `--world`) network-shaped local multiplayer game host: fixed-point player state, a runtime mutation/journal/undo protocol vocabulary, principals + capability grants (addons included), a per-user player document (`puck.world.player.v1`) with bindings layered onto the `Puck.Commands` stack, cloud-ready storage (local-proven, cloud wiring deferred), session write-back, native self-recording (`puck.recording.v1`, `--recording`, `capture.*` verbs), and SDF world rendering. Verify game behavior by running it. |
+| `Puck.Post` | Fail-isolated engine power-on self-test across CPU, same-device GPU, cross-backend, and live-subsystem tiers. It does not gate greenfield game behavior. |
+| `Puck.HumbleGamingBrick.Post` | Humble core conformance, determinism, reference-ROM, save, and cross-generation link battery. |
+| `Puck.AdvancedGamingBrick.Post` | Advanced core conformance, determinism, commercial-ROM, link, co-simulation, and diagnostic tooling. |
 
-## `experimental/` projects
+## Experimental projects
 
-| Project | Purpose |
+`experimental/` holds only `Puck.BareMetal`; the GamingBrick cores live in
+`src/` alongside the rest of the split projects.
+
+| Project | Responsibility |
 |---|---|
-| `Puck.HumbleGamingBrick` (+ `.Post`) | GB/GBC emulator core (SM83, snapshot/restore/fork determinism) and its tiered POST battery. The base for the [ideal gaming brick plan](ideal-gaming-brick-plan.md). |
-| `Puck.AdvancedGamingBrick` (+ `.Post`) | GBA emulator core (ARM7TDMI, per-cycle timing model) and its POST battery + deep diagnostics (mGBA lockstep co-sim, traces). |
-| `Puck.BareMetal` | Freestanding C# (custom CoreLib + mimalloc, no GC/BCL): Windows samples, UEFI kernels, a freestanding Vulkan window, and the Steam Deck boot target. [README](../experimental/Puck.BareMetal/README.md). |
+| `Puck.BareMetal` | Freestanding Native AOT runtime, UEFI kernels, native experiments, and direct hardware bring-up. |
 
-## Other top-level directories
+## Repository data and tools
 
 | Path | Purpose |
 |---|---|
-| `schema/` | `run.schema.json`, generated by `Puck.Demo --emit-schema`. |
-| `docs/examples/` | Annotated `puck.run.v1` example documents (all validated by the Post `run-document` stage). |
-| `tools/` | Formatting/validation tooling and checked-in baselines. |
-
-The monolithic `src/Puck` and `src/Puck.Avatars` projects (rule 1) live only
-in git history, not the tree — as do the completed design records that
-referenced their paths (see the retirement policy in [README.md](README.md)).
+| `schema/run.schema.json` | Generated JSON Schema for `puck.run.v1`. |
+| `docs/examples/` | Valid and negative document examples plus console scripts. |
+| `tools/` | Formatting, batteries, generation, and analysis utilities. |
+| `.agents/skills/` | Current factual and procedural agent references for repository-specific work. |

@@ -15,7 +15,7 @@ public sealed class TerminalControl : ITerminalControl, IInputFocus {
     /// <inheritdoc />
     public bool IsActiveFor(Puck.Commands.InputDeviceId deviceId) {
         lock (m_releasedDevices) {
-            return !m_allReleased && !m_releasedDevices.Contains(deviceId);
+            return (!m_allReleased && !m_releasedDevices.Contains(item: deviceId));
         }
     }
 
@@ -36,7 +36,7 @@ public sealed class TerminalControl : ITerminalControl, IInputFocus {
     public void Release(Puck.Commands.InputDeviceId? deviceId = null) {
         lock (m_releasedDevices) {
             if (deviceId.HasValue) {
-                m_releasedDevices.Add(deviceId.Value);
+                m_releasedDevices.Add(item: deviceId.Value);
             } else {
                 m_allReleased = true;
             }
@@ -47,7 +47,7 @@ public sealed class TerminalControl : ITerminalControl, IInputFocus {
     public void Claim(Puck.Commands.InputDeviceId? deviceId = null) {
         lock (m_releasedDevices) {
             if (deviceId.HasValue) {
-                m_releasedDevices.Remove(deviceId.Value);
+                m_releasedDevices.Remove(item: deviceId.Value);
             } else {
                 m_allReleased = false;
                 m_releasedDevices.Clear();

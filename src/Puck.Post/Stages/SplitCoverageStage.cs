@@ -27,23 +27,23 @@ internal sealed class SplitCoverageStage : IPostStage {
     // outside every viewport region, so its presence inside [0,1]² is an uncovered band. (The scene's darkest legitimate
     // colors — sky ≥ (10,13,18), the cull's empty-tile flat (18,23,34) — cannot collide with it; see the shader.)
     private const byte LetterboxR = 4;
-    private const byte LetterboxG = 4;
     private const byte LetterboxB = 5;
+    private const byte LetterboxG = 4;
 
     // The eased divider positions to sample: merged (0) → full split (1) → back to merged, on exact binary fractions so
     // the guillotine rect arithmetic below is float-exact.
     private static readonly float[] EaseSteps = [0f, 0.25f, 0.5f, 0.75f, 1f, 0.75f, 0.5f, 0.25f, 0f];
     // The per-pane chase anchors (stand-ins for player positions), fixed and spread around the scene.
     private static readonly Vector3[] PaneAnchors = [
-        new Vector3(-2f, 0.5f, 0f),
-        new Vector3(2f, 0.5f, 0f),
-        new Vector3(0f, 0.5f, -2f),
-        new Vector3(0.5f, 0.5f, 2f),
+        new Vector3(x: -2f, y: 0.5f, z: 0f),
+        new Vector3(x: 2f, y: 0.5f, z: 0f),
+        new Vector3(x: 0f, y: 0.5f, z: -2f),
+        new Vector3(x: 0.5f, y: 0.5f, z: 2f),
     ];
-    private static readonly Vector3 ChaseOffset = new(0f, 4f, 7f);
-    private static readonly Vector3 SharedEye = new(0f, 7f, 11f);
-    private static readonly Vector3 SharedTarget = new(0f, 0.5f, 0f);
-    private static readonly Vector3 TargetLift = new(0f, 0.4f, 0f);
+    private static readonly Vector3 ChaseOffset = new(x: 0f, y: 4f, z: 7f);
+    private static readonly Vector3 SharedEye = new(x: 0f, y: 7f, z: 11f);
+    private static readonly Vector3 SharedTarget = new(x: 0f, y: 0.5f, z: 0f);
+    private static readonly Vector3 TargetLift = new(x: 0f, y: 0.4f, z: 0f);
 
     /// <inheritdoc/>
     public string Name => "split-coverage";
@@ -129,8 +129,8 @@ internal sealed class SplitCoverageStage : IPostStage {
                         var u = ((x + 0.5f) / OutputWidth);
                         var offset = (int)(((y * OutputWidth) + x) * 4);
                         var r = pixels[offset];
-                        var g = pixels[offset + 1];
-                        var b = pixels[offset + 2];
+                        var g = pixels[(offset + 1)];
+                        var b = pixels[(offset + 2)];
 
                         if (
                             (r == LetterboxR) &&
@@ -142,8 +142,8 @@ internal sealed class SplitCoverageStage : IPostStage {
 
                         for (var index = 0; (index < paneCount); index++) {
                             if (Contains(rect: rects[index], u: u, v: v)) {
-                                _ = paneDistinctColors[index].Add(item: ((r << 16) | (g << 8) | b));
-                                paneMaxChannel[index] = Math.Max(paneMaxChannel[index], Math.Max(r, Math.Max((int)g, b)));
+                                _ = paneDistinctColors[index].Add(item: (r << 16) | (g << 8) | b);
+                                paneMaxChannel[index] = Math.Max(val1: paneMaxChannel[index], val2: Math.Max(val1: r, val2: Math.Max(val1: (int)g, val2: b)));
                                 break;
                             }
                         }
@@ -168,7 +168,7 @@ internal sealed class SplitCoverageStage : IPostStage {
 
                 // One artifact per pane count, captured mid-transition (the layout state a frozen-rect bug blanks).
                 if ((step == 2) && (ease == 0.5f)) {
-                    artifactPath = Path.Combine(context.ArtifactsDirectory, $"split-coverage-{paneCount}.png");
+                    artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: $"split-coverage-{paneCount}.png");
                     PngEncoder.Write(height: (int)OutputHeight, path: artifactPath, rgba: pixels, width: (int)OutputWidth);
                 }
             }
@@ -218,21 +218,21 @@ internal sealed class SplitCoverageStage : IPostStage {
     // A small showcase scene: a ground plane and three landmarks, so every camera angle has structure to render.
     private static SdfProgram BuildScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.55f, 0.55f, 0.6f)));
-        var red = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.25f, 0.2f)));
-        var blue = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.5f, 0.85f)));
-        var yellow = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.8f, 0.25f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.55f, y: 0.55f, z: 0.6f)));
+        var red = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.85f, y: 0.25f, z: 0.2f)));
+        var blue = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.5f, z: 0.85f)));
+        var yellow = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.8f, z: 0.25f)));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
-            .Translate(offset: new Vector3(-1.5f, 1f, 0f))
+            .Translate(offset: new Vector3(x: -1.5f, y: 1f, z: 0f))
             .Sphere(radius: 1f, material: red)
             .ResetPoint()
-            .Translate(offset: new Vector3(1.5f, 0.75f, 0f))
+            .Translate(offset: new Vector3(x: 1.5f, y: 0.75f, z: 0f))
             .Sphere(radius: 0.75f, material: blue)
             .ResetPoint()
-            .Translate(offset: new Vector3(0f, 0.5f, -1.5f))
-            .Box(halfExtents: new Vector3(0.6f, 0.5f, 0.6f), round: 0.1f, material: yellow)
+            .Translate(offset: new Vector3(x: 0f, y: 0.5f, z: -1.5f))
+            .Box(halfExtents: new Vector3(x: 0.6f, y: 0.5f, z: 0.6f), round: 0.1f, material: yellow)
             .Build();
     }
 
@@ -245,8 +245,8 @@ internal sealed class SplitCoverageStage : IPostStage {
             var rect = rects[index];
             var eye = Vector3.Lerp(value1: SharedEye, value2: (PaneAnchors[index] + ChaseOffset), amount: ease);
             var target = Vector3.Lerp(value1: SharedTarget, value2: (PaneAnchors[index] + TargetLift), amount: ease);
-            var paneWidth = Math.Max(1u, (uint)(rect.Width * OutputWidth));
-            var paneHeight = Math.Max(1u, (uint)(rect.Height * OutputHeight));
+            var paneWidth = Math.Max(val1: 1u, val2: (uint)(rect.Width * OutputWidth));
+            var paneHeight = Math.Max(val1: 1u, val2: (uint)(rect.Height * OutputHeight));
 
             views[index] = new SdfViewSnapshot(
                 Camera: CameraSnapshot.LookAt(position: eye, target: target, fieldOfViewRadians: FieldOfViewRadians, viewportWidth: paneWidth, viewportHeight: paneHeight),

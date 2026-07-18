@@ -1,10 +1,11 @@
 # Puck.Demo SDF-debug tour — drive the fullscreen single-shape SDF debugger over stdin and capture each view.
-# Run (bash):       PUCK_TIMING=1 dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 55 < docs/examples/scripts/sdf-debug.console
-# Run (PowerShell): $env:PUCK_TIMING=1; Get-Content docs/examples/scripts/sdf-debug.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 55
-# Captures land in artifacts/sdf-debug/ (gitignored). PUCK_TIMING=1 makes sdf.info print per-pass GPU ms.
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 55 < docs/examples/scripts/sdf-debug.console
+# Run (PowerShell): Get-Content docs/examples/scripts/sdf-debug.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 55
+# Captures land in artifacts/sdf-debug/ (gitignored). `gpu.timing on` (this script arms it) makes sdf.info print per-pass GPU ms.
 
 # Enter the mode and pick a torus — the room is replaced by one shape at the origin, framed by the orbit camera.
 sdf
+gpu.timing on
 sdf.shape torus 1 0.35
 debug.view.normals
 step 45

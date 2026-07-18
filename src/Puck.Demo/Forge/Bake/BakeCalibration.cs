@@ -84,9 +84,8 @@ internal static class BakeCalibration {
             new CalibrationSubject(HandColours: art.BackgroundColours, HandTiles: art.NetTile, Height: 8, Name: "net", Program: NetScene(), Width: 8),
         ];
     }
-
     private static byte[] StackTiles(byte[] tile, int count) {
-        var stacked = new byte[tile.Length * count];
+        var stacked = new byte[(tile.Length * count)];
 
         for (var index = 0; (index < count); index++) {
             tile.CopyTo(array: stacked, index: (index * tile.Length));
@@ -101,39 +100,36 @@ internal static class BakeCalibration {
         var builder = new SdfProgramBuilder();
 
         AddBackdrop(builder: builder);
-        _ = builder.ResetPoint().Box(halfExtents: new Vector3(4.6f, 12.6f, 0.4f), round: 0f, material: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.93f, 0.94f, 0.97f), Emissive: 0.8f)));
+        _ = builder.ResetPoint().Box(halfExtents: new Vector3(x: 4.6f, y: 12.6f, z: 0.4f), round: 0f, material: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.93f, y: 0.94f, z: 0.97f), Emissive: 0.8f)));
 
         return builder.Build();
     }
-
     private static SdfProgram BallScene() {
         var builder = new SdfProgramBuilder();
 
         AddBackdrop(builder: builder);
-        _ = builder.ResetPoint().Sphere(radius: 3.1f, material: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.96f, 0.84f, 0.36f), Emissive: 0.8f)));
+        _ = builder.ResetPoint().Sphere(radius: 3.1f, material: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.96f, y: 0.84f, z: 0.36f), Emissive: 0.8f)));
 
         return builder.Build();
     }
-
     private static SdfProgram NetScene() {
         var builder = new SdfProgramBuilder();
 
         AddBackdrop(builder: builder);
 
-        var cyan = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.38f, 0.69f, 0.78f), Emissive: 0.8f));
+        var cyan = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.38f, y: 0.69f, z: 0.78f), Emissive: 0.8f));
 
         // The hand tile's dash pattern: columns 3-4 lit on rows 0-3 and 6-7 — a long dash over a short one.
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 2f, 0f)).Box(halfExtents: new Vector3(1f, 2f, 0.4f), round: 0f, material: cyan);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, -3f, 0f)).Box(halfExtents: new Vector3(1f, 1f, 0.4f), round: 0f, material: cyan);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 2f, z: 0f)).Box(halfExtents: new Vector3(x: 1f, y: 2f, z: 0.4f), round: 0f, material: cyan);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -3f, z: 0f)).Box(halfExtents: new Vector3(x: 1f, y: 1f, z: 0.4f), round: 0f, material: cyan);
 
         return builder.Build();
     }
-
     private static void AddBackdrop(SdfProgramBuilder builder) {
         _ = builder
             .ResetPoint()
-            .Translate(offset: new Vector3(0f, 0f, -6f))
-            .Box(halfExtents: new Vector3(40f, 40f, 0.5f), round: 0f, material: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.05f, 0.06f, 0.10f), Emissive: 1.0f)));
+            .Translate(offset: new Vector3(x: 0f, y: 0f, z: -6f))
+            .Box(halfExtents: new Vector3(x: 40f, y: 40f, z: 0.5f), round: 0f, material: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.05f, y: 0.06f, z: 0.10f), Emissive: 1.0f)));
     }
 
     // ---- the two shade sources --------------------------------------------------------------------------------------
@@ -143,7 +139,7 @@ internal static class BakeCalibration {
         var style = BakeStyles.Classic;
         var camera = CameraSnapshot.LookAt(
             fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-            position: new Vector3(0f, 0f, ((subject.Height / 2f) / TanHalfFov)),
+            position: new Vector3(x: 0f, y: 0f, z: ((subject.Height / 2f) / TanHalfFov)),
             target: Vector3.Zero,
             viewportHeight: (uint)(subject.Height * style.SupersampleFactor),
             viewportWidth: (uint)(subject.Width * style.SupersampleFactor)
@@ -157,18 +153,18 @@ internal static class BakeCalibration {
             Target: BakeTarget.Dmg,
             Views: [new BakeView(Camera: camera, Name: subject.Name, Program: subject.Program)]
         );
-        var background = BakePipeline.Run(device: device, gpu: gpu, plan: plan).Assets.Background
-            ?? throw new InvalidOperationException(message: "The calibration bake produced no background.");
-        var shades = new byte[subject.Width * subject.Height];
+        var background = (BakePipeline.Run(device: device, gpu: gpu, plan: plan).Assets.Background
+            ?? throw new InvalidOperationException(message: "The calibration bake produced no background."));
+        var shades = new byte[(subject.Width * subject.Height)];
         var tilesWide = (subject.Width / 8);
 
         for (var tileY = 0; (tileY < (subject.Height / 8)); tileY++) {
             for (var tileX = 0; (tileX < tilesWide); tileX++) {
-                var tile = HgbImage.DecodeTile2bpp(tileBytes: background.Tiles.TileData.AsSpan(start: (background.TileMap[(tileY * 32) + tileX] * 16), length: 16));
+                var tile = HgbImage.DecodeTile2bpp(tileBytes: background.Tiles.TileData.AsSpan(start: (background.TileMap[((tileY * 32) + tileX)] * 16), length: 16));
 
                 for (var row = 0; (row < 8); row++) {
                     for (var column = 0; (column < 8); column++) {
-                        shades[(((tileY * 8) + row) * subject.Width) + ((tileX * 8) + column)] = tile[(row * 8) + column];
+                        shades[((((tileY * 8) + row) * subject.Width) + ((tileX * 8) + column))] = tile[((row * 8) + column)];
                     }
                 }
             }
@@ -180,7 +176,7 @@ internal static class BakeCalibration {
     // The hand side: each 2bpp index maps through its Volley palette colour's luma onto the DMG ramp — the honest
     // shared currency (the hand palettes are display colours; the bake's indices are display shades).
     private static byte[] HandShades(CalibrationSubject subject) {
-        var shades = new byte[subject.Width * subject.Height];
+        var shades = new byte[(subject.Width * subject.Height)];
         var tileCount = (subject.HandTiles.Length / 16);
 
         for (var tile = 0; (tile < tileCount); tile++) {
@@ -191,7 +187,7 @@ internal static class BakeCalibration {
                 var luma = StyleGrade.Luma(b: (colour.B / 255f), g: (colour.G / 255f), r: (colour.R / 255f));
 
                 // The subjects are one tile wide, so tile t is exactly rows t*8..t*8+7.
-                shades[(tile * 64) + pixel] = (byte)StyleGrade.DmgShade(luma: luma);
+                shades[((tile * 64) + pixel)] = (byte)StyleGrade.DmgShade(luma: luma);
             }
         }
 
@@ -210,7 +206,7 @@ internal static class BakeCalibration {
             var tileMatched = 0;
 
             for (var pixel = 0; (pixel < 64); pixel++) {
-                if (handShades[(tile * 64) + pixel] == bakedShades[(tile * 64) + pixel]) {
+                if (handShades[((tile * 64) + pixel)] == bakedShades[((tile * 64) + pixel)]) {
                     tileMatched++;
                 }
             }
@@ -221,19 +217,18 @@ internal static class BakeCalibration {
 
         return $"bake-calibration | {subject.Name} {subject.Width}×{subject.Height} | {string.Join(separator: " | ", values: perTile)} | subject {((100.0 * matched) / handShades.Length):F1}%";
     }
-
     private static void WriteComparisonPng(IReadOnlyList<(CalibrationSubject Subject, byte[] HandShades, byte[] BakedShades)> panels, string path) {
         var width = 0;
         var height = 0;
 
         foreach (var (subject, _, _) in panels) {
-            width += ((subject.Width * 2) + PanelGap + SubjectGap);
+            width += (((subject.Width * 2) + PanelGap) + SubjectGap);
             height = Math.Max(val1: height, val2: subject.Height);
         }
 
         width -= SubjectGap;
 
-        var rgba = new byte[(width * Scale) * (height * Scale) * 4];
+        var rgba = new byte[(((width * Scale) * (height * Scale)) * 4)];
 
         FillBackground(rgba: rgba);
 
@@ -241,32 +236,30 @@ internal static class BakeCalibration {
 
         foreach (var (subject, handShades, bakedShades) in panels) {
             PaintShades(height: subject.Height, originX: originX, rgba: rgba, rowStride: (width * Scale), shades: handShades, width: subject.Width);
-            PaintShades(height: subject.Height, originX: (originX + subject.Width + PanelGap), rgba: rgba, rowStride: (width * Scale), shades: bakedShades, width: subject.Width);
-            originX += ((subject.Width * 2) + PanelGap + SubjectGap);
+            PaintShades(height: subject.Height, originX: ((originX + subject.Width) + PanelGap), rgba: rgba, rowStride: (width * Scale), shades: bakedShades, width: subject.Width);
+            originX += (((subject.Width * 2) + PanelGap) + SubjectGap);
         }
 
         PngEncoder.Write(height: (height * Scale), path: path, rgba: rgba, width: (width * Scale));
     }
-
     private static void FillBackground(byte[] rgba) {
         for (var offset = 0; (offset < rgba.Length); offset += 4) {
             rgba[offset] = 58;
-            rgba[offset + 1] = 58;
-            rgba[offset + 2] = 70;
-            rgba[offset + 3] = 0xFF;
+            rgba[(offset + 1)] = 58;
+            rgba[(offset + 2)] = 70;
+            rgba[(offset + 3)] = 0xFF;
         }
     }
-
     private static void PaintShades(byte[] rgba, int rowStride, byte[] shades, int width, int height, int originX) {
         for (var y = 0; (y < (height * Scale)); y++) {
             for (var x = 0; (x < (width * Scale)); x++) {
-                var (r, g, b) = DisplayRamp[shades[((y / Scale) * width) + (x / Scale)]];
-                var offset = ((y * rowStride) + ((originX * Scale) + x)) * 4;
+                var (r, g, b) = DisplayRamp[shades[(((y / Scale) * width) + (x / Scale))]];
+                var offset = (((y * rowStride) + ((originX * Scale) + x)) * 4);
 
                 rgba[offset] = r;
-                rgba[offset + 1] = g;
-                rgba[offset + 2] = b;
-                rgba[offset + 3] = 0xFF;
+                rgba[(offset + 1)] = g;
+                rgba[(offset + 2)] = b;
+                rgba[(offset + 3)] = 0xFF;
             }
         }
     }

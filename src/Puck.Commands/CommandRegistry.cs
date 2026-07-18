@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.CommandLine;
 using System.Numerics;
 
@@ -36,9 +37,47 @@ public sealed class CommandRegistry : ICommandSink {
     // hashable, wire-compact identity in a CommandSnapshot — strings stay on the text/config side.
     private readonly Dictionary<string, ushort> m_idByName = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly string[] m_nameById;
+    // The text-dispatch FAST PATH table (see Submit): every command built via CommandDefinition.WithTrailingArgs with
+    // Immediate routing, keyed ORDINAL by its name and each alias — ordinal because System.CommandLine matches command
+    // names case-SENSITIVELY, so a case-insensitive key here would fast-path a line the full parse would reject. Frozen
+    // once at construction (read-only, read-heavy). A miss falls through to the unchanged System.CommandLine parse.
+    private readonly FrozenDictionary<string, CommandDefinition> m_fastPath;
+    // The span-keyed alternate view over m_fastPath: the fast path looks a verb up by the line's leading-token SPAN, so
+    // the verb token never materializes as a string. StringComparer.Ordinal supplies the IAlternateEqualityComparer that
+    // makes this legal; built once, reused every dispatch.
+    private readonly FrozenDictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_fastPathAlt;
+    // The Digital impulse every fast-path verb carries (WithTrailingArgs and WithWireArgs are always Digital), hoisted to
+    // a constant so a fast-path dispatch neither recomputes it nor rebuilds the CommandContext around it.
+    private static readonly CommandValue s_digitalImpulse = CommandValue.Digital(active: true);
+    // The ONE reused context for every fast-path dispatch: Parse/Phase/Registry are constant on this path and Value is
+    // always s_digitalImpulse, so a single immutable instance serves every wire-native and trailing-args fast dispatch —
+    // no per-line context construction. (CommandContext is a readonly record struct, so reusing it is safe.)
+    private readonly CommandContext m_fastContext;
+    // The wire acknowledgement mode: false (the default) echoes every accepted line exactly as before; true (`wire.ack
+    // quiet`) drops the SUCCESS acks of wire-native verbs, so a flood of accepted commands costs no echo bytes. Errors
+    // and query (EchoesData) verbs are never suppressed. Toggled by the built-in `wire.ack` verb.
+    private bool m_acksQuiet;
+    // The built-in `wire.ack [on|quiet]` verb, registered beside `help`: it reports or flips m_acksQuiet. Handled inline
+    // in Submit (like help), so it never enters a module or the fast path.
+    private readonly Argument<string[]> m_wireAckArgument = new(name: "mode") {
+        Arity = ArgumentArity.ZeroOrMore,
+        Description = "on | quiet",
+    };
+    private readonly Command m_wireAckCommand;
     // The deterministic-input sink a Simulation-class submitted command is folded into instead of running inline;
     // null until a host wires one (the live console-driving registry), so every other registry keeps the inline path.
     private ICommandInjectionSink? m_injectionSink;
+    // TextCommandSource uses this as a FIFO barrier: after it submits a deferred simulation mutation, later
+    // Immediate-routed stdin lines stay queued until the mutation's snapshot has actually applied. Further
+    // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order.
+    private int m_pendingSimulationSubmissions;
+    // The span-keyed alternate view over m_byName, so RoutesToSimulation classifies a line's verb token without
+    // materializing it. Built once at construction, after registration completes.
+    private readonly Dictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_byNameAlt;
+
+    /// <summary>The cap on whitespace-delimited tokens the fast path handles from a <see langword="stackalloc"/> buffer;
+    /// a line with more falls through to the full parse. Far above any real console verb's token count.</summary>
+    private const int MaxFastPathTokens = 16;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandRegistry"/> class, registering the commands
@@ -55,11 +94,11 @@ public sealed class CommandRegistry : ICommandSink {
 
         m_observers = ((observers is null)
             ? []
-            : (observers as ICommandObserver[]) ?? observers.ToArray());
+            : ((observers as ICommandObserver[]) ?? observers.ToArray()));
 
         foreach (var module in modules) {
             foreach (var definition in module.GetCommands()) {
-                m_root.Subcommands.Add(definition.TextCommand);
+                m_root.Subcommands.Add(item: definition.TextCommand);
                 m_byTextCommand[definition.TextCommand] = definition;
                 m_byName[definition.Name] = definition;
 
@@ -70,7 +109,16 @@ public sealed class CommandRegistry : ICommandSink {
             }
         }
 
-        m_root.Subcommands.Add(m_helpCommand);
+        m_root.Subcommands.Add(item: m_helpCommand);
+
+        // The wire's own control verb, beside help: `wire.ack [on|quiet]` reports or flips the acknowledgement mode.
+        m_wireAckCommand = new Command(
+            description: "Sets or reports the stdin acknowledgement mode: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the success acks of side-effecting verbs (errors and query verbs like player.where still echo); no argument reports the current mode.",
+            name: "wire.ack"
+        ) {
+            m_wireAckArgument,
+        };
+        m_root.Subcommands.Add(item: m_wireAckCommand);
 
         // Intern a stable id per distinct command. Ordinal-sort the canonical names so the assignment is
         // identical across machines and builds (independent of module registration order); aliases resolve to
@@ -88,7 +136,33 @@ public sealed class CommandRegistry : ICommandSink {
         foreach (var (name, definition) in m_byName) {
             m_idByName[name] = m_idByName[definition.Name];
         }
+
+        // The fast-path table: every name/alias whose definition carries a trailing-args handler (built via
+        // CommandDefinition.WithTrailingArgs) AND runs inline (Immediate routing — a Simulation command must still fold
+        // into the snapshot stream, so it is excluded and takes the full parse). Ordinal-keyed to mirror
+        // System.CommandLine's case-sensitive command matching. m_byName's keys carry each name and alias verbatim.
+        var fastPath = new Dictionary<string, CommandDefinition>(comparer: StringComparer.Ordinal);
+
+        foreach (var (name, definition) in m_byName) {
+            if ((definition.TrailingArgsHandler is not null) && (definition.Routing == CommandRouting.Immediate)) {
+                fastPath[name] = definition;
+            }
+        }
+
+        m_fastPath = fastPath.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        m_fastPathAlt = m_fastPath.GetAlternateLookup<ReadOnlySpan<char>>();
+        m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
+        m_fastContext = new CommandContext(
+            Parse: null,
+            Phase: CommandPhase.Completed,
+            Registry: this,
+            Value: s_digitalImpulse
+        );
     }
+
+    /// <summary>Whether accepted-command acks are echoed. <see langword="false"/> once <c>wire.ack quiet</c> is set — a
+    /// wire-native handler reads this (via <see cref="WireArgs.Echo"/>) to skip building a success echo it would drop.</summary>
+    internal bool AcksEnabled => !m_acksQuiet;
 
     /// <summary>The number of distinct commands; each has an interned id in <c>[0, <see cref="CommandCount"/>)</c>.</summary>
     public int CommandCount => m_nameById.Length;
@@ -123,6 +197,73 @@ public sealed class CommandRegistry : ICommandSink {
             CommandValueKind.Axis2D => CommandValue.Axis(value: Vector2.One),
             _ => CommandValue.Inactive(kind: kind),
         };
+    }
+
+    /// <summary>Splits a line into whitespace-delimited token ranges without allocating. A token is a maximal run of
+    /// non-whitespace characters (<see cref="char.IsWhiteSpace(char)"/>, matching <see cref="string.Split(char[], StringSplitOptions)"/>'s
+    /// null-separator semantics exactly), so this reproduces the System.CommandLine tokenizer for unquoted input.
+    /// Fills <paramref name="tokens"/> with one <see cref="Range"/> per token.</summary>
+    /// <param name="line">The line to tokenize.</param>
+    /// <param name="tokens">The destination span (capacity <see cref="MaxFastPathTokens"/>).</param>
+    /// <returns>The token count, or <c>-1</c> when the line has more tokens than <paramref name="tokens"/> can hold
+    /// (the caller then falls through to the full parse).</returns>
+    private static int Tokenize(ReadOnlySpan<char> line, Span<Range> tokens) {
+        var count = 0;
+        var index = 0;
+
+        while (index < line.Length) {
+            while ((index < line.Length) && char.IsWhiteSpace(c: line[index])) {
+                index++;
+            }
+
+            if (index >= line.Length) {
+                break;
+            }
+
+            var start = index;
+
+            while ((index < line.Length) && !char.IsWhiteSpace(c: line[index])) {
+                index++;
+            }
+
+            if (count >= tokens.Length) {
+                return -1;
+            }
+
+            tokens[count++] = new Range(start: start, end: index);
+        }
+
+        return count;
+    }
+
+    /// <summary>Reports or flips the wire acknowledgement mode for the built-in <c>wire.ack</c> verb.</summary>
+    /// <param name="mode">The parsed trailing tokens: empty reports the current mode; <c>on</c>/<c>quiet</c> set it.</param>
+    /// <returns>A result echoing the resulting mode, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
+    private CommandResult ApplyWireAck(string[] mode) {
+        if (mode.Length == 0) {
+            return new CommandResult((m_acksQuiet ? "[wire.ack: quiet]" : "[wire.ack: on]"));
+        }
+
+        if (mode.Length > 1) {
+            return new CommandResult(Output: "[wire.ack: expected one of on | quiet]") {
+                IsError = true,
+            };
+        }
+
+        switch (mode[0]) {
+            case "on":
+                m_acksQuiet = false;
+
+                return new CommandResult(Output: "[wire.ack: on]");
+            case "quiet":
+                m_acksQuiet = true;
+
+                return new CommandResult(Output: "[wire.ack: quiet]");
+            default:
+                return new CommandResult(Output: $"[wire.ack: unknown mode '{mode[0]}' — expected on | quiet]") {
+                    IsError = true,
+                };
+        }
     }
 
     /// <summary>Builds the help listing of every registered command and its description, ordered by name.</summary>
@@ -211,6 +352,37 @@ public sealed class CommandRegistry : ICommandSink {
 
         return m_activeMaps.Contains(item: map);
     }
+    /// <summary>Determines whether a source-driven command id currently belongs to an active map.</summary>
+    /// <param name="commandId">The interned command id.</param>
+    /// <returns><see langword="true"/> when the command exists and its map is active.</returns>
+    internal bool IsSourceCommandActive(ushort commandId) {
+        if (commandId >= m_nameById.Length) {
+            return false;
+        }
+
+        return (m_byName.TryGetValue(key: m_nameById[commandId], value: out var definition) &&
+            m_activeMaps.Contains(item: definition.Map));
+    }
+
+    /// <summary>Whether a submitted simulation command is waiting for its fixed-step snapshot to apply.</summary>
+    internal bool HasPendingSimulationSubmission => (m_pendingSimulationSubmissions != 0);
+    /// <summary>Whether the line's verb resolves to a <see cref="CommandRouting.Simulation"/>-routed command. Such a
+    /// line may drain behind an unapplied deferred mutation (it folds into the same pending snapshot, FIFO); an
+    /// unresolved or <see cref="CommandRouting.Immediate"/> line reads applied state, so it must wait.</summary>
+    /// <param name="line">The command line whose leading verb token is classified.</param>
+    internal bool RoutesToSimulation(string line) {
+        var content = line.AsSpan().Trim();
+
+        if (content.IsEmpty) {
+            return false;
+        }
+
+        var separator = content.IndexOfAny(values: " \t");
+        var verb = ((separator < 0) ? content : content[..separator]);
+
+        return (m_byNameAlt.TryGetValue(key: verb, value: out var definition) &&
+            (definition.Routing == CommandRouting.Simulation));
+    }
     /// <summary>
     /// Applies one fixed-step tick's <see cref="CommandSnapshot"/>: records each command's value for polling
     /// (<see cref="GetValue"/>) and dispatches edge handlers, gated by the active command maps. This is the
@@ -229,6 +401,23 @@ public sealed class CommandRegistry : ICommandSink {
             foreach (var entry in lane.Entries) {
                 var name = m_nameById[entry.CommandId];
 
+                // A submitted text entry owns a FIFO-barrier count. Always route it through the completion helper first:
+                // even a defensive name-table miss must reach that helper's finally block and release the barrier.
+                if (entry.Text is { } line) {
+                    if (entry.Dispatch) {
+                        ApplySubmittedSimulation(
+                            line: line,
+                            expectedCommandId: entry.CommandId,
+                            slot: lane.Slot,
+                            completesTextSubmission: entry.CompletesTextSubmission
+                        );
+                    } else if (entry.CompletesTextSubmission && (m_pendingSimulationSubmissions != 0)) {
+                        m_pendingSimulationSubmissions--;
+                    }
+
+                    continue;
+                }
+
                 if (!m_byName.TryGetValue(
                     key: name,
                     value: out var definition
@@ -242,13 +431,7 @@ public sealed class CommandRegistry : ICommandSink {
 
                 m_state[name] = entry.Value;
 
-                // Dispatch matches the default ActivateOn: a press edge or a continuous axis fires the handler;
-                // a held-digital re-assert (Active + Digital) and a release edge do not — a handler that wants a
-                // release reads the phase. Polling (GetValue) still sees the held value via m_state above.
-                var dispatch = ((entry.Phase == CommandPhase.Started) ||
-                    ((entry.Phase == CommandPhase.Active) && (entry.Value.Kind != CommandValueKind.Digital)));
-
-                if (!dispatch) {
+                if (!entry.Dispatch) {
                     continue;
                 }
 
@@ -257,14 +440,46 @@ public sealed class CommandRegistry : ICommandSink {
                     Parse: null,
                     Phase: entry.Phase,
                     Registry: this,
+                    Slot: lane.Slot,
                     Text: null,
-                    Value: entry.Value
+                    Value: entry.Value,
+                    AssignedSlot: entry.AssignedSlot
                 );
 
                 _ = Dispatch(
                     context: in context,
                     definition: definition
                 );
+            }
+        }
+    }
+    // Executes a simulation-routed text command from its tick snapshot. Submit already parsed and identified the line
+    // before injection; parsing again here recreates the handler's ordinary text context without re-routing it.
+    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, int slot, bool completesTextSubmission) {
+        try {
+            var parseResult = m_root.Parse(commandLine: line);
+
+            if ((parseResult.Errors.Count != 0) ||
+                !m_byTextCommand.TryGetValue(key: parseResult.CommandResult.Command, value: out var definition) ||
+                !TryGetId(name: definition.Name, id: out var actualCommandId) ||
+                (actualCommandId != expectedCommandId)) {
+                return;
+            }
+
+            var value = (definition.ValueSelector?.Invoke(arg: parseResult) ?? ImpulseValue(kind: definition.ValueKind));
+            var context = new CommandContext(
+                Parse: parseResult,
+                Phase: CommandPhase.Completed,
+                Registry: this,
+                Slot: slot,
+                Text: line,
+                Value: value
+            );
+
+            _ = Dispatch(context: in context, definition: definition, suppressWireAck: true);
+        } finally {
+            if (completesTextSubmission && (m_pendingSimulationSubmissions != 0)) {
+                m_pendingSimulationSubmissions--;
             }
         }
     }
@@ -329,9 +544,14 @@ public sealed class CommandRegistry : ICommandSink {
     /// <summary>Runs a command's handler and notifies every observer of the dispatch.</summary>
     /// <param name="context">The invocation state passed to the handler.</param>
     /// <param name="definition">The command being dispatched.</param>
+    /// <param name="suppressWireAck">Whether quiet wire mode may suppress a successful acknowledgement.</param>
     /// <returns>The result the handler returned.</returns>
-    private CommandResult Dispatch(in CommandContext context, CommandDefinition definition) {
+    private CommandResult Dispatch(in CommandContext context, CommandDefinition definition, bool suppressWireAck = false) {
         var result = definition.Handler(arg: context);
+
+        if (suppressWireAck && m_acksQuiet && (definition.WireArgsHandler is not null) && !definition.EchoesData && !result.IsError) {
+            result = CommandResult.None;
+        }
 
         if (m_observers.Length != 0) {
             var activation = new CommandActivation(
@@ -341,7 +561,7 @@ public sealed class CommandRegistry : ICommandSink {
                 Text: context.Text
             );
 
-            for (var index = 0; index < m_observers.Length; index++) {
+            for (var index = 0; (index < m_observers.Length); index++) {
                 m_observers[index].OnCommand(activation: in activation);
             }
         }
@@ -369,8 +589,9 @@ public sealed class CommandRegistry : ICommandSink {
     /// <param name="line">The command line to parse and execute.</param>
     /// <returns>
     /// The handler's result; <see cref="CommandResult.None"/> for an empty or whitespace line; the help
-    /// listing for the <c>help</c> command; a queued acknowledgement for a simulation command routed to the
-    /// deterministic input path; or a message describing parse errors or an unknown command.
+    /// listing for the <c>help</c> command; no immediate result for a simulation command routed to the deterministic
+    /// input path (its real result is produced when its tick is applied); or a message describing parse errors or an
+    /// unknown command.
     /// </returns>
     /// <remarks>
     /// This path is never gated by command maps; it is the deliberate console entry point. A
@@ -384,6 +605,59 @@ public sealed class CommandRegistry : ICommandSink {
 
         if (string.IsNullOrWhiteSpace(value: line)) {
             return CommandResult.None;
+        }
+
+        // FAST PATH for the plain `verb arg arg…` line shape — skips the System.CommandLine parse (measured ~5.2 µs +
+        // ~8.6 KB per line at the World's ~34-verb surface), the measured cause of the stdin proof's worst-frame dips
+        // when a burst of lines lands in one Collect. Eligible ONLY when the line carries neither `"` (System.CommandLine's
+        // one quote char) nor `@` (its response-file sigil) AND the first whitespace-delimited token EXACTLY names a
+        // command registered via WithTrailingArgs/WithWireArgs with Immediate routing. Anything else — an unknown/other-
+        // shape first token, a quoted or response-file line, help, wire.ack — falls through to the parse below UNCHANGED,
+        // so all error text and rich behavior stay byte-identical.
+        //
+        // ZERO-COPY: the line is tokenized into a stackalloc Span<Range> (Tokenize reproduces
+        // Split((char[])null, RemoveEmptyEntries) whitespace semantics exactly), the verb is looked up by its SPAN via
+        // the frozen alternate lookup (so the verb token never materializes), and the reused m_fastContext is handed to
+        // the handler. A WIRE-NATIVE verb (WithWireArgs) receives a zero-copy WireArgs over the trailing token ranges —
+        // no substrings, no argument array; a trailing-args verb (Demo) gets a materialized string[], built
+        // only now, at dispatch. The context's Parse is null: no fast-path handler reads context.Parse/Value/Phase/
+        // DeviceId (they read only their args) — a Verb like the movement keys does, but a Verb never enters this path.
+        if ((line.IndexOf(value: '"') < 0) && (line.IndexOf(value: '@') < 0)) {
+            Span<Range> tokenRanges = stackalloc Range[MaxFastPathTokens];
+            var tokenCount = Tokenize(line: line, tokens: tokenRanges);
+
+            if ((tokenCount > 0) && m_fastPathAlt.TryGetValue(key: line.AsSpan(range: tokenRanges[0]), value: out var fast)) {
+                var argRanges = tokenRanges[1..tokenCount];
+
+                m_state[fast.Name] = s_digitalImpulse;
+
+                if (fast.WireArgsHandler is { } wireHandler) {
+                    var result = wireHandler(
+                        arg1: m_fastContext,
+                        arg2: new WireArgs(line: line, ranges: argRanges, echo: !m_acksQuiet)
+                    );
+
+                    // Quiet mode drops a SUCCESSFUL wire-native ack (the handler already skipped building it via
+                    // WireArgs.Echo, so this is the contract backstop): a query verb's data (EchoesData) and every error
+                    // (IsError) always survive, so a scripted run still reads back poses and still sees its failures.
+                    return ((m_acksQuiet && !fast.EchoesData && !result.IsError)
+                        ? CommandResult.None
+                        : result);
+                }
+
+                // Legacy trailing-args verb: materialize the argument strings now (only the trailing tokens, and only on
+                // an actual dispatch — the verb token is never substringed).
+                var args = new string[argRanges.Length];
+
+                for (var index = 0; (index < args.Length); index++) {
+                    args[index] = line[argRanges[index]];
+                }
+
+                return fast.TrailingArgsHandler!(
+                    arg1: m_fastContext,
+                    arg2: args
+                );
+            }
         }
 
         var parseResult = m_root.Parse(commandLine: line);
@@ -401,6 +675,10 @@ public sealed class CommandRegistry : ICommandSink {
             return new CommandResult(BuildHelpText());
         }
 
+        if (command == m_wireAckCommand) {
+            return ApplyWireAck(mode: (parseResult.GetValue(argument: m_wireAckArgument) ?? []));
+        }
+
         if (m_byTextCommand.TryGetValue(
             key: command,
             value: out var definition
@@ -414,21 +692,38 @@ public sealed class CommandRegistry : ICommandSink {
             if ((definition.Routing == CommandRouting.Simulation) &&
                 (m_injectionSink is { } sink) &&
                 TryGetId(name: definition.Name, id: out var commandId)) {
-                sink.Inject(injection: new CommandInjection(CommandId: commandId, Value: value, Phase: CommandPhase.Started));
+                m_pendingSimulationSubmissions++;
 
-                return new CommandResult($"[queued: {definition.Name}]");
+                try {
+                    sink.Inject(injection: new CommandInjection(CommandId: commandId, Value: value, Phase: CommandPhase.Started, Text: line) {
+                        CompletesTextSubmission = true,
+                    });
+                } catch {
+                    m_pendingSimulationSubmissions--;
+
+                    throw;
+                }
+
+                return CommandResult.None;
             }
 
             m_state[definition.Name] = value;
 
             // The text path returns its result to the caller, so it is not observed (the caller displays
             // it); observers exist for the source-driven path, which has no return value to inspect.
-            return definition.Handler(arg: new CommandContext(
+            var result = definition.Handler(arg: new CommandContext(
                 Parse: parseResult,
                 Phase: CommandPhase.Completed,
                 Registry: this,
                 Value: value
             ));
+
+            // Apply the same quiet-mode ack suppression the fast path does, so a quoted or many-token wire line (which
+            // takes this full parse) obeys wire.ack identically: a successful side-effecting wire-native ack is dropped,
+            // while a query verb's data and every error survive. Non-wire verbs are never suppressed.
+            return ((m_acksQuiet && (definition.WireArgsHandler is not null) && !definition.EchoesData && !result.IsError)
+                ? CommandResult.None
+                : result);
         }
 
         return new CommandResult($"Unknown command: {line}");

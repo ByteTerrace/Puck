@@ -102,8 +102,8 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
         // UAV -> INDIRECT_ARGUMENT before ExecuteIndirect). Host-visible (default): an upload-heap buffer, already a
         // legal ExecuteIndirect source — its GENERIC_READ creation state includes INDIRECT_ARGUMENT and upload
         // resources never leave it, so no buffer-state transition is needed. Neither needs an extra D3D12 buffer flag.
-        return deviceLocal
+        return (deviceLocal
             ? CreateDeviceLocal(deviceContext: deviceContext, sizeBytes: sizeBytes)
-            : Create(deviceContext: deviceContext, sizeBytes: sizeBytes);
+            : Create(deviceContext: deviceContext, sizeBytes: sizeBytes));
     }
 }

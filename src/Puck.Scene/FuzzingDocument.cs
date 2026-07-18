@@ -49,7 +49,7 @@ public sealed record FuzzingDocument {
             } else if ((range[0] < 0) || (range[1] < range[0])) {
                 errors.Add(path: $"{path}.seedRange", message: $"seedRange [{range[0]}, {range[1]}] must satisfy 0 <= start <= end");
             } else if ((((long)range[1] - range[0]) + 1) > MaxSeedSpan) {
-                errors.Add(path: $"{path}.seedRange", message: $"seedRange [{range[0]}, {range[1]}] spans {((long)range[1] - range[0]) + 1} seeds; the limit is {MaxSeedSpan} (one isolated child process is spawned per seed)");
+                errors.Add(path: $"{path}.seedRange", message: $"seedRange [{range[0]}, {range[1]}] spans {(((long)range[1] - range[0]) + 1)} seeds; the limit is {MaxSeedSpan} (one isolated child process is spawned per seed)");
             }
         }
 

@@ -23,9 +23,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkBack = 0x08;
     private const int VkC = 0x43;
     private const int VkControl = 0x11;
-    private const int VkLWin = 0x5B;
-    private const int VkRWin = 0x5C;
-    private const int VkShift = 0x10;
     private const int VkDown = 0x28;
     private const int VkEscape = 0x1B;
     private const int VkF1 = 0x70;
@@ -36,38 +33,49 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkF6 = 0x75;
     private const int VkF7 = 0x76;
     private const int VkF8 = 0x77;
+    private const int VkLWin = 0x5B;
     private const int VkLeft = 0x25;
     private const int VkMenu = 0x12;
     private const int VkOem3 = 0xC0;
+    private const int VkRWin = 0x5C;
     private const int VkReturn = 0x0D;
     private const int VkRight = 0x27;
+    private const int VkShift = 0x10;
+    private const int VkSpace = 0x20;
     private const int VkTab = 0x09;
     private const int VkUp = 0x26;
     private const int VkV = 0x56;
+    private const int VkZ = 0x5A;
     private const uint WmChar = 0x0102;
     private const uint WmClose = 0x0010;
     private const uint WmDestroy = 0x0002;
     private const uint WmDisplayChange = 0x007E;
-    private const uint WmWindowPosChanged = 0x0047;
     private const uint WmEraseBkgnd = 0x0014;
     private const uint WmInput = 0x00FF;
     private const uint WmKeyDown = 0x0100;
     private const uint WmKeyUp = 0x0101;
+    private const uint WmLButtonDown = 0x0201;
+    private const uint WmLButtonUp = 0x0202;
+    private const uint WmMButtonDown = 0x0207;
+    private const uint WmMButtonUp = 0x0208;
     private const uint WmMouseMove = 0x0200;
     private const uint WmNcCreate = 0x0081;
     private const uint WmNcDestroy = 0x0082;
     private const uint WmPaint = 0x000F;
+    private const uint WmRButtonDown = 0x0204;
+    private const uint WmRButtonUp = 0x0205;
     private const uint WmSetCursor = 0x0020;
     private const uint WmShowWindow = 0x0018;
     private const uint WmSize = 0x0005;
     private const uint WmSysKeyDown = 0x0104;
     private const uint WmSysKeyUp = 0x0105;
+    private const uint WmWindowPosChanged = 0x0047;
     // Raw Input (WM_INPUT): un-accelerated, full-rate relative mouse motion, summed pump-level per frame.
     private const uint RidInput = 0x10000003;
-    private const uint RimTypeMouse = 0;
-    private const ushort RiMouseMoveAbsolute = 0x01;
-    private const ushort HidUsagePageGeneric = 0x01;
     private const ushort HidUsageGenericMouse = 0x02;
+    private const ushort HidUsagePageGeneric = 0x01;
+    private const ushort RiMouseMoveAbsolute = 0x01;
+    private const uint RimTypeMouse = 0;
     private const uint WsOverlappedWindow = 0x00CF0000;
     private const uint WsPopup = 0x80000000;
     private const uint WsVisible = 0x10000000;
@@ -436,7 +444,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
                 return 0;
             case WmDisplayChange:
-                // Display mode/topology changed — the VRR range may differ now; let the pacer re-query. Still forward to
+                // Display mode/topology changed — signal timing or advertised VRR capabilities may differ; re-query. Still forward to
                 // DefWindowProc so any default processing runs.
                 OnDisplayConfigurationChanged();
                 return User32.DefWindowProc(
@@ -485,6 +493,18 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 );
             case WmMouseMove:
                 return HandleMouseMove(lParam: lParam);
+            case WmLButtonDown:
+                return HandlePointerButtonDown(button: 0, windowHandle: windowHandle);
+            case WmLButtonUp:
+                return HandlePointerButtonUp(button: 0);
+            case WmRButtonDown:
+                return HandlePointerButtonDown(button: 1, windowHandle: windowHandle);
+            case WmRButtonUp:
+                return HandlePointerButtonUp(button: 1);
+            case WmMButtonDown:
+                return HandlePointerButtonDown(button: 2, windowHandle: windowHandle);
+            case WmMButtonUp:
+                return HandlePointerButtonUp(button: 2);
             case WmClose:
                 _ = User32.DestroyWindow(windowHandle: windowHandle);
                 return 0;
@@ -563,15 +583,21 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         var modifiers = ComputeModifiers();
 
-        // Ctrl+V pastes: the clipboard text flows through the text pipeline. (Copy/select-all/cycle-focus
-        // are emitted below as first-class chords for the app to bind.)
+        // Ctrl+V pastes: the clipboard text flows through the text pipeline. The chord is consumed WHETHER OR NOT the
+        // clipboard has text — otherwise an empty clipboard would let Ctrl+V fall through to the letter case below
+        // and emit a LetterDown('v', Control) that a full clipboard suppresses: a clipboard-state-dependent binding
+        // behavior no consumer could reason about.
         if (
             (modifiers == InputModifiers.Control) &&
-            (wParam.ToInt64() == VkV) &&
-            m_clipboardService.TryGetText(text: out var clipboardText) &&
-            (clipboardText.Length > 0)
+            (wParam.ToInt64() == VkV)
         ) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(text: clipboardText));
+            if (
+                m_clipboardService.TryGetText(text: out var clipboardText) &&
+                (clipboardText.Length > 0)
+            ) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(text: clipboardText));
+            }
+
             return 0;
         }
 
@@ -625,14 +651,25 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             case VkRight:
                 m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.ArrowRight, modifiers: modifiers));
                 return 0;
+            case VkSpace:
+                // Space is a first-class named key (the world binds it to the jump action lane, held for variable
+                // height). Its WM_CHAR (a literal ' ') still arrives independently — TranslateMessage runs before
+                // dispatch — so typed text keeps flowing to the text pipeline; an unbound Space signal is ignored by
+                // the binding table. Mirrors the letter/arrow keys: down here, up via TryMapNamedKey in HandleKeyUp.
+                m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Space, modifiers: modifiers));
+                return 0;
             case VkTab when (modifiers != InputModifiers.None):
                 m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: KeyCode.Tab, modifiers: modifiers));
                 return 0;
-            case VkA when (modifiers != InputModifiers.None):
-                m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(character: 'a', modifiers: modifiers));
-                return 0;
-            case VkC when (modifiers != InputModifiers.None):
-                m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(character: 'c', modifiers: modifiers));
+            case >= VkA and <= VkZ:
+                // EVERY letter key is a first-class key signal, chorded or plain — a game binds WASD movement the
+                // same way it binds Ctrl+C. The letter's WM_CHAR still arrives independently (TranslateMessage runs
+                // in the pump before dispatch), so typed text keeps flowing to the text pipeline; an unbound letter
+                // signal is simply ignored by the binding table.
+                m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(
+                    character: LetterForVirtualKey(virtualKey: wParam.ToInt64()),
+                    modifiers: modifiers
+                ));
                 return 0;
             default:
                 return User32.DefWindowProc(
@@ -644,11 +681,16 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         }
     }
     private nint HandleKeyUp(nint windowHandle, uint message, nint wParam, nint lParam) {
-        // Release edges for the named navigation/function/special keys. Letter chords (Ctrl+A/Ctrl+C) are
-        // one-shot press actions, so they have no useful release edge. Releases are inert by default
-        // (CommandBinding.ActivateOn ignores Completed) — they exist so a future held-key feature needs no
-        // seam re-cut. Modifiers are not recomputed: a key-up carries no chord intent.
+        // Release edges for the named navigation/function/special keys AND the letter keys — a held-key
+        // consumer (e.g. a movement binding's release edge) needs the up transition or the hold sticks.
+        // Releases are inert by default (CommandBinding.ActivateOn ignores Completed). Modifiers are not
+        // recomputed: a key-up carries no chord intent.
         var virtualKey = wParam.ToInt64();
+
+        if (virtualKey is >= VkA and <= VkZ) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.LetterUp(character: LetterForVirtualKey(virtualKey: virtualKey)));
+            return 0;
+        }
 
         if (TryMapNamedKey(virtualKey: virtualKey, key: out var key)) {
             m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(key: key));
@@ -662,6 +704,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             windowHandle: windowHandle
         );
     }
+    // The single owner of the VK→letter identity BOTH key edges share — a copy-paste slip desyncing the down and up
+    // arithmetic (each previously computed it inline) would silently break every held-letter consumer.
+    private static char LetterForVirtualKey(long virtualKey) {
+        return (char)('a' + (virtualKey - VkA));
+    }
     private static bool TryMapNamedKey(long virtualKey, out KeyCode key) {
         key = virtualKey switch {
             VkOem3 => KeyCode.Backtick,
@@ -673,6 +720,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             VkDown => KeyCode.ArrowDown,
             VkLeft => KeyCode.ArrowLeft,
             VkRight => KeyCode.ArrowRight,
+            VkSpace => KeyCode.Space,
             VkF1 => KeyCode.F1,
             VkF2 => KeyCode.F2,
             VkF3 => KeyCode.F3,
@@ -761,6 +809,27 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_lastMouseX = mouseX;
         m_lastMouseY = mouseY;
         m_pointerPositionDirty = true;
+        return 0;
+    }
+    // A left-button press captures the mouse: the OS then keeps routing WM_MOUSEMOVE/WM_LBUTTONUP to this window
+    // even after the pointer leaves the client area (or the whole window), so a drag that starts inside and ends
+    // outside still streams moves and the matching release edge, instead of going silent the moment the cursor
+    // crosses the border. Only the left button captures — a middle/right press dragging a panel is not a contract
+    // this window makes, and stacking captures across buttons would need a ref-count this simple pump doesn't have.
+    private nint HandlePointerButtonDown(int button, nint windowHandle) {
+        if (button == 0) {
+            _ = User32.SetCapture(windowHandle: windowHandle);
+        }
+
+        m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Started));
+        return 0;
+    }
+    private nint HandlePointerButtonUp(int button) {
+        if (button == 0) {
+            _ = User32.ReleaseCapture();
+        }
+
+        m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Completed));
         return 0;
     }
 

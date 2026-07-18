@@ -16,6 +16,27 @@ A command can be driven two ways over one shared identity:
 - **Discretely** — a handler runs on each activation (a key press, a typed line).
 - **Continuously** — the current frame's value is polled (an analog stick, a mouse delta).
 
+For an authoritative simulation, use the fixed-step path: `InputRouter` captures every modality into ordered,
+per-slot `CommandSnapshot`s; Launcher applies one snapshot and calls one `IFixedStepSimulation.Step` for each exact
+host-owned tick. `CommandContext.Slot` is the simulation identity. `DeviceId` is only a live, local annotation (for
+rumble or device assignment) and is deliberately absent from recordings.
+
+```csharp
+services.AddFixedStepSimulation<GameSimulation>(bindings);
+
+sealed class GameSimulation : IFixedStepSimulation {
+    public void Step(in FixedStepContext tick, in CommandSnapshot commands) {
+        // Advance authoritative state exactly once. Launcher already applied commands.
+    }
+}
+```
+
+This registration is the easy path: Launcher owns the accumulator, input capture windows, held folding, console
+injection, snapshot application, catch-up, focus-loss release, and interpolation residual. A consumer does not build a
+second loop or recover seconds from floating point. The frame-oriented
+`BeginFrame` / `Collect` path below remains available to presentation-only or
+non-simulated consumers.
+
 ---
 
 ## Mental model
@@ -49,7 +70,7 @@ the matching handler with **no map gating**.
 | `CommandRegistry` | The hub. Aggregates modules, owns sources, dispatches, gates by map, holds per-frame state. Implements `ICommandSink`. |
 | `CommandDefinition` | Named, typed, invokable command — the shared identity behind every way it can be driven. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
-| `CommandContext` | Per-invocation state handed to a handler (value, phase, parse result, text, registry). |
+| `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, local device, parse result, text, registry). |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` | The per-frame value, tagged with its `CommandValueKind`, packed into a `Vector4`. |
 | `CommandValueKind` | Shape of the value: `Digital`, `Axis1D`, `Axis2D`, `Axis3D`, `Orientation`. |
@@ -61,6 +82,8 @@ the matching handler with **no map gating**.
 | `CommandBinding` | Binds an input source id to a command (constant or pass-through value). |
 | `BindingCommandSource` | Rewrites `InputSignal`s into `CommandSignal`s via a binding table. |
 | `TextCommandSource` | Feeds queued command lines through the registry's text path. |
+| `InputRouter` | Captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. |
+| `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick; recordable and replayable without local device identities. |
 
 ---
 

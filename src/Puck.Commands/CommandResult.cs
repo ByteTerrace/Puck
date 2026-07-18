@@ -11,6 +11,16 @@ namespace Puck.Commands;
 /// <param name="Output">The text to append to the transcript.</param>
 /// <param name="ClearTranscript"><see langword="true"/> to request that the transcript be cleared.</param>
 public readonly record struct CommandResult(string Output, bool ClearTranscript = false) {
+    /// <summary>
+    /// Whether this result reports a FAILURE (a bad argument count, an unparsable value, an unknown target). Defaults to
+    /// <see langword="false"/>, so every existing result is a success and nothing changes. It is the wire's
+    /// acknowledgement discriminator: the registry's <c>wire.ack quiet</c> mode suppresses a SUCCESS echo from a
+    /// wire-native verb but ALWAYS surfaces an error, so a scripted run still sees its failures on a quiet pipe. A
+    /// wire-native (<see cref="CommandDefinition.WithWireArgs"/>) handler is therefore contractually required to set
+    /// <c>IsError: true</c> on every failure return — that is what makes quiet mode safe.
+    /// </summary>
+    public bool IsError { get; init; }
+
     /// <summary>Gets a result that produces no transcript output and leaves the transcript unchanged.</summary>
     public static CommandResult None => new("");
 

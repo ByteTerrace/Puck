@@ -7,32 +7,28 @@
 
 using System.Runtime.InteropServices;
 
-internal static class Program
-{
+internal static class Program {
     [DllImport("puckefi"), SuppressGCTransition]
     private static extern void PuckSerialWriteByte(int b);
-
-    private static void Print(string s)
-    {
-        for (int i = 0; i < s.Length; i++)
-            PuckSerialWriteByte((byte)s[i]);
-        PuckSerialWriteByte('\r');
-        PuckSerialWriteByte('\n');
+    private static void Print(string s) {
+        for (int i = 0; (i < s.Length); i++)
+            PuckSerialWriteByte(b: (byte)s[i]);
+        PuckSerialWriteByte(b: '\r');
+        PuckSerialWriteByte(b: '\n');
     }
-
-    private static int Main()
-    {
-        Print("[hello] Puck.Runtime is live.");
+    private static int Main() {
+        Print(s: "[hello] Puck.Runtime is live.");
 
         // Exercise the allocator + array + foreach so a runtime ABI bug would surface here.
         int[] values = new int[8];
         int sum = 0;
-        for (int i = 0; i < values.Length; i++)
-            values[i] = i + 1;
+
+        for (int i = 0; (i < values.Length); i++)
+            values[i] = (i + 1);
         foreach (int v in values)
             sum += v;
 
-        Print(sum == 36 ? "[hello] alloc + array + foreach OK (sum=36)." : "[hello] RUNTIME FAILURE.");
+        Print(s: ((sum == 36) ? "[hello] alloc + array + foreach OK (sum=36)." : "[hello] RUNTIME FAILURE."));
         return 0;
     }
 }

@@ -8,16 +8,14 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage C8. Hardware ray-tracing world parity — the POST's cross-backend check of the inline ray-query path,
-/// built from the demo's retired <c>RtWorldProducerNode</c> (provenance; the demo has no RT parity gate — its
-/// <c>--world-rt</c> is a live producer — so this stage IS the first cross-backend diff of the path). The shared hero
+/// Tier-C hardware ray-tracing world parity check for the inline ray-query path. The shared hero
 /// scene is decomposed into a TLAS of unit-AABB instances (one per finite primitive, via
 /// <see cref="RtWorldInstances"/>), and the one SM 6.5 ray-query kernel (<c>sdf-world-rt-debug.rq.comp</c>) renders it
 /// on both backends — Vulkan ray-query on the host device (SPIR-V) and DXR 1.1 on the shared LUID-matched Tier-C
 /// Direct3D 12 device (DXIL). The kernel RAY-TRACES the cull (TLAS entry + analytic floor crossing set the march
 /// start; misses are sky) then SDF-MARCHES the full <c>map()</c> with RT-accelerated soft shadows, so both backends
 /// shade the identical continuous image and must agree within the calibrated <c>WorldComposite</c> thresholds.
-/// The plan's explicit skip-with-note path: when <see cref="IGpuAccelerationStructure.IsSupported"/> is false on
+/// When <see cref="IGpuAccelerationStructure.IsSupported"/> is false on
 /// either backend's device the stage returns <see cref="PostStageOutcome.Skip"/> naming the unsupported side — a
 /// missing hardware/driver capability is NEVER a failure. Artifacts: both backend renders and the diff heatmap.
 /// </summary>
@@ -121,7 +119,7 @@ internal sealed class RtStage : IPostStage {
 
         var bounds = RtWorldInstances.Extract(program: program);
         var groundPlane = RtWorldInstances.ExtractGroundPlane(program: program);
-        var instanceCount = (uint)Math.Min(bounds.Count, (int)InstanceCapacity);
+        var instanceCount = (uint)Math.Min(val1: bounds.Count, val2: (int)InstanceCapacity);
 
         for (var index = 0; (index < (int)instanceCount); index++) {
             var bound = bounds[index];

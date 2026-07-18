@@ -1,0 +1,15 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Illustrative INVALID example (its rejection is asserted by the Post `run-document` stage as one of the corpus's checked-in negatives): two addons both declare slot 1 — no roster slot may have two owners. Run `Puck.Demo --run docs/examples/overworld-autopilot-bad-slot.json` to see it rejected with a clear, source-attributed error at addons[1].slot and exit code 2.",
+    "addons": [
+        { "name": "ghost", "modulePath": "Assets/Addons/autopilot-ghost.wat", "slot": 1 },
+        { "name": "understudy", "modulePath": "Assets/Addons/autopilot-ghost.wat", "slot": 1 }
+    ],
+    "graph": {
+        "$type": "overworld",
+        "consoles": [
+            { "model": "cgb", "romPath": "volley.gbc" }
+        ]
+    }
+}

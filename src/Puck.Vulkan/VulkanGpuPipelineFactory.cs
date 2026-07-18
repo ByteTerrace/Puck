@@ -24,12 +24,12 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
         var renderPass = ((IVulkanRenderTarget)renderTarget).RenderPass;
         var vertexShader = (VulkanShaderModule)vertexShaderModule;
         var fragmentShader = (VulkanShaderModule)fragmentShaderModule;
-        var vkPushConstant = pushConstantBinding is null ? null
+        var vkPushConstant = ((pushConstantBinding is null) ? null
             : new VulkanPushConstantBinding(
                 data: pushConstantBinding.Data,
                 offset: pushConstantBinding.Offset,
                 stageFlags: (uint)pushConstantBinding.StageFlags
-            );
+            ));
 
         return pipelineFactory.Create(
             enableStorageBuffer: enableStorageBuffer,

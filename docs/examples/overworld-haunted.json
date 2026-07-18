@@ -1,0 +1,19 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "The haunted arcade: three WASM ghosts, one per cabinet. Boot the demo and touch nothing — each ghost walks its exclusive roster slot to its own machine (left / center / right along the -Z wall) and boots it, and the room wakes itself: fullscreen eases to side-by-side eases to big-top as the screens light. Pure data — the same engine, summoned differently. Forge the cartridge first (`Puck.Demo --forge-volley volley.gbc`), then `Puck.Demo --run docs/examples/overworld-haunted.json`. Parse-validation does not check modulePath — the run path does.",
+    "addons": [
+        { "name": "west", "modulePath": "Assets/Addons/haunted-left.wat", "slot": 1, "fuelPerTick": 250000 },
+        { "name": "keeper", "modulePath": "Assets/Addons/autopilot-ghost.wat", "slot": 2, "fuelPerTick": 250000 },
+        { "name": "east", "modulePath": "Assets/Addons/haunted-right.wat", "slot": 3, "fuelPerTick": 250000 }
+    ],
+    "graph": {
+        "$type": "overworld",
+        "immersed": false,
+        "consoles": [
+            { "model": "dmg", "romPath": "volley.gbc" },
+            { "model": "cgb", "romPath": "volley.gbc" },
+            { "model": "agb", "romPath": "volley.gbc" }
+        ]
+    }
+}

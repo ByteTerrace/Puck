@@ -16,6 +16,17 @@
         <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
         <TargetFramework>net10.0</TargetFramework>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- Single source of truth for the official C#/WinRT Windows SDK projection pack
+             (microsoft.windows.sdk.net.ref). Puck.Platform PackageDownloads this exact pack for its
+             own compile, and WindowsCaptureProjection.targets re-declares the pack's two runtime
+             assemblies in every Windows-capture executable so they land in that executable's
+             .deps.json. Every version literal and pack path derives from these two properties, so a
+             pack bump is a one-line edit here. PackageDownload cannot float — it requires an exact
+             bracketed version — so this centralization is itself the guard against a silent
+             per-file version drift (a missed bump degrades to a runtime FileNotFoundException, not
+             a build error). $(WindowsSdkNetRefRoot) lives in Directory.Build.targets because
+             $(NuGetPackageRoot) is not yet defined when this file is imported. -->
+        <WindowsSdkNetRefVersion>10.0.22621.57</WindowsSdkNetRefVersion>
     </PropertyGroup>
 
     <ItemGroup>

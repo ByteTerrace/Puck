@@ -4,10 +4,8 @@
 // With no GC this only releases *unmanaged* resources — the managed object itself is not
 // reclaimed until process exit.
 
-namespace System
-{
-    public interface IDisposable
-    {
+namespace System {
+    public interface IDisposable {
         void Dispose();
     }
 }

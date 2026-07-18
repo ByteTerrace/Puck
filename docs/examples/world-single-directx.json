@@ -8,7 +8,7 @@
         "presentMode": "vsync",
         "surfaceFormat": "r8g8b8a8",
         "exitAfterSeconds": 30,
-        "renderRate": 60
+        "presentRate": "sixty"
     },
     "scene": {
         "materials": [

@@ -100,7 +100,6 @@ internal sealed class CardUndo {
         m_emitter.MarkLabel(label: noSaturate);
         m_emitter.Return();
     }
-
     private void EmitPopSubroutine() {
         var empty = m_emitter.NewLabel();
 
@@ -148,8 +147,7 @@ internal sealed class CardUndo {
             if (fromDeToHl) {
                 m_emitter.LoadAFromDe();
                 m_emitter.StoreAToHlIncrement();
-            }
-            else {
+            } else {
                 m_emitter.LoadAFromHlIncrement();
                 m_emitter.StoreAToDe();
             }

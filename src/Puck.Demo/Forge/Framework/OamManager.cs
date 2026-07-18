@@ -7,8 +7,8 @@ namespace Puck.Demo.Forge.Framework;
 /// fight over a slot; a hidden slot is simply Y = 0 (off the top of the screen).
 /// </summary>
 internal sealed class OamManager {
-    private const int SlotCount = 40;
     private const int BytesPerSlot = 4;
+    private const int SlotCount = 40;
 
     private readonly Sm83Emitter m_emitter;
     private int m_reservedSlots;
@@ -45,7 +45,7 @@ internal sealed class OamManager {
             throw new ArgumentOutOfRangeException(paramName: nameof(slot), message: $"Sprite byte ({slot}, {byteIndex}) is outside the shadow OAM.");
         }
 
-        return (ushort)(FrameworkMemoryMap.ShadowOam + (slot * BytesPerSlot) + byteIndex);
+        return (ushort)((FrameworkMemoryMap.ShadowOam + (slot * BytesPerSlot)) + byteIndex);
     }
 
     /// <summary>Emits a full slot write from registers: B = Y, C = X, D = tile, E = attributes. Clobbers A.</summary>

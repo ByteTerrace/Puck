@@ -21,8 +21,8 @@ internal readonly record struct InputScriptStep(byte Buttons, byte Frames);
 /// <param name="Score">The score (0..999999).</param>
 internal sealed record ScoreTableEntry(string Initials, int Score);
 
-/// <summary>A fixed-stride record table: the landed block plus the stride/count facts SM83 indexing needs.</summary>
-/// <param name="Table">The landed block.</param>
+/// <summary>A fixed-stride record table: the linked block plus the stride/count facts SM83 indexing needs.</summary>
+/// <param name="Table">The linked block.</param>
 /// <param name="Stride">The bytes per record.</param>
 /// <param name="Count">The record count.</param>
 internal readonly record struct RomRecords(RomTable Table, int Stride, int Count);
@@ -181,7 +181,7 @@ internal sealed class GameManifest {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: stride, other: 1, paramName: nameof(stride));
         ClaimName(name: name);
 
-        var bytes = new byte[stride * records.Count];
+        var bytes = new byte[(stride * records.Count)];
 
         for (var index = 0; (index < records.Count); index++) {
             if (records[index].Length != stride) {
@@ -212,7 +212,7 @@ internal sealed class GameManifest {
         ArgumentNullException.ThrowIfNull(steps);
         ClaimName(name: name);
 
-        var bytes = new byte[(steps.Count * 2) + 1];
+        var bytes = new byte[((steps.Count * 2) + 1)];
 
         for (var index = 0; (index < steps.Count); index++) {
             if (steps[index].Buttons == 0xFF) {
@@ -223,8 +223,8 @@ internal sealed class GameManifest {
                 throw new ArgumentException(message: $"Step {index} of '{name}' holds for 0 frames.", paramName: nameof(steps));
             }
 
-            bytes[index * 2] = steps[index].Buttons;
-            bytes[(index * 2) + 1] = steps[index].Frames;
+            bytes[(index * 2)] = steps[index].Buttons;
+            bytes[((index * 2) + 1)] = steps[index].Frames;
         }
 
         bytes[^1] = 0xFF;
@@ -240,7 +240,7 @@ internal sealed class GameManifest {
     public static byte[] BuildScoreTable(IReadOnlyList<ScoreTableEntry> entries, byte fontTileBase) {
         ArgumentNullException.ThrowIfNull(entries);
 
-        var payload = new byte[entries.Count * 6];
+        var payload = new byte[(entries.Count * 6)];
         var index = 0;
 
         foreach (var entry in entries) {
@@ -272,7 +272,7 @@ internal sealed class GameManifest {
     public LinkedManifest Link(GameFramework framework) {
         ArgumentNullException.ThrowIfNull(framework);
 
-        if ((m_fontTileBase < 0) && (m_literalScreens.Count > 0 || HasOverlayAllocations())) {
+        if ((m_fontTileBase < 0) && ((m_literalScreens.Count > 0) || HasOverlayAllocations())) {
             throw new InvalidOperationException(message: "Screens with text overlays need DefineFontTiles.");
         }
 
@@ -353,7 +353,6 @@ internal sealed class GameManifest {
             Map: framework.Data.Add(name: $"{declaration.Name}-map", bytes: relocated.TileMap)
         );
     }
-
     private static IReadOnlyList<LinkedSpriteSet> LinkSpriteArt(AssetLinker linker, SpriteArtDeclaration declaration) {
         var linked = new List<LinkedSpriteSet>(capacity: declaration.Bundle.Sprites.Count);
 
@@ -363,7 +362,6 @@ internal sealed class GameManifest {
 
         return linked;
     }
-
     private void LinkLiteralScreens(GameFramework framework, Dictionary<string, LinkedScreen> screens) {
         foreach (var (name, cells, overlays) in m_literalScreens) {
             var map = new byte[MapByteCount];
@@ -373,7 +371,6 @@ internal sealed class GameManifest {
             screens.Add(key: name, value: new LinkedScreen(Attributes: null, Map: framework.Data.Add(name: $"{name}-map", bytes: map)));
         }
     }
-
     private Dictionary<string, RomRecords> LinkRecords(GameFramework framework) {
         var linked = new Dictionary<string, RomRecords>(comparer: StringComparer.Ordinal);
 
@@ -383,7 +380,6 @@ internal sealed class GameManifest {
 
         return linked;
     }
-
     private Dictionary<string, RomTable> LinkTexts(GameFramework framework) {
         var linked = new Dictionary<string, RomTable>(comparer: StringComparer.Ordinal);
 
@@ -393,7 +389,6 @@ internal sealed class GameManifest {
 
         return linked;
     }
-
     private static Dictionary<string, RomTable> LinkNamedBlocks(GameFramework framework, List<(string Name, byte[] Bytes)> blocks) {
         var linked = new Dictionary<string, RomTable>(comparer: StringComparer.Ordinal);
 
@@ -411,7 +406,7 @@ internal sealed class GameManifest {
             ValidateOverlay(overlay: overlay);
 
             for (var index = 0; (index < overlay.Text.Length); index++) {
-                cells[(overlay.Row * MapSide) + overlay.Column + index] = text.TileFor(character: overlay.Text[index]);
+                cells[(((overlay.Row * MapSide) + overlay.Column) + index)] = text.TileFor(character: overlay.Text[index]);
             }
         }
     }
@@ -423,13 +418,11 @@ internal sealed class GameManifest {
             Array.Clear(array: attributes, index: ((overlay.Row * MapSide) + overlay.Column), length: overlay.Text.Length);
         }
     }
-
     private static void ValidateOverlay(ScreenText overlay) {
         if ((overlay.Row < 0) || (overlay.Row >= MapSide) || (overlay.Column < 0) || ((overlay.Column + overlay.Text.Length) > MapSide)) {
             throw new InvalidOperationException(message: $"The overlay '{overlay.Text}' at ({overlay.Row}, {overlay.Column}) leaves the {MapSide}×{MapSide} map.");
         }
     }
-
     private bool HasOverlayAllocations() {
         foreach (var declaration in m_allocations) {
             if (declaration is ArtScreenDeclaration { Overlays.Count: > 0 }) {
@@ -439,7 +432,6 @@ internal sealed class GameManifest {
 
         return false;
     }
-
     private void ClaimName(string name) {
         ArgumentException.ThrowIfNullOrEmpty(name);
 
@@ -447,7 +439,6 @@ internal sealed class GameManifest {
             throw new ArgumentException(message: $"The manifest already declares '{name}'.", paramName: nameof(name));
         }
     }
-
     private static byte PackBcdPair(int value) => (byte)(((value / 10) << 4) | (value % 10));
 
     // The allocation-bearing declaration kinds, walked in declaration order at link time.

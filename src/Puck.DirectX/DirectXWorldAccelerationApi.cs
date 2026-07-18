@@ -80,6 +80,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             var blasInputs = BlasInputs(aabbGpuAddress: aabbAddress, geometry: &blasGeometry);
 
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO blasInfo;
+
             device5->GetRaytracingAccelerationStructurePrebuildInfo(&blasInputs, &blasInfo);
 
             var blasBuffer = CreateBuffer(device: device, sizeBytes: blasInfo.ResultDataMaxSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
@@ -99,6 +100,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             var tlasInputs = TlasInputs(instanceGpuAddress: instanceAddress, instanceCount: maxInstanceCount);
 
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasInfo;
+
             device5->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputs, &tlasInfo);
 
             var tlasBuffer = CreateBuffer(device: device, sizeBytes: tlasInfo.ResultDataMaxSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
@@ -164,7 +166,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
         transform[4] = 0.0f; transform[5] = scaleY; transform[6] = 0.0f; transform[7] = worldCenterY;
         transform[8] = 0.0f; transform[9] = 0.0f; transform[10] = scaleZ; transform[11] = worldCenterZ;
         // InstanceID:24 | InstanceMask:8, then InstanceContributionToHitGroupIndex:24 | Flags:8.
-        *(uint*)(entry + 48) = ((instanceId & 0x00FFFFFF) | (visibilityMask << 24));
+        *(uint*)(entry + 48) = (instanceId & 0x00FFFFFF) | (visibilityMask << 24);
         *(uint*)(entry + 52) = 0;
         *(ulong*)(entry + 56) = blasGpuAddress;
     }
@@ -177,7 +179,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
     /// <param name="instanceCount">The number of leading instance-buffer entries to build the TLAS over.</param>
     /// <param name="includeBlasBuild">Whether to prepend the static unit-AABB BLAS build.</param>
     public void RecordWorldAccelerationBuild(nint commandBufferHandle, in DirectXWorldAccelerationResources resources, uint instanceCount, bool includeBlasBuild) {
-        var state = (DirectXCommandBufferState)GCHandle.FromIntPtr(commandBufferHandle).Target!;
+        var state = (DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!;
         var commandList4 = QueryCommandList4(commandList: (ID3D12GraphicsCommandList*)state.CommandList);
 
         try {
@@ -195,7 +197,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
                 UavBarrier(commandList: (ID3D12GraphicsCommandList*)state.CommandList, resource: resources.BlasBufferHandle);
             }
 
-            var tlasInputs = TlasInputs(instanceGpuAddress: resources.InstanceBufferGpuAddress, instanceCount: Math.Min(instanceCount, resources.MaxInstanceCount));
+            var tlasInputs = TlasInputs(instanceGpuAddress: resources.InstanceBufferGpuAddress, instanceCount: Math.Min(val1: instanceCount, val2: resources.MaxInstanceCount));
             var tlasBuild = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC {
                 DestAccelerationStructureData = resources.TlasGpuAddress,
                 Inputs = tlasInputs,

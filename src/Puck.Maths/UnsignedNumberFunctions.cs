@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics.X86;
 
 namespace Puck.Maths;
 
@@ -211,9 +212,11 @@ public static class UnsignedNumberFunctions {
     /// <param name="value">The value to invert. It must be odd; even values have no inverse modulo a power of two, and passing one yields a meaningless result.</param>
     /// <returns>The unique value <c>r</c> for which <c>(<paramref name="value"/> * r)</c> is congruent to <c>1</c> modulo <c>2^w</c>.</returns>
     /// <remarks>
-    /// Uses the Newton–Hensel doubling iteration from “An Improved Integer Multiplicative Inverse (modulo 2^w)” by
-    /// Jeffrey Hurchalla, April 2022 (<see href="https://arxiv.org/ftp/arxiv/papers/2204/2204.04342.pdf"/>). The number
-    /// of refinement steps is fixed by the width of <typeparamref name="T"/>, so a closed generic runs in constant time.
+    /// Uses the Newton–Hensel doubling iteration: each step doubles the number of correct low-order bits, so a fixed
+    /// number of steps recovers the full-width inverse. The number of refinement steps is fixed by the width of
+    /// <typeparamref name="T"/>, so a closed generic runs in constant time. The step count assumes the storage width
+    /// of <typeparamref name="T"/> is a power of two — true for every built-in integer; a custom width that is not
+    /// leaves the top bits of the inverse unrefined.
     /// </remarks>
     public static T ModularInverse<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var bitCount = int.CreateChecked(value: BinaryIntegerConstants<T>.Size);
@@ -261,6 +264,9 @@ public static class UnsignedNumberFunctions {
     /// is returned unchanged; the result is zero when <paramref name="value"/> is zero or when the next power of two
     /// would exceed the range of <typeparamref name="T"/>.
     /// </returns>
+    /// <remarks>The out-of-range guard assumes the storage width of <typeparamref name="T"/> is a power of two —
+    /// true for every built-in integer. A custom width that is not a power of two trips the guard early and zeroes
+    /// results for the type's upper bit positions.</remarks>
     public static T NextPowerOfTwo<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var x = int.CreateTruncating(value: (BinaryIntegerConstants<T>.Size - T.LeadingZeroCount(value: (value - T.One))));
         var y = int.CreateTruncating(value: BinaryIntegerConstants<T>.Log2Size);
@@ -283,7 +289,8 @@ public static class UnsignedNumberFunctions {
     /// <remarks>
     /// The width-specific branch is selected by the JIT, so a closed generic runs a fixed, value-independent
     /// instruction sequence (constant time). The 8-, 16-, 32-, and 64-bit widths seed the result with a fixed-latency
-    /// hardware floating-point square root and settle it with a branchless integer correction, while wider widths use a
+    /// hardware floating-point square root and settle it with a branchless integer correction; the 128-bit width seeds
+    /// the same way and closes the seed's error with a single Newton step before the correction; wider widths use a
     /// branchless bit-by-bit algorithm whose iteration count is fixed by the width of <typeparamref name="T"/>.
     /// </remarks>
     public static T SquareRoot<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
@@ -295,6 +302,7 @@ public static class UnsignedNumberFunctions {
             16 => T.CreateTruncating(value: ((uint)MathF.Sqrt(x: uint.CreateTruncating(value: value)))),
             32 => T.CreateTruncating(value: ((uint)Math.Sqrt(d: uint.CreateTruncating(value: value)))),
             64 => T.CreateTruncating(value: Sqrt(value: ulong.CreateTruncating(value: value))),
+            128 => T.CreateTruncating(value: Sqrt128(value: UInt128.CreateTruncating(value: value))),
 #endif
             _ => SoftwareImplementation(value: value),
         };
@@ -327,6 +335,39 @@ public static class UnsignedNumberFunctions {
             x -= unchecked(((x > 4294967295UL).As<ulong>() * (x - 4294967295UL))); // clamp to uint.MaxValue so (x * x) cannot overflow
             x -= ((x * x) > value).As<ulong>(); // settle a one-too-high estimate
             x += (x < 4294967295UL).As<ulong>() & (unchecked(((x + 1UL) * (x + 1UL))) <= value).As<ulong>(); // settle a one-too-low estimate
+
+            return x;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static UInt128 Sqrt128(UInt128 value) {
+            if (value <= ((UInt128)ulong.MaxValue)) { return Sqrt(value: ((ulong)value)); }
+
+            var maximumRoot = ((UInt128)ulong.MaxValue);
+            var seed = ((ulong)Math.Sqrt(d: ((double)value))); // within 2^13 of the true root; the cast saturates at ulong.MaxValue, which the true root never exceeds
+            var high = ((ulong)(value >> 64));
+            UInt128 x;
+
+            if (
+                X86Base.X64.IsSupported &&
+                (high < seed)
+            ) {
+#pragma warning disable SYSLIB5004
+                var (quotient, _) = X86Base.X64.DivRem(
+                    lower: ((ulong)value),
+                    upper: high,
+                    divisor: seed
+                );
+#pragma warning restore SYSLIB5004
+
+                x = ((((UInt128)seed) + quotient) >> 1); // one Newton step collapses the seed's error to at most one either way
+            } else {
+                x = ((((UInt128)seed) + (value / seed)) >> 1);
+            }
+
+            x -= ((x > maximumRoot).As<UInt128>() * (x - maximumRoot)); // clamp to ulong.MaxValue so (x * x) cannot overflow
+            x -= ((x * x) > value).As<UInt128>(); // settle a one-too-high estimate
+            x -= ((x * x) > value).As<UInt128>(); // the clamp can leave the estimate two too high near the top of the range
+            x += (x < maximumRoot).As<UInt128>() & (unchecked(((x + UInt128.One) * (x + UInt128.One))) <= value).As<UInt128>(); // settle a one-too-low estimate
 
             return x;
         }

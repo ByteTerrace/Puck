@@ -26,11 +26,11 @@ internal sealed class DynamicTransformStage : IPostStage {
     private const int MovedChannelDelta = 8;
     private const double MinMovedFraction = 0.01;
 
-    private static readonly Vector3 RestingPosition = new(0f, 0.8f, 0f);
-    private static readonly Vector3 MovedPosition = new(1.5f, 0.8f, 0f);
+    private static readonly Vector3 RestingPosition = new(x: 0f, y: 0.8f, z: 0f);
+    private static readonly Vector3 MovedPosition = new(x: 1.5f, y: 0.8f, z: 0f);
     // An asymmetric "beam" mover (elongated in X) so a rotation is VISIBLE — a sphere is rotation-invariant, which is
     // why the identity-only test could never exercise the quaternion path.
-    private static readonly Vector3 MoverHalfExtents = new(0.8f, 0.3f, 0.3f);
+    private static readonly Vector3 MoverHalfExtents = new(x: 0.8f, y: 0.3f, z: 0.3f);
 
     /// <inheritdoc/>
     public string Name => "dynamic-transform";
@@ -61,12 +61,12 @@ internal sealed class DynamicTransformStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var artifactPath = Path.Combine(context.ArtifactsDirectory, "dynamic-transform-moved-dynamic.png");
+        var artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "dynamic-transform-moved-dynamic.png");
 
-        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-resting-dynamic.png"), rgba: dynamicResting, width: (int)OutputWidth);
-        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-resting-baked.png"), rgba: bakedResting, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "dynamic-transform-resting-dynamic.png"), rgba: dynamicResting, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "dynamic-transform-resting-baked.png"), rgba: bakedResting, width: (int)OutputWidth);
         PngEncoder.Write(height: (int)OutputHeight, path: artifactPath, rgba: dynamicMoved, width: (int)OutputWidth);
-        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-moved-baked.png"), rgba: bakedMoved, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "dynamic-transform-moved-baked.png"), rgba: bakedMoved, width: (int)OutputWidth);
 
         var totalPixels = (int)(OutputWidth * OutputHeight);
 
@@ -103,8 +103,8 @@ internal sealed class DynamicTransformStage : IPostStage {
 
         var bakedRotated = bakedRotatedRenderer.RenderFrame(frame: BuildFrame(program: bakedRotatedProgram, transforms: []));
 
-        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-rotated-dynamic.png"), rgba: dynamicRotated, width: (int)OutputWidth);
-        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "dynamic-transform-rotated-baked.png"), rgba: bakedRotated, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "dynamic-transform-rotated-dynamic.png"), rgba: dynamicRotated, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "dynamic-transform-rotated-baked.png"), rgba: bakedRotated, width: (int)OutputWidth);
 
         var rotatedFailures = ParityThresholds.Continuous.Evaluate(metrics: ParityMetrics.Compute(reference: bakedRotated, comparand: dynamicRotated, width: (int)OutputWidth, height: (int)OutputHeight));
 
@@ -132,10 +132,10 @@ internal sealed class DynamicTransformStage : IPostStage {
         for (var pixel = 0; (pixel < totalPixels); pixel++) {
             var offset = (pixel * 4);
             var delta = Math.Max(
-                Math.Abs(value: (a[offset] - b[offset])),
-                Math.Max(
-                    Math.Abs(value: (a[offset + 1] - b[offset + 1])),
-                    Math.Abs(value: (a[offset + 2] - b[offset + 2]))
+                val1: Math.Abs(value: (a[offset] - b[offset])),
+                val2: Math.Max(
+                    val1: Math.Abs(value: (a[(offset + 1)] - b[(offset + 1)])),
+                    val2: Math.Abs(value: (a[(offset + 2)] - b[(offset + 2)]))
                 )
             );
 
@@ -154,14 +154,14 @@ internal sealed class DynamicTransformStage : IPostStage {
     // exactly Translate THEN Rotate, so the baked op order matches. This is the oracle program.
     private static SdfProgram BuildScene(Vector3? bakedPosition, Quaternion? bakedOrientation) {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.55f, 0.6f)));
-        var mover = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.25f, 0.2f)));
-        var landmark = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.5f, 0.85f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.55f, z: 0.6f)));
+        var mover = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.85f, y: 0.25f, z: 0.2f)));
+        var landmark = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.5f, z: 0.85f)));
 
         _ = builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
-            .Translate(offset: new Vector3(-2f, 0.6f, -1f))
-            .Box(halfExtents: new Vector3(0.6f, 0.6f, 0.6f), round: 0.05f, material: landmark)
+            .Translate(offset: new Vector3(x: -2f, y: 0.6f, z: -1f))
+            .Box(halfExtents: new Vector3(x: 0.6f, y: 0.6f, z: 0.6f), round: 0.05f, material: landmark)
             .ResetPoint();
 
         if (bakedPosition is null) {
@@ -182,8 +182,8 @@ internal sealed class DynamicTransformStage : IPostStage {
     // One fixed full-screen camera framing both entity positions, so only the entity's motion changes the image.
     private static SdfFrame BuildFrame(SdfProgram program, IReadOnlyList<DynamicTransform> transforms) {
         var camera = CameraSnapshot.LookAt(
-            position: new Vector3(0.75f, 3.5f, 7.5f),
-            target: new Vector3(0.75f, 0.8f, 0f),
+            position: new Vector3(x: 0.75f, y: 3.5f, z: 7.5f),
+            target: new Vector3(x: 0.75f, y: 0.8f, z: 0f),
             fieldOfViewRadians: FieldOfViewRadians,
             viewportWidth: OutputWidth,
             viewportHeight: OutputHeight

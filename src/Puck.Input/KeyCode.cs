@@ -38,6 +38,11 @@ public enum KeyCode {
     /// <summary>The Right arrow key.</summary>
     ArrowRight,
 
+    /// <summary>The Space bar — a named key (like Enter) so a binding can target it as a first-class control (the world's
+    /// jump action rides it). Its WM_CHAR (a literal space) still flows to the text pipeline independently, exactly as a
+    /// letter key's does, so typed text is unaffected.</summary>
+    Space,
+
     /// <summary>A letter key; the specific letter is carried by <see cref="WindowInputEvent.Character"/>.</summary>
     Letter,
 

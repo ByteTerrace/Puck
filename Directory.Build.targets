@@ -1,0 +1,15 @@
+<Project>
+    <PropertyGroup>
+        <!-- Derived here rather than in Directory.Build.props: $(NuGetPackageRoot) is set by NuGet's
+             generated props, which import after Directory.Build.props but before this file. Properties
+             evaluate before items, so csproj-body HintPaths resolve this correctly. -->
+        <WindowsSdkNetRefRoot>$(NuGetPackageRoot)\microsoft.windows.sdk.net.ref\$(WindowsSdkNetRefVersion)\lib\net8.0</WindowsSdkNetRefRoot>
+    </PropertyGroup>
+
+    <!-- Flow the Windows Graphics Capture projection references to every project automatically. The imported
+         ItemGroup self-selects (Windows + a ProjectReference to Puck.Platform), so any current or future executable
+         that references Puck.Platform records Microsoft.Windows.SDK.NET.dll + WinRT.Runtime.dll in its .deps.json
+         with no per-consumer csproj edit. This import lands after each project's body, so @(ProjectReference) is
+         already populated when the ItemGroup condition is evaluated. -->
+    <Import Project="$(MSBuildThisFileDirectory)src\Puck.Platform\WindowsCaptureProjection.targets" />
+</Project>

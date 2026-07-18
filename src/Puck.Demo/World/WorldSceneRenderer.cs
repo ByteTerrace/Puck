@@ -3,6 +3,7 @@ using Puck.Assets;
 using Puck.Demo.Creator;
 using Puck.Demo.Forge;
 using Puck.SdfVm;
+using Puck.Text;
 
 namespace Puck.Demo.World;
 
@@ -38,17 +39,29 @@ public sealed class WorldSceneRenderer {
     // that giving them their own per-item instance buys nothing; they ride the always-evaluated set like the
     // overworld's floor/walls.
     private const float LightRadius = 0.08f;
-    private static readonly Vector3 LightAlbedo = new(1f, 0.92f, 0.75f);
+
+    private static readonly Vector3 LightAlbedo = new(x: 1f, y: 0.92f, z: 0.75f);
     // The ghost stamp's preview accent — the same bright cyan CreatorSceneRenderer uses for its ghost, so a
     // not-yet-placed stamp reads as a hologram everywhere in the engine.
-    private static readonly Vector3 GhostAlbedo = new(0.35f, 0.92f, 1.0f);
+    private static readonly Vector3 GhostAlbedo = new(x: 0.35f, y: 0.92f, z: 1.0f);
     // The walk-override ghost outline (renders only while the overrides page is active) — a thin amber frame so a
     // blocker/walkable rectangle reads as an overlay, never authored geometry.
-    private static readonly Vector3 WalkOverrideAlbedo = new(0.95f, 0.65f, 0.2f);
-
+    private static readonly Vector3 WalkOverrideAlbedo = new(x: 0.95f, y: 0.65f, z: 0.2f);
     private readonly WorldScene m_scene;
     private readonly ContentAddressedStore m_store;
     private readonly int m_slotBase;
+    // The SHARED world-glyph atlas (the SAME FontAtlas the DiegeticUiDirector builds once and the engine uploads via
+    // ISdfFrameSource.GlyphAtlas) + its layout engine — bound after construction by the render assembly. Null off
+    // Windows / when no font resolved, in which case a placement's text runs simply don't emit (its boxes still stamp).
+    private FontAtlas? m_font;
+    private readonly TextLayout m_textLayout = new();
+
+    /// <summary>Binds the shared world-glyph atlas so a placed creation's <see cref="TextRunDocument"/>s lay out
+    /// against the EXACT atlas the shader samples — one atlas, one TextLayout. Threaded in from the render assembly
+    /// after the atlas-owning director is composed; the frame source that owns this renderer never names the atlas
+    /// type (it sits at its CA1506 coupling ceiling). Null leaves text runs unemitted.</summary>
+    /// <param name="font">The shared font atlas (or null when none was built).</param>
+    public void SetGlyphAtlas(FontAtlas? font) => m_font = font;
 
     /// <summary>Initializes the renderer over a scene at its dynamic-transform slot base.</summary>
     /// <param name="scene">The authored scene to emit.</param>
@@ -89,6 +102,14 @@ public sealed class WorldSceneRenderer {
         var paletteByHash = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
         foreach (var placement in m_scene.Placements) {
+            // A `companion` placement stays in the model (so it round-trips through world.save/world.load like any
+            // other) but emits no STATIC stamp here — it is dispatched into the live CompanionRoster instead
+            // (CompanionRoster.SpawnFromWorld), which renders it as an animated, wandering instance. Emitting it here
+            // too would double-render the same creation: once frozen at its authored spot, once roaming.
+            if (string.Equals(a: placement.Role, b: "companion", comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
             EmitPlacement(builder: builder, paletteByHash: paletteByHash, placement: placement);
         }
 
@@ -105,17 +126,15 @@ public sealed class WorldSceneRenderer {
     /// <param name="transforms">The unified dynamic-transform buffer (the scene writes its own slot range).</param>
     /// <param name="hiddenPosition">Where a hidden slot parks (far below the floor).</param>
     /// <param name="timeSeconds">The render clock (drives the ghost's hover; presentation only).</param>
-    public void PackTransforms(DynamicTransform[] transforms, Vector3 hiddenPosition, float timeSeconds = 0f) {
-        ArgumentNullException.ThrowIfNull(transforms);
-
-        var hover = new Vector3(0f, (0.05f + (0.04f * MathF.Sin(x: (2.1f * timeSeconds)))), 0f);
+    public void PackTransforms(Span<DynamicTransform> transforms, Vector3 hiddenPosition, float timeSeconds = 0f) {
+        var hover = new Vector3(x: 0f, y: (0.05f + (0.04f * MathF.Sin(x: (2.1f * timeSeconds)))), z: 0f);
         var sway = (1.5f * MathF.Sin(x: (0.9f * timeSeconds)));
 
-        transforms[m_slotBase + GhostSlotOffset] = (m_scene.GhostReady
+        transforms[(m_slotBase + GhostSlotOffset)] = (m_scene.GhostReady
             ? new DynamicTransform(Orientation: YawQuaternion(degrees: (m_scene.GhostYawDegrees + sway)), Position: (m_scene.GhostPosition + hover))
             : new DynamicTransform(Orientation: Quaternion.Identity, Position: hiddenPosition));
 
-        transforms[m_slotBase + DragSlotOffset] = ((m_scene.Dragging && (m_scene.SelectedPlacement is { } dragging))
+        transforms[(m_slotBase + DragSlotOffset)] = ((m_scene.Dragging && (m_scene.SelectedPlacement is { } dragging))
             ? new DynamicTransform(Orientation: YawQuaternion(degrees: dragging.YawDegrees), Position: dragging.Position)
             : new DynamicTransform(Orientation: Quaternion.Identity, Position: hiddenPosition));
     }
@@ -127,7 +146,6 @@ public sealed class WorldSceneRenderer {
             _ = builder.ResetPoint().Translate(offset: patch.Center).Box(halfExtents: patch.HalfExtents, material: material, round: 0.02f);
         }
     }
-
     private void EmitLights(SdfProgramBuilder builder) {
         foreach (var light in m_scene.Lights) {
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: (light.Color * light.Intensity), Emissive: (0.8f + light.Intensity)));
@@ -135,7 +153,6 @@ public sealed class WorldSceneRenderer {
             _ = builder.ResetPoint().Translate(offset: light.Position).Sphere(material: material, radius: LightRadius);
         }
     }
-
     private void EmitWalkOverrideGhosts(SdfProgramBuilder builder) {
         if (m_scene.WalkOverrides.Count == 0) {
             return;
@@ -144,11 +161,10 @@ public sealed class WorldSceneRenderer {
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: WalkOverrideAlbedo, Emissive: 0.5f));
 
         foreach (var entry in m_scene.WalkOverrides) {
-            var center = new Vector3((0.5f * (entry.MinX + entry.MaxX)), m_scene.Bounds.FloorY, (0.5f * (entry.MinZ + entry.MaxZ)));
-            var halfExtents = new Vector3((0.5f * (entry.MaxX - entry.MinX)), 0.01f, (0.5f * (entry.MaxZ - entry.MinZ)));
+            var center = new Vector3(x: (0.5f * (entry.MinX + entry.MaxX)), y: m_scene.Bounds.FloorY, z: (0.5f * (entry.MinZ + entry.MaxZ)));
+            var halfExtents = new Vector3(x: (0.5f * (entry.MaxX - entry.MinX)), y: 0.01f, z: (0.5f * (entry.MaxZ - entry.MinZ)));
 
-            // A plain solid plate. There used to be an Onion(0.03) between the Translate and the Box, which did nothing
-            // to the plate at all: Onion is a FIELD op — it rewrites the running distance as abs(d) - t — and mapCore's
+            // A plain solid plate. Onion is a field operation — it rewrites the running distance as abs(d) - t — and mapCore's
             // accumulator is never reset (ResetPoint resets the POINT, not result.distance). So it shelled the terrain and
             // the lamps emitted before it, and NESTED with every earlier ghost's onion. Measured against the exact mapCore
             // arithmetic with two overrides: a terrain slice fell from 83% solid to 15%, and its top rose by 0.06 —
@@ -169,7 +185,7 @@ public sealed class WorldSceneRenderer {
     private void EmitPlacement(SdfProgramBuilder builder, Dictionary<string, int[]> paletteByHash, WorldPlacement placement) {
         if (m_scene.ResolveCreation(hash: placement.SourceHash, store: m_store) is not { } creation) {
             return; // A placement whose source no longer resolves in the store renders as nothing (load already
-                     // drops these; a live cache eviction mid-session degrades the same way rather than throwing).
+                    // drops these; a live cache eviction mid-session degrades the same way rather than throwing).
         }
 
         var paletteIds = ResolvePalette(creation: creation, hash: placement.SourceHash, paletteByHash: paletteByHash, builder: builder);
@@ -180,11 +196,12 @@ public sealed class WorldSceneRenderer {
         // that simply never culls, which is correct and the author's own performance choice).
         var foldSpan = PatternSpan(pattern: placement.Pattern);
 
-        if (placement.Repeat is not { } repeat || (repeat.TotalCount <= 1)) {
+        if ((placement.Repeat is not { } repeat) || (repeat.TotalCount <= 1)) {
             var boundRadius = (((reach + foldSpan) * placement.Scale) + PlacementBoundMargin);
 
             _ = builder.BeginInstance(boundCenter: placement.Position, boundRadius: boundRadius);
             EmitPlacedShapes(builder: builder, creation: creation, paletteIds: paletteIds, placement: in placement, placementOrigin: placement.Position, placementRotation: rotation, repeatLimit: null, repeatSpacing: null);
+            EmitTextRuns(builder: builder, creation: creation, paletteIds: paletteIds, placement: in placement, placementOrigin: placement.Position, placementRotation: rotation, repeatLimit: null, repeatSpacing: null);
             _ = builder.EndInstance();
 
             return;
@@ -193,8 +210,8 @@ public sealed class WorldSceneRenderer {
         // Auto-split: a row longer than MaxRepeatPerSegment on either axis becomes several placements internally —
         // each segment's own RepeatLimited span, so no single instance bound covers more than the cap's worth of
         // copies (a full-length row's enclosing sphere would otherwise defeat the tile cull for the whole row).
-        var segmentsX = Math.Max(val1: 1, val2: ((repeat.CountX + WorldScene.MaxRepeatPerSegment - 1) / WorldScene.MaxRepeatPerSegment));
-        var segmentsZ = Math.Max(val1: 1, val2: ((repeat.CountZ + WorldScene.MaxRepeatPerSegment - 1) / WorldScene.MaxRepeatPerSegment));
+        var segmentsX = Math.Max(val1: 1, val2: (((repeat.CountX + WorldScene.MaxRepeatPerSegment) - 1) / WorldScene.MaxRepeatPerSegment));
+        var segmentsZ = Math.Max(val1: 1, val2: (((repeat.CountZ + WorldScene.MaxRepeatPerSegment) - 1) / WorldScene.MaxRepeatPerSegment));
 
         for (var segmentX = 0; (segmentX < segmentsX); segmentX++) {
             var countX = SegmentCount(total: repeat.CountX, segment: segmentX, segments: segmentsX);
@@ -212,10 +229,10 @@ public sealed class WorldSceneRenderer {
 
                 var offsetX = (SegmentStartIndex(total: repeat.CountX, segment: segmentX, segments: segmentsX) * repeat.SpacingX);
                 var offsetZ = (SegmentStartIndex(total: repeat.CountZ, segment: segmentZ, segments: segmentsZ) * repeat.SpacingZ);
-                var segmentOrigin = (placement.Position + Vector3.Transform(value: new Vector3(offsetX, 0f, offsetZ), rotation: rotation));
-                var span = new Vector3(((countX - 1) * repeat.SpacingX * 0.5f), 0f, ((countZ - 1) * repeat.SpacingZ * 0.5f));
+                var segmentOrigin = (placement.Position + Vector3.Transform(value: new Vector3(x: offsetX, y: 0f, z: offsetZ), rotation: rotation));
+                var span = new Vector3(x: (((countX - 1) * repeat.SpacingX) * 0.5f), y: 0f, z: (((countZ - 1) * repeat.SpacingZ) * 0.5f));
                 var segmentCenter = (segmentOrigin + Vector3.Transform(value: span, rotation: rotation));
-                var segmentReach = (reach + foldSpan + span.Length());
+                var segmentReach = ((reach + foldSpan) + span.Length());
                 var boundRadius = ((segmentReach * placement.Scale) + PlacementBoundMargin);
 
                 _ = builder.BeginInstance(boundCenter: segmentCenter, boundRadius: boundRadius);
@@ -226,8 +243,18 @@ public sealed class WorldSceneRenderer {
                     placement: in placement,
                     placementOrigin: segmentOrigin,
                     placementRotation: rotation,
-                    repeatLimit: new Vector3((countX - 1), 0f, (countZ - 1)),
-                    repeatSpacing: new Vector3(repeat.SpacingX, 0f, repeat.SpacingZ)
+                    repeatLimit: new Vector3(x: (countX - 1), y: 0f, z: (countZ - 1)),
+                    repeatSpacing: new Vector3(x: repeat.SpacingX, y: 0f, z: repeat.SpacingZ)
+                );
+                EmitTextRuns(
+                    builder: builder,
+                    creation: creation,
+                    paletteIds: paletteIds,
+                    placement: in placement,
+                    placementOrigin: segmentOrigin,
+                    placementRotation: rotation,
+                    repeatLimit: new Vector3(x: (countX - 1), y: 0f, z: (countZ - 1)),
+                    repeatSpacing: new Vector3(x: repeat.SpacingX, y: 0f, z: repeat.SpacingZ)
                 );
                 _ = builder.EndInstance();
             }
@@ -247,16 +274,15 @@ public sealed class WorldSceneRenderer {
 
         if (placement.Pattern is { } pattern) {
             chain = chain.WallpaperFold(
-                cell: new Vector2(MathF.Max(pattern.CellWidth, 0.0001f), MathF.Max(pattern.CellHeight, 0.0001f)),
+                cell: new Vector2(x: MathF.Max(x: pattern.CellWidth, y: 0.0001f), y: MathF.Max(x: pattern.CellHeight, y: 0.0001f)),
                 group: ParseWallpaperGroup(name: pattern.Group),
-                limit: new Vector2((pattern.LimitX ?? UnlimitedFoldLimit), (pattern.LimitZ ?? UnlimitedFoldLimit)),
+                limit: new Vector2(x: (pattern.LimitX ?? UnlimitedFoldLimit), y: (pattern.LimitZ ?? UnlimitedFoldLimit)),
                 materialStride: (pattern.MaterialStride ?? 0)
             );
         }
 
         return chain;
     }
-
     private static SdfWallpaperGroup ParseWallpaperGroup(string? name) =>
         (((name is { Length: > 0 }) && Enum.TryParse<SdfWallpaperGroup>(ignoreCase: true, result: out var group, value: name)) ? group : SdfWallpaperGroup.P1);
 
@@ -271,10 +297,10 @@ public sealed class WorldSceneRenderer {
             return 0f;
         }
 
-        var spanX = ((value.LimitX is { } limitX) ? (MathF.Max(value.CellWidth, 0.0001f) * limitX) : UnlimitedFoldLimit);
-        var spanZ = ((value.LimitZ is { } limitZ) ? (MathF.Max(value.CellHeight, 0.0001f) * limitZ) : UnlimitedFoldLimit);
+        var spanX = ((value.LimitX is { } limitX) ? (MathF.Max(x: value.CellWidth, y: 0.0001f) * limitX) : UnlimitedFoldLimit);
+        var spanZ = ((value.LimitZ is { } limitZ) ? (MathF.Max(x: value.CellHeight, y: 0.0001f) * limitZ) : UnlimitedFoldLimit);
 
-        return MathF.Min(MathF.Sqrt((spanX * spanX) + (spanZ * spanZ)), UnlimitedFoldLimit);
+        return MathF.Min(x: MathF.Sqrt(x: ((spanX * spanX) + (spanZ * spanZ))), y: UnlimitedFoldLimit);
     }
 
     // Emits a STATIC placement's shapes, each as ITS OWN segment carrying the FULL placement-transform prefix
@@ -297,11 +323,76 @@ public sealed class WorldSceneRenderer {
             }
 
             chain = chain
-                .Scale(scale: new Vector3(placementScale))
+                .Scale(scale: new Vector3(value: placementScale))
                 .Translate(offset: shape.Position)
                 .Rotate(rotation: shape.Rotation)
                 .Scale(scale: shape.Scale);
             _ = AvatarDefinition.AppendPrimitive(blend: (shape.Blend ?? SdfBlendOp.Union), chain: chain, material: material, smooth: (shape.Smooth ?? 0f), type: shape.Type);
+        }
+    }
+
+    // Expands a placement's creation TEXT RUNS into Glyph shapes INSIDE the same static instance as its boxes: each
+    // glyph is a self-contained segment carrying the FULL placement-transform prefix (Translate → Rotate → the optional
+    // fold ops → the optional repeat → the uniform placement Scale), then the glyph's own in-plane Translate/Rotate —
+    // exactly as EmitPlacedShapes bakes a box, so the lettering rides the stamp's place/rotate/fold/repeat/scale. The
+    // per-glyph layout (cell UVs, half-extents, plane centre) comes from the SHARED FontAtlas + TextLayout the diegetic
+    // UI uses, so a run samples the same atlas the engine uploads; EmHeight/Depth are in the creation's LOCAL units and
+    // scale to world through the placement Scale (its distanceScale channel), like every box half-extent. Engrave =
+    // Subtraction (carved recess), emboss = Union (proud relief); the slab straddles the surface, so it is never
+    // coplanar. No-op with no atlas bound (off-Windows), no runs, or empty text — the placement's boxes still stamp.
+    // A run's glyph count competes for the SAME MaxShapesPerStamp budget the boxes do (WorldScene.StampShapeCount),
+    // and each glyph's op-chain is no longer than the probe's per-shape reservation, so the capacity envelope holds
+    // with NO probe growth (a glyph is just another shape in the reserved MaxShapesPerStamp).
+    private void EmitTextRuns(SdfProgramBuilder builder, CreationDocument creation, IReadOnlyList<int> paletteIds, in WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? repeatSpacing, Vector3? repeatLimit) {
+        if ((m_font is not { } font) || (creation.TextRuns is not { Count: > 0 } runs)) {
+            return;
+        }
+
+        var placementScale = placement.Scale;
+        var atlasWidth = (float)font.Width;
+        var atlasHeight = (float)font.Height;
+
+        foreach (var run in runs) {
+            if (run.Text is not { Length: > 0 } text) {
+                continue;
+            }
+
+            var material = paletteIds[Math.Clamp(value: (run.Material ?? 0), max: (paletteIds.Count - 1), min: 0)];
+            var blend = (string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.OrdinalIgnoreCase) ? SdfBlendOp.Subtraction : SdfBlendOp.Union);
+            var emHeight = MathF.Max(x: run.EmHeight, y: 0.001f);
+            var depth = MathF.Max(x: (run.Depth ?? 0.02f), y: 0.001f);
+            var worldPerTexel = (emHeight / font.Size);
+            var distanceScale = (font.DistanceRange * worldPerTexel);
+            // The run plane in the creation's LOCAL frame (+X advance, +Y ascent) from the run's own rotation — the
+            // same basis SdfProgramBuilder.Text derives, so the layout math matches the shared emission path.
+            var right = Vector3.Normalize(value: Vector3.Transform(value: Vector3.UnitX, rotation: run.Rotation));
+            var up = Vector3.Normalize(value: Vector3.Transform(value: Vector3.UnitY, rotation: run.Rotation));
+            var layout = m_textLayout.Layout(atlas: font, text: text, scale: emHeight);
+            // Centre the run on its authored Position: the baseline-left pen shifts left half the run width and down
+            // half the cap height (Ascender·em), so Position is the run's visual centre.
+            var origin = ((run.Position - (right * (0.5f * layout.Width))) - (up * ((0.5f * font.Metrics.Ascender) * emHeight)));
+
+            foreach (var glyph in layout.Placements) {
+                var atlasBounds = glyph.AtlasBounds;
+                var planeBounds = glyph.PlaneBounds;
+                var halfWidth = ((0.5f * (atlasBounds.Right - atlasBounds.Left)) * worldPerTexel);
+                var halfHeight = ((0.5f * (atlasBounds.Bottom - atlasBounds.Top)) * worldPerTexel);
+                var centre2D = new Vector2(x: (0.5f * (planeBounds.Left + planeBounds.Right)), y: (0.5f * (planeBounds.Bottom + planeBounds.Top)));
+                var localCentre = ((origin + (right * centre2D.X)) + (up * centre2D.Y));
+                var uvBottomLeft = new Vector2(x: (atlasBounds.Left / atlasWidth), y: (atlasBounds.Bottom / atlasHeight));
+                var uvTopRight = new Vector2(x: (atlasBounds.Right / atlasWidth), y: (atlasBounds.Top / atlasHeight));
+                var chain = AppendFoldOps(chain: builder.ResetPoint().Translate(offset: placementOrigin).Rotate(rotation: placementRotation), placement: in placement);
+
+                if ((repeatSpacing is { } spacing) && (repeatLimit is { } limit)) {
+                    chain = chain.RepeatLimited(spacing: spacing, limit: limit);
+                }
+
+                _ = chain
+                    .Scale(scale: new Vector3(value: placementScale))
+                    .Translate(offset: localCentre)
+                    .Rotate(rotation: run.Rotation)
+                    .Glyph(uvBottomLeft: uvBottomLeft, uvTopRight: uvTopRight, halfWidth: halfWidth, halfHeight: halfHeight, extrudeHalfDepth: depth, distanceScale: distanceScale, material: material, blend: blend);
+            }
         }
     }
 
@@ -317,7 +408,6 @@ public sealed class WorldSceneRenderer {
             _ = AvatarDefinition.AppendPrimitive(blend: (shape.Blend ?? SdfBlendOp.Union), chain: chain, material: material, smooth: (shape.Smooth ?? 0f), type: shape.Type);
         }
     }
-
     private void EmitGhostSlot(SdfProgramBuilder builder, Dictionary<string, int[]> paletteByHash) {
         var ghostMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: GhostAlbedo, Emissive: 0.5f));
         var reach = 0.6f;
@@ -327,7 +417,7 @@ public sealed class WorldSceneRenderer {
         if ((m_scene.GhostReady) && (m_scene.ResolveCreation(hash: m_scene.GhostSourceHash!, store: m_store) is { } creation)) {
             var paletteIds = ResolvePalette(creation: creation, hash: m_scene.GhostSourceHash!, paletteByHash: paletteByHash, builder: builder);
 
-            _ = builder.ResetPoint().TransformDynamic(slot: (m_slotBase + GhostSlotOffset)).Scale(scale: new Vector3(m_scene.GhostScale));
+            _ = builder.ResetPoint().TransformDynamic(slot: (m_slotBase + GhostSlotOffset)).Scale(scale: new Vector3(value: m_scene.GhostScale));
             EmitCreationChainWithHighlight(builder: builder, creation: creation, paletteIds: paletteIds, highlightMaterial: ghostMaterial);
         } else {
             // No creation armed yet: a small hologram marker so the slot still draws something coherent (never an
@@ -337,7 +427,6 @@ public sealed class WorldSceneRenderer {
 
         _ = builder.EndInstance();
     }
-
     private void EmitDragSlot(SdfProgramBuilder builder, Dictionary<string, int[]> paletteByHash) {
         var highlightMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: GhostAlbedo, Emissive: 0.9f));
         var dragging = (m_scene.Dragging ? m_scene.SelectedPlacement : null);
@@ -348,7 +437,7 @@ public sealed class WorldSceneRenderer {
         if ((dragging is { } placement) && (m_scene.ResolveCreation(hash: placement.SourceHash, store: m_store) is { } creation)) {
             var paletteIds = ResolvePalette(creation: creation, hash: placement.SourceHash, paletteByHash: paletteByHash, builder: builder);
 
-            _ = builder.ResetPoint().TransformDynamic(slot: (m_slotBase + DragSlotOffset)).Scale(scale: new Vector3(placement.Scale));
+            _ = builder.ResetPoint().TransformDynamic(slot: (m_slotBase + DragSlotOffset)).Scale(scale: new Vector3(value: placement.Scale));
             EmitCreationChainWithHighlight(builder: builder, creation: creation, paletteIds: paletteIds, highlightMaterial: highlightMaterial);
         } else {
             // Not dragging: a hidden zero-radius stub (the dynamic slot itself parks below the floor via
@@ -363,7 +452,7 @@ public sealed class WorldSceneRenderer {
     // preview reads as a uniform hologram tint regardless of the creation's own palette.
     private static void EmitCreationChainWithHighlight(SdfProgramBuilder builder, CreationDocument creation, IReadOnlyList<int> paletteIds, int highlightMaterial) {
         _ = paletteIds; // Palette registration already ran (materials must be added so program-relative ids stay
-                         // stable across builds); the preview simply paints every shape with the highlight instead.
+                        // stable across builds); the preview simply paints every shape with the highlight instead.
 
         foreach (var shape in (creation.Shapes ?? [])) {
             var chain = builder.ResetPoint().Translate(offset: shape.Position).Rotate(rotation: shape.Rotation).Scale(scale: shape.Scale);
@@ -387,7 +476,7 @@ public sealed class WorldSceneRenderer {
         var ids = new int[Math.Max(val1: count, val2: 1)];
 
         if (count == 0) {
-            ids[0] = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.7f)));
+            ids[0] = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: 0.7f)));
         } else {
             for (var index = 0; (index < count); index++) {
                 var entry = palette[index];
@@ -402,23 +491,32 @@ public sealed class WorldSceneRenderer {
     }
 
     // A creation's worst-case reach from its own local origin — the largest per-shape reach across every authored
-    // shape, so the placement's instance bound covers the whole replayed chain regardless of which shapes it has.
+    // shape AND every text run, so the placement's instance bound covers the whole replayed chain (a masked-out tile
+    // must never clip a glyph that reaches past the boxes).
     private static float CreationReach(CreationDocument? creation) {
-        if ((creation?.Shapes is not { Count: > 0 } shapes)) {
+        if (creation is null) {
             return 0.6f;
         }
 
         var reach = 0f;
+        var any = false;
 
-        foreach (var shape in shapes) {
-            var shapeReach = (shape.Position.Length() + AvatarDefinition.Reach(scale: shape.Scale, type: shape.Type));
-
-            reach = MathF.Max(reach, shapeReach);
+        foreach (var shape in (creation.Shapes ?? [])) {
+            reach = MathF.Max(x: reach, y: (shape.Position.Length() + AvatarDefinition.Reach(scale: shape.Scale, type: shape.Type)));
+            any = true;
         }
 
-        return reach;
-    }
+        foreach (var run in (creation.TextRuns ?? [])) {
+            // A generous run reach: its anchor offset + half the run's world extent (~0.6 em per glyph advance) + the
+            // relief depth. A fat bound only costs a rare extra evaluation; a too-tight one would cull real glyphs.
+            var runReach = ((run.Position.Length() + ((0.6f * MathF.Max(x: run.EmHeight, y: 0.001f)) * MathF.Max(x: run.GlyphCount, y: 1))) + (run.Depth ?? 0.02f));
 
+            reach = MathF.Max(x: reach, y: runReach);
+            any = true;
+        }
+
+        return (any ? reach : 0.6f);
+    }
     private static Quaternion YawQuaternion(float degrees) =>
         Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (degrees * (MathF.PI / 180f)));
 
@@ -430,7 +528,6 @@ public sealed class WorldSceneRenderer {
 
         return Math.Max(val1: 0, val2: (end - start));
     }
-
     private static int SegmentStartIndex(int total, int segment, int segments) =>
         Math.Min(val1: total, val2: (segment * WorldScene.MaxRepeatPerSegment));
 
@@ -452,7 +549,7 @@ public sealed class WorldSceneRenderer {
 
         for (var creationIndex = 0; (creationIndex < (WorldScene.MaxPlacements + 1)); creationIndex++) {
             for (var index = 0; (index < CreatorScene.PaletteSize); index++) {
-                var id = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f)));
+                var id = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: 0.5f)));
 
                 if (creationIndex == 0) {
                     placementMaterialIds[index] = id;
@@ -473,19 +570,19 @@ public sealed class WorldSceneRenderer {
         for (var index = 0; (index < WorldScene.MaxTerrainPatches); index++) {
             var terrainMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: WorldPalette.MaterialColor(slot: index)));
 
-            _ = builder.ResetPoint().Translate(offset: new Vector3((index * probeSpread), 0f, 0f)).Box(halfExtents: new Vector3(0.5f), material: terrainMaterial, round: 0.02f);
+            _ = builder.ResetPoint().Translate(offset: new Vector3(x: (index * probeSpread), y: 0f, z: 0f)).Box(halfExtents: new Vector3(value: 0.5f), material: terrainMaterial, round: 0.02f);
         }
 
         for (var index = 0; (index < WorldScene.MaxLights); index++) {
             var lightMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: LightAlbedo, Emissive: 1f));
 
-            _ = builder.ResetPoint().Translate(offset: new Vector3((index * probeSpread), 1f, 0f)).Sphere(material: lightMaterial, radius: LightRadius);
+            _ = builder.ResetPoint().Translate(offset: new Vector3(x: (index * probeSpread), y: 1f, z: 0f)).Sphere(material: lightMaterial, radius: LightRadius);
         }
 
         // KEEP IN SYNC with EmitWalkOverrideGhosts: the probe must remain a worst-case upper bound of the live emission,
         // instruction for instruction. Its Onion went with the live one (see there for why).
         for (var index = 0; (index < WorldScene.MaxWalkOverrides); index++) {
-            _ = builder.ResetPoint().Translate(offset: new Vector3((index * probeSpread), 0.01f, 1f)).Box(halfExtents: new Vector3(0.5f, 0.01f, 0.5f), material: walkOverrideMaterial, round: 0f);
+            _ = builder.ResetPoint().Translate(offset: new Vector3(x: (index * probeSpread), y: 0.01f, z: 1f)).Box(halfExtents: new Vector3(x: 0.5f, y: 0.01f, z: 0.5f), material: walkOverrideMaterial, round: 0f);
         }
 
         // MaxPlacements densest-legal instances. EmitPlacedShapes bakes the placement transform into EVERY shape's
@@ -494,19 +591,19 @@ public sealed class WorldSceneRenderer {
         // placement Scale) followed by the shape's own Translate + Rotate + Scale + primitive — reserved for every
         // shape so a real folded/patterned/repeated stamp always fits the once-sized buffers.
         for (var index = 0; (index < WorldScene.MaxPlacements); index++) {
-            var center = new Vector3(index, 4f, 0f);
+            var center = new Vector3(x: index, y: 4f, z: 0f);
 
             _ = builder.BeginInstance(boundCenter: center, boundRadius: 12f);
 
             for (var shapeIndex = 0; (shapeIndex < WorldScene.MaxShapesPerStamp); shapeIndex++) {
-                var material = placementMaterialIds[shapeIndex % CreatorScene.PaletteSize];
+                var material = placementMaterialIds[(shapeIndex % CreatorScene.PaletteSize)];
 
                 _ = builder.ResetPoint()
                     .Translate(offset: center)
                     .Rotate(rotation: Quaternion.Identity)
                     .SymmetryX()
-                    .WallpaperFold(cell: new Vector2(2f, 2f), group: SdfWallpaperGroup.P1, limit: new Vector2(4f, 4f))
-                    .RepeatLimited(spacing: new Vector3(1f, 0f, 1f), limit: new Vector3(WorldScene.MaxRepeatPerSegment, 0f, WorldScene.MaxRepeatPerSegment))
+                    .WallpaperFold(cell: new Vector2(x: 2f, y: 2f), group: SdfWallpaperGroup.P1, limit: new Vector2(x: 4f, y: 4f))
+                    .RepeatLimited(spacing: new Vector3(x: 1f, y: 0f, z: 1f), limit: new Vector3(x: WorldScene.MaxRepeatPerSegment, y: 0f, z: WorldScene.MaxRepeatPerSegment))
                     .Scale(scale: Vector3.One)
                     .Translate(offset: Vector3.Zero)
                     .Rotate(rotation: Quaternion.Identity)
@@ -522,10 +619,9 @@ public sealed class WorldSceneRenderer {
         EmitProbeDynamicSlot(builder: builder, material: ghostMaterial, slot: GhostSlotOffset);
         EmitProbeDynamicSlot(builder: builder, material: highlightMaterial, slot: DragSlotOffset);
     }
-
     private static void EmitProbeDynamicSlot(SdfProgramBuilder builder, int material, int slot) {
         _ = builder.BeginInstanceDynamic(boundOffset: Vector3.Zero, boundRadius: (0.6f * WorldScene.MaxScale), slot: slot);
-        _ = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: new Vector3(WorldScene.MaxScale));
+        _ = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: new Vector3(value: WorldScene.MaxScale));
 
         for (var shapeIndex = 0; (shapeIndex < WorldScene.MaxShapesPerStamp); shapeIndex++) {
             _ = builder.ResetPoint().Translate(offset: Vector3.Zero).Rotate(rotation: Quaternion.Identity).Scale(scale: Vector3.One).Sphere(material: material, radius: 0.3f);
@@ -540,15 +636,15 @@ public sealed class WorldSceneRenderer {
 /// presentation-only; the dusk whimsy grows this later.</summary>
 public static class WorldPalette {
     private static readonly Vector3[] Colors = [
-        new Vector3(0.42f, 0.42f, 0.46f), // 0: road/plaza gray
-        new Vector3(0.32f, 0.55f, 0.30f), // 1: lawn green
-        new Vector3(0.55f, 0.48f, 0.35f), // 2: dirt/path tan
-        new Vector3(0.30f, 0.32f, 0.40f), // 3: dusk-slate
+        new Vector3(x: 0.42f, y: 0.42f, z: 0.46f), // 0: road/plaza gray
+        new Vector3(x: 0.32f, y: 0.55f, z: 0.30f), // 1: lawn green
+        new Vector3(x: 0.55f, y: 0.48f, z: 0.35f), // 2: dirt/path tan
+        new Vector3(x: 0.30f, y: 0.32f, z: 0.40f), // 3: dusk-slate
     ];
 
     /// <summary>Resolves a world palette slot to its color (out-of-range slots wrap).</summary>
     /// <param name="slot">The palette slot.</param>
     /// <returns>The slot's albedo.</returns>
     public static Vector3 MaterialColor(int slot) =>
-        Colors[((slot % Colors.Length) + Colors.Length) % Colors.Length];
+        Colors[(((slot % Colors.Length) + Colors.Length) % Colors.Length)];
 }

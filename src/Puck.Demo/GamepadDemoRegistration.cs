@@ -69,6 +69,11 @@ internal static class GamepadDemoRegistration {
             diagnostics: static message => Console.Error.WriteLine(value: message),
             hidSource: new Win32HidDeviceSource()
         ));
+        // The run's single-drainer mechanism (see InputArbiter's doc comment): every gamepad-reading registrant —
+        // the brick-pad service, the overworld's page adapters, the router/local intent sources — samples through
+        // this instead of calling GamepadManager.Drain itself. Registered unconditionally, alongside the manager it
+        // wraps; it stays idle unless a registrant registers a lane.
+        services.AddSingleton<IInputArbiter>(implementationFactory: static sp => new InputArbiter(manager: sp.GetRequiredService<GamepadManager>()));
 
         if (registerGlobalSource) {
             services.AddSingleton<ICommandSource>(implementationFactory: static sp => new GamepadInputSource(

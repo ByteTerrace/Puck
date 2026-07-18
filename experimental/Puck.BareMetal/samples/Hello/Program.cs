@@ -21,44 +21,42 @@
 using System;
 using System.Runtime.InteropServices;
 
-internal static unsafe class Program
-{
+internal static unsafe class Program {
     private const int STD_OUTPUT_HANDLE = -11;
 
     [DllImport("kernel32"), SuppressGCTransition]
     private static extern IntPtr GetStdHandle(int nStdHandle);
-
     [DllImport("kernel32"), SuppressGCTransition]
     private static extern int WriteFile(IntPtr hFile, byte* buffer, int numberOfBytesToWrite, int* numberOfBytesWritten, IntPtr overlapped);
-
-    private static int Main()
-    {
+    private static int Main() {
         // Exercise mimalloc with a non-trivial allocation: zero-init check, then a
         // write/read round-trip over the whole buffer. Any failure returns non-zero.
-        const int probeLength = 256 * 1024;
+        const int probeLength = (256 * 1024);
         byte[] probe = new byte[probeLength];
 
-        for (int i = 0; i < probeLength; i++)
+        for (int i = 0; (i < probeLength); i++)
             if (probe[i] != 0)
                 return 1; // mi_zalloc must hand back zeroed storage
 
-        for (int i = 0; i < probeLength; i++)
-            probe[i] = (byte)(i * 31 + 7);
+        for (int i = 0; (i < probeLength); i++)
+            probe[i] = (byte)((i * 31) + 7);
 
-        for (int i = 0; i < probeLength; i++)
-            if (probe[i] != (byte)(i * 31 + 7))
+        for (int i = 0; (i < probeLength); i++)
+            if (probe[i] != (byte)((i * 31) + 7))
                 return 2; // heap storage must survive read-back intact
 
         const string message = "Puck.BareMetal: hello from puck + mimalloc - NativeAOT, no GC, no .NET runtime.\r\n";
 
         int length = message.Length;
         byte[] line = new byte[length];
-        for (int i = 0; i < length; i++)
+
+        for (int i = 0; (i < length); i++)
             line[i] = (byte)message[i];
 
         int written;
+
         fixed (byte* p = line)
-            WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), p, length, &written, default);
+            WriteFile(GetStdHandle(nStdHandle: STD_OUTPUT_HANDLE), p, length, &written, default);
 
         return 0;
     }

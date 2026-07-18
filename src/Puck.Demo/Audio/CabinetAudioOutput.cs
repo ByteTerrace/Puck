@@ -1,19 +1,21 @@
 using System.Runtime.InteropServices;
-using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Abstractions.Machines;
 
 namespace Puck.Demo.Audio;
 
 /// <summary>
-/// One booted cabinet's speaker path: an OS waveform-audio output stream that drains the machine's
-/// <see cref="IAudioSink"/> once per produced frame and queues the mixed stereo frames for playback. Each cabinet
-/// owns its own stream and the OS audio engine mixes the open streams — the simplest good multi-cabinet default (all
-/// booted cabinets are audible at once, like a real arcade room). Strictly OUTPUT-ONLY: it reads the sink's bounded
-/// ring (host-facing plumbing the emulator's determinism contract already excludes) and writes to the OS; nothing
-/// flows back toward the simulation. The queue is self-regulating — at most <see cref="MaxQueuedHeaders"/> buffers
-/// in flight (a latency bound of roughly a quarter second worst-case; typically one or two ~17 ms buffers), and when
-/// the device is saturated the pump simply leaves samples in the sink's ring, which itself keeps only the newest
-/// emulated second. A short silence cushion is queued ahead of the first real samples so frame-pacing jitter does
-/// not click. Any API failure downgrades to silence rather than disturbing the demo.
+/// One booted cabinet's speaker path: an OS waveform-audio output stream that drains a machine's neutral
+/// <see cref="IAudioMachine"/> capability once per produced frame and queues the mixed stereo frames for playback.
+/// One path for every core — <see cref="HumbleAudioMachine"/> and <see cref="AdvancedAudioMachine"/> adapt the SM83
+/// and native ARM7TDMI cores' own sinks onto it, so this class never names a concrete machine. Each cabinet owns its
+/// own stream and the OS audio engine mixes the open streams — the simplest good multi-cabinet default (all booted
+/// cabinets are audible at once, like a real arcade room). Strictly OUTPUT-ONLY: it reads the machine's bounded ring
+/// (host-facing plumbing the emulator's determinism contract already excludes) and writes to the OS; nothing flows
+/// back toward the simulation. The queue is self-regulating — at most <see cref="MaxQueuedHeaders"/> buffers in
+/// flight (a latency bound of roughly a quarter second worst-case; typically one or two ~17 ms buffers), and when the
+/// device is saturated the pump simply leaves samples buffered, which itself keeps only the newest emulated second.
+/// A short silence cushion is queued ahead of the first real samples so frame-pacing jitter does not click. Any API
+/// failure downgrades to silence rather than disturbing the demo.
 /// </summary>
 internal sealed unsafe class CabinetAudioOutput : IDisposable {
     /// <summary>The stream rate: 2¹⁵ frames per emulated second — an exact divisor of the 4194304 Hz mixer clock, so
@@ -74,13 +76,17 @@ internal sealed unsafe class CabinetAudioOutput : IDisposable {
         return new CabinetAudioOutput(device: device);
     }
 
-    /// <summary>Drains whatever the sink has buffered into the playback queue. Called once per produced frame after
-    /// the machine stepped; cheap when there is nothing to move.</summary>
-    /// <param name="sink">The machine's audio sink.</param>
-    public void Pump(IAudioSink sink) {
-        ArgumentNullException.ThrowIfNull(sink);
+    /// <summary>Drains whatever <paramref name="machine"/> has buffered into the playback queue — the one path every
+    /// core's cabinet pumps through, regardless of which core produced the audio. It queries no available-count (a
+    /// core-neutral capability exposes only the drain), so the pump queues its silence cushion on the first call —
+    /// which is exactly when playback begins — then drains buffer-by-buffer until a drain returns nothing. Called
+    /// once per produced frame after the machine stepped; a pure read of host-facing audio, so nothing flows back
+    /// toward the simulation.</summary>
+    /// <param name="machine">The machine's neutral audio capability.</param>
+    public void Pump(IAudioMachine machine) {
+        ArgumentNullException.ThrowIfNull(machine);
 
-        if (m_disposed || m_failed || (sink.AvailableSampleCount == 0)) {
+        if (m_disposed || m_failed) {
             return;
         }
 
@@ -90,17 +96,17 @@ internal sealed unsafe class CabinetAudioOutput : IDisposable {
             PumpSilenceCushion();
         }
 
-        while (sink.AvailableSampleCount > 0) {
+        while (true) {
             var index = TryClaimHeader();
 
             if (index < 0) {
-                return; // Device saturated: leave the rest in the sink's ring (it keeps the newest second on its own).
+                return; // Device saturated: leave the rest buffered (the machine keeps only the newest emulated second).
             }
 
-            var written = sink.ReadSamples(destination: new Span<short>(pointer: (void*)m_buffers[index], length: BufferSampleCapacity));
+            var written = machine.ReadSamples(destination: new Span<short>(pointer: (void*)m_buffers[index], length: BufferSampleCapacity));
 
             if (written == 0) {
-                return;
+                return; // Nothing buffered: the claimed header was never written, so it stays free for the next pump.
             }
 
             Submit(index: index, sampleCount: written);
@@ -160,8 +166,7 @@ internal sealed unsafe class CabinetAudioOutput : IDisposable {
                 _ = WaveOut.UnprepareHeader(handle: m_device, header: m_headers[index], headerByteLength: (uint)sizeof(WaveHeader));
                 m_written[index] = false;
                 free = ((free < 0) ? index : free);
-            }
-            else {
+            } else {
                 ++inFlight;
             }
         }

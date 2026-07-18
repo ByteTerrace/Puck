@@ -14,23 +14,46 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     private const int LeftStickOffset = 6;    // 3 bytes, two 12-bit axes
     private const int RightStickOffset = 9;    // 3 bytes, two 12-bit axes
     private const int ImuOffset = 13;   // three 12-byte samples (accel xyz, gyro xyz; int16 LE)
-    private const int ImuSampleSize = 12;
     private const int ImuSampleCount = 3;
+    private const int ImuSampleSize = 12;
     private const float ImuSampleSeconds = 0.005f; // each of the three IMU sub-samples spans a fixed 5 ms
     private const int StickCenter = 2048;  // nominal center of a 12-bit axis before calibration
     private const float StickRange = 1800f; // nominal half-travel; clamped to ±1 after scaling
     private const float StickDeadzone = 0.12f;
+    // Factory stick calibration lives in SPI flash: 9 bytes per stick, three 12-bit-packed (x, y) triples for the
+    // center, the below-center span, and the above-center span. The LEFT and RIGHT sticks pack those three triples
+    // in DIFFERENT orders (LEFT: above, center, below — RIGHT: center, below, above; see TryDecodeStickCalibration).
+    // User calibration, when present (magic 0xB2 0xA1), OVERRIDES the factory values.
+    private const uint FactoryLeftStickCalibrationAddress = 0x603DU;
+    private const uint FactoryRightStickCalibrationAddress = 0x6046U;
+    private const uint UserLeftStickCalibrationAddress = 0x8010U;   // 2 magic bytes at 0x8010, then 9 data bytes at 0x8012
+    private const uint UserRightStickCalibrationAddress = 0x801BU;  // 2 magic bytes at 0x801B, then 9 data bytes at 0x801D
+    private const int StickCalibrationDataLength = 9;
+    private const byte UserCalibrationMagic0 = 0xB2;
+    private const byte UserCalibrationMagic1 = 0xA1;
+    // A 0x21 subcommand reply to an SPI read echoes: [15..18] address (u32 LE), [19] length, [20..] the flash data.
+    private const int SpiReplyAddressOffset = 15;
+    private const int SpiReplyDataOffset = 20;
+    private const int SpiReplyLengthOffset = 19;
+    private const int SpiReadAttempts = 5;              // resend the read request this many times before giving up
+    // Plausibility bounds that reject unprogrammed/garbage flash (all-0x000 or all-0xFFF, absurd spans) so a bad
+    // read degrades to the nominal scale rather than poisoning an axis. A 12-bit axis is 0..4095, nominal center ~2048.
+    private const int StickCalibrationMinCenter = 512;
+    private const int StickCalibrationMaxCenter = 3583;
+    private const int StickCalibrationMaxSpan = 2400;
+    private const int StickCalibrationMinSpan = 128;
     // The IMU gyro reports ~0.070 deg/s per LSB (≈ ±2294 dps full scale), then degrees → radians.
     // Nominal/uncalibrated — per-device calibration would refine it.
     private const float GyroRadiansPerSecondPerLsb = (0.070f * (MathF.PI / 180f));
     // The accelerometer reports ≈ 0.000244 g per LSB (≈ ±8g full scale). Nominal/uncalibrated.
     private const float AccelerometerGPerLsb = 0.000244f;
-    private const byte RumbleOutputReportId = 0x10;
     private const byte DisableUsbTimeoutCommand = 0x04;
+    private const byte RumbleOutputReportId = 0x10;
     private const byte EnableFastBaudRateCommand = 0x03;   // 0x80 0x03: switch to the 3 Mbit baud rate
     private const byte RequestStatusCommand = 0x01;        // 0x80 0x01: request controller status (MAC + type), NOT "enable UART"
     private const byte HandshakeCommand = 0x02;            // 0x80 0x02: USB handshake
     private const byte InertialMeasurementUnitCommand = 0x40;
+    private const byte SpiFlashReadCommand = 0x10;         // subcommand 0x10: read SPI flash (payload: u32 LE address + u8 length)
     private const byte InitCommandInputReportId = 0x81;    // device -> host: reply to a 0x80 init command
     private const byte InitCommandOutputReportId = 0x80;   // host -> device: USB init command
     private const byte PlayerLightsCommand = 0x30;
@@ -55,6 +78,8 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     private byte m_rumblePacketId;
     private long m_lastRumbleSendTicks;
     private float m_lastRumbleIntensity;
+    private StickCalibration m_leftStickCalibration;   // default: IsValid = false → the nominal scale is used
+    private StickCalibration m_rightStickCalibration;
 
     public NintendoSwitchController(IHidDevice device) {
         ArgumentNullException.ThrowIfNull(device);
@@ -66,9 +91,9 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
 
         m_device = device;
         m_packetId = byte.MinValue;
-        m_requestBuffer = new byte[(outputLength > 0) ? outputLength : ReportSizeInBytes];
-        m_responseBuffer = new byte[(inputLength > 0) ? inputLength : ReportSizeInBytes];
-        m_rumbleBuffer = new byte[(outputLength > 0) ? outputLength : ReportSizeInBytes];
+        m_requestBuffer = new byte[((outputLength > 0) ? outputLength : ReportSizeInBytes)];
+        m_responseBuffer = new byte[((inputLength > 0) ? inputLength : ReportSizeInBytes)];
+        m_rumbleBuffer = new byte[((outputLength > 0) ? outputLength : ReportSizeInBytes)];
     }
 
     private async ValueTask<bool> SendInitCommand(
@@ -227,12 +252,182 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             command: InertialMeasurementUnitCommand
         );
 
+        // Read the factory (or user, when present) stick calibration from SPI flash so each axis reaches ±1 at full
+        // physical deflection — this corrects the per-device asymmetry the nominal scale cannot. Done before the pad
+        // starts flooding 0x30 full reports so the 0x21 subcommand replies are easy to pick out. A failed/implausible
+        // read leaves the nominal scale in place (see LoadStickCalibrationAsync), so a pad is never worse off.
+        await LoadStickCalibrationAsync(cancellationToken: cancellationToken);
+
         // set standard input report mode (0x30 = full input report with IMU)
         requestBuffer[11] = StandardFullModeArgument;
         _ = await SendSubcommand(
             cancellationToken: cancellationToken,
             command: SetInputReportModeCommand
         );
+    }
+
+    // Loads both sticks' calibration from SPI flash. Each stick prefers its user calibration (magic 0xB2 0xA1
+    // present) over the factory calibration, and falls back to the nominal scale on any failure.
+    private async ValueTask LoadStickCalibrationAsync(CancellationToken cancellationToken) {
+        m_leftStickCalibration = await LoadOneStickCalibrationAsync(
+            cancellationToken: cancellationToken,
+            factoryAddress: FactoryLeftStickCalibrationAddress,
+            isLeftStick: true,
+            stickName: "left",
+            userAddress: UserLeftStickCalibrationAddress
+        );
+        m_rightStickCalibration = await LoadOneStickCalibrationAsync(
+            cancellationToken: cancellationToken,
+            factoryAddress: FactoryRightStickCalibrationAddress,
+            isLeftStick: false,
+            stickName: "right",
+            userAddress: UserRightStickCalibrationAddress
+        );
+    }
+    private async ValueTask<StickCalibration> LoadOneStickCalibrationAsync(
+        uint factoryAddress,
+        uint userAddress,
+        bool isLeftStick,
+        string stickName,
+        CancellationToken cancellationToken
+    ) {
+        // Read the 2 magic bytes + 9 data bytes at the user-calibration address; a valid magic means the user
+        // calibration is present and OVERRIDES the factory calibration.
+        var userBuffer = new byte[(StickCalibrationDataLength + 2)];
+
+        if (await TryReadSpiFlash(address: userAddress, length: (StickCalibrationDataLength + 2), destination: userBuffer, cancellationToken: cancellationToken)
+            && (UserCalibrationMagic0 == userBuffer[0]) && (UserCalibrationMagic1 == userBuffer[1])
+            && TryDecodeStickCalibration(data: userBuffer.AsSpan(start: 2, length: StickCalibrationDataLength), isLeftStick: isLeftStick, calibration: out var userCalibration)) {
+            LogCalibration(source: "user", stickName: stickName, calibration: in userCalibration);
+
+            return userCalibration;
+        }
+
+        // Factory calibration (9 data bytes).
+        var factoryBuffer = new byte[StickCalibrationDataLength];
+
+        if (await TryReadSpiFlash(address: factoryAddress, length: StickCalibrationDataLength, destination: factoryBuffer, cancellationToken: cancellationToken)
+            && TryDecodeStickCalibration(data: factoryBuffer, isLeftStick: isLeftStick, calibration: out var factoryCalibration)) {
+            LogCalibration(source: "factory", stickName: stickName, calibration: in factoryCalibration);
+
+            return factoryCalibration;
+        }
+
+        // A pad must never get WORSE because calibration failed: keep the nominal scale and say so exactly once.
+        Console.Error.WriteLine(value: $"[gamepad] Switch Pro {stickName} stick calibration unavailable (SPI read failed or implausible); using nominal scale");
+
+        return default;
+    }
+    private static void LogCalibration(string source, string stickName, in StickCalibration calibration) {
+        Console.Error.WriteLine(value: $"[gamepad] Switch Pro {stickName} stick calibration source={source} center=({calibration.CenterX:F0},{calibration.CenterY:F0}) x[-{calibration.MinBelowX:F0},+{calibration.MaxAboveX:F0}] y[-{calibration.MinBelowY:F0},+{calibration.MaxAboveY:F0}]");
+    }
+    // Reads <paramref name="length"/> bytes of SPI flash at <paramref name="address"/> via subcommand 0x10, over the
+    // rumble+subcommand output report (like SendSubcommand). Matches the reply by its echoed subcommand id AND the
+    // exact address+length we requested, so an unrelated queued 0x21 reply can't be mistaken for ours. Returns false
+    // (leaving the caller on the nominal scale) if no matching reply arrives after SpiReadAttempts resends.
+    private async ValueTask<bool> TryReadSpiFlash(
+        uint address,
+        int length,
+        byte[] destination,
+        CancellationToken cancellationToken
+    ) {
+        const uint MaximumReplyReads = 16U;
+
+        var device = m_device;
+        var requestBuffer = m_requestBuffer;
+        var responseBuffer = m_responseBuffer;
+        var result = false;
+
+        for (var attempt = 0; ((attempt < SpiReadAttempts) && !result); ++attempt) {
+            // The packet number is a 4-bit rolling counter; mask it like the rumble/subcommand path so it never
+            // spills into the high nibble.
+            var packetId = ((byte)(m_packetId++ & 0x0F));
+
+            requestBuffer.AsSpan().Clear();
+
+            requestBuffer[0] = RumbleSubcommandOutputReportId;
+            requestBuffer[1] = packetId;
+            requestBuffer[10] = SpiFlashReadCommand;
+
+            // The neutral rumble payload occupies [2..10) on the rumble+subcommand report (span used immediately,
+            // not held across the await below).
+            DefaultRumblePacket.CopyTo(destination: requestBuffer.AsSpan()[2..]);
+            // SPI read arguments: little-endian u32 address followed by a u8 length.
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: requestBuffer.AsSpan(start: 11), value: address);
+            requestBuffer[15] = ((byte)length);
+
+            responseBuffer.AsSpan().Clear();
+
+            await device.WriteAsync(
+                buffer: requestBuffer,
+                cancellationToken: cancellationToken
+            );
+            await Task.Delay(
+                cancellationToken: cancellationToken,
+                millisecondsDelay: 12
+            );
+
+            for (var read = uint.MinValue; (MaximumReplyReads > read); ++read) {
+                var numberOfBytesRead = await device.ReadAsync(
+                    buffer: responseBuffer,
+                    cancellationToken: cancellationToken,
+                    timeoutInMilliseconds: 60
+                );
+
+                if ((numberOfBytesRead >= (SpiReplyDataOffset + length))
+                    && (SubcommandReplyInputReportId == responseBuffer[0])
+                    && (SpiFlashReadCommand == responseBuffer[SubcommandReplyAckOffset])
+                    && (address == BinaryPrimitives.ReadUInt32LittleEndian(source: responseBuffer.AsSpan(start: SpiReplyAddressOffset)))
+                    && (length == responseBuffer[SpiReplyLengthOffset])) {
+                    responseBuffer.AsSpan(start: SpiReplyDataOffset, length: length).CopyTo(destination: destination.AsSpan(start: 0, length: length));
+
+                    result = true;
+
+                    break;
+                }
+            }
+        }
+
+        requestBuffer.AsSpan().Clear();
+
+        return result;
+    }
+    // Decodes a 9-byte SPI stick-calibration block into per-axis center + below-center/above-center spans. The nine
+    // bytes hold six little-endian 12-bit values (three (x, y) triples); the LEFT and RIGHT sticks order those
+    // triples DIFFERENTLY — LEFT: above, center, below; RIGHT: center, below, above. Returns false when the decoded
+    // values are implausible so the caller keeps the nominal scale.
+    private static bool TryDecodeStickCalibration(ReadOnlySpan<byte> data, bool isLeftStick, out StickCalibration calibration) {
+        Span<int> values = stackalloc int[6];
+
+        values[0] = data[0] | ((data[1] & 0x0F) << 8);
+        values[1] = (data[1] >> 4) | (data[2] << 4);
+        values[2] = data[3] | ((data[4] & 0x0F) << 8);
+        values[3] = (data[4] >> 4) | (data[5] << 4);
+        values[4] = data[6] | ((data[7] & 0x0F) << 8);
+        values[5] = (data[7] >> 4) | (data[8] << 4);
+
+        int centerX, centerY, maxAboveX, maxAboveY, minBelowX, minBelowY;
+
+        if (isLeftStick) {
+            maxAboveX = values[0]; maxAboveY = values[1];
+            centerX = values[2]; centerY = values[3];
+            minBelowX = values[4]; minBelowY = values[5];
+        } else {
+            centerX = values[0]; centerY = values[1];
+            minBelowX = values[2]; minBelowY = values[3];
+            maxAboveX = values[4]; maxAboveY = values[5];
+        }
+
+        calibration = new StickCalibration(
+            centerX: centerX,
+            centerY: centerY,
+            maxAboveX: maxAboveX,
+            maxAboveY: maxAboveY,
+            minBelowX: minBelowX,
+            minBelowY: minBelowY
+        );
+
+        return calibration.IsValid;
     }
 
     /// <summary>
@@ -335,7 +530,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     private static byte PlayerLedPattern(int playerIndex) {
         // Switch convention: player N lights N solid LEDs (P1 = ●○○○, P2 = ●●○○, …). Bits 0-3 are the four
         // solid LEDs; cap at four slots and wrap beyond.
-        var slot = (playerIndex & 3);
+        var slot = playerIndex & 3;
 
         return ((byte)((1 << (slot + 1)) - 1));
     }
@@ -383,10 +578,10 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             Accelerometer: accelerometer,
             Buttons: buttons,
             Gyro: gyro,
-            LeftStick: ReadStick(report: report, offset: LeftStickOffset),
+            LeftStick: ReadStick(report: report, offset: LeftStickOffset, calibration: in m_leftStickCalibration),
             LeftTrigger: ((0 != (buttonsLeft & 0x80)) ? 1f : 0f),   // ZL is digital
             Orientation: FuseImu(report: report),
-            RightStick: ReadStick(report: report, offset: RightStickOffset),
+            RightStick: ReadStick(report: report, offset: RightStickOffset, calibration: in m_rightStickCalibration),
             RightTrigger: ((0 != (buttonsRight & 0x80)) ? 1f : 0f)  // ZR is digital
         );
 
@@ -437,12 +632,32 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
 
         return ((sum / ImuSampleCount) * AccelerometerGPerLsb);
     }
-    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset) {
-        var rawX = (report[offset] | ((report[offset + 1] & 0x0F) << 8));
-        var rawY = ((report[offset + 1] >> 4) | (report[offset + 2] << 4));
+    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset, in StickCalibration calibration) {
+        var rawX = report[offset] | ((report[(offset + 1)] & 0x0F) << 8);
+        var rawY = (report[(offset + 1)] >> 4) | (report[(offset + 2)] << 4);
+        float x, y;
+
+        if (calibration.IsValid) {
+            // Per-axis normalization from the pad's own calibration: (raw - center) / span, where span is the
+            // above-center travel for a positive push and the below-center travel for a negative one. Because the
+            // span comes from the pad itself, a full physical deflection maps to |axis| ≈ 1 even on an asymmetric
+            // stick — the fix for a pad that could not reach ±1 under the single nominal scale.
+            var deltaX = (rawX - calibration.CenterX);
+            var deltaY = (rawY - calibration.CenterY);
+
+            x = (deltaX / ((deltaX >= 0f) ? calibration.MaxAboveX : calibration.MinBelowX));
+            y = (deltaY / ((deltaY >= 0f) ? calibration.MaxAboveY : calibration.MinBelowY));
+        } else {
+            // Nominal fallback (no valid calibration was read) — the original single-scale path, unchanged.
+            x = ((rawX - StickCenter) / StickRange);
+            y = ((rawY - StickCenter) / StickRange);
+        }
+
+        // Clamp each axis into the unit range (a calibrated axis can nudge just past 1 at its extreme point) before
+        // the radial deadzone/rescale.
         var stick = new Vector2(
-            x: ((rawX - StickCenter) / StickRange),
-            y: ((rawY - StickCenter) / StickRange)
+            x: Math.Clamp(value: x, max: 1f, min: -1f),
+            y: Math.Clamp(value: y, max: 1f, min: -1f)
         );
         var magnitude = stick.Length();
 
@@ -470,5 +685,39 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
         }
 
         return ((sum / ImuSampleCount) * GyroRadiansPerSecondPerLsb);
+    }
+
+    // Per-device stick calibration decoded from SPI flash: the raw center and the below-/above-center travel per
+    // axis. IsValid gates the whole feature — a default (all-zero) value is invalid, so an unread/failed calibration
+    // transparently keeps the nominal scale in ReadStick.
+    private readonly struct StickCalibration {
+        public StickCalibration(int centerX, int centerY, int maxAboveX, int maxAboveY, int minBelowX, int minBelowY) {
+            static bool IsCenterPlausible(int value) {
+                return ((value >= StickCalibrationMinCenter) && (value <= StickCalibrationMaxCenter));
+            }
+            static bool IsSpanPlausible(int value) {
+                return ((value >= StickCalibrationMinSpan) && (value <= StickCalibrationMaxSpan));
+            }
+
+            CenterX = centerX;
+            CenterY = centerY;
+            MaxAboveX = maxAboveX;
+            MaxAboveY = maxAboveY;
+            MinBelowX = minBelowX;
+            MinBelowY = minBelowY;
+            IsValid = (
+                IsCenterPlausible(value: centerX) && IsCenterPlausible(value: centerY)
+                && IsSpanPlausible(value: maxAboveX) && IsSpanPlausible(value: maxAboveY)
+                && IsSpanPlausible(value: minBelowX) && IsSpanPlausible(value: minBelowY)
+            );
+        }
+
+        public float CenterX { get; }
+        public float CenterY { get; }
+        public bool IsValid { get; }
+        public float MaxAboveX { get; }
+        public float MaxAboveY { get; }
+        public float MinBelowX { get; }
+        public float MinBelowY { get; }
     }
 }

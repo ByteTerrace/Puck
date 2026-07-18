@@ -19,35 +19,35 @@ public static class VulkanComputeServiceRegistration {
         // The Vulkan-only ray-query / acceleration-structure API (no neutral seam — D3D12 has no DXR). Registered
         // here so the world-acceleration builder and the ray-query (--world-rt) path can resolve it. Harmless when
         // unused — it self-resolves device entry points lazily on first call.
-        services.TryAddSingleton<IVulkanAccelerationStructureApi>(static _ => new VulkanNativeAccelerationStructureApi());
-        services.TryAddSingleton<IVulkanWorldAccelerationApi>(static sp => new VulkanWorldAccelerationApi(
+        services.TryAddSingleton<IVulkanAccelerationStructureApi>(implementationFactory: static _ => new VulkanNativeAccelerationStructureApi());
+        services.TryAddSingleton<IVulkanWorldAccelerationApi>(implementationFactory: static sp => new VulkanWorldAccelerationApi(
             accelerationStructureApi: sp.GetRequiredService<IVulkanAccelerationStructureApi>()
         ));
         // The neutral acceleration-structure factory the ray-query render node resolves (the Vulkan peer of the
         // Direct3D 12 one). Wraps the world-acceleration builder; harmless when unused.
-        services.TryAddSingleton<IGpuAccelerationStructureFactory>(static sp => new VulkanGpuAccelerationStructureFactory(
+        services.TryAddSingleton<IGpuAccelerationStructureFactory>(implementationFactory: static sp => new VulkanGpuAccelerationStructureFactory(
             worldAccelerationApi: sp.GetRequiredService<IVulkanWorldAccelerationApi>()
         ));
-        services.TryAddSingleton<IGpuComputeCommandPoolFactory>(static sp => new VulkanGpuComputeCommandPoolFactory(
+        services.TryAddSingleton<IGpuComputeCommandPoolFactory>(implementationFactory: static sp => new VulkanGpuComputeCommandPoolFactory(
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>()
         ));
-        services.TryAddSingleton<IGpuComputePipelineFactory>(static sp => new VulkanGpuComputePipelineFactory(
+        services.TryAddSingleton<IGpuComputePipelineFactory>(implementationFactory: static sp => new VulkanGpuComputePipelineFactory(
             computePipelineApi: sp.GetRequiredService<IVulkanComputePipelineApi>()
         ));
-        services.TryAddSingleton<IGpuComputeRecorder>(static sp => new VulkanGpuComputeRecorder(
+        services.TryAddSingleton<IGpuComputeRecorder>(implementationFactory: static sp => new VulkanGpuComputeRecorder(
             recordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()
         ));
-        services.TryAddSingleton<IGpuStorageImageFactory>(static sp => new VulkanGpuStorageImageFactory(
+        services.TryAddSingleton<IGpuStorageImageFactory>(implementationFactory: static sp => new VulkanGpuStorageImageFactory(
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>()
         ));
         // GPU performance counters: the timestamp query-pool factory + recorder (the neutral timing seam). The
         // query-pool native API is registered with the other native APIs; the physical-device API supplies the period.
-        services.TryAddSingleton<IGpuTimingPoolFactory>(static sp => new VulkanGpuTimingPoolFactory(
+        services.TryAddSingleton<IGpuTimingPoolFactory>(implementationFactory: static sp => new VulkanGpuTimingPoolFactory(
             physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>(),
             queryPoolApi: sp.GetRequiredService<IVulkanQueryPoolApi>()
         ));
-        services.TryAddSingleton<IGpuTimingRecorder>(static sp => new VulkanGpuTimingRecorder(
+        services.TryAddSingleton<IGpuTimingRecorder>(implementationFactory: static sp => new VulkanGpuTimingRecorder(
             queryPoolApi: sp.GetRequiredService<IVulkanQueryPoolApi>()
         ));
         // The compute-services bundle composes the nine granular compute factories/services a compute node drives

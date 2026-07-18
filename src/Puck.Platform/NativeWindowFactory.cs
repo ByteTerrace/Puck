@@ -18,7 +18,7 @@ public sealed class NativeWindowFactory(
 
     public INativeWindow Create() {
         if (m_options.Mode == NativeWindowMode.Headless) {
-            return new ConfiguredNativeWindow(Options.Create(m_options));
+            return new ConfiguredNativeWindow(options: Options.Create(options: m_options));
         }
 
         if (m_options.Mode != NativeWindowMode.PlatformWindow) {
@@ -33,11 +33,11 @@ public sealed class NativeWindowFactory(
 
         return displayKind switch {
             NativeDisplayKind.Win32 => new Win32NativeWindow(
-                m_clipboardService,
-                Options.Create(m_options)
+                clipboardService: m_clipboardService,
+                options: Options.Create(options: m_options)
             ),
-            NativeDisplayKind.Wayland => new WaylandNativeWindow(Options.Create(m_options)),
-            NativeDisplayKind.Xcb => new XcbNativeWindow(Options.Create(m_options)),
+            NativeDisplayKind.Wayland => new WaylandNativeWindow(options: Options.Create(options: m_options)),
+            NativeDisplayKind.Xcb => new XcbNativeWindow(options: Options.Create(options: m_options)),
             NativeDisplayKind.Vi => CreateViWindow(),
             _ => throw new PlatformNotSupportedException(message: $"Platform windows for display kind '{displayKind}' are not implemented.")
         };
@@ -54,7 +54,7 @@ public sealed class NativeWindowFactory(
 
         return new ViNativeWindow(
             backend: backend,
-            options: Options.Create(m_options)
+            options: Options.Create(options: m_options)
         );
     }
 }

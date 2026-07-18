@@ -4,6 +4,8 @@ using Puck.Assets;
 using Puck.Demo.Creator;
 using Puck.Demo.Editing;
 using Puck.Demo.Forge;
+using Puck.Scene;
+using Puck.SdfVm;
 
 namespace Puck.Demo.World;
 
@@ -20,6 +22,10 @@ namespace Puck.Demo.World;
 /// <param name="Role">The anchor role (null = decoration; <c>cabinet:&lt;n&gt;</c> re-homes a console stand).</param>
 /// <param name="Mirror">The symmetry fold axis (<c>x</c> or <c>z</c>, the placement's LOCAL frame; null = none).</param>
 /// <param name="Pattern">The wallpaper pattern block (null = none).</param>
+/// <param name="Exit">A re-forged fourth-wall EXIT condition on a <c>cabinet:&lt;n&gt;</c> placement (see
+/// <see cref="PlacementDocument.Exit"/>); null = none re-forged.</param>
+/// <param name="Victory">A re-forged 128-bit VICTORY condition (see <see cref="PlacementDocument.Victory"/>); null =
+/// none re-forged.</param>
 public readonly record struct WorldPlacement(
     int Id,
     string RefName,
@@ -30,7 +36,9 @@ public readonly record struct WorldPlacement(
     WorldPlacementRepeat? Repeat,
     string? Role,
     string? Mirror,
-    WorldPlacementPattern? Pattern
+    WorldPlacementPattern? Pattern,
+    BrickExitCondition? Exit = null,
+    BrickVictoryCondition? Victory = null
 );
 
 /// <summary>A placement's repeat block (mirrors <see cref="PlacementRepeatDocument"/>).</summary>
@@ -101,10 +109,10 @@ public readonly record struct WorldBounds(float MinX, float MinZ, float MaxX, fl
     /// <param name="position">The candidate position.</param>
     /// <returns>The clamped position.</returns>
     public Vector3 Clamp(Vector3 position) =>
-        new(Math.Clamp(value: position.X, max: MaxX, min: MinX), position.Y, Math.Clamp(value: position.Z, max: MaxZ, min: MinZ));
+        new(x: Math.Clamp(value: position.X, max: MaxX, min: MinX), y: position.Y, z: Math.Clamp(value: position.Z, max: MaxZ, min: MinZ));
 
     /// <summary>The lot's planar center.</summary>
-    public Vector3 Center => new((0.5f * (MinX + MaxX)), FloorY, (0.5f * (MinZ + MaxZ)));
+    public Vector3 Center => new(x: (0.5f * (MinX + MaxX)), y: FloorY, z: (0.5f * (MinZ + MaxZ)));
 }
 
 /// <summary>
@@ -141,9 +149,11 @@ public sealed class WorldScene {
     public const int MaxLights = 128;
     /// <summary>The walk-override budget (the probe reserves exactly this many ghost outlines).</summary>
     public const int MaxWalkOverrides = 128;
-    /// <summary>The placed-camera budget. Cameras are cheap DATA (a posed eye marker); the number that can produce a
-    /// live FEED at once is the far smaller <c>CameraFeedPool.MaxCameraFeeds</c> (each feed is a render pass) — the
-    /// wiring model is what decides which eyes get a feed, so a world may hold many eyes and light only a few.</summary>
+    /// <summary>The placed-camera budget. Cameras are cheap DATA (a posed eye marker); the number that can hold a live
+    /// persistent VIEW at once is <see cref="Puck.SdfVm.Views.ViewStack.MaxRegisteredViews"/>, of which only
+    /// <see cref="Puck.SdfVm.Views.ViewStack.RefreshBudget"/> re-render on any one frame (the rest persist their last
+    /// image) — the wiring model decides which eyes get a view, so a world may hold many eyes and light or refresh
+    /// only a few.</summary>
     public const int MaxCameras = 64;
     /// <summary>The uniform-scale envelope a placement may be grown/shrunk to.</summary>
     public const float MinScale = 0.2f;
@@ -156,7 +166,7 @@ public sealed class WorldScene {
     private readonly List<CameraEye> m_cameras = [];
     // The screen-surface wiring table: at most one source per screen index. A dictionary keeps the set-semantics the
     // world.wire verb wants (wiring a taken screen replaces its source); the render node reads it to route each screen.
-    private readonly Dictionary<int, ScreenWireSource> m_wiring = [];
+    private readonly Dictionary<int, ScreenSourceRef> m_wiring = [];
     private int m_nextCameraId;
     private readonly Dictionary<string, CreationDocumentCacheEntry> m_creationCache = new(comparer: StringComparer.Ordinal);
     private WorldBounds m_bounds = WorldBounds.Default;
@@ -233,7 +243,7 @@ public sealed class WorldScene {
     }
     /// <summary>The screen-surface wiring table (screen index → the source it displays). At most one entry per screen
     /// index; a screen with no entry falls back to its default behavior (its brick viewport / flat material).</summary>
-    public IReadOnlyDictionary<int, ScreenWireSource> Wiring => m_wiring;
+    public IReadOnlyDictionary<int, ScreenSourceRef> Wiring => m_wiring;
     /// <summary>The authored lot bounds.</summary>
     public WorldBounds Bounds => m_bounds;
     /// <summary>The world's save/load handle.</summary>
@@ -324,7 +334,7 @@ public sealed class WorldScene {
             return null;
         }
 
-        m_creationCache[hash] = new CreationDocumentCacheEntry(Document: document, ShapeCount: (document.Shapes?.Count ?? 0));
+        m_creationCache[hash] = new CreationDocumentCacheEntry(Document: document, ShapeCount: document.StampShapeCount());
 
         return document;
     }
@@ -333,12 +343,13 @@ public sealed class WorldScene {
     /// <c>world.place</c> uses before committing to an oversized assembly.</summary>
     /// <param name="hash">The candidate creation's content hash.</param>
     /// <param name="store">The content-addressed store to resolve against.</param>
-    /// <param name="shapeCount">The resolved shape count (0 when unresolved).</param>
+    /// <param name="shapeCount">The resolved shape count (0 when unresolved) — INCLUDING every text run's expanded
+    /// glyph count, since the world stamps text as real Glyph geometry that competes for the per-stamp budget.</param>
     /// <returns>Whether the hash resolved to a creation at all.</returns>
     public bool TryMeasureCreation(string hash, ContentAddressedStore store, out int shapeCount) {
         var document = ResolveCreation(hash: hash, store: store);
 
-        shapeCount = (document?.Shapes?.Count ?? 0);
+        shapeCount = (document?.StampShapeCount() ?? 0);
 
         return (document is not null);
     }
@@ -378,7 +389,7 @@ public sealed class WorldScene {
     /// <param name="deltaSeconds">The frame delta.</param>
     public void Move(Vector2 planar, float deltaSeconds) {
         const float moveSpeed = 4.0f;
-        var step = (new Vector3(planar.X, 0f, planar.Y) * (moveSpeed * deltaSeconds));
+        var step = (new Vector3(x: planar.X, y: 0f, z: planar.Y) * (moveSpeed * deltaSeconds));
 
         if (step == Vector3.Zero) {
             return;
@@ -428,7 +439,7 @@ public sealed class WorldScene {
         }
 
         const float rotateSpeed = 90f; // degrees/second at full deflection
-        var deltaDegrees = (rate * rotateSpeed * deltaSeconds);
+        var deltaDegrees = ((rate * rotateSpeed) * deltaSeconds);
 
         if (TargetIsGhost) {
             m_ghostYawDegrees = SnapYaw(yawDegrees: WrapDegrees(degrees: (m_ghostYawDegrees + deltaDegrees)));
@@ -448,9 +459,9 @@ public sealed class WorldScene {
     /// (floor-rest), exactly as the analog <see cref="Move"/> path does.</summary>
     /// <param name="requested">The requested world position (Y ignored — floor-rest).</param>
     public void SetTargetPositionExact(Vector3 requested) {
-        var planar = new Vector3(requested.X, TargetPosition.Y, requested.Z);
+        var planar = new Vector3(x: requested.X, y: TargetPosition.Y, z: requested.Z);
         var result = (m_snap.Enabled
-            ? m_bounds.Clamp(position: GridSnap.Apply(intent: planar, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: new Vector3(float.NaN)))
+            ? m_bounds.Clamp(position: GridSnap.Apply(intent: planar, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: new Vector3(value: float.NaN)))
             : m_bounds.Clamp(position: planar));
 
         m_snapIntent = result;
@@ -560,7 +571,7 @@ public sealed class WorldScene {
     /// <param name="objectPitch">The object grid's in-plane pitch (X/Z).</param>
     /// <param name="objectPatchRadius">The object grid's finite-patch radius.</param>
     public void WriteGridOverlay(float floorY, out uint flags, out Vector2 worldPitch, out Vector3 objectOrigin, out Quaternion objectFrame, out Vector2 objectPitch, out float objectPatchRadius) {
-        var overlay = GridOverlayState.From(snap: m_snap, gridVisible: m_snapGridVisible, floorY: floorY);
+        var overlay = GridOverlayFactory.From(snap: m_snap, gridVisible: m_snapGridVisible, floorY: floorY);
 
         flags = overlay.Flags;
         objectFrame = overlay.ObjectFrame;
@@ -616,26 +627,25 @@ public sealed class WorldScene {
             return Vector3.Zero;
         }
 
-        var min = new Vector3(float.MaxValue);
-        var max = new Vector3(float.MinValue);
+        var min = new Vector3(value: float.MaxValue);
+        var max = new Vector3(value: float.MinValue);
 
         foreach (var shape in shapes) {
             var shapeScale = ((shape.Scale == default) ? Vector3.One : shape.Scale);
             var center = (shape.Position * scale);
-            var shapeMaxScale = MathF.Max(shapeScale.X, MathF.Max(shapeScale.Y, shapeScale.Z));
-            var reach = (AvatarDefinition.Reach(type: shape.Type, scale: Vector3.One) * shapeMaxScale * scale);
+            var shapeMaxScale = MathF.Max(x: shapeScale.X, y: MathF.Max(x: shapeScale.Y, y: shapeScale.Z));
+            var reach = ((AvatarDefinition.Reach(type: shape.Type, scale: Vector3.One) * shapeMaxScale) * scale);
 
-            min = Vector3.Min(value1: min, value2: (center - new Vector3(reach)));
-            max = Vector3.Max(value1: max, value2: (center + new Vector3(reach)));
+            min = Vector3.Min(value1: min, value2: (center - new Vector3(value: reach)));
+            max = Vector3.Max(value1: max, value2: (center + new Vector3(value: reach)));
         }
 
         return new Vector3(
-            MathF.Max(MathF.Abs(min.X), MathF.Abs(max.X)),
-            MathF.Max(MathF.Abs(min.Y), MathF.Abs(max.Y)),
-            MathF.Max(MathF.Abs(min.Z), MathF.Abs(max.Z))
+            x: MathF.Max(x: MathF.Abs(x: min.X), y: MathF.Abs(x: max.X)),
+            y: MathF.Max(x: MathF.Abs(x: min.Y), y: MathF.Abs(x: max.Y)),
+            z: MathF.Max(x: MathF.Abs(x: min.Z), y: MathF.Abs(x: max.Z))
         );
     }
-
     private static float FaceRadiusFor(Vector3 pitch) {
         var min = float.MaxValue;
 
@@ -655,7 +665,7 @@ public sealed class WorldScene {
             return;
         }
 
-        var factor = MathF.Exp((rate * 1.2f * deltaSeconds));
+        var factor = MathF.Exp(x: ((rate * 1.2f) * deltaSeconds));
 
         if (TargetIsGhost) {
             var next = Math.Clamp(value: (m_ghostScale * factor), max: MaxScale, min: MinScale);
@@ -869,23 +879,24 @@ public sealed class WorldScene {
     /// <param name="pitch">The eye's tilt, radians.</param>
     /// <param name="fieldOfViewRadians">The vertical field of view (null = the engine default).</param>
     /// <param name="focusDistance">The look-at target distance (null = 1).</param>
-    /// <param name="anchor">The anchor kind (only <see cref="CameraAnchorKind.World"/> and
-    /// <see cref="CameraAnchorKind.Placement"/> are valid in the WORLD document; a shape anchor belongs to a creation).</param>
+    /// <param name="anchor">The anchor kind (only <see cref="SdfAnchorKind.World"/> and
+    /// <see cref="SdfAnchorKind.Instance"/> are valid in the WORLD document; a <see cref="SdfAnchorKind.Body"/> anchor
+    /// belongs to a creation).</param>
     /// <param name="anchorId">The anchored placement id (ignored for a standalone eye).</param>
     /// <returns>The new eye's id, or null when the camera budget is full.</returns>
-    public int? AddCamera(Vector3 position, float yaw = 0f, float pitch = 0f, float? fieldOfViewRadians = null, float? focusDistance = null, CameraAnchorKind anchor = CameraAnchorKind.World, int anchorId = 0) {
+    public int? AddCamera(Vector3 position, float yaw = 0f, float pitch = 0f, float? fieldOfViewRadians = null, float? focusDistance = null, SdfAnchorKind anchor = SdfAnchorKind.World, int anchorId = 0) {
         if (m_cameras.Count >= MaxCameras) {
             return null;
         }
 
-        // A world-document eye rides a world-space frame or a placement; a shape anchor (a creation's own lens) has no
+        // A world-document eye rides a world-space frame or a placement; a Body anchor (a creation's own lens) has no
         // meaning here (no shape ids in a world), so it coerces to a standalone world eye.
-        var effectiveAnchor = ((anchor == CameraAnchorKind.Placement) ? CameraAnchorKind.Placement : CameraAnchorKind.World);
+        var effectiveAnchor = ((anchor == SdfAnchorKind.Instance) ? SdfAnchorKind.Instance : SdfAnchorKind.World);
         var id = m_nextCameraId++;
 
         m_cameras.Add(item: new CameraEye(
             Anchor: effectiveAnchor,
-            AnchorId: ((effectiveAnchor == CameraAnchorKind.Placement) ? anchorId : 0),
+            AnchorId: ((effectiveAnchor == SdfAnchorKind.Instance) ? anchorId : 0),
             FieldOfViewRadians: fieldOfViewRadians,
             FocusDistance: focusDistance,
             Id: id,
@@ -911,24 +922,33 @@ public sealed class WorldScene {
         }
 
         m_cameras.RemoveAt(index: index);
+
+        foreach (var screenIndex in m_wiring
+            .Where(predicate: entry => ((entry.Value.Kind == ScreenSourceKind.Camera) && (entry.Value.Index == id)))
+            .Select(selector: entry => entry.Key)
+            .ToArray()
+        ) {
+            _ = m_wiring.Remove(key: screenIndex);
+        }
+
         MarkRevision();
 
         return true;
     }
 
     /// <summary>Wires a screen surface to display a source (the <c>world.wire</c> verb). Set-semantics: wiring a screen
-    /// that already has a source REPLACES it. A <see cref="ScreenWireKind.None"/> source CLEARS the screen's wire (it
+    /// that already has a source REPLACES it. A <see cref="ScreenSourceKind.None"/> source CLEARS the screen's wire (it
     /// falls back to its default behavior). Bumps <see cref="Revision"/> only (the host re-polls the table each frame);
     /// snapshot-covered. Refuses (returns false) an out-of-range screen index.</summary>
     /// <param name="screenIndex">The screen-surface slot to wire (0..<c>SdfProgramBuilder.MaxScreenSurfaces</c> - 1).</param>
-    /// <param name="source">The source to display (<see cref="ScreenWireSource.None"/> clears the wire).</param>
+    /// <param name="source">The source to display (<see cref="ScreenSourceRef.None"/> clears the wire).</param>
     /// <returns>Whether the screen index was in range and the wire applied.</returns>
-    public bool WireScreen(int screenIndex, ScreenWireSource source) {
+    public bool WireScreen(int screenIndex, ScreenSourceRef source) {
         if ((screenIndex < 0) || (screenIndex >= Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces)) {
             return false;
         }
 
-        if (source.Kind == ScreenWireKind.None) {
+        if (source.Kind == ScreenSourceKind.None) {
             _ = m_wiring.Remove(key: screenIndex);
         } else {
             m_wiring[screenIndex] = source;
@@ -962,8 +982,8 @@ public sealed class WorldScene {
             return 1;
         }
 
-        var segmentsX = Math.Max(val1: 1, val2: ((value.CountX + MaxRepeatPerSegment - 1) / MaxRepeatPerSegment));
-        var segmentsZ = Math.Max(val1: 1, val2: ((value.CountZ + MaxRepeatPerSegment - 1) / MaxRepeatPerSegment));
+        var segmentsX = Math.Max(val1: 1, val2: (((value.CountX + MaxRepeatPerSegment) - 1) / MaxRepeatPerSegment));
+        var segmentsZ = Math.Max(val1: 1, val2: (((value.CountZ + MaxRepeatPerSegment) - 1) / MaxRepeatPerSegment));
 
         return (segmentsX * segmentsZ);
     }
@@ -982,6 +1002,96 @@ public sealed class WorldScene {
         MarkProgramChanged();
 
         return true;
+    }
+
+    /// <summary>Sets/clears the persisted fourth-wall EXIT condition on the <c>cabinet:&lt;n&gt;</c> placement
+    /// (a no-op — not the SELECTED placement — since a re-forged condition targets a cabinet INDEX, not the
+    /// authoring cursor). The console <c>condition.*</c> verbs call this alongside the live edit
+    /// (<c>Overworld.OverworldFrameSource</c>'s queued <c>PendingConditionEdit</c>) so a re-forge persists through
+    /// <c>world.save</c>, not just the running session. Presentation/sim-metadata only (mirrors
+    /// <see cref="SetSelectedRole"/>): never marks the program changed — a condition never touches emitted
+    /// geometry.</summary>
+    /// <param name="cabinetIndex">The cabinet index (the placement's <c>cabinet:&lt;n&gt;</c> role).</param>
+    /// <param name="condition">The replacement condition, or null to clear.</param>
+    /// <returns>Whether a matching placement was found.</returns>
+    public bool SetCabinetExitCondition(int cabinetIndex, BrickExitCondition? condition) {
+        var index = FindCabinetPlacementIndex(cabinetIndex: cabinetIndex);
+
+        if (index < 0) {
+            return false;
+        }
+
+        m_placements[index] = m_placements[index] with { Exit = condition };
+
+        return true;
+    }
+
+    /// <summary>Sets/clears the persisted 128-bit VICTORY condition on the <c>cabinet:&lt;n&gt;</c> placement —
+    /// the victory half of <see cref="SetCabinetExitCondition"/> (see its remarks).</summary>
+    /// <param name="cabinetIndex">The cabinet index (the placement's <c>cabinet:&lt;n&gt;</c> role).</param>
+    /// <param name="condition">The replacement condition, or null to clear.</param>
+    /// <returns>Whether a matching placement was found.</returns>
+    public bool SetCabinetVictoryCondition(int cabinetIndex, BrickVictoryCondition? condition) {
+        var index = FindCabinetPlacementIndex(cabinetIndex: cabinetIndex);
+
+        if (index < 0) {
+            return false;
+        }
+
+        m_placements[index] = m_placements[index] with { Victory = condition };
+
+        return true;
+    }
+
+    // Finds the placement carrying role `cabinet:<cabinetIndex>` (mirrors OverworldRoom's cabinet-role recognition),
+    // or -1 when the cabinet was never re-homed onto a placement (the common case — most cabinets stay code-built
+    // stands with nothing to persist a condition onto).
+    private int FindCabinetPlacementIndex(int cabinetIndex) {
+        var role = $"cabinet:{cabinetIndex}";
+
+        for (var index = 0; (index < m_placements.Count); index++) {
+            if (string.Equals(a: m_placements[index].Role, b: role, comparisonType: StringComparison.Ordinal)) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>Reads cabinet <paramref name="cabinetIndex"/>'s re-forged EXIT condition off a LOADED document (not
+    /// this live scene) — the load-time half of <see cref="SetCabinetExitCondition"/>: a null field means "nothing
+    /// re-forged here" (the cabinet keeps whatever the run document originally authored), never "clear the original"
+    /// — so a world.load can only ADD a re-forge on top of the boot-authored condition, never silently erase one.
+    /// Static (a pure read over the passed document) so <c>OverworldFrameSource.ConsumePendingWorldLoad</c> — already
+    /// at its analyzer coupling ceiling — names no new type: <see cref="WorldDocument"/>/<see cref="BrickExitCondition"/>
+    /// are already coupled there.</summary>
+    /// <param name="document">The document to read (null = nothing).</param>
+    /// <param name="cabinetIndex">The cabinet index (the placement's <c>cabinet:&lt;n&gt;</c> role).</param>
+    /// <returns>The re-forged condition, or null (no matching placement, or nothing re-forged on it).</returns>
+    public static BrickExitCondition? FindCabinetExitCondition(WorldDocument? document, int cabinetIndex) =>
+        FindCabinetPlacement(document: document, cabinetIndex: cabinetIndex)?.Exit;
+
+    /// <summary>The victory half of <see cref="FindCabinetExitCondition"/> (see its remarks).</summary>
+    /// <param name="document">The document to read (null = nothing).</param>
+    /// <param name="cabinetIndex">The cabinet index (the placement's <c>cabinet:&lt;n&gt;</c> role).</param>
+    /// <returns>The re-forged condition, or null (no matching placement, or nothing re-forged on it).</returns>
+    public static BrickVictoryCondition? FindCabinetVictoryCondition(WorldDocument? document, int cabinetIndex) =>
+        FindCabinetPlacement(document: document, cabinetIndex: cabinetIndex)?.Victory;
+
+    private static PlacementDocument? FindCabinetPlacement(WorldDocument? document, int cabinetIndex) {
+        if (document?.Placements is not { Count: > 0 } placements) {
+            return null;
+        }
+
+        var role = $"cabinet:{cabinetIndex}";
+
+        foreach (var placement in placements) {
+            if (string.Equals(a: placement.Role, b: role, comparisonType: StringComparison.Ordinal)) {
+                return placement;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Rebinds the SELECTED placement to a different (compatible) creation by name/hash — the console
@@ -1184,6 +1294,9 @@ public sealed class WorldScene {
     /// <param name="NextWalkOverrideId">The next walk-override id counter.</param>
     /// <param name="WalkGridKind">The walk grid tessellation knob.</param>
     /// <param name="MovementLock">The movement direction lock knob.</param>
+    /// <param name="Cameras">The placed camera eyes.</param>
+    /// <param name="Wiring">The screen-source wiring table.</param>
+    /// <param name="NextCameraId">The next camera id counter.</param>
     public sealed record Snapshot(
         IReadOnlyList<WorldPlacement> Placements,
         IReadOnlyList<WorldTerrainPatch> Terrain,
@@ -1204,7 +1317,7 @@ public sealed class WorldScene {
         string WalkGridKind,
         string MovementLock,
         IReadOnlyList<CameraEye> Cameras,
-        IReadOnlyList<ScreenWire> Wiring,
+        IReadOnlyList<ScreenSource> Wiring,
         int NextCameraId
     );
 
@@ -1232,7 +1345,7 @@ public sealed class WorldScene {
             Terrain: [.. m_terrain],
             WalkGridKind: m_walkGridKind,
             WalkOverrides: [.. m_walkOverrides],
-            Wiring: [.. m_wiring.Select(selector: static pair => new ScreenWire(ScreenIndex: pair.Key, Source: pair.Value))]
+            Wiring: [.. m_wiring.Select(selector: static pair => new ScreenSource(ScreenIndex: pair.Key, Source: pair.Value))]
         );
     }
 
@@ -1286,6 +1399,7 @@ public sealed class WorldScene {
 
         foreach (var placement in m_placements) {
             placements.Add(item: new PlacementDocument(
+                Exit: placement.Exit,
                 Id: placement.Id,
                 Mirror: placement.Mirror,
                 Name: placement.RefName,
@@ -1306,6 +1420,7 @@ public sealed class WorldScene {
                 Role: placement.Role,
                 Scale: placement.Scale,
                 Source: placement.SourceHash,
+                Victory: placement.Victory,
                 YawDegrees: placement.YawDegrees
             ));
         }
@@ -1334,8 +1449,8 @@ public sealed class WorldScene {
             // The model carries radians (the engine's unit); the document carries DEGREES (the authoring/verb unit) so a
             // saved world reads human. FOV null in the model stays null in the document (the engine default).
             cameras.Add(item: new CameraDocument(
-                Anchor: ((eye.Anchor == CameraAnchorKind.Placement) ? "placement" : "world"),
-                AnchorId: ((eye.Anchor == CameraAnchorKind.Placement) ? (int?)eye.AnchorId : null),
+                Anchor: ((eye.Anchor == SdfAnchorKind.Instance) ? "placement" : "world"),
+                AnchorId: ((eye.Anchor == SdfAnchorKind.Instance) ? (int?)eye.AnchorId : null),
                 Focus: eye.FocusDistance,
                 Fov: ((eye.FieldOfViewRadians is { } fov) ? (float?)(fov * (180f / MathF.PI)) : null),
                 Id: eye.Id,
@@ -1345,22 +1460,22 @@ public sealed class WorldScene {
             ));
         }
 
-        var wiring = new List<ScreenWireDocument>(capacity: m_wiring.Count);
+        var wiring = new List<ScreenSourceDocument>(capacity: m_wiring.Count);
 
         // Emit the wiring table in ascending screen-index order so the saved bytes are stable regardless of the
         // dictionary's insertion order (a load→save round-trip is byte-identical).
         foreach (var screenIndex in m_wiring.Keys.Order()) {
             var source = m_wiring[screenIndex];
 
-            wiring.Add(item: new ScreenWireDocument(
-                Index: ((source.Kind is ScreenWireKind.Brick or ScreenWireKind.Feed) ? (int?)source.Index : null),
+            wiring.Add(item: new ScreenSourceDocument(
+                Index: ((source.Kind is ScreenSourceKind.Guest or ScreenSourceKind.Camera) ? (int?)source.Index : null),
                 Kind: (source.Kind switch {
-                    ScreenWireKind.Brick => "brick",
-                    ScreenWireKind.Feed => "feed",
-                    ScreenWireKind.Named => "named",
+                    ScreenSourceKind.Guest => "guest",
+                    ScreenSourceKind.Camera => "camera",
+                    ScreenSourceKind.Named => "named",
                     _ => "none",
                 }),
-                Name: ((source.Kind == ScreenWireKind.Named) ? source.Name : null),
+                Name: ((source.Kind == ScreenSourceKind.Named) ? source.Name : null),
                 Screen: screenIndex
             ));
         }
@@ -1445,6 +1560,7 @@ public sealed class WorldScene {
             }
 
             m_placements.Add(item: new WorldPlacement(
+                Exit: placement.Exit,
                 Id: placement.Id,
                 Mirror: placement.Mirror,
                 Pattern: ((placement.Pattern is { } patternDocument)
@@ -1463,6 +1579,7 @@ public sealed class WorldScene {
                 Role: placement.Role,
                 Scale: (placement.Scale ?? 1f),
                 SourceHash: source,
+                Victory: placement.Victory,
                 YawDegrees: (placement.YawDegrees ?? 0f)
             ));
             maxPlacementId = Math.Max(val1: maxPlacementId, val2: placement.Id);
@@ -1476,7 +1593,7 @@ public sealed class WorldScene {
                 break;
             }
 
-            var id = maxTerrainId + 1;
+            var id = (maxTerrainId + 1);
 
             m_terrain.Add(item: new WorldTerrainPatch(Center: patch.Center, HalfExtents: patch.HalfExtents, Id: id, Kind: (patch.Kind ?? "slab"), Material: (patch.Material ?? 0)));
             maxTerrainId = id;
@@ -1489,7 +1606,7 @@ public sealed class WorldScene {
                 break;
             }
 
-            var id = maxLightId + 1;
+            var id = (maxLightId + 1);
 
             m_lights.Add(item: new WorldLight(Color: light.Color, Id: id, Intensity: (light.Intensity ?? 1f), Position: light.Position));
             maxLightId = id;
@@ -1502,7 +1619,7 @@ public sealed class WorldScene {
                 break;
             }
 
-            var id = maxWalkOverrideId + 1;
+            var id = (maxWalkOverrideId + 1);
 
             m_walkOverrides.Add(item: new WorldWalkOverride(Id: id, Kind: (entry.Kind ?? "blocker"), MaxX: entry.MaxX, MaxZ: entry.MaxZ, MinX: entry.MinX, MinZ: entry.MinZ));
             maxWalkOverrideId = id;
@@ -1529,11 +1646,11 @@ public sealed class WorldScene {
                 break;
             }
 
-            var anchor = (string.Equals(a: camera.Anchor, b: "placement", comparisonType: StringComparison.OrdinalIgnoreCase) ? CameraAnchorKind.Placement : CameraAnchorKind.World);
+            var anchor = (string.Equals(a: camera.Anchor, b: "placement", comparisonType: StringComparison.OrdinalIgnoreCase) ? SdfAnchorKind.Instance : SdfAnchorKind.World);
 
             m_cameras.Add(item: new CameraEye(
                 Anchor: anchor,
-                AnchorId: ((anchor == CameraAnchorKind.Placement) ? (camera.AnchorId ?? 0) : 0),
+                AnchorId: ((anchor == SdfAnchorKind.Instance) ? (camera.AnchorId ?? 0) : 0),
                 FieldOfViewRadians: ((camera.Fov is { } fov) ? (float?)(fov * (MathF.PI / 180f)) : null),
                 FocusDistance: camera.Focus,
                 Id: camera.Id,
@@ -1549,20 +1666,20 @@ public sealed class WorldScene {
 
     // Loads the screen wiring table (a "none" entry is the absence of a wire and does not seat). Extracted from
     // LoadDocument to keep its cyclomatic complexity in bound.
-    private void LoadWiring(IReadOnlyList<ScreenWireDocument>? wiring) {
+    private void LoadWiring(IReadOnlyList<ScreenSourceDocument>? wiring) {
         foreach (var wire in (wiring ?? [])) {
             if ((wire.Screen < 0) || (wire.Screen >= Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces)) {
                 continue;
             }
 
             var source = (wire.Kind?.ToLowerInvariant() switch {
-                "brick" => ScreenWireSource.Brick(consoleIndex: (wire.Index ?? 0)),
-                "feed" => ScreenWireSource.Feed(feedIndex: (wire.Index ?? 0)),
-                "named" => ((wire.Name is { Length: > 0 } name) ? ScreenWireSource.Named(name: name) : ScreenWireSource.None),
-                _ => ScreenWireSource.None,
+                "guest" => ScreenSourceRef.Guest(consoleIndex: (wire.Index ?? 0)),
+                "camera" => ScreenSourceRef.Camera(feedIndex: (wire.Index ?? 0)),
+                "named" => ((wire.Name is { Length: > 0 } name) ? ScreenSourceRef.Named(name: name) : ScreenSourceRef.None),
+                _ => ScreenSourceRef.None,
             });
 
-            if (source.Kind != ScreenWireKind.None) {
+            if (source.Kind != ScreenSourceKind.None) {
                 m_wiring[wire.Screen] = source;
             }
         }
@@ -1631,7 +1748,6 @@ public sealed class WorldScene {
     private void MarkRevision() {
         Revision++;
     }
-
     private static float WrapDegrees(float degrees) {
         var wrapped = (degrees % 360f);
 

@@ -33,7 +33,7 @@ internal static class RomForge {
         });
     }
 
-    /// <summary>Forges the Pocket Camera viewfinder cartridge and self-verifies it. Unlike the SDF forge this needs no
+    /// <summary>Forges the camera viewfinder cartridge and self-verifies it. Unlike the SDF forge this needs no
     /// GPU — the ROM's pixels come from the M64282FP sensor at run time — so it builds, writes, and boots synchronously:
     /// the boot runs against the emulator's default (deterministic gradient) sensor, so <c>&lt;out&gt;.emulated.png</c>
     /// shows the forged ROM driving the real camera protocol and dithering the gradient onto the brick screen.</summary>
@@ -47,7 +47,7 @@ internal static class RomForge {
         WriteRom(outputPath: outputPath, rom: rom);
         VerifyBoot(rom: rom, outputPath: outputPath);
 
-        Console.WriteLine(value: $"camera forge | wrote {outputPath} ({rom.Length} bytes) | Pocket Camera (0xFC) viewfinder | boot it with: --rom {outputPath}");
+        Console.WriteLine(value: $"camera forge | wrote {outputPath} ({rom.Length} bytes) | camera (0xFC) viewfinder | boot it with: --rom {outputPath}");
 
         return Task.FromResult(result: 0);
     }
@@ -168,13 +168,13 @@ internal static class RomForge {
         }
 
         if ((maximum - minimum) < minimumSpread) {
-            throw new InvalidOperationException(message: $"{label} audio verification failed: the capture is flat (spread {maximum - minimum}, range {minimum}..{maximum}) — the ROM sound driver never modulated the APU.");
+            throw new InvalidOperationException(message: $"{label} audio verification failed: the capture is flat (spread {(maximum - minimum)}, range {minimum}..{maximum}) — the ROM sound driver never modulated the APU.");
         }
 
         var wavPath = Path.ChangeExtension(path: outputPath, extension: ".audio.wav");
 
         WriteWav(path: wavPath, sampleRate: sampleRate, samples: samples);
-        Console.WriteLine(value: $"{label} audio | {samples.Count / 2} stereo frames ({(samples.Count / 2) / (double)sampleRate:F1} s at {sampleRate} Hz, sample range {minimum}..{maximum}) → {wavPath}");
+        Console.WriteLine(value: $"{label} audio | {(samples.Count / 2)} stereo frames ({((samples.Count / 2) / (double)sampleRate):F1} s at {sampleRate} Hz, sample range {minimum}..{maximum}) → {wavPath}");
     }
 
     // A minimal PCM16 stereo RIFF writer for the audio proof (no external audio library, on purpose — mirrors the
@@ -325,51 +325,49 @@ internal static class RomForge {
     }
 
     /// <summary>The <c>--forge-avatar</c> tool mode: forge a playable OVERWORLD ROM from a player's avatar (a saved
-    /// creation document or legacy avatar JSON, or a built-in demo avatar when no path is given). A
-    /// <c>puck.creation.v1</c> document contributes its bake style AND its timeline FRAMES as the authored walk
-    /// poses; anything else walks the procedural cycle. Runs inside the shared GPU host; returns 0 on success.</summary>
+    /// <c>puck.creation.v1</c> document, or a built-in demo avatar when no path is given). The creation document
+    /// contributes its bake style AND its timeline FRAMES as the authored walk poses; the built-in avatar walks the
+    /// procedural cycle. Runs inside the shared GPU host; returns 0 on success.</summary>
     /// <param name="outputPath">Where to write the <c>.gbc</c>.</param>
-    /// <param name="avatarJsonPath">An optional creation/avatar JSON file (as saved by creator mode).</param>
+    /// <param name="creationPath">An optional creation document (as saved by creator mode).</param>
     /// <param name="args">The host args (backend selection etc.).</param>
     /// <returns>0 on success.</returns>
-    public static Task<int> RunAvatarAsync(string outputPath, string? avatarJsonPath, string[] args) =>
-        RunAvatarAsync(outputPath: outputPath, avatarJsonPath: avatarJsonPath, args: args, movementMode: MovementMode.FourWay);
+    public static Task<int> RunAvatarAsync(string outputPath, string? creationPath, string[] args) =>
+        RunAvatarAsync(outputPath: outputPath, creationPath: creationPath, args: args, movementMode: MovementMode.FourWay);
 
     /// <summary>String-typed movement-mode overload — the CLI seam. <c>Main</c> sits at its class-coupling ceiling
     /// and may not name <see cref="MovementMode"/>, so the <c>--forge-avatar-movement-mode</c> option passes its raw
     /// token here and the mapping lives with the forge: <c>four</c> (default), <c>eight</c>, or <c>hex</c>.</summary>
     /// <param name="outputPath">Where to write the <c>.gbc</c>.</param>
-    /// <param name="avatarJsonPath">An optional creation/avatar JSON file (as saved by creator mode).</param>
+    /// <param name="creationPath">An optional creation document (as saved by creator mode).</param>
     /// <param name="args">The host args (backend selection etc.).</param>
     /// <param name="movementModeText">The direction-lock token (<c>four</c>/<c>eight</c>/<c>hex</c>; null = four).</param>
     /// <returns>0 on success.</returns>
-    public static Task<int> RunAvatarAsync(string outputPath, string? avatarJsonPath, string[] args, string? movementModeText) =>
-        RunAvatarAsync(outputPath: outputPath, avatarJsonPath: avatarJsonPath, args: args, movementMode: (movementModeText?.ToLowerInvariant() switch {
+    public static Task<int> RunAvatarAsync(string outputPath, string? creationPath, string[] args, string? movementModeText) =>
+        RunAvatarAsync(outputPath: outputPath, creationPath: creationPath, args: args, movementMode: (movementModeText?.ToLowerInvariant() switch {
             "eight" => MovementMode.EightWay,
             "hex" => MovementMode.Hex,
             _ => MovementMode.FourWay,
         }));
 
-    /// <summary>Overload taking the walker's direction-lock mode explicitly — see the <c>--forge-avatar-movement-mode</c>
-    /// patch block in this workstream's report for the CLI option that will call this once wired up. Kept as a SEPARATE
-    /// overload (rather than a new parameter on the three-argument overload) so <c>Program.cs</c>'s existing call site
-    /// keeps resolving against the untouched overload, off <c>Main</c>'s class-coupling ceiling.</summary>
+    /// <summary>Overload taking the walker's direction-lock mode explicitly; the string-typed CLI seam above maps its
+    /// raw token onto this. A separate overload (rather than a parameter on the three-argument form) keeps
+    /// <see cref="MovementMode"/> out of <c>Main</c>'s reach — <c>Main</c> sits at its class-coupling ceiling.</summary>
     /// <param name="outputPath">Where to write the <c>.gbc</c>.</param>
-    /// <param name="avatarJsonPath">An optional creation/avatar JSON file (as saved by creator mode).</param>
+    /// <param name="creationPath">An optional creation document (as saved by creator mode).</param>
     /// <param name="args">The host args (backend selection etc.).</param>
     /// <param name="movementMode">The forged walker's d-pad direction lock.</param>
     /// <returns>0 on success.</returns>
-    public static Task<int> RunAvatarAsync(string outputPath, string? avatarJsonPath, string[] args, MovementMode movementMode) {
+    public static Task<int> RunAvatarAsync(string outputPath, string? creationPath, string[] args, MovementMode movementMode) {
         ArgumentException.ThrowIfNullOrEmpty(outputPath);
 
         IReadOnlyList<IReadOnlyList<AvatarShape>>? framePoses = null;
         BakeStyle? style = null;
         var avatar = BuildDemoAvatar();
 
-        if (avatarJsonPath is { } path) {
-            // CreationStore.Load accepts both the native puck.creation.v1 document and the legacy avatar JSON.
-            var document = CreationStore.Load(nameOrPath: path)
-                ?? throw new ArgumentException(message: $"No creation or avatar JSON readable at '{path}'.", paramName: nameof(avatarJsonPath));
+        if (creationPath is { } path) {
+            var document = (CreationStore.Load(nameOrPath: path)
+                ?? throw new ArgumentException(message: $"No creation document readable at '{path}'.", paramName: nameof(creationPath)));
 
             avatar = AvatarForge.FromCreation(document: document, framePoses: out framePoses);
             style = BakeStyles.Resolve(diagnostic: out _, name: document.BakeStyle);
@@ -469,12 +467,12 @@ internal static class RomForge {
         ("adventurer", FlagshipAdventurer.BuildAdventurer),
     ];
 
-    /// <summary>The <c>--forge-flagships</c> tool mode: Arc 3's three flagship avatars, verified as CONTENT. For each
+    /// <summary>The <c>--forge-flagships</c> tool mode verifies the three flagship avatars as content. For each
     /// of <see cref="FlagshipCreations"/>'s recipes this regenerates the document and asserts it is BYTE-IDENTICAL to
     /// the committed <c>docs/examples/creations/&lt;name&gt;.creation.json</c> (content determinism — the recipe is
     /// the source of truth, the committed file is its checked-in output), runs the recipe's own rig assertions (see
     /// <see cref="AssertLanternFish"/>/<see cref="AssertCrtRobot"/>/<see cref="AssertAdventurer"/>), then forges the
-    /// ADVENTURER through the same <see cref="ForgeAvatarRom"/> path <c>--forge-avatar-from</c> uses — proving the
+    /// adventurer through the same <c>ForgeAvatarRom</c> path <c>--forge-avatar-from</c> uses, proving the
     /// bake inherits the IK'd stride end to end. Runs inside the shared GPU host (the adventurer bake needs one);
     /// the document round-trip and rig assertions run first, outside it, so a failure there is never masked by the
     /// GPU host's own try/catch.</summary>
@@ -493,7 +491,7 @@ internal static class RomForge {
             VerifyByteIdenticalRegeneration(document: document, name: name);
             documents[name] = document;
 
-            Console.WriteLine(value: $"flagship forge | {name} | {document.Shapes?.Count ?? 0} shape(s), {document.Chains?.Count ?? 0} chain(s), {document.Frames?.Count ?? 0} frame(s) | regenerated byte-identical to docs/examples/creations/{name}.creation.json");
+            Console.WriteLine(value: $"flagship forge | {name} | {(document.Shapes?.Count ?? 0)} shape(s), {(document.Chains?.Count ?? 0)} chain(s), {(document.Frames?.Count ?? 0)} frame(s) | regenerated byte-identical to docs/examples/creations/{name}.creation.json");
         }
 
         AssertLanternFish(document: documents["lantern-fish"]);
@@ -554,8 +552,8 @@ internal static class RomForge {
     // curves the body rather than freezing it) — the two things a spine-chain flagship must demonstrate.
     private static void AssertLanternFish(CreationDocument document) {
         var chains = (document.Chains ?? throw new InvalidOperationException(message: "flagship forge: lantern-fish declared no chains."));
-        var spine = chains.FirstOrDefault(predicate: static chain => string.Equals(a: chain.Name, b: "spine", comparisonType: StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException(message: "flagship forge: lantern-fish declared no 'spine' chain.");
+        var spine = (chains.FirstOrDefault(predicate: static chain => string.Equals(a: chain.Name, b: "spine", comparisonType: StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException(message: "flagship forge: lantern-fish declared no 'spine' chain."));
 
         if (!string.Equals(a: spine.Kind, b: CreatorChainState.KindSpine, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             throw new InvalidOperationException(message: $"flagship forge: lantern-fish 'spine' chain is kind '{spine.Kind}', expected 'spine'.");
@@ -567,7 +565,7 @@ internal static class RomForge {
             throw new InvalidOperationException(message: $"flagship forge: lantern-fish recorded {frames.Count} frame(s), need at least 2 to show a swim cycle.");
         }
 
-        var spineShapeIds = new HashSet<int>(spine.Shapes);
+        var spineShapeIds = new HashSet<int>(collection: spine.Shapes);
         var firstFramePositions = new Dictionary<int, Vector3>();
         var anyDifference = false;
 
@@ -601,8 +599,8 @@ internal static class RomForge {
         string[] limbNames = ["armLeft", "armRight", "legLeft", "legRight"];
 
         foreach (var limbName in limbNames) {
-            var chain = chains.FirstOrDefault(predicate: chain => string.Equals(a: chain.Name, b: limbName, comparisonType: StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException(message: $"flagship forge: crt-robot declared no '{limbName}' chain.");
+            var chain = (chains.FirstOrDefault(predicate: chain => string.Equals(a: chain.Name, b: limbName, comparisonType: StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException(message: $"flagship forge: crt-robot declared no '{limbName}' chain."));
 
             if (!string.Equals(a: chain.Kind, b: CreatorChainState.KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase) || (chain.Shapes.Count != 3)) {
                 throw new InvalidOperationException(message: $"flagship forge: crt-robot '{limbName}' is not a valid limb (kind '{chain.Kind}', {chain.Shapes.Count} shape(s)).");
@@ -702,7 +700,6 @@ internal static class RomForge {
 
         Console.Error.WriteLine(value: $"avatar bake | PBAK round-trip linked | {linker.TileCount} tiles | {parsed.Sprites.Count} sprite sets | {frameTotal} frames");
     }
-
     private static byte[] ForgeAvatarRom(IGpuDeviceContext device, IGpuComputeServices gpu, AvatarDefinition avatar, string title, IReadOnlyList<IReadOnlyList<AvatarShape>>? framePoses, BakeStyle? style, out AvatarForge.AvatarSheet sheet, out BakedAssetBundle bundle, out int roomTileCount, MovementMode movementMode = MovementMode.FourWay) {
         ArgumentNullException.ThrowIfNull(avatar);
 
@@ -712,10 +709,10 @@ internal static class RomForge {
         roomTileCount = room.TileCount;
 
         if ((roomTileCount + sheet.TileCount) > MaxTiles) {
-            throw new InvalidOperationException(message: $"The forged overworld needs {roomTileCount + sheet.TileCount} tiles ({roomTileCount} room + {sheet.TileCount} avatar), over the {MaxTiles}-tile VRAM budget.");
+            throw new InvalidOperationException(message: $"The forged overworld needs {(roomTileCount + sheet.TileCount)} tiles ({roomTileCount} room + {sheet.TileCount} avatar), over the {MaxTiles}-tile VRAM budget.");
         }
 
-        var tileData = new byte[room.TileData.Length + sheet.SpriteTiles.Length];
+        var tileData = new byte[(room.TileData.Length + sheet.SpriteTiles.Length)];
 
         room.TileData.CopyTo(array: tileData, index: 0);
         sheet.SpriteTiles.CopyTo(array: tileData, index: room.TileData.Length);
@@ -735,10 +732,10 @@ internal static class RomForge {
     // has a deterministic subject. Uses only the creator's own primitive set, in the creator's local frame.
     private static AvatarDefinition BuildDemoAvatar() {
         var shapes = new List<AvatarShape> {
-            new(Type: AvatarPrimitive.Ellipsoid, Position: new Vector3(0f, 0.62f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(1.05f, 1.25f, 0.85f)),
-            new(Type: AvatarPrimitive.Sphere, Position: new Vector3(0f, 1.18f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(0.72f)),
-            new(Type: AvatarPrimitive.Capsule, Position: new Vector3(-0.2f, 0.05f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(0.5f)),
-            new(Type: AvatarPrimitive.Capsule, Position: new Vector3(0.2f, 0.05f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(0.5f)),
+            new(Type: AvatarPrimitive.Ellipsoid, Position: new Vector3(x: 0f, y: 0.62f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(x: 1.05f, y: 1.25f, z: 0.85f)),
+            new(Type: AvatarPrimitive.Sphere, Position: new Vector3(x: 0f, y: 1.18f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.72f)),
+            new(Type: AvatarPrimitive.Capsule, Position: new Vector3(x: -0.2f, y: 0.05f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.5f)),
+            new(Type: AvatarPrimitive.Capsule, Position: new Vector3(x: 0.2f, y: 0.05f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.5f)),
         };
 
         return AvatarDefinition.FromPlacedShapes(shapes: shapes);
@@ -747,18 +744,17 @@ internal static class RomForge {
     /// <summary>Authors the sprite: a blobby, smooth-unioned creature — SDF's home turf, legible once crushed to 16×16.</summary>
     private static SdfProgram BuildCreatureScene() {
         var builder = new SdfProgramBuilder();
-        var body = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.88f, 0.44f, 0.20f)));
-        var belly = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.96f, 0.82f, 0.38f)));
+        var body = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.88f, y: 0.44f, z: 0.20f)));
+        var belly = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.96f, y: 0.82f, z: 0.38f)));
 
         _ = builder.ResetPoint().Sphere(radius: 1.0f, material: body);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0.95f, 0f)).Sphere(radius: 0.66f, material: body, blend: SdfBlendOp.SmoothUnion, smooth: 0.55f);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-0.55f, -0.8f, 0.25f)).Sphere(radius: 0.34f, material: body, blend: SdfBlendOp.SmoothUnion, smooth: 0.3f);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0.55f, -0.8f, 0.25f)).Sphere(radius: 0.34f, material: body, blend: SdfBlendOp.SmoothUnion, smooth: 0.3f);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0.05f, 0.8f)).Sphere(radius: 0.42f, material: belly, blend: SdfBlendOp.SmoothUnion, smooth: 0.25f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0.95f, z: 0f)).Sphere(radius: 0.66f, material: body, blend: SdfBlendOp.SmoothUnion, smooth: 0.55f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.55f, y: -0.8f, z: 0.25f)).Sphere(radius: 0.34f, material: body, blend: SdfBlendOp.SmoothUnion, smooth: 0.3f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.55f, y: -0.8f, z: 0.25f)).Sphere(radius: 0.34f, material: body, blend: SdfBlendOp.SmoothUnion, smooth: 0.3f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0.05f, z: 0.8f)).Sphere(radius: 0.42f, material: belly, blend: SdfBlendOp.SmoothUnion, smooth: 0.25f);
 
         return builder.Build();
     }
-
     private static void Forge(IGpuDeviceContext device, IGpuComputeServices gpu, string outputPath) {
         var rom = ForgeSceneCart(device: device, gpu: gpu, program: BuildCreatureScene(), title: "PUCKFORGE", room: out var room, creature: out var creature);
 
@@ -778,8 +774,8 @@ internal static class RomForge {
         room = SceneForge.ForgeRoom(device: device, gpu: gpu);
 
         var creatureCamera = CameraSnapshot.LookAt(
-            position: new Vector3(0f, 0.15f, 4.4f),
-            target: new Vector3(0f, 0.05f, 0f),
+            position: new Vector3(x: 0f, y: 0.15f, z: 4.4f),
+            target: new Vector3(x: 0f, y: 0.05f, z: 0f),
             fieldOfViewRadians: (42f * (MathF.PI / 180f)),
             viewportWidth: CreatureSupersample,
             viewportHeight: CreatureSupersample
@@ -788,11 +784,11 @@ internal static class RomForge {
         creature = SceneForge.ForgeSprite(device: device, gpu: gpu, program: program, camera: creatureCamera, supersampleWidth: CreatureSupersample, supersampleHeight: CreatureSupersample, reduceFactor: CreatureReduceFactor);
 
         if ((room.TileCount + creature.TileCount) > MaxTiles) {
-            throw new InvalidOperationException(message: $"The forged scene needs {room.TileCount + creature.TileCount} tiles, over the {MaxTiles}-tile VRAM budget.");
+            throw new InvalidOperationException(message: $"The forged scene needs {(room.TileCount + creature.TileCount)} tiles, over the {MaxTiles}-tile VRAM budget.");
         }
 
         var objectTileBase = room.TileCount;
-        var tileData = new byte[room.TileData.Length + creature.TileData.Length];
+        var tileData = new byte[(room.TileData.Length + creature.TileData.Length)];
 
         room.TileData.CopyTo(array: tileData, index: 0);
         creature.TileData.CopyTo(array: tileData, index: room.TileData.Length);
@@ -831,19 +827,19 @@ internal static class RomForge {
         const int screenTop = ((SceneForge.ScreenHeight - CreatureSize) / 2);
 
         (int Dx, int Dy, int Tile)[] sprites = [
-            (0, 0, objectTileBase + 0),
-            (8, 0, objectTileBase + 1),
-            (0, 8, objectTileBase + 2),
-            (8, 8, objectTileBase + 3),
+            (0, 0, (objectTileBase + 0)),
+            (8, 0, (objectTileBase + 1)),
+            (0, 8, (objectTileBase + 2)),
+            (8, 8, (objectTileBase + 3)),
         ];
 
-        var oam = new byte[sprites.Length * 4];
+        var oam = new byte[(sprites.Length * 4)];
 
         for (var index = 0; (index < sprites.Length); index++) {
-            oam[(index * 4) + 0] = (byte)(screenTop + sprites[index].Dy + 16);
-            oam[(index * 4) + 1] = (byte)(screenLeft + sprites[index].Dx + 8);
-            oam[(index * 4) + 2] = (byte)sprites[index].Tile;
-            oam[(index * 4) + 3] = 0x00;
+            oam[((index * 4) + 0)] = (byte)((screenTop + sprites[index].Dy) + 16);
+            oam[((index * 4) + 1)] = (byte)((screenLeft + sprites[index].Dx) + 8);
+            oam[((index * 4) + 2)] = (byte)sprites[index].Tile;
+            oam[((index * 4) + 3)] = 0x00;
         }
 
         return oam;
@@ -865,25 +861,25 @@ internal static class RomForge {
     /// <param name="saveFileName">The save file's name (e.g. <c>"brickfall.sav"</c>).</param>
     /// <returns>The save-file path.</returns>
     internal static string PrepareDefaultSavePath(string saveFileName) {
-        var directory = Path.Combine(Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData), "Puck", "Demo");
+        var directory = Path.Combine(path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData), path2: "Puck", path3: "Demo");
 
         _ = Directory.CreateDirectory(path: directory);
 
-        return Path.Combine(directory, saveFileName);
+        return Path.Combine(path1: directory, path2: saveFileName);
     }
 
     // A 160x144 RGBA preview of what the ROM should display: the quantized background with the creature composited.
     private static void WritePreview(string outputPath, HgbImage.Rgb[] backgroundPalette, byte[] backgroundIndices, HgbImage.Rgb[] objectPalette, byte[] creatureIndices) {
-        var preview = new byte[SceneForge.ScreenWidth * SceneForge.ScreenHeight * 4];
+        var preview = new byte[((SceneForge.ScreenWidth * SceneForge.ScreenHeight) * 4)];
 
         for (var pixel = 0; (pixel < backgroundIndices.Length); pixel++) {
             var colour = backgroundPalette[backgroundIndices[pixel]];
             var offset = (pixel * 4);
 
             preview[offset] = colour.R;
-            preview[offset + 1] = colour.G;
-            preview[offset + 2] = colour.B;
-            preview[offset + 3] = 0xFF;
+            preview[(offset + 1)] = colour.G;
+            preview[(offset + 2)] = colour.B;
+            preview[(offset + 3)] = 0xFF;
         }
 
         const int screenLeft = ((SceneForge.ScreenWidth - CreatureSize) / 2);
@@ -891,7 +887,7 @@ internal static class RomForge {
 
         for (var y = 0; (y < CreatureSize); y++) {
             for (var x = 0; (x < CreatureSize); x++) {
-                var index = creatureIndices[(y * CreatureSize) + x];
+                var index = creatureIndices[((y * CreatureSize) + x)];
 
                 if (index == 0) {
                     continue;
@@ -901,9 +897,9 @@ internal static class RomForge {
                 var offset = ((((screenTop + y) * SceneForge.ScreenWidth) + (screenLeft + x)) * 4);
 
                 preview[offset] = colour.R;
-                preview[offset + 1] = colour.G;
-                preview[offset + 2] = colour.B;
-                preview[offset + 3] = 0xFF;
+                preview[(offset + 1)] = colour.G;
+                preview[(offset + 2)] = colour.B;
+                preview[(offset + 3)] = 0xFF;
             }
         }
 
@@ -947,69 +943,71 @@ internal static class RomForge {
 
         // Settle past boot setup, then confirm the seeded spawn state.
         RunFrames(buttons: JoypadButtons.None, frames: 16);
-        var startX = Read(OverworldProtocol.PlayerXAddress);
-        var startY = Read(OverworldProtocol.PlayerYAddress);
+        var startX = Read(address: OverworldProtocol.PlayerXAddress);
+        var startY = Read(address: OverworldProtocol.PlayerYAddress);
 
         Assert(condition: (startX == OverworldProtocol.StartX), message: $"spawn X {startX} != {OverworldProtocol.StartX}");
         Assert(condition: (startY == OverworldProtocol.StartY), message: $"spawn Y {startY} != {OverworldProtocol.StartY}");
-        Assert(condition: (Read(OverworldProtocol.FacingAddress) == OverworldProtocol.FacingDown), message: "spawn facing is not down");
+        Assert(condition: (Read(address: OverworldProtocol.FacingAddress) == OverworldProtocol.FacingDown), message: "spawn facing is not down");
 
         // Idle is static: the pose tile and position hold while no direction is held.
-        var idleTile = Read(OverworldProtocol.TileScratchAddress);
+        var idleTile = Read(address: OverworldProtocol.TileScratchAddress);
 
         RunFrames(buttons: JoypadButtons.None, frames: 24);
-        Assert(condition: (Read(OverworldProtocol.TileScratchAddress) == idleTile), message: "idle pose tile changed with no input (spurious animation)");
-        Assert(condition: (Read(OverworldProtocol.PlayerXAddress) == startX), message: "idle position drifted with no input");
-        Assert(condition: (Read(OverworldProtocol.MovingAddress) == 0), message: "moving flag set with no input");
+        Assert(condition: (Read(address: OverworldProtocol.TileScratchAddress) == idleTile), message: "idle pose tile changed with no input (spurious animation)");
+        Assert(condition: (Read(address: OverworldProtocol.PlayerXAddress) == startX), message: "idle position drifted with no input");
+        Assert(condition: (Read(address: OverworldProtocol.MovingAddress) == 0), message: "moving flag set with no input");
 
         // Each direction moves the sprite the right way AND sets its facing.
         RunFrames(buttons: JoypadButtons.Right, frames: 16);
-        var afterRight = Read(OverworldProtocol.PlayerXAddress);
+        var afterRight = Read(address: OverworldProtocol.PlayerXAddress);
+
         Assert(condition: (afterRight > startX), message: $"Right did not increase X ({startX} → {afterRight})");
-        Assert(condition: (Read(OverworldProtocol.FacingAddress) == OverworldProtocol.FacingRight), message: "Right did not set facing right");
+        Assert(condition: (Read(address: OverworldProtocol.FacingAddress) == OverworldProtocol.FacingRight), message: "Right did not set facing right");
 
         RunFrames(buttons: JoypadButtons.Left, frames: 16);
-        Assert(condition: (Read(OverworldProtocol.PlayerXAddress) < afterRight), message: "Left did not decrease X");
-        Assert(condition: (Read(OverworldProtocol.FacingAddress) == OverworldProtocol.FacingLeft), message: "Left did not set facing left");
+        Assert(condition: (Read(address: OverworldProtocol.PlayerXAddress) < afterRight), message: "Left did not decrease X");
+        Assert(condition: (Read(address: OverworldProtocol.FacingAddress) == OverworldProtocol.FacingLeft), message: "Left did not set facing left");
 
-        var beforeUp = Read(OverworldProtocol.PlayerYAddress);
+        var beforeUp = Read(address: OverworldProtocol.PlayerYAddress);
 
         if (movementMode == MovementMode.Hex) {
             // Pure vertical is a NO-OP in hex (no vertical neighbor); the 60° diagonals carry the vertical axis.
             RunFrames(buttons: JoypadButtons.Up, frames: 16);
-            Assert(condition: (Read(OverworldProtocol.PlayerYAddress) == beforeUp), message: $"hex: Up alone moved Y ({beforeUp} → {Read(OverworldProtocol.PlayerYAddress)})");
+            Assert(condition: (Read(address: OverworldProtocol.PlayerYAddress) == beforeUp), message: $"hex: Up alone moved Y ({beforeUp} → {Read(address: OverworldProtocol.PlayerYAddress)})");
             RunFrames(buttons: JoypadButtons.Down, frames: 16);
-            Assert(condition: (Read(OverworldProtocol.PlayerYAddress) == beforeUp), message: "hex: Down alone moved Y");
+            Assert(condition: (Read(address: OverworldProtocol.PlayerYAddress) == beforeUp), message: "hex: Down alone moved Y");
 
-            var beforeDiagonalX = Read(OverworldProtocol.PlayerXAddress);
+            var beforeDiagonalX = Read(address: OverworldProtocol.PlayerXAddress);
 
-            RunFrames(buttons: (JoypadButtons.Up | JoypadButtons.Left), frames: 16);
-            Assert(condition: (Read(OverworldProtocol.PlayerYAddress) < beforeUp), message: "hex: Up+Left did not decrease Y (the NW neighbor)");
-            Assert(condition: (Read(OverworldProtocol.PlayerXAddress) < beforeDiagonalX), message: "hex: Up+Left did not decrease X");
+            RunFrames(buttons: JoypadButtons.Up | JoypadButtons.Left, frames: 16);
+            Assert(condition: (Read(address: OverworldProtocol.PlayerYAddress) < beforeUp), message: "hex: Up+Left did not decrease Y (the NW neighbor)");
+            Assert(condition: (Read(address: OverworldProtocol.PlayerXAddress) < beforeDiagonalX), message: "hex: Up+Left did not decrease X");
             // Hex diagonals step (±1, ±2): the vertical magnitude dominates, so the |dx| ≥ |dy| facing rule
             // resolves the diagonal to the VERTICAL pose (the sprite walks "up" while drifting west — correct
             // for a 4-facing sheet).
-            Assert(condition: (Read(OverworldProtocol.FacingAddress) == OverworldProtocol.FacingUp), message: "hex: Up+Left did not face up (vertical magnitude dominates the 1:2 step)");
+            Assert(condition: (Read(address: OverworldProtocol.FacingAddress) == OverworldProtocol.FacingUp), message: "hex: Up+Left did not face up (vertical magnitude dominates the 1:2 step)");
 
-            var beforeReturnY = Read(OverworldProtocol.PlayerYAddress);
+            var beforeReturnY = Read(address: OverworldProtocol.PlayerYAddress);
 
-            RunFrames(buttons: (JoypadButtons.Down | JoypadButtons.Right), frames: 16);
-            Assert(condition: (Read(OverworldProtocol.PlayerYAddress) > beforeReturnY), message: "hex: Down+Right did not increase Y (the SE neighbor)");
-        }
-        else {
+            RunFrames(buttons: JoypadButtons.Down | JoypadButtons.Right, frames: 16);
+            Assert(condition: (Read(address: OverworldProtocol.PlayerYAddress) > beforeReturnY), message: "hex: Down+Right did not increase Y (the SE neighbor)");
+        } else {
             RunFrames(buttons: JoypadButtons.Up, frames: 16);
-            var afterUp = Read(OverworldProtocol.PlayerYAddress);
+            var afterUp = Read(address: OverworldProtocol.PlayerYAddress);
+
             Assert(condition: (afterUp < beforeUp), message: $"Up did not decrease Y ({beforeUp} → {afterUp})");
-            Assert(condition: (Read(OverworldProtocol.FacingAddress) == OverworldProtocol.FacingUp), message: "Up did not set facing up");
+            Assert(condition: (Read(address: OverworldProtocol.FacingAddress) == OverworldProtocol.FacingUp), message: "Up did not set facing up");
 
             RunFrames(buttons: JoypadButtons.Down, frames: 16);
-            Assert(condition: (Read(OverworldProtocol.PlayerYAddress) > afterUp), message: "Down did not increase Y");
-            Assert(condition: (Read(OverworldProtocol.FacingAddress) == OverworldProtocol.FacingDown), message: "Down did not set facing down");
+            Assert(condition: (Read(address: OverworldProtocol.PlayerYAddress) > afterUp), message: "Down did not increase Y");
+            Assert(condition: (Read(address: OverworldProtocol.FacingAddress) == OverworldProtocol.FacingDown), message: "Down did not set facing down");
         }
 
         // Boundary clamp: hold Right well past the edge — X must PIN at the max, never wrap the byte past it.
         RunFrames(buttons: JoypadButtons.Right, frames: 220);
-        var clampedX = Read(OverworldProtocol.PlayerXAddress);
+        var clampedX = Read(address: OverworldProtocol.PlayerXAddress);
+
         Assert(condition: (clampedX == OverworldProtocol.MaxX), message: $"X did not clamp to {OverworldProtocol.MaxX} (got {clampedX} — wrapped or overran)");
 
         // Walk animation: at the clamp the position is pinned, so a changing pose tile isolates the animation from
@@ -1019,13 +1017,13 @@ internal static class RomForge {
         for (var frame = 0; (frame < 24); frame++) {
             joypad.SetButtons(pressed: JoypadButtons.Right);
             machine.Machine.Run(tCycles: 70224UL);
-            poseTiles.Add(item: Read(OverworldProtocol.TileScratchAddress));
+            poseTiles.Add(item: Read(address: OverworldProtocol.TileScratchAddress));
         }
 
         Assert(condition: (poseTiles.Count >= 2), message: $"walk animation did not cycle the pose tile while moving (saw {poseTiles.Count} distinct tiles)");
-        Assert(condition: (Read(OverworldProtocol.PlayerXAddress) == OverworldProtocol.MaxX), message: "position drifted off the clamp while animating");
+        Assert(condition: (Read(address: OverworldProtocol.PlayerXAddress) == OverworldProtocol.MaxX), message: "position drifted off the clamp while animating");
 
-        Console.WriteLine(value: $"overworld verify | spawn ({startX},{startY}) | {(movementMode == MovementMode.Hex ? "hex moves (W/E pure, diagonals carry Y, vertical-alone no-op)" : "move+facing all four ways")} | clamp X→{OverworldProtocol.MaxX} | walk cycled {poseTiles.Count} pose tiles");
+        Console.WriteLine(value: $"overworld verify | spawn ({startX},{startY}) | {((movementMode == MovementMode.Hex) ? "hex moves (W/E pure, diagonals carry Y, vertical-alone no-op)" : "move+facing all four ways")} | clamp X→{OverworldProtocol.MaxX} | walk cycled {poseTiles.Count} pose tiles");
     }
 
     // Self-verification (the "two worlds meet at a file" round-trip): boot the freshly-forged .gbc on a real Humble CGB
@@ -1072,16 +1070,16 @@ internal static class RomForge {
     /// <summary>Packs a machine's native ARGB framebuffer into the RGBA8 bytes the PNG encoder / strip builder expects.</summary>
     internal static byte[] FramebufferToRgba(MachineInstance machine) {
         var pixels = machine.GetRequiredService<IFramebuffer>().Pixels;
-        var rgba = new byte[Framebuffer.ScreenWidth * Framebuffer.ScreenHeight * 4];
+        var rgba = new byte[((Framebuffer.ScreenWidth * Framebuffer.ScreenHeight) * 4)];
 
         for (var index = 0; (index < pixels.Length); index++) {
             var pixel = pixels[index];
             var offset = (index * 4);
 
             rgba[offset] = (byte)(pixel >> 16);
-            rgba[offset + 1] = (byte)(pixel >> 8);
-            rgba[offset + 2] = (byte)pixel;
-            rgba[offset + 3] = 0xFF;
+            rgba[(offset + 1)] = (byte)(pixel >> 8);
+            rgba[(offset + 2)] = (byte)pixel;
+            rgba[(offset + 3)] = 0xFF;
         }
 
         return rgba;

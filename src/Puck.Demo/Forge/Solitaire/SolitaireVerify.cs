@@ -16,8 +16,8 @@ namespace Puck.Demo.Forge;
 /// INDEPENDENT C# checksum, top-slot insertion, and corruption recovery. Throws on any violation.
 /// </summary>
 internal static class SolitaireVerify {
-    private const ulong TCyclesPerFrame = 70224UL;
     private const ushort AttractSeed = 0x1234;
+    private const ulong TCyclesPerFrame = 70224UL;
 
     /// <summary>Runs the whole battery.</summary>
     /// <param name="rom">The ROM image.</param>
@@ -318,11 +318,11 @@ internal static class SolitaireVerify {
         Assert(condition: (slot >= 0), message: "the BCA entry is missing from the high-score mirror");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[(slot * SolitaireProtocol.HiScoreEntryByteCount) + 3 + index] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
+            Assert(condition: (mirror[(((slot * SolitaireProtocol.HiScoreEntryByteCount) + 3) + index)] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
         }
 
         for (var entry = 1; (entry < SolitaireProtocol.HiScoreEntryCount); entry++) {
-            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {entry - 1} < entry {entry})");
+            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {(entry - 1)} < entry {entry})");
         }
 
         return (driver.ExportExternalRam(), ReadSavePayload(driver: driver), streak);
@@ -339,10 +339,10 @@ internal static class SolitaireVerify {
         var sum = 0;
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        var stored = (sram[SaveModule.HeaderByteCount + SolitaireProtocol.SavePayloadByteCount] | (sram[SaveModule.HeaderByteCount + SolitaireProtocol.SavePayloadByteCount + 1] << 8));
+        var stored = sram[(SaveModule.HeaderByteCount + SolitaireProtocol.SavePayloadByteCount)] | (sram[((SaveModule.HeaderByteCount + SolitaireProtocol.SavePayloadByteCount) + 1)] << 8);
 
         Assert(condition: (sum == stored), message: $"the stored checksum 0x{stored:X4} does not match the independently computed 0x{sum:X4}");
         Assert(condition: payload.SequenceEqual(other: expectedMirror), message: "the persisted payload does not match the in-game mirror");
@@ -361,7 +361,7 @@ internal static class SolitaireVerify {
 
         for (var entry = 0; (entry < SolitaireProtocol.HiScoreEntryCount); entry++) {
             for (var index = 0; (index < 3); index++) {
-                payload[(entry * SolitaireProtocol.HiScoreEntryByteCount) + 3 + index] = 0x00;
+                payload[(((entry * SolitaireProtocol.HiScoreEntryByteCount) + 3) + index)] = 0x00;
             }
         }
 
@@ -396,9 +396,9 @@ internal static class SolitaireVerify {
         Assert(condition: (FindEntry(mirror: mirror, initials: "AAA") == 0), message: "the beating score did not insert at slot 0");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[3 + index] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
-            Assert(condition: (mirror[SolitaireProtocol.HiScoreEntryByteCount + index] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
-            Assert(condition: (mirror[SolitaireProtocol.HiScoreEntryByteCount + 3 + index] == 0x00), message: "the old leader's score did not shift down intact");
+            Assert(condition: (mirror[(3 + index)] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
+            Assert(condition: (mirror[(SolitaireProtocol.HiScoreEntryByteCount + index)] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
+            Assert(condition: (mirror[((SolitaireProtocol.HiScoreEntryByteCount + 3) + index)] == 0x00), message: "the old leader's score did not shift down intact");
         }
     }
 
@@ -406,7 +406,7 @@ internal static class SolitaireVerify {
     private static void AssertCorruptionRecovery(byte[] rom, byte[] sram) {
         var corrupted = (byte[])sram.Clone();
 
-        corrupted[SaveModule.HeaderByteCount + 5] ^= 0x5A;
+        corrupted[(SaveModule.HeaderByteCount + 5)] ^= 0x5A;
 
         using var driver = new Driver(rom: rom, externalRam: corrupted);
 
@@ -433,11 +433,11 @@ internal static class SolitaireVerify {
         for (var tableau = 0; (tableau < 7); tableau++) {
             var pile = (byte)(SolitaireProtocol.PileTableauBase + tableau);
 
-            Assert(condition: (ReadCount(driver: driver, pile: pile) == (tableau + 1)), message: $"{context}: tableau {tableau} holds {ReadCount(driver: driver, pile: pile)} cards (expected {tableau + 1})");
+            Assert(condition: (ReadCount(driver: driver, pile: pile) == (tableau + 1)), message: $"{context}: tableau {tableau} holds {ReadCount(driver: driver, pile: pile)} cards (expected {(tableau + 1)})");
             Assert(condition: (ReadFaceUp(driver: driver, column: tableau) == 1), message: $"{context}: tableau {tableau} face-up is {ReadFaceUp(driver: driver, column: tableau)} (expected 1)");
 
             for (var index = 0; (index <= tableau); index++) {
-                var actual = driver.Read(address: (ushort)(SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride) + index));
+                var actual = driver.Read(address: (ushort)((SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride)) + index));
 
                 Assert(condition: (actual == deck[offset]), message: $"{context}: tableau {tableau}[{index}] is card {actual} (the oracle dealt {deck[offset]})");
                 offset++;
@@ -466,13 +466,12 @@ internal static class SolitaireVerify {
             var pile = (SolitaireProtocol.PileTableauBase + tableau);
 
             for (var index = 0; (index <= tableau); index++) {
-                _ = seen.Add(item: driver.Read(address: (ushort)(SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride) + index)));
+                _ = seen.Add(item: driver.Read(address: (ushort)((SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride)) + index)));
             }
         }
 
         Assert(condition: (seen.Count == CardDeck.CardCount), message: $"the deal is not a 52-card permutation ({seen.Count} distinct ids)");
     }
-
     private static void ClearBoard(Driver driver) {
         for (var pile = 0; (pile < SolitaireProtocol.PileCount); pile++) {
             driver.Write(address: (ushort)(SolitaireProtocol.CountsBase + pile), value: 0);
@@ -490,23 +489,21 @@ internal static class SolitaireVerify {
         driver.Write(address: SolitaireProtocol.UndoHead, value: 0);
         driver.Write(address: SolitaireProtocol.UndoCount, value: 0);
     }
-
     private static void SetTableau(Driver driver, int column, byte faceUp, byte[] cards) {
         var pile = (SolitaireProtocol.PileTableauBase + column);
 
         for (var index = 0; (index < cards.Length); index++) {
-            driver.Write(address: (ushort)(SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride) + index), value: cards[index]);
+            driver.Write(address: (ushort)((SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride)) + index), value: cards[index]);
         }
 
         driver.Write(address: (ushort)(SolitaireProtocol.CountsBase + pile), value: (byte)cards.Length);
         driver.Write(address: (ushort)(SolitaireProtocol.FaceUpBase + column), value: faceUp);
     }
-
     private static void SetFoundation(Driver driver, int foundation, byte[] cards) {
         var pile = (SolitaireProtocol.PileFoundationBase + foundation);
 
         for (var index = 0; (index < cards.Length); index++) {
-            driver.Write(address: (ushort)(SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride) + index), value: cards[index]);
+            driver.Write(address: (ushort)((SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride)) + index), value: cards[index]);
         }
 
         driver.Write(address: (ushort)(SolitaireProtocol.CountsBase + pile), value: (byte)cards.Length);
@@ -531,7 +528,7 @@ internal static class SolitaireVerify {
             var cards = new byte[12];
 
             for (var rank = 1; (rank <= 12); rank++) {
-                cards[rank - 1] = CardDeck.CardId(suit: suit, rank: rank);
+                cards[(rank - 1)] = CardDeck.CardId(suit: suit, rank: rank);
             }
 
             SetFoundation(driver: driver, foundation: suit, cards: cards);
@@ -604,16 +601,14 @@ internal static class SolitaireVerify {
     // ==== Read helpers. ==================================================================================================
 
     private static byte ReadCount(Driver driver, byte pile) => driver.Read(address: (ushort)(SolitaireProtocol.CountsBase + pile));
-
     private static byte ReadFaceUp(Driver driver, int column) => driver.Read(address: (ushort)(SolitaireProtocol.FaceUpBase + column));
-
     private static int ReadScore(Driver driver) {
         var value = 0;
 
         for (var index = 0; (index < 3); index++) {
             var packed = driver.Read(address: (ushort)(SolitaireProtocol.Score + index));
 
-            value = ((value * 100) + (((packed >> 4) & 0x0F) * 10) + (packed & 0x0F));
+            value = (((value * 100) + (((packed >> 4) & 0x0F) * 10)) + (packed & 0x0F));
         }
 
         return value;
@@ -629,7 +624,7 @@ internal static class SolitaireVerify {
             snapshot.Add(item: count);
 
             for (var index = 0; (index < count); index++) {
-                snapshot.Add(item: driver.Read(address: (ushort)(SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride) + index)));
+                snapshot.Add(item: driver.Read(address: (ushort)((SolitaireProtocol.PileBase + (pile * SolitaireProtocol.PileStride)) + index)));
             }
         }
 
@@ -644,7 +639,6 @@ internal static class SolitaireVerify {
 
         return [.. snapshot];
     }
-
     private static byte[] ReadSavePayload(Driver driver) {
         var payload = new byte[SolitaireProtocol.SavePayloadByteCount];
 
@@ -654,9 +648,8 @@ internal static class SolitaireVerify {
 
         return payload;
     }
-
     private static byte[] ReadMirror(Driver driver) {
-        var mirror = new byte[SolitaireProtocol.HiScoreEntryCount * SolitaireProtocol.HiScoreEntryByteCount];
+        var mirror = new byte[(SolitaireProtocol.HiScoreEntryCount * SolitaireProtocol.HiScoreEntryByteCount)];
 
         for (var index = 0; (index < mirror.Length); index++) {
             mirror[index] = driver.Read(address: (ushort)(SolitaireProtocol.HiScoreMirror + index));
@@ -664,13 +657,12 @@ internal static class SolitaireVerify {
 
         return mirror;
     }
-
     private static int FindEntry(byte[] mirror, string initials) {
         for (var entry = 0; (entry < SolitaireProtocol.HiScoreEntryCount); entry++) {
             var matches = true;
 
             for (var index = 0; (index < 3); index++) {
-                if (mirror[(entry * SolitaireProtocol.HiScoreEntryByteCount) + index] != TextModule.TileFor(fontTileBase: SolitaireTables.FontTileBase, character: initials[index])) {
+                if (mirror[((entry * SolitaireProtocol.HiScoreEntryByteCount) + index)] != TextModule.TileFor(fontTileBase: SolitaireTables.FontTileBase, character: initials[index])) {
                     matches = false;
 
                     break;
@@ -684,15 +676,14 @@ internal static class SolitaireVerify {
 
         return -1;
     }
-
     private static int EntryScore(byte[] mirror, int entry) {
         var offset = ((entry * SolitaireProtocol.HiScoreEntryByteCount) + 3);
         var value = 0;
 
         for (var index = 0; (index < 3); index++) {
-            var packed = mirror[offset + index];
+            var packed = mirror[(offset + index)];
 
-            value = ((value * 100) + (((packed >> 4) & 0x0F) * 10) + (packed & 0x0F));
+            value = (((value * 100) + (((packed >> 4) & 0x0F) * 10)) + (packed & 0x0F));
         }
 
         return value;
@@ -710,15 +701,14 @@ internal static class SolitaireVerify {
         payload.CopyTo(array: sram, index: SaveModule.HeaderByteCount);
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        sram[SaveModule.HeaderByteCount + payload.Length] = (byte)(sum & 0xFF);
-        sram[SaveModule.HeaderByteCount + payload.Length + 1] = (byte)((sum >> 8) & 0xFF);
+        sram[(SaveModule.HeaderByteCount + payload.Length)] = (byte)(sum & 0xFF);
+        sram[((SaveModule.HeaderByteCount + payload.Length) + 1)] = (byte)((sum >> 8) & 0xFF);
 
         return sram;
     }
-
     private static void Assert(bool condition, string message) {
         if (!condition) {
             throw new InvalidOperationException(message: $"solitaire ROM verification failed: {message}");
@@ -749,11 +739,8 @@ internal static class SolitaireVerify {
         }
 
         public byte Read(ushort address) => m_bus.ReadByte(address: address);
-
-        public int ReadWide(ushort address) => (Read(address: address) | (Read(address: (ushort)(address + 1)) << 8));
-
+        public int ReadWide(ushort address) => Read(address: address) | (Read(address: (ushort)(address + 1)) << 8);
         public void Write(ushort address, byte value) => m_bus.WriteByte(address: address, value: value);
-
         public void RunFrames(JoypadButtons buttons, int frames) {
             for (var frame = 0; (frame < frames); frame++) {
                 m_joypad.SetButtons(pressed: buttons);
@@ -769,9 +756,7 @@ internal static class SolitaireVerify {
             RunFrames(buttons: buttons, frames: 8);
             RunFrames(buttons: JoypadButtons.None, frames: 6);
         }
-
         public byte[] ExportExternalRam() => m_cartridge.ExportExternalRam();
-
         public void Dispose() => m_machine.Dispose();
     }
 }

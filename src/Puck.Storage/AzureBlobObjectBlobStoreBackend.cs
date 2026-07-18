@@ -6,8 +6,14 @@ using Azure.Storage.Blobs.Models;
 
 namespace Puck.Storage;
 
-internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend {
-    private static readonly BlobClientOptions BlobClientOptionsField = new(BlobClientOptions.ServiceVersion.V2025_11_05);
+/// <summary>
+/// The Azure Blob backend. Its version token is the blob ETag — the download ETag on a read (§2.5.2, previously
+/// discarded), and a <c>BlobRequestConditions.IfMatch</c> on a conditional write, catching a 412 as a precondition
+/// failure. This is the true optimistic-concurrency path the cloud arc exercises; the same seam the local backend
+/// implements best-effort. <see cref="IDisposable"/> because it owns the lazily-created credential.
+/// </summary>
+internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend, IDisposable {
+    private static readonly BlobClientOptions BlobClientOptionsField = new(version: BlobClientOptions.ServiceVersion.V2025_11_05);
 
     private static AzureBlobObjectStorageTarget GetTarget(ObjectStorageTarget target) {
         ArgumentNullException.ThrowIfNull(target);
@@ -21,7 +27,7 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
 
     // NOTE: initializer order is load-bearing; do not alphabetize.
     private readonly ConcurrentDictionary<string, BlobServiceClient> m_blobServiceClients = new(comparer: StringComparer.Ordinal);
-    private readonly Lazy<DefaultAzureCredential> m_defaultAzureCredential = new(static () => new DefaultAzureCredential());
+    private readonly Lazy<DefaultAzureCredential> m_defaultAzureCredential = new(valueFactory: static () => new DefaultAzureCredential());
 
     private BlobClient GetBlobClient(AzureBlobObjectStorageTarget target, ObjectBlobAddress address) {
         return GetBlobClients(
@@ -36,28 +42,28 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
         var root = ObjectBlobAddressPath.GetRoot(address: address);
         var blobName = ObjectBlobAddressPath.GetNormalizedKey(address: address);
         var serviceClient = GetServiceClient(target: target);
-        var containerClient = serviceClient.GetBlobContainerClient(root);
+        var containerClient = serviceClient.GetBlobContainerClient(blobContainerName: root);
 
-        return (containerClient, containerClient.GetBlobClient(blobName));
+        return (containerClient, containerClient.GetBlobClient(blobName: blobName));
     }
     private BlobServiceClient GetServiceClient(AzureBlobObjectStorageTarget target) {
         if (target.ConnectionString is { Length: > 0 } connectionString) {
             return m_blobServiceClients.GetOrAdd(
-                $"connection-string:{connectionString}",
-                _ => new BlobServiceClient(
-                    connectionString,
-                    BlobClientOptionsField
+                key: $"connection-string:{connectionString}",
+                valueFactory: _ => new BlobServiceClient(
+                    connectionString: connectionString,
+                    options: BlobClientOptionsField
                 )
             );
         }
 
         if (target.ServiceUri is not null) {
             return m_blobServiceClients.GetOrAdd(
-                $"service-uri:{target.ServiceUri.AbsoluteUri}",
-                _ => new BlobServiceClient(
-                    target.ServiceUri,
-                    m_defaultAzureCredential.Value,
-                    BlobClientOptionsField
+                key: $"service-uri:{target.ServiceUri.AbsoluteUri}",
+                valueFactory: _ => new BlobServiceClient(
+                    credential: m_defaultAzureCredential.Value,
+                    options: BlobClientOptionsField,
+                    serviceUri: target.ServiceUri
                 )
             );
         }
@@ -68,7 +74,18 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
         );
     }
 
-    public async ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
+    public void Dispose() {
+        // The service clients hold no unmanaged handles; the credential can (managed-identity/broker token pipes), so
+        // dispose it when it was ever materialized. Guarded on IDisposable so a credential type that is not disposable
+        // (the common case) is a harmless no-op.
+        if (m_defaultAzureCredential.IsValueCreated && (m_defaultAzureCredential.Value is IDisposable disposable)) {
+            disposable.Dispose();
+        }
+
+        m_blobServiceClients.Clear();
+    }
+
+    public async ValueTask<ObjectBlobContent?> ReadAsync(
         ObjectStorageTarget target,
         ObjectBlobAddress address,
         CancellationToken cancellationToken = default
@@ -79,9 +96,12 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
         );
 
         try {
-            var download = await blobClient.DownloadContentAsync(cancellationToken);
+            var download = await blobClient.DownloadContentAsync(cancellationToken: cancellationToken);
 
-            return download.Value.Content.ToArray();
+            return new ObjectBlobContent(
+                Content: download.Value.Content.ToArray(),
+                VersionToken: download.Value.Details.ETag.ToString()
+            );
         } catch (RequestFailedException ex) when ((ex.Status == 404)) {
             return null;
         }
@@ -91,11 +111,12 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
 
         return (target is AzureBlobObjectStorageTarget);
     }
-    public async ValueTask<bool> WriteAsync(
+    public async ValueTask<ObjectBlobWriteResult> WriteAsync(
         ObjectStorageTarget target,
         ObjectBlobAddress address,
         ReadOnlyMemory<byte> content,
         ObjectBlobWriteMode mode,
+        string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     ) {
         var (containerClient, blobClient) = GetBlobClients(
@@ -104,15 +125,25 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
         );
         await containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
 
-        var blobContent = new BinaryData(content.ToArray());
+        var blobContent = new BinaryData(data: content.ToArray());
 
         if (mode == ObjectBlobWriteMode.Overwrite) {
-            await blobClient.UploadAsync(
-                blobContent,
-                overwrite: true,
-                cancellationToken
-            );
-            return true;
+            // An if-match guards the overwrite (optimistic concurrency); its absence keeps the unconditional overwrite.
+            var conditions = (ifMatchVersion is not null
+                ? new BlobRequestConditions { IfMatch = new ETag(etag: ifMatchVersion) }
+                : null);
+
+            try {
+                var response = await blobClient.UploadAsync(
+                    blobContent,
+                    new BlobUploadOptions { Conditions = conditions },
+                    cancellationToken
+                );
+
+                return new ObjectBlobWriteResult(Succeeded: true, PreconditionFailed: false, VersionToken: response.Value.ETag.ToString());
+            } catch (RequestFailedException ex) when ((ex.Status == 412)) {
+                return new ObjectBlobWriteResult(Succeeded: false, PreconditionFailed: true, VersionToken: null);
+            }
         }
 
         if (mode != ObjectBlobWriteMode.CreateOnly) {
@@ -124,7 +155,7 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
         }
 
         try {
-            await blobClient.UploadAsync(
+            var response = await blobClient.UploadAsync(
                 blobContent,
                 new BlobUploadOptions {
                     Conditions = new BlobRequestConditions {
@@ -133,9 +164,11 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
                 },
                 cancellationToken
             );
-            return true;
+
+            return new ObjectBlobWriteResult(Succeeded: true, PreconditionFailed: false, VersionToken: response.Value.ETag.ToString());
         } catch (RequestFailedException ex) when ((ex.Status is 409 or 412)) {
-            return false;
+            // The blob already existed — a create-only loss, not an if-match precondition failure.
+            return new ObjectBlobWriteResult(Succeeded: false, PreconditionFailed: false, VersionToken: null);
         }
     }
 }

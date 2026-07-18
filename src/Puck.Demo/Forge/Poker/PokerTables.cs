@@ -83,20 +83,20 @@ internal static class PokerTables {
         for (var shape = 0; (shape < table.Length); shape++) {
             var flush = ((shape & 0x01) != 0);
             var straight = ((shape & 0x02) != 0);
-            var pairs = ((shape >> 2) & 0x03);
+            var pairs = (shape >> 2) & 0x03;
             var trips = ((shape & 0x10) != 0);
             var quads = ((shape & 0x20) != 0);
 
             table[shape] = (byte)(
                 quads ? 7
-                : (trips && (pairs >= 1)) ? 6
-                : (flush && straight) ? 8
-                : flush ? 5
-                : straight ? 4
-                : trips ? 3
-                : (pairs == 2) ? 2
-                : (pairs == 1) ? 1
-                : 0);
+                : ((trips && (pairs >= 1)) ? 6
+                : ((flush && straight) ? 8
+                : (flush ? 5
+                : (straight ? 4
+                : (trips ? 3
+                : ((pairs == 2) ? 2
+                : ((pairs == 1) ? 1
+                : 0))))))));
         }
 
         return table;
@@ -168,8 +168,8 @@ internal static class PokerTables {
         table.CopyTo(array: payload, index: 0);
 
         for (var seat = 0; (seat < PokerProtocol.SeatCount); seat++) {
-            payload[table.Length + (seat * 2)] = 0x02;      // 0200 chips, packed BCD, MSB first.
-            payload[table.Length + (seat * 2) + 1] = 0x00;
+            payload[(table.Length + (seat * 2))] = 0x02;      // 0200 chips, packed BCD, MSB first.
+            payload[((table.Length + (seat * 2)) + 1)] = 0x00;
         }
 
         return payload;
@@ -196,8 +196,8 @@ internal static class PokerTables {
         var map = new byte[0x400];
 
         for (var column = 2; (column <= 17); column++) {
-            map[(6 * 32) + column] = (byte)(CardTables.TileSuitBase + (column % 4));
-            map[(16 * 32) + column] = (byte)(CardTables.TileSuitBase + ((column + 2) % 4));
+            map[((6 * 32) + column)] = (byte)(CardTables.TileSuitBase + (column % 4));
+            map[((16 * 32) + column)] = (byte)(CardTables.TileSuitBase + ((column + 2) % 4));
         }
 
         return map;

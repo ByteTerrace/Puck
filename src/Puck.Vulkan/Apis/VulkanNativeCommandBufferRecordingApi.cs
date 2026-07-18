@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -27,6 +28,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     private const uint ImageAspectColorBit = 0x00000001;
     private const uint QueueFamilyIgnored = 0xFFFFFFFF;
     private const uint StructureTypeCommandBufferBeginInfo = 42;
+    private const uint StructureTypeDebugUtilsLabel = 1000128002;
     private const uint StructureTypeImageMemoryBarrier = 45;
     private const uint StructureTypeMemoryBarrier = 46;
     private const uint StructureTypeRenderPassBeginInfo = 43;
@@ -78,6 +80,41 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             commandBufferHandle,
             in beginInfo
         );
+    }
+    /// <inheritdoc/>
+    public void BeginDebugLabel(nint deviceHandle, nint commandBufferHandle, string label) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: label);
+
+        var beginLabel = GetPointers(deviceHandle: deviceHandle).CmdBeginDebugUtilsLabel;
+
+        // VK_EXT_debug_utils absent (extension not enabled, or no capture layer resolving the entry point): no-op.
+        if (beginLabel is null) {
+            return;
+        }
+
+        var byteCount = Encoding.UTF8.GetByteCount(s: label);
+        Span<byte> nameBytes = stackalloc byte[(byteCount + 1)];
+
+        Encoding.UTF8.GetBytes(chars: label, bytes: nameBytes);
+        nameBytes[byteCount] = 0;
+
+        fixed (byte* labelName = nameBytes) {
+            var info = new VkDebugUtilsLabelExt {
+                LabelName = labelName,
+                StructureType = StructureTypeDebugUtilsLabel,
+            };
+
+            beginLabel(commandBufferHandle, in info);
+        }
+    }
+    /// <inheritdoc/>
+    public void EndDebugLabel(nint deviceHandle, nint commandBufferHandle) {
+        var endLabel = GetPointers(deviceHandle: deviceHandle).CmdEndDebugUtilsLabel;
+
+        // VK_EXT_debug_utils absent: no-op (balances a BeginDebugLabel that also no-oped).
+        if (endLabel is not null) {
+            endLabel(commandBufferHandle);
+        }
     }
     /// <inheritdoc/>
     public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
@@ -896,6 +933,10 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         public delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void> CmdPushConstants;
         public delegate* unmanaged[Cdecl]<nint, void> CmdEndRenderPass;
         public delegate* unmanaged[Cdecl]<nint, VkResult> EndCommandBuffer;
+        // VK_EXT_debug_utils command-buffer labels — null when the extension is not enabled (BeginDebugLabel /
+        // EndDebugLabel then no-op).
+        public delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void> CmdBeginDebugUtilsLabel;
+        public delegate* unmanaged[Cdecl]<nint, void> CmdEndDebugUtilsLabel;
     }
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
@@ -1014,6 +1055,21 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
         fixed (byte* pName = "vkEndCommandBuffer"u8) {
             pNew.EndCommandBuffer = (delegate* unmanaged[Cdecl]<nint, VkResult>)getAddr(
+                deviceHandle,
+                pName
+            );
+        }
+        // Optional (VK_EXT_debug_utils): getAddr returns null when the extension is not enabled, leaving the label
+        // methods as no-ops. The command-buffer label commands are device-child, so vkGetDeviceProcAddr resolves them
+        // once the instance extension is on.
+        fixed (byte* pName = "vkCmdBeginDebugUtilsLabelEXT"u8) {
+            pNew.CmdBeginDebugUtilsLabel = (delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)getAddr(
+                deviceHandle,
+                pName
+            );
+        }
+        fixed (byte* pName = "vkCmdEndDebugUtilsLabelEXT"u8) {
+            pNew.CmdEndDebugUtilsLabel = (delegate* unmanaged[Cdecl]<nint, void>)getAddr(
                 deviceHandle,
                 pName
             );

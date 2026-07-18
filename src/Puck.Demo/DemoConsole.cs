@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Demo.DevConsole;
 
 namespace Puck.Demo;
@@ -19,6 +20,10 @@ internal sealed class DemoConsole {
     private int m_anchorLeft;
     private int m_anchorTop;
     private string m_line = "";
+    // A client-space, top-left override for the on-screen panel's position — set by a title-band drag
+    // (ConsoleOverlayNode) or the console.move verb, cleared by console.reset. Null = the default token-derived rect.
+    // Session/presentation-only, exactly like m_visible: never coupled to a CommandSnapshot, never replayed.
+    private Vector2? m_panelPosition;
     private bool m_visible;
 
     /// <summary>Initializes a new instance of the <see cref="DemoConsole"/> class.</summary>
@@ -44,6 +49,34 @@ internal sealed class DemoConsole {
         }
 
         m_visible = visible;
+        Publish();
+    }
+
+    /// <summary>Sets a client-space, top-left override for the on-screen panel's position — the write side both a
+    /// title-band drag (<see cref="ConsoleOverlayNode"/>, every dragged frame) and the <c>console.move</c> verb use.
+    /// Clamped here to non-negative client coordinates only: this store knows nothing about the panel's
+    /// on-screen size or the window's dimensions (it must stay usable even when nothing is rendering, e.g. a headless
+    /// run), so the overlay applies the full screen/title-band-aware clamp again at render time regardless of source.
+    /// </summary>
+    /// <param name="position">The requested top-left position, in client pixels.</param>
+    /// <returns>The stored (clamped) position, for the caller to echo.</returns>
+    public Vector2 SetPanelPosition(Vector2 position) {
+        var clamped = new Vector2(x: Math.Max(val1: 0f, val2: position.X), y: Math.Max(val1: 0f, val2: position.Y));
+
+        m_panelPosition = clamped;
+        Publish();
+
+        return clamped;
+    }
+
+    /// <summary>Clears the panel-position override (the <c>console.reset</c> verb): the panel returns to its default
+    /// token-derived rect.</summary>
+    public void ClearPanelPosition() {
+        if (m_panelPosition is null) {
+            return;
+        }
+
+        m_panelPosition = null;
         Publish();
     }
 
@@ -119,14 +152,32 @@ internal sealed class DemoConsole {
 
         return line;
     }
+    /// <summary>Echoes a scripted (stdin-submitted) command line into the on-screen history ONLY — the panel then
+    /// shows the same conversation the pipe drives (the unification contract's one-console rule) — without writing
+    /// to stdout: the pipe already knows what it sent, and a scripted run's assertable stdout must stay
+    /// byte-identical. Pair with <see cref="WriteLine"/> for the result, exactly like the panel's enter verb.</summary>
+    /// <param name="line">The submitted command line.</param>
+    public void EchoSubmittedLine(string line) {
+        if (string.IsNullOrEmpty(value: line)) {
+            return;
+        }
+
+        AddHistory(message: $"> {line}");
+        Publish();
+    }
     /// <summary>Writes a message above the in-progress input line, then redraws the line beneath it.</summary>
     /// <param name="message">The message to write.</param>
     public void WriteLine(string message) {
         AddHistory(message: message);
         Publish();
 
+        // stdout is a PLAIN-TEXT sink: an enriched line (the compiled control-char stream the CRT terminal parses)
+        // keeps its stream in the history/feed, but its C0 delimiters mangle a terminal/pipe — strip to the visible
+        // runes for the stdout copy only. An ordinary line carries no delimiters and passes through byte-identical.
+        var plainMessage = StripEnrichmentForStdout(message: message);
+
         if (Console.IsOutputRedirected) {
-            Console.Out.WriteLine(value: message);
+            Console.Out.WriteLine(value: plainMessage);
             Console.Out.Write(value: m_line);
 
             return;
@@ -138,11 +189,20 @@ internal sealed class DemoConsole {
             SetCursor(left: m_anchorLeft, top: m_anchorTop);
         }
 
-        Console.Out.WriteLine(value: message);
+        Console.Out.WriteLine(value: plainMessage);
         CaptureAnchor();
         Console.Out.Write(value: m_line);
     }
 
+    private static string StripEnrichmentForStdout(string message) {
+        foreach (var c in message) {
+            if (Puck.Text.TextEnrichmentTags.IsDelimiter(unicodeScalar: c)) {
+                return string.Concat(values: Puck.Text.TextEnrichmentTags.EnumerateVisibleRunes(text: message));
+            }
+        }
+
+        return message;
+    }
     private void ClearLine() {
         if (!Console.IsOutputRedirected && (m_line.Length > 0)) {
             SetCursor(left: m_anchorLeft, top: m_anchorTop);
@@ -172,15 +232,14 @@ internal sealed class DemoConsole {
             m_history.RemoveRange(index: 0, count: (m_history.Count - MaxHistory));
         }
     }
-
     private void Publish() {
         m_store.Publish(frame: new ConsoleTextFrame(
             Input: m_line,
             Lines: m_history.ToArray(),
+            PanelPosition: m_panelPosition,
             Visible: m_visible
         ));
     }
-
     private static void SetCursor(int left, int top) {
         Console.SetCursorPosition(
             left: Math.Clamp(value: left, max: (Console.BufferWidth - 1), min: 0),

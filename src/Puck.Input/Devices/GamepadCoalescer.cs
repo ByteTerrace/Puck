@@ -30,7 +30,7 @@ public sealed class GamepadCoalescer {
             // (CommandBinding.ActivateOn ignores Completed), so it updates held state without re-firing a
             // press-driven handler.
             if (m_hasSample) {
-                var newlyPressed = (state.Buttons & ~m_previousButtons);
+                var newlyPressed = state.Buttons & ~m_previousButtons;
 
                 // Stamp each button's FIRST press in this window with the report's arrival time, so a snapshot
                 // capture gives every press its true sub-frame edge time. Bits already pressed this window keep
@@ -45,7 +45,7 @@ public sealed class GamepadCoalescer {
                 }
 
                 m_pressed |= newlyPressed;
-                m_released |= (~state.Buttons & m_previousButtons);
+                m_released |= ~state.Buttons & m_previousButtons;
             }
 
             m_previousButtons = state.Buttons;

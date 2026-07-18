@@ -37,7 +37,7 @@ public static class WorldThemeComposer {
                 // rather than a scale exercise; the last row of a pattern always sounds, so the loop lands.
                 rows.Add(item: ((((value & 0x07) < 3) && (row != 15))
                     ? new AudioRowDocument(Duty: null, Envelope: null, Note: AudioRowDocument.Hold)
-                    : new AudioRowDocument(Duty: ((value >> 6) & 0x03), Envelope: null, Note: Pentatonic[(value % Pentatonic.Length)])));
+                    : new AudioRowDocument(Duty: (value >> 6) & 0x03, Envelope: null, Note: Pentatonic[(value % Pentatonic.Length)])));
             }
 
             patterns.Add(item: rows);

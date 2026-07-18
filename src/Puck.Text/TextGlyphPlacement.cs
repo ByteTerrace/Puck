@@ -18,11 +18,13 @@ namespace Puck.Text;
 /// <param name="PlaneBounds">The glyph quad in the result's coordinate space (pen-offset and scaled).</param>
 /// <param name="AtlasBounds">The glyph's source rectangle in the atlas image, in texels.</param>
 /// <param name="Atlas">The atlas the glyph belongs to, when the placement needs to carry its own atlas; otherwise <see langword="null"/>.</param>
+/// <param name="Effect">The enrichment effect in force at this glyph, carried through from the enrichment-aware layout overload; <see cref="TextEffect.None"/> for unenriched text. Resolve it to a per-glyph channel with <see cref="TextGlyphChannel.Resolve"/>.</param>
 public readonly record struct TextGlyphPlacement(
     int Unicode,
     Vector2 BaselineOrigin,
     FontAtlasGlyph Glyph,
     FontAtlasBounds PlaneBounds,
     FontAtlasBounds AtlasBounds,
-    FontAtlas? Atlas = null
+    FontAtlas? Atlas = null,
+    TextEffect Effect = default
 );

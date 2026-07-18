@@ -41,27 +41,27 @@ internal sealed class WorldSymmetryPlaneStage : IPostStage {
     // authored on the plane's positive side, comfortably clear of the seam.
     internal static SdfProgram BuildSymmetryPlaneScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.4f, 0.45f, 0.5f)));
-        var crimson = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.25f, 0.3f), Emissive: 0.35f));
-        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.25f, 0.85f, 0.8f), Emissive: 0.35f));
-        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.75f, 0.2f), Emissive: 0.35f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.4f, y: 0.45f, z: 0.5f)));
+        var crimson = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.25f, z: 0.3f), Emissive: 0.35f));
+        var teal = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.25f, y: 0.85f, z: 0.8f), Emissive: 0.35f));
+        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.75f, z: 0.2f), Emissive: 0.35f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // Fold across the diagonal plane normal (1,0,1)/sqrt2, offset 0.2 — a clearly non-axis-aligned plane.
-            .SymmetryPlane(normal: new Vector3(1f, 0f, 1f), offset: 0.2f)
+            .SymmetryPlane(normal: new Vector3(x: 1f, y: 0f, z: 1f), offset: 0.2f)
             // The asymmetric prototype: a rounded box, a cone, and a sphere at three different offsets, all
             // comfortably on the plane's positive (kept) side — the nearest shape sits ~1.2 units from the plane,
             // far outside its own ~0.2-unit reach.
-            .Translate(offset: new Vector3(0.95f, 0.15f, 0.85f))
-            .Box(halfExtents: new Vector3(0.18f, 0.1f, 0.12f), round: 0.02f, material: crimson)
+            .Translate(offset: new Vector3(x: 0.95f, y: 0.15f, z: 0.85f))
+            .Box(halfExtents: new Vector3(x: 0.18f, y: 0.1f, z: 0.12f), round: 0.02f, material: crimson)
             .ResetPoint()
-            .SymmetryPlane(normal: new Vector3(1f, 0f, 1f), offset: 0.2f)
-            .Translate(offset: new Vector3(1.1f, 0.05f, 0.65f))
+            .SymmetryPlane(normal: new Vector3(x: 1f, y: 0f, z: 1f), offset: 0.2f)
+            .Translate(offset: new Vector3(x: 1.1f, y: 0.05f, z: 0.65f))
             .RoundCone(lowerRadius: 0.1f, upperRadius: 0.03f, height: 0.24f, material: teal)
             .ResetPoint()
-            .SymmetryPlane(normal: new Vector3(1f, 0f, 1f), offset: 0.2f)
-            .Translate(offset: new Vector3(0.7f, 0.08f, 1.05f))
+            .SymmetryPlane(normal: new Vector3(x: 1f, y: 0f, z: 1f), offset: 0.2f)
+            .Translate(offset: new Vector3(x: 0.7f, y: 0.08f, z: 1.05f))
             .Sphere(radius: 0.1f, material: amber)
             .Build();
     }

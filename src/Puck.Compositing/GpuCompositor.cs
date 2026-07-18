@@ -35,6 +35,7 @@ public sealed class GpuCompositor {
     /// <param name="target">The offscreen render target to compose into.</param>
     /// <param name="drawCommands">The draw list to replay. Must contain at least one command.</param>
     /// <param name="pipelines">The content-addressed pipeline map every command's <see cref="GpuDrawCommand.PipelineId"/> resolves against.</param>
+    /// <param name="debugLabel">An optional GPU-capture debug-group name wrapping the recorded pass; <see langword="null"/> records no group.</param>
     /// <returns>The render target's command buffer handle, recorded and ready to submit.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="drawCommands"/> is empty.</exception>
@@ -43,7 +44,8 @@ public sealed class GpuCompositor {
         IGpuDeviceContext deviceContext,
         IGpuRenderTarget target,
         IReadOnlyList<GpuDrawCommand> drawCommands,
-        IReadOnlyDictionary<AssetContentHash, IGpuPipeline> pipelines
+        IReadOnlyDictionary<AssetContentHash, IGpuPipeline> pipelines,
+        string? debugLabel = null
     ) {
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(target);
@@ -64,6 +66,15 @@ public sealed class GpuCompositor {
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle
         );
+
+        if (debugLabel is not null) {
+            m_commandRecorder.BeginDebugGroup(
+                commandBufferHandle: commandBufferHandle,
+                deviceHandle: deviceHandle,
+                label: debugLabel
+            );
+        }
+
         m_commandRecorder.BeginRenderPass(
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle,
@@ -134,6 +145,14 @@ public sealed class GpuCompositor {
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle
         );
+
+        if (debugLabel is not null) {
+            m_commandRecorder.EndDebugGroup(
+                commandBufferHandle: commandBufferHandle,
+                deviceHandle: deviceHandle
+            );
+        }
+
         m_commandRecorder.EndCommandBuffer(
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle

@@ -42,8 +42,9 @@ public readonly record struct UFixedQ0016(ushort Value)
     private const uint RawOne = (1U << FractionBitCount);
     private const double RawOneInverse = (1d / RawOne);
 
-    // The exact upper bound of the representable real range (ushort.MaxValue / 2^16), used to reject out-of-range text.
-    private static readonly decimal MaxValueAsDecimal = (ushort.MaxValue / ((decimal)RawOne));
+    private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(
+        fractionBitCount: FractionBitCount
+    );
 
     /// <summary>Converts a <see cref="UFixedQ0016"/> to its exact <see cref="double"/> value.</summary>
     /// <param name="value">The value to convert.</param>
@@ -84,10 +85,7 @@ public readonly record struct UFixedQ0016(ushort Value)
         var greaterThanHalf = Convert.ToUInt32(value: (remainder > RawHalf));
         var correction = greaterThanHalf | (equalToHalf & truncated & 1U);
 
-        return new(Value: ((ushort)Math.Min(
-            val1: (truncated + correction),
-            val2: ((uint)RawMaxValue)
-        )));
+        return new(Value: ((ushort)(truncated + correction)));
     }
     /// <summary>Divides <paramref name="x"/> by <paramref name="y"/> in fixed point, rounding to nearest with ties to even and saturating to <see cref="MaxValue"/>.</summary>
     /// <param name="x">The dividend.</param>
@@ -192,9 +190,9 @@ public readonly record struct UFixedQ0016(ushort Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ0016 AddSaturating(UFixedQ0016 x, UFixedQ0016 y) =>
         new(Value: ((ushort)Math.Min(
-            val1: (((uint)x.Value) + y.Value),
-            val2: ((uint)RawMaxValue)
-        )));
+        val1: (((uint)x.Value) + y.Value),
+        val2: ((uint)RawMaxValue)
+    )));
     /// <summary>Restricts <paramref name="value"/> to the inclusive range <c>[<paramref name="minimum"/>, <paramref name="maximum"/>]</c>.</summary>
     /// <param name="value">The value to clamp.</param>
     /// <param name="minimum">The inclusive lower bound.</param>
@@ -203,10 +201,10 @@ public readonly record struct UFixedQ0016(ushort Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ0016 Clamp(UFixedQ0016 value, UFixedQ0016 minimum, UFixedQ0016 maximum) =>
         new(Value: Math.Clamp(
-            value: value.Value,
-            min: minimum.Value,
-            max: maximum.Value
-        ));
+        value: value.Value,
+        min: minimum.Value,
+        max: maximum.Value
+    ));
     /// <summary>Converts a <see cref="double"/> to a <see cref="UFixedQ0016"/>, rounding to nearest with ties to even.</summary>
     /// <param name="value">The value to convert.</param>
     /// <returns>The nearest representable <see cref="UFixedQ0016"/>, clamped to <c>[0, <see cref="MaxValue"/>]</c>. Inputs at or above one, as well as negative and not-a-number inputs, clamp into range.</returns>
@@ -237,9 +235,9 @@ public readonly record struct UFixedQ0016(ushort Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ0016 Max(UFixedQ0016 x, UFixedQ0016 y) =>
         new(Value: Math.Max(
-            val1: x.Value,
-            val2: y.Value
-        ));
+        val1: x.Value,
+        val2: y.Value
+    ));
     /// <summary>Returns the lesser of two values.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>
@@ -247,9 +245,9 @@ public readonly record struct UFixedQ0016(ushort Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ0016 Min(UFixedQ0016 x, UFixedQ0016 y) =>
         new(Value: Math.Min(
-            val1: x.Value,
-            val2: y.Value
-        ));
+        val1: x.Value,
+        val2: y.Value
+    ));
     /// <summary>Subtracts <paramref name="y"/> from <paramref name="x"/>, saturating to <see cref="MinValue"/> (zero) instead of wrapping on underflow.</summary>
     /// <param name="x">The minuend.</param>
     /// <param name="y">The subtrahend.</param>
@@ -317,10 +315,10 @@ public readonly record struct UFixedQ0016(ushort Value)
     /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UFixedQ0016 result) =>
         TryParseCore(
-            s: s,
-            provider: provider,
-            result: out result
-        );
+        s: s,
+        provider: provider,
+        result: out result
+    );
     /// <summary>Tries to parse a string into a <see cref="UFixedQ0016"/>.</summary>
     /// <param name="s">The string to parse, or <see langword="null"/>.</param>
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
@@ -340,34 +338,27 @@ public readonly record struct UFixedQ0016(ushort Value)
         );
     }
 
-    // Parses an unsigned decimal in [0, 1). Out-of-range text (including the unrepresentable 1.0) is rejected outright,
-    // so Parse round-trips ToString exactly. decimal arithmetic is exact across the whole 16-bit range.
+    // Parses and quantizes directly from the decimal digits. Out-of-range text (including the unrepresentable 1.0) is
+    // rejected outright, and arbitrarily long fractions cannot double-round through an intermediate decimal value.
     private static bool TryParseCore(ReadOnlySpan<char> s, IFormatProvider? provider, out UFixedQ0016 result) {
         result = default;
 
-        if (!decimal.TryParse(
+        if (FixedPointParseStatus.Success != FixedPointText.Parse(
             s: s,
             style: NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite | NumberStyles.AllowDecimalPoint,
-            provider: (provider ?? CultureInfo.InvariantCulture),
-            result: out var parsed
+            provider: provider,
+            fractionBitCount: FractionBitCount,
+            parsingDenominator: ParsingDenominator,
+            maximumPositiveRaw: RawMaxValue,
+            maximumNegativeMagnitudeRaw: 0UL,
+            rejectExactOutOfRange: true,
+            negative: out _,
+            rawMagnitude: out var rawValue
         )) {
             return false;
         }
 
-        if (
-            (0m > parsed) ||
-            (parsed > MaxValueAsDecimal)
-        ) {
-            return false;
-        }
-
-        var scaled = decimal.Round(
-            d: (parsed * RawOne),
-            decimals: 0,
-            mode: MidpointRounding.ToEven
-        );
-
-        result = new(Value: ((ushort)scaled));
+        result = new(Value: ((ushort)rawValue));
 
         return true;
     }
@@ -380,9 +371,9 @@ public readonly record struct UFixedQ0016(ushort Value)
     /// <returns><see langword="true"/> when <paramref name="destination"/> was large enough; otherwise <see langword="false"/>.</returns>
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) =>
         TryFormatCore(
-            destination: destination,
-            charsWritten: out charsWritten
-        );
+        destination: destination,
+        charsWritten: out charsWritten
+    );
     /// <summary>Returns the exact decimal string representation of this value.</summary>
     /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2¹⁶</c> fraction always terminates within sixteen digits).</returns>
     public override string ToString() {

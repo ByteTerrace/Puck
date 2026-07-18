@@ -15,7 +15,7 @@ namespace Puck.Commands;
 /// <remarks>This is the seed of a future <c>Puck.Replay</c> project.</remarks>
 public sealed class SnapshotRecording {
     private const uint Magic = 0x504B_5253u; // "PKRS"
-    private const uint Version = 1u;
+    private const uint Version = 3u;
 
     /// <summary>The simulation seed the recorded run was created with.</summary>
     public required uint Seed { get; init; }
@@ -71,6 +71,14 @@ public sealed class SnapshotRecording {
                 foreach (var entry in entries) {
                     writer.Write(value: entry.CommandId);
                     writer.Write(value: ((byte)entry.Phase));
+                    writer.Write(value: entry.Dispatch);
+                    writer.Write(value: entry.AssignedSlot);
+                    writer.Write(value: (entry.Text is not null));
+
+                    if (entry.Text is { } text) {
+                        writer.Write(value: text);
+                    }
+
                     WriteValue(writer: writer, value: entry.Value);
                 }
             }
@@ -89,7 +97,10 @@ public sealed class SnapshotRecording {
 
         using var reader = new BinaryReader(input: stream, encoding: Encoding.UTF8, leaveOpen: true);
 
-        if ((reader.ReadUInt32() != Magic) || (reader.ReadUInt32() != Version)) {
+        var magic = reader.ReadUInt32();
+        var version = reader.ReadUInt32();
+
+        if ((magic != Magic) || (version is not (1u or 2u or Version))) {
             throw new InvalidDataException(message: "Not a snapshot recording, or an unsupported version.");
         }
 
@@ -117,13 +128,18 @@ public sealed class SnapshotRecording {
                 for (var entryIndex = 0; (entryIndex < entryCount); entryIndex++) {
                     var recordedId = reader.ReadUInt16();
                     var phase = ((CommandPhase)reader.ReadByte());
+                    var recordedDispatch = ((version >= 2u) ? reader.ReadBoolean() : (bool?)null);
+                    var assignedSlot = ((version >= 3u) && reader.ReadBoolean());
+                    var text = (((version >= 2u) && reader.ReadBoolean()) ? reader.ReadString() : null);
                     var value = ReadValue(reader: reader);
+                    var dispatch = (recordedDispatch ??
+                        ((phase == CommandPhase.Started) || ((phase == CommandPhase.Active) && (value.Kind != CommandValueKind.Digital))));
 
                     // Remap by name so a recording survives a rebuild that reassigns ids; an entry naming a command
                     // the current build no longer interns is dropped rather than mis-bound. Device is not restored
                     // (it was never serialized — it is a local-only annotation).
                     if ((recordedId < names.Length) && registry.TryGetId(name: names[recordedId], id: out var currentId)) {
-                        entries.Add(item: new CommandEntry(CommandId: currentId, Value: value, Phase: phase));
+                        entries.Add(item: new CommandEntry(CommandId: currentId, Dispatch: dispatch, Text: text, Value: value, Phase: phase, AssignedSlot: assignedSlot));
                     }
                 }
 
@@ -131,8 +147,8 @@ public sealed class SnapshotRecording {
                     continue;
                 }
 
-                // Re-sort by the CURRENT id so the lane keeps its deterministic, hashable layout after remapping.
-                entries.Sort(comparison: static (left, right) => left.CommandId.CompareTo(value: right.CommandId));
+                // Preserve recorded entry order: it is semantic for repeated commands and for multiple mutations in
+                // one tick. Id remapping changes identity only, never FIFO execution order.
                 lanes.Add(item: new CommandLane(Entries: entries.DrainToImmutable(), Slot: slot));
             }
 

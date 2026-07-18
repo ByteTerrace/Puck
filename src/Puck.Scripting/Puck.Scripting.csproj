@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <!-- Exact pin — fuel counting is Cranelift-codegen-dependent (basic-block granularity,
+             upstream #4109); a silent bump can shift the fuel-exhaustion tick and break stored
+             replays. Bumping is a deliberate, re-gated change, never an incidental restore. -->
+        <PackageReference Include="Wasmtime" Version="[44.0.0]" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
+</Project>

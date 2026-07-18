@@ -200,7 +200,6 @@ public sealed class ContentAddressedStore {
 
         return Path.Combine(path1: m_objectsDirectory, path2: hex[..2], path3: hex);
     }
-
     private string RefPath(string category, string name) =>
         Path.Combine(path1: m_refsDirectory, path2: category, path3: name);
 

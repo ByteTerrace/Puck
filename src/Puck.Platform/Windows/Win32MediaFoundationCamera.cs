@@ -177,7 +177,6 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
             _ = MfInterop.MFShutdown();
         }
     }
-
     private IMFSourceReader OpenDefaultReader() {
         // Enumerate video capture devices, pick the first (shared with the GPU-tier session).
         var (mediaSource, deviceName) = MfInterop.ActivateDefaultVideoSource();
@@ -232,7 +231,6 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
 
         return reader;
     }
-
     private void ReadLoop(IMFSourceReader reader) {
         var scratch = Array.Empty<byte>();
 
@@ -303,8 +301,8 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
 
         m_firstFrameLogged = true;
 
-        var expected = (m_width * m_height * 4);
-        var orientation = (m_defaultStride < 0) ? "bottom-up" : ((m_defaultStride > 0) ? "top-down" : "unreported(assume top-down)");
+        var expected = ((m_width * m_height) * 4);
+        var orientation = ((m_defaultStride < 0) ? "bottom-up" : ((m_defaultStride > 0) ? "top-down" : "unreported(assume top-down)"));
 
         Console.Out.WriteLine(value: $"[camera] first frame {m_width}x{m_height}: buffer {length} bytes (packed expects {expected}, {((length == expected) ? "no padding" : "PADDED/short")}); default stride {m_defaultStride} ({orientation}).");
     }

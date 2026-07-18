@@ -25,6 +25,8 @@ public sealed record PaletteEntryDocument(Vector3 Albedo, float? Emissive, float
 /// <param name="Group">The composition group (null = ungrouped).</param>
 /// <param name="Mirror">Whether the shape mirrors across its local X=0 plane (null = false).</param>
 /// <param name="Twist">The shape's local twist rate (null = 0).</param>
+/// <param name="Bend">The shape's local bend rate about Y (null = 0).</param>
+/// <param name="Dilate">The shape's inflation radius (null = 0).</param>
 /// <param name="Onion">The shape's shell thickness (null = 0, solid).</param>
 public sealed record ShapeDocument(
     int Id,
@@ -39,8 +41,65 @@ public sealed record ShapeDocument(
     int? Group,
     bool? Mirror = null,
     float? Twist = null,
-    float? Onion = null
+    float? Onion = null,
+    float? Bend = null,
+    float? Dilate = null
 );
+
+/// <summary>
+/// One engraved/embossed TEXT RUN a creation carries — a string laid ONTO one of the creation's own surfaces (a shop
+/// facade, a marquee band), stored as text-plus-placement and expanded at world-emission time into
+/// <see cref="SdfShapeType.Glyph"/> shapes via the SHARED font atlas + <c>Puck.Text.TextLayout</c> (never persisted
+/// pre-expanded, so the run stays font-independent on the wire). The run sits on its own plane (<paramref name="Position"/>
+/// centre + <paramref name="Rotation"/>, in the creation's workbench space: local +X = advance, +Y = ascent, +Z = the
+/// relief normal). The glyph slab STRADDLES the host surface, so the lettering is proud (emboss / Union) or recessed
+/// (engrave / Subtraction) but NEVER coplanar — coincident zero-sets speckle (docs/sdf-wiki/text-and-glyphs.md).
+/// </summary>
+/// <param name="Text">The run's text (whitespace / unmapped code points advance the pen without a glyph).</param>
+/// <param name="Position">The run's anchor CENTRE on the host surface (workbench space).</param>
+/// <param name="Rotation">The run plane's orientation (local +X advance, +Y ascent, +Z the relief normal).</param>
+/// <param name="EmHeight">The world height of one em, in the creation's own (pre-placement) units.</param>
+/// <param name="Depth">The glyph extrude HALF-depth — the relief the slab straddles the surface by (null = a thin default).</param>
+/// <param name="Mode"><c>engrave</c> (Subtraction — a carved recess) or <c>emboss</c> (Union — proud relief); null = emboss.</param>
+/// <param name="Material">The palette slot the letters shade with (null = 0).</param>
+public sealed record TextRunDocument(
+    string Text,
+    Vector3 Position,
+    Quaternion Rotation,
+    float EmHeight,
+    float? Depth,
+    string? Mode,
+    int? Material
+) {
+    /// <summary>The engrave mode name (Subtraction — a carved recess).</summary>
+    public const string ModeEngrave = "engrave";
+
+    /// <summary>The emboss mode name (Union — proud relief; the default).</summary>
+    public const string ModeEmboss = "emboss";
+
+    /// <summary>The number of GLYPH shapes this run expands to for the per-stamp shape budget — its non-whitespace
+    /// character count, a conservative upper bound of the atlas's laid-out placements (which skip whitespace and
+    /// unmapped code points). Whitespace-only / empty text contributes nothing. Derived (recomputed from
+    /// <see cref="Text"/>), so it is kept OFF the wire.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int GlyphCount {
+        get {
+            if (Text is not { Length: > 0 } text) {
+                return 0;
+            }
+
+            var count = 0;
+
+            foreach (var character in text) {
+                if (!char.IsWhiteSpace(c: character)) {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
+}
 
 /// <summary>One IK chain on the wire (mirrors <see cref="CreatorChainState"/>'s DEFINITION — rest geometry is
 /// re-derived from the member shapes' CURRENT positions at load time, never persisted, so a loaded chain always
@@ -153,6 +212,10 @@ public sealed record CreationBehaviorDocument(
 /// feed — the lantern-fish's lure lens is one entry here.</param>
 /// <param name="Behavior">The behavior manifest (null = the defaults: walks, no face). Records how the creation moves
 /// and any screen faces it declares, so consumers stop re-supplying those facts by hand.</param>
+/// <param name="TextRuns">The engraved/embossed text runs the creation carries (null/empty = none). Each is a string
+/// laid onto a surface, expanded at emission into <see cref="SdfShapeType.Glyph"/> shapes — see
+/// <see cref="TextRunDocument"/>. Omitted from the wire when null (a text-free creation stays byte-identical), so this
+/// member did NOT churn the whole town's committed JSON when it landed.</param>
 public sealed record CreationDocument(
     string? Schema,
     string? Name,
@@ -163,18 +226,33 @@ public sealed record CreationDocument(
     IReadOnlyList<FrameDocument>? Frames,
     IReadOnlyList<ChainDocument>? Chains = null,
     IReadOnlyList<CreationCameraDocument>? Cameras = null,
-    CreationBehaviorDocument? Behavior = null
+    CreationBehaviorDocument? Behavior = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<TextRunDocument>? TextRuns = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
+
+    /// <summary>The creation's total per-stamp shape budget: its authored shapes PLUS every text run's expanded glyph
+    /// count (a run counts as its letters — the world stamps text as real Glyph geometry, so it competes for the same
+    /// <see cref="Puck.Demo.World.WorldScene.MaxShapesPerStamp"/> budget the boxes do).</summary>
+    /// <returns>The total shape count a placement of this creation emits.</returns>
+    public int StampShapeCount() {
+        var count = (Shapes?.Count ?? 0);
+
+        foreach (var run in (TextRuns ?? [])) {
+            count += run.GlyphCount;
+        }
+
+        return count;
+    }
 }
 
 /// <summary>
-/// Loads and saves <see cref="CreationDocument"/>s against the <c>./creations/</c> folder, plus the legacy
-/// <c>.avatar.json</c> import (an <see cref="AvatarDefinition"/> sniffed by its <c>Shapes</c> + <c>BoundRadius</c>
-/// members). Serializes through the ONE shared <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields =
-/// true</c> is LOAD-BEARING: Vector3/Quaternion expose fields, not properties, and omitting it silently zeroes every
-/// transform into degenerate shapes.
+/// Loads and saves <see cref="CreationDocument"/>s against the <c>./creations/</c> folder. Serializes through the ONE
+/// shared <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields = true</c> is LOAD-BEARING:
+/// Vector3/Quaternion expose fields, not properties, and omitting it silently zeroes every transform into degenerate
+/// shapes.
 /// </summary>
 public static class CreationStore {
     /// <summary>The folder creations persist under (relative to the working directory, beside forged-avatars/).</summary>
@@ -212,8 +290,7 @@ public static class CreationStore {
         return path;
     }
 
-    /// <summary>Loads a creation by save handle OR file path, accepting both the native document and a legacy
-    /// <c>.avatar.json</c> (imported with default style/materials). The result is normalized — never trust persisted
+    /// <summary>Loads a creation by save handle or file path. The result is normalized — never trust persisted
     /// derived values.</summary>
     /// <param name="nameOrPath">The save handle (resolved under <c>./creations/</c>) or an explicit file path.</param>
     /// <returns>The normalized document, or null when nothing readable exists at the location.</returns>
@@ -227,13 +304,6 @@ public static class CreationStore {
         }
 
         var json = File.ReadAllText(path: path);
-
-        // The legacy avatar shape: an AvatarDefinition (Shapes + BoundRadius, no schema tag) — import it so every
-        // creation authored before the document existed migrates for free.
-        if (!json.Contains(value: CreationDocument.CurrentSchema, comparisonType: StringComparison.Ordinal) &&
-            json.Contains(value: "BoundRadius", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            return ImportAvatar(avatar: AvatarDefinition.FromJson(json: json), name: Path.GetFileNameWithoutExtension(path: path));
-        }
 
         return Normalize(document: JsonSerializer.Deserialize<CreationDocument>(json: json, options: DocumentJsonOptions.Shared));
     }
@@ -268,7 +338,9 @@ public static class CreationStore {
 
         foreach (var shape in (document.Shapes ?? [])) {
             shapes.Add(item: shape with {
+                Bend = Math.Clamp(value: (shape.Bend ?? 0f), max: CreatorScene.MaxBend, min: -CreatorScene.MaxBend),
                 Blend = (shape.Blend ?? SdfBlendOp.Union),
+                Dilate = Math.Clamp(value: (shape.Dilate ?? 0f), max: CreatorScene.MaxDilate, min: 0f),
                 Group = Math.Max(val1: (shape.Group ?? 0), val2: 0),
                 Material = Math.Clamp(value: (shape.Material ?? 0), max: (CreatorScene.PaletteSize - 1), min: 0),
                 Mirror = (shape.Mirror ?? false),
@@ -314,7 +386,42 @@ public static class CreationStore {
             Name = Sanitize(name: (document.Name ?? "creation")),
             Schema = CreationDocument.CurrentSchema,
             Shapes = shapes,
+            TextRuns = NormalizeTextRuns(textRuns: document.TextRuns),
         });
+    }
+
+    // The default extrude half-depth a text run relies on when it declares none, and the floors every run clamps to —
+    // a zero-depth glyph slab has no relief (it would be coplanar with the surface), so the depth is floored positive.
+    private const float DefaultTextDepth = 0.02f;
+    private const float MinTextDepth = 0.001f;
+    private const float MinTextEmHeight = 0.01f;
+
+    // Text runs normalize to a canonical mode name, a clamped material slot / positive depth+em, and a normalized
+    // rotation; an empty-text run drops (it carries no geometry). A fully absent list collapses to null so a text-free
+    // creation round-trips byte-identically (the member is JsonIgnore-when-null too).
+    private static List<TextRunDocument>? NormalizeTextRuns(IReadOnlyList<TextRunDocument>? textRuns) {
+        if (textRuns is not { Count: > 0 } source) {
+            return null;
+        }
+
+        var normalized = new List<TextRunDocument>(capacity: source.Count);
+
+        foreach (var run in source) {
+            if (run.Text is not { Length: > 0 } text) {
+                continue;
+            }
+
+            normalized.Add(item: run with {
+                Depth = MathF.Max(x: (run.Depth ?? DefaultTextDepth), y: MinTextDepth),
+                EmHeight = MathF.Max(x: run.EmHeight, y: MinTextEmHeight),
+                Material = Math.Clamp(value: (run.Material ?? 0), max: (CreatorScene.PaletteSize - 1), min: 0),
+                Mode = (string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.OrdinalIgnoreCase) ? TextRunDocument.ModeEngrave : TextRunDocument.ModeEmboss),
+                Rotation = ((run.Rotation == default) ? Quaternion.Identity : Quaternion.Normalize(value: run.Rotation)),
+                Text = text,
+            });
+        }
+
+        return ((normalized.Count > 0) ? normalized : null);
     }
 
     // A creation camera rides one of the creation's own shapes; a camera naming a missing shape (or carrying a
@@ -335,10 +442,10 @@ public static class CreationStore {
 
             normalized.Add(item: camera with {
                 Feed = ((camera.Feed is { Length: > 0 } feed) ? feed : null),
-                Focus = ((camera.Focus is { } focus && float.IsFinite(f: focus)) ? (float?)MathF.Max(focus, 0.01f) : null),
-                Fov = ((camera.Fov is { } fov && float.IsFinite(f: fov)) ? (float?)Math.Clamp(value: fov, max: 170f, min: 1f) : null),
-                Pitch = ((camera.Pitch is { } pitch && float.IsFinite(f: pitch)) ? (float?)Math.Clamp(value: pitch, max: 85f, min: -85f) : null),
-                Yaw = ((camera.Yaw is { } yaw && float.IsFinite(f: yaw)) ? (float?)yaw : null),
+                Focus = (((camera.Focus is { } focus) && float.IsFinite(f: focus)) ? (float?)MathF.Max(x: focus, y: 0.01f) : null),
+                Fov = (((camera.Fov is { } fov) && float.IsFinite(f: fov)) ? (float?)Math.Clamp(value: fov, max: 170f, min: 1f) : null),
+                Pitch = (((camera.Pitch is { } pitch) && float.IsFinite(f: pitch)) ? (float?)Math.Clamp(value: pitch, max: 85f, min: -85f) : null),
+                Yaw = (((camera.Yaw is { } yaw) && float.IsFinite(f: yaw)) ? (float?)yaw : null),
             });
         }
 
@@ -386,46 +493,13 @@ public static class CreationStore {
 
         return new CreationBehaviorDocument(Faces: faces, Locomotion: locomotion);
     }
-
-    private static CreationDocument ImportAvatar(AvatarDefinition avatar, string name) {
-        var shapes = new List<ShapeDocument>(capacity: avatar.Shapes.Count);
-
-        for (var index = 0; (index < avatar.Shapes.Count); index++) {
-            var shape = avatar.Shapes[index];
-
-            shapes.Add(item: new ShapeDocument(
-                Blend: SdfBlendOp.Union,
-                Group: 0,
-                Id: index,
-                Material: (index % CreatorScene.PaletteSize),
-                Name: null,
-                Position: shape.Position,
-                Rotation: shape.Rotation,
-                Scale: shape.Scale,
-                Smooth: 0f,
-                Type: shape.Type
-            ));
-        }
-
-        return new CreationDocument(
-            BakeStyle: "classic",
-            Frames: null,
-            Intent: CreatorIntent.Object,
-            Name: Sanitize(name: name),
-            Palette: null,
-            Schema: CreationDocument.CurrentSchema,
-            Shapes: shapes
-        );
-    }
-
     private static string PathFor(string name) =>
         Path.Combine(path1: Folder, path2: $"{Sanitize(name: name)}.creation.json");
-
     private static string Sanitize(string name) {
         var builder = new System.Text.StringBuilder(capacity: name.Length);
 
         foreach (var character in name) {
-            _ = builder.Append(value: (char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_')) ? character : '-');
+            _ = builder.Append(value: ((char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_')) ? character : '-'));
         }
 
         return ((builder.Length > 0) ? builder.ToString() : "creation");

@@ -26,8 +26,8 @@ internal static class BrickfallTables {
     private const int TitlePromptRow = 11;
     private const int TitlePromptColumn = 5;
     private const string TitlePromptText = "PUSH START";
-    private const int TitleScoresRow = 13;
     private const int TitleScoresColumn = 3;
+    private const int TitleScoresRow = 13;
     private const string TitleScoresText = "SELECT SCORES";
 
     private static PbakBackground? s_titleArt;
@@ -80,7 +80,7 @@ internal static class BrickfallTables {
             Block(fill: '2'),
             Block(fill: '3'),
         };
-        var tiles = new byte[parts.Length * 16];
+        var tiles = new byte[(parts.Length * 16)];
 
         for (var index = 0; (index < parts.Length); index++) {
             parts[index].CopyTo(array: tiles, index: (index * 16));
@@ -94,7 +94,7 @@ internal static class BrickfallTables {
     /// shape clockwise within its 4×4 box; the O piece is left fixed (rotation is a no-op).</summary>
     /// <returns>The piece table bytes.</returns>
     public static byte[] BuildPieceTable() {
-        var data = new byte[7 * 4 * 4 * 2];
+        var data = new byte[(((7 * 4) * 4) * 2)];
         var index = 0;
 
         for (var type = 0; (type < 7); type++) {
@@ -217,8 +217,8 @@ internal static class BrickfallTables {
         var map = new byte[0x400];
 
         for (var column = 2; (column <= 17); column++) {
-            map[(2 * 32) + column] = (byte)(TileBlockBase + (column % 3));
-            map[(7 * 32) + column] = (byte)(TileBlockBase + ((column + 2) % 3));
+            map[((2 * 32) + column)] = (byte)(TileBlockBase + (column % 3));
+            map[((7 * 32) + column)] = (byte)(TileBlockBase + ((column + 2) % 3));
         }
 
         WriteText(map: map, row: 5, column: 5, text: "BRICKFALL");
@@ -233,8 +233,8 @@ internal static class BrickfallTables {
         var map = new byte[0x400];
 
         for (var row = 0; (row < BrickfallProtocol.WellRows); row++) {
-            map[(row * 32) + 0] = TileWall;
-            map[(row * 32) + 11] = TileWall;
+            map[((row * 32) + 0)] = TileWall;
+            map[((row * 32) + 11)] = TileWall;
         }
 
         return map;
@@ -255,15 +255,14 @@ internal static class BrickfallTables {
         var result = new (int X, int Y)[cells.Length];
 
         for (var index = 0; (index < cells.Length); index++) {
-            result[index] = (3 - cells[index].Y, cells[index].X);
+            result[index] = ((3 - cells[index].Y), cells[index].X);
         }
 
         return result;
     }
-
     private static void WriteText(byte[] map, int row, int column, string text) {
         for (var index = 0; (index < text.Length); index++) {
-            map[(row * 32) + column + index] = TextModule.TileFor(fontTileBase: FontTileBase, character: text[index]);
+            map[(((row * 32) + column) + index)] = TextModule.TileFor(fontTileBase: FontTileBase, character: text[index]);
         }
     }
 
@@ -274,12 +273,12 @@ internal static class BrickfallTables {
 
         return EncodeTile(rows: [
             "33333333",
-            ("3" + f + f + f + f + f + f + "0"),
-            ("3" + f + f + f + f + f + f + "0"),
-            ("3" + f + f + f + f + f + f + "0"),
-            ("3" + f + f + f + f + f + f + "0"),
-            ("3" + f + f + f + f + f + f + "0"),
-            ("3" + f + f + f + f + f + f + "0"),
+            ((((((("3" + f) + f) + f) + f) + f) + f) + "0"),
+            ((((((("3" + f) + f) + f) + f) + f) + f) + "0"),
+            ((((((("3" + f) + f) + f) + f) + f) + f) + "0"),
+            ((((((("3" + f) + f) + f) + f) + f) + f) + "0"),
+            ((((((("3" + f) + f) + f) + f) + f) + f) + "0"),
+            ((((((("3" + f) + f) + f) + f) + f) + f) + "0"),
             "00000000",
         ]);
     }
@@ -292,7 +291,7 @@ internal static class BrickfallTables {
             var line = rows[row];
 
             for (var column = 0; (column < 8); column++) {
-                indices[(row * 8) + column] = (byte)((column < line.Length) ? (line[column] switch {
+                indices[((row * 8) + column)] = (byte)((column < line.Length) ? (line[column] switch {
                     '1' => 1,
                     '2' => 2,
                     '3' or '#' => 3,

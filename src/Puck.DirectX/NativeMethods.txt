@@ -108,6 +108,12 @@ D3D12_QUERY_HEAP_TYPE
 D3D12_QUERY_TYPE
 D3D12_QUERY_DATA_PIPELINE_STATISTICS
 
+// Direct3D 12: shader-model capability query (the Shader Model 6.6 device floor — the DXIL peer of the Vulkan
+// SPIR-V 1.6 floor). CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL) clamps HighestShaderModel to what the driver
+// supports; a report below 6.6 fails loud.
+D3D12_FEATURE_DATA_SHADER_MODEL
+D3D_SHADER_MODEL
+
 // Direct3D 12: debug layer + info queue (validation message surfacing).
 D3D12GetDebugInterface
 ID3D12Debug

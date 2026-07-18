@@ -108,7 +108,7 @@ internal static class CardTables {
             throw new InvalidOperationException(message: $"The card tile set built {tiles.Count} tiles, not the pinned {CardTileCount}.");
         }
 
-        var bytes = new byte[tiles.Count * 16];
+        var bytes = new byte[(tiles.Count * 16)];
 
         for (var index = 0; (index < tiles.Count); index++) {
             tiles[index].CopyTo(array: bytes, index: (index * 16));
@@ -171,13 +171,12 @@ internal static class CardTables {
 
         for (var row = 0; (row < 8); row++) {
             for (var column = 0; (column < 8); column++) {
-                indices[(row * 8) + column] = PickCornerColour(column: column, glyph: glyph, ink: ink, rightBorder: rightBorder, row: row);
+                indices[((row * 8) + column)] = PickCornerColour(column: column, glyph: glyph, ink: ink, rightBorder: rightBorder, row: row);
             }
         }
 
         return HgbImage.EncodeTile2bpp(tileIndices: indices);
     }
-
     private static byte PickCornerColour(int column, string[] glyph, byte ink, bool rightBorder, int row) {
         if ((row == 0) || (rightBorder ? (column == 7) : (column == 0))) {
             return ColourInk;
@@ -202,7 +201,7 @@ internal static class CardTables {
             for (var column = 0; (column < 8); column++) {
                 var border = ((row == 7) || (left ? (column == 0) : (column == 7)));
 
-                indices[(row * 8) + column] = (border ? ColourInk : ColourWhite);
+                indices[((row * 8) + column)] = (border ? ColourInk : ColourWhite);
             }
         }
 
@@ -225,7 +224,7 @@ internal static class CardTables {
                     var globalColumn = (column + (isLeft ? 0 : 8));
                     var lattice = (((globalRow + globalColumn) % 4) < 2);
 
-                    indices[(row * 8) + column] = (border ? ColourInk : (lattice ? ColourRed : ColourWhite));
+                    indices[((row * 8) + column)] = (border ? ColourInk : (lattice ? ColourRed : ColourWhite));
                 }
             }
 
@@ -248,7 +247,7 @@ internal static class CardTables {
                 for (var column = 0; (column < 8); column++) {
                     var border = ((isTop && (row == 0)) || (!isTop && (row == 7)) || (isLeft && (column == 0)) || (!isLeft && (column == 7)));
 
-                    indices[(row * 8) + column] = (border ? ColourInk : ColourFelt);
+                    indices[((row * 8) + column)] = (border ? ColourInk : ColourFelt);
                 }
             }
 
@@ -277,7 +276,7 @@ internal static class CardTables {
 
         for (var row = 0; (row < 8); row++) {
             for (var column = 0; (column < 8); column++) {
-                indices[(row * 8) + column] = (byte)(((column < rows[row].Length) ? rows[row][column] : '.') switch {
+                indices[((row * 8) + column)] = (byte)(((column < rows[row].Length) ? rows[row][column] : '.') switch {
                     '#' => 1,
                     '2' => 2,
                     '3' => 3,

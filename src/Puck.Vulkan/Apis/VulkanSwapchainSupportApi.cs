@@ -5,6 +5,7 @@ using Puck.Vulkan.Messages;
 
 namespace Puck.Vulkan.Apis;
 
+/// <summary>Queries the capabilities, formats, and present modes available to a Vulkan surface.</summary>
 public sealed class VulkanSwapchainSupportApi : IVulkanSwapchainSupportApi {
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
 

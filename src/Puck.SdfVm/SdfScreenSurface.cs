@@ -15,7 +15,8 @@ namespace Puck.SdfVm;
 /// <param name="Up">The unit world-space axis the UV's V increases against (V = 0 at the top).</param>
 /// <param name="HalfWidth">The half-extent along <paramref name="Right"/> (matches the slab's local X half-extent).</param>
 /// <param name="HalfHeight">The half-extent along <paramref name="Up"/> (matches the slab's local Y half-extent).</param>
-/// <param name="ScreenIndex">The screen source slot (0..7, see <see cref="SdfWorldEngine.SetScreenSource"/>) this
+/// <param name="ScreenIndex">The screen source slot (0 through <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> − 1,
+/// see <see cref="SdfWorldEngine.SetScreenSource"/>) this
 /// surface samples when a source is bound.</param>
 public readonly record struct SdfScreenSurface(
     Vector3 Origin,

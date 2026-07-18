@@ -4,10 +4,8 @@
 //
 // ABI: the JIT calls this with a fixed (ref byte, ref byte, nuint) signature — must match exactly.
 
-namespace System
-{
-    internal static class Buffer
-    {
+namespace System {
+    internal static class Buffer {
         internal static void BulkMoveWithWriteBarrier(ref byte destination, ref byte source, nuint byteCount)
             => SpanHelpers.Memmove(ref destination, ref source, byteCount);
     }

@@ -8,8 +8,8 @@ prototype that composition root exists to run. With no flags at all it opens the
 overworld: a controller-driven player in a walled room of bootable console
 cabinets, each cabinet a costume of the one GamingBrick SM83 machine.
 
-This README is the handoff doc for future agents: what the project is, what it
-can do today, and where it is going. The deep, current design record lives in
+This README explains the project's current capabilities and operating model.
+The detailed design record lives in
 [docs/overworld-demo-plan.md](../../docs/overworld-demo-plan.md) (the plan of
 record) — this file is the front door; that file is the detail. That plan opens
 with **the unification contract**, the north star this README is written
@@ -20,7 +20,7 @@ flags/env demoted to CI/proof and developer twins. Read it before deep work.
 >
 > `Puck.Demo` is a **playground**, not settled precedent. It is expected to
 > churn and be rewritten. Three rules follow from that, and they are not
-> negotiable (CLAUDE.md rule 3, [agent-guide anti-calcification
+> negotiable (`AGENTS.md` rule 3, [agent-guide anti-calcification
 > doctrine](../../docs/agent-guide.md#anti-calcification-doctrine) rule 5):
 >
 > 1. **Verify demo changes by RUNNING the demo**, never by a gate:
@@ -145,7 +145,7 @@ same document model. There is no second imperative code path.
 | `--validate-overworld` | The demo's one self-gate: pure-CPU determinism + replay self-check; exits (0 pass, 1 divergence, 2 infra-fail). | No in-game path (this is the demo's one intentional self-gate, kept only because Post cannot reference the composition root). |
 | `--emit-schema <path>` | Headless: write the run-document JSON Schema and exit. | No in-game path — a schema dump, not a session capability. |
 | `--forge <path>` | Headless: forge a `.gbc` from SDF-authored art (a centred creature sprite over a forged room) (+ preview PNG). | In-game twin: `forge scene` bakes the creator's live creation through this SAME creature-cart path (type 10) and hot-swaps it into the nearest cabinet in-session (distinct from the walking-avatar cart the same creation also forges). |
-| `--forge-camera <path>` | Headless: forge a real Pocket Camera `.gbc` (authentic M64282FP protocol) and self-verify it. | Cycle a cabinet to the camera cart type in-game (no in-game *forging* path — forging a fresh cart from scratch is a developer/CI action; TODO — unification: an in-game forge act). |
+| `--forge-camera <path>` | Headless: forge a real camera `.gbc` (authentic M64282FP protocol) and self-verify it. | Cycle a cabinet to the camera cart type in-game (no in-game *forging* path — forging a fresh cart from scratch is a developer/CI action; TODO — unification: an in-game forge act). |
 | `--forge-avatar <path>` `[--forge-avatar-from <creation.json>]` | Headless: forge a playable overworld `.gbc` a walking avatar sprite inhabits (built-in demo avatar, or a saved creation/avatar JSON — a creation document's timeline frames become the walk poses). Also writes the bake pipeline's `<out>.bake.bin` asset blob. | Exact proof twin of creator mode's commit step + the `forge` verb: both bake the SAME `puck.creation.v1` document through `AvatarForge.FromCreation`, so `--forge-avatar-from <saved>` is **byte-identical** to forging that same creation in-game (frames + bake style included). |
 | `--forge-flagships <path>` | Headless: regenerate the three flagship avatars (lantern-fish, crt-robot, adventurer) from their recipes, assert byte-identical content determinism, then forge the adventurer through the avatar-forge path. | Proof twin; the flagships appear in-game as `companion.add`-able roaming companions. |
 | `--forge-volley <path>` / `--forge-brickfall <path>` / `--forge-chroma <path>` / `--forge-solitaire <path>` / `--forge-poker <path>` | Headless: build one of the five five-star framework games (genuine SM83 machine code — title/attract/pause/battery high scores/sound), self-verify on a real machine, and write the `.gbc` (+ emulated preview PNG + asserted audio WAV; the card games also write a dealt-board `.play.png` proof). Each SDF-bakes its title art on the GPU first (hand-authored fallback without one). | Cycle a cabinet to that cart type in-game and play it; forging a fresh one from scratch has no in-game path yet (TODO — unification). |
@@ -178,11 +178,8 @@ every other run. The live mid-session equivalent of `world` is the
 `world.load <handle>` console verb. Make it a LIVING town by loading the flagship
 trio as roaming companions with the `companion.add` verb (one per name).
 
-> **The demo's entire `PUCK_*` env surface is REMOVED** (unification contract
-> item 2). There is no `PUCK_OVERWORLD_*`, `PUCK_COMPANION_*`,
-> `PUCK_CREATOR_LOAD`, `PUCK_LINK_CABLE_PROBE`, `PUCK_WORLD_ROUNDTRIP`, or
-> `PUCK_CONSOLE_OPEN` — setting one is inert. Reach every former capability
-> through a **console verb** or a **run-document field**:
+> The demo does not expose a `PUCK_*` environment configuration surface.
+> Use a **console verb** or a **run-document field** instead:
 >
 > - Deterministic headless screenshots: pipe a verb script over stdin —
 >   `cart <i> <type>` / `boot <i>` / `reveal` / `step <n>` / `settle` /
@@ -197,8 +194,9 @@ trio as roaming companions with the `companion.add` verb (one per name).
 >   console's cart — set live with `cart`).
 >
 > The authoritative migration table is in
-> [docs/overworld-demo-plan.md](../../docs/overworld-demo-plan.md). (`PUCK_TIMING`
-> and other engine/launcher diagnostics are a separate, untouched concern.)
+> [docs/overworld-demo-plan.md](../../docs/overworld-demo-plan.md). (`PUCK_RAY_QUERY`
+> and other engine/launcher diagnostics are a separate, untouched concern; GPU
+> timing is armed live via the `gpu.timing` switch, no env var.)
 
 ## What lives in this folder
 
@@ -206,16 +204,18 @@ trio as roaming companions with the `companion.add` verb (one per name).
 |---|---|
 | `Program.cs` | The composition root: parse CLI → build/load run document → resolve host, presenters, windowing, allocator, backend switch, command modules, gamepad routing → run. |
 | `DemoRunRegistrar.cs`, `GraphBuilder.cs`, `DemoRunDocuments.cs` | Document load/synthesis, graph pre-flight (deferred affordances become attributed exit-2 errors), and flag→document synthesis (the CLI flags flow straight into `DemoRunDocuments.Synthesize`; there is no separate flag-bundle type). |
-| `SdfWorldRenderSpec.cs`, `SdfWorldRenderBuilder.cs` | The shared render assembly both graph kinds (`overworld`, `world`) build through — backend selection, world-render wiring. |
-| `Overworld/` | **The game.** The deterministic world (`OverworldWorld`, `OverworldRoom`), intent sources (local/scripted/router/network), the lockstep brick timeline, the screen-layout director, the frame source, the determinism node + snapshot projection. |
-| `Forge/` | **ROM forging.** SDF-art → `.gbc` (`RomForge`, `SceneForge`), the SM83 emitter, the Pocket Camera / avatar / world-lens cartridges. `Forge/Framework/` is the shared SM83 game framework (kernel, WRAM map, saves, PRNG, input, text, OAM, link, sound); `Forge/Volley`, `Forge/Brickfall`, `Forge/Chroma`, `Forge/Solitaire`, `Forge/Poker`, `Forge/Cards`, `Forge/Tune` are the five-star framework games plus the shared card layer and the audio-document-driven jukebox; `Forge/Bake/` is the SDF→brick bake pipeline. |
+| `Overworld/` | **The game.** The deterministic world (`OverworldWorld`, `OverworldRoom`), intent sources (local/scripted/router/network), the lockstep brick timeline, the screen-layout director, the frame source, the determinism node + snapshot projection, and `DiegeticUiInstaller` (the demo-side `SdfWorldRenderSpec.DecorateFrameSource` closure that mirrors the binding bar + console into world geometry). The shared render assembly lives in `src/Puck.SdfVm`. |
+| `Forge/` | **ROM forging.** SDF-art → `.gbc` (`RomForge`, `SceneForge`), the SM83 emitter, the camera / avatar / world-lens cartridges. `Forge/Framework/` is the shared SM83 game framework (kernel, WRAM map, saves, PRNG, input, text, OAM, link, sound); `Forge/Volley`, `Forge/Brickfall`, `Forge/Chroma`, `Forge/Solitaire`, `Forge/Poker`, `Forge/Cards`, `Forge/Tune` are the five-star framework games plus the shared card layer and the audio-document-driven jukebox; `Forge/Bake/` is the SDF→brick bake pipeline. |
 | `Town/` | **Puckton.** `TownWorld`, `TownBuildings`, `TownProps`, `TownForge` — the flagship sculpted town's content + the `--forge-town` build/verify/materialize path. |
-| `Camera/` | `WebcamCameraSensor` — a PC webcam driving the emulated Pocket Camera sensor seam. |
+| `Camera/` | `WebcamCameraSensor` — a PC webcam driving the emulated camera cartridge sensor seam. |
 | `Audio/` | `CabinetAudioOutput`, `WaveOut` — the demo's live audio output path for a booted cabinet. |
 | `BindingBar/` | The on-screen, per-player action-bar overlay (glyph atlas in a storage buffer; scales with active players; swaps for creator mode). |
 | `DevConsole/` | Puck's on-screen GPU developer console (GDI-rasterized monospace atlas, single storage buffer). |
-| `Replay/` | `HashTrace` — the record/replay hash stream. |
 | `DemoCommandModule.cs`, `DemoConsole.cs` | The core console verbs (`creator`, `forge`, `debug.view`, line editing) and the controller haptics proofs. Authoring verbs live across five command modules: `DemoCommandModule` (core/debug), `Creator/CreatorCommandModule.cs` (`creator.*` sculpt/animate/rig), `World/WorldCommandModule.cs` (`world.*` place/wire/save), `Tracker/TrackerCommandModule.cs` (`tracker.*` compose/play), and `Creator/CompanionCommandModule.cs` (`companion.*` roaming companions). |
+| `Garden/` | The deterministic garden's structure/growth (`GardenTreeGenerator`, `GardenGrowth`, `GardenRenderer` — a seeded fixed-point L-system tree that telescopes in over sim ticks); `GardenCommandModule.cs` (root) wires `garden.plant`/`garden.list`/`garden.clear`. |
+| `Museum/` | `MuseumRenderer` — the replay museum's static exhibit wall + the Droste door, mirroring the Garden/Workbench/Terminal house pattern (see `OverworldFrameSource.Emitters.cs` for the wiring). |
+| `Rts/` | The RTS proof scenario's authored content: `RtsScenario` (arena bounds, terrain/blocker rectangles, the baked `IWorldQuery`), `RtsTerrainEmitter`/`RtsUnitInstanceEmitter` (the SDF presentation). Per-tick unit sim state lives on `Overworld/OverworldWorld.cs` (`RtsUnit`, `AdvanceRtsUnits`); `RtsCommandModule.cs` (root) wires `rts.spawn`/`rts.select`/`rts.move`/`rts.list`/`rts.clear`. |
+| `Gravity/` | The GRAVITY ARC's planetoid proof: `GravityScenario` (authors the warp-free planetoid program — sphere + SmoothUnion mounds + SmoothSubtraction crater — at a far `WorldCoord3` cell), `PlanetoidEmitter` (renders the SAME instruction stream the `SdfFieldEvaluator` walks — single source of truth), `WalkerInstanceEmitter` (the walker's dynamic-transform-slot presentation). Per-tick walker sim state lives on `Overworld/OverworldWorld.cs` (`FieldWalkerBody`, `AdvanceFieldWalker`, beside `RtsUnit`); `Overworld/FieldWalkerBody.cs`/`FieldWalkerTuning.cs` are the fixed-point body + feel constants; `Overworld/OverworldFrameSource.Gravity.cs` is the dedicated fullscreen takeover; `GravityCommandModule.cs` (root) wires `planet.spawn`/`planet.walk`/`planet.list`. |
 
 ## What the demo can do today
 
@@ -252,7 +252,7 @@ owns it, in the [plan of record](../../docs/overworld-demo-plan.md)):
   create → commit → hot-swap, the genuinely diegetic path. World-sculpt
   (`world.*`) and a tracker/jukebox composer (`tracker.*`) exist alongside it as
   console-verb-driven authoring surfaces (see "What lives in this folder").
-- **The forge subsystem** — SDF art, an authentic Pocket Camera, avatars, the
+- **The forge subsystem** — SDF art, an authentic camera cartridge, avatars, the
   flagship companions, and seven genuine hand-authored SM83 games (Volley,
   Brickfall, Chroma, Solitaire, Poker, plus the world-lens cart and the tune
   jukebox), each emitted as a real `.gbc` and self-verified on an emulated
@@ -280,7 +280,7 @@ The carried arcs (unchanged direction; full detail in the plan of record and
 - **Retire the `PUCK_*` env surface** into run-document fields and console
   verbs (migration table in the plan of record), and wire stdin into the
   console's command registry so a script can drive a full session headlessly.
-- **PC camera as a real GB Camera** through the cartridge-sensor peripheral seam
+- **PC camera driving a real camera cartridge** through the cartridge-sensor peripheral seam
   (the ROM that reads the sensor is deliberately not designed yet).
 - **Device promote/demote as a game mechanic** — a player's device upgrades or
   downgrades in realtime, moving their running game between costumes

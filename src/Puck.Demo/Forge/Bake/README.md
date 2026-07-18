@@ -10,7 +10,7 @@ pipeline serves every consumer: the live easel preview in creator mode, the `--f
 > The bake lives under the GREENFIELD demo: verify by running the tool modes and the live preview, never by
 > adding a gate. Diagnostics and calibration are REPORTS — findings to read, not failure exits.
 
-> **In-game reflection** (the [unification contract](../../../../docs/overworld-demo-plan.md#the-unification-contract-read-first--the-north-star-for-this-arc)):
+> **In-game reflection** (the [experience contract](../../../../docs/overworld-demo-plan.md#experience-contract)):
 > the bake is reached in-session today through the live easel preview in creator mode
 > (`creator.baketarget`/`creator.bakeoverlay`/`creator.style`) and the `forge` verb's
 > author→forge→hot-swap loop. The headless `--forge-bake*` / `--forge-avatar` tool modes
@@ -153,7 +153,7 @@ through exactly this round trip.
 
 ## The live preview (BakePreviewService)
 
-The arc's headline: while the player sculpts, the workbench easel shows the **actual baked pixels**. The editor
+While the player sculpts, the workbench easel shows the **actual baked pixels**. The editor
 connects through the `ICreatorBakePreview` seam (`OverworldFrameSource.ConnectBakePreview` swaps the null stub
 for the live service); the easel borrows screen-surface slot 3 while creator mode is up.
 

@@ -118,7 +118,10 @@ public static class BindingProfile {
 
     private static IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> BuildTable(BindingPageDefinition page) {
         var entries = (page.Entries ?? []);
-        var definitions = new InputBindingDefinition[entries.Count];
+        // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
+        // expressiveness (activation edge, incidental-modifier tolerance, constant value). Built directly here rather
+        // than through InputBindingDefinition, which is the reduced (edge + required-modifiers) shape.
+        var grouped = new Dictionary<string, List<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
 
         for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
             var entry = entries[entryIndex];
@@ -127,16 +130,30 @@ public static class BindingProfile {
                 throw new ArgumentException(message: $"Page \"{page.Id}\" carries an entry without a source or command.", paramName: nameof(page));
             }
 
-            definitions[entryIndex] = new InputBindingDefinition(
+            if (!grouped.TryGetValue(
+                key: entry.Source,
+                value: out var list
+            )) {
+                list = [];
+                grouped[entry.Source] = list;
+            }
+
+            list.Add(item: new CommandBinding(
                 ActivateOn: entry.ActivateOn,
+                AnyModifiers: entry.AnyModifiers,
                 Command: entry.Command,
-                Source: entry.Source
-            );
+                Value: entry.Value
+            ));
         }
 
-        return InputBindingTable.Build(definitions: definitions);
-    }
+        var table = new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
 
+        foreach (var (source, list) in grouped) {
+            table[source] = list;
+        }
+
+        return table;
+    }
     private static BindingPageView BuildView(IReadOnlyList<BindingModifierDefinition> modifiers, BindingPageDefinition page, HashSet<int> chord) {
         var buttons = new BindingPageButtonView[(page.Entries?.Count ?? 0)];
 

@@ -8,12 +8,125 @@
     "maxZ": 7,
     "floorY": 0
   },
-  "terrain": [],
+  "terrain": [
+    {
+      "kind": "slab",
+      "center": {
+        "x": 0,
+        "y": 0,
+        "z": -3.5
+      },
+      "halfExtents": {
+        "x": 1.7,
+        "y": 0.05,
+        "z": 3.5
+      },
+      "material": 0
+    },
+    {
+      "kind": "slab",
+      "center": {
+        "x": 0,
+        "y": 0,
+        "z": 3.4
+      },
+      "halfExtents": {
+        "x": 1.7,
+        "y": 0.05,
+        "z": 3.2
+      },
+      "material": 0
+    },
+    {
+      "kind": "plaza",
+      "center": {
+        "x": 0,
+        "y": 0,
+        "z": 0.3
+      },
+      "halfExtents": {
+        "x": 3,
+        "y": 0.05,
+        "z": 3.3
+      },
+      "material": 0
+    },
+    {
+      "kind": "slab",
+      "center": {
+        "x": 0,
+        "y": 0,
+        "z": -6.8
+      },
+      "halfExtents": {
+        "x": 2.2,
+        "y": 0.05,
+        "z": 1
+      },
+      "material": 2
+    },
+    {
+      "kind": "slab",
+      "center": {
+        "x": -6.8,
+        "y": 0,
+        "z": 2.8
+      },
+      "halfExtents": {
+        "x": 1.4,
+        "y": 0.05,
+        "z": 1.8
+      },
+      "material": 2
+    },
+    {
+      "kind": "slab",
+      "center": {
+        "x": -6.5,
+        "y": 0,
+        "z": -4
+      },
+      "halfExtents": {
+        "x": 1.6,
+        "y": 0.05,
+        "z": 1.6
+      },
+      "material": 2
+    },
+    {
+      "kind": "slab",
+      "center": {
+        "x": 6.8,
+        "y": 0,
+        "z": 0.6
+      },
+      "halfExtents": {
+        "x": 1.8,
+        "y": 0.05,
+        "z": 1.8
+      },
+      "material": 2
+    },
+    {
+      "kind": "plaza",
+      "center": {
+        "x": 0,
+        "y": 0,
+        "z": 6.1
+      },
+      "halfExtents": {
+        "x": 2.4,
+        "y": 0.05,
+        "z": 0.7
+      },
+      "material": 0
+    }
+  ],
   "placements": [
     {
       "id": 0,
       "name": "town-arcade",
-      "source": "sha256/4dcc2484116c79661624260675398399ee32ca11ba9d2b692cd59b8cf16dbe32",
+      "source": "sha256/d208ce363f5639dc561e9c6abc7accb76a3e57927ba43c111c0513fbf44e5b34",
       "position": {
         "x": 0,
         "y": -0.48,
@@ -24,12 +137,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 1,
       "name": "town-cottage-a",
-      "source": "sha256/7f88828ff017e10eb180c96b343044bbeb8999b54162e49ebd5dc347a0372be5",
+      "source": "sha256/6d43dfda31af7e6a1af2d667c4e7ec8b9d4fed83e4d3c3d14d8aea9a91564e68",
       "position": {
         "x": -7,
         "y": -0.42,
@@ -40,12 +155,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 2,
       "name": "town-cottage-b",
-      "source": "sha256/696765fb4ac31260ad123e9aebf32c18254efd124b512d642f3808bae4901e35",
+      "source": "sha256/142cd4300ea1020ac36b41770e4c8330d3c215c42808848db2212f62fdd2086b",
       "position": {
         "x": -6.5,
         "y": -0.38,
@@ -56,12 +173,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 3,
       "name": "town-grocery",
-      "source": "sha256/083a242289c950a14de150f777317f0404f5ff5477461a8fbdc57a837c3de1e7",
+      "source": "sha256/6db8b15b9895bbca4f0211ad62fe69713f27d5d0134e6c3dc9395dadb34ac6e1",
       "position": {
         "x": 7,
         "y": -0.4,
@@ -72,12 +191,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 4,
       "name": "town-fountain",
-      "source": "sha256/44e2b2c2234e67d17b9ddc4d689f546f05fe116095201e10f02c46c9bf4da3cd",
+      "source": "sha256/1fbcda27d4b642ce89cd42dfa095be9eac5758408cd396fb7508d53c46ce44aa",
       "position": {
         "x": 0,
         "y": -0.6,
@@ -88,12 +209,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 5,
       "name": "town-lamp",
-      "source": "sha256/11725971d5aefadd1edcb4c02497c3f1d284d33802cac58fad257b929de5b64f",
+      "source": "sha256/f55adf02f36e5f5104dcb1b451d8a85006358473e188a50e61d1584fcaff97cd",
       "position": {
         "x": -5,
         "y": -0.39,
@@ -109,12 +232,14 @@
       },
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 6,
       "name": "town-lamp",
-      "source": "sha256/11725971d5aefadd1edcb4c02497c3f1d284d33802cac58fad257b929de5b64f",
+      "source": "sha256/f55adf02f36e5f5104dcb1b451d8a85006358473e188a50e61d1584fcaff97cd",
       "position": {
         "x": 5,
         "y": -0.39,
@@ -130,12 +255,14 @@
       },
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 7,
       "name": "town-tree",
-      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "source": "sha256/4097cb9da92949f9ed7c449079e4c62486bf9efe56eea56a68294c504828b82e",
       "position": {
         "x": -8,
         "y": -0.3,
@@ -146,12 +273,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 8,
       "name": "town-tree",
-      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "source": "sha256/4097cb9da92949f9ed7c449079e4c62486bf9efe56eea56a68294c504828b82e",
       "position": {
         "x": 8,
         "y": -0.3,
@@ -162,12 +291,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 9,
       "name": "town-tree",
-      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "source": "sha256/4097cb9da92949f9ed7c449079e4c62486bf9efe56eea56a68294c504828b82e",
       "position": {
         "x": -8,
         "y": -0.3,
@@ -178,12 +309,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 10,
       "name": "town-tree",
-      "source": "sha256/8a2ed863a7c4d53787bd4dcff43f1b52629cbdcdc0ba2badf2a4acf8c5d7badf",
+      "source": "sha256/4097cb9da92949f9ed7c449079e4c62486bf9efe56eea56a68294c504828b82e",
       "position": {
         "x": 8,
         "y": -0.3,
@@ -194,14 +327,16 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 11,
       "name": "town-bench",
-      "source": "sha256/d28e9d0063f38c4e8548faffb8b14cb6ba5c8e16a2484cb4835c6de3f480a137",
+      "source": "sha256/ae58d7666519d84e90adf0e0a3f9d5ed2273854019f783e8c8f0eac6dcd45634",
       "position": {
-        "x": -2.6,
+        "x": -3.1,
         "y": -0.25,
         "z": 0
       },
@@ -210,14 +345,16 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 12,
       "name": "town-bench",
-      "source": "sha256/d28e9d0063f38c4e8548faffb8b14cb6ba5c8e16a2484cb4835c6de3f480a137",
+      "source": "sha256/ae58d7666519d84e90adf0e0a3f9d5ed2273854019f783e8c8f0eac6dcd45634",
       "position": {
-        "x": 2.6,
+        "x": 3.1,
         "y": -0.25,
         "z": 0
       },
@@ -226,12 +363,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 13,
       "name": "town-planter",
-      "source": "sha256/29d5d2f1baea105e189149af85bddc7a62cd2e83edd1953f5f39177b22b12497",
+      "source": "sha256/c911c02e3b79df3b7041580c296f883d68f202ff6413b01cd040db97b2ddaaf9",
       "position": {
         "x": -3,
         "y": -0.49,
@@ -242,12 +381,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 14,
       "name": "town-planter",
-      "source": "sha256/29d5d2f1baea105e189149af85bddc7a62cd2e83edd1953f5f39177b22b12497",
+      "source": "sha256/c911c02e3b79df3b7041580c296f883d68f202ff6413b01cd040db97b2ddaaf9",
       "position": {
         "x": 3,
         "y": -0.49,
@@ -258,12 +399,14 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
     },
     {
       "id": 15,
       "name": "town-mailbox",
-      "source": "sha256/5f59eb22133dea6bcfee800999db12ebf3a0ed4928d5fe49fd1330987a336cd7",
+      "source": "sha256/9bd857d34c34002158ff0bbaba70f43bf9d17674285621a444025e65f64e00fd",
       "position": {
         "x": 4.5,
         "y": -0.24,
@@ -274,7 +417,189 @@
       "repeat": null,
       "role": null,
       "mirror": null,
-      "pattern": null
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 16,
+      "name": "lantern-fish",
+      "source": "sha256/6cc4c86f310e70e0bb4934b332ee71f9a4a017e48126fa2dea334ac94bdb8ae6",
+      "position": {
+        "x": 1.6,
+        "y": 0,
+        "z": 1.4
+      },
+      "yawDegrees": 0,
+      "scale": 1,
+      "repeat": null,
+      "role": "companion",
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 17,
+      "name": "crt-robot",
+      "source": "sha256/a79d3ea32a132ad200ef77e8708a5f02b8647f67c94d839c15da7659d3f185d4",
+      "position": {
+        "x": -1.8,
+        "y": 0,
+        "z": -1.6
+      },
+      "yawDegrees": 0,
+      "scale": 1,
+      "repeat": null,
+      "role": "companion",
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 18,
+      "name": "adventurer",
+      "source": "sha256/4a331e0eb61a89e04fa328259ab2032766c3654f8c2f209cf617dce8c5ffb8fe",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 2.6
+      },
+      "yawDegrees": 0,
+      "scale": 1,
+      "repeat": null,
+      "role": "companion",
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 19,
+      "name": "town-marquee",
+      "source": "sha256/412543db7208ebec2d6d0c368afdad1c6877237fe11efaf74ff0fa927eea9735",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 6.2
+      },
+      "yawDegrees": 180,
+      "scale": 3,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 20,
+      "name": "town-planter",
+      "source": "sha256/c911c02e3b79df3b7041580c296f883d68f202ff6413b01cd040db97b2ddaaf9",
+      "position": {
+        "x": -2.8,
+        "y": -0.49,
+        "z": 2.6
+      },
+      "yawDegrees": 0,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 21,
+      "name": "town-planter",
+      "source": "sha256/c911c02e3b79df3b7041580c296f883d68f202ff6413b01cd040db97b2ddaaf9",
+      "position": {
+        "x": 2.8,
+        "y": -0.49,
+        "z": 2.6
+      },
+      "yawDegrees": 0,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 22,
+      "name": "town-lamp",
+      "source": "sha256/f55adf02f36e5f5104dcb1b451d8a85006358473e188a50e61d1584fcaff97cd",
+      "position": {
+        "x": -3.9,
+        "y": -0.39,
+        "z": 6.3
+      },
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 23,
+      "name": "town-lamp",
+      "source": "sha256/f55adf02f36e5f5104dcb1b451d8a85006358473e188a50e61d1584fcaff97cd",
+      "position": {
+        "x": 3.9,
+        "y": -0.39,
+        "z": 6.3
+      },
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 24,
+      "name": "town-bench",
+      "source": "sha256/ae58d7666519d84e90adf0e0a3f9d5ed2273854019f783e8c8f0eac6dcd45634",
+      "position": {
+        "x": -2.2,
+        "y": -0.25,
+        "z": 5.6
+      },
+      "yawDegrees": 90,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
+    },
+    {
+      "id": 25,
+      "name": "town-bench",
+      "source": "sha256/ae58d7666519d84e90adf0e0a3f9d5ed2273854019f783e8c8f0eac6dcd45634",
+      "position": {
+        "x": 2.2,
+        "y": -0.25,
+        "z": 5.6
+      },
+      "yawDegrees": 270,
+      "scale": 1.4,
+      "repeat": null,
+      "role": null,
+      "mirror": null,
+      "pattern": null,
+      "exit": null,
+      "victory": null
     }
   ],
   "lights": [
@@ -442,7 +767,7 @@
     "cellSizeRaw": 16384,
     "width": 72,
     "height": 64,
-    "cells": "//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////9///////////9///////////9///////////9///////////9///////////9///////////9/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////HwD4//////8/AAD4//////8/AAD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4////////DwD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAD4//////8/AAAAAPD//w8AAAAAAPD//w8AAAAAAPD//w8AAAAAAPD/",
+    "cells": "AADw////DwAAfgDw////DwB\u002BfgDw////DwB\u002BfgDw////DwB\u002BfgDw////DwB\u002B/n/w////D/5//n/w////D/5/8H/w////D/4P8H/w////D/4P8H/w////D/4P8P//////D/4P////////7/8P////////7/8P////////7/8P////////7wcA////////7wcA////\u002BP8f4AcA////AAAAAAAA////AAAAAAAA////AAAAAAAA////AAAAAAAA////AAAAAAAA////AAAAAAAA////AAAAAAAA////AAAA/P//////AAAA/P//////AAAA/P//////AAAA/P////8HAAAA/P/////35//n///////35//n////AADw5//n////AAD85//n////AAD85//n////AAD85//n////AAD85//n////////5//n////////5//n////////5//n////////5//n///////35//n///////35//n///////35//n///////nDwDw///////nDwDw///////nDwDw///////3DwDw///////3DwDw///////3DwDw///////3DwDw///////3DwDw///////3fwD\u002B///////3fwD\u002B/wEA///3fwD\u002B/wcA///HfwD\u002B\u002BwcA///HfwD\u002B4wcA////fwD\u002B/wcA////fwD\u002B/wd\u002BfuD/fwD\u002B/wd\u002BfgD\u002BfwD\u002BfwB\u002BfgD\u002BfwD\u002BfwB\u002BfgD\u002BfwD\u002BfwB\u002BfgD\u002BfwD\u002BfwB\u002BAAD\u002BfwD\u002BfwAA",
     "kind": null,
     "rowStrideRaw": null
   },

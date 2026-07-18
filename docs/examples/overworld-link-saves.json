@@ -1,0 +1,16 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Per-console saveSlot (the general (console, type) save-distinctness seam a link trade / critter-swap rides): two cabinets that would otherwise SHARE one battery save per cart type each keep their OWN by deriving a per-cabinet path ({base}.s{slot}.sav). Boot both, Cycle each to the same battery-backed game, and their high-score / progress saves no longer collide. This is the seam the overworld link cable drives over stdin: `Puck.Demo --run docs/examples/overworld-link-saves.json`, then pipe `boot 0` / `boot 1` / `link 0 1` / `press 0 a*4` / `press 1 a - a - a` — each cabinet holds its own save while the linked pair steps in lockstep and the diegetic cable glows while they exchange bytes. A null saveSlot (the default, and every other example) keeps the shared-per-type save, byte-unchanged.",
+    "host": {
+        "presentMode": "vsync"
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld",
+        "consoles": [
+            { "model": "cgb", "saveSlot": 0 },
+            { "model": "cgb", "saveSlot": 1 }
+        ]
+    }
+}

@@ -26,8 +26,8 @@ internal static class ChromaTables {
     private const int TitlePromptRow = 11;
     private const int TitlePromptColumn = 5;
     private const string TitlePromptText = "PUSH START";
-    private const int TitleScoresRow = 13;
     private const int TitleScoresColumn = 3;
+    private const int TitleScoresRow = 13;
     private const string TitleScoresText = "SELECT SCORES";
 
     private static PbakBackground? s_titleArt;
@@ -92,7 +92,7 @@ internal static class ChromaTables {
             ColourTile(index: '3'),
             EncodeTile(rows: ["11111111", "1......1", "1......1", "1......1", "1......1", "1......1", "1......1", "11111111"]),
         };
-        var tiles = new byte[parts.Length * 16];
+        var tiles = new byte[(parts.Length * 16)];
 
         for (var index = 0; (index < parts.Length); index++) {
             parts[index].CopyTo(array: tiles, index: (index * 16));
@@ -155,8 +155,8 @@ internal static class ChromaTables {
         var map = new byte[0x400];
 
         for (var column = 2; (column <= 17); column++) {
-            map[(2 * 32) + column] = (byte)(TileBlockBase + (column % 3));
-            map[(7 * 32) + column] = (byte)(TileBlockBase + ((column + 2) % 3));
+            map[((2 * 32) + column)] = (byte)(TileBlockBase + (column % 3));
+            map[((7 * 32) + column)] = (byte)(TileBlockBase + ((column + 2) % 3));
         }
 
         WriteText(map: map, row: 5, column: 7, text: "CHROMA");
@@ -172,14 +172,13 @@ internal static class ChromaTables {
     // A block with a dark 1-px gutter so a field of same-colour blocks still reads as a grid of cells.
     private static byte[] ColourTile(char index) {
         var f = index.ToString();
-        var body = ("0" + f + f + f + f + f + f + "0");
+        var body = ((((((("0" + f) + f) + f) + f) + f) + f) + "0");
 
         return EncodeTile(rows: ["00000000", body, body, body, body, body, body, "00000000"]);
     }
-
     private static void WriteText(byte[] map, int row, int column, string text) {
         for (var index = 0; (index < text.Length); index++) {
-            map[(row * 32) + column + index] = TextModule.TileFor(fontTileBase: FontTileBase, character: text[index]);
+            map[(((row * 32) + column) + index)] = TextModule.TileFor(fontTileBase: FontTileBase, character: text[index]);
         }
     }
 
@@ -191,7 +190,7 @@ internal static class ChromaTables {
             var line = rows[row];
 
             for (var column = 0; (column < 8); column++) {
-                indices[(row * 8) + column] = (byte)((column < line.Length) ? (line[column] switch {
+                indices[((row * 8) + column)] = (byte)((column < line.Length) ? (line[column] switch {
                     '1' => 1,
                     '2' => 2,
                     '3' or '#' => 3,

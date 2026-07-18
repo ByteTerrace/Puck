@@ -65,10 +65,10 @@ internal sealed class WorldChildStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-child-diff.png");
+        var diffPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-child-diff.png");
 
-        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "world-child-vulkan.png"), rgba: vulkanPixels, width: (int)OutputWidth);
-        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(context.ArtifactsDirectory, "world-child-directx.png"), rgba: directXPixels, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-child-vulkan.png"), rgba: vulkanPixels, width: (int)OutputWidth);
+        PngEncoder.Write(height: (int)OutputHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-child-directx.png"), rgba: directXPixels, width: (int)OutputWidth);
         ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)OutputHeight, path: diffPath, reference: vulkanPixels, width: (int)OutputWidth);
 
         var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)OutputWidth, height: (int)OutputHeight);
@@ -191,6 +191,5 @@ internal sealed class WorldChildStage : IPostStage {
             gpu.DescriptorAllocator.DestroyPool(deviceHandle: deviceHandle, poolHandle: pool);
         }
     }
-
     private static uint Groups(uint size) => ((size + (WorkgroupEdge - 1)) / WorkgroupEdge);
 }

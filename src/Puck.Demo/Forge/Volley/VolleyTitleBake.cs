@@ -24,8 +24,8 @@ internal static class VolleyTitleBake {
 
     // Background palette slots 1..7 — slot 0 belongs to the gameplay palette the play screen renders with.
     private const int PaletteBudget = 7;
-    private const int NativeWidth = 160;
     private const int NativeHeight = 144;
+    private const int NativeWidth = 160;
     private const float TanHalfFov = 0.41421356f; // tan(45°/2)
 
     /// <summary>Bakes the title scene and installs it as the cartridge's title art. Never throws.</summary>
@@ -74,7 +74,7 @@ internal static class VolleyTitleBake {
     private static BakeView TitleView(BakeStyle style) {
         var camera = CameraSnapshot.LookAt(
             fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-            position: new Vector3(0f, 0f, ((NativeHeight / 16f) / TanHalfFov)),
+            position: new Vector3(x: 0f, y: 0f, z: ((NativeHeight / 16f) / TanHalfFov)),
             target: Vector3.Zero,
             viewportHeight: (uint)(NativeHeight * style.SupersampleFactor),
             viewportWidth: (uint)(NativeWidth * style.SupersampleFactor)
@@ -88,38 +88,38 @@ internal static class VolleyTitleBake {
     // bold dither as REPEATED 4×4 patterns, which the tile dedupe then collapses.
     private static SdfProgram BuildTitleScene() {
         var builder = new SdfProgramBuilder();
-        var sky = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.07f, 0.08f, 0.14f), Emissive: 1.4f));
-        var court = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.13f, 0.15f, 0.24f), Emissive: 1.1f));
-        var cyan = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.38f, 0.69f, 0.78f), Emissive: 1.2f));
-        var white = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.91f, 0.93f, 0.96f), Emissive: 1.3f));
-        var whiteDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.62f, 0.64f, 0.70f), Emissive: 1.0f));
-        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.97f, 0.84f, 0.36f), Emissive: 1.6f));
-        var amberDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.66f, 0.55f, 0.22f), Emissive: 1.0f));
+        var sky = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.07f, y: 0.08f, z: 0.14f), Emissive: 1.4f));
+        var court = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.13f, y: 0.15f, z: 0.24f), Emissive: 1.1f));
+        var cyan = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.38f, y: 0.69f, z: 0.78f), Emissive: 1.2f));
+        var white = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.91f, y: 0.93f, z: 0.96f), Emissive: 1.3f));
+        var whiteDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.62f, y: 0.64f, z: 0.70f), Emissive: 1.0f));
+        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.97f, y: 0.84f, z: 0.36f), Emissive: 1.6f));
+        var amberDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.66f, y: 0.55f, z: 0.22f), Emissive: 1.0f));
 
         // Backdrop + the court band along the bottom (rows 15..17).
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0f, -2f)).Box(halfExtents: new Vector3(30f, 20f, 0.5f), round: 0f, material: sky);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, -7.5f, 0f)).Box(halfExtents: new Vector3(12f, 1.5f, 0.2f), round: 0f, material: court);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0f, z: -2f)).Box(halfExtents: new Vector3(x: 30f, y: 20f, z: 0.5f), round: 0f, material: sky);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -7.5f, z: 0f)).Box(halfExtents: new Vector3(x: 12f, y: 1.5f, z: 0.2f), round: 0f, material: court);
 
         // The dashed net down the centre: unit dashes with unit gaps, on the grid.
         for (var dash = 0; (dash < 6); dash++) {
             _ = builder
                 .ResetPoint()
-                .Translate(offset: new Vector3(0f, (-5.5f + (dash * 2f)), 0f))
-                .Box(halfExtents: new Vector3(0.5f, 0.5f, 0.2f), round: 0f, material: cyan);
+                .Translate(offset: new Vector3(x: 0f, y: (-5.5f + (dash * 2f)), z: 0f))
+                .Box(halfExtents: new Vector3(x: 0.5f, y: 0.5f, z: 0.2f), round: 0f, material: cyan);
         }
 
         // The two paddle bars mid-rally: tall unit-wide boxes with a dim inner course so the bars read as columns.
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-8.5f, 1.0f, 0f)).Box(halfExtents: new Vector3(0.5f, 2.5f, 0.2f), round: 0f, material: white);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-8.5f, 1.0f, 0.05f)).Box(halfExtents: new Vector3(0.2f, 2.0f, 0.2f), round: 0f, material: whiteDim);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(8.5f, -2.0f, 0f)).Box(halfExtents: new Vector3(0.5f, 2.5f, 0.2f), round: 0f, material: white);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(8.5f, -2.0f, 0.05f)).Box(halfExtents: new Vector3(0.2f, 2.0f, 0.2f), round: 0f, material: whiteDim);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -8.5f, y: 1.0f, z: 0f)).Box(halfExtents: new Vector3(x: 0.5f, y: 2.5f, z: 0.2f), round: 0f, material: white);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -8.5f, y: 1.0f, z: 0.05f)).Box(halfExtents: new Vector3(x: 0.2f, y: 2.0f, z: 0.2f), round: 0f, material: whiteDim);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 8.5f, y: -2.0f, z: 0f)).Box(halfExtents: new Vector3(x: 0.5f, y: 2.5f, z: 0.2f), round: 0f, material: white);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 8.5f, y: -2.0f, z: 0.05f)).Box(halfExtents: new Vector3(x: 0.2f, y: 2.0f, z: 0.2f), round: 0f, material: whiteDim);
 
         // The ball mid-flight, tilted off the grid so it reads as MOTION, with two trailing echoes fading behind it.
         var tilt = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (18f * (MathF.PI / 180f)));
 
-        _ = builder.ResetPoint().Translate(offset: new Vector3(2.5f, 3.2f, 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(0.9f, 0.9f, 0.2f), round: 0.35f, material: amber);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0.4f, 2.2f, 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(0.6f, 0.6f, 0.2f), round: 0.25f, material: amberDim);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-1.4f, 1.4f, 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(0.4f, 0.4f, 0.2f), round: 0.18f, material: amberDim);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 2.5f, y: 3.2f, z: 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 0.9f, y: 0.9f, z: 0.2f), round: 0.35f, material: amber);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.4f, y: 2.2f, z: 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 0.6f, y: 0.6f, z: 0.2f), round: 0.25f, material: amberDim);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -1.4f, y: 1.4f, z: 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 0.4f, y: 0.4f, z: 0.2f), round: 0.18f, material: amberDim);
 
         return builder.Build();
     }

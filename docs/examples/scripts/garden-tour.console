@@ -1,0 +1,52 @@
+# Puck.Demo console-driving TOUR — the deterministic garden: plant a fixed seed, watch it grow purely from sim
+# ticks, and prove growth is bit-for-bit reproducible.
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 90 < docs/examples/scripts/garden-tour.console
+# Run (PowerShell): Get-Content docs/examples/scripts/garden-tour.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 90
+#
+# THE DETERMINISM PROOF for this feature is a pure-CPU, no-window, no-wall-clock check (two independent
+# OverworldWorld instances, same seed, same fixed tick count, compared bit-for-bit) — see the task report for why:
+# `step <n>` here holds for n PRODUCED FRAMES, and this demo's fixed 240 Hz sim tick advances in real-Stopwatch-paced
+# catch-up bursts per frame (docs/agent-guide.md already documents this for whole-app capture: "tick allocation sits
+# near a wall-clock boundary" — a PRE-EXISTING, engine-wide property, not specific to this feature, and how MANY
+# ticks a given `step <n>` covers varies a lot with real present timing/machine load). This script still exercises
+# every verb end to end (plant/list/hash.mark/capture) and its hash.marks are worth comparing WITHIN one run (mark,
+# act, mark — the documented bisection use).
+
+state
+
+# Force the fourth-wall reveal now (a real connected controller may already be immersed in a booted cabinet) so the
+# room — and the garden planted below — is what the room camera actually shows.
+reveal world
+settle
+
+hash.mark start
+
+# A FIXED seed — the whole tree (branch angles, counts, lean, palette) is a pure function of this.
+garden.plant 1234
+garden.list
+
+hash.mark planted
+
+# Step through however much of the reveal ladder real ticks buy in each chunk, reading garden.list at each rung.
+step 20
+garden.list
+hash.mark rung-1
+
+step 20
+garden.list
+hash.mark rung-2
+
+step 40
+garden.list
+hash.mark fully-grown
+
+# A second, differently-seeded garden — proves two seeds coexist and diverge visibly (different silhouette/palette).
+garden.plant 777
+garden.list
+
+# Read the grown tree back from the GPU to a PNG (the directory is created), then let the shot land.
+capture artifacts/console/garden-tour.png
+step 5
+
+hash.mark end
+hash.marks

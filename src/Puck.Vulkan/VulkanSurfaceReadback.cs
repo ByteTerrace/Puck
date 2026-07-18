@@ -36,6 +36,12 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     private VulkanFrameReadbackBuffer? m_readbackBuffer;
     private uint m_width;
 
+    /// <summary>Initializes a reusable image readback service.</summary>
+    /// <param name="frameReadbackApi">The API that owns host-visible readback buffers.</param>
+    /// <param name="frameSynchronizationApi">The API used to synchronize asynchronous reads.</param>
+    /// <param name="commandResourcesFactory">The factory for copy command resources.</param>
+    /// <param name="commandBufferRecordingApi">The API used to record image-to-buffer copies.</param>
+    /// <param name="queueSubmitter">The queue submission service.</param>
     public VulkanSurfaceReadback(
         IVulkanFrameReadbackApi frameReadbackApi,
         IVulkanFrameSynchronizationApi frameSynchronizationApi,
@@ -258,7 +264,6 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             deviceHandle: device.Handle
         ).ThrowIfFailed(operation: "vkEndCommandBuffer");
     }
-
     private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat, uint bytesPerPixel) {
         var device = deviceContext.LogicalDevice;
 

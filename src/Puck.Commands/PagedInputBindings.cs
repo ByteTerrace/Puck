@@ -30,6 +30,7 @@ public sealed class PagedInputBindings : IInputBindings {
         public required Dictionary<string, IReadOnlyList<CommandBinding>> Latches { get; init; }
         public required CompiledBindingProfile Profile { get; init; }
         public required BindingChordTracker Tracker { get; init; }
+
         public volatile BindingPageView View;
 
         public SlotState() {
@@ -130,7 +131,6 @@ public sealed class PagedInputBindings : IInputBindings {
     private static void Publish(SlotState state) {
         state.View = state.Profile.ViewOf(pageIndex: state.Tracker.ActivePageIndex);
     }
-
     private SlotState StateFor(int slot) {
         var profile = m_profile;
 

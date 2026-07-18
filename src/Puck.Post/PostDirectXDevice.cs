@@ -48,11 +48,11 @@ internal sealed class PostDirectXDevice : IDisposable {
         // The canonical Direct3D 12 compute seam plus the factories the host presenter would otherwise contribute —
         // this is an off-host, presenter-less collection, so they have no other source here.
         services.AddDirectXComputeApis();
-        services.TryAddSingleton<IGpuDescriptorAllocator>(static _ => new DirectXGpuDescriptorAllocator());
-        services.TryAddSingleton<IGpuQueueSubmitter>(static _ => new DirectXGpuQueueSubmitter());
-        services.TryAddSingleton<IGpuShaderModuleFactory>(static _ => new DirectXGpuShaderModuleFactory());
-        services.TryAddSingleton<IGpuStorageBufferFactory>(static _ => new DirectXGpuStorageBufferFactory());
-        services.TryAddSingleton<IGpuSurfaceTransferFactory>(static _ => new DirectXGpuSurfaceTransferFactory());
+        services.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static _ => new DirectXGpuDescriptorAllocator());
+        services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static _ => new DirectXGpuQueueSubmitter());
+        services.TryAddSingleton<IGpuShaderModuleFactory>(implementationFactory: static _ => new DirectXGpuShaderModuleFactory());
+        services.TryAddSingleton<IGpuStorageBufferFactory>(implementationFactory: static _ => new DirectXGpuStorageBufferFactory());
+        services.TryAddSingleton<IGpuSurfaceTransferFactory>(implementationFactory: static _ => new DirectXGpuSurfaceTransferFactory());
 
         m_provider = services.BuildServiceProvider();
         Host = new HostContext(capabilities: new Dictionary<Type, object> {

@@ -2,10 +2,15 @@ namespace Puck.Input.Output;
 
 /// <summary>The kind of output effect a <see cref="GamepadOutputCommand"/> carries.</summary>
 public enum GamepadOutputKind : byte {
+    /// <summary>Dual-motor body rumble.</summary>
     Rumble = 0,
+    /// <summary>Independent left and right trigger rumble.</summary>
     TriggerRumble = 1,
+    /// <summary>Controller LED color.</summary>
     Led = 2,
+    /// <summary>A device-specific raw output report.</summary>
     Raw = 3,
+    /// <summary>Adaptive trigger effects.</summary>
     TriggerEffect = 4,
 }
 

@@ -2,8 +2,8 @@ namespace Puck.Demo.Forge.Bake;
 
 /// <summary>
 /// The bake's colour currency: packed RGB555 (<c>bbbbbgggggrrrrr</c>, the CGB palette-RAM bit layout) with ROUNDING
-/// conversions — <c>(v·31+127)/255</c> up-conversion parity, unlike the legacy forge's truncating <c>&gt;&gt;3</c>
-/// (<see cref="HgbImage.EncodePalette"/>), which is left untouched for the old recipes. All palette fitting and
+/// conversions — <c>(v·31+127)/255</c> up-conversion parity. `HgbImage.EncodePalette` uses truncation for its separate
+/// wire-compatibility contract. All palette fitting and
 /// error math happens in this space so the fit optimizes exactly what the hardware will display.
 /// </summary>
 internal static class BakeColor {
@@ -40,7 +40,7 @@ internal static class BakeColor {
     /// <param name="channel">The channel index (0 = red, 1 = green, 2 = blue).</param>
     /// <returns>The 5-bit channel value.</returns>
     public static int Channel(ushort colour, int channel) =>
-        ((colour >> (channel * 5)) & 0x1F);
+        (colour >> (channel * 5)) & 0x1F;
 
     /// <summary>Squared Euclidean distance between two packed colours, in 5-bit channel units.</summary>
     /// <param name="a">The first colour.</param>
@@ -51,7 +51,7 @@ internal static class BakeColor {
         var dg = (Channel(channel: 1, colour: a) - Channel(channel: 1, colour: b));
         var db = (Channel(channel: 2, colour: a) - Channel(channel: 2, colour: b));
 
-        return ((dr * dr) + (dg * dg) + (db * db));
+        return (((dr * dr) + (dg * dg)) + (db * db));
     }
 
     /// <summary>An integer Rec.709-weighted luminance for ORDERING palette colours (lightest first) — scaled so
@@ -59,15 +59,15 @@ internal static class BakeColor {
     /// <param name="colour">The packed RGB555 colour.</param>
     /// <returns>The weighted luminance (larger = lighter).</returns>
     public static int Luminance(ushort colour) =>
-        ((2126 * Channel(channel: 0, colour: colour)) + (7152 * Channel(channel: 1, colour: colour)) + (722 * Channel(channel: 2, colour: colour)));
+        (((2126 * Channel(channel: 0, colour: colour)) + (7152 * Channel(channel: 1, colour: colour))) + (722 * Channel(channel: 2, colour: colour)));
 
     /// <summary>Expands a packed colour to packed <c>0xRRGGBB</c> (the diagnostics/preview form).</summary>
     /// <param name="colour">The packed RGB555 colour.</param>
     /// <returns>The 24-bit RGB value.</returns>
     public static uint ToRgb24(ushort colour) =>
-        (((uint)Expand8(value5: Channel(channel: 0, colour: colour)) << 16)
+        ((uint)Expand8(value5: Channel(channel: 0, colour: colour)) << 16)
             | ((uint)Expand8(value5: Channel(channel: 1, colour: colour)) << 8)
-            | Expand8(value5: Channel(channel: 2, colour: colour)));
+            | Expand8(value5: Channel(channel: 2, colour: colour));
 
     /// <summary>Writes a palette table into CGB palette-RAM wire bytes (little-endian RGB555 pairs), padding every
     /// palette to exactly four colours by repeating its last (or black when empty).</summary>
@@ -76,7 +76,7 @@ internal static class BakeColor {
     /// fitted colours then occupy slots 1..3 and slot 0 writes as black.</param>
     /// <returns>The wire-form palette set.</returns>
     public static BakedPaletteSet EncodePalettes(IReadOnlyList<ushort[]> palettes, bool reserveTransparentSlot) {
-        var bytes = new byte[palettes.Count * 8];
+        var bytes = new byte[(palettes.Count * 8)];
 
         for (var palette = 0; (palette < palettes.Count); palette++) {
             var colours = palettes[palette];
@@ -90,7 +90,7 @@ internal static class BakeColor {
                 var byteOffset = ((palette * 8) + (slot * 2));
 
                 bytes[byteOffset] = (byte)(value & 0xFF);
-                bytes[byteOffset + 1] = (byte)((value >> 8) & 0xFF);
+                bytes[(byteOffset + 1)] = (byte)((value >> 8) & 0xFF);
             }
         }
 

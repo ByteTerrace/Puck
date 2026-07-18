@@ -20,8 +20,8 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
 
     /// <inheritdoc/>
     public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) {
-        var pool = (DirectXDescriptorPool)GCHandle.FromIntPtr(poolHandle).Target!;
-        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(descriptorSetLayoutHandle).Target!;
+        var pool = (DirectXDescriptorPool)GCHandle.FromIntPtr(value: poolHandle).Target!;
+        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target!;
         // Bump-allocate this set's own region from the pool's single shader-visible heap so multiple independent
         // sets can share one pool (matching a Vulkan pool) instead of every set aliasing the whole heap. The first
         // set lands at offset 0, so single-set-per-pool callers are unaffected.
@@ -35,24 +35,24 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         pool.NextOffset = (offset + slotCount);
 
         var set = new DirectXDescriptorSet {
-            HeapHandle = pool.HeapHandle,
-            DescriptorSize = pool.DescriptorSize,
             CpuBase = (pool.CpuBase + ((nuint)offset * pool.DescriptorSize)),
+            DescriptorSize = pool.DescriptorSize,
             GpuBase = (pool.GpuBase + ((ulong)offset * pool.DescriptorSize)),
+            HeapHandle = pool.HeapHandle,
             SlotByBinding = layout.SlotByBinding,
         };
 
-        return GCHandle.ToIntPtr(GCHandle.Alloc(set));
+        return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: set));
     }
 
     /// <inheritdoc/>
     public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) {
         var device = (ID3D12Device*)deviceHandle;
         // An acceleration-structure SRV is just another CBV_SRV_UAV heap slot, so it adds to the total like the rest.
-        var totalDescriptors = (sizes.CombinedImageSamplerCount + sizes.StorageBufferCount + sizes.StorageImageCount + sizes.AccelerationStructureCount);
+        var totalDescriptors = (((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount) + sizes.AccelerationStructureCount);
         var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-            NumDescriptors = (totalDescriptors > 0) ? totalDescriptors : 1,
+            NumDescriptors = ((totalDescriptors > 0) ? totalDescriptors : 1),
             Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         };
 
@@ -70,11 +70,11 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
             HeapHandle = (nint)heap,
             DescriptorSize = descriptorSize,
             Capacity = heapDesc.NumDescriptors,
-            CpuBase = GetCpuHeapStart(heapPtr).ptr,
-            GpuBase = GetGpuHeapStart(heapPtr).ptr,
+            CpuBase = GetCpuHeapStart(heap: heapPtr).ptr,
+            GpuBase = GetGpuHeapStart(heap: heapPtr).ptr,
         };
 
-        return GCHandle.ToIntPtr(GCHandle.Alloc(pool));
+        return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: pool));
     }
 
     /// <inheritdoc/>
@@ -84,7 +84,7 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
 
     /// <inheritdoc/>
     public void DestroyPool(nint deviceHandle, nint poolHandle) {
-        var gcHandle = GCHandle.FromIntPtr(poolHandle);
+        var gcHandle = GCHandle.FromIntPtr(value: poolHandle);
         var pool = (DirectXDescriptorPool)gcHandle.Target!;
 
         if (0 != pool.HeapHandle) {
@@ -108,11 +108,11 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         nint samplerHandle
     ) {
         var device = (ID3D12Device*)deviceHandle;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
-        var imageView = (DirectXImageView)GCHandle.FromIntPtr(imageViewHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
+        var imageView = (DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!;
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = set.CpuBase + ((nuint)(slotIndex * set.DescriptorSize)),
+            ptr = (set.CpuBase + ((nuint)(slotIndex * set.DescriptorSize))),
         };
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = imageView.Format,
@@ -154,9 +154,9 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         }
 
         var device = (ID3D12Device*)deviceHandle;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize)),
+            ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
         };
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = Windows.Win32.Graphics.Dxgi.Common.DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
@@ -185,9 +185,9 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         ulong bufferSize
     ) {
         var device = (ID3D12Device*)deviceHandle;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize)),
+            ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
         };
         // A read-only StructuredBuffer<uint4> SRV (stride 16) — matches the HLSL and is valid on the upload-heap
         // buffer, where a UAV is not. Each element is one uint4 program word, so NumElements = size / 16.
@@ -220,9 +220,9 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         ulong bufferSize
     ) {
         var device = (ID3D12Device*)deviceHandle;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize)),
+            ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
         };
         // A read-only StructuredBuffer<uint>/<float> SRV with the matching 4-byte element stride — for a default-heap
         // buffer a compute pass wrote (the cull buffer, the cull-args bbox bounds). The stride-16 WriteStorageBuffer
@@ -257,9 +257,9 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         ulong bufferSize
     ) {
         var device = (ID3D12Device*)deviceHandle;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize)),
+            ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
         };
         // A RWStructuredBuffer<float> UAV (stride 4) over the default-heap cull buffer the beam prepass writes.
         var uavDesc = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
@@ -292,11 +292,11 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
         nint imageViewHandle
     ) {
         var device = (ID3D12Device*)deviceHandle;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
-        var imageView = (DirectXImageView)GCHandle.FromIntPtr(imageViewHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
+        var imageView = (DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!;
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = set.CpuBase + ((nuint)(slotIndex * set.DescriptorSize)),
+            ptr = (set.CpuBase + ((nuint)(slotIndex * set.DescriptorSize))),
         };
         var uavDesc = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
             Format = imageView.Format,

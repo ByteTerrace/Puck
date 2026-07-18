@@ -11,8 +11,8 @@ namespace Puck.Demo.Tracker;
 /// edit so a caller can redraw the console dump only when something actually changed.
 /// </summary>
 internal sealed class TrackerScene {
-    private const int MinTempo = 1;
     private const int MaxTempo = 255;
+    private const int MinTempo = 1;
 
     private AudioDocument m_document;
     private int m_patternIndex;
@@ -43,6 +43,9 @@ internal sealed class TrackerScene {
 
     /// <summary>The cursor's current row index within the current pattern.</summary>
     public int RowIndex => m_rowIndex;
+
+    /// <summary>The current pattern's row count (the transport strip's readout denominator).</summary>
+    public int RowCount => CurrentPattern.Count;
 
     /// <summary>Enters or leaves tracker mode. Leaving does not discard the working document — re-entering resumes
     /// exactly where editing left off (save explicitly to persist it).</summary>
@@ -111,7 +114,7 @@ internal sealed class TrackerScene {
     public int MovePattern(int direction) {
         var patterns = m_document.Patterns!;
 
-        m_patternIndex = (((m_patternIndex + Math.Sign(value: direction)) % patterns.Count + patterns.Count) % patterns.Count);
+        m_patternIndex = ((((m_patternIndex + Math.Sign(value: direction)) % patterns.Count) + patterns.Count) % patterns.Count);
         m_rowIndex = 0;
         ++Revision;
 
@@ -179,7 +182,7 @@ internal sealed class TrackerScene {
 
         var upper = note.Trim().ToUpperInvariant();
 
-        if (TrackerNote.IndexOf(note: upper) is var index && !string.Equals(a: TrackerNote.AtIndex(index: index), b: upper, comparisonType: StringComparison.Ordinal)) {
+        if ((TrackerNote.IndexOf(note: upper) is var index) && !string.Equals(a: TrackerNote.AtIndex(index: index), b: upper, comparisonType: StringComparison.Ordinal)) {
             return false; // Not a recognized token (IndexOf's Hold fallback would silently misreport success).
         }
 
@@ -205,13 +208,13 @@ internal sealed class TrackerScene {
     public IReadOnlyList<string> RenderRows() {
         var pattern = CurrentPattern;
         var lines = new List<string>(capacity: (pattern.Count + 1)) {
-            $"[tracker] \"{m_document.Name}\" — tempo {m_document.Tempo} — pattern {m_patternIndex + 1}/{m_document.Patterns!.Count} — {(m_playing ? "PLAYING" : "stopped")}",
+            $"[tracker] \"{m_document.Name}\" — tempo {m_document.Tempo} — pattern {(m_patternIndex + 1)}/{m_document.Patterns!.Count} — {(m_playing ? "PLAYING" : "stopped")}",
         };
 
         for (var row = 0; (row < pattern.Count); row++) {
             var marker = ((row == m_rowIndex) ? ">" : " ");
 
-            lines.Add(item: $"{marker} {row,2:D2} | {pattern[row].Note,-3} dty{pattern[row].Duty ?? 2}");
+            lines.Add(item: $"{marker} {row,2:D2} | {pattern[row].Note,-3} dty{(pattern[row].Duty ?? 2)}");
         }
 
         return lines;
@@ -232,7 +235,6 @@ internal sealed class TrackerScene {
 
         return note;
     }
-
     private void ReplaceRow(int row, Func<AudioRowDocument, AudioRowDocument> edit) {
         var patterns = new List<IReadOnlyList<AudioRowDocument>>(collection: m_document.Patterns!);
         var rows = new List<AudioRowDocument>(collection: patterns[m_patternIndex]);

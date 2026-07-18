@@ -5,7 +5,7 @@ namespace Puck.Input.Devices;
 /// <summary>
 /// Per-device orientation state for the complementary <see cref="ImuFusion"/> filter: it learns and removes the
 /// gyro's zero-rate bias while the device is held still and accumulates the fused pose. The integration step is
-/// timed by a <paramref name="deltaSeconds"/> the caller supplies — derived from the device's own report clock
+/// timed by a <c>deltaSeconds</c> value the caller supplies — derived from the device's own report clock
 /// (the DualSense sensor timestamp) or its fixed sub-sample cadence (the Switch), <em>not</em> a wall clock — so
 /// the fusion holds no hidden time source and the same report stream fuses identically. Callers feed gyro (rad/s)
 /// and accelerometer (g) already expressed in a right-handed frame (X = right, Y = up, Z = back); each device
@@ -16,8 +16,8 @@ internal sealed class ImuOrientationTracker {
     // subtracted — otherwise the unreferenced yaw would drift on that bias. dt is clamped to a sane report cadence.
     private const float GyroStationaryThreshold = 0.10f; // rad/s
     private const float GyroBiasLearnRate = 0.02f;
-    private const float MinIntegrationSeconds = 0.0002f;
     private const float MaxIntegrationSeconds = 0.02f;
+    private const float MinIntegrationSeconds = 0.0002f;
 
     private Vector3 m_gyroBias;
     private bool m_hasSample;

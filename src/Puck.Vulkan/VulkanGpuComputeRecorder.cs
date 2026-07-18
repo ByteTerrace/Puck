@@ -15,6 +15,12 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) =>
         recordingApi.EndCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle).ThrowIfFailed(operation: "vkEndCommandBuffer");
     /// <inheritdoc/>
+    public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
+        recordingApi.BeginDebugLabel(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, label: label);
+    /// <inheritdoc/>
+    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
+        recordingApi.EndDebugLabel(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+    /// <inheritdoc/>
     public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) =>
         recordingApi.BindComputePipeline(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, pipelineHandle: pipelineHandle);
     /// <inheritdoc/>
@@ -69,7 +75,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
         );
 
     private static uint ToVulkanAccess(GpuComputeAccess access) {
-        uint result = 0;
+        var result = 0U;
 
         if (0 != (access & GpuComputeAccess.ShaderRead)) {
             result |= VulkanAccessFlags.ShaderRead;
@@ -95,7 +101,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
         };
     }
     private static uint ToVulkanStage(GpuComputeStage stage) {
-        uint result = 0;
+        var result = 0U;
 
         if (0 != (stage & GpuComputeStage.TopOfPipe)) {
             result |= VulkanPipelineStageFlags.TopOfPipe;

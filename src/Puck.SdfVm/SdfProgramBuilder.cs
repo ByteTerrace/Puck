@@ -1,25 +1,27 @@
 using System.Numerics;
+using Puck.Text;
 
 namespace Puck.SdfVm;
 
+/// <summary>Builds an SDF program as an ordered stream of point transforms, field operations, shapes, and materials.</summary>
 public sealed class SdfProgramBuilder {
     // KEEP IN SYNC with SDF_SCREEN_MATERIAL in Assets/Shaders/Sdf/sdf-vm.hlsli.
+    /// <summary>The reserved material identifier used by the plain procedural screen material.</summary>
     public const int ScreenMaterialId = 65535;
     /// <summary>The instance CEILING — the most instances one program may declare. The world renderer's per-tile
     /// mask is a DERIVED ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
-    /// it at 128 words per tile (4096/32). Everything downstream DERIVES from the LIVE program's instance count — the
+    /// it at 512 words per tile (16384/32). Everything downstream DERIVES from the LIVE program's instance count — the
     /// mask width, the host-pushed indexing, and the mask-buffer sizing all use
     /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring FEWER instances than this cap packs
     /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
-    /// constant tracks it. 16384 is explicitly DEFERRED pending the SDF perf-bench instrument's beam-slope measurement
-    /// (does <c>sdf-beam</c> grow linearly with instance count, and where does it dominate frame time?); the survey's
-    /// uniform-grid cull row (docs/sdf-sota-survey.md row 15) is the gate for pushing past this without a spatial
-    /// acceleration structure. KEEP IN SYNC with SDF_MAX_INSTANCES in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
-    public const int MaxInstances = 4096;
+    /// constant tracks it. The ceiling's static cost is the per-tile mask buffer. KEEP IN SYNC with SDF_MAX_INSTANCES in
+    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    public const int MaxInstances = 16384;
     /// <summary>The most screen surfaces one program may declare (matches <see cref="SdfWorldEngine.MaxScreenSurfaces"/>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract SEPARATE from the
-    /// viewport capacity <see cref="SdfWorldEngine.MaxViewports"/>).</summary>
-    public const int MaxScreenSurfaces = 8;
+    /// viewport capacity <see cref="SdfWorldEngine.MaxViewports"/>). Capped at 32 by the single-<c>uint</c>
+    /// <c>screenMask</c> the engine pushes per frame.</summary>
+    public const int MaxScreenSurfaces = 32;
     /// <summary>The deepest a <see cref="PushField"/>/<see cref="PopField"/> scope may nest. Depth 1 covers every case
     /// that exists today — creator groups cannot nest and a chamfer wedge is depth 1 — enforced by a validator rule and
     /// NOT part of the packed word layout, so raising it never re-gates the stream. But it is NOT a one-line bump: the
@@ -34,6 +36,22 @@ public sealed class SdfProgramBuilder {
     private readonly List<SdfInstruction> m_instructions = [];
     private readonly List<SdfMaterial> m_materials = [];
     private readonly List<SdfScreenSurface> m_screenSurfaces = [];
+    // The open material-scope stack (see SdfMaterialScope) — a list, not a single slot, so scopes can nest; every
+    // positional-stride clamp (ApplyPositionalMaterialScopeClamp) resolves against ONLY the innermost (last) entry.
+    // Empty for a scope-free program, so the clamp path below never runs and emission stays byte-identical to before
+    // this mechanism existed.
+    private readonly List<SdfMaterialScope> m_materialScopes = [];
+    // Chain-local HOST MIRROR of the shader's parityMaterialDelta slot (Assets/Shaders/Sdf/sdf-vm.hlsli): which
+    // recently emitted instruction (WallpaperFold or RepeatPolar), if any, is driving a positional material recolor
+    // for the shape(s) that follow in the CURRENT ResetPoint..ResetPoint chain segment — its index in m_instructions,
+    // the raw stride value packed into that instruction's Material lane, and the largest additional material offset
+    // ONE unit of that raw stride can produce (2 for a hex wallpaper group's 3-coloring, 1 for every other wallpaper
+    // group, sectorCount-1 for RepeatPolar). SDF_OP_RESET clears parityMaterialDelta on the GPU, so ResetPoint()
+    // clears this mirror the same way; a zero-stride fold leaves it untouched on BOTH sides (the shader's own
+    // `!= 0u` guard — see WallpaperFold/RepeatPolar below). Consumed (and, inside an open material scope, clamped) by
+    // Shape() before a positional shape's material lands in the packed program — the clamp early-returns whenever
+    // m_materialScopes is empty, so a scope-free program never mutates an already-emitted instruction.
+    private (int InstructionIndex, int ReachPerUnit, int RawValue)? m_positionalFold;
     // The one open field scope (a PushField without its PopField yet), or null when none is open: carries the compose
     // blend + smooth radius PopField bakes onto its instruction, and the ShapeBlend count when it opened (so a
     // shape-less scope is rejected at close). Null for a scope-free program, so its packed words stay byte-identical.
@@ -50,10 +68,40 @@ public sealed class SdfProgramBuilder {
     private float m_openInstanceRadius;
     private int m_openInstanceSlot;
 
+    /// <summary>Adds a material to the program palette.</summary>
+    /// <param name="material">The material to add.</param>
+    /// <returns>The zero-based material identifier used by shape instructions.</returns>
     public int AddMaterial(SdfMaterial material) {
         m_materials.Add(item: material);
 
         return (m_materials.Count - 1);
+    }
+    /// <summary>Opens a material-authoring scope (see <see cref="SdfMaterialScope"/>): while open, any positional
+    /// material recolor from <see cref="WallpaperFold"/>/<see cref="RepeatPolar"/> is clamped so it can only ever
+    /// reach a material THIS scope itself added (via <see cref="AddMaterial"/>) — never a material an outer scope, or
+    /// a different emitter sharing this builder, added. Dispose the returned scope (a <see langword="using"/> block)
+    /// to close it; scopes nest strictly LIFO, and the innermost open scope is the one every positional stride
+    /// resolves against. Opening no scope at all (the default for every caller that existed before this mechanism)
+    /// leaves every positional recolor exactly as unclamped as before — this call is the ONLY thing that changes
+    /// emission behavior.</summary>
+    /// <returns>The opened scope — dispose it to close.</returns>
+    public SdfMaterialScope BeginMaterialScope() {
+        var scope = new SdfMaterialScope(builder: this, materialBase: m_materials.Count);
+
+        m_materialScopes.Add(item: scope);
+
+        return scope;
+    }
+    /// <summary>Closes <paramref name="scope"/> (called by <see cref="SdfMaterialScope.Dispose"/> — not meant to be
+    /// called directly).</summary>
+    /// <param name="scope">The scope to close.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="scope"/> is not the innermost open scope.</exception>
+    internal void EndMaterialScope(SdfMaterialScope scope) {
+        if ((m_materialScopes.Count == 0) || !ReferenceEquals(objA: m_materialScopes[^1], objB: scope)) {
+            throw new InvalidOperationException(message: "Material scopes must close in LIFO order — dispose the innermost open scope before an outer one (or this scope was already closed).");
+        }
+
+        m_materialScopes.RemoveAt(index: (m_materialScopes.Count - 1));
     }
     /// <summary>Opens a STATIC per-object instance: every instruction until the matching <see cref="EndInstance"/>
     /// belongs to it, and the world renderer's tile-cull beam prepass tests <paramref name="boundCenter"/>/
@@ -141,6 +189,7 @@ public sealed class SdfProgramBuilder {
 
         return this;
     }
+
     private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true) {
         if (isDynamic && ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))) {
             throw new ArgumentOutOfRangeException(paramName: nameof(slot), message: $"Dynamic instance slots must be in [0, {SdfProgram.MaxDynamicTransformSlot}].");
@@ -177,9 +226,17 @@ public sealed class SdfProgramBuilder {
 
         EndInstance();
     }
+    /// <summary>Resets the local evaluation point for the next instruction chain without clearing the accumulated field.</summary>
+    /// <returns>This builder.</returns>
     public SdfProgramBuilder ResetPoint() {
+        // Mirrors the shader's SDF_OP_RESET clearing parityMaterialDelta — see m_positionalFold's remarks.
+        m_positionalFold = null;
+
         return Transform(op: SdfOp.ResetPoint);
     }
+    /// <summary>Translates subsequent point evaluation by <paramref name="offset"/>.</summary>
+    /// <param name="offset">The translation in local units.</param>
+    /// <returns>This builder.</returns>
     public SdfProgramBuilder Translate(Vector3 offset) {
         return Transform(
             data0: new Vector4(
@@ -189,6 +246,9 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Translate
         );
     }
+    /// <summary>Rotates subsequent point evaluation by a normalized copy of <paramref name="rotation"/>.</summary>
+    /// <param name="rotation">The local-space rotation.</param>
+    /// <returns>This builder.</returns>
     public SdfProgramBuilder Rotate(Quaternion rotation) {
         // Normalized HOST-SIDE (defensive: JSON-authored quaternions arrive here raw) — the shader's inverse-rotate
         // assumes a unit quaternion, and a drifted one would shear space rather than rotate it.
@@ -204,20 +264,23 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Rotate
         );
     }
+    /// <summary>Scales subsequent point evaluation and applies the conservative minimum-axis distance correction.</summary>
+    /// <param name="scale">The local-space scale. Components are converted to positive nonzero magnitudes.</param>
+    /// <returns>This builder.</returns>
     public SdfProgramBuilder Scale(Vector3 scale) {
         // The degenerate-scale clamp AND the resulting distance rescale are HOST-BAKED (Data0.xyz = |scale| clamped,
         // Data0.w = its min axis): shapes evaluate millions of times per frame while programs build once, and the
         // shader's per-evaluation abs/max/min collapse to one lane read. The min-axis factor is the conservative
         // correction for a non-uniform scale — f(S⁻¹p)·min(s) is 1-Lipschitz, so it can only underestimate true
         // distance, never overstep. HLSL's abs/max/min agree with MathF's bit-for-bit on every non-NaN input, and
-        // 0.0001f is the same float the shader used to clamp against (KEEP IN SYNC with SDF_OP_SCALE in
+        // 0.0001f is the shader's clamp value (KEEP IN SYNC with SDF_OP_SCALE in
         // Assets/Shaders/Sdf/sdf-vm.hlsli).
-        var clamped = Vector3.Max(Vector3.Abs(scale), new Vector3(0.0001f));
+        var clamped = Vector3.Max(value1: Vector3.Abs(value: scale), value2: new Vector3(value: 0.0001f));
 
         return Transform(
             data0: new Vector4(
                 value: clamped,
-                w: MathF.Min(clamped.X, MathF.Min(clamped.Y, clamped.Z))
+                w: MathF.Min(x: clamped.X, y: MathF.Min(x: clamped.Y, y: clamped.Z))
             ),
             op: SdfOp.Scale
         );
@@ -270,8 +333,8 @@ public sealed class SdfProgramBuilder {
     public SdfProgramBuilder LogSphere(float shellRatio, float twist = 0f) {
         // w = ln(ratio) and its reciprocal are HOST-BAKED (the shader avoids a per-eval log-of-constant and a divide,
         // matching Repeat's baked-reciprocal pattern; KEEP IN SYNC with SDF_OP_LOG_SPHERE in sdf-vm.hlsli).
-        var ratio = MathF.Max(shellRatio, 1.0001f);
-        var w = MathF.Log(ratio);
+        var ratio = MathF.Max(x: shellRatio, y: 1.0001f);
+        var w = MathF.Log(x: ratio);
 
         return Transform(
             data0: new Vector4(
@@ -293,7 +356,7 @@ public sealed class SdfProgramBuilder {
     /// identity, so an unused op leaves the point byte-identical. Like <see cref="Repeat"/>, keep the prototype clear of
     /// the cell boundary: the caller must ensure jitter/2 + prototype radius ≤ min(spacing)/2 (this builder validates
     /// only the half it can see — that the displacement alone cannot cross a boundary; the prototype is emitted later,
-    /// so its radius is unknown here). CONTAINMENT IS NOT SUFFICIENT (verified 2026-07-08, slice capture): even with
+    /// so its radius is unknown here). Containment is not sufficient: even with
     /// the in-cell rule satisfied, the single-cell <c>round()</c> fold can pick the WRONG copy near a cell wall — a
     /// copy jittered toward the boundary is nearer to the adjacent cell's query points than that cell's own copy — so
     /// the field OVERestimates at cell boundaries (visible seams, grazing-angle hole risk). The in-cell rule keeps the
@@ -317,7 +380,7 @@ public sealed class SdfProgramBuilder {
     /// displaced content would cross a cell boundary and hole the march).</exception>
     public SdfProgramBuilder CellJitter(Vector3 spacing, float jitter, uint seed = 0u, float tumble = 0f, int materialVariants = 0, SdfNoiseFlavor flavor = SdfNoiseFlavor.White) {
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz), mirroring Repeat().
-        var clamped = Vector3.Max(spacing, new Vector3(0.001f));
+        var clamped = Vector3.Max(value1: spacing, value2: new Vector3(value: 0.001f));
 
         if (materialVariants < 0) {
             throw new ArgumentException(message: "CellJitter materialVariants must be >= 0 (0 = geometric only).", paramName: nameof(materialVariants));
@@ -325,13 +388,13 @@ public sealed class SdfProgramBuilder {
 
         // The half the builder CAN see: the displacement alone must not push content across the round() cell boundary.
         // (The caller must also keep jitter/2 + prototype radius <= min(spacing)/2 — the prototype radius is unknown here.)
-        var minSpacing = MathF.Min(clamped.X, MathF.Min(clamped.Y, clamped.Z));
+        var minSpacing = MathF.Min(x: clamped.X, y: MathF.Min(x: clamped.Y, y: clamped.Z));
 
-        if ((MathF.Abs(jitter) * 0.5f) >= (0.5f * minSpacing)) {
+        if ((MathF.Abs(x: jitter) * 0.5f) >= (0.5f * minSpacing)) {
             throw new ArgumentException(message: "CellJitter jitter/2 must be < min(spacing)/2, or jittered content crosses the cell boundary and holes the march. The caller must ALSO keep jitter/2 + prototype radius <= min(spacing)/2 (the prototype is emitted later, so this builder cannot check it) — and even then the single-cell round() fold overestimates near cell walls (containment does not guarantee the nearest copy; boundary seams and grazing-angle hole risk persist), so keep jitter conservative.", paramName: nameof(jitter));
         }
 
-        var clampedTumble = Math.Clamp(tumble, 0f, 1f);
+        var clampedTumble = Math.Clamp(max: 1f, min: 0f, value: tumble);
 
         m_instructions.Add(item: new SdfInstruction(
             Blend: (uint)flavor,
@@ -376,7 +439,7 @@ public sealed class SdfProgramBuilder {
 
         // count and the sector angle's reciprocals are HOST-BAKED (Data0.yzw): shapes evaluate millions of times per
         // frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT_POLAR in Assets/Shaders/Sdf/sdf-vm.hlsli).
-        var sectors = Math.Max(1, count);
+        var sectors = Math.Max(val1: 1, val2: count);
         var angle = ((2f * MathF.PI) / sectors);
 
         m_instructions.Add(item: new SdfInstruction(
@@ -392,6 +455,13 @@ public sealed class SdfProgramBuilder {
             Op: SdfOp.RepeatPolar,
             Shape: (uint)axis
         ));
+
+        // Mirrors the shader's `if (instructionHeader.w != 0u) parityMaterialDelta = wrapped * stride` (wrapped ranges
+        // 0..sectors-1) — see WallpaperFold's identical tracking above for why this is sound to compute HERE, at
+        // RepeatPolar's own call site.
+        if (materialStride != 0) {
+            m_positionalFold = ((m_instructions.Count - 1), (sectors - 1), materialStride);
+        }
 
         return this;
     }
@@ -562,7 +632,7 @@ public sealed class SdfProgramBuilder {
             Data0: default,
             Data1: new Vector4(
                 w: 0f,
-                x: MathF.Max(0f, scope.Smooth),
+                x: MathF.Max(x: 0f, y: scope.Smooth),
                 y: 0f,
                 z: 0f
             ),
@@ -588,21 +658,21 @@ public sealed class SdfProgramBuilder {
         );
     }
     /// <summary>Infinite DOMAIN-REPEAT fold: tiles space into cells of <paramref name="spacing"/> with a single-cell
-    /// <c>round()</c> fold, so the prototype that follows repeats on the lattice. EXACTNESS CONTRACT (verified
-    /// 2026-07-08, slice capture): the returned distance is the CURRENT cell's copy only, so the fold is exact ONLY for
+    /// <c>round()</c> fold, so the prototype that follows repeats on the lattice. The returned distance is the current
+    /// cell's copy only, so the fold is exact only for
     /// an ON-CENTER prototype contained within half-<paramref name="spacing"/> per axis. An off-center or oversized
     /// prototype creases the field at the cell walls with an OVERestimate (the nearest surface lives in a neighbouring
     /// cell the fold never consults) — an overestimate can hole the march, and neither the Lipschitz step clamp nor the
     /// over-relaxation step-back catches it (they bound the field's rate, not a boundary discontinuity). The builder
     /// CANNOT validate this (the prototype is emitted later and its post-fold translation matters as much as its
-    /// radius) — the caller owns the rule, exactly like <see cref="CellJitter"/>'s in-cell rule. iq's 3^k neighbour-cell
+    /// radius) — the caller owns the rule, exactly like <see cref="CellJitter"/>'s in-cell rule. A 3^k neighbour-cell
     /// check would remove the constraint but is judged not worth the interpreter cost at current usage. KEEP IN SYNC
     /// with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
     public SdfProgramBuilder Repeat(Vector3 spacing) {
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz): shapes evaluate millions of
         // times per frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli).
-        var clamped = Vector3.Max(spacing, new Vector3(0.001f));
+        var clamped = Vector3.Max(value1: spacing, value2: new Vector3(value: 0.001f));
 
         return Transform(
             data0: new Vector4(
@@ -628,7 +698,7 @@ public sealed class SdfProgramBuilder {
         // SDF_OP_REPEAT_LIMITED in Assets/Shaders/Sdf/sdf-vm.hlsli). Clamped WITHOUT Abs, matching the shader's old
         // max(data0.xyz, 0.001) — a negative spacing must keep behaving as it did. Unlike Repeat there is no free lane
         // for the reciprocal (Data1.xyz carries the limit), so the shader keeps its divide.
-        var clamped = Vector3.Max(spacing, new Vector3(0.001f));
+        var clamped = Vector3.Max(value1: spacing, value2: new Vector3(value: 0.001f));
 
         return Transform(
             data0: new Vector4(
@@ -661,8 +731,8 @@ public sealed class SdfProgramBuilder {
         // round; hex lattices (pitch = cell.x) read z = 1/pitch and w = 2/(√3·pitch) — the two divides in the axial
         // decompose (KEEP IN SYNC with the fold functions in Assets/Shaders/Sdf/sdf-vm.hlsli).
         var isHex = (group >= SdfWallpaperGroup.P3);
-        var inverseX = (1f / MathF.Max(cell.X, 0.0001f));
-        var inverseY = (isHex ? ((2f / 1.7320508f) * inverseX) : (1f / MathF.Max(cell.Y, 0.0001f)));
+        var inverseX = (1f / MathF.Max(x: cell.X, y: 0.0001f));
+        var inverseY = (isHex ? ((2f / 1.7320508f) * inverseX) : (1f / MathF.Max(x: cell.Y, y: 0.0001f)));
 
         m_instructions.Add(item: new SdfInstruction(
             Blend: (uint)plane,
@@ -682,6 +752,17 @@ public sealed class SdfProgramBuilder {
             Op: SdfOp.WallpaperFold,
             Shape: (uint)group
         ));
+
+        // Mirrors the shader's `if (instructionHeader.w != 0u) parityMaterialDelta = cellKey * stride` (a zero stride
+        // leaves parityMaterialDelta — and this mirror — untouched, exactly like the shader's own guard). cellKey's
+        // range is sdfWallpaperCellKey's: 0..2 (3-coloring) for a hex group (P3 and up), 0..1 (parity) otherwise — see
+        // the sdf-world skill's C#↔HLSL contract table — so the largest per-unit-stride reach is known HERE, at
+        // WallpaperFold's own call site, without waiting for the shape that eventually uses this fold's material.
+        if (materialStride != 0) {
+            var maxCellKey = ((group >= SdfWallpaperGroup.P3) ? 2 : 1);
+
+            m_positionalFold = ((m_instructions.Count - 1), maxCellKey, materialStride);
+        }
 
         return this;
     }
@@ -719,6 +800,12 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.SymmetryPlane
         );
     }
+    /// <summary>Adds a sphere centered at the current local point.</summary>
+    /// <param name="radius">The sphere radius.</param>
+    /// <param name="material">The material identifier.</param>
+    /// <param name="blend">The blend against the accumulated field.</param>
+    /// <param name="smooth">The radius used by smooth and chamfer blends.</param>
+    /// <returns>This builder.</returns>
     public SdfProgramBuilder Sphere(float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         return Shape(
             blend: blend,
@@ -739,9 +826,9 @@ public sealed class SdfProgramBuilder {
     /// the tip half-height √(r²−d²) is real; it is HOST-BAKED (skips the per-eval sqrt) — KEEP IN SYNC with sdfVesica
     /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public SdfProgramBuilder Vesica(float radius, float halfSeparation, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        var r = MathF.Abs(radius);
-        var d = MathF.Min(MathF.Abs(halfSeparation), (r * 0.9999f)); // d < r keeps b = √(r²−d²) real and positive
-        var b = MathF.Sqrt((r * r) - (d * d));
+        var r = MathF.Abs(x: radius);
+        var d = MathF.Min(x: MathF.Abs(x: halfSeparation), y: (r * 0.9999f)); // d < r keeps b = √(r²−d²) real and positive
+        var b = MathF.Sqrt(x: ((r * r) - (d * d)));
 
         return Shape(
             blend: blend,
@@ -756,7 +843,7 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A rounded rectangle (iq sdRoundedBox) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
+    /// <summary>A rounded rectangle (exact rounded-box 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
     /// rounded slab/plaque, <see cref="SdfLift.Revolve"/> a rounded disc/puck. Exact and 1-Lipschitz. KEEP IN SYNC
     /// with sdfRoundedRect in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="halfWidth">Half-width of the rectangle (its local X half-extent).</param>
@@ -765,25 +852,28 @@ public sealed class SdfProgramBuilder {
     /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
     /// <param name="liftAmount">The revolve offset (for <see cref="SdfLift.Revolve"/>) or the extrude half-height (for
     /// <see cref="SdfLift.Extrude"/>); clamped to ≥ 0.</param>
+    /// <param name="material">The material index assigned to the shape.</param>
+    /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
+    /// <param name="smooth">The blend smoothing radius.</param>
     public SdfProgramBuilder RoundedRectangle(float halfWidth, float halfHeight, float cornerRadius, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        var hw = MathF.Abs(halfWidth);
-        var hh = MathF.Abs(halfHeight);
+        var hw = MathF.Abs(x: halfWidth);
+        var hh = MathF.Abs(x: halfHeight);
 
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,
             dimensions: new Vector4(
-                w: MathF.Max(0f, liftAmount),
+                w: MathF.Max(x: 0f, y: liftAmount),
                 x: hw,
                 y: hh,
-                z: Math.Clamp(cornerRadius, 0f, MathF.Min(hw, hh))
+                z: Math.Clamp(cornerRadius, 0f, MathF.Min(x: hw, y: hh))
             ),
             material: material,
             shape: SdfShapeType.RoundedRectangle,
             smooth: smooth
         );
     }
-    /// <summary>A regular convex <paramref name="sides"/>-gon (iq sdStar with the m = 2 regular-polygon case) lifted to
+    /// <summary>A regular convex <paramref name="sides"/>-gon (the exact star-polygon SDF with the m = 2 regular-polygon case) lifted to
     /// a 3D solid — <see cref="SdfLift.Extrude"/> gives a prism (a nut, a column, a gem), <see cref="SdfLift.Revolve"/>
     /// a lathe of the polygon's profile. The half-sector π/n is HOST-BAKED. Exact and 1-Lipschitz. KEEP IN SYNC with
     /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
@@ -791,16 +881,19 @@ public sealed class SdfProgramBuilder {
     /// <param name="radius">The circumradius (centre to a vertex).</param>
     /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
     /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    /// <param name="material">The material index assigned to the shape.</param>
+    /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
+    /// <param name="smooth">The blend smoothing radius.</param>
     public SdfProgramBuilder RegularPolygon(int sides, float radius, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        var n = Math.Max(3, sides);
+        var n = Math.Max(val1: 3, val2: sides);
 
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,      // Data1.y = lift mode
             derived2: 1f,                     // Data1.z = ecs.y = 1 (m = 2: the regular-polygon case)
             dimensions: new Vector4(
-                w: MathF.Max(0f, liftAmount),
-                x: MathF.Abs(radius),
+                w: MathF.Max(x: 0f, y: liftAmount),
+                x: MathF.Abs(x: radius),
                 y: (MathF.PI / n),            // an = π/n, HOST-BAKED
                 z: 0f                         // ecs.x = 0
             ),
@@ -809,7 +902,7 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>An <paramref name="points"/>-pointed star (iq sdStar) lifted to a 3D solid — <see cref="SdfLift.Extrude"/>
+    /// <summary>An <paramref name="points"/>-pointed star (the exact star-polygon SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/>
     /// gives a star prism (a badge, a gem), <see cref="SdfLift.Revolve"/> a spiked lathe. The baked constants
     /// (π/n and ecs = (cos(π/m), sin(π/m))) are HOST-BAKED. Exact and 1-Lipschitz. KEEP IN SYNC with
     /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
@@ -819,27 +912,30 @@ public sealed class SdfProgramBuilder {
     /// (deeper notches between points).</param>
     /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
     /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    /// <param name="material">The material index assigned to the shape.</param>
+    /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
+    /// <param name="smooth">The blend smoothing radius.</param>
     public SdfProgramBuilder Star(int points, float radius, float sharpness, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        var n = Math.Max(2, points);
-        var m = Math.Clamp(sharpness, 2f, n);
+        var n = Math.Max(val1: 2, val2: points);
+        var m = Math.Clamp(max: n, min: 2f, value: sharpness);
         var en = (MathF.PI / m);
 
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,      // Data1.y = lift mode
-            derived2: MathF.Sin(en),          // Data1.z = ecs.y = sin(π/m)
+            derived2: MathF.Sin(x: en),          // Data1.z = ecs.y = sin(π/m)
             dimensions: new Vector4(
-                w: MathF.Max(0f, liftAmount),
-                x: MathF.Abs(radius),
+                w: MathF.Max(x: 0f, y: liftAmount),
+                x: MathF.Abs(x: radius),
                 y: (MathF.PI / n),            // an = π/n, HOST-BAKED
-                z: MathF.Cos(en)             // ecs.x = cos(π/m), HOST-BAKED
+                z: MathF.Cos(x: en)             // ecs.x = cos(π/m), HOST-BAKED
             ),
             material: material,
             shape: SdfShapeType.Star,
             smooth: smooth
         );
     }
-    /// <summary>An isosceles trapezoid (iq sdTrapezoid) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
+    /// <summary>An isosceles trapezoid (exact isosceles-trapezoid 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
     /// keystone/wedge prism, <see cref="SdfLift.Revolve"/> a frustum/lampshade/cup. Exact and 1-Lipschitz. KEEP IN
     /// SYNC with sdfTrapezoidSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="bottomHalfWidth">Half-width of the bottom edge (at local −Y).</param>
@@ -847,22 +943,25 @@ public sealed class SdfProgramBuilder {
     /// <param name="halfHeight">Half-height of the trapezoid.</param>
     /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
     /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    /// <param name="material">The material index assigned to the shape.</param>
+    /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
+    /// <param name="smooth">The blend smoothing radius.</param>
     public SdfProgramBuilder Trapezoid(float bottomHalfWidth, float topHalfWidth, float halfHeight, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         return Shape(
             blend: blend,
             derived1: (float)(uint)lift,
             dimensions: new Vector4(
-                w: MathF.Max(0f, liftAmount),
-                x: MathF.Abs(bottomHalfWidth),
-                y: MathF.Abs(topHalfWidth),
-                z: MathF.Abs(halfHeight)
+                w: MathF.Max(x: 0f, y: liftAmount),
+                x: MathF.Abs(x: bottomHalfWidth),
+                y: MathF.Abs(x: topHalfWidth),
+                z: MathF.Abs(x: halfHeight)
             ),
             material: material,
             shape: SdfShapeType.Trapezoid,
             smooth: smooth
         );
     }
-    /// <summary>An ellipse (iq's exact sdEllipse) lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives
+    /// <summary>An ellipse (the exact ellipse 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives
     /// an exact SPHEROID (which, unlike the approximate <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float)"/> #6,
     /// earns a real cull bound), <see cref="SdfLift.Extrude"/> an elliptic-cylinder prism. Exact and 1-Lipschitz.
     /// KEEP IN SYNC with sdfEllipseSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
@@ -870,13 +969,16 @@ public sealed class SdfProgramBuilder {
     /// <param name="semiY">The semi-axis along local Y.</param>
     /// <param name="lift">Whether to revolve the profile around Y (offset 0 ⇒ a spheroid) or extrude it along Z.</param>
     /// <param name="liftAmount">The revolve offset or the extrude half-height; clamped to ≥ 0.</param>
+    /// <param name="material">The material index assigned to the shape.</param>
+    /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
+    /// <param name="smooth">The blend smoothing radius.</param>
     public SdfProgramBuilder Ellipse(float semiX, float semiY, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        var ea = MathF.Max(MathF.Abs(semiX), 1e-4f);
-        var eb = MathF.Max(MathF.Abs(semiY), 1e-4f);
+        var ea = MathF.Max(x: MathF.Abs(x: semiX), y: 1e-4f);
+        var eb = MathF.Max(x: MathF.Abs(x: semiY), y: 1e-4f);
 
         // The exact ellipse divides by (eb²−ea²); nudge a perfect circle apart so it never divides by zero (a circle is
         // better served by Sphere/Cylinder anyway). Sub-pixel at any sane authoring scale.
-        if (MathF.Abs(ea - eb) < 1e-4f) {
+        if (MathF.Abs(x: (ea - eb)) < 1e-4f) {
             eb = (ea + 1e-4f);
         }
 
@@ -884,7 +986,7 @@ public sealed class SdfProgramBuilder {
             blend: blend,
             derived1: (float)(uint)lift,
             dimensions: new Vector4(
-                w: MathF.Max(0f, liftAmount),
+                w: MathF.Max(x: 0f, y: liftAmount),
                 x: ea,
                 y: eb,
                 z: 0f
@@ -892,6 +994,203 @@ public sealed class SdfProgramBuilder {
             material: material,
             shape: SdfShapeType.Ellipse,
             smooth: smooth
+        );
+    }
+    /// <summary>A single glyph cell sampled from a bound font atlas (see <see cref="SdfWorldEngine.SetGlyphAtlas"/>) as
+    /// a DISTANCE-level field — text as real world geometry (marchable, liftable, blendable, and with
+    /// <see cref="SdfBlendOp.Subtraction"/> ENGRAVABLE into any surface). The glyph is the atlas letter where the atlas
+    /// is bound (the world-lit render) and the conservative extruded cell box everywhere else. Most callers use
+    /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float)"/>, which
+    /// bakes these arguments from a laid-out string; this primitive is the one-cell seam.
+    /// <para>The cell must map with UNIFORM scale — <paramref name="halfWidth"/>/<paramref name="halfHeight"/>
+    /// proportional to the atlas cell's texel width/height — for the field to stay 1-Lipschitz (factor 1, no step
+    /// clamp); a stretched cell is the caller's risk, exactly as <see cref="Repeat"/>'s in-cell rule is. The atlas UVs
+    /// are unorm2x16-packed HOST-SIDE into two lanes so the ISA-wide <paramref name="smooth"/> radius keeps its lane
+    /// (KEEP IN SYNC with SDF_SHAPE_GLYPH / sdfGlyphUnpackUv in Assets/Shaders/Sdf/sdf-vm.hlsli).</para></summary>
+    /// <param name="uvBottomLeft">The atlas UV (in <c>[0, 1]²</c>) at the cell's local <c>(-halfWidth, -halfHeight)</c> corner.</param>
+    /// <param name="uvTopRight">The atlas UV at the cell's local <c>(+halfWidth, +halfHeight)</c> corner.</param>
+    /// <param name="halfWidth">The cell's local X half-extent, in world units.</param>
+    /// <param name="halfHeight">The cell's local Y half-extent, in world units.</param>
+    /// <param name="extrudeHalfDepth">The half-depth the glyph extrudes along local Z (clamped to ≥ 0).</param>
+    /// <param name="distanceScale">The atlas distance range (in texels) times the world size of one texel: converts the
+    /// encoded <c>[0, 1]</c> distance to world units. Host-baked (foot-gun discipline).</param>
+    /// <param name="material">The material id the letter shades with.</param>
+    /// <param name="blend">The blend against the field accumulated so far (Subtraction engraves).</param>
+    /// <param name="smooth">The smooth/chamfer radius (meaningful only for a smooth/chamfer <paramref name="blend"/>).</param>
+    public SdfProgramBuilder Glyph(Vector2 uvBottomLeft, Vector2 uvTopRight, float halfWidth, float halfHeight, float extrudeHalfDepth, float distanceScale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        return Shape(
+            blend: blend,
+            derived1: MathF.Abs(x: halfWidth),   // Data1.y = halfWidth
+            derived2: MathF.Abs(x: halfHeight),  // Data1.z = halfHeight
+            dimensions: new Vector4(
+                w: MathF.Max(x: 0f, y: extrudeHalfDepth),  // Data0.w = extrudeHalfDepth
+                x: PackUv(uv: uvBottomLeft),         // Data0.x = packed uvMin
+                y: PackUv(uv: uvTopRight),           // Data0.y = packed uvMax
+                z: distanceScale                     // Data0.z = distanceScale
+            ),
+            material: material,
+            shape: SdfShapeType.Glyph,
+            smooth: smooth
+        );
+    }
+    /// <summary>Lays <paramref name="text"/> out against <paramref name="atlas"/> and emits one <see cref="Glyph"/> cell
+    /// per drawn character, positioned on the plane spanned by <paramref name="right"/>/<paramref name="up"/> at
+    /// <paramref name="origin"/> (the first line's baseline pen). Each glyph is a self-contained
+    /// <see cref="ResetPoint"/> + transform + <see cref="Glyph"/> SEGMENT, so a whole string is a multi-segment run the
+    /// caller wraps in one <see cref="BeginInstance"/>/<see cref="EndInstance"/> with a bound covering the block. The
+    /// atlas must be uploaded to the engine (<see cref="SdfWorldEngine.SetGlyphAtlas"/>) for the letters to resolve;
+    /// unbound, each cell renders as its conservative box.</summary>
+    /// <param name="atlas">The font atlas providing glyph geometry, metrics, and per-glyph atlas rectangles.</param>
+    /// <param name="text">The string to lay out (line feeds break lines; unmapped code points are skipped).</param>
+    /// <param name="origin">The world-space pen origin — the first line's baseline, left edge.</param>
+    /// <param name="right">The unit world axis local +X (advance direction) maps to.</param>
+    /// <param name="up">The unit world axis local +Y (ascent direction) maps to; the glyphs extrude along right×up.</param>
+    /// <param name="worldEmHeight">The world height of one em — the text's world scale.</param>
+    /// <param name="material">The material id the letters shade with.</param>
+    /// <param name="blend">The blend against the field accumulated so far (Subtraction engraves the text).</param>
+    /// <param name="extrudeHalfDepth">The half-depth each glyph extrudes along the plane normal.</param>
+    /// <param name="smooth">The smooth/chamfer radius for a smooth/chamfer <paramref name="blend"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="text"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="worldEmHeight"/> is not greater than zero.</exception>
+    public SdfProgramBuilder Text(FontAtlas atlas, string text, Vector3 origin, Vector3 right, Vector3 up, float worldEmHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float extrudeHalfDepth = 0.1f, float smooth = 0f) {
+        ArgumentNullException.ThrowIfNull(atlas);
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (worldEmHeight <= 0f) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(worldEmHeight), message: "Text world em height must be greater than zero.");
+        }
+
+        // Uniform world-per-texel (atlas.Size = pixels per em): every glyph derives BOTH half-extents from it, so the
+        // sampled field stays 1-Lipschitz (factor 1). distanceScale rides the same factor.
+        var worldPerTexel = (worldEmHeight / atlas.Size);
+        var distanceScale = (atlas.DistanceRange * worldPerTexel);
+        // Local (right, up, forward=right×up) → world: the rotation whose rows are the basis (System.Numerics'
+        // row-vector Transform), so Rotate places each glyph's authored local XY onto the text plane.
+        var unitRight = Vector3.Normalize(value: right);
+        var unitUp = Vector3.Normalize(value: up);
+        var forward = Vector3.Normalize(value: Vector3.Cross(vector1: unitRight, vector2: unitUp));
+        var orientation = Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
+            m11: unitRight.X, m12: unitRight.Y, m13: unitRight.Z, m14: 0f,
+            m21: unitUp.X, m22: unitUp.Y, m23: unitUp.Z, m24: 0f,
+            m31: forward.X, m32: forward.Y, m33: forward.Z, m34: 0f,
+            m41: 0f, m42: 0f, m43: 0f, m44: 1f
+        ));
+        var layout = new TextLayout().Layout(atlas: atlas, text: text, scale: worldEmHeight);
+        var atlasWidth = (float)atlas.Width;
+        var atlasHeight = (float)atlas.Height;
+
+        foreach (var placement in layout.Placements) {
+            var atlasBounds = placement.AtlasBounds;
+            var planeBounds = placement.PlaneBounds;
+            // Uniform half-extents from the atlas cell's texel size; the cell CENTRE from the laid-out plane bounds (the
+            // pen already placed it in the block). The two agree up to the padded margin, which is empty field.
+            var halfWidth = ((0.5f * (atlasBounds.Right - atlasBounds.Left)) * worldPerTexel);
+            var halfHeight = ((0.5f * (atlasBounds.Bottom - atlasBounds.Top)) * worldPerTexel);
+            var centre2D = new Vector2(
+                x: (0.5f * (planeBounds.Left + planeBounds.Right)),
+                y: (0.5f * (planeBounds.Bottom + planeBounds.Top))
+            );
+            var worldCentre = ((origin + (unitRight * centre2D.X)) + (unitUp * centre2D.Y));
+            // Local (-hw,-hh) is the cell's bottom-left → atlas (uMin, vBottom = the LARGER texel row, top-down); local
+            // (+hw,+hh) is top-right → (uMax, vTop). The lerp in the shader maps local→uv along this diagonal.
+            var uvBottomLeft = new Vector2(x: (atlasBounds.Left / atlasWidth), y: (atlasBounds.Bottom / atlasHeight));
+            var uvTopRight = new Vector2(x: (atlasBounds.Right / atlasWidth), y: (atlasBounds.Top / atlasHeight));
+
+            _ = ResetPoint()
+                .Translate(offset: worldCentre)
+                .Rotate(rotation: orientation)
+                .Glyph(
+                    blend: blend,
+                    distanceScale: distanceScale,
+                    extrudeHalfDepth: extrudeHalfDepth,
+                    halfHeight: halfHeight,
+                    halfWidth: halfWidth,
+                    material: material,
+                    smooth: smooth,
+                    uvBottomLeft: uvBottomLeft,
+                    uvTopRight: uvTopRight
+                );
+        }
+
+        return this;
+    }
+    // Host-side unorm2x16 pack of an atlas UV: 16-bit u in the low half, v in the high half, matching sdfGlyphUnpackUv
+    // (KEEP IN SYNC). An integer pack reinterpreted as float bits, so it is bit-identical across both DXC backends.
+    private static float PackUv(Vector2 uv) {
+        var u = (uint)Math.Clamp(value: (int)MathF.Round(x: (MathF.Max(x: 0f, y: uv.X) * 65535f)), min: 0, max: 65535);
+        var v = (uint)Math.Clamp(value: (int)MathF.Round(x: (MathF.Max(x: 0f, y: uv.Y) * 65535f)), min: 0, max: 65535);
+
+        return BitConverter.UInt32BitsToSingle(value: u | (v << 16));
+    }
+    /// <summary>The maximum voxel count per brick axis: the <see cref="SampledRegion"/> shape packs each dim in 10 bits
+    /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
+    /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
+    public const int MaxSampledRegionDim = 1023;
+    /// <summary>A SAMPLED distance-field brick (<see cref="SdfShapeType.SampledRegion"/>): the settled-carve UNION field,
+    /// pre-baked into a <paramref name="dimX"/>x<paramref name="dimY"/>x<paramref name="dimZ"/> cubic-voxel lattice at
+    /// <paramref name="brickWordOffset"/> in the engine's <c>sdfBrickPool</c> buffer, sampled O(1) by manual trilinear
+    /// interpolation and composed as ONE ordinary <see cref="SdfBlendOp.Subtraction"/> instance. The distance channel is
+    /// pre-scaled c/λ (λ folded in at bake time, so this op applies NO step clamp), and <paramref name="boundaryFloor"/>
+    /// (= margin/λ, host-baked) is the outside-box lower-bound offset. Where the pool is not bound the shape falls back to
+    /// the conservative union hull (SDF_FAR_DISTANCE — the subtraction never bites), so a brick program renders uncarved
+    /// but never holes. The lane packing (Data0 = boxMin.xyz + cellSize; Data1 = smooth + packedDims + brickWordOffset +
+    /// boundaryFloor) is KEEP IN SYNC with sdfSampledRegion in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="boxMin">The brick box's minimum corner in the chain's local space (voxel (0,0,0)'s cell origin).</param>
+    /// <param name="cellSize">The cubic voxel edge (world units per voxel); must be finite and greater than zero.</param>
+    /// <param name="dimX">Voxel count along local X, in [1, <see cref="MaxSampledRegionDim"/>].</param>
+    /// <param name="dimY">Voxel count along local Y, in [1, <see cref="MaxSampledRegionDim"/>].</param>
+    /// <param name="dimZ">Voxel count along local Z, in [1, <see cref="MaxSampledRegionDim"/>].</param>
+    /// <param name="brickWordOffset">The brick's base word index in the pool buffer (from the planner's slot layout); ≥ 0.</param>
+    /// <param name="boundaryFloor">The host-baked outside-box lower-bound offset (margin/λ); finite and ≥ 0.</param>
+    /// <param name="material">The material id the carved region shades with (unused where subtraction only removes).</param>
+    /// <param name="blend">The compose against the accumulated field; <see cref="SdfBlendOp.Subtraction"/> by default (a
+    /// brick carves). Smooth and chamfered carves remain analytic and must not use this sampled representation.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A dim is out of range, <paramref name="cellSize"/> is not positive
+    /// and finite, <paramref name="brickWordOffset"/> is negative, or <paramref name="boundaryFloor"/> is negative or not
+    /// finite.</exception>
+    public SdfProgramBuilder SampledRegion(Vector3 boxMin, float cellSize, int dimX, int dimY, int dimZ, int brickWordOffset, float boundaryFloor, int material, SdfBlendOp blend = SdfBlendOp.Subtraction) {
+        if (!float.IsFinite(f: cellSize) || (cellSize <= 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(cellSize), message: "A sampled-region cell size must be finite and greater than zero.");
+        }
+
+        if ((dimX < 1) || (dimX > MaxSampledRegionDim)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(dimX), message: $"A sampled-region dimension must be in [1, {MaxSampledRegionDim}].");
+        }
+
+        if ((dimY < 1) || (dimY > MaxSampledRegionDim)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(dimY), message: $"A sampled-region dimension must be in [1, {MaxSampledRegionDim}].");
+        }
+
+        if ((dimZ < 1) || (dimZ > MaxSampledRegionDim)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(dimZ), message: $"A sampled-region dimension must be in [1, {MaxSampledRegionDim}].");
+        }
+
+        if (brickWordOffset < 0) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(brickWordOffset), message: "A sampled-region brick word offset must be non-negative.");
+        }
+
+        if (!float.IsFinite(f: boundaryFloor) || (boundaryFloor < 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(boundaryFloor), message: "A sampled-region boundary floor must be finite and non-negative.");
+        }
+
+        // 3x10-bit dim pack; the two uint bit-fields (packedDims, brickWordOffset) ride the float lanes as reinterpreted
+        // bits (like Glyph's PackUv) and round-trip exactly through SdfProgram's WriteVector4 — no arithmetic touches them.
+        var packedDims = (uint)dimX | ((uint)dimY << 10) | ((uint)dimZ << 20);
+
+        return Shape(
+            blend: blend,
+            derived1: BitConverter.UInt32BitsToSingle(value: packedDims),                // Data1.y = packedDims (uint bits)
+            derived2: BitConverter.UInt32BitsToSingle(value: (uint)brickWordOffset),      // Data1.z = brickWordOffset (uint bits)
+            derived3: boundaryFloor,                                                      // Data1.w = boundaryFloor
+            dimensions: new Vector4(
+                w: cellSize,       // Data0.w = cellSize
+                x: boxMin.X,       // Data0.xyz = box min corner
+                y: boxMin.Y,
+                z: boxMin.Z
+            ),
+            material: material,
+            shape: SdfShapeType.SampledRegion,
+            smooth: 0f             // Data1.x = smooth: a brick composes with HARD subtraction (smooth carves stay analytic)
         );
     }
     public SdfProgramBuilder Box(Vector3 halfExtents, float round, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
@@ -933,13 +1232,13 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder RoundCone(float lowerRadius, float upperRadius, float height, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        // The slope terms are HOST-BAKED (Data0.w = b, Data1.y = a): the shader used to rederive a divide and a sqrt
-        // per evaluation from constants (KEEP IN SYNC with sdfRoundCone in Assets/Shaders/Sdf/sdf-vm.hlsli).
-        var slope = ((lowerRadius - upperRadius) / MathF.Max(height, 0.0001f));
+        // The slope terms are HOST-BAKED (Data0.w = b, Data1.y = a) to avoid a divide and square root per evaluation
+        // (KEEP IN SYNC with sdfRoundCone in Assets/Shaders/Sdf/sdf-vm.hlsli).
+        var slope = ((lowerRadius - upperRadius) / MathF.Max(x: height, y: 0.0001f));
 
         return Shape(
             blend: blend,
-            derived1: MathF.Sqrt(MathF.Max((1f - (slope * slope)), 0f)),
+            derived1: MathF.Sqrt(x: MathF.Max(x: (1f - (slope * slope)), y: 0f)),
             dimensions: new Vector4(
                 w: slope,
                 x: lowerRadius,
@@ -957,7 +1256,7 @@ public sealed class SdfProgramBuilder {
             // Data1.y carries the HOST-BAKED 1/dot(endpoint, endpoint): shapes evaluate millions of times per frame
             // while programs build once, and the shared multiply keeps both backends' shader codegen identical where a
             // per-eval divide contracted differently (KEEP IN SYNC with sdfCapsule in Assets/Shaders/Sdf/sdf-vm.hlsli).
-            derived1: (1f / MathF.Max(Vector3.Dot(endpoint, endpoint), 0.0001f)),
+            derived1: (1f / MathF.Max(x: Vector3.Dot(vector1: endpoint, vector2: endpoint), y: 0.0001f)),
             dimensions: new Vector4(
                 value: endpoint,
                 w: radius
@@ -982,9 +1281,9 @@ public sealed class SdfProgramBuilder {
         );
     }
     public SdfProgramBuilder Ellipsoid(Vector3 radii, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
-        // The degenerate-radius clamp and the inverse radii are HOST-BAKED (Data1.yzw): the shader used to pay two
-        // vector divides per evaluation (KEEP IN SYNC with sdfEllipsoid in Assets/Shaders/Sdf/sdf-vm.hlsli).
-        var clamped = Vector3.Max(Vector3.Abs(value: radii), new Vector3(0.0001f));
+        // The degenerate-radius clamp and inverse radii are HOST-BAKED (Data1.yzw) to avoid two vector divides per
+        // evaluation (KEEP IN SYNC with sdfEllipsoid in Assets/Shaders/Sdf/sdf-vm.hlsli).
+        var clamped = Vector3.Max(value1: Vector3.Abs(value: radii), value2: new Vector3(value: 0.0001f));
         var inverse = (Vector3.One / clamped);
 
         return Shape(
@@ -1013,7 +1312,7 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A <see cref="ScreenSlab"/> whose LIT face samples a bound screen source (see
+    /// <summary>A screen slab whose LIT face samples a bound screen source (see
     /// <see cref="SdfWorldEngine.SetScreenSource"/>) instead of the flat screen material, when one is bound this
     /// frame — a diegetic screen (an emulator's framebuffer, e.g.) on STATIC geometry. The slab's shape/distance field
     /// is identical to the plain overload (a rounded box); only shading differs. The world-space frame maps a hit
@@ -1026,17 +1325,17 @@ public sealed class SdfProgramBuilder {
     /// <param name="worldOrigin">The front face's world-space center.</param>
     /// <param name="worldRight">The unit world-space axis the UV's U increases along (the slab's local +X, in world space).</param>
     /// <param name="worldUp">The unit world-space axis the UV's V increases against — V = 0 at the top (the slab's local +Y, in world space).</param>
-    /// <param name="screenIndex">The screen source slot (0..7) this surface samples.</param>
+    /// <param name="screenIndex">The screen source slot in the range 0 through <see cref="MaxScreenSurfaces"/> − 1.</param>
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius (meaningful only for a smooth <paramref name="blend"/>).</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..7</c>, or this
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside the supported range, or this
     /// program has already declared <see cref="MaxScreenSurfaces"/> screen surfaces.</exception>
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, int screenIndex, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         if (
             (screenIndex < 0) ||
             (screenIndex >= MaxScreenSurfaces)
         ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(screenIndex), message: $"A screen index must be 0..{MaxScreenSurfaces - 1}.");
+            throw new ArgumentOutOfRangeException(paramName: nameof(screenIndex), message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}.");
         }
 
         if (m_screenSurfaces.Count >= MaxScreenSurfaces) {
@@ -1061,7 +1360,7 @@ public sealed class SdfProgramBuilder {
                 value: halfExtents,
                 w: round
             ),
-            material: (ScreenMaterialId + 1 + screenIndex),
+            material: ((ScreenMaterialId + 1) + screenIndex),
             shape: SdfShapeType.ScreenSlab,
             smooth: smooth
         );
@@ -1072,7 +1371,7 @@ public sealed class SdfProgramBuilder {
     /// <param name="round">The corner-rounding radius.</param>
     /// <param name="worldOrigin">The front face's world-space center.</param>
     /// <param name="worldOrientation">The static slab orientation in world space.</param>
-    /// <param name="screenIndex">The screen source slot (0..7) this surface samples.</param>
+    /// <param name="screenIndex">The screen source slot in the range 0 through <see cref="MaxScreenSurfaces"/> − 1.</param>
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius.</param>
     /// <returns>This builder.</returns>
@@ -1086,11 +1385,15 @@ public sealed class SdfProgramBuilder {
             screenIndex: screenIndex,
             smooth: smooth,
             worldOrigin: worldOrigin,
-            worldRight: Vector3.Transform(Vector3.UnitX, unit),
-            worldUp: Vector3.Transform(Vector3.UnitY, unit)
+            worldRight: Vector3.Transform(rotation: unit, value: Vector3.UnitX),
+            worldUp: Vector3.Transform(rotation: unit, value: Vector3.UnitY)
         );
     }
-    public SdfProgram Build() {
+    /// <summary>Compiles the authored instructions/instances/materials/screens into a packed <see cref="SdfProgram"/>.</summary>
+    /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (default
+    /// <see langword="true"/>). Pass <see langword="false"/> to force the beam's flat per-instance fallback over the same
+    /// instances — the reference the grid-cull gate compares against; see <see cref="SdfProgram"/>.</param>
+    public SdfProgram Build(bool buildInstanceGrid = true) {
         if (m_openInstanceFirst >= 0) {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
@@ -1099,7 +1402,12 @@ public sealed class SdfProgramBuilder {
             throw new InvalidOperationException(message: "Build was called with a field scope still open (PushField without its PopField).");
         }
 
+        if (m_materialScopes.Count > 0) {
+            throw new InvalidOperationException(message: "Build was called with a material scope still open (BeginMaterialScope without disposing the returned scope).");
+        }
+
         return new SdfProgram(
+            buildInstanceGrid: buildInstanceGrid,
             instructions: m_instructions,
             instances: m_instances,
             materials: m_materials,
@@ -1125,6 +1433,8 @@ public sealed class SdfProgramBuilder {
         // Counts ShapeBlend emissions so PopField can reject a shape-less scope. A scope-free program never reads it.
         m_shapeCount++;
 
+        ApplyPositionalMaterialScopeClamp(material: material);
+
         m_instructions.Add(item: new SdfInstruction(
             Blend: (uint)blend,
             Data0: dimensions,
@@ -1140,5 +1450,47 @@ public sealed class SdfProgramBuilder {
         ));
 
         return this;
+    }
+    // The material-scope safety net (see SdfMaterialScope): mirrors the shader's parityMaterialDelta reach against the
+    // innermost open scope and, if the active positional fold (m_positionalFold) could recolor `material` past the
+    // scope's own added-material span, CLAMPS the fold instruction's raw stride down — retroactively (the fold
+    // instruction already sits in m_instructions, so this rewrites it in place) — to the largest value that keeps
+    // every reachable material inside the scope. A no-op whenever no scope is open or no positional fold is active in
+    // the current chain, so scope-free emission never executes past the first condition.
+    //
+    // SOUNDNESS: this checks against m_materials.Count AT THIS SHAPE'S OWN EMISSION, which by the established
+    // authoring convention (every emitter registers all of a scope's materials BEFORE emitting the fold + the shapes
+    // it recolors — see SdfDriftMonolith.Emit) already equals the scope's final material count. Even when a caller
+    // does not follow that convention, checking against the CURRENT count is still SAFE (never unsound): the true
+    // final scope span can only be >= what exists right now, so a clamp computed against the interim count can only
+    // be MORE conservative than strictly necessary, never less.
+    private void ApplyPositionalMaterialScopeClamp(int material) {
+        if ((m_materialScopes.Count == 0) || (m_positionalFold is not { } fold) || (fold.RawValue == 0)) {
+            return;
+        }
+
+        var scope = m_materialScopes[^1];
+
+        // A shape whose OWN declared material doesn't belong to the open scope at all is a caller bug no clamp can
+        // fix (the fold's reach is meaningless relative to a material the scope never added) — fail loud rather than
+        // silently mis-clamping.
+        if ((material < scope.MaterialBase) || (material >= m_materials.Count)) {
+            throw new InvalidOperationException(message: $"A positionally-recolored shape's material (index {material}) does not belong to the open material scope (base {scope.MaterialBase}, {(m_materials.Count - scope.MaterialBase)} material(s) added so far). Add every material a scope's positional fold recolors through AddMaterial before emitting the fold and the shapes that use it.");
+        }
+
+        var allowedReach = ((m_materials.Count - 1) - material);
+        var maxReach = (fold.ReachPerUnit * fold.RawValue);
+
+        if (maxReach <= allowedReach) {
+            return;
+        }
+
+        var clampedRaw = Math.Max(val1: 0, val2: (allowedReach / fold.ReachPerUnit));
+        var instruction = m_instructions[fold.InstructionIndex];
+
+        m_instructions[fold.InstructionIndex] = (instruction with { Material = (uint)clampedRaw });
+        // The clamp only ever narrows the reach going forward — a later shape under the SAME fold (in the same chain
+        // segment) re-checks against this smaller value, so repeated shapes never re-widen a clamp a scope required.
+        m_positionalFold = (fold.InstructionIndex, fold.ReachPerUnit, clampedRaw);
     }
 }

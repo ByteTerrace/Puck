@@ -1,6 +1,4 @@
 using System.Numerics;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Puck.SdfVm;
 
 namespace Puck.Demo.Forge;
@@ -45,28 +43,25 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
     // static bake. A primitive's worst-case reach from its local origin (used to size the avatar bound); each is the
     // matching dimension below plus a small margin.
     private const float SphereRadius = 0.38f;
-    private static readonly Vector3 BoxHalfExtents = new(0.34f, 0.34f, 0.34f);
+
+    private static readonly Vector3 BoxHalfExtents = new(x: 0.34f, y: 0.34f, z: 0.34f);
+
     private const float BoxRound = 0.04f;
+    private const float CylinderHalfHeight = 0.36f;
+    private const float CylinderRadius = 0.30f;
     private const float TorusMajor = 0.30f;
     private const float TorusMinor = 0.12f;
-    private const float CylinderRadius = 0.30f;
-    private const float CylinderHalfHeight = 0.36f;
-    private static readonly Vector3 CapsuleEndpoint = new(0f, 0.55f, 0f);
+
+    private static readonly Vector3 CapsuleEndpoint = new(x: 0f, y: 0.55f, z: 0f);
+
     private const float CapsuleRadius = 0.20f;
-    private static readonly Vector3 EllipsoidRadii = new(0.42f, 0.28f, 0.34f);
+
+    private static readonly Vector3 EllipsoidRadii = new(x: 0.42f, y: 0.28f, z: 0.34f);
     // The round-cone runs base→tip along +Y: a stout fang/spike at unit scale (a wide rounded base tapering to a
     // small rounded tip), sized so its radial reach sits in the same band as the other primitives.
     private const float RoundConeLowerRadius = 0.22f;
-    private const float RoundConeUpperRadius = 0.05f;
     private const float RoundConeHeight = 0.52f;
-
-    private static readonly JsonSerializerOptions JsonOptions = new() {
-        Converters = { new JsonStringEnumConverter() },
-        // System.Numerics.Vector3/Quaternion expose X/Y/Z/W as FIELDS, not properties; without this every vector would
-        // (de)serialize as empty and collapse to zero — a zero scale/quaternion is a degenerate, unrenderable shape.
-        IncludeFields = true,
-        WriteIndented = true,
-    };
+    private const float RoundConeUpperRadius = 0.05f;
 
     /// <summary>A built-in starter avatar (a little standing figure), used as the initial in-memory creation before a
     /// player has authored their own — so the avatar cabinet always has something to forge, and the Post/CLI demo has a
@@ -74,10 +69,10 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
     /// <returns>The recentered starter avatar.</returns>
     public static AvatarDefinition Default() =>
         FromPlacedShapes(shapes: [
-            new AvatarShape(Type: AvatarPrimitive.Ellipsoid, Position: new Vector3(0f, 0.62f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(1.05f, 1.25f, 0.85f)),
-            new AvatarShape(Type: AvatarPrimitive.Sphere, Position: new Vector3(0f, 1.18f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(0.72f)),
-            new AvatarShape(Type: AvatarPrimitive.Capsule, Position: new Vector3(-0.2f, 0.05f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(0.5f)),
-            new AvatarShape(Type: AvatarPrimitive.Capsule, Position: new Vector3(0.2f, 0.05f, 0f), Rotation: Quaternion.Identity, Scale: new Vector3(0.5f)),
+            new AvatarShape(Type: AvatarPrimitive.Ellipsoid, Position: new Vector3(x: 0f, y: 0.62f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(x: 1.05f, y: 1.25f, z: 0.85f)),
+            new AvatarShape(Type: AvatarPrimitive.Sphere, Position: new Vector3(x: 0f, y: 1.18f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.72f)),
+            new AvatarShape(Type: AvatarPrimitive.Capsule, Position: new Vector3(x: -0.2f, y: 0.05f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.5f)),
+            new AvatarShape(Type: AvatarPrimitive.Capsule, Position: new Vector3(x: 0.2f, y: 0.05f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.5f)),
         ]);
 
     /// <summary>Lifts the placed creator shapes (in room/world space) into an avatar in its own local frame: the shapes
@@ -101,12 +96,12 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
 
         foreach (var shape in shapes) {
             centroid += shape.Position;
-            lowestY = MathF.Min(lowestY, (shape.Position.Y - LocalReach(type: shape.Type, scale: shape.Scale)));
+            lowestY = MathF.Min(x: lowestY, y: (shape.Position.Y - LocalReach(type: shape.Type, scale: shape.Scale)));
         }
 
         centroid /= shapes.Count;
 
-        var offset = new Vector3(centroid.X, lowestY, centroid.Z);
+        var offset = new Vector3(x: centroid.X, y: lowestY, z: centroid.Z);
         var recentered = new List<AvatarShape>(capacity: shapes.Count);
         var bound = 0f;
 
@@ -114,10 +109,10 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
             var local = (shape.Position - offset);
 
             recentered.Add(item: shape with { Position = local });
-            bound = MathF.Max(bound, (local.Length() + LocalReach(type: shape.Type, scale: shape.Scale)));
+            bound = MathF.Max(x: bound, y: (local.Length() + LocalReach(type: shape.Type, scale: shape.Scale)));
         }
 
-        return new AvatarDefinition(Shapes: recentered, BoundRadius: MathF.Max(bound, SphereRadius));
+        return new AvatarDefinition(Shapes: recentered, BoundRadius: MathF.Max(x: bound, y: SphereRadius));
     }
 
     /// <summary>Bakes the avatar into a STATIC SDF program the forge renders standalone (no dynamic-transform slots —
@@ -170,30 +165,6 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
         };
     }
 
-    /// <summary>Serializes the avatar to indented JSON (enums as names) so a creation can be saved beside its forged
-    /// ROM and re-forged headlessly.</summary>
-    public string ToJson() => JsonSerializer.Serialize(value: this, options: JsonOptions);
-
-    /// <summary>Reparses an avatar from <see cref="ToJson"/> output and RE-NORMALIZES it through
-    /// <see cref="FromPlacedShapes"/> (recenter + re-derive the bound). This is idempotent for an avatar that was saved
-    /// already-recentered (centroid ≈ 0, feet ≈ 0 → a no-op offset), and makes an externally hand-authored avatar frame
-    /// correctly too — so the persisted <see cref="BoundRadius"/> is advisory, never trusted blindly.</summary>
-    /// <param name="json">The serialized avatar.</param>
-    /// <returns>The parsed, normalized avatar.</returns>
-    /// <exception cref="ArgumentException">The JSON does not parse into an avatar with at least one shape.</exception>
-    public static AvatarDefinition FromJson(string json) {
-        ArgumentException.ThrowIfNullOrEmpty(json);
-
-        var parsed = JsonSerializer.Deserialize<AvatarDefinition>(json: json, options: JsonOptions)
-            ?? throw new ArgumentException(message: "The avatar JSON was null.", paramName: nameof(json));
-
-        if ((parsed.Shapes is null) || (parsed.Shapes.Count == 0)) {
-            throw new ArgumentException(message: "The avatar JSON declared no shapes.", paramName: nameof(json));
-        }
-
-        return FromPlacedShapes(shapes: parsed.Shapes);
-    }
-
     /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component
     /// times the primitive's farthest surface point (the canonical dimension table). Shared with the bake planner's
     /// recenter/framing math so a bake camera fits exactly the geometry the forge renders.</summary>
@@ -210,25 +181,25 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
     /// <returns>The local half-extents.</returns>
     public static Vector3 AxisExtents(AvatarPrimitive type) =>
         (type switch {
-            AvatarPrimitive.Box => (BoxHalfExtents + new Vector3(BoxRound)),
-            AvatarPrimitive.Torus => new Vector3((TorusMajor + TorusMinor), TorusMinor, (TorusMajor + TorusMinor)),
-            AvatarPrimitive.Cylinder => new Vector3(CylinderRadius, CylinderHalfHeight, CylinderRadius),
-            AvatarPrimitive.Capsule => new Vector3(CapsuleRadius, (CapsuleEndpoint.Y + CapsuleRadius), CapsuleRadius),
+            AvatarPrimitive.Box => (BoxHalfExtents + new Vector3(value: BoxRound)),
+            AvatarPrimitive.Torus => new Vector3(x: (TorusMajor + TorusMinor), y: TorusMinor, z: (TorusMajor + TorusMinor)),
+            AvatarPrimitive.Cylinder => new Vector3(x: CylinderRadius, y: CylinderHalfHeight, z: CylinderRadius),
+            AvatarPrimitive.Capsule => new Vector3(x: CapsuleRadius, y: (CapsuleEndpoint.Y + CapsuleRadius), z: CapsuleRadius),
             AvatarPrimitive.Ellipsoid => EllipsoidRadii,
-            AvatarPrimitive.RoundCone => new Vector3(RoundConeLowerRadius, (RoundConeHeight + RoundConeUpperRadius), RoundConeLowerRadius),
-            _ => new Vector3(SphereRadius),
+            AvatarPrimitive.RoundCone => new Vector3(x: RoundConeLowerRadius, y: (RoundConeHeight + RoundConeUpperRadius), z: RoundConeLowerRadius),
+            _ => new Vector3(value: SphereRadius),
         });
 
     // A primitive's worst-case reach from its local origin at a given scale — the largest scale component times the
     // primitive's farthest surface point, used to size the avatar bound and the recenter baseline.
     private static float LocalReach(AvatarPrimitive type, Vector3 scale) {
-        var maxScale = MathF.Max(scale.X, MathF.Max(scale.Y, scale.Z));
+        var maxScale = MathF.Max(x: scale.X, y: MathF.Max(x: scale.Y, y: scale.Z));
         var reach = type switch {
             AvatarPrimitive.Box => (BoxHalfExtents.Length() + BoxRound),
             AvatarPrimitive.Torus => (TorusMajor + TorusMinor),
-            AvatarPrimitive.Cylinder => MathF.Sqrt((CylinderRadius * CylinderRadius) + (CylinderHalfHeight * CylinderHalfHeight)),
+            AvatarPrimitive.Cylinder => MathF.Sqrt(x: ((CylinderRadius * CylinderRadius) + (CylinderHalfHeight * CylinderHalfHeight))),
             AvatarPrimitive.Capsule => (CapsuleEndpoint.Length() + CapsuleRadius),
-            AvatarPrimitive.Ellipsoid => MathF.Max(EllipsoidRadii.X, MathF.Max(EllipsoidRadii.Y, EllipsoidRadii.Z)),
+            AvatarPrimitive.Ellipsoid => MathF.Max(x: EllipsoidRadii.X, y: MathF.Max(x: EllipsoidRadii.Y, y: EllipsoidRadii.Z)),
             // Base at the local origin, tip up +Y: the farthest surface point is the rounded tip (height + tip radius).
             AvatarPrimitive.RoundCone => (RoundConeHeight + RoundConeUpperRadius),
             _ => SphereRadius,
@@ -242,7 +213,8 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
     private static Vector3 ShapeHue(int index) {
         var hue = ((index * 0.61803399f) % 1f);
         var h6 = (hue * 6f);
-        var x = (1f - MathF.Abs(((h6 % 2f) - 1f)));
+        var x = (1f - MathF.Abs(x: ((h6 % 2f) - 1f)));
+
         var (r, g, b) = ((int)h6 switch {
             0 => (1f, x, 0f),
             1 => (x, 1f, 0f),
@@ -252,6 +224,6 @@ public sealed record AvatarDefinition(IReadOnlyList<AvatarShape> Shapes, float B
             _ => (1f, 0f, x),
         });
 
-        return new Vector3((0.30f + (0.6f * r)), (0.30f + (0.6f * g)), (0.30f + (0.6f * b)));
+        return new Vector3(x: (0.30f + (0.6f * r)), y: (0.30f + (0.6f * g)), z: (0.30f + (0.6f * b)));
     }
 }

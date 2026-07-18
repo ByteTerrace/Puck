@@ -13,11 +13,11 @@ public sealed record OverworldRoom {
     /// <summary>The floor plane height (world Y); the player rests with its lower face on it.</summary>
     public float FloorY { get; init; } = 0f;
     /// <summary>The minimum XZ corner of the inner wall boundary (the player's box stops flush against it).</summary>
-    public Vector2 BoundsMin { get; init; } = new(-8f, -8f);
+    public Vector2 BoundsMin { get; init; } = new(x: -8f, y: -8f);
     /// <summary>The maximum XZ corner of the inner wall boundary.</summary>
-    public Vector2 BoundsMax { get; init; } = new(8f, 8f);
+    public Vector2 BoundsMax { get; init; } = new(x: 8f, y: 8f);
     /// <summary>The player avatar box half-extents (x = half width, y = half height, z = half depth).</summary>
-    public Vector3 PlayerHalfExtents { get; init; } = new(0.35f, 0.5f, 0.35f);
+    public Vector3 PlayerHalfExtents { get; init; } = new(x: 0.35f, y: 0.5f, z: 0.35f);
     /// <summary>The half-thickness of the perimeter walls, whose boxes are CENTERED on <see cref="BoundsMin"/>/
     /// <see cref="BoundsMax"/>. The single source of truth shared by the collision planes (<see cref="OverworldRoom"/>
     /// → <c>FixedRoom</c>) and the visual walls (the frame source), so a body rests flush against a wall's INNER face
@@ -60,19 +60,18 @@ public sealed record OverworldRoom {
         if (consoleCount > 0) {
             // Spaced evenly along the far wall, snug enough to leave the room's center open; a stand sits just off the
             // wall's inner face so the visual pedestal never intersects the wall boxes. Up to three stands keep the
-            // historical 5-unit spacing BYTE-FOR-BYTE (the determinism gate's scripted room and the overworld state hash
-            // both derive collision from these centers); a FOURTH stand cannot fit that spacing inside the ±8 bounds
+            // 5-unit spacing for up to three stands; a fourth stand cannot fit that spacing inside the ±8 bounds
             // (the outermost pedestals would bury themselves in the side walls), so a full house tightens to 4.4 —
             // outer centers at ±6.6, pedestal edges at ±7.3, clear of the side walls' inner faces at ±7.7.
             var spacing = ((consoleCount <= 3) ? 5f : 4.4f);
             var stands = new ConsoleStand[consoleCount];
             var z = (room.BoundsMin.Y + 1.4f);
-            var firstX = (-0.5f * spacing * (consoleCount - 1));
+            var firstX = ((-0.5f * spacing) * (consoleCount - 1));
 
             for (var index = 0; (index < consoleCount); index++) {
                 stands[index] = new ConsoleStand(
                     Center: new Vector2(x: (firstX + (index * spacing)), y: z),
-                    HalfExtents: new Vector3(0.7f, 0.55f, 0.45f)
+                    HalfExtents: new Vector3(x: 0.7f, y: 0.55f, z: 0.45f)
                 );
             }
 
@@ -84,12 +83,12 @@ public sealed record OverworldRoom {
 
             var slots = new ShelfSlot[shelfCount];
             var x = (room.BoundsMin.X + 1.1f);
-            var firstZ = (-0.5f * ShelfSpacing * (shelfCount - 1));
+            var firstZ = ((-0.5f * ShelfSpacing) * (shelfCount - 1));
 
             for (var index = 0; (index < shelfCount); index++) {
                 slots[index] = new ShelfSlot(
                     Center: new Vector2(x: x, y: (firstZ + (index * ShelfSpacing))),
-                    HalfExtents: new Vector3(0.3f, 0.35f, 0.3f)
+                    HalfExtents: new Vector3(x: 0.3f, y: 0.35f, z: 0.3f)
                 );
             }
 
@@ -122,8 +121,8 @@ public sealed record OverworldRoom {
 
         if (document.Bounds is { } bounds) {
             room = (room with {
-                BoundsMax = new Vector2(bounds.MaxX, bounds.MaxZ),
-                BoundsMin = new Vector2(bounds.MinX, bounds.MinZ),
+                BoundsMax = new Vector2(x: bounds.MaxX, y: bounds.MaxZ),
+                BoundsMin = new Vector2(x: bounds.MinX, y: bounds.MinZ),
                 FloorY = bounds.FloorY,
             });
         }
@@ -141,7 +140,7 @@ public sealed record OverworldRoom {
                     continue; // out of range for this room's console count — ignored, not clamped into a collision.
                 }
 
-                stands[cabinetIndex] = stands[cabinetIndex] with { Center = new Vector2(placement.Position.X, placement.Position.Z) };
+                stands[cabinetIndex] = stands[cabinetIndex] with { Center = new Vector2(x: placement.Position.X, y: placement.Position.Z) };
                 changed = true;
             }
 

@@ -57,6 +57,17 @@ public sealed class ScreenLayoutDirector {
     public const int ViewCount = SdfWorldEngine.MaxViewports;
 
     private const float TransitionSeconds = 0.6f; // how long a layout transition (boot or mode switch) takes
+    // The render-scale policy floors (presentation-only; the engine's native q=255 path is bit-exact): views render
+    // at this fraction of their region while a layout/reveal ease plays, easing back to 1 at settle; the immersed
+    // fullscreen pane holds its reduced scale (its content is a CRT face carrying 160×144 sources — see Compose).
+    private const float TransitionRenderScale = 0.5f;
+    private const float ImmersedRenderScale = 0.5f;
+    // The SETTLED room view's render scale — the demo's user-facing render-scale quality tier (WorldRenderScaleTiers),
+    // resolved to its float scale by the host and pushed here. Default 1 (native, the bit-exact full-resolution path),
+    // so the settled room is byte-unchanged until a run-doc field / the `render-scale` verb lowers it. Presentation-only
+    // (never simulation state); consumed for slot 0 (the room) in the settled branch of Compose.
+    private float m_revealedRoomRenderScale = 1f;
+
     private const float SmoothRate = 6f;          // low-pass rate for the centroid + spread metrics
     private const float FieldOfViewRadians = (50f * (MathF.PI / 180f));
     // Per-pane camera: each pane slot frames its OWN cabinet's diegetic screen, its "closeness" eased from 0 (the wide
@@ -65,19 +76,19 @@ public sealed class ScreenLayoutDirector {
     // eases; PaneEyeUp/Distance place the FULLY-CLOSE camera in front of the screen (+Z, head-on, filling it).
     private const float FocusRate = 3f;
     // A fully-close pane sits head-on in FRONT of the screen (+Z) at exactly the distance that makes the screen fill
-    // the viewport HEIGHT for the shared vertical FoV — so a diegetic screen reads like a real GB/GBA panel scaled up
+    // the viewport HEIGHT for the shared vertical FoV — so a diegetic screen reads like a real handheld panel scaled up
     // (pillar-boxed on wide panes). The margin leaves a sliver of the square bezel visible.
     // CONTAIN framing: the fully-close pane fits the WHOLE screen inside the viewport (the limiting dimension fills
     // edge-to-edge, the other letterboxes), so NO gameplay is cropped. The immersed room is unlit, so the letterbox
     // margins render black — a real handheld/emulator-fullscreen look. Margin 1 = the limiting axis exactly fills.
     private const float ScreenFillMargin = 1.0f;
-    // The diegetic screen's content aspect (width / height) — the native Game Boy panel. KEEP IN SYNC with
+    // The diegetic screen's content aspect (width / height) — the native DMG/CGB panel. KEEP IN SYNC with
     // OverworldFrameSource.ScreenAspect (the slab is authored at this aspect).
     private const float ScreenContentAspect = (160f / 144f);
     // The REVEALED room framing: a fixed, centered isometric-ish overview of the whole group (not a tight chase), so
     // every player can roam freely. The eye sits up and in front (+Y/+Z), looking slightly toward the machine wall.
-    private static readonly Vector3 IsoEyeOffset = new(0f, 10f, 14f);
-    private static readonly Vector3 IsoTargetOffset = new(0f, 0.5f, -1f);
+    private static readonly Vector3 IsoEyeOffset = new(x: 0f, y: 10f, z: 14f);
+    private static readonly Vector3 IsoTargetOffset = new(x: 0f, y: 0.5f, z: -1f);
     // How much of the frame HEIGHT the room (the PRIMARY slice) keeps once players engage machines; the engaged games
     // share the remaining bottom strip as SECONDARY slices.
     private const float RoomPrimaryHeight = 0.66f;
@@ -85,7 +96,7 @@ public sealed class ScreenLayoutDirector {
     // to the window edges (no outer bezel) but a gap opens between neighbours.
     private const float InterPaneGap = 0.012f;
 
-    private static readonly Vector3 TargetLift = new(0f, 0.4f, 0f);
+    private static readonly Vector3 TargetLift = new(x: 0f, y: 0.4f, z: 0f);
     // Reused per-frame view buffer — refilled (never reallocated) each Compose() call so a high-rate VRR present loop
     // allocates nothing here; valid only until the next Compose() (the renderer consumes it synchronously per frame).
     private readonly SdfViewSnapshot[] m_views = new SdfViewSnapshot[ViewCount];
@@ -95,7 +106,7 @@ public sealed class ScreenLayoutDirector {
     // The effective pane list (console indices, boot order, filtered by the mode) plus the copy the retarget check
     // compares against — both reused, no per-frame allocation.
     private readonly List<int> m_panes = new(capacity: (ViewCount - 1));
-    private readonly int[] m_lastPanes = new int[ViewCount - 1];
+    private readonly int[] m_lastPanes = new int[(ViewCount - 1)];
     private ScreenLayoutDirectorMode m_mode;
     private ScreenLayoutDirectorMode m_lastMode;
     // CREATOR VIEW: an override the host raises while the player edits their avatar. It eases the ROOM to fullscreen and
@@ -115,9 +126,9 @@ public sealed class ScreenLayoutDirector {
     private float m_smoothSpread;
     // Per-pane camera state: each pane's eased closeness (0=room framing, 1=up on its screen) and the last screen point
     // it framed (kept so an ease-OUT after a pane hides still has somewhere to blend back from).
-    private readonly float[] m_paneCloseness = new float[ViewCount - 1];
-    private readonly Vector3[] m_paneScreen = new Vector3[ViewCount - 1];
-    private readonly float[] m_paneScreenHalfHeight = new float[ViewCount - 1];
+    private readonly float[] m_paneCloseness = new float[(ViewCount - 1)];
+    private readonly Vector3[] m_paneScreen = new Vector3[(ViewCount - 1)];
+    private readonly float[] m_paneScreenHalfHeight = new float[(ViewCount - 1)];
     // The reveal zoom: the room camera eases FROM the triggering machine's native-screen framing TO the iso overview
     // over one transition. Presentation-only; started by BeginReveal, consumed in RoomEyeTarget.
     private bool m_revealActive;
@@ -140,6 +151,18 @@ public sealed class ScreenLayoutDirector {
     public bool CreatorView {
         get => m_creatorView;
         set => m_creatorView = value;
+    }
+
+    /// <summary>The SETTLED room view's (slot 0) render scale — the resolved float of the demo's render-scale quality
+    /// tier (see <see cref="Puck.Scene.WorldRenderScaleTiers"/>). 1 (the default) is native / full resolution (the
+    /// bit-exact path); a lower value renders the fullscreen revealed room at a reduced internal resolution that Stage 2
+    /// bilinearly upsamples, trading softness for frame cost (~ scale²) on the demo's most expensive view. Applies ONLY
+    /// once the layout has settled (a transition already reduces every view); presentation-only, never fed into the
+    /// simulation. The host sets it at boot (the run-doc <c>revealedRenderScale</c> field) and live (the
+    /// <c>render-scale</c> verb).</summary>
+    public float RevealedRoomRenderScale {
+        get => m_revealedRoomRenderScale;
+        set => m_revealedRoomRenderScale = value;
     }
 
     /// <summary>Gets or sets an optional per-console visibility read for the IMMERSED tiling: a booted console's pane
@@ -166,11 +189,23 @@ public sealed class ScreenLayoutDirector {
     /// for sprite intent. Eased both ways; null (or a null result) keeps the chase framing. Presentation-only.</summary>
     public Func<(Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)?>? CreatorCameraSource { get; set; }
 
+    /// <summary>Gets or sets whether the workpiece camera SNAPS to the source pose instead of easing. The perf bench
+    /// asserts this while a run is in flight: an eased pose converges on the wall-clock delta and never exactly
+    /// arrives, so fast configurations get sampled MID-EASE and two runs never measure the same framing — a snapped
+    /// pose is settled the instant the configuration starts, the same discipline as <see cref="ScenarioCameraPose"/>.
+    /// Null or false keeps the ease (entering a mode reads as a move, not a cut).</summary>
+    public Func<bool>? CreatorCameraSnapSource { get; set; }
+
     /// <summary>Gets or sets the REVEALED-room framing source — the loaded world's bounds, so the fourth-wall reveal
     /// frames the WHOLE place (a sculpted town is far larger than the default room). Null (or a null result) keeps the
-    /// legacy fixed overview centred on the players — so the DEFAULT room's reveal is byte-unchanged; only a loaded
+    /// fixed overview centred on the players; only a loaded
     /// world (grown bounds) overrides it. Presentation-only.</summary>
     public Func<RoomFraming?>? RoomFramingSource { get; set; }
+
+    /// <summary>Gets or sets a transient additive offset on the ROOM view's (slot 0) look-target — the editor-reveal
+    /// beat's small camera nudge (see OverworldFrameSource). Applied ONLY to the room view; the pane cameras blend from
+    /// the un-nudged room framing. Null (or a zero result) leaves the framing unchanged. Presentation-only.</summary>
+    public Func<Vector3>? RoomTargetNudge { get; set; }
 
     /// <summary>A loaded world's reveal framing: the room CENTER (at eye-height) and its planar half-extents, so the
     /// revealed overview can pull the iso camera back far enough to contain the whole lot.</summary>
@@ -233,21 +268,47 @@ public sealed class ScreenLayoutDirector {
         // The machines are decoupled from the slots now, so EVERY slot is a real SDF view: slot 0 the wide room, slots
         // 1..4 per-cabinet cameras (framing each cabinet's diegetic screen at their own eased closeness).
         var (roomEye, roomTarget) = RoomEyeTarget(activePositions: activePositions, deltaSeconds: deltaSeconds);
+        // The editor-reveal beat's nudge lands on the ROOM view only (slot 0); panes keep blending from the un-nudged
+        // room framing below. Zero at rest, so the room view frames byte-identically outside the beat.
+        var nudgedRoomTarget = (roomTarget + (RoomTargetNudge?.Invoke() ?? Vector3.Zero));
+
+        // The render-scale policy (presentation-only; docs/sdf-backlog.md §town-reveal lag spike): while a layout or
+        // reveal ease plays, every SDF view renders at a reduced internal resolution — the motion hides the softness
+        // and the reveal's 57→130 ms overview cost step stops playing at ~7.5 fps — snapping back to NATIVE (the
+        // bit-exact engine path) the moment the eases settle. While IMMERSED (settled), the fullscreen pane's world
+        // view — the measured hidden ~57 ms, a world render zoomed onto a CRT face whose content is upscaled 160×144
+        // anyway — renders reduced too; DOWNSCALED, never skipped (skipping resurrects the pipeline-warm spike the
+        // per-frame trace disproved).
+        var revealProgress = (m_revealActive ? SmoothStep(t: m_revealBlend) : 1f);
+        var settleProgress = MathF.Min(x: revealProgress, y: SmoothStep(t: m_transition));
+        var transitionScale = (TransitionRenderScale + ((1f - TransitionRenderScale) * settleProgress));
 
         for (var slot = 0; (slot < ViewCount); slot++) {
             var region = m_current[slot];
-            var viewportWidth = Math.Max(1u, (uint)(region.Width * imageWidth));
-            var viewportHeight = Math.Max(1u, (uint)(region.Height * imageHeight));
+            var viewportWidth = Math.Max(val1: 1u, val2: (uint)(region.Width * imageWidth));
+            var viewportHeight = Math.Max(val1: 1u, val2: (uint)(region.Height * imageHeight));
 
             var viewportAspect = ((float)viewportWidth / viewportHeight);
+
             var (eye, target) = ((slot == 0)
-                ? (roomEye, roomTarget)
+                ? (roomEye, nudgedRoomTarget)
                 : PaneEyeTarget(paneIndex: (slot - 1), roomEye: roomEye, roomTarget: roomTarget, deltaSeconds: deltaSeconds, viewportAspect: viewportAspect));
+            // While easing, every view renders reduced (the motion hides it). Settled: the ROOM (slot 0 — the fullscreen
+            // revealed room, the most expensive view) renders at the configured quality tier (native 1 by default, so
+            // the settled room is byte-unchanged until lowered); the immersed game panes hold their reduced CRT scale;
+            // every other settled view snaps back to native.
+            var renderScale = ((settleProgress < 1f)
+                ? transitionScale
+                : ((slot == 0)
+                    ? m_revealedRoomRenderScale
+                    : ((m_mode == ScreenLayoutDirectorMode.Immersed) ? ImmersedRenderScale : 1f)));
 
             m_views[slot] = new SdfViewSnapshot(
                 Camera: CameraSnapshot.LookAt(position: eye, target: target, fieldOfViewRadians: FieldOfViewRadians, viewportWidth: viewportWidth, viewportHeight: viewportHeight),
                 Region: region
-            );
+            ) {
+                RenderScale = renderScale,
+            };
         }
 
         return m_views;
@@ -370,7 +431,7 @@ public sealed class ScreenLayoutDirector {
         };
 
         for (var pane = 0; (pane < count); pane++) {
-            m_target[1 + m_panes[pane]] = m_mode switch {
+            m_target[(1 + m_panes[pane])] = m_mode switch {
                 // Immersed panes cover the whole frame; a thin interior gap divides neighbours without an outer bezel.
                 ScreenLayoutDirectorMode.Immersed => WithInteriorGaps(rect: ImmersedPaneRect(count: count, pane: pane)),
                 ScreenLayoutDirectorMode.Revealed => WithInteriorGaps(rect: RevealedPaneRect(count: count, pane: pane)),
@@ -384,12 +445,12 @@ public sealed class ScreenLayoutDirector {
     private static NormalizedRect WithInteriorGaps(NormalizedRect rect) {
         const float half = (InterPaneGap * 0.5f);
 
-        var x0 = (rect.X > 0.001f) ? (rect.X + half) : rect.X;
-        var y0 = (rect.Y > 0.001f) ? (rect.Y + half) : rect.Y;
-        var x1 = ((rect.X + rect.Width) < 0.999f) ? ((rect.X + rect.Width) - half) : (rect.X + rect.Width);
-        var y1 = ((rect.Y + rect.Height) < 0.999f) ? ((rect.Y + rect.Height) - half) : (rect.Y + rect.Height);
+        var x0 = ((rect.X > 0.001f) ? (rect.X + half) : rect.X);
+        var y0 = ((rect.Y > 0.001f) ? (rect.Y + half) : rect.Y);
+        var x1 = (((rect.X + rect.Width) < 0.999f) ? ((rect.X + rect.Width) - half) : (rect.X + rect.Width));
+        var y1 = (((rect.Y + rect.Height) < 0.999f) ? ((rect.Y + rect.Height) - half) : (rect.Y + rect.Height));
 
-        return new NormalizedRect(X: x0, Y: y0, Width: MathF.Max(0f, (x1 - x0)), Height: MathF.Max(0f, (y1 - y0)));
+        return new NormalizedRect(X: x0, Y: y0, Width: MathF.Max(x: 0f, y: (x1 - x0)), Height: MathF.Max(x: 0f, y: (y1 - y0)));
     }
 
     // The REVEALED break-out layout: the room stays the MAIN view and the driven panes tile with it — room fullscreen
@@ -398,9 +459,9 @@ public sealed class ScreenLayoutDirector {
     // The reveal split: the room is the big PRIMARY slice across the top; each engaged player's game is a SECONDARY
     // slice sharing the bottom strip in engaged order. Nobody engaged (count 0) = the room fullscreen.
     private static NormalizedRect RevealedRoomRect(int count) {
-        return (count == 0)
+        return ((count == 0)
             ? FullScreen
-            : new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: RoomPrimaryHeight);
+            : new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: RoomPrimaryHeight));
     }
     private static NormalizedRect RevealedPaneRect(int count, int pane) {
         var width = (1f / count);
@@ -460,7 +521,7 @@ public sealed class ScreenLayoutDirector {
         }
 
         if (activePositions.Count == 0) {
-            return (new Vector3(0f, 12f, 16f), Vector3.Zero);
+            return (new Vector3(x: 0f, y: 12f, z: 16f), Vector3.Zero);
         }
 
         var centroid = Vector3.Zero;
@@ -476,7 +537,7 @@ public sealed class ScreenLayoutDirector {
         for (var index = 0; (index < activePositions.Count); index++) {
             var delta = (activePositions[index] - centroid);
 
-            spread = MathF.Max(spread, MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)));
+            spread = MathF.Max(x: spread, y: MathF.Sqrt(x: ((delta.X * delta.X) + (delta.Z * delta.Z))));
         }
 
         if (!m_initialized) {
@@ -484,7 +545,7 @@ public sealed class ScreenLayoutDirector {
             m_smoothSpread = spread;
             m_initialized = true;
         } else {
-            var smoothing = MathF.Min(1f, (SmoothRate * deltaSeconds));
+            var smoothing = MathF.Min(x: 1f, y: (SmoothRate * deltaSeconds));
 
             m_smoothCentroid += ((centroid - m_smoothCentroid) * smoothing);
             m_smoothSpread += ((spread - m_smoothSpread) * smoothing);
@@ -513,7 +574,7 @@ public sealed class ScreenLayoutDirector {
 
         // STANDARD / IMMERSED: the chase framing that fits every active player (eye pulled up + back as spread grows).
         var target = (m_smoothCentroid + TargetLift);
-        var eye = (m_smoothCentroid + new Vector3(0f, (6.5f + m_smoothSpread), (11f + (m_smoothSpread * 1.5f))));
+        var eye = (m_smoothCentroid + new Vector3(x: 0f, y: (6.5f + m_smoothSpread), z: (11f + (m_smoothSpread * 1.5f))));
 
         // The CREATOR workpiece camera: while the creator view is up, the room view leaves the chase framing for the
         // authoring camera — eased from wherever the room camera was, so entering the mode reads as a move, not a cut.
@@ -522,11 +583,11 @@ public sealed class ScreenLayoutDirector {
             // Object intent orbits the target; sprite intent locks HEAD-ON (+Z looking toward -Z, zero pitch) so the
             // authored silhouette is exactly what the bake will rasterize.
             var desiredEye = (workpiece.Sprite
-                ? (desiredTarget + new Vector3(0f, 0f, workpiece.Distance))
+                ? (desiredTarget + new Vector3(x: 0f, y: 0f, z: workpiece.Distance))
                 : (desiredTarget + (new Vector3(
-                    (MathF.Sin(x: workpiece.Yaw) * MathF.Cos(x: workpiece.Pitch)),
-                    MathF.Sin(x: workpiece.Pitch),
-                    (MathF.Cos(x: workpiece.Yaw) * MathF.Cos(x: workpiece.Pitch))
+                    x: (MathF.Sin(x: workpiece.Yaw) * MathF.Cos(x: workpiece.Pitch)),
+                    y: MathF.Sin(x: workpiece.Pitch),
+                    z: (MathF.Cos(x: workpiece.Yaw) * MathF.Cos(x: workpiece.Pitch))
                 ) * workpiece.Distance)));
 
             if (!m_creatorCameraInitialized) {
@@ -536,7 +597,16 @@ public sealed class ScreenLayoutDirector {
                 m_creatorCameraInitialized = true;
             }
 
-            var creatorSmoothing = MathF.Min(1f, (SmoothRate * deltaSeconds));
+            if (CreatorCameraSnapSource?.Invoke() ?? false) {
+                // The bench's measurement pose: applied VERBATIM (no smoothing), so every configuration samples an
+                // identical, fully settled framing and two runs produce comparable tables.
+                m_creatorEye = desiredEye;
+                m_creatorTarget = desiredTarget;
+
+                return (m_creatorEye, m_creatorTarget);
+            }
+
+            var creatorSmoothing = MathF.Min(x: 1f, y: (SmoothRate * deltaSeconds));
 
             m_creatorEye += ((desiredEye - m_creatorEye) * creatorSmoothing);
             m_creatorTarget += ((desiredTarget - m_creatorTarget) * creatorSmoothing);
@@ -554,11 +624,11 @@ public sealed class ScreenLayoutDirector {
     // locks head-on (+Z, zero pitch) so the authored silhouette is exactly what a bake would rasterize.
     private static (Vector3 Eye, Vector3 Target) ScenarioEyeTarget((Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite) pose) {
         var eye = (pose.Sprite
-            ? (pose.Target + new Vector3(0f, 0f, pose.Distance))
+            ? (pose.Target + new Vector3(x: 0f, y: 0f, z: pose.Distance))
             : (pose.Target + (new Vector3(
-                (MathF.Sin(x: pose.Yaw) * MathF.Cos(x: pose.Pitch)),
-                MathF.Sin(x: pose.Pitch),
-                (MathF.Cos(x: pose.Yaw) * MathF.Cos(x: pose.Pitch))
+                x: (MathF.Sin(x: pose.Yaw) * MathF.Cos(x: pose.Pitch)),
+                y: MathF.Sin(x: pose.Pitch),
+                z: (MathF.Cos(x: pose.Yaw) * MathF.Cos(x: pose.Pitch))
             ) * pose.Distance)));
 
         return (eye, pose.Target);
@@ -566,11 +636,10 @@ public sealed class ScreenLayoutDirector {
 
     // The revealed overview's settled eye/target. A loaded world (the town) frames its whole LOT — centred on the lot,
     // the iso offset pulled back proportional to how much bigger the lot is than the default room (half-extent 8u) — so
-    // nothing spills off-frame. With no world loaded the framing is the legacy fixed overview around the player
-    // centroid (byte-unchanged for the default room's reveal).
+    // nothing spills off-frame. With no world loaded, the framing is the fixed overview around the player centroid.
     private (Vector3 Eye, Vector3 Target) RevealOverview() {
         if (RoomFramingSource?.Invoke() is { } framing) {
-            var scale = MathF.Max(1f, (MathF.Max(framing.HalfWidth, framing.HalfDepth) / 8f));
+            var scale = MathF.Max(x: 1f, y: (MathF.Max(x: framing.HalfWidth, y: framing.HalfDepth) / 8f));
 
             return ((framing.Center + (IsoEyeOffset * scale)), (framing.Center + IsoTargetOffset));
         }
@@ -593,10 +662,10 @@ public sealed class ScreenLayoutDirector {
     private static (Vector3 Eye, Vector3 Target) NativeScreenCamera(Vector3 screen, float screenHalfHeight, float viewportAspect) {
         // Fill the vertical half-FoV; push the camera BACK when the screen is wider (per its content aspect) than the
         // viewport so the horizontal axis just fits instead — max() picks the further camera = contain (whole screen in).
-        var fit = MathF.Max(x: 1f, y: (ScreenContentAspect / MathF.Max(viewportAspect, 1e-3f)));
+        var fit = MathF.Max(x: 1f, y: (ScreenContentAspect / MathF.Max(x: viewportAspect, y: 1e-3f)));
         var distance = (((screenHalfHeight * ScreenFillMargin) * fit) / MathF.Tan(x: (FieldOfViewRadians * 0.5f)));
 
-        return ((screen + new Vector3(0f, 0f, distance)), screen);
+        return ((screen + new Vector3(x: 0f, y: 0f, z: distance)), screen);
     }
 
     /// <summary>The room-light multiplier for this frame (the frame source scales its ambient + sun by it): the room is
@@ -621,13 +690,14 @@ public sealed class ScreenLayoutDirector {
             m_paneScreenHalfHeight[paneIndex] = req.ScreenHalfHeight;
         }
 
-        m_paneCloseness[paneIndex] += ((goal - m_paneCloseness[paneIndex]) * MathF.Min(1f, (FocusRate * deltaSeconds)));
+        m_paneCloseness[paneIndex] += ((goal - m_paneCloseness[paneIndex]) * MathF.Min(x: 1f, y: (FocusRate * deltaSeconds)));
 
         if (m_paneCloseness[paneIndex] <= 0.001f) {
             return (roomEye, roomTarget);
         }
 
-        var blend = SmoothStep(m_paneCloseness[paneIndex]);
+        var blend = SmoothStep(t: m_paneCloseness[paneIndex]);
+
         var (closeEye, closeTarget) = NativeScreenCamera(screen: m_paneScreen[paneIndex], screenHalfHeight: m_paneScreenHalfHeight[paneIndex], viewportAspect: viewportAspect);
 
         return (Vector3.Lerp(value1: roomEye, value2: closeEye, amount: blend), Vector3.Lerp(value1: roomTarget, value2: closeTarget, amount: blend));
@@ -645,6 +715,5 @@ public sealed class ScreenLayoutDirector {
             X: (a.X + ((b.X - a.X) * t)),
             Y: (a.Y + ((b.Y - a.Y) * t))
         );
-
     private static float SmoothStep(float t) => ((t * t) * (3f - (2f * t)));
 }

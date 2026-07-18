@@ -11,7 +11,7 @@ namespace Puck.Demo.Forge;
 /// entropy at the title's confirm edge — same press frame, bit-identical session) → fixed-limit betting → a draw
 /// phase → a second betting round → showdown with full hand evaluation, the rankings and personalities all manifest
 /// data. Chips are packed BCD; every AI choice flows through the one <see cref="PokerProtocol.DecisionAction"/>
-/// seam so the follow-on link arc can substitute remote actions without restructuring the table.
+/// seam so a link implementation can substitute remote actions without restructuring the table.
 /// </summary>
 internal sealed class PokerGame {
     private const byte GameLcdc = Hw.LcdBackgroundAndObjects;
@@ -28,7 +28,6 @@ internal sealed class PokerGame {
     private readonly int m_cursorSlot;
     private readonly int m_cursorMaxEntries;
     private readonly LinkedSpriteSet m_cursor;
-
     private readonly RomTable m_bgPalettes;
     private readonly RomTable m_objPalettes;
     private readonly RomTable m_tiles;
@@ -59,7 +58,6 @@ internal sealed class PokerGame {
     private readonly RomTable m_strHiScores;
     private readonly RomTable m_strHandsWon;
     private readonly RomTable m_strTopPot;
-
     private readonly int m_subCardRecord;
     private readonly int m_subRowColAddr;
     private readonly int m_subCellOffset;
@@ -118,15 +116,13 @@ internal sealed class PokerGame {
 
         if (titleArt is not null) {
             manifest.DefineArtScreen(name: "title", art: titleArt, overlays: PokerTables.TitleOverlays);
-        }
-        else {
+        } else {
             manifest.DefineScreen(name: "title", cells: PokerTables.BuildTitleBannerCells(), overlays: PokerTables.TitleOverlays);
         }
 
         if (feltArt is not null) {
             manifest.DefineArtScreen(name: "play", art: feltArt, overlays: PokerTables.PlayOverlays);
-        }
-        else {
+        } else {
             manifest.DefineScreen(name: "play", cells: PokerTables.BuildFallbackFeltCells(), overlays: PokerTables.PlayOverlays);
         }
 
@@ -164,7 +160,7 @@ internal sealed class PokerGame {
         manifest.DefineText(name: "str-top-pot", text: "TOP POT");
 
         for (var seat = 1; (seat < PokerProtocol.SeatCount); seat++) {
-            manifest.DefineText(name: $"str-name-{seat}", text: PokerTables.OpponentNames[seat - 1]);
+            manifest.DefineText(name: $"str-name-{seat}", text: PokerTables.OpponentNames[(seat - 1)]);
         }
 
         for (var category = 0; (category < PokerTables.CategoryCount); category++) {
@@ -477,8 +473,7 @@ internal sealed class PokerGame {
             e.Load(destination: Reg8.Memory, source: Reg8.B);
             e.XorA();
             e.StoreAToHighPage(port: Hw.PortVramBank);
-        }
-        else if (m_titleAttributes is not null) {
+        } else if (m_titleAttributes is not null) {
             // The felt is flat but the title paints attributes; keep the board's cells pinned to palette 0.
             e.LoadAImmediate(value: 0x01);
             e.StoreAToHighPage(port: Hw.PortVramBank);
@@ -1261,7 +1256,7 @@ internal sealed class PokerGame {
             e.LoadAImmediate(value: 0x02);
             e.StoreAToAddress(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2)));
             e.XorA();
-            e.StoreAToAddress(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2) + 1));
+            e.StoreAToAddress(address: (ushort)((PokerProtocol.BankrollMirror + (seat * 2)) + 1));
         }
 
         e.MarkLabel(label: noReset);
@@ -1502,7 +1497,7 @@ internal sealed class PokerGame {
             e.LoadAFromAddress(address: PokerProtocol.ActorSeat);
             e.ArithmeticImmediate(op: AluOp.Compare, value: (byte)seat);
             e.JumpRelative(condition: Condition.NotZero, label: skip);
-            m_fw.Text.EmitPrintQueued(text: m_strFold, row: 2, column: PokerTables.OpponentColumns[seat - 1]);
+            m_fw.Text.EmitPrintQueued(text: m_strFold, row: 2, column: PokerTables.OpponentColumns[(seat - 1)]);
             e.MarkLabel(label: skip);
         }
 
@@ -2057,11 +2052,11 @@ internal sealed class PokerGame {
             e.JumpAbsolute(condition: Condition.NotZero, label: skip);
 
             for (var slot = 0; (slot < PokerProtocol.HandSize); slot++) {
-                e.LoadAImmediate(value: (byte)PokerTables.RevealRows[seat - 1]);
+                e.LoadAImmediate(value: (byte)PokerTables.RevealRows[(seat - 1)]);
                 e.StoreAToAddress(address: PokerProtocol.TmpRow);
                 e.LoadAImmediate(value: (byte)(PokerTables.RevealColumn + (slot * 2)));
                 e.StoreAToAddress(address: PokerProtocol.TmpCol);
-                e.LoadAFromAddress(address: (ushort)(PokerProtocol.HandBase + (seat * PokerProtocol.HandStride) + slot));
+                e.LoadAFromAddress(address: (ushort)((PokerProtocol.HandBase + (seat * PokerProtocol.HandStride)) + slot));
                 e.StoreAToAddress(address: PokerProtocol.TmpCard);
                 e.Call(label: m_subDrawStrip);
             }
@@ -2249,7 +2244,7 @@ internal sealed class PokerGame {
             var isDealer = e.NewLabel();
             var write = e.NewLabel();
             var row = ((seat == 0) ? 16 : 0);
-            var column = ((seat == 0) ? 0 : (PokerTables.OpponentColumns[seat - 1] - 1));
+            var column = ((seat == 0) ? 0 : (PokerTables.OpponentColumns[(seat - 1)] - 1));
 
             e.LoadAFromAddress(address: PokerProtocol.DealerSeat);
             e.ArithmeticImmediate(op: AluOp.Compare, value: (byte)seat);
@@ -2279,10 +2274,10 @@ internal sealed class PokerGame {
             e.JumpRelative(condition: Condition.Zero, label: busted);
             e.JumpRelative(label: done);
             e.MarkLabel(label: folded);
-            m_fw.Text.EmitPrintDirect(text: m_strFold, row: 2, column: PokerTables.OpponentColumns[seat - 1]);
+            m_fw.Text.EmitPrintDirect(text: m_strFold, row: 2, column: PokerTables.OpponentColumns[(seat - 1)]);
             e.JumpRelative(label: done);
             e.MarkLabel(label: busted);
-            m_fw.Text.EmitPrintDirect(text: m_strOut, row: 2, column: PokerTables.OpponentColumns[seat - 1]);
+            m_fw.Text.EmitPrintDirect(text: m_strOut, row: 2, column: PokerTables.OpponentColumns[(seat - 1)]);
             e.MarkLabel(label: done);
         }
 
@@ -2295,7 +2290,7 @@ internal sealed class PokerGame {
         m_fw.Text.EmitPrintBcdDirect(bcdAddress: PokerProtocol.BankrollMirror, byteCount: 2, row: 16, column: 5);
 
         for (var seat = 1; (seat < PokerProtocol.SeatCount); seat++) {
-            m_fw.Text.EmitPrintBcdDirect(bcdAddress: (ushort)(PokerProtocol.BankrollMirror + (seat * 2)), byteCount: 2, row: 1, column: PokerTables.OpponentColumns[seat - 1]);
+            m_fw.Text.EmitPrintBcdDirect(bcdAddress: (ushort)(PokerProtocol.BankrollMirror + (seat * 2)), byteCount: 2, row: 1, column: PokerTables.OpponentColumns[(seat - 1)]);
         }
     }
 
@@ -2406,7 +2401,7 @@ internal sealed class PokerGame {
         for (var seat = 0; (seat < PokerProtocol.SeatCount); seat++) {
             var skip = e.NewLabel();
             var row = ((seat == 0) ? 16 : 1);
-            var column = ((seat == 0) ? 5 : PokerTables.OpponentColumns[seat - 1]);
+            var column = ((seat == 0) ? 5 : PokerTables.OpponentColumns[(seat - 1)]);
 
             e.LoadAFromAddress(address: PokerProtocol.TmpSeat);
             e.ArithmeticImmediate(op: AluOp.Compare, value: (byte)seat);
@@ -2576,7 +2571,7 @@ internal sealed class PokerGame {
         for (var slot = 0; (slot < (PokerProtocol.HiScoreEntryCount - 1)); slot++) {
             var take = e.NewLabel();
             var skip = e.NewLabel();
-            var entryScore = (ushort)(PokerProtocol.HiScoreMirror + (slot * PokerProtocol.HiScoreEntryByteCount) + 3);
+            var entryScore = (ushort)((PokerProtocol.HiScoreMirror + (slot * PokerProtocol.HiScoreEntryByteCount)) + 3);
 
             for (var index = 0; (index < 3); index++) {
                 e.LoadAFromAddress(address: (ushort)(PokerProtocol.Score + index));
@@ -2587,8 +2582,7 @@ internal sealed class PokerGame {
 
                 if (index < 2) {
                     e.JumpRelative(condition: Condition.NotZero, label: skip);
-                }
-                else {
+                } else {
                     e.JumpRelative(label: skip);
                 }
             }
@@ -2606,8 +2600,8 @@ internal sealed class PokerGame {
         e.Arithmetic(op: AluOp.Subtract, source: Reg8.C);
         e.JumpRelative(condition: Condition.Zero, label: noShift);
         e.Load(destination: Reg8.B, source: Reg8.A);
-        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)(PokerProtocol.HiScoreMirror + (4 * PokerProtocol.HiScoreEntryByteCount) - 1));
-        e.LoadImmediate(pair: Reg16.De, value: (ushort)(PokerProtocol.HiScoreMirror + (5 * PokerProtocol.HiScoreEntryByteCount) - 1));
+        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)((PokerProtocol.HiScoreMirror + (4 * PokerProtocol.HiScoreEntryByteCount)) - 1));
+        e.LoadImmediate(pair: Reg16.De, value: (ushort)((PokerProtocol.HiScoreMirror + (5 * PokerProtocol.HiScoreEntryByteCount)) - 1));
         e.MarkLabel(label: shiftLoop);
         e.LoadAFromHlDecrement();
         e.StoreAToDe();
@@ -2721,7 +2715,6 @@ internal sealed class PokerGame {
         e.StoreAToAddress(address: PokerProtocol.IdleTimer);
         e.StoreAToAddress(address: PokerProtocol.IdleTimerHigh);
     }
-
     private void EmitTitleTick(Sm83Emitter e) {
         var stay = e.NewLabel();
 
@@ -2734,8 +2727,7 @@ internal sealed class PokerGame {
                 emitter.StoreAToAddress(address: PokerProtocol.PendingDeal);
                 m_fw.States.EmitRequestState(id: PokerProtocol.StatePlay);
                 emitter.Return();
-            }
-            else {
+            } else {
                 m_fw.States.EmitRequestState(id: PokerProtocol.StateHighScores);
                 emitter.Return();
             }
@@ -2744,7 +2736,6 @@ internal sealed class PokerGame {
         m_fw.States.EmitRequestState(id: PokerProtocol.StateAttract);
         e.MarkLabel(label: stay);
     }
-
     private void EmitAttractEnter(Sm83Emitter e) {
         // The constant seed makes the scripted table identical every time; attract never writes SRAM (the mirror
         // is refreshed on the way back to the title).
@@ -2762,7 +2753,6 @@ internal sealed class PokerGame {
         e.Call(label: m_subBoardRepaint);
         e.Call(label: m_subStartBetRound);
     }
-
     private void EmitAttractTick(Sm83Emitter e) {
         var noReal = e.NewLabel();
         var running = e.NewLabel();
@@ -2786,7 +2776,6 @@ internal sealed class PokerGame {
         e.MarkLabel(label: running);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitHighScoresEnter(Sm83Emitter e) {
         m_fw.Oam.EmitHideRange(baseSlot: m_cursorSlot, count: m_cursorMaxEntries);
         m_fw.Bg.EmitLcdOff();
@@ -2816,7 +2805,6 @@ internal sealed class PokerGame {
         e.StoreAToAddress(address: PokerProtocol.IdleTimer);
         e.StoreAToAddress(address: PokerProtocol.IdleTimerHigh);
     }
-
     private void EmitHighScoresTick(Sm83Emitter e) {
         var back = e.NewLabel();
         var stay = e.NewLabel();
@@ -2832,7 +2820,6 @@ internal sealed class PokerGame {
         m_fw.States.EmitRequestState(id: PokerProtocol.StateTitle);
         e.MarkLabel(label: stay);
     }
-
     private void EmitPlayEnter(Sm83Emitter e) {
         var noDeal = e.NewLabel();
         var resumeMenu = e.NewLabel();
@@ -2885,17 +2872,14 @@ internal sealed class PokerGame {
 
         e.MarkLabel(label: resumeDone);
     }
-
     private void EmitPlayTick(Sm83Emitter e) {
         ArgumentNullException.ThrowIfNull(e);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitPauseEnter(Sm83Emitter e) {
         ArgumentNullException.ThrowIfNull(e);
         m_fw.Text.EmitPrintQueued(text: m_strPause, row: (PokerProtocol.MenuRow + 1), column: PokerProtocol.MenuCursorColumn);
     }
-
     private void EmitPauseTick(Sm83Emitter e) {
         var resume = e.NewLabel();
         var noAbandon = e.NewLabel();
@@ -2915,7 +2899,6 @@ internal sealed class PokerGame {
         m_fw.States.EmitRequestState(id: PokerProtocol.StatePlay);
         e.MarkLabel(label: noAbandon);
     }
-
     private void EmitGameOverEnter(Sm83Emitter e) {
         var cleared = e.NewLabel();
         var messageDone = e.NewLabel();
@@ -2947,12 +2930,11 @@ internal sealed class PokerGame {
         // cabinet's host-seeded share into the top-16 SRAM win region (the room XORs it across cabinets for the reveal).
         m_fw.Victory.EmitStoreShare();
     }
-
     private void EmitGameOverTick(Sm83Emitter e) {
         var resolve = e.NewLabel();
         var qualify = e.NewLabel();
         var noQualify = e.NewLabel();
-        var entry4Score = (ushort)(PokerProtocol.HiScoreMirror + ((PokerProtocol.HiScoreEntryCount - 1) * PokerProtocol.HiScoreEntryByteCount) + 3);
+        var entry4Score = (ushort)((PokerProtocol.HiScoreMirror + ((PokerProtocol.HiScoreEntryCount - 1) * PokerProtocol.HiScoreEntryByteCount)) + 3);
 
         e.LoadAFromAddress(address: FrameworkMemoryMap.InputPressed);
         e.Load(destination: Reg8.B, source: Reg8.A);
@@ -2974,7 +2956,7 @@ internal sealed class PokerGame {
             e.LoadAImmediate(value: 0x02);
             e.StoreAToAddress(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2)));
             e.XorA();
-            e.StoreAToAddress(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2) + 1));
+            e.StoreAToAddress(address: (ushort)((PokerProtocol.BankrollMirror + (seat * 2)) + 1));
         }
 
         e.Call(label: m_subSaveIfLive);
@@ -2998,7 +2980,6 @@ internal sealed class PokerGame {
         e.MarkLabel(label: qualify);
         m_fw.States.EmitRequestState(id: PokerProtocol.StateScoreEntry);
     }
-
     private void EmitScoreEntryEnter(Sm83Emitter e) {
         m_fw.Oam.EmitHideRange(baseSlot: m_cursorSlot, count: m_cursorMaxEntries);
         m_pad.EmitEnterReset(e: e);
@@ -3010,7 +2991,6 @@ internal sealed class PokerGame {
         m_fw.Text.EmitPrintBcdDirect(bcdAddress: PokerProtocol.Score, byteCount: 3, row: 6, column: 7);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitScoreEntryTick(Sm83Emitter e) {
         m_pad.EmitTick(e: e, emitConfirm: emitter => {
             emitter.Call(label: m_subHiInsert);
@@ -3033,8 +3013,7 @@ internal sealed class PokerGame {
 
         if (attributes is { } table) {
             FrameworkKernel.EmitBlockCopy(emitter: e, sourceAddress: table.Address, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400);
-        }
-        else {
+        } else {
             FrameworkKernel.EmitBlockFill(emitter: e, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400, value: 0x00);
         }
 

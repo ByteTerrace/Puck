@@ -9,9 +9,9 @@ namespace Puck.Demo.World;
 /// the headless town builder (<c>Puck.Demo.Town</c>), which must produce a committed world whose baked grid is
 /// byte-identical to what a live save would write — otherwise the <c>world.verify</c> save→reload byte-compare
 /// mismatches. Bakes the walk
-/// grid from the document's placements (resolved from the store), its terrain patches, and the room's own console
-/// stands, honoring the requested tessellation. Deterministic: bake-twice from the same (document, room, kind) is
-/// byte-identical.
+/// grid from the document's placements (resolved from the store) and the room's own console stands, honoring the
+/// requested tessellation — terrain patches are walkable dressing and never contribute (see the terrain remark
+/// below). Deterministic: bake-twice from the same (document, room, kind) is byte-identical.
 /// </summary>
 public static class WorldWalkGridBake {
     /// <summary>Bakes the walk grid into a copy of <paramref name="document"/>.</summary>
@@ -31,13 +31,27 @@ public static class WorldWalkGridBake {
         var footprints = new List<WorldFootprint>();
 
         foreach (var placement in (document.Placements ?? [])) {
+            // A `companion` placement is a roaming presentation resident, not a static obstacle (see
+            // CompanionRoster.SpawnFromWorld) — it contributes no footprint, or the flagship trio would each carve
+            // a permanently-blocked tile at their own spawn point.
+            if (string.Equals(a: placement.Role, b: "companion", comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
             if ((placement.Source is { Length: > 0 } source) && store.TryGet(content: out var bytes, hash: source) && (CreationDocumentBytes.Deserialize(bytes: bytes) is { } creation)) {
                 footprints.AddRange(collection: WorldFootprintDerivation.ForPlacement(creation: creation, placement: placement));
             }
         }
-        foreach (var patch in (document.Terrain ?? [])) {
-            footprints.Add(item: WorldFootprintDerivation.ForTerrainPatch(patch: patch));
-        }
+        // Terrain patches (road/plaza/sidewalk slabs) are walkable dressing BY DEFINITION — a paved surface a player
+        // can't walk on isn't a road, it's a wall — so they never feed the blocking pass, regardless of the small rise
+        // their box needs to clear the floor plane's own surface and actually render (see EmitTerrain's round-box
+        // union: a patch fully submerged at y<FloorY is provably invisible under sphere-tracing, since the floor is
+        // an infinite half-space solid below y=FloorY — WorldFootprintDerivation.ForTerrainPatch's Y-band gate can
+        // never both hide a patch from the walk grid AND let it clear the floor to render). The live world-sculpt
+        // terrain tool (WorldSculptController.AddTerrainWithHistory) already authors exactly this shape — Center.Y =
+        // FloorY, HalfExtents.Y = 0.05 — so leaving the Y-gated footprint wired in here would make the player's own
+        // terrain brush self-block the ground it paints. ForTerrainPatch itself is kept (a future raised-decor kind —
+        // a curb or dais — could opt back in explicitly) but is deliberately UNCALLED from this bake.
         // The room's own stands block exactly as the sim's FixedConsole boxes do (full walk-band height). Room
         // planar coordinates are Vector2 XZ (X = world X, Y = world Z — the room's own convention).
         foreach (var stand in room.Consoles) {

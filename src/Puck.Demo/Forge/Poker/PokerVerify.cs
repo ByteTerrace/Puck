@@ -18,8 +18,8 @@ namespace Puck.Demo.Forge;
 /// round-tripped through an INDEPENDENT C# checksum, and corruption recovery. Throws on any violation.
 /// </summary>
 internal static class PokerVerify {
-    private const ulong TCyclesPerFrame = 70224UL;
     private const ushort AttractSeed = 0x1234;
+    private const ulong TCyclesPerFrame = 70224UL;
     private const int TotalChips = 800;
 
     /// <summary>Runs the whole battery.</summary>
@@ -65,8 +65,7 @@ internal static class PokerVerify {
             if (rank == CardDeck.RankAce) {
                 rankCounts[1]++;
                 rankCounts[14]++;
-            }
-            else {
+            } else {
                 rankCounts[rank]++;
             }
         }
@@ -83,7 +82,7 @@ internal static class PokerVerify {
             var run = true;
 
             for (var step = 0; (step < 5); step++) {
-                run &= (rankCounts[high - step] != 0);
+                run &= (rankCounts[(high - step)] != 0);
             }
 
             if (run) {
@@ -104,30 +103,26 @@ internal static class PokerVerify {
 
             if (count >= 4) {
                 quadRank = rank;
-            }
-            else if (count == 3) {
+            } else if (count == 3) {
                 tripRank = rank;
-            }
-            else if (count == 2) {
+            } else if (count == 2) {
                 pairCount++;
 
                 if (pairHigh == 0) {
                     pairHigh = rank;
-                }
-                else {
+                } else {
                     pairLow = rank;
                 }
             }
         }
 
-        var shape = ((flush ? 1 : 0) | ((straightHigh != 0) ? 2 : 0) | (pairCount << 2) | ((tripRank != 0) ? 0x10 : 0) | ((quadRank != 0) ? 0x20 : 0));
+        var shape = (flush ? 1 : 0) | ((straightHigh != 0) ? 2 : 0) | (pairCount << 2) | ((tripRank != 0) ? 0x10 : 0) | ((quadRank != 0) ? 0x20 : 0);
         var category = PokerTables.BuildCategoryTable()[shape];
         var tiebreaks = new byte[5];
 
         if (straightHigh != 0) {
             tiebreaks[0] = (byte)straightHigh;
-        }
-        else {
+        } else {
             var index = 0;
 
             for (var target = 4; (target >= 1); target--) {
@@ -161,14 +156,11 @@ internal static class PokerVerify {
 
         if (!facing) {
             action = (((strength >= row[PokerTables.PersonalityFieldBet]) || bluff) ? PokerProtocol.ActionBetRaise : PokerProtocol.ActionCheckCall);
-        }
-        else if ((raises < PokerProtocol.RaiseCap) && (strength >= row[PokerTables.PersonalityFieldRaise])) {
+        } else if ((raises < PokerProtocol.RaiseCap) && (strength >= row[PokerTables.PersonalityFieldRaise])) {
             action = PokerProtocol.ActionBetRaise;
-        }
-        else if ((strength >= row[PokerTables.PersonalityFieldCall]) || bluff) {
+        } else if ((strength >= row[PokerTables.PersonalityFieldCall]) || bluff) {
             action = PokerProtocol.ActionCheckCall;
-        }
-        else {
+        } else {
             action = PokerProtocol.ActionFold;
         }
 
@@ -181,7 +173,7 @@ internal static class PokerVerify {
         var action = intent;
 
         if (action == PokerProtocol.ActionBetRaise) {
-            if ((raises >= PokerProtocol.RaiseCap) || (bankrollChips < ((betLevel + 1 - roundBet) * 10))) {
+            if ((raises >= PokerProtocol.RaiseCap) || (bankrollChips < (((betLevel + 1) - roundBet) * 10))) {
                 action = PokerProtocol.ActionCheckCall;
             }
         }
@@ -200,7 +192,6 @@ internal static class PokerVerify {
     // ==== The staged-flow plumbing. ======================================================================================
 
     private enum TableEvent { Action, Menu, DrawSelect, HandEnd, GameOver }
-
     private sealed record TableSnap(ushort Prng, byte BetLevel, byte RaiseCount, byte[] RoundBet, byte[] Strength, byte[] Folded, int[] Bankrolls, int Pot, byte InHand, byte Phase);
 
     private static TableSnap Snapshot(Driver driver) {
@@ -275,6 +266,7 @@ internal static class PokerVerify {
         }
 
         var facing = (before.BetLevel != before.RoundBet[actor]);
+
         var (intent, _) = DecideOracle(seat: actor, strength: before.Strength[actor], facing: facing, raises: before.RaiseCount, prngState: before.Prng);
         var action = FilterLegality(intent: intent, betLevel: before.BetLevel, roundBet: before.RoundBet[actor], raises: before.RaiseCount, bankrollChips: before.Bankrolls[actor]);
         var observed = driver.Read(address: (ushort)(PokerProtocol.LastActionBase + actor));
@@ -284,26 +276,24 @@ internal static class PokerVerify {
 
         if (action == PokerProtocol.ActionFold) {
             expectedDisplay = PokerProtocol.ActedFold;
-        }
-        else if (action == PokerProtocol.ActionCheckCall) {
+        } else if (action == PokerProtocol.ActionCheckCall) {
             var needed = (before.BetLevel - before.RoundBet[actor]);
 
             expectedDisplay = ((needed > 0) ? PokerProtocol.ActedCall : PokerProtocol.ActedCheck);
             expectedPaid = (needed * 10);
-        }
-        else {
+        } else {
             expectedDisplay = ((before.BetLevel > 0) ? PokerProtocol.ActedRaise : PokerProtocol.ActedBet);
             expectedLevel = (before.BetLevel + 1);
             expectedPaid = ((expectedLevel - before.RoundBet[actor]) * 10);
         }
 
         Assert(condition: (observed == expectedDisplay), message: $"{context}: seat {actor} acted {observed}, the personality oracle expected {expectedDisplay} (intent {intent}, filtered {action})");
-        Assert(condition: (ReadBankroll(driver: driver, seat: actor) == (before.Bankrolls[actor] - expectedPaid)), message: $"{context}: seat {actor}'s bankroll moved to {ReadBankroll(driver: driver, seat: actor)} (expected {before.Bankrolls[actor] - expectedPaid})");
+        Assert(condition: (ReadBankroll(driver: driver, seat: actor) == (before.Bankrolls[actor] - expectedPaid)), message: $"{context}: seat {actor}'s bankroll moved to {ReadBankroll(driver: driver, seat: actor)} (expected {(before.Bankrolls[actor] - expectedPaid)})");
         Assert(condition: (driver.Read(address: PokerProtocol.BetLevel) == expectedLevel), message: $"{context}: the bet level is {driver.Read(address: PokerProtocol.BetLevel)} (expected {expectedLevel})");
 
         if (driver.Read(address: PokerProtocol.Phase) != PokerProtocol.PhaseHandEnd) {
             // A pot award (an uncontested fold-out) empties the pot in the same event; only assert mid-round.
-            Assert(condition: (ReadPot(driver: driver) == (before.Pot + expectedPaid)), message: $"{context}: the pot is {ReadPot(driver: driver)} (expected {before.Pot + expectedPaid})");
+            Assert(condition: (ReadPot(driver: driver) == (before.Pot + expectedPaid)), message: $"{context}: the pot is {ReadPot(driver: driver)} (expected {(before.Pot + expectedPaid)})");
         }
     }
 
@@ -334,14 +324,11 @@ internal static class PokerVerify {
     // ==== Read helpers. ==================================================================================================
 
     private static int BcdToInt(byte high, byte low) =>
-        (((((high >> 4) & 0x0F) * 10) + (high & 0x0F)) * 100) + ((((low >> 4) & 0x0F) * 10) + (low & 0x0F));
-
+        ((((((high >> 4) & 0x0F) * 10) + (high & 0x0F)) * 100) + ((((low >> 4) & 0x0F) * 10) + (low & 0x0F)));
     private static int ReadBankroll(Driver driver, int seat) =>
-        BcdToInt(high: driver.Read(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2))), low: driver.Read(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2) + 1)));
-
+        BcdToInt(high: driver.Read(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2))), low: driver.Read(address: (ushort)((PokerProtocol.BankrollMirror + (seat * 2)) + 1)));
     private static int ReadPot(Driver driver) =>
         BcdToInt(high: driver.Read(address: PokerProtocol.Pot), low: driver.Read(address: (ushort)(PokerProtocol.Pot + 1)));
-
     private static int ChipTotal(Driver driver) {
         var total = ReadPot(driver: driver);
 
@@ -351,41 +338,35 @@ internal static class PokerVerify {
 
         return total;
     }
-
     private static byte[] ReadHand(Driver driver, int seat) {
         var hand = new byte[PokerProtocol.HandSize];
 
         for (var slot = 0; (slot < PokerProtocol.HandSize); slot++) {
-            hand[slot] = driver.Read(address: (ushort)(PokerProtocol.HandBase + (seat * PokerProtocol.HandStride) + slot));
+            hand[slot] = driver.Read(address: (ushort)((PokerProtocol.HandBase + (seat * PokerProtocol.HandStride)) + slot));
         }
 
         return hand;
     }
-
     private static byte[] ReadEval(Driver driver, int seat) {
         var eval = new byte[8];
 
         for (var index = 0; (index < 8); index++) {
-            eval[index] = driver.Read(address: (ushort)(PokerProtocol.EvalBase + (seat * 8) + index));
+            eval[index] = driver.Read(address: (ushort)((PokerProtocol.EvalBase + (seat * 8)) + index));
         }
 
         return eval;
     }
-
     private static void WriteHand(Driver driver, int seat, byte[] cards) {
         for (var slot = 0; (slot < PokerProtocol.HandSize); slot++) {
-            driver.Write(address: (ushort)(PokerProtocol.HandBase + (seat * PokerProtocol.HandStride) + slot), value: cards[slot]);
+            driver.Write(address: (ushort)((PokerProtocol.HandBase + (seat * PokerProtocol.HandStride)) + slot), value: cards[slot]);
         }
     }
-
     private static void WriteStrength(Driver driver, int seat, byte strength) =>
         driver.Write(address: (ushort)(PokerProtocol.StrengthBase + seat), value: strength);
-
     private static void WriteBankroll(Driver driver, int seat, byte high, byte low) {
         driver.Write(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2)), value: high);
-        driver.Write(address: (ushort)(PokerProtocol.BankrollMirror + (seat * 2) + 1), value: low);
+        driver.Write(address: (ushort)((PokerProtocol.BankrollMirror + (seat * 2)) + 1), value: low);
     }
-
     private static byte[] ReadSavePayload(Driver driver) {
         var payload = new byte[PokerProtocol.SavePayloadByteCount];
 
@@ -403,7 +384,6 @@ internal static class PokerVerify {
         driver.RunFrames(buttons: JoypadButtons.None, frames: 2);
         Assert(condition: (driver.Read(address: FrameworkMemoryMap.GameState) == PokerProtocol.StatePlay), message: "confirming DEAL did not start a session");
     }
-
     private static void Assert(bool condition, string message) {
         if (!condition) {
             throw new InvalidOperationException(message: $"poker ROM verification failed: {message}");
@@ -438,7 +418,7 @@ internal static class PokerVerify {
             var hand = ReadHand(driver: driver, seat: seat);
 
             for (var slot = 0; (slot < PokerProtocol.HandSize); slot++) {
-                Assert(condition: (hand[slot] == deck[(seat * PokerProtocol.HandSize) + slot]), message: $"the attract deal: seat {seat} card {slot} is {hand[slot]} (the oracle dealt {deck[(seat * PokerProtocol.HandSize) + slot]})");
+                Assert(condition: (hand[slot] == deck[((seat * PokerProtocol.HandSize) + slot)]), message: $"the attract deal: seat {seat} card {slot} is {hand[slot]} (the oracle dealt {deck[((seat * PokerProtocol.HandSize) + slot)]})");
             }
 
             Assert(condition: (ReadBankroll(driver: driver, seat: seat) == 195), message: $"the attract ante: seat {seat} holds {ReadBankroll(driver: driver, seat: seat)} chips (expected 195)");
@@ -494,7 +474,7 @@ internal static class PokerVerify {
             var hand = ReadHand(driver: first, seat: seat);
 
             for (var slot = 0; (slot < PokerProtocol.HandSize); slot++) {
-                Assert(condition: (hand[slot] == deck[(seat * PokerProtocol.HandSize) + slot]), message: $"the recovered-seed deal: seat {seat} card {slot} is {hand[slot]} (the oracle dealt {deck[(seat * PokerProtocol.HandSize) + slot]})");
+                Assert(condition: (hand[slot] == deck[((seat * PokerProtocol.HandSize) + slot)]), message: $"the recovered-seed deal: seat {seat} card {slot} is {hand[slot]} (the oracle dealt {deck[((seat * PokerProtocol.HandSize) + slot)]})");
             }
         }
 
@@ -672,7 +652,6 @@ internal static class PokerVerify {
         AssertOneShowdown(rom: rom, idleFrames: 44, playerHand: [2, 15, 28, 1, 14], rexHand: [40, 43, 45, 47, 49], expectedWinner: 0, context: "the full boat vs the flush", expectedPlayerTb0: 3);
         AssertOneShowdown(rom: rom, idleFrames: 45, playerHand: [12, 25, 28, 41, 11], rexHand: [38, 51, 2, 15, 36], expectedWinner: 0, context: "the two-pair kicker fight", expectedPlayerTb0: 13);
     }
-
     private static void AssertOneShowdown(byte[] rom, int idleFrames, byte[] playerHand, byte[] rexHand, byte expectedWinner, string context, byte expectedPlayerTb0) {
         using var driver = new Driver(rom: rom);
 
@@ -749,7 +728,7 @@ internal static class PokerVerify {
             StartPlay(driver: driver, idleFrames: (40 + trial));
 
             for (var seat = 1; (seat < PokerProtocol.SeatCount); seat++) {
-                WriteStrength(driver: driver, seat: seat, strength: strengths[((seat - 1) + trial) % 3]);
+                WriteStrength(driver: driver, seat: seat, strength: strengths[(((seat - 1) + trial) % 3)]);
             }
 
             var seedValue = (ushort)(0x4321 + (trial * 7));
@@ -808,11 +787,9 @@ internal static class PokerVerify {
 
             if (driver.Read(address: PokerProtocol.AwaitInput) == 1) {
                 driver.Press(buttons: JoypadButtons.A);
-            }
-            else if (driver.Read(address: PokerProtocol.AwaitInput) == 2) {
+            } else if (driver.Read(address: PokerProtocol.AwaitInput) == 2) {
                 driver.Press(buttons: JoypadButtons.Start);
-            }
-            else {
+            } else {
                 driver.RunFrames(buttons: JoypadButtons.None, frames: 1);
             }
         }
@@ -860,10 +837,10 @@ internal static class PokerVerify {
         var slot = FindEntry(mirror: mirror, initials: "BCA");
 
         Assert(condition: (slot >= 0), message: "the BCA entry is missing from the records mirror");
-        Assert(condition: ((mirror[(slot * PokerProtocol.HiScoreEntryByteCount) + 3] == 0x00) && (mirror[(slot * PokerProtocol.HiScoreEntryByteCount) + 4] == scoreHigh) && (mirror[(slot * PokerProtocol.HiScoreEntryByteCount) + 5] == scoreLow)), message: "the persisted entry's score does not match the final stack");
+        Assert(condition: ((mirror[((slot * PokerProtocol.HiScoreEntryByteCount) + 3)] == 0x00) && (mirror[((slot * PokerProtocol.HiScoreEntryByteCount) + 4)] == scoreHigh) && (mirror[((slot * PokerProtocol.HiScoreEntryByteCount) + 5)] == scoreLow)), message: "the persisted entry's score does not match the final stack");
 
         for (var entry = 1; (entry < PokerProtocol.HiScoreEntryCount); entry++) {
-            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the records table is not sorted (entry {entry - 1} < entry {entry})");
+            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the records table is not sorted (entry {(entry - 1)} < entry {entry})");
         }
 
         for (var seat = 0; (seat < PokerProtocol.SeatCount); seat++) {
@@ -905,10 +882,10 @@ internal static class PokerVerify {
         var sum = 0;
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        var stored = (sram[SaveModule.HeaderByteCount + PokerProtocol.SavePayloadByteCount] | (sram[SaveModule.HeaderByteCount + PokerProtocol.SavePayloadByteCount + 1] << 8));
+        var stored = sram[(SaveModule.HeaderByteCount + PokerProtocol.SavePayloadByteCount)] | (sram[((SaveModule.HeaderByteCount + PokerProtocol.SavePayloadByteCount) + 1)] << 8);
 
         Assert(condition: (sum == stored), message: $"the stored checksum 0x{stored:X4} does not match the independently computed 0x{sum:X4}");
         Assert(condition: payload.SequenceEqual(other: expectedMirror), message: "the persisted payload does not match the in-game mirror");
@@ -924,7 +901,7 @@ internal static class PokerVerify {
     private static void AssertCorruptionRecovery(byte[] rom, byte[] sram) {
         var corrupted = (byte[])sram.Clone();
 
-        corrupted[SaveModule.HeaderByteCount + 5] ^= 0x5A;
+        corrupted[(SaveModule.HeaderByteCount + 5)] ^= 0x5A;
 
         using var driver = new Driver(rom: rom, externalRam: corrupted);
 
@@ -932,9 +909,8 @@ internal static class PokerVerify {
         Assert(condition: (driver.Read(address: FrameworkMemoryMap.GameState) == PokerProtocol.StateTitle), message: "a machine with a corrupt save did not boot cleanly to the title");
         Assert(condition: ReadSavePayload(driver: driver).AsSpan().SequenceEqual(other: PokerTables.BuildDefaultSavePayload()), message: "a corrupt save did not fall back to the ROM's default payload");
     }
-
     private static byte[] ReadAllHands(Driver driver) {
-        var hands = new byte[PokerProtocol.SeatCount * PokerProtocol.HandSize];
+        var hands = new byte[(PokerProtocol.SeatCount * PokerProtocol.HandSize)];
 
         for (var seat = 0; (seat < PokerProtocol.SeatCount); seat++) {
             ReadHand(driver: driver, seat: seat).CopyTo(array: hands, index: (seat * PokerProtocol.HandSize));
@@ -942,13 +918,12 @@ internal static class PokerVerify {
 
         return hands;
     }
-
     private static int FindEntry(byte[] mirror, string initials) {
         for (var entry = 0; (entry < PokerProtocol.HiScoreEntryCount); entry++) {
             var matches = true;
 
             for (var index = 0; (index < 3); index++) {
-                if (mirror[(entry * PokerProtocol.HiScoreEntryByteCount) + index] != TextModule.TileFor(fontTileBase: PokerTables.FontTileBase, character: initials[index])) {
+                if (mirror[((entry * PokerProtocol.HiScoreEntryByteCount) + index)] != TextModule.TileFor(fontTileBase: PokerTables.FontTileBase, character: initials[index])) {
                     matches = false;
 
                     break;
@@ -962,15 +937,14 @@ internal static class PokerVerify {
 
         return -1;
     }
-
     private static int EntryScore(byte[] mirror, int entry) {
         var offset = ((entry * PokerProtocol.HiScoreEntryByteCount) + 3);
         var value = 0;
 
         for (var index = 0; (index < 3); index++) {
-            var packed = mirror[offset + index];
+            var packed = mirror[(offset + index)];
 
-            value = ((value * 100) + (((packed >> 4) & 0x0F) * 10) + (packed & 0x0F));
+            value = (((value * 100) + (((packed >> 4) & 0x0F) * 10)) + (packed & 0x0F));
         }
 
         return value;
@@ -1000,11 +974,8 @@ internal static class PokerVerify {
         }
 
         public byte Read(ushort address) => m_bus.ReadByte(address: address);
-
-        public int ReadWide(ushort address) => (Read(address: address) | (Read(address: (ushort)(address + 1)) << 8));
-
+        public int ReadWide(ushort address) => Read(address: address) | (Read(address: (ushort)(address + 1)) << 8);
         public void Write(ushort address, byte value) => m_bus.WriteByte(address: address, value: value);
-
         public void RunFrames(JoypadButtons buttons, int frames) {
             for (var frame = 0; (frame < frames); frame++) {
                 m_joypad.SetButtons(pressed: buttons);
@@ -1020,9 +991,7 @@ internal static class PokerVerify {
             RunFrames(buttons: buttons, frames: 8);
             RunFrames(buttons: JoypadButtons.None, frames: 6);
         }
-
         public byte[] ExportExternalRam() => m_cartridge.ExportExternalRam();
-
         public void Dispose() => m_machine.Dispose();
     }
 }

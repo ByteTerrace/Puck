@@ -44,7 +44,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
 
     /// <inheritdoc/>
     public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var allocator = (ID3D12CommandAllocator*)state.Allocator;
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
 
@@ -54,16 +54,24 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
 
     /// <inheritdoc/>
     public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         ((ID3D12GraphicsCommandList*)state.CommandList)->Close();
     }
 
     /// <inheritdoc/>
+    public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
+        DirectXDebugLabel.Begin(commandList: (ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList, label: label);
+
+    /// <inheritdoc/>
+    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
+        DirectXDebugLabel.End(commandList: (ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList);
+
+    /// <inheritdoc/>
     public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
-        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(pipelineHandle).Target!;
+        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineHandle).Target!;
 
         commandList->SetComputeRootSignature((ID3D12RootSignature*)layout.RootSignatureHandle);
         commandList->SetPipelineState((ID3D12PipelineState*)layout.PsoHandle);
@@ -76,10 +84,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         nint pipelineLayoutHandle,
         nint descriptorSetHandle
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
-        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(pipelineLayoutHandle).Target!;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
+        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
         var heap = (ID3D12DescriptorHeap*)set.HeapHandle;
 
         commandList->SetDescriptorHeaps(1, &heap);
@@ -101,9 +109,9 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         uint offset,
         ReadOnlySpan<byte> data
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
-        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(pipelineLayoutHandle).Target!;
+        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!;
 
         if (0 > layout.RootConstantsParamIndex) {
             return;
@@ -114,14 +122,14 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
                 RootParameterIndex: (uint)layout.RootConstantsParamIndex,
                 Num32BitValuesToSet: (uint)(data.Length / 4),
                 pSrcData: pData,
-                DestOffsetIn32BitValues: offset / 4
+                DestOffsetIn32BitValues: (offset / 4)
             );
         }
     }
 
     /// <inheritdoc/>
     public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         ((ID3D12GraphicsCommandList*)state.CommandList)->Dispatch(
             ThreadGroupCountX: groupCountX,
@@ -132,7 +140,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
 
     /// <inheritdoc/>
     public void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var signature = (ID3D12CommandSignature*)GetOrCreateDispatchSignature(deviceHandle: deviceHandle);
 
         // The argument buffer is an upload-heap resource permanently in GENERIC_READ (which already permits
@@ -159,7 +167,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         GpuComputeStage sourceStageMask,
         GpuComputeStage destinationStageMask
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         // Enhanced Barriers (the Vulkan-barrier peer): a texture barrier carrying real sync + access scopes (from the
         // neutral stage/access masks) and first-class layouts. The neutral oldLayout is honored directly — Undefined
@@ -202,10 +210,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         };
 
         barrier.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            pResource = (ID3D12Resource*)imageHandle,
-            Subresource = DirectXConstants.AllSubresources,
-            StateBefore = before,
             StateAfter = after,
+            StateBefore = before,
+            Subresource = DirectXConstants.AllSubresources,
+            pResource = (ID3D12Resource*)imageHandle,
         };
 
         commandList->ResourceBarrier(1, &barrier);
@@ -221,7 +229,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         GpuComputeStage sourceStageMask,
         GpuComputeStage destinationStageMask
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         // Enhanced Barriers: a global memory barrier carrying real sync + access scopes from the neutral masks (the
         // Vulkan VkMemoryBarrier peer), instead of the scopeless legacy UAV barrier.
@@ -267,7 +275,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         GpuComputeStage sourceStageMask,
         GpuComputeStage destinationStageMask
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         // Enhanced Barriers: a per-RESOURCE buffer barrier. ExecuteIndirect requires the argument buffer in the
         // INDIRECT_ARGUMENT access state; a global barrier does not prepare a specific buffer for it, so the GPU-written
@@ -311,10 +319,10 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         };
 
         transition.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            pResource = (ID3D12Resource*)bufferHandle,
-            Subresource = DirectXConstants.AllSubresources,
             StateAfter = after,
             StateBefore = before,
+            Subresource = DirectXConstants.AllSubresources,
+            pResource = (ID3D12Resource*)bufferHandle,
         };
 
         commandList->ResourceBarrier(1, &transition);
@@ -460,7 +468,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         }
 
         if (0 != (accessMask & GpuComputeAccess.ShaderRead)) {
-            access |= (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+            access |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
         }
 
         if (0 != (accessMask & GpuComputeAccess.IndirectCommandRead)) {
@@ -470,7 +478,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         return access;
     }
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
-        (DirectXCommandBufferState)GCHandle.FromIntPtr(commandBufferHandle).Target!;
+        (DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!;
     private static D3D12_RESOURCE_STATES ToResourceState(GpuImageLayout layout) {
         return layout switch {
             GpuImageLayout.ShaderReadOnly => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,

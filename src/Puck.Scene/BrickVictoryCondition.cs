@@ -54,7 +54,7 @@ public static class VictoryGate {
         region.SequenceEqual(other: target);
 
     private static int HexValue(char c) =>
-        (c <= '9') ? (c - '0') : ((char.ToLowerInvariant(c: c) - 'a') + 10);
+        ((c <= '9') ? (c - '0') : ((char.ToLowerInvariant(c: c) - 'a') + 10));
 }
 
 /// <summary>
@@ -118,7 +118,7 @@ public sealed record BrickVictoryCondition {
     /// <param name="destination">A <see cref="VictoryGate.RegionByteCount"/>-byte span.</param>
     /// <returns>Whether a share is present and parsed.</returns>
     public bool TryParseShare(Span<byte> destination) =>
-        (Share is not null) && VictoryGate.TryParseGuidBytes(text: Share, destination: destination);
+        ((Share is not null) && VictoryGate.TryParseGuidBytes(text: Share, destination: destination));
 
     internal void Validate(string path, ValidationErrors errors) {
         if (!SupportedModes.Contains(value: Mode, comparer: StringComparer.OrdinalIgnoreCase)) {
@@ -132,12 +132,10 @@ public sealed record BrickVictoryCondition {
         if (IsMeta) {
             if (Share is null) {
                 errors.Add(path: $"{path}.share", message: "a meta victory needs a share (this cabinet's converge-toward 128 bits, as a GUID)");
-            }
-            else if (!Guid.TryParse(input: Share, result: out _)) {
+            } else if (!Guid.TryParse(input: Share, result: out _)) {
                 errors.Add(path: $"{path}.share", message: $"share '{Share}' must be a GUID");
             }
-        }
-        else {
+        } else {
             if (Share is not null) {
                 errors.Add(path: $"{path}.share", message: "share is only valid for a meta victory; a solo victory converges its region directly on target");
             }

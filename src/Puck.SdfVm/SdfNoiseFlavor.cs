@@ -7,9 +7,9 @@ namespace Puck.SdfVm;
 /// bound White has — and <c>SdfProgram.AnalyzeLipschitz</c>'s reach-independent clamp is unchanged for all three.</summary>
 public enum SdfNoiseFlavor : uint {
     /// <summary>The independent PCG3D uniform: three decorrelated hashed uniforms, one per axis. The default, and
-    /// BYTE-IDENTICAL to pre-flavor programs (which packed the Blend lane 0).</summary>
+    /// This is the zero-valued default and preserves the base jitter distribution.</summary>
     White = 0,
-    /// <summary>Roberts' R3 generalized-golden low-discrepancy offset (the rank-1 lattice on the integer cell index),
+    /// <summary>The R3 generalized-golden low-discrepancy offset (the rank-1 lattice on the integer cell index),
     /// evaluated in FIXED-POINT integer so it is de-clumped yet bit-identical cross-backend. "Blue-ish" low-discrepancy
     /// scatter — NOT true isotropic blue noise.</summary>
     Blue = 1,

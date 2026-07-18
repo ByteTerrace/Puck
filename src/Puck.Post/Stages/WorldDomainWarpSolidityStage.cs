@@ -11,14 +11,14 @@ namespace Puck.Post;
 /// Tier-C stage — the <see cref="SdfOp.DomainWarp"/> SOLIDITY proof, the gate cross-backend PARITY cannot provide:
 /// both backends overstep a non-1-Lipschitz field IDENTICALLY, so a parity diff of two equally-eroded renders passes
 /// while both are wrong. DomainWarp perturbs the sample point by a bounded, cross-coupled sinusoidal field BEFORE the
-/// shape evaluates; the metric stretches by up to <c>amplitude·‖frequency‖</c>, so the warped field can OVERESTIMATE
+/// shape evaluates; the metric stretches by up to <c>amplitude·max|frequency_i|</c>, so the warped field can OVERESTIMATE
 /// true distance by that factor. Sphere-traced WITHOUT the Lipschitz step clamp, a grazing ray approaching a warped
 /// blade near a wobble crest reads that overestimate and steps clean PAST the blade into the sky behind it — eroding
-/// the silhouette. WITH the clamp (<c>SdfProgram.AnalyzeLipschitz</c> bakes <c>1/(1 + amplitude·‖frequency‖)</c> into
+/// the silhouette. WITH the clamp (<c>SdfProgram.AnalyzeLipschitz</c> bakes <c>1/(1 + amplitude·max|frequency_i|)</c> into
 /// the step scale) the march stays conservative and the blades render solid.
 /// <para>The test shape is a floating row of thin, bright EMISSIVE blades (tiled by <see cref="SdfOp.Repeat"/>, an
 /// isometric fold — no clamp of its own) each wobbled by DomainWarp (frequency 2.5/2.5/2.5, amplitude 0.14,
-/// amplitude·‖frequency‖ ≈ 0.61 — a moderate margin, not a knife-edge), viewed by a low oblique camera whose grazing
+/// amplitude·max|frequency_i| = 0.35), viewed by a low oblique camera whose grazing
 /// rays travel along the warped faces across many blades. No ground plane, so every gap is unambiguous sky.</para>
 /// <para>The detector mirrors <see cref="WorldWarpSolidityStage"/>: a coverage floor (silhouette-agnostic — the
 /// warped outline is irregular) is the primary tooth, with a loose enclosed-hole net as a secondary catch. A bright
@@ -29,44 +29,19 @@ internal sealed class WorldDomainWarpSolidityStage : IPostStage {
     private const float FieldOfViewRadians = (50f * (MathF.PI / 180f));
     private const uint Height = 600;
     private const uint Width = 960;
-    // Calibrated on the Vulkan host (deterministic, fixed scene/camera) by a clamped-vs-unclamped differential on the
-    // SAME scene (stepScale forced to 1.0 via reflection for the unclamped measurement): the DomainWarp boundary
-    // factor recovers the blade pixels an unclamped approach-overstep erodes to sky — measured 235121 blade pixels
-    // clamped (stepScale 0.741) vs 221217 unclamped. The floor sits well below the eroded count so a truly
-    // broken/unframed render (INFRA) is distinguished from a holed one (FAIL).
-    //
-    // RECALIBRATED when DisplaceWarpLipschitz was corrected from ‖frequency‖₂ to ‖frequency‖∞ — DomainWarp's Jacobian
-    // is I + amplitude·D·P with P the cyclic permutation and D = diag(f_i·cos(...)), a generalized permutation matrix
-    // whose spectral norm IS its largest entry. The old ‖·‖₂ bound over-clamped by √3× on this isotropic frequency
-    // (stepScale 0.623, a fatter 244106 px silhouette). The tighter, still-provably-safe clamp renders closer to the
-    // true silhouette (235121 px). The unclamped figure is a property of stepScale == 1.0 and is unchanged, so the
-    // tooth still bites.
+    // The fixed Vulkan scene measures 235121 blade pixels with the step clamp and 221217 without it. The vacuity floor
+    // is well below either population so an empty or unframed render is reported as infrastructure failure.
     private const int VacuityFloor = 90000;
     // The PRIMARY tooth: coverage below this means the blades eroded — the field overstepped as grazing rays
     // approached a wobble crest and stepped over the blade. 228000 sits ~3.0% below the clamped 235121 and ~3.1% above
     // the unclamped 221217 — roughly midway, so it survives benign edge-pixel shifts without masking a real clamp
     // regression.
     private const int MinBladeCoverage = 228000;
-    // SECONDARY net (deliberately loose): interior sky the border flood-fill can't reach. DomainWarp perturbs the
-    // POINT (not just the field), so its wobble folds the blade edges into more self-occluding nooks than Displace's
-    // pure relief; the in-cell gaps between repeated blades also enclose more perspective pockets. A solid render
-    // still carries a real enclosed-gap floor (measured ~1.6% clamped); this only trips on GROSS holing well above
-    // that — COVERAGE is the real regression catch.
+    // Interior gaps occupy about 1.6% of the clamped reference. This deliberately loose secondary bound catches gross
+    // holing while leaving coverage as the primary discriminator.
     private const double MaxEnclosedHoleFraction = 0.03;
-    // A background (sky) pixel has a LOW red channel (skyColor tops out ~26/255 in red). The threshold sits in the wide
-    // valley just above it. It was 90 on the premise that a 0.7-emissive blade stays red >= ~150 "under any shading" —
-    // FALSE since the shading wave landed: emissive is still added un-occluded, but the lit color then passes through
-    // the curvature ink-outline/cavity-darken, the 5-tap AO on the ambient fill, distance fog (dimming the far boxes
-    // toward the vanishing point), and coverage AA — which together pull present-blade edges/creases/far-boxes into the
-    // ~40-90 red band on this HIGH-perimeter thin-blade row (DomainWarp's point wobble makes the inter-box gaps more
-    // irregular than Displace's, so it darkens/encloses more). A red-90 cut miscounts those as sky, eroding coverage
-    // (~15k px) and inflating the enclosed-gap count with shaded-but-present blade. Dropping to 40 (still 14 above the
-    // sky ceiling) re-counts shaded blade as blade, while a REAL march hole — pure sky, red ~15-26, punched clean
-    // through a blade — stays below 40 and is still caught: the coverage floor and enclosed cap below are UNCHANGED, so
-    // the teeth keep their full discriminating power. Verified NOT a clamp regression: at the true-sky threshold the
-    // coverage recovers to the CLAMPED calibration (234842 px, ~= 235121 and far above the unclamped 221217), the
-    // enclosed pixels are inter-box sky slivers between the wobbled boxes (scene geometry, not tunneling — confirmed by
-    // overlay), and world-warp-solidity (a single wide low-perimeter blade) still passes untouched.
+    // Sky red is at most about 26. A threshold of 40 includes shaded blade edges while excluding true sky; at this
+    // threshold the current render measures about 234842 blade pixels, consistent with the clamped reference.
     private const byte SolidRedThreshold = 40;
 
     /// <inheritdoc/>
@@ -86,12 +61,12 @@ internal sealed class WorldDomainWarpSolidityStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildWarpedBladesScene() {
         var builder = new SdfProgramBuilder();
-        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.55f, 0.1f), Emissive: 0.7f));
+        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.55f, z: 0.1f), Emissive: 0.7f));
 
         return builder
-            .Repeat(spacing: new Vector3(0.9f, 6.0f, 6.0f))
-            .DomainWarp(frequency: new Vector3(2.5f, 2.5f, 2.5f), amplitude: 0.14f)
-            .Box(halfExtents: new Vector3(0.30f, 0.30f, 0.10f), round: 0.02f, material: brass)
+            .Repeat(spacing: new Vector3(x: 0.9f, y: 6.0f, z: 6.0f))
+            .DomainWarp(frequency: new Vector3(x: 2.5f, y: 2.5f, z: 2.5f), amplitude: 0.14f)
+            .Box(halfExtents: new Vector3(x: 0.30f, y: 0.30f, z: 0.10f), round: 0.02f, material: brass)
             .Build();
     }
 
@@ -103,7 +78,7 @@ internal sealed class WorldDomainWarpSolidityStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var artifactPath = Path.Combine(context.ArtifactsDirectory, "world-domain-warp-solidity.png");
+        var artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-domain-warp-solidity.png");
 
         PngEncoder.Write(height: (int)Height, path: artifactPath, rgba: pixels, width: (int)Width);
 
@@ -127,9 +102,8 @@ internal sealed class WorldDomainWarpSolidityStage : IPostStage {
             return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"the warped blade row holed: {enclosedHoles} interior sky pixels enclosed by blade ({(enclosedFraction * 100.0):0.##}% of {solidPixels} blade pixels) — DomainWarp oversteps WITHOUT the Lipschitz step clamp (> {(MaxEnclosedHoleFraction * 100.0):0.##}% allowed)");
         }
 
-        return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"the DomainWarp-wobbled blade row (freq 2.5/2.5/2.5, amp 0.14, stepScale {program.StepScale:0.###}) renders SOLID on the Vulkan host: {solidPixels} blade pixels, {enclosedHoles} enclosed ({(enclosedFraction * 100.0):0.###}%) — the D1 Lipschitz step clamp holds the field 1-Lipschitz-safe");
+        return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"the DomainWarp-wobbled blade row (freq 2.5/2.5/2.5, amp 0.14, stepScale {program.StepScale:0.###}) renders SOLID on the Vulkan host: {solidPixels} blade pixels, {enclosedHoles} enclosed ({(enclosedFraction * 100.0):0.###}%) — the Lipschitz step clamp holds the field 1-Lipschitz-safe");
     }
-
     private static int CountSolid(byte[] pixels) {
         var count = 0;
 
@@ -193,14 +167,13 @@ internal sealed class WorldDomainWarpSolidityStage : IPostStage {
 
         return enclosed;
     }
-
     private static SdfFrame BuildFrame(SdfProgram program) {
         // A low, elevated oblique camera looking down the blade row: its rays graze across many warped faces at
         // once — exactly the condition that makes a non-1-Lipschitz warp overstep. A face-on camera into a single
         // blade would never graze and never erode, hiding the very defect this stage guards.
         var camera = CameraSnapshot.LookAt(
-            position: new Vector3(6.0f, 2.2f, 1.0f),
-            target: new Vector3(-6.0f, 0.0f, -0.2f),
+            position: new Vector3(x: 6.0f, y: 2.2f, z: 1.0f),
+            target: new Vector3(x: -6.0f, y: 0.0f, z: -0.2f),
             fieldOfViewRadians: FieldOfViewRadians,
             viewportWidth: Width,
             viewportHeight: Height

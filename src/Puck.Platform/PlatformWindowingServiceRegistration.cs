@@ -20,7 +20,7 @@ public static class PlatformWindowingServiceRegistration {
 
         services.TryAddSingleton<INativeDisplayEnvironment, NativeDisplayEnvironment>();
         services.TryAddSingleton<INativeWindowPlatformSupport, NativeWindowPlatformSupport>();
-        services.TryAddSingleton<IClipboardService>(static sp =>
+        services.TryAddSingleton<IClipboardService>(implementationFactory: static sp =>
             ((sp.GetRequiredService<INativeWindowPlatformSupport>().CurrentDisplayKind == NativeDisplayKind.Win32)
                 ? new Win32ClipboardService()
                 : new NullClipboardService()));

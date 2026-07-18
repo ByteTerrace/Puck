@@ -76,7 +76,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
             DepthOrArraySize = 1,
             Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
             Flags = (simultaneousAccess
-                ? (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS)
+                ? D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS
                 : D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
             Format = format,
             Height = height,
@@ -113,7 +113,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         );
         m_sharedHandle = sharedHandle;
 
-        m_imageViewToken = GCHandle.Alloc(new DirectXImageView {
+        m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
             Format = format,
             ResourceHandle = m_resource,
         });
@@ -144,7 +144,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
     /// <inheritdoc/>
     public nint ImageHandle => m_resource;
     /// <inheritdoc/>
-    public nint ImageViewHandle => GCHandle.ToIntPtr(m_imageViewToken);
+    public nint ImageViewHandle => GCHandle.ToIntPtr(value: m_imageViewToken);
     /// <inheritdoc/>
     public uint Height { get; }
     /// <inheritdoc/>
@@ -211,8 +211,8 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
             m_imageViewToken.Free();
         }
 
-        Release(ref m_fence);
-        Release(ref m_resource);
+        Release(pointer: ref m_fence);
+        Release(pointer: ref m_resource);
 
         if (!m_sharedHandle.IsNull) {
             _ = PInvoke.CloseHandle(hObject: m_sharedHandle);

@@ -33,12 +33,12 @@ internal static class StyleGrade {
 
         for (var offset = 0; (offset < rgba.Length); offset += 4) {
             var r = Stretch(channel: (rgba[offset] / 255f), contrast: style.Contrast);
-            var g = Stretch(channel: (rgba[offset + 1] / 255f), contrast: style.Contrast);
-            var b = Stretch(channel: (rgba[offset + 2] / 255f), contrast: style.Contrast);
+            var g = Stretch(channel: (rgba[(offset + 1)] / 255f), contrast: style.Contrast);
+            var b = Stretch(channel: (rgba[(offset + 2)] / 255f), contrast: style.Contrast);
             var luma = Luma(b: b, g: g, r: r);
 
             if ((style.Gamma != 1f) && (luma > 0f)) {
-                var lift = (MathF.Pow(luma, style.Gamma) / luma);
+                var lift = (MathF.Pow(x: luma, y: style.Gamma) / luma);
 
                 r *= lift;
                 g *= lift;
@@ -53,8 +53,8 @@ internal static class StyleGrade {
             }
 
             rgba[offset] = ToByte(value: r);
-            rgba[offset + 1] = ToByte(value: g);
-            rgba[offset + 2] = ToByte(value: b);
+            rgba[(offset + 1)] = ToByte(value: g);
+            rgba[(offset + 2)] = ToByte(value: b);
         }
     }
 
@@ -70,9 +70,9 @@ internal static class StyleGrade {
             return 0f;
         }
 
-        var threshold = (((Bayer4[(y & 3), (x & 3)] + 0.5f) / 16f) - 0.5f);
+        var threshold = (((Bayer4[y & 3, x & 3] + 0.5f) / 16f) - 0.5f);
 
-        return (threshold * style.DitherStrength * (255f / 31f));
+        return ((threshold * style.DitherStrength) * (255f / 31f));
     }
 
     /// <summary>Classifies a sprite view's pixels against its sampled empty-corner background: true = foreground.
@@ -85,7 +85,7 @@ internal static class StyleGrade {
     public static bool[] ForegroundMask(byte[] rgba, int width, int height) {
         ArgumentNullException.ThrowIfNull(rgba);
 
-        var mask = new bool[width * height];
+        var mask = new bool[(width * height)];
         var backgroundR = (int)rgba[0];
         var backgroundG = (int)rgba[1];
         var backgroundB = (int)rgba[2];
@@ -93,10 +93,10 @@ internal static class StyleGrade {
         for (var pixel = 0; (pixel < mask.Length); pixel++) {
             var offset = (pixel * 4);
             var dr = (rgba[offset] - backgroundR);
-            var dg = (rgba[offset + 1] - backgroundG);
-            var db = (rgba[offset + 2] - backgroundB);
+            var dg = (rgba[(offset + 1)] - backgroundG);
+            var db = (rgba[(offset + 2)] - backgroundB);
 
-            mask[pixel] = (((dr * dr) + (dg * dg) + (db * db)) > TransparencyThresholdSquared);
+            mask[pixel] = ((((dr * dr) + (dg * dg)) + (db * db)) > TransparencyThresholdSquared);
         }
 
         return mask;
@@ -135,19 +135,19 @@ internal static class StyleGrade {
     public static void OutlineBackground(byte[] rgba, int width, int height, float threshold) {
         ArgumentNullException.ThrowIfNull(rgba);
 
-        var luma = new float[width * height];
+        var luma = new float[(width * height)];
 
         for (var pixel = 0; (pixel < luma.Length); pixel++) {
             var offset = (pixel * 4);
 
-            luma[pixel] = Luma(b: (rgba[offset + 2] / 255f), g: (rgba[offset + 1] / 255f), r: (rgba[offset] / 255f));
+            luma[pixel] = Luma(b: (rgba[(offset + 2)] / 255f), g: (rgba[(offset + 1)] / 255f), r: (rgba[offset] / 255f));
         }
 
         var edges = new bool[luma.Length];
 
         for (var y = 1; (y < (height - 1)); y++) {
             for (var x = 1; (x < (width - 1)); x++) {
-                edges[(y * width) + x] = (SobelMagnitude(luma: luma, width: width, x: x, y: y) > threshold);
+                edges[((y * width) + x)] = (SobelMagnitude(luma: luma, width: width, x: x, y: y) > threshold);
             }
         }
 
@@ -159,7 +159,7 @@ internal static class StyleGrade {
     /// <param name="luma">The graded luma in [0, 1].</param>
     /// <returns>The 2-bit shade index.</returns>
     public static int DmgShade(float luma) =>
-        Math.Min(val1: 3, val2: (int)MathF.Floor((1f - Math.Clamp(value: luma, max: 1f, min: 0f)) * 4f));
+        Math.Min(val1: 3, val2: (int)MathF.Floor(x: ((1f - Math.Clamp(value: luma, max: 1f, min: 0f)) * 4f)));
 
     /// <summary>Rec.709 luma of graded [0, 1] channels.</summary>
     /// <param name="r">The red channel.</param>
@@ -167,36 +167,32 @@ internal static class StyleGrade {
     /// <param name="b">The blue channel.</param>
     /// <returns>The luma in [0, 1] (for in-gamut inputs).</returns>
     public static float Luma(float r, float g, float b) =>
-        ((0.2126f * r) + (0.7152f * g) + (0.0722f * b));
+        (((0.2126f * r) + (0.7152f * g)) + (0.0722f * b));
 
     private static float Stretch(float channel, float contrast) =>
         (((channel - 0.5f) * contrast) + 0.5f);
-
     private static byte ToByte(float value) =>
-        (byte)Math.Clamp(value: (int)MathF.Round((value * 255f)), max: 255, min: 0);
-
+        (byte)Math.Clamp(value: (int)MathF.Round(x: (value * 255f)), max: 255, min: 0);
     private static bool HasTransparentNeighbour(bool[] mask, int width, int height, int x, int y) =>
-        ((x == 0) || !mask[(y * width) + (x - 1)]
-            || (x == (width - 1)) || !mask[(y * width) + (x + 1)]
-            || (y == 0) || !mask[((y - 1) * width) + x]
-            || (y == (height - 1)) || !mask[((y + 1) * width) + x]);
-
+        ((x == 0) || !mask[((y * width) + (x - 1))]
+            || (x == (width - 1)) || !mask[((y * width) + (x + 1))]
+            || (y == 0) || !mask[(((y - 1) * width) + x)]
+            || (y == (height - 1)) || !mask[(((y + 1) * width) + x)]);
     private static float SobelMagnitude(float[] luma, int width, int x, int y) {
-        var topLeft = luma[((y - 1) * width) + (x - 1)];
-        var top = luma[((y - 1) * width) + x];
-        var topRight = luma[((y - 1) * width) + (x + 1)];
-        var left = luma[(y * width) + (x - 1)];
-        var right = luma[(y * width) + (x + 1)];
-        var bottomLeft = luma[((y + 1) * width) + (x - 1)];
-        var bottom = luma[((y + 1) * width) + x];
-        var bottomRight = luma[((y + 1) * width) + (x + 1)];
-        var gx = ((topRight + (2f * right) + bottomRight) - (topLeft + (2f * left) + bottomLeft));
-        var gy = ((bottomLeft + (2f * bottom) + bottomRight) - (topLeft + (2f * top) + topRight));
+        var topLeft = luma[(((y - 1) * width) + (x - 1))];
+        var top = luma[(((y - 1) * width) + x)];
+        var topRight = luma[(((y - 1) * width) + (x + 1))];
+        var left = luma[((y * width) + (x - 1))];
+        var right = luma[((y * width) + (x + 1))];
+        var bottomLeft = luma[(((y + 1) * width) + (x - 1))];
+        var bottom = luma[(((y + 1) * width) + x)];
+        var bottomRight = luma[(((y + 1) * width) + (x + 1))];
+        var gx = (((topRight + (2f * right)) + bottomRight) - ((topLeft + (2f * left)) + bottomLeft));
+        var gy = (((bottomLeft + (2f * bottom)) + bottomRight) - ((topLeft + (2f * top)) + topRight));
 
         // Normalized by the operator's ±4 range so the style threshold reads in luma units.
-        return (MathF.Sqrt((gx * gx) + (gy * gy)) / 4f);
+        return (MathF.Sqrt(x: ((gx * gx) + (gy * gy))) / 4f);
     }
-
     private static void DarkenWhere(byte[] rgba, bool[] where, float scale) {
         for (var pixel = 0; (pixel < where.Length); pixel++) {
             if (!where[pixel]) {
@@ -206,8 +202,8 @@ internal static class StyleGrade {
             var offset = (pixel * 4);
 
             rgba[offset] = (byte)(rgba[offset] * scale);
-            rgba[offset + 1] = (byte)(rgba[offset + 1] * scale);
-            rgba[offset + 2] = (byte)(rgba[offset + 2] * scale);
+            rgba[(offset + 1)] = (byte)(rgba[(offset + 1)] * scale);
+            rgba[(offset + 2)] = (byte)(rgba[(offset + 2)] * scale);
         }
     }
 }

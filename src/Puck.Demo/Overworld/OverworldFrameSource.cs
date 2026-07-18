@@ -1,33 +1,47 @@
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Puck.Abstractions.Gpu;
 using Puck.Assets;
+using Puck.Cameras;
 using Puck.Compositing;
 using Puck.Demo.Configuration;
 using Puck.Demo.Creator;
+using Puck.Demo.DevConsole;
+using Puck.Demo.Garden;
+using Puck.Demo.Museum;
+using Puck.Demo.Rts;
 using Puck.Demo.World;
 using Puck.HumbleGamingBrick;
 using Puck.Input.Devices;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SdfVm.Views;
+using Puck.Text;
 
 namespace Puck.Demo.Overworld;
 
 /// <summary>
-/// Bridges the deterministic <see cref="OverworldWorld"/> to the SDF renderer. It builds the static room program (the
-/// floor, four walls, the console stands with their diegetic screen surfaces, the cartridge shelf, and one box per
-/// FIXED player/cartridge/control slot at a dynamic-transform slot) and, each frame, emits the slots' current
-/// transforms (which the renderer uploads into the dynamic-transform buffer) plus the screen director's view list.
+/// Bridges the deterministic <see cref="OverworldWorld"/> to the SDF renderer. Its program content is composed from
+/// named <see cref="ISdfSceneEmitter"/>s (the room shell, the console stands, the player boxes, the workbench, the
+/// terminal, the diegetic bar, the creator/world/companion pools, the link cable, the studio backdrop — see
+/// <c>OverworldFrameSource.Emitters.cs</c>) over a <see cref="SdfCompositionFrameSource"/>, so a console boot or a
+/// creator/world edit rebuilds exactly like any other composed content change; the SDF-debug takeover
+/// (<see cref="Puck.SdfVm.Debug.SdfDebugMode"/>) is a SEPARATE, alternate composition (never mixed into the room
+/// list — see <see cref="ISdfSceneEmitter"/>'s takeover remarks), and the native AGB takeover is a single static
+/// program (its worst case is strictly dominated by the room's, so it needs no probe of its own — see
+/// <see cref="BuildAgbDebugProgram"/>). This source implements <see cref="ISdfFrameDresser"/> itself: the composed
+/// program/transforms are "dressed" into a full <see cref="SdfFrame"/> by <see cref="Dress"/>, which owns the
+/// screen-director view layout, the room mood (ambient/sun/grid-overlay), and every debug frame-channel flag —
+/// exactly the presentation concerns that have nothing to do with WHAT geometry exists.
+/// <para>
 /// Everything is rendered relative to the room's SPAWN ANCHOR — the room is bounded (±8 world units), so a FIXED
 /// anchor keeps every float small AND immovable; an anchor that followed the players (the unbounded-world pattern)
-/// flipped across its snap grid at the room's center lines and made the smoothed camera race the jump. The program
-/// rebuilds when a console boots (its screen material lights up) or the creator scene's program content changes;
-/// rebuilt programs may vary in size below the WORST-CASE envelope this source probes at render assembly
-/// (<see cref="MeasureWorstCaseEnvelope"/> — the engine's buffers reserve that ceiling up front). A player,
+/// flipped across its snap grid at the room's center lines and made the smoothed camera race the jump. A player,
 /// cartridge, or control moves purely by changing the per-frame dynamic-transform buffer (a free player slot's box
 /// rides a hidden position) and the per-frame view regions.
-/// </summary>
-public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldControlHost {
+/// </para></summary>
+public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldControlHost, ISdfFrameDresser {
     // The default per-console accent palette, by console index — matching the default document's dmg/cgb/agb
     // console order. Presentation only; see ConsoleAccentPalette for the shared source.
     private static readonly Vector3[] DefaultAccents = [
@@ -41,9 +55,9 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private const float ScreenAspect = (160f / 144f);
     // Per-console control-cluster piece count and their slot offsets within a console's 3-slot block (d-pad, A, B).
     private const int ControlsPerConsole = 3;
-    private const int DPadControlOffset = 0;
     private const int AButtonControlOffset = 1;
     private const int BButtonControlOffset = 2;
+    private const int DPadControlOffset = 0;
     // How far a pressed control depresses into its pedestal (world units) — small enough to read as a press, not a
     // collapse.
     private const float ControlDepress = 0.03f;
@@ -71,7 +85,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // enclosing-shell trick fought the tile cull. The gray fills the lower frame and the pitch-down orbit keeps the
     // subject reading against it; the dark sky remains above, giving the deliberate flat-lit studio sweep. The albedo
     // is a true mid-gray so a light creature still separates without the blowout a near-white field would cause.
-    private static readonly Vector3 StudioBackdropAlbedo = new(0.55f, 0.56f, 0.58f);
+    private static readonly Vector3 StudioBackdropAlbedo = new(x: 0.55f, y: 0.56f, z: 0.58f);
     // How far below the workbench floor the sweep plane sits (a hair under, so a creature resting near the floor never
     // z-fights the sweep).
     private const float StudioFloorDrop = 0.05f;
@@ -88,8 +102,8 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // low midpoint, plus a small sphere marking the sag — SmoothUnion INSIDE this one static instance only (the
     // cull-safety contract: never smooth-blend across an instance boundary you want maskable).
     private const float CableRadius = 0.025f;
-    private const float CableSagRadius = 0.05f;
     private const float CableSagDrop = 0.6f;
+    private const float CableSagRadius = 0.05f;
     private const float CableSmooth = 0.04f;
 
     // THE DIEGETIC WORKBENCH (Stage 3 of the self-editing arc): a room-only prop — a desk with a terminal screen panel
@@ -116,10 +130,61 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private const float WorkbenchLitEmissive = 1.5f;
     // How fast the power-on glow eases in once EditorRevealed latches (per second) — ~0.7 s to full, matching the
     // reveal's transition feel. The program rebuilds while the glow ramps (a handful of rebuilds, exactly a boot's
-    // cost profile); once at 0 or 1 it is settled and stops rebuilding. Quantized into buckets for the rebuild key so
-    // the ramp rebuilds a bounded number of times, never once per frame indefinitely.
+    // cost profile); once at 0 or 1 it is settled and stops rebuilding. The linear ramp is SmoothStep-shaped (in BOTH
+    // the bucket key and EmitWorkbench's read — one easing, so the quantized rebuilds and the baked emissive always
+    // agree) so the power-on accelerates then settles rather than ramping flatly. Quantized into buckets for the
+    // rebuild key so the ramp rebuilds a bounded number of times, never once per frame indefinitely; SmoothStep's slow
+    // tails mean the near-0/near-1 buckets rarely flip, so the extra buckets buy finer mid-ramp steps (where the ease
+    // is steepest) without adding rebuilds at the ends.
+    // NOTE: this is Q33's easing fallback, not the glow-as-frame-channel ideal — the emissive is still BAKED per
+    // material (SdfMaterialData in sdf-vm.hlsli), so a per-frame channel would need shared-engine shader surgery.
     private const float WorkbenchGlowRate = 1.45f;
-    private const int WorkbenchGlowBuckets = 12;
+    private const int WorkbenchGlowBuckets = 16;
+    // The editor-reveal beat (Q35): a one-shot swell as the workshop opens. Duration ~0.9 s; the bell (sin over the
+    // span) peaks mid-beat then returns to rest, so BOTH the light pulse and the camera nudge start and end at zero
+    // (no snap). The gain lifts the room light ~35% at the peak (a warm bloom); the target lift nudges the room
+    // camera's look-point up a touch (a subtle "glance" as the light comes up). Presentation-only tunables.
+    private const float EditorRevealBeatSeconds = 0.9f;
+    private const float EditorRevealBeatLightGain = 0.35f;
+    private const float EditorRevealBeatTargetLift = 0.35f;
+
+    // ---- The diegetic console terminal (diegetic-UI Tier 0) ---------------------------------------------------------
+    // A physical terminal object whose CRT screen live-mirrors the developer console (the same lines the overlay shows /
+    // stdout echoes) — the control plane made flesh. Its screen SOURCE rides the generic dynamic-claimant seam
+    // (RegisterScreenClaimant) at one HEADROOM slot, resolving the console named feed the diegetic-feed director
+    // publishes; the geometry is a modest desk + a room-facing CRT slab emitted with the room (EmitTerminal). Display-
+    // only this tier: input stays pad + overlay console + stdin.
+    //
+    // Placed against the +Z (near) wall — the only wall free of cabinets (−Z), the shelf (−X), and the workbench (+X) —
+    // offset toward −X so it sits off-center, its CRT facing −Z back into the room (across from the cabinet row). The
+    // face uses the +Z cabinet convention mirrored 180° about Y (worldRight −X, worldUp +Y, front face on −Z), so the
+    // console image reads un-mirrored exactly as a cabinet's does from its own front. Visual-only (no collision entry —
+    // the sim's FixedRoom never learns it exists), like the workbench.
+    internal const int TerminalScreenSlot = 5;            // a free ScreenSlotLedger headroom slot (4-7; 4 is the AGB debug slot); internal so the render assembly can bind the terminal's glyph decal to this slot
+
+    private const float TerminalInsetX = 3.0f;            // the terminal center's inset from the −X wall (clear of a full shelf)
+    private const float TerminalInsetZ = 1.15f;           // its inset from the +Z (near) wall
+    private const float TerminalPedestalHalfDepth = 0.34f;
+    private const float TerminalPedestalHalfHeight = 0.46f;
+    private const float TerminalPedestalHalfWidth = 0.42f;
+    private const float TerminalScreenHalfWidth = 0.44f;  // the CRT slab half-width; height derives from the 4:3 CRT aspect
+    private const float TerminalScreenHalfDepth = 0.06f;  // the slab thickness
+    private const float TerminalScreenGap = 0.06f;        // the gap between the pedestal top and the slab's bottom edge
+    private const float TerminalInstanceRadius = 1.3f;    // covers the pedestal + hood + CRT slab in one bound
+    private const float TerminalCrtAspect = (4f / 3f);    // matches ConsoleFeed's 256x192 (4:3) CRT so the slab samples undistorted
+
+    // ---- The diegetic UI bar (Tier 2) worst-case envelope --------------------------------------------------------
+    // The bar is ONE dynamic instance; these bound its worst case so MeasureWorstCaseEnvelope reserves it BEFORE the
+    // director installs (the probe runs at spec construction, ahead of Build's InstallDiegeticUi — so this source
+    // reserves the envelope self-containedly, mirroring EmitTerminal's unconditional-lit probe form). The real emit
+    // (DiegeticUiDirector.Emit) is a strict subset of the synthetic probe below. KEEP IN SYNC with the director's
+    // MaxChips / MaxLabelChars.
+    private const int DiegeticBarMaxChips = 12;           // the primary bar's twelve physical slots
+    private const int DiegeticBarMaxLabelChars = 2;       // the longest button label (e.g. "LB"/"RT")
+    private const int DiegeticUiSlotCount = 1;            // the whole bar rides one dynamic-transform slot (its rig pose)
+    private const float DiegeticBarBoundRadius = 1.20f;   // KEEP IN SYNC with DiegeticUiDirector.BoundRadius
+    private const int DiegeticNameplateMaxChars = 6;      // "PUCK/1" — KEEP IN SYNC with DiegeticUiDirector.NameplateText
+    private const int DiegeticTitleMaxChars = 11;         // "HUB TRACKER" — the hub readout; KEEP IN SYNC with DiegeticUiDirector.TitleEmHeight's remarks
 
     /// <summary>The engine's screen-surface slot capacity (mirrors <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>
     /// as a primitive) — exposed so the render node, at its analyzer coupling ceiling, never needs to name
@@ -135,14 +200,14 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private readonly ScreenLayoutDirector m_director;
     // The last committed world document this source applied (reference identity — records are immutable).
     private WorldDocument? m_appliedWorldCommit;
-    // The creating slot's rendered position this frame (the world-sculpt camera's anchor).
+    // The creating slot's rendered position this frame (the world-sculpt camera's anchor) — mirrors
+    // m_playerRenderTransforms[0].Position, kept as its own field for the existing WorldSculptCameraFrame reader.
     private Vector3 m_primaryPlayerRenderPosition;
     // The companion pool (presentation-only creatures) — composed here like the creator/world trios.
     private readonly CompanionRoster m_companions = new();
-    private readonly CompanionRenderer m_companionRenderer;
-    private readonly int m_companionSlotBase;
+    private readonly Creator.CompanionEmitter m_companionEmitter;
     // The roster size the current program was built for (add/del = a structural rebuild; the slot topology is
-    // constant, only the reserved slots' content changes).
+    // constant, only the reserved slots' content changes) — folded into m_roomRevision (see AdvanceRoomRevision).
     private int m_builtCompanionCount;
     private readonly IReadOnlyList<Vector3> m_consoleAccents;
     // Reads the buttons currently applied to a console's machine this frame (GamingBrickChildNode.CurrentButtons) —
@@ -151,26 +216,72 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private readonly Func<int, JoypadButtons>? m_controlsSource;
     // Reused render-relative position buffer for the screen director — Cleared+refilled each frame (no per-frame alloc).
     private readonly List<Vector3> m_activePositions = new(capacity: OverworldWorld.MaxPlayers);
-    // The unified dynamic-transform layout: players first (fixed MaxPlayers slots, OverworldWorld's own numbering),
-    // then one slot per unified cartridge index, then ControlsPerConsole slots per console stand. Computed once
-    // (cartridge/console counts never change after construction) and reused every frame — no per-frame allocation.
-    private readonly int m_controlSlotBase;
-    // The creator pool's first dynamic-transform slot: the GHOST rides m_creatorSlotBase, and placed shape i rides
-    // m_creatorSlotBase + 1 + i (see the creator-mode section below).
-    private readonly int m_creatorSlotBase;
-    private readonly int m_dynamicTransformCount;
-    private readonly DynamicTransform[] m_dynamicTransforms;
+    // Every FIXED player slot's last-packed render-relative transform (see PackPlayerRenderTransforms) — computed
+    // FRESH each CaptureFrame BEFORE the active composition source packs the room's dynamic-transform buffer (so
+    // PlayerBoxEmitter bakes THIS frame's positions), which makes it exactly ONE FRAME STALE for anything that reads
+    // it EARLIER in the same CaptureFrame call (NearestActivePlayer, the world-sculpt camera target via
+    // m_primaryPlayerRenderPosition) — the same lag every other diegetic-feed anchor in this source already carries.
+    private readonly DynamicTransform[] m_playerRenderTransforms = new DynamicTransform[OverworldWorld.MaxPlayers];
+    // This frame's screen-director view layout, computed once in CaptureFrame (BEFORE the active composition source
+    // packs) so the diegetic UI bar's rig-mount transform (DiegeticBarEmitter.PackDynamicTransforms) tracks the room
+    // camera with NO added lag, and so Dress can hand it straight to the returned SdfFrame.
+    private IReadOnlyList<SdfViewSnapshot> m_currentViews = [];
+    // ---- The diegetic UI (Tier 2): the overlay action bar mirrored as camera-rig-mounted SDF geometry -------------
+    // The whole bar rides ONE dynamic-transform slot (its rig-facing pose, repositioned each frame from the room
+    // camera); the geometry is baked in bar-local space and REBUILT only when the bar's content signature changes. The
+    // Tier-2 composition (the glyph atlas + the bar emission) lives in the composed DiegeticUiDirector, wired here
+    // through a pure DELEGATE seam (InstallDiegeticUi) so this source — at its exact CA1506 coupling ceiling — names no
+    // new type to host it (the delegate arities are already in its coupling set; the atlas rides an ISdfFrameSource
+    // decorator the render assembly wraps, never this source's own GlyphAtlas override).
+    // The bar's per-frame rig transform (from the director), the content signature that triggers a bar rebuild, and the
+    // emit callback that lays the bar's panels + embossed labels. Null until InstallDiegeticUi runs (a run with no
+    // binding-bar store — e.g. a bare validation harness — leaves the bar absent, its reserved slot simply unused).
+    private Func<IReadOnlyList<SdfViewSnapshot>, DynamicTransform>? m_diegeticMount;
+    private Func<int>? m_diegeticSignature;
+    private Action<SdfProgramBuilder>? m_diegeticEmit;
+    // The bar's own emitter (see the room-composition list in the constructor) — kept typed so InstallDiegeticUi can
+    // read the ACTUAL dynamic-transform slot the composition host assigned it (see DiegeticBarEmitter.SlotBase).
+    private readonly DiegeticBarEmitter m_diegeticBarEmitter;
+    // The diegetic bar's visibility latch (the `ui.diegetic on|off` verb) — DEFAULT ON so the feature shows the moment
+    // a revealed room appears; the overlay bar stays regardless (they coexist by design this tier). A toggle rebuilds
+    // the program (the bar geometry appears/vanishes), exactly like a cabinet boot/unboot. m_builtDiegeticVisible /
+    // m_builtDiegeticSignature are what the current program baked, so a settled bar never rebuilds.
+    private bool m_diegeticUiVisible = true;
+    private bool m_builtDiegeticVisible = true;
+    private int m_builtDiegeticSignature = -1;
+    // The most recently DRESSED program/transforms (see Dress) — read by TickFeeds for the camera-feed pool's own
+    // render pass, regardless of which composition (room, SDF-debug, or the AGB takeover) produced them.
     private SdfProgram? m_program;
+    private IReadOnlyList<DynamicTransform> m_lastTransforms = [];
+    // The last program object Dress actually saw — reference-diffed against the incoming one every call to detect a
+    // real rebuild (SdfCompositionFrameSource always hands back the SAME instance across frames it did not rebuild,
+    // and a rebuild always constructs a fresh one — see SdfCompositionFrameSource.CaptureFrame).
+    private SdfProgram? m_lastDressedProgram;
+    // The AGB takeover's ONE static program (see BuildAgbDebugProgram) — built once and reused forever (the framebuffer
+    // it samples changes every frame, but the PROGRAM never does).
+    private SdfProgram? m_agbProgram;
+    // The room composition's shared "did the combined room content change" trigger (see AdvanceRoomRevision) — every
+    // studio-suppressible room emitter without its own independent Revision (see Emitters.cs) shares this ONE counter,
+    // exactly mirroring the old single-program-single-trigger discipline: the whole room rebuilds together, as it
+    // always has, just expressed as a monotonic counter instead of a hand-rolled bool.
+    private int m_roomRevision;
     // The boot mask the current program's screen materials were chosen under; a boot rebuilds the program.
     private uint m_programBootedMask;
     // The set of OCCUPIED player slots the current program parked/unparked against (bit s = slot s has a player). An
     // empty slot's player box is PARKED so the beam cull skips it; a join/leave flips a bit and rebuilds the program
     // (one envelope-safe rebuild, exactly like a boot). -1 forces the first build.
     private uint m_builtActivePlayerMask = 0xFFFFFFFFu;
-    // The scene's ProgramRevision the current program was built from; an authoring edit that changes the program's
-    // content moves it, and CaptureFrame rebuilds (a creator MOVE never does — it rides the dynamic transforms).
-    private int m_builtProgramRevision = -1;
     private float m_time;
+    // The engine-side anchor registry is republished every CaptureFrame via PublishAnchors: the
+    // room's real player bodies, its spawn anchor, and each console's screen face, all under stable names a future
+    // rig/consumer resolves by id (ISdfAnchorSource) rather than reaching into this class's private fields. This
+    // per-frame pose data flows through SdfEmitContext.InterpolationAlpha.
+    private readonly SdfAnchorTable m_anchorTable = new();
+    // The two alternate composition sources (see the class remarks): the room (this source's default content) and the
+    // SDF-debug takeover. Both share this source as their ISdfFrameDresser. Built once, at the end of the constructor
+    // (after every field an emitter's worst-case probe might read is already assigned).
+    private readonly SdfCompositionFrameSource m_roomComposition;
+    private readonly SdfCompositionFrameSource m_sdfDebugComposition;
     // THE WORKBENCH power-on glow (Stage 3): 0 = dark/locked, 1 = fully lit. It eases toward the target the editor
     // unlock implies (EditorRevealed → 1) on the render clock in CaptureFrame — presentation only, never hashed. The
     // program's workbench panel bakes an emissive proportional to this, so the ramp rebuilds the program (like a boot)
@@ -178,6 +289,17 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // glow (bucket unchanged) never rebuilds. The FALLBACK bucket (-1) forces the first build.
     private float m_workbenchGlow;
     private int m_builtWorkbenchBucket = -1;
+    // THE DETERMINISTIC GARDEN's own room-revision trigger: an occupied-count + per-slot growth-stage-bucket
+    // signature (see GardenSignature) — a plant/clear or a stage advance rebuilds the room exactly like a boot does.
+    // -1 forces the first build.
+    private int m_builtGardenSignature = -1;
+    // THE EDITOR-REVEAL BEAT (Q35): a one-shot choreographed flourish armed on the EditorRevealed false→true edge (see
+    // the setter in OverworldFrameSource.Control). It rides the render clock in CaptureFrame — presentation only, never
+    // hashed — driving a bell-shaped room-light pulse (a transient lift on the AmbientScale/SunScale room-light seam)
+    // and a small room-camera target nudge (through the director's RoomTargetNudge hook, riding its existing easing) so
+    // "the workshop opens" reads as a warm swell + glance rather than a bare latch. Starts ELAPSED (= duration) so no
+    // beat plays until armed; advances to the duration then rests.
+    private float m_editorRevealBeatTime = EditorRevealBeatSeconds;
     // CREATOR-MODE presentation state (never hashed — the deterministic sim knows nothing of it): the authored scene
     // model, its program/transform emitter, and the pad state machine that edits it. This source is the composition
     // point for the creator objects — the render node drives them through thin forwarders so its own type coupling
@@ -191,11 +313,11 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // these emit (the easel's preview, a world.wire'd cabinet) still arbitrate through the ledger; only their content,
     // owned right here, is read directly.
     private readonly CreatorScene m_creator;
-    private readonly CreatorSceneRenderer m_creatorRenderer;
+    private readonly CreatorSceneEmitter m_creatorEmitter;
     private readonly CreatorController m_creatorController;
     // The live bake-preview seam the easel's screen slab samples — NULL until the bake pipeline's service replaces it
-    // (ConnectBakePreview); a null seam reads as a powered-off easel (handle 0 / zero glow), same as the former
-    // NullCreatorBakePreview null-object. Kept nullable (not a null-object) so this source names one fewer type — it
+    // (ConnectBakePreview); a null seam reads as a powered-off easel (handle 0 / zero glow). Kept nullable so this
+    // source names one fewer type — it
     // sits at its exact analyzer coupling ceiling, and the SDF-debug facade needs the room.
     private ICreatorBakePreview? m_bakePreview;
     // The owned live bake service, when installed (InstallBakePreview) — this source composes it so the render
@@ -210,49 +332,102 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // and lights the scene flat + bright in CaptureFrame; false (the default, and every non-scenario run) keeps the
     // dim arcade-room framing. Never toggled after install — a scenario's backdrop is fixed for the run.
     private bool m_scenarioStudio;
-    // The probed worst-case capacity envelope (computed once on first use — see MeasureWorstCaseEnvelope).
-    private (int Words, int Instances)? m_worstCase;
     // The world sculptor's composition (scene/renderer/controller/history/store) — see the ctor's trio comment.
     private readonly ContentAddressedStore m_worldStore;
     private readonly WorldScene m_worldScene;
     private readonly EditHistory<WorldScene.Snapshot> m_worldHistory;
-    private readonly WorldSceneRenderer m_worldRenderer;
+    private readonly WorldSceneEmitter m_worldEmitter;
+
+    /// <summary>Binds the SHARED world-glyph atlas onto the world-scene emitter, AFTER the atlas-owning
+    /// <c>DiegeticUiDirector</c> is composed (the town's façade signage lays out against that one atlas) — forwards to
+    /// <see cref="WorldSceneEmitter.SetGlyphAtlas"/> so this source stays at its CA1506 ceiling and never names the
+    /// atlas type itself.</summary>
+    /// <param name="font">The shared font atlas.</param>
+    internal void SetWorldGlyphAtlas(FontAtlas? font) => m_worldEmitter.SetGlyphAtlas(font: font);
+
     private readonly WorldSculptController m_worldController;
-    private readonly int m_worldSlotBase;
-    private int m_builtWorldRevision = -1;
     private bool m_worldSculptActive;
+
+    // The workbench authoring hub is a one-shot mode picker the lit workbench prop opens. Bare
+    // primitives (bool + int) so this source — at its exact analyzer coupling ceiling — takes on no new type; the
+    // registry that gives the selection meaning is reached only through the node's ForgeCommands forwarders.
+    private bool m_hubActive;
+    private int m_hubSelection;
 
     // SDF-DEBUG mode (the fullscreen single-shape debug tool): the whole mode (scene + orbit controller + emitter) is
     // composed behind ONE facade type — this source is at its exact analyzer coupling ceiling and cannot name three
     // (it sheds NullCreatorBakePreview's reference to make room; see m_bakePreview). Presentation only — the sim never
-    // sees it. While the mode is up the program REPLACES the room with the debug subject (BuildProgram's early branch);
-    // the capacity probe folds the subject's worst case in (EmitProbe), so a live op push can never outgrow the buffers.
-    private readonly Puck.Demo.SdfDebug.SdfDebugMode m_sdfDebug = new();
-    private int m_builtSdfDebugRevision = -1;
+    // sees it. While the mode is up, m_sdfDebugComposition (an alternate composition — see the ctor) REPLACES the room
+    // with the debug subject; its own aggregate Revision (SdfDebugEmitter.Revision => m_sdfDebug.Revision) drives its
+    // rebuilds, so this source tracks no mirror of it.
+    private readonly Puck.SdfVm.Debug.SdfDebugMode m_sdfDebug = new();
 
-    // The diegetic-feed director (the camera-feed pool + the procedural face feed + the named-feed registry) — this
-    // source owns and drives it (InstallFeeds composes it once the render assembly's envelope is known); null until
-    // then (a bare-room source with no feed wiring pays nothing). It is the WS-12 wiring of the landed camera primitive
-    // into the live render path.
-    private CameraFeedPool? m_feeds;
-    // The program-affecting feed state the LAST rebuild was built for: the SET of world+creation camera-feed NAMES the
-    // wiring wants live. It does not change the program's instruction stream (feeds render into offscreen slabs the
-    // program already declares), so it is NOT a rebuild trigger — this is stashed only so PlanFeeds runs once per frame.
-    private int m_builtFeedRevision = -1;
+    // The REVEALED-ROOM fixed-camera perf-bench channel (room.bench) — a diagnostic distinct from m_sdfDebug's own
+    // SdfBenchScene (which swaps the program to a synthetic gallery workload): this one changes nothing about what is
+    // rendered, it only pins the camera over the LIVE room content via the director's existing ScenarioCameraPose
+    // seam (the --scenario harness's own verbatim-pose primitive) and samples SdfEngineNode's per-pass GPU timings.
+    // See RoomBenchScene + OverworldFrameSource.RoomBench.cs.
+    private readonly RoomBenchScene m_roomBench = new();
+    // Whether the pin is currently asserted on the director — tracked so the release-to-player edge (Running
+    // false after having been true) fires exactly once (ApplyRoomBenchCameraPose).
+    private bool m_roomBenchHeld;
+
+    // The diegetic view stack contains every offscreen camera render, procedural face feed, and console-mirror CRT;
+    // register against this ONE pool. InstallViews composes it once the render assembly's envelope is known; null
+    // until then (a bare-room source with no view wiring pays nothing).
+    private ViewStack? m_views;
+    // The application services InstallFeeds was given — retained only so TickFeeds can resolve the GPU compute seam
+    // for the face and console feeds' own ticking.
+    private IServiceProvider? m_services;
+    // Whether the resolved host backend is Direct3D 12 — retained from InstallFeeds so a camera view registered later
+    // (RegisterCameraView, lazily on first request) selects the right kernel bytecode.
+    private bool m_viewsHostOnDirectX;
+    // The program-affecting revision state the view stack's content was LAST rebuilt for: bumped only when Dress sees
+    // a genuinely new SdfProgram instance (see Dress's programChanged), so a view's own re-upload happens once per
+    // real program change, never every frame (SdfCameraView/NestedWorldView both no-op an unchanged revision).
+    private int m_viewProgramRevision;
+    // The procedural face feed + the diegetic console terminal's CRT — presentation-only CPU-drawn producers this
+    // source still owns and ticks directly (their own upload cadence, gated on "is anything showing me this frame"),
+    // registered into m_views as unbudgeted GuestSurfaceView content so every consumer resolves them through the same
+    // named-view vocabulary as a real camera. See PlanViews/TickViews.
+    private readonly ProceduralFeed m_faceFeed = new();
+    private ConsoleFeed? m_consoleFeed;
+    // Persistent SdfCameraView instances by name — a camera view owns a real GPU resource (an offscreen engine), so
+    // PlanViews REBINDS the same instance's Rig/AnchorSource each frame rather than constructing a fresh one (which
+    // would rebuild the engine for nothing; see SdfCameraView's remarks). Never removed mid-run — a camera feed that
+    // stops being wired simply is not rendered.
+    private readonly Dictionary<string, SdfCameraView> m_cameraViews = new(comparer: StringComparer.Ordinal);
     // A reusable owner token for the world/creation camera-feed claimants' ledger participation (one token covers ALL
     // camera feeds this source publishes — they share the headroom band, and the render node reads their handles by
     // name, not by which slot each landed on). Reference-stable (boxed once).
     private readonly object m_cameraFeedClaimToken = new();
-    // The screen indices a world.wire / creation-face wired to a camera feed or named feed this frame (screen index ->
-    // feed name). Recomputed each CaptureFrame; the render node's per-slot override consults it (a wired slot samples
-    // the named-feed registry instead of its cabinet brick / flat material).
+    // The diegetic console terminal's ledger owner token (one reference-stable claim on its headroom screen slot) and
+    // its visibility latch (default ON — a permanent revealed-room fixture; the `terminal on|off` verb flips it as a dev
+    // assist). m_builtTerminalVisible joins the rebuild trigger: hiding/showing swaps the CRT slab for a dark box (a
+    // program-instruction change), exactly like a cabinet boot.
+    private readonly object m_terminalClaimToken = new();
+    private bool m_terminalVisible = true;
+    private bool m_builtTerminalVisible = true;
+    // THE REPLAY MUSEUM + THE DROSTE DOOR's ledger owner tokens: one per reserved headroom slot (the museum's four
+    // screens, then the door's one), registered ONCE in InstallFeeds — permanent Anchored reservations with no
+    // source of their own (content arrives only through `world.wire`, see MuseumRenderer's type remarks).
+    private static readonly object[] MuseumClaimTokens = [new(), new(), new(), new(), new()];
+    // The screen indices a world.wire / creation-face wired to a camera view or named view this frame (screen index ->
+    // view name). Recomputed each CaptureFrame; the render node's per-slot override consults it (a wired slot samples
+    // the named-view registry instead of its cabinet brick / flat material).
     private readonly Dictionary<int, string> m_wiredFeedByScreen = [];
-    // Reused scratch for PlanDiegeticFeeds — cleared and refilled each frame instead of allocating fresh collections
-    // (the plan reruns every produced frame because a companion's live shape pose feeds each request, but these two
-    // CONTAINERS need not churn the GC). WiredScreenSet still returns a fresh per-request set — those are retained a
-    // frame inside each PlannedFeed, so they cannot share one scratch instance.
-    private readonly List<CameraFeedRequest> m_feedRequestScratch = new(capacity: CameraFeedPool.MaxCameraFeeds);
-    private readonly Dictionary<string, int> m_feedByNameScratch = new(comparer: StringComparer.Ordinal);
+    // Reused scratch for PlanViews — the SET of view names requested this frame (dedupes a name shared by both a face
+    // and a world.wire) and, per name, the screen indices wired to it. Cleared and refilled each frame rather than
+    // reallocated (the plan reruns every produced frame because a companion's live shape pose feeds each request).
+    private readonly HashSet<string> m_requestedViewScratch = new(comparer: StringComparer.Ordinal);
+
+    // The reveal transition state (see BeginRevealTransition's remarks).
+    private const string RevealTransitionConsoleView = "reveal.console";
+    private const string RevealTransitionRoomView = "reveal.room";
+    private const float RevealTransitionSeconds = 0.6f;
+
+    private ViewTransition? m_revealTransition;
+    private float m_revealTransitionElapsed;
 
     // ---- The screen mux (ledger arbitration + the link cable) ---------------------------------------------------
     // The 8-slot allocator: cabinets (0-3, preferred slots) and the creator easel's borrow (slot 3, preferred) claim
@@ -284,6 +459,12 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     /// <summary>The link pair's other end (see <see cref="LinkedConsoleASource"/>).</summary>
     public Func<int>? LinkedConsoleBSource { get; set; }
 
+    /// <summary>An optional 0..1 GLOW intensity for the diegetic link cable, set by the render node from the linked
+    /// ports' live serial-transfer state (SC bit 7, decayed) — the cable lights while a pair is exchanging bytes and
+    /// fades when idle. Presentation-only whimsy: a pure read of emulated state, never fed back into it, and null (the
+    /// default) leaves the cable its plain dark rubber. Read by <see cref="EmitLinkCable"/>.</summary>
+    public Func<float>? LinkCableGlowSource { get; set; }
+
     /// <summary>Initializes the frame source over a world, its room, and the screen director that lays out the views.</summary>
     /// <param name="world">The deterministic simulation to present.</param>
     /// <param name="room">The authored room (the same instance the world's collision derived from).</param>
@@ -305,18 +486,6 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         m_consoleAccents = (consoleAccents ?? DefaultAccents);
         m_controlsSource = controlsSource;
 
-        // No physical cartridge instances — the cart choice lives at the cabinet; the control clusters follow
-        // the player slots directly.
-        m_controlSlotBase = OverworldWorld.MaxPlayers;
-        // The creator pool sits after the control slots: one ghost slot, then the placed-shape slots.
-        m_creatorSlotBase = (m_controlSlotBase + (m_room.Consoles.Count * ControlsPerConsole));
-        // The world sculptor's two slots (ghost stamp + selected drag) sit after the creator pool; the companion
-        // pool (roots + shape slots) after those.
-        m_worldSlotBase = (m_creatorSlotBase + CreatorSceneRenderer.DynamicSlotCount);
-        m_companionSlotBase = (m_worldSlotBase + WorldSceneRenderer.DynamicSlotCount);
-        m_dynamicTransformCount = (m_companionSlotBase + CompanionRenderer.DynamicSlotCount);
-        m_dynamicTransforms = new DynamicTransform[m_dynamicTransformCount];
-
         // One reference-stable ledger claim token per console (see ScreenSlotLedger.Claim's ref-equality contract).
         m_cabinetClaimTokens = new object[m_room.Consoles.Count];
         for (var index = 0; (index < m_cabinetClaimTokens.Length); index++) {
@@ -327,9 +496,9 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // wall), at the SAME floor height the room renders at.
         var workbench = new WorkbenchRegion(
             Center: new Vector3(
-                (0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)),
-                m_room.FloorY,
-                (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))
+                x: (0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)),
+                y: m_room.FloorY,
+                z: (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))
             ),
             HalfExtent: WorkbenchHalfExtent,
             MaxY: (m_room.FloorY + 3.0f),
@@ -337,20 +506,27 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         );
 
         m_creator = new CreatorScene(workbench: workbench);
-        m_creatorRenderer = new CreatorSceneRenderer(scene: m_creator, slotBase: m_creatorSlotBase);
+        m_creatorEmitter = new CreatorSceneEmitter(scene: m_creator);
         m_creatorController = new CreatorController(narrate: static line => Console.Error.WriteLine(value: line), scene: m_creator);
         // The workpiece camera: while creator is up, the room view leaves the player chase for the controller's
         // orbit/head-on framing; while WORLD-SCULPT is up, a lifted town-read orbit anchored on the creating slot
         // (the player IS the cursor — steep pitch, generous distance, so a street reads while stamping). Both ride
         // the director's one eased CreatorCameraSource seam (this source is the composition point).
-        m_director.CreatorCameraSource = () => (AgbDebugCameraFrame() ?? m_sdfDebug.CameraFrame ?? m_creatorController.CameraFrame ?? WorldSculptCameraFrame());
+        m_director.CreatorCameraSource = () => (AgbDebugCameraFrame() ?? (m_sdfDebug.CameraFrame ?? (m_creatorController.CameraFrame ?? WorldSculptCameraFrame())));
+        // The perf bench's pose is a MEASUREMENT pose: applied verbatim (no easing) so every configuration samples an
+        // identical, fully settled framing — see SdfDebugMode.CameraSnaps.
+        m_director.CreatorCameraSnapSource = () => m_sdfDebug.CameraSnaps;
+        // The editor-reveal beat's room-camera nudge (Q35): a transient look-point lift while the one-shot beat plays,
+        // resolved at INVOKE time (each Compose) so it rides the director's own eased room framing rather than cutting.
+        // Zero at rest, so a session that never reveals the editor frames byte-identically.
+        m_director.RoomTargetNudge = EditorRevealBeatTargetNudge;
         // When a world (the town) is loaded, the fourth-wall reveal frames the WHOLE lot rather than the fixed
         // default-room overview — centred on the lot, pulled back to its bounds. Null while no world is applied, so
         // the default room's reveal framing is byte-unchanged.
         m_director.RoomFramingSource = () => ((m_appliedWorldCommit is null)
             ? (ScreenLayoutDirector.RoomFraming?)null
             : new ScreenLayoutDirector.RoomFraming(
-                Center: new Vector3((0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)), (m_room.FloorY + 0.5f), (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))),
+                Center: new Vector3(x: (0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)), y: (m_room.FloorY + 0.5f), z: (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))),
                 HalfDepth: (0.5f * (m_room.BoundsMax.Y - m_room.BoundsMin.Y)),
                 HalfWidth: (0.5f * (m_room.BoundsMax.X - m_room.BoundsMin.X))
             ));
@@ -359,7 +535,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // spawn anchor at local zero), so it shares the space of the active player positions the director frames.
         // Assigned ONCE: the lambda resolves current instance state (m_room, PaneCloseness) at INVOKE time (each
         // Compose), so it never needs per-frame recreation — a fresh capturing delegate every frame was pure churn.
-        m_director.PaneCameraSource = paneIndex => ((paneIndex >= 0) && (paneIndex < m_room.Consoles.Count)
+        m_director.PaneCameraSource = paneIndex => (((paneIndex >= 0) && (paneIndex < m_room.Consoles.Count))
             ? (ScreenCenterLocal(consoleIndex: paneIndex), (PaneCloseness?.Invoke(paneIndex) ?? 0f), ScreenHalfHeightLocal(consoleIndex: paneIndex))
             : ((Vector3, float, float)?)null);
 
@@ -370,7 +546,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         m_worldStore = new ContentAddressedStore(root: "store");
         m_worldScene = new WorldScene();
         m_worldHistory = new EditHistory<WorldScene.Snapshot>(capacity: 64, initial: m_worldScene.CaptureSnapshot());
-        m_worldRenderer = new WorldSceneRenderer(scene: m_worldScene, slotBase: m_worldSlotBase, store: m_worldStore);
+        m_worldEmitter = new WorldSceneEmitter(scene: m_worldScene, store: m_worldStore);
         m_worldController = new WorldSculptController(
             history: m_worldHistory,
             narrate: static line => Console.Error.WriteLine(value: line),
@@ -381,20 +557,70 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // and ships INSIDE the saved bytes — see BakeWorldForSave.
         m_worldScene.PrepareForSave = BakeWorldForSave;
 
-        m_companionRenderer = new CompanionRenderer(roster: m_companions, slotBase: m_companionSlotBase);
+        m_companionEmitter = new Creator.CompanionEmitter(roster: m_companions);
+        m_companionEmitter.SetFaceSlotResolver(resolver: CompanionFaceSlot);
         // Companions roam the whole ROOM (not the workbench pedestal) — a generous band above the floor, inside
-        // the walls.
-        CompanionBounds = new WorkbenchRegion(
+        // the walls. Recomputed (not just set once here) whenever m_room changes — see ComputeCompanionBounds.
+        m_companionBounds = ComputeCompanionBounds();
+
+        // The room composition contains every studio-suppressible content block in emission order (order is otherwise
+        // free — see the sdf-world skill; nothing
+        // outside this source depends on a specific numeric dynamic-transform slot). PlayerBoxEmitter/
+        // ConsoleStandEmitter's dynamic slots and the creator/world/companion/diegetic-bar emitters' own slots are all
+        // assigned contiguously by SdfCompositionFrameSource — see the type remarks for the slot-base story.
+        // The RTS scenario bakes the arena's deterministic query provider once and binds it onto
+        // the sim — the sim's ground-snap/spawn checks consult ONLY this interface (see OverworldWorld.ConfigureRtsQuery
+        // /RtsScenario's remarks), never the render program. Configured unconditionally (like the garden pool, always
+        // present regardless of which document loaded) — cheap, deterministic, in-memory only this wave.
+        m_world.ConfigureRtsQuery(query: RtsScenario.BuildQuery());
+
+        m_diegeticBarEmitter = new DiegeticBarEmitter(owner: this);
+        m_roomComposition = new SdfCompositionFrameSource(
+            dresser: this,
+            emitters: [
+                new PlayerBoxEmitter(owner: this),
+                new ConsoleStandEmitter(owner: this),
+                m_creatorEmitter,
+                m_worldEmitter,
+                m_companionEmitter,
+                m_diegeticBarEmitter,
+                new RoomEmitter(owner: this),
+                new WorkbenchEmitter(owner: this),
+                new TerminalEmitter(owner: this),
+                new LinkCableEmitter(owner: this),
+                new StudioBackdropEmitter(owner: this),
+                new GardenEmitter(owner: this),
+                new RtsTerrainEmitter(),
+                new RtsUnitInstanceEmitter(world: m_world),
+                new MuseumEmitter(owner: this),
+            ]
+        );
+        // THE SDF-DEBUG TAKEOVER: an ALTERNATE composition (never mixed into the room list — see
+        // ISdfSceneEmitter's takeover remarks) sharing this source as its dresser, so entering/leaving the mode needs
+        // no manual "force a rebuild" — the composed PROGRAM OBJECT simply differs from whichever the room last built,
+        // which Dress's reference-diff already treats as a real change.
+        m_sdfDebugComposition = new SdfCompositionFrameSource(emitters: [new Puck.SdfVm.Debug.SdfDebugEmitter(mode: m_sdfDebug)], dresser: this);
+        // The gravity scenario takeover (see OverworldFrameSource.Gravity.cs) binds the one field
+        // evaluator + builds its own alternate composition, mirroring the SDF-debug wiring immediately above.
+        InitializeGravity();
+    }
+
+    // Companions roam the whole ROOM (not the workbench pedestal) — a generous band above the floor, inside the
+    // walls, derived from the CURRENT m_room's bounds/floor. Factored out of the constructor so
+    // ConsumePendingWorldLoad can recompute it after swapping m_room to a loaded world's bounds — the constructor
+    // originally captured this ONCE against the default room, which left companions confined to the stale default
+    // bounds after a world.load into a differently-sized lot (the rank-19 staleness bug).
+    private WorkbenchRegion ComputeCompanionBounds() {
+        return new WorkbenchRegion(
             Center: new Vector3(
-                (0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)),
-                m_room.FloorY,
-                (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))
+                x: (0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)),
+                y: m_room.FloorY,
+                z: (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))
             ),
-            HalfExtent: (0.5f * MathF.Max(x: (m_room.BoundsMax.X - m_room.BoundsMin.X), y: (m_room.BoundsMax.Y - m_room.BoundsMin.Y)) - 1.2f),
+            HalfExtent: ((0.5f * MathF.Max(x: (m_room.BoundsMax.X - m_room.BoundsMin.X), y: (m_room.BoundsMax.Y - m_room.BoundsMin.Y))) - 1.2f),
             MaxY: (m_room.FloorY + 3.5f),
             MinY: (m_room.FloorY + 0.4f)
         );
-
     }
 
     // The boot-time world load: when the run document names a world handle (OverworldNode.World), resolve it from
@@ -466,67 +692,59 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // jump every time the players crossed its snap grid).
         var renderOrigin = m_world.SpawnAnchor;
 
-        // Rebuild when a console boots (its screen material lights) or the creator scene's PROGRAM content changed
-        // (a place/undo/primitive/scale/material edit). Rebuilt programs may vary in size below the worst-case
-        // envelope the engine's buffers were sized against (MeasureWorstCaseEnvelope) — the once-sized buffers stay
-        // valid by construction. A creator MOVE never rebuilds (it rides the dynamic-transform buffer).
         // Companions steer/animate on the render clock BEFORE packing (presentation only — the sim never sees them).
         // The companion face auto-tune's "preferred remote feed is live" probe: a companion drifts to its remote face
         // feed only when the host's named-feed registry is actually producing that feed this frame — never fish/lure
         // by name, just "is this companion's last face-feed name live" (see CompanionState.FaceFeeds).
         m_companions.Tick(deltaSeconds: deltaSeconds, nearestPlayerProvider: NearestActivePlayer, remoteFeedProbe: PreferredRemoteFeedLive);
 
-        // The screen mux: resolves the ledger (cabinets/easel/any registered dynamic claimants) — BEFORE the program
-        // rebuild check, since a claimed headroom slot or the link cable's pair can change what BuildProgram emits.
+        // The screen mux: resolves the ledger (cabinets/easel/any registered dynamic claimants) — BEFORE the room
+        // composition packs, since a claimed headroom slot or the link cable's pair can change what it emits.
         var linkedA = (LinkedConsoleASource?.Invoke() ?? -1);
         var linkedB = (LinkedConsoleBSource?.Invoke() ?? -1);
         var linkedPair = (((linkedA >= 0) && (linkedB >= 0)) ? (linkedA, linkedB) : ((int A, int B)?)null);
 
         // Register the companion faces' screen claims + the world/creation camera-feed claim BEFORE ResolveScreenMux,
-        // so the ledger arbitrates them with the cabinets/easel in one pass; then plan the camera feeds from the
-        // resolved wiring. Presentation-only — never touches sim state.
+        // so the ledger arbitrates them with the cabinets/easel in one pass. Presentation-only — never touches sim
+        // state. Reads LAST frame's packed companion/player transforms (NearestActivePlayer) — one frame stale by
+        // construction, same as before. PlanViews itself moves BELOW PublishAnchors (see there) — it binds each
+        // camera view to an anchor name PublishAnchors must have already republished THIS tick.
         RegisterCompanionFaceClaims();
         ResolveScreenMux(linkedPair: linkedPair);
-        PlanDiegeticFeeds();
 
         // Ease the workbench power-on glow toward the editor unlock (revealed → 1, else 0) on the render clock; a
         // crossed quantized bucket rebuilds the program (its panel bakes an emissive proportional to the glow), so the
         // power-on reads as an eased "the workshop opens" rather than a hard cut. Presentation only — never hashed.
         AdvanceWorkbenchGlow(deltaSeconds: deltaSeconds);
-
-        var bootedMask = m_world.BootedMask;
-        var activePlayerMask = ActivePlayerMask();
-        var workbenchBucket = WorkbenchGlowBucket();
-        var programChanged = ((m_program is null) || (bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (workbenchBucket != m_builtWorkbenchBucket) || (m_creator.ProgramRevision != m_builtProgramRevision) || (m_worldScene.ProgramRevision != m_builtWorldRevision) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair) || (m_sdfDebug.Active && (m_sdfDebug.Revision != m_builtSdfDebugRevision)));
-
-        if (programChanged) {
-            m_program = BuildProgram(bootedMask: bootedMask);
-            m_programBootedMask = bootedMask;
-            m_builtActivePlayerMask = activePlayerMask;
-            m_builtWorkbenchBucket = workbenchBucket;
-            m_builtProgramRevision = m_creator.ProgramRevision;
-            m_builtWorldRevision = m_worldScene.ProgramRevision;
-            m_builtCompanionCount = m_companions.Companions.Count;
-            m_builtLinkedPair = linkedPair;
-            m_builtSdfDebugRevision = m_sdfDebug.Revision;
-            // The camera feeds share this program object; bump the feed revision only when it actually rebuilds, so the
-            // feed engine re-uploads once per real program change, not every frame (Rebuild no-ops on an unchanged rev).
-            m_builtFeedRevision++;
+        // Advance the one-shot editor-reveal beat (armed on the EditorRevealed edge): a bell-shaped swell over
+        // EditorRevealBeatSeconds, then it rests. Presentation only — never hashed, like the workbench glow above.
+        if (m_editorRevealBeatTime < EditorRevealBeatSeconds) {
+            m_editorRevealBeatTime = MathF.Min(x: EditorRevealBeatSeconds, y: (m_editorRevealBeatTime + MathF.Max(x: deltaSeconds, y: 0f)));
         }
 
-        // Render-relative, alpha-interpolated player positions for the camera director (reused list — no per-frame alloc).
-        // A presentation override (a player driving their brick, whose avatar follows the game sprite) wins over the sim
-        // body, so the camera frames the followed avatar.
+        // The shared room-content trigger (see AdvanceRoomRevision) — runs every frame regardless of which
+        // composition ends up active, so a change while a takeover is up (e.g. a scripted `boot` mid-debug-session)
+        // is still waiting for the room composition the moment it becomes active again.
+        AdvanceRoomRevision(linkedPair: linkedPair);
+
+        // FRESH per-frame player positions + the screen-director view layout — computed BEFORE any composition source
+        // packs its dynamic-transform buffer, so PlayerBoxEmitter (players) and DiegeticBarEmitter (the bar's
+        // camera-rig mount) bake THIS frame's values; every read of these two ABOVE this point in the method (the
+        // companion tick/plan above) already saw LAST frame's, the documented one-frame lag.
+        PackPlayerRenderTransforms(renderOrigin: renderOrigin, alpha: interpolationAlpha);
+        PublishAnchors();
+
+        // Plans this frame's diegetic views (camera views + named-view wiring) now that every anchor a view might
+        // bind (a companion shape, a world placement) is freshly republished — see PublishAnchors.
+        PlanViews();
+        AdvanceRevealTransition(deltaSeconds: deltaSeconds);
+
         m_activePositions.Clear();
 
         for (var slot = 0; (slot < m_world.Slots.Count); slot++) {
-            if (m_world.Slots[slot] is not { } player) {
-                continue;
+            if (m_world.Slots[slot] is not null) {
+                m_activePositions.Add(item: m_playerRenderTransforms[slot].Position);
             }
-
-            m_activePositions.Add(item: ((PresentationOverride?.Invoke(slot) is { } overridden)
-                ? overridden.ToRenderRelative(origin: renderOrigin)
-                : player.Body.RenderRelativePositionAt(renderOrigin: renderOrigin, alpha: interpolationAlpha)));
         }
 
         // The pane cameras ride m_director.PaneCameraSource, assigned once in the constructor (it resolves live
@@ -534,18 +752,249 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         //
         // The scenario harness's per-frame pose is settled by the render node's ScenarioTick BEFORE this compose (the
         // node owns the capture-arm + graceful-exit seams; see ScenarioTick), so the director already holds this
-        // frame's verbatim shot pose here. Nothing to advance in the source itself.
-        var views = m_director.Compose(activePositions: m_activePositions, bootOrder: m_world.BootOrder, imageWidth: width, imageHeight: height, deltaSeconds: deltaSeconds);
+        // frame's verbatim shot pose here. Nothing to advance in the source itself. The room-bench pin (below) rides
+        // the SAME director seam; the two are not expected to run together (one is a headless capture run, the other
+        // an interactive console verb), but ApplyRoomBenchCameraPose only asserts while Running, so a bench started
+        // mid-scenario would win outright rather than corrupt either state.
+        ApplyRoomBenchCameraPose();
+        // The engine-benchmark harness's per-frame camera and workload pins are consumed after room.bench's pin
+        // (the two never overlap) and BEFORE Compose reads ScenarioCameraPose, so a bench scene frames view 0.
+        ApplyBenchStage();
+
+        m_currentViews = m_director.Compose(activePositions: m_activePositions, bootOrder: m_world.BootOrder, imageWidth: width, imageHeight: height, deltaSeconds: deltaSeconds);
 
         // View 0 is always the room; stash its live rect for the binding-bar overlay (this runs INSIDE the producer's
         // ProduceFrame, so the overlay — which wraps the producer — always reads the region of the frame it draws over).
-        LastRoomRegion = views[0].Region;
+        LastRoomRegion = m_currentViews[0].Region;
 
-        PackDynamicTransforms(renderOrigin: renderOrigin, alpha: interpolationAlpha);
+        // Exactly ONE of the takeovers is active: the native AGB scene (a single static program — no capacity probe
+        // needed, see BuildAgbDebugProgram), the SDF-debug mode (its OWN alternate composition), the GRAVITY ARC's
+        // planetoid takeover (also its OWN alternate composition — see OverworldFrameSource.Gravity.cs; it uses its
+        // OWN dresser, not this file's shared Dress, so it never reads m_currentViews at all), or the room (the
+        // default). Each composition's CaptureFrame rebuilds (if its aggregate Revision changed), packs its own
+        // dynamic transforms, and calls its dresser — this method never builds an SdfFrame itself.
+        // The engine-benchmark synthetic-workload takeover renders a single cached workload program
+        // fullscreen in place of the room, framed by the pinned bench pose — the same single-cached-program takeover
+        // shape as the AGB scene below, so Dress's reference-diff treats entering/leaving it as a real change. Checked
+        // FIRST so a bench sdf.* scene wins over any other takeover.
+        if (m_benchWorkloadActive && (m_benchWorkloadProgram is { } benchProgram)) {
+            return Dress(program: benchProgram, transforms: m_benchWorkloadTransforms, width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
+        }
+
+        if (m_agbActive) {
+            m_agbProgram ??= BuildAgbDebugProgram();
+
+            return Dress(program: m_agbProgram, transforms: [], width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
+        }
+
+        if (m_gravityActive) {
+            return m_gravityComposition.CaptureFrame(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
+        }
+
+        return (m_sdfDebug.Active
+            ? m_sdfDebugComposition.CaptureFrame(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha)
+            : m_roomComposition.CaptureFrame(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha));
+    }
+
+    // The shared "did the combined room content change" trigger (see the m_roomRevision field remarks): every
+    // rebuild condition is expressed as a monotonic bump. The creator and world scenes' own
+    // ProgramRevision and the SDF-debug mode's OWN Revision are read directly by their respective emitters/composition
+    // (CreatorSceneEmitter/WorldSceneEmitter/SdfDebugEmitter), so they are NOT folded in here.
+    private void AdvanceRoomRevision((int A, int B)? linkedPair) {
+        var bootedMask = m_world.BootedMask;
+        var activePlayerMask = ActivePlayerMask();
+        var workbenchBucket = WorkbenchGlowBucket();
+        // The diegetic bar's content signature (page/binding/family) joins the trigger, exactly like the terminal's
+        // on/off and the workbench glow: the CAMERA-rig pose rides the bar's dynamic slot (never a rebuild), only its
+        // CONTENT changing re-bakes the panels + labels.
+        var diegeticSignature = (m_diegeticSignature?.Invoke() ?? 0);
+        var gardenSignature = GardenSignature();
+        var changed = ((bootedMask != m_programBootedMask) || (activePlayerMask != m_builtActivePlayerMask) || (workbenchBucket != m_builtWorkbenchBucket) || (m_terminalVisible != m_builtTerminalVisible) || (m_diegeticUiVisible != m_builtDiegeticVisible) || (diegeticSignature != m_builtDiegeticSignature) || (m_companions.Companions.Count != m_builtCompanionCount) || !EqualLinkedPair(a: linkedPair, b: m_builtLinkedPair) || (gardenSignature != m_builtGardenSignature));
+
+        if (!changed) {
+            return;
+        }
+
+        m_roomRevision++;
+        m_programBootedMask = bootedMask;
+        m_builtActivePlayerMask = activePlayerMask;
+        m_builtWorkbenchBucket = workbenchBucket;
+        m_builtTerminalVisible = m_terminalVisible;
+        m_builtDiegeticVisible = m_diegeticUiVisible;
+        m_builtDiegeticSignature = diegeticSignature;
+        m_builtCompanionCount = m_companions.Companions.Count;
+        m_builtLinkedPair = linkedPair;
+        m_builtGardenSignature = gardenSignature;
+    }
+
+    // The deterministic garden's rebuild key: occupied-slot count in the low bits, then each occupied slot's growth
+    // stage (clamped to a small fixed width so six slots always pack into one int) — changes exactly when a plant/
+    // clear happens or a stage advances, never on every tick (a settled tree stops rebuilding once fully grown).
+    private int GardenSignature() {
+        var gardens = m_world.Gardens;
+        var signature = 0;
+
+        for (var slot = 0; (slot < gardens.Count); slot++) {
+            if (gardens[slot] is not { } planted) {
+                continue;
+            }
+
+            var ticksSincePlanting = (m_world.CurrentTick - planted.PlantedTick);
+            var stageBucket = Math.Min(val1: 7UL, val2: (ticksSincePlanting / GardenTreeGenerator.TicksPerStage));
+
+            signature |= ((1 + (int)stageBucket) << (slot * 4));
+        }
+
+        return signature;
+    }
+
+    // Every FIXED player slot's FRESH render-relative transform for this frame (see the m_playerRenderTransforms field
+    // remarks) — a presentation override (a player driving their brick, whose avatar follows the game sprite) wins
+    // over the sim body, so the camera and the baked player box both follow the followed avatar.
+    private void PackPlayerRenderTransforms(WorldCoord3 renderOrigin, float alpha) {
+        var players = m_world.DynamicTransforms(renderOrigin: renderOrigin, alpha: alpha);
+
+        for (var slot = 0; (slot < OverworldWorld.MaxPlayers); slot++) {
+            m_playerRenderTransforms[slot] = ((PresentationOverride?.Invoke(slot) is { } overridden)
+                ? (players[slot] with { Position = overridden.ToRenderRelative(origin: renderOrigin) })
+                : players[slot]);
+        }
+
+        // The world-sculpt camera anchors on the CREATING slot's rendered position (the player is the cursor).
+        m_primaryPlayerRenderPosition = m_playerRenderTransforms[0].Position;
+    }
+
+    // Republishes this frame's real anchors into m_anchorTable: every player body, the room's
+    // spawn anchor, and each console's screen face — the room's own honest answer to "what can a camera rig ride
+    // here." BeginTick marks every previously-published id not-live FIRST, so a slot/console that stops existing
+    // (a player leaves, the room's console count shrinks on a world reload) correctly stops resolving rather than
+    // leaving a stale pose behind (see SdfAnchorTable's remarks). Called once per CaptureFrame, right after
+    // PackPlayerRenderTransforms (whose fresh values this publishes) and before anything reads the table.
+    private void PublishAnchors() {
+        m_anchorTable.BeginTick();
+
+        // The spawn anchor: render-relative space is ALREADY anchored at the room's spawn point (renderOrigin, above
+        // — see CaptureFrame's remarks), so its own render-relative position is always the origin.
+        _ = m_anchorTable.Publish(name: "world.spawn", pose: new SdfAnchor(Position: Vector3.Zero, Orientation: Quaternion.Identity));
+
+        for (var slot = 0; (slot < OverworldWorld.MaxPlayers); slot++) {
+            if (m_world.Slots[slot] is null) {
+                continue; // An empty slot publishes nothing — a rig resolving "player.N" for a free slot correctly
+                          // sees it as not-live rather than parked-below-the-floor.
+            }
+
+            var transform = m_playerRenderTransforms[slot];
+
+            _ = m_anchorTable.Publish(name: $"player.{slot}", pose: new SdfAnchor(Position: transform.Position, Orientation: transform.Orientation));
+        }
+
+        for (var index = 0; (index < m_room.Consoles.Count); index++) {
+            // Static (a console stand never moves once placed) — republished every tick like every other anchor, per
+            // the table's own per-tick-republish contract (see SdfAnchorTable's remarks), rather than published once
+            // and left to linger.
+            _ = m_anchorTable.Publish(name: $"console.{index}", pose: new SdfAnchor(Position: ScreenCenterLocal(consoleIndex: index), Orientation: Quaternion.Identity));
+        }
+
+        // Every companion creation camera's anchored shape and every world-scene camera's anchored placement are rows
+        // in this table, so SdfCameraView reads them through the same ISdfAnchorSource
+        // vocabulary as a player body or a console face (see RegisterCameraView/PlanViews). Published for EVERY
+        // declared camera (not only a currently-wired/requested one) — cheap (a dictionary write), and it means a
+        // camera view registered later in the same tick always finds a fresh anchor if one exists.
+        PublishCompanionShapeAnchors();
+        PublishWorldPlacementAnchors();
+    }
+
+    // Publishes "shape.{companionIndex}.{shapeId}" for every companion creation camera's anchored shape, from the
+    // companion emitter's own last-packed transform cache (one frame stale, like every other diegetic-view anchor).
+    // A shape not yet packed (or missing — normalization should have dropped its camera) simply is not published this
+    // tick, so SdfCameraView.Resolve correctly reports no signal for it (see the anchor table's own remarks).
+    private void PublishCompanionShapeAnchors() {
+        var companions = m_companions.Companions;
+
+        for (var companionIndex = 0; (companionIndex < companions.Count); companionIndex++) {
+            var cameras = companions[companionIndex].Document.Cameras;
+
+            if (cameras is not { Count: > 0 }) {
+                continue;
+            }
+
+            var shapes = (companions[companionIndex].Document.Shapes ?? []);
+
+            foreach (var camera in cameras) {
+                var shapeIndex = IndexOfShape(shapes: shapes, shapeId: camera.ShapeId);
+
+                if ((shapeIndex < 0) || !m_companionEmitter.TryGetShapeTransform(companionIndex: companionIndex, shapeIndex: shapeIndex, transform: out var shapeTransform)) {
+                    continue;
+                }
+
+                _ = m_anchorTable.Publish(name: ShapeAnchorName(companionIndex: companionIndex, shapeId: camera.ShapeId), pose: new SdfAnchor(Position: shapeTransform.Position, Orientation: shapeTransform.Orientation));
+            }
+        }
+    }
+
+    // Publishes "placement.{id}" for every world-scene camera anchored to a placement (SdfAnchorKind.Instance), from
+    // the world scene's own live placement pose. A World-anchored eye needs no such anchor (CameraEye ignores it).
+    private void PublishWorldPlacementAnchors() {
+        foreach (var eye in m_worldScene.Cameras) {
+            if (eye.Anchor != SdfAnchorKind.Instance) {
+                continue;
+            }
+
+            if (!m_worldScene.TryResolvePlacementPose(placementId: eye.AnchorId, out var position, out var yawRadians)) {
+                continue;
+            }
+
+            _ = m_anchorTable.Publish(name: PlacementAnchorName(placementId: eye.AnchorId), pose: new SdfAnchor(Position: position, Orientation: Quaternion.CreateFromYawPitchRoll(yaw: yawRadians, pitch: 0f, roll: 0f)));
+        }
+    }
+    private static int IndexOfShape(IReadOnlyList<ShapeDocument> shapes, int shapeId) {
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (shapes[index].Id == shapeId) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>Turns the composed program/transforms into this frame's <see cref="SdfFrame"/> (see
+    /// <see cref="ISdfFrameDresser"/>) — the room mood, the debug frame-channel flags, and the grid-lock overlay; the
+    /// SAME dressing applies regardless of which of the three takeovers produced <paramref name="program"/> (a
+    /// fullscreen debug/AGB subject still sits inside the room's view layout — see <see cref="m_currentViews"/>).</summary>
+    SdfFrame ISdfFrameDresser.Dress(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
+        Dress(program: program, transforms: transforms, width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
+
+    private SdfFrame Dress(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        _ = width;
+        _ = height;
+        _ = deltaSeconds;
+        _ = interpolationAlpha;
+
+        // A real rebuild always hands back a FRESH SdfProgram object (every composition source's BuildProgram
+        // constructs a new SdfProgramBuilder every time); an unchanged program is the SAME instance across calls — so
+        // reference identity is exactly the old `programChanged` bool, generalized across all three takeovers (a
+        // switch between them is itself always a "change": the two composition sources' m_program fields are
+        // independent objects, and the AGB program is a third, separately cached one).
+        var programChanged = !ReferenceEquals(objA: program, objB: m_lastDressedProgram);
+
+        m_lastDressedProgram = program;
+        m_program = program;
+        m_lastTransforms = transforms;
+
+        if (programChanged) {
+            // The view stack's content shares this program object; bump the revision only when it actually rebuilds, so
+            // a view's offscreen engine re-uploads once per real program change, not every frame.
+            m_viewProgramRevision++;
+        }
+
+        // The diegetic bar's rig mount is packed by DiegeticBarEmitter.PackDynamicTransforms directly (it reads
+        // m_currentViews, computed fresh in CaptureFrame before any composition source packs) — nothing to do here.
 
         // While immersed the room is UNLIT (RoomLightFactor 0), so the letterbox margins around a contained screen
         // render BLACK — a native handheld/emulator look — easing up to the arcade mood as the reveal lights the room.
-        var roomLight = m_director.RoomLightFactor;
+        // The editor-reveal beat (Q35) rides this same seam: a transient bell-shaped lift as the workshop opens, so the
+        // room blooms warm then settles. Zero at rest (and while immersed, RoomLightFactor 0 zeroes it out anyway).
+        var roomLight = (m_director.RoomLightFactor * (1f + (EditorRevealBeatLightGain * EditorRevealBeat())));
 
         // The grid-lock overlay channel (grid-locking §4): the ACTIVE editor writes it as primitives (no new type
         // named here — the scenes name the GridOverlayState facade, keeping this class under its coupling ceiling).
@@ -565,9 +1014,9 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         }
 
         return new SdfFrame(
-            Program: m_program!, // non-null: programChanged is true whenever m_program was null, so it was just built
+            Program: program,
             ProgramChanged: programChanged,
-            Views: views,
+            Views: m_currentViews,
             // A scenario run PINS the rendered content/animation clock to the active shot's deterministic time (never the
             // wall-clock accumulator), so a time-animated creation renders identically regardless of the run's fps — the
             // byte-identical proof. Every non-scenario run keeps the live render clock.
@@ -579,23 +1028,49 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             // reveal's room-light does — at dusk the authored lamps' emissive materials carry the room (world.dusk).
             // SDF-debug pins the room full-bright (Ambient/Sun 1) so the lit/normals views read true against the
             // replaced-room debug subject; otherwise studio's flat lighting or the dim arcade mood applies.
-            AmbientScale = ((m_sdfDebug.Active || m_agbActive) ? 1f : (m_scenarioStudio ? StudioAmbientScale : (OverworldAmbientScale * roomLight * m_worldScene.Daylight))),
+            AmbientScale = ((m_sdfDebug.Active || m_agbActive || m_benchWorkloadActive) ? 1f : (m_scenarioStudio ? StudioAmbientScale : ((OverworldAmbientScale * roomLight) * m_worldScene.Daylight))),
             // The SLICE debug view's plane channel (two floats riding the frame's screen-light env lanes — see
             // SdfFrame.DebugSliceAxis): the sdf.slice verb positions an axis-aligned slice plane; the defaults (0)
             // are the camera-locked plane, so a run that never touches the verb uploads the same zeros as before.
             DebugSliceAxis = m_sdfDebug.SliceAxis,
             DebugSliceOffset = m_sdfDebug.SliceOffset,
-            DynamicTransforms = m_dynamicTransforms,
+            // The analytic-normal A/B lever (the sdf.normals verb): default false = the analytic forward-mode gradient
+            // dual; true swaps back to the 4-tap finite-difference probe. A pure frame flag (no geometry), so it rides
+            // the same per-frame channel as the slice lanes above.
+            DisableAmbientOcclusion = m_benchDisableAmbientOcclusion,
+            // The soft-shadow grid-cull A/B lever (the sdf.shadowcull verb): default ON (DisableShadowCull false), so the
+            // shadow march gathers each lit pixel's shadow-ray grid neighbourhood; OFF forces the flat all-instances
+            // reference. A pure frame flag, same per-frame channel as the normals lever above.
+            // The F1/F2 far-field isolators (sdf.far-bound / sdf.shadow-far-exit): both ship ON, so the frame DISABLES
+            // only when the backing state clears the feature — the "off" sides of the owner's paired A/B.
+            DisableFarBound = !m_benchFarBound,
+            DisableScreenLights = m_benchDisableScreenLights,
+            DisableShadowCull = !m_sdfDebug.ShadowCull,
+            DisableShadowFarExit = !m_benchShadowFarExit,
             // The grid-lock overlay channel (grid-locking §4), threaded into SdfFrame's Grid* fields exactly like the
             // slice lanes above (the active editor wrote the locals; all-zero outside an editor).
+            DisableSoftShadows = m_benchDisableSoftShadows,
+            DynamicTransforms = transforms,
+            // The cadence gate (sdf.cadence-gate): default OFF (m_benchEnableCadenceGate false) = every frame renders
+            // fully, byte-identical. A presentation-only engine policy, not a shader lever, so it rides SdfFrame as a
+            // plain flag the engine reads (never the screen-light buffer).
+            EnableCadenceGate = m_benchEnableCadenceGate,
+            EnableShadowProxy = m_benchEnableShadowProxy,
             GridFlags = gridFlags,
             GridFloorY = gridFloorY,
             GridObjectFrame = gridObjectFrame,
             GridObjectOrigin = gridObjectOrigin,
             GridObjectPatchRadius = gridObjectPatchRadius,
+            // The engine-benchmark shader-level levers are four per-frame lanes driven by the demo-side
+            // live state the feature-switch registry writes (BenchDisable*/BenchShadowDistanceScale). Default all-off/0 =
+            // every effect ON, so the shipped demo uploads the same zeros as before the levers existed.
             GridObjectPitch = gridObjectPitch,
             GridWorldPitch = gridWorldPitch,
-            SunScale = ((m_sdfDebug.Active || m_agbActive) ? 1f : (m_scenarioStudio ? StudioSunScale : (OverworldSunScale * roomLight * m_worldScene.Daylight))),
+            ShadowDistanceScale = m_benchShadowDistanceScale,
+            SunScale = ((m_sdfDebug.Active || m_agbActive || m_benchWorkloadActive) ? 1f : (m_scenarioStudio ? StudioSunScale : ((OverworldSunScale * roomLight) * m_worldScene.Daylight))),
+            // PATH B — the shadow-proxy lever (sdf.shadow-proxy): default OFF (m_benchEnableShadowProxy false) uploads 0
+            // = the full shadow occluder set, byte-identical to before the lever existed.
+            UseFiniteDifferenceNormals = m_sdfDebug.UseFiniteDifferenceNormals,
         };
     }
 
@@ -615,9 +1090,9 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // Stashed for BuildProgram (the sagging cable's emission reads this — see EmitLinkCable), validated against
         // the room's actual console count so a stale/out-of-range linked pair (e.g. from the `link` console verb) can
         // never index past m_room.Consoles.
-        m_currentLinkedPair = ((linkedPair is { A: >= 0, B: >= 0 } pair) && (pair.A < m_room.Consoles.Count) && (pair.B < m_room.Consoles.Count) && (pair.A != pair.B))
+        m_currentLinkedPair = (((linkedPair is { A: >= 0, B: >= 0 } pair) && (pair.A < m_room.Consoles.Count) && (pair.B < m_room.Consoles.Count) && (pair.A != pair.B))
             ? linkedPair
-            : null;
+            : null);
 
         // Studio review has no cabinets and no easel (BuildProgram skips both), so no borrow is submitted — the easel
         // slab isn't emitted, so nothing samples the preview slot.
@@ -653,9 +1128,8 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             Console.Error.WriteLine(value: narration);
         }
     }
-
     private static bool EqualLinkedPair((int A, int B)? a, (int A, int B)? b) =>
-        (a.HasValue == b.HasValue) && (!a.HasValue || ((a.Value.A == b!.Value.A) && (a.Value.B == b.Value.B)));
+        ((a.HasValue == b.HasValue) && (!a.HasValue || ((a.Value.A == b!.Value.A) && (a.Value.B == b.Value.B))));
 
     // ---- Companion faces + the diegetic-feed director (WS-12) ------------------------------------------------------
     // A screen-faced companion (its behavior manifest declares a face) registers a floating Ambient screen claim
@@ -714,12 +1188,12 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             var pinned = companion; // capture for the closures.
 
             // A floating (preferredSlot -1) Ambient claim: it never evicts a cabinet, taking the lowest free headroom
-            // slot. Its source/light resolve the companion's CURRENTLY-tuned face feed by NAME through the registry.
+            // slot. Its source/light resolve the companion's CURRENTLY-tuned face feed by NAME through the view stack.
             RegisterScreenClaimant(
-                light: () => (m_feeds?.ResolveNamedFeedLight(name: pinned.CurrentFaceFeed) ?? Vector3.Zero),
+                light: () => (m_views?.ResolveGlow(name: pinned.CurrentFaceFeed) ?? Vector3.Zero),
                 ownerToken: token,
                 priority: ScreenSlotPriority.Ambient,
-                source: () => (m_feeds?.ResolveNamedFeedHandle(name: pinned.CurrentFaceFeed) ?? 0)
+                source: () => (m_views?.Resolve(name: pinned.CurrentFaceFeed) ?? 0)
             );
         }
     }
@@ -745,52 +1219,153 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
 
     // Whether a companion's PREFERRED remote face feed (the last entry in its face-feed list, e.g. its own camera feed)
     // is producing pixels this frame — the auto-tune's "is there something to drift to" probe. Never names a specific
-    // feed: it asks the registry whether the companion's own last-listed feed name is live.
+    // feed: it asks the view stack whether the companion's own last-listed view name is live.
     private bool PreferredRemoteFeedLive(CompanionState companion) {
-        if ((m_feeds is not { } feeds) || (companion.FaceFeeds.Count == 0)) {
+        if ((m_views is not { } views) || (companion.FaceFeeds.Count == 0)) {
             return false;
         }
 
-        return feeds.IsNamedFeedLive(name: companion.FaceFeeds[^1]);
+        return views.IsLive(name: companion.FaceFeeds[^1]);
     }
 
-    /// <summary>Composes the diegetic-feed director over the main engine's worst-case envelope (idempotent) — the
-    /// render node calls this once at resource build so its own type coupling stays flat; this source is the feed
-    /// objects' composition point (mirrors <see cref="InstallBakePreview"/>). Without it the source runs feed-free (a
-    /// bare-room run pays nothing).</summary>
+    /// <summary>Composes the diegetic view stack over the main engine's worst-case envelope (idempotent) — the render
+    /// node calls this once at resource build so its own type coupling stays flat; this source is the view stack's
+    /// composition point (mirrors <see cref="InstallBakePreview"/>). Without it the source runs view-free (a bare-room
+    /// run pays nothing). Named <c>InstallFeeds</c> still (not renamed to match <see cref="ViewStack"/>'s own
+    /// vocabulary) — the render node already names this method, and the swap underneath it is meant to be invisible.</summary>
     /// <param name="services">The application services (the GPU compute seam).</param>
-    /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the feed kernels).</param>
+    /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the view kernels).</param>
     public void InstallFeeds(IServiceProvider services, bool hostsOnDirectX) {
         ArgumentNullException.ThrowIfNull(services);
 
-        m_feeds ??= new CameraFeedPool(
-            dynamicTransformCapacity: m_dynamicTransformCount,
-            hostsOnDirectX: hostsOnDirectX,
-            instanceCapacity: WorstCaseInstanceCapacity,
-            programWordCapacity: WorstCaseProgramWordCapacity,
-            services: services
+        m_services = services;
+        m_viewsHostOnDirectX = hostsOnDirectX;
+        m_views ??= new ViewStack();
+        m_consoleFeed ??= new ConsoleFeed(source: (services.GetService(serviceType: typeof(ConsoleTextStore)) as IConsoleTextSource));
+
+        // The procedural face feed + the console CRT are cheap producers some OTHER path (TickFeeds, below) already
+        // keeps current every frame — unbudgeted GuestSurfaceView content, so ViewStack.RenderFrame always serves
+        // their FRESHEST handle rather than a round-robin-stale one.
+        _ = m_views.Register(band: ScreenSlotPriority.Ambient, content: new GuestSurfaceView(roomGlow: FaceFeedGlow, source: () => m_faceFeed.CurrentImageViewHandle), name: CompanionState.DefaultFaceFeed);
+        _ = m_views.Register(band: ScreenSlotPriority.Anchored, content: new GuestSurfaceView(roomGlow: ConsoleFeedGlow, source: () => (m_consoleFeed?.CurrentImageViewHandle ?? 0)), name: ConsoleFeed.FeedName);
+
+        // The diegetic console terminal claims its headroom screen slot through the SAME generic seam a placeable
+        // diegetic camera would — an Anchored preferred-slot claim (a permanent fixture, like a cabinet, so it always
+        // seats its own slot); its source/light resolve the console named view the stack publishes. No transform
+        // provider: the CRT slab is STATIC geometry (EmitTerminal bakes its world frame directly). Registered once here
+        // (persistent across passes); the `terminal on|off` verb gates only its EMISSION, never this claim.
+        RegisterScreenClaimant(
+            light: () => (m_views?.ResolveGlow(name: ConsoleFeed.FeedName) ?? Vector3.Zero),
+            ownerToken: m_terminalClaimToken,
+            preferredSlot: TerminalScreenSlot,
+            priority: ScreenSlotPriority.Anchored,
+            source: () => (m_views?.Resolve(name: ConsoleFeed.FeedName) ?? 0)
         );
+
+        // THE REPLAY MUSEUM + THE DROSTE DOOR: reserve their five headroom slots permanently (Anchored, like the
+        // terminal), so a floating claimant never seats where MuseumRenderer's static geometry already declared a
+        // ScreenSlab. No source/light provider here — content arrives only through `world.wire named:<name> <screen>`
+        // (the render node's per-slot wired-feed override wins over the ledger's own empty source; see
+        // OverworldRenderNode.BuildScreenSources).
+        for (var index = 0; (index < MuseumRenderer.ScreenCount); index++) {
+            RegisterScreenClaimant(ownerToken: MuseumClaimTokens[index], preferredSlot: (MuseumRenderer.ScreenSlotBase + index), priority: ScreenSlotPriority.Anchored);
+        }
+
+        RegisterScreenClaimant(ownerToken: MuseumClaimTokens[^1], preferredSlot: MuseumRenderer.DoorScreenSlot, priority: ScreenSlotPriority.Anchored);
     }
 
-    /// <summary>Renders this frame's planned camera feeds + ticks the procedural face feed (the render-thread half of
-    /// the diegetic-feed director). The render node calls this each produced frame beside its bake-preview tick (a
+    /// <summary>Registers a booted cabinet's raw framebuffer as a named, resolvable <see cref="ViewStack"/> entry
+    /// for the immersed-emulator guest view: <c>world.wire named:guest:N &lt;screen&gt;</c>
+    /// already resolves any name registered here through the EXISTING <c>ScreenSourceKind.Named</c> wiring grammar
+    /// (<c>CollectWorldWiredViews</c>) — no wiring-grammar change was needed, only the registration itself. Zero
+    /// emulator reference here: <paramref name="source"/> is the SAME <c>Func&lt;nint&gt;</c> closure shape
+    /// <c>OverworldRenderNode.BuildScreenSources</c> already wraps a <c>GamingBrickChildNode</c> in directly — this
+    /// call ADDS a second, named path to that same handle for the view stack's benefit, alongside (never replacing)
+    /// the cabinet's existing direct screen-source wiring (the documented "W-SEAM decision" — a cabinet's screen
+    /// slab still samples the direct provider; this name is for a DIFFERENT screen wiring it onto, e.g. the reveal's
+    /// guest→room transition or a TV-in-TV proof). Idempotent per name (<see cref="ViewStack.Register"/> updates in
+    /// place) — safe to call once at boot, which is all this wave does.</summary>
+    /// <param name="consoleIndex">The cabinet's console index — the registered name is <c>"guest:{consoleIndex}"</c>.</param>
+    /// <param name="source">Resolves the cabinet's current native framebuffer handle (0 while unbooted/unassigned).</param>
+    /// <returns>The registered view id, or <see cref="ViewId.None"/> when the view stack isn't installed yet.</returns>
+    public ViewId RegisterGuestView(int consoleIndex, Func<nint> source) {
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (m_views is not { } views) {
+            return ViewId.None;
+        }
+
+        return views.Register(band: ScreenSlotPriority.Ambient, content: new GuestSurfaceView(source: source), name: $"guest:{consoleIndex}");
+    }
+
+    // A soft neutral glow for the default face feed's room-light contribution (the CRT face casts a faint light).
+    private static readonly Vector3 FaceFeedGlow = new(x: 0.10f, y: 0.16f, z: 0.12f);
+    // A soft green phosphor glow for the console terminal's room-light contribution, same spirit as the face glow.
+    private static readonly Vector3 ConsoleFeedGlow = new(x: 0.08f, y: 0.15f, z: 0.10f);
+
+    /// <summary>Installs the diegetic-UI Tier-2 seam (the camera-rig-mounted action bar) as a set of DELEGATES, so this
+    /// source hosts it without naming the <c>DiegeticUiDirector</c> type — it sits at its exact CA1506 coupling ceiling,
+    /// and every delegate arity here is already in its coupling set. The render assembly composes the director and calls
+    /// this; the bar's atlas reaches the engine through the director's own <c>ISdfFrameSource</c> decorator, not this
+    /// source's <c>GlyphAtlas</c> override. Idempotent enough to call once at assembly.</summary>
+    /// <param name="bindSlotBase">Receives the reserved dynamic-transform slot the bar rides (given synchronously here).</param>
+    /// <param name="emit">Emits the bar geometry into the program being built (invoked from <see cref="EmitDiegeticBar"/>
+    /// when the bar is visible; the worst-case probe reserves the envelope self-containedly instead — see the field
+    /// remarks).</param>
+    /// <param name="mount">Computes the bar's per-frame camera-rig transform from the composed views.</param>
+    /// <param name="signature">The bar's content signature; a change rebuilds the program (page/binding/family swap).</param>
+    public void InstallDiegeticUi(Action<int> bindSlotBase, Action<SdfProgramBuilder> emit, Func<IReadOnlyList<SdfViewSnapshot>, DynamicTransform> mount, Func<int> signature) {
+        ArgumentNullException.ThrowIfNull(bindSlotBase);
+        ArgumentNullException.ThrowIfNull(emit);
+        ArgumentNullException.ThrowIfNull(mount);
+        ArgumentNullException.ThrowIfNull(signature);
+
+        m_diegeticEmit = emit;
+        m_diegeticMount = mount;
+        m_diegeticSignature = signature;
+        // The bar's actual slot: captured by DiegeticBarEmitter on its first Emit call, which the room composition's
+        // construction-time worst-case probe already forced (see the ctor) — so it is always known by the time this
+        // install runs (the render assembly composes this AFTER the frame source is fully constructed).
+        bindSlotBase(obj: m_diegeticBarEmitter.SlotBase);
+    }
+
+    /// <summary>Renders this frame's planned views + ticks the procedural face/console feeds (the render-thread half
+    /// of the diegetic view stack). The render node calls this each produced frame beside its bake-preview tick (a
     /// live GPU device); a no-op until <see cref="InstallFeeds"/> ran. Reads the PREVIOUS <c>CaptureFrame</c>'s plan —
-    /// a deliberate one-frame lag matching the diegetic-CRT read the primitive's self-reference rule expects.</summary>
+    /// a deliberate one-frame lag matching the diegetic-CRT read <see cref="ViewStack"/>'s self-reference rule expects.</summary>
     /// <param name="context">The frame context (its host resolves the live GPU device).</param>
     public void TickFeeds(in Puck.Hosting.FrameContext context) {
-        if ((m_feeds is not { } feeds) || (m_program is null)) {
+        if ((m_views is not { } views) || (m_program is null) || (m_services is not { } services)) {
             return;
         }
 
-        feeds.TickFeeds(
-            context: in context,
-            dynamicTransforms: m_dynamicTransforms,
-            faceFeedNeeded: FaceFeedNeeded(),
-            program: m_program,
-            resolveScreenSource: ResolveFeedScreenSource,
-            revision: m_builtFeedRevision,
-            time: ((m_captureSequencer is { } scenario) ? scenario.PinnedContentTime : m_time)
+        var faceFeedNeeded = FaceFeedNeeded();
+        var consoleFeedNeeded = m_terminalVisible;
+
+        if (
+            (faceFeedNeeded || consoleFeedNeeded) &&
+            (services.GetService(serviceType: typeof(IGpuComputeServices)) is IGpuComputeServices gpu) &&
+            context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)
+        ) {
+            if (faceFeedNeeded) {
+                m_faceFeed.Tick(deltaSeconds: (float)context.DeltaSeconds, device: device, gpu: gpu);
+            }
+
+            if (consoleFeedNeeded) {
+                m_consoleFeed?.Tick(device: device, gpu: gpu);
+            }
+        }
+
+        var renderContext = new ViewRenderContext(
+            DynamicTransforms: m_lastTransforms,
+            Host: context,
+            Program: m_program,
+            ProgramRevision: m_viewProgramRevision,
+            ResolveScreenSource: ResolveFeedScreenSource,
+            Time: ((m_captureSequencer is { } scenario) ? scenario.PinnedContentTime : m_time)
         );
+
+        views.RenderFrame(context: in renderContext);
     }
 
     // Whether the default (procedural) face feed is wanted this frame: a screen-faced companion exists, or a
@@ -811,75 +1386,129 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         return false;
     }
 
-    /// <summary>Disposes the diegetic-feed director's GPU resources (the render node's teardown path).</summary>
+    /// <summary>Disposes the diegetic view stack's GPU resources + the face/console feeds' own (the render node's
+    /// teardown path).</summary>
     public void DisposeFeeds() {
-        m_feeds?.Dispose();
-        m_feeds = null;
+        m_views?.Dispose();
+        m_views = null;
+        m_faceFeed.Dispose();
+        m_consoleFeed?.Dispose();
+        m_consoleFeed = null;
+        m_cameraViews.Clear();
     }
 
-    /// <summary>The wired-feed image handle a <c>world.wire</c> routed onto screen <paramref name="screenIndex"/> this
-    /// frame, or 0 when nothing wired a feed there — the render node's per-slot cabinet source override consults this
-    /// so a screen wired to a camera/named feed samples the feed INSTEAD of its cabinet brick / flat material (the
+    /// <summary>The wired-view image handle a <c>world.wire</c> routed onto screen <paramref name="screenIndex"/> this
+    /// frame, or 0 when nothing wired a view there — the render node's per-slot cabinet source override consults this
+    /// so a screen wired to a camera/named view samples the view INSTEAD of its cabinet brick / flat material (the
     /// fish's lure onto a cabinet screen). Primitive-typed (<see langword="nint"/>) on purpose — the node stays
     /// coupling-flat.</summary>
     /// <param name="screenIndex">The screen-surface slot index (a cabinet index 0-3, or a headroom slot).</param>
-    /// <returns>The wired feed's handle, or 0 for no wire (the caller keeps its default source).</returns>
+    /// <returns>The wired view's handle, or 0 for no wire (the caller keeps its default source).</returns>
     public nint ResolveWiredFeedOverride(int screenIndex) =>
-        ((m_wiredFeedByScreen.TryGetValue(key: screenIndex, value: out var feedName) && (m_feeds is { } feeds))
-            ? feeds.ResolveNamedFeedHandle(name: feedName)
+        ((m_wiredFeedByScreen.TryGetValue(key: screenIndex, value: out var viewName) && (m_views is { } views))
+            ? views.Resolve(name: viewName)
             : 0);
 
-    // What a screen index binds INSIDE a camera feed's own render: the same wiring the room shows (a wired feed's
-    // named handle, else the cabinet/flat fallback via the base screen-source resolution). The feed engine itself
-    // enforces the self-reference rule (a screen wired to the feed being rendered binds 0), so this need not.
+    // What a screen index binds INSIDE a camera/nested view's own render: the same wiring the room shows (a wired
+    // view's named handle, else the cabinet/flat fallback via the base screen-source resolution). ViewStack itself
+    // enforces the self-reference rule (a screen wired to the view being rendered binds 0), so this need not.
     private nint ResolveFeedScreenSource(int screenIndex) {
-        if (m_wiredFeedByScreen.TryGetValue(key: screenIndex, value: out var feedName) && (m_feeds is { } feeds)) {
-            return feeds.ResolveNamedFeedHandle(name: feedName);
+        if (m_wiredFeedByScreen.TryGetValue(key: screenIndex, value: out var viewName) && (m_views is { } views)) {
+            return views.Resolve(name: viewName);
         }
 
-        // A feed sees the room's OTHER diegetic screens through the same dynamic-claimant source the room uses (a
-        // booted cabinet's framebuffer lives on the render node's side, not here — a feed showing a cabinet is a
-        // future refinement; today a feed renders the world geometry + any wired feed screens, which is the proof).
+        // A view sees the room's OTHER diegetic screens through the same dynamic-claimant source the room uses (a
+        // booted cabinet's framebuffer lives on the render node's side, not here — a view showing a cabinet is a
+        // future refinement; today a view renders the world geometry + any wired view screens, which is the proof).
         return ResolveDynamicSource(slot: screenIndex);
     }
 
-    // Plans the camera feeds the wiring wants live this frame: every companion creation-camera whose named feed a face
-    // references (the fish's lure feed the face auto-tunes to), plus every world-scene camera a world.wire routes onto
-    // a screen. Builds the CameraFeedRequest list (resolving each eye's live anchor pose), registers the camera-feed
-    // screen claim, records screen->feed-name wiring for the render node's per-slot override, and hands the plan to the
-    // director. Presentation-only; the plan is consumed one frame later by TickFeeds (the diegetic lag).
-    private void PlanDiegeticFeeds() {
+    // Plans the views the wiring wants live this frame: every companion creation-camera whose named view a face
+    // references (the fish's lure lens), plus every world-scene camera a world.wire routes onto a screen. Registers
+    // (or rebinds) each as a persistent SdfCameraView, records screen->view-name wiring for the render node's per-slot
+    // override, and sets each view's self-reference screen set. Presentation-only; the views render one frame later
+    // via TickFeeds (the diegetic lag) — called AFTER PublishAnchors so every anchor a view might bind is fresh.
+    private void PlanViews() {
         m_wiredFeedByScreen.Clear();
 
-        if (m_feeds is not { } feeds) {
+        if (m_views is not { } views) {
             return;
         }
 
-        // Collect distinct requested feeds by NAME (a feed named by both a face and a world.wire is one pool slot).
-        // Reused scratch — cleared, not reallocated (see the field remarks). The plan itself must rerun each frame (live
-        // companion poses), but the containers do not need to churn the GC.
-        var requests = m_feedRequestScratch;
-        var byName = m_feedByNameScratch;
+        var requested = m_requestedViewScratch;
 
-        requests.Clear();
-        byName.Clear();
+        requested.Clear();
 
-        // 1) Companion creation cameras backing a face's referenced feed name (the fish's lure lens). A companion's
-        //    creation camera rides one of the companion's OWN shapes; resolve that shape's live world pose.
-        CollectCompanionFeeds(byName: byName, requests: requests);
+        // 1) Companion creation cameras backing a face's referenced view name (the fish's lure lens). A companion's
+        //    creation camera rides one of the companion's OWN shapes — its anchor was just published by PublishAnchors.
+        CollectCompanionViews(views: views, requested: requested);
 
-        // 2) World-scene cameras a world.wire routed onto a screen (feed:N -> eye #N). Records the screen->feed-name
-        //    wiring so the render node's per-slot override samples the feed.
-        CollectWorldWiredFeeds(byName: byName, requests: requests);
+        // 2) World-scene cameras a world.wire routed onto a screen (camera:N -> eye #N). Records the screen->view-name
+        //    wiring so the render node's per-slot override samples the view, and Named-kind wires too.
+        CollectWorldWiredViews(views: views, requested: requested);
 
-        feeds.PlanFeeds(requestedFeeds: requests);
+        // 2.5) The reveal-transition views (BeginRevealTransition) are directly-registered, never wire-requested —
+        //    fold them into the SAME requested-set so the structural release below (ReleaseUnwiredNestedViews)
+        //    reclaims them too, not only AdvanceRevealTransition's one-shot completion edge. "Still wanted" for a
+        //    reveal view means the transition is still running.
+        if (m_revealTransition is not null) {
+            _ = requested.Add(item: RevealTransitionConsoleView);
+            _ = requested.Add(item: RevealTransitionRoomView);
+        }
+
+        // 3) Withdraw any lazily-registered nested-world exhibit no wire references anymore THIS frame — the
+        //    counterpart to EnsureNestedWorldViewRegistered/EnsureMuseumNestedViewsRegistered above, which only ever
+        //    register (see ReleaseUnwiredNestedViews's remarks for why this altitude, not ViewStack.RenderFrame,
+        //    owns the withdrawal).
+        ReleaseUnwiredNestedViews(views: views, requested: requested);
+
+        // Every requested view's self-reference set is only fully known once BOTH passes above have recorded every
+        // wire — apply it last.
+        foreach (var name in requested) {
+            views.SetWiredScreens(name: name, screenIndices: WiredScreenSet(viewName: name));
+        }
     }
 
-    // Companion creation cameras whose named feed a face references: the feed is requested (so it renders live), and
-    // its eye rides the anchored shape's CURRENT world pose (the shape's dynamic-transform slot the companion renderer
-    // packed this frame). The face's own auto-tune decides WHETHER to show it; the feed renders regardless of tune so
-    // the auto-tune's "is the feed live" probe has a real answer.
-    private void CollectCompanionFeeds(Dictionary<string, int> byName, List<CameraFeedRequest> requests) {
+    // Releases lazily registered nested-world exhibits when no `world.wire` references them this frame, and releases
+    // reveal-transition views when their transition is no longer running. ViewStack cannot infer demand from screen
+    // wiring alone because transitions can sample an unwired view. This owner has the complete requested set, so it
+    // releases unused views, disposes their offscreen engines, and clears the cache for lazy recreation on demand.
+    private void ReleaseUnwiredNestedViews(ViewStack views, HashSet<string> requested) {
+        if ((m_nestedWorldView is not null) && !requested.Contains(item: NestedWorldViewName)) {
+            views.Release(name: NestedWorldViewName);
+            m_nestedWorldView = null;
+        }
+
+        if ((m_museumWallpaperView is not null) && !requested.Contains(item: MuseumRenderer.WallpaperViewName)) {
+            views.Release(name: MuseumRenderer.WallpaperViewName);
+            m_museumWallpaperView = null;
+        }
+
+        if ((m_drosteDoorView is not null) && !requested.Contains(item: MuseumRenderer.DoorViewName)) {
+            views.Release(name: MuseumRenderer.DoorViewName);
+            m_drosteDoorView = null;
+        }
+
+        // The reveal-transition pair: AdvanceRevealTransition's completion edge already releases these immediately,
+        // so by the time this runs on a later frame m_cameraViews normally no longer holds either key — this is the
+        // structural backstop (a future call site that arms/settles a transition without going through
+        // AdvanceRevealTransition still gets reclaimed here).
+        if (m_cameraViews.ContainsKey(key: RevealTransitionConsoleView) && !requested.Contains(item: RevealTransitionConsoleView)) {
+            views.Release(name: RevealTransitionConsoleView);
+            _ = m_cameraViews.Remove(key: RevealTransitionConsoleView);
+        }
+
+        if (m_cameraViews.ContainsKey(key: RevealTransitionRoomView) && !requested.Contains(item: RevealTransitionRoomView)) {
+            views.Release(name: RevealTransitionRoomView);
+            _ = m_cameraViews.Remove(key: RevealTransitionRoomView);
+        }
+    }
+
+    // Companion creation cameras whose named view a face references: the view is requested (so it renders live), its
+    // rig is a CameraEye (Body-anchored) bound to the shape's anchor PublishAnchors just published. The face's own
+    // auto-tune decides WHETHER to show it; the view renders regardless of tune so the auto-tune's "is it live" probe
+    // has a real answer.
+    private void CollectCompanionViews(ViewStack views, HashSet<string> requested) {
         var companions = m_companions.Companions;
 
         for (var companionIndex = 0; (companionIndex < companions.Count); companionIndex++) {
@@ -890,53 +1519,45 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
                 continue;
             }
 
-            var shapes = (companion.Document.Shapes ?? []);
-            var rootSlot = (m_companionSlotBase + (companionIndex * CompanionRenderer.SlotsPerCompanion));
-
             foreach (var camera in cameras) {
-                if (requests.Count >= CameraFeedPool.MaxCameraFeeds) {
+                if (requested.Count >= ViewStack.MaxRegisteredViews) {
                     break;
                 }
 
-                var feedName = (camera.Feed ?? camera.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+                var viewName = (camera.Feed ?? camera.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
 
-                if (byName.ContainsKey(key: feedName)) {
+                if (!requested.Add(item: viewName)) {
                     continue; // already requested (a shared name).
                 }
 
-                // The anchored shape's live pose: its index in the document's shapes is the companion renderer's
-                // shape-slot offset (rootSlot + 1 + shapeIndex — see CompanionRenderer).
-                var shapeIndex = IndexOfShape(shapes: shapes, shapeId: camera.ShapeId);
+                var anchorName = ShapeAnchorName(companionIndex: companionIndex, shapeId: camera.ShapeId);
 
-                if (shapeIndex < 0) {
-                    continue; // a camera naming a missing shape (normalization should have dropped it).
-                }
-
-                var shapeSlot = (rootSlot + 1 + shapeIndex);
-                var shapeTransform = m_dynamicTransforms[shapeSlot];
-
-                byName[feedName] = requests.Count;
-                requests.Add(item: BuildCreationCameraRequest(camera: camera, feedName: feedName, shapeTransform: shapeTransform));
+                RegisterCameraView(views: views, viewName: viewName, eye: BuildCreationCameraEye(camera: camera), anchorName: anchorName);
             }
         }
     }
 
-    // World-scene cameras a world.wire routed onto a screen: for each Feed-kind wire, the eye is the world camera whose
-    // Id equals the wire's feed index; its pose is world/placement-anchored (world anchors pose directly; a placement
-    // anchor rides its stamp — resolved through the world scene). Also records Named-kind wires so a screen wired to a
-    // creation/host feed name samples it (the fish's lure onto a cabinet screen).
-    private void CollectWorldWiredFeeds(Dictionary<string, int> byName, List<CameraFeedRequest> requests) {
+    // World-scene cameras a world.wire routed onto a screen: for each Camera-kind wire, the eye is the world camera
+    // whose Id equals the wire's index; its rig binds the placement anchor PublishAnchors published (or no anchor at
+    // all for a World-anchored eye — CameraEye ignores it). Also records Named-kind wires so a screen wired to a
+    // creation/host view name samples it (the fish's lure onto a cabinet screen).
+    private void CollectWorldWiredViews(ViewStack views, HashSet<string> requested) {
         foreach (var (screenIndex, source) in m_worldScene.Wiring) {
             switch (source.Kind) {
-                case ScreenWireKind.Named when (source.Name is { Length: > 0 } namedFeed):
-                    // A screen wired directly to a named feed (a creation camera's feed, the emote face, …). The
-                    // named feed itself is requested by whatever OWNS it (a companion camera, above); here we only
+                case ScreenSourceKind.Named when (source.Name is { Length: > 0 } namedView):
+                    // A screen wired directly to a named view (a creation camera's view, the emote face, a nested
+                    // world, …). The named view itself is requested by whatever OWNS it (a companion camera, above,
+                    // or a host registration like a NestedWorldView — EnsureNestedWorldViewRegistered lazily
+                    // registers the one this demo ships, the FIRST time something actually wires to it); here we only
                     // record the screen->name binding so the render node's per-slot override samples it.
-                    m_wiredFeedByScreen[screenIndex] = namedFeed;
+                    m_wiredFeedByScreen[screenIndex] = namedView;
+                    _ = requested.Add(item: namedView);
+                    EnsureNestedWorldViewRegistered(views: views, name: namedView);
+                    EnsureMuseumNestedViewsRegistered(views: views, name: namedView);
 
                     break;
-                case ScreenWireKind.Feed:
-                    RecordWorldCameraFeed(byName: byName, feedIndex: source.Index, requests: requests, screenIndex: screenIndex);
+                case ScreenSourceKind.Camera:
+                    RecordWorldCameraView(views: views, feedIndex: source.Index, requested: requested, screenIndex: screenIndex);
 
                     break;
                 default:
@@ -944,13 +1565,12 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             }
         }
     }
+    private void RecordWorldCameraView(ViewStack views, int feedIndex, HashSet<string> requested, int screenIndex) {
+        var viewName = $"world:{feedIndex}";
 
-    private void RecordWorldCameraFeed(Dictionary<string, int> byName, int feedIndex, List<CameraFeedRequest> requests, int screenIndex) {
-        var feedName = $"world:{feedIndex}";
+        m_wiredFeedByScreen[screenIndex] = viewName;
 
-        m_wiredFeedByScreen[screenIndex] = feedName;
-
-        if (byName.ContainsKey(key: feedName) || (requests.Count >= CameraFeedPool.MaxCameraFeeds)) {
+        if (!requested.Add(item: viewName) || (requested.Count > ViewStack.MaxRegisteredViews)) {
             return;
         }
 
@@ -959,37 +1579,33 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
                 continue;
             }
 
-            // A Placement-anchored eye rides its prop's LIVE pose (so a camera on a dragged building follows it); a
-            // World-anchored eye poses straight from its own Position/Yaw (CameraEye.Resolve ignores the anchor pose),
-            // so the zero default is correct there.
-            var anchorPosition = Vector3.Zero;
-            var anchorYaw = 0f;
+            // A Placement-anchored eye rides its prop's LIVE pose (so a camera on a dragged building follows it) via
+            // the "placement.{id}" anchor PublishAnchors published this tick; a World-anchored eye poses straight from
+            // its own Position/Yaw (CameraEye.Resolve ignores the anchor), so no anchor binding is correct there.
+            var anchorName = ((eye.Anchor == SdfAnchorKind.Instance) ? PlacementAnchorName(placementId: eye.AnchorId) : null);
 
-            if (eye.Anchor == CameraAnchorKind.Placement) {
-                _ = m_worldScene.TryResolvePlacementPose(placementId: eye.AnchorId, out anchorPosition, out anchorYaw);
-            }
-
-            byName[feedName] = requests.Count;
-            requests.Add(item: new CameraFeedRequest(
-                AnchorPosition: anchorPosition,
-                AnchorYaw: anchorYaw,
-                Eye: eye,
-                Name: feedName,
-                WiredScreens: WiredScreenSet(feedName: feedName)
-            ));
+            // Unlike a nested-world/museum exhibit (ReleaseUnwiredNestedViews), a world-wired camera feed is never
+            // Released when a screen re-wires away from it — re-registering a fresh SdfCameraView on every re-wire
+            // would lose its persistent offscreen engine for no reason. So it stays registered forever once any
+            // screen has wired it once, which used to mean it round-robins forever even after every screen moves on.
+            // The ViewStack liveness predicate closes that gap WITHOUT releasing: m_wiredFeedByScreen (rebuilt this
+            // same PlanViews pass, just above) already says whether any screen still wires this exact name — reading
+            // it live means the round-robin cursor skips this view's turn the instant nothing wires it, and resumes
+            // spending budget on it the instant something does, with its last frame served in between.
+            RegisterCameraView(views: views, viewName: viewName, eye: eye, anchorName: anchorName, isLive: () => m_wiredFeedByScreen.ContainsValue(value: viewName));
 
             break;
         }
     }
 
-    // A creation camera → a CameraFeedRequest: the eye is a Shape-anchored eye whose stored pose is the camera's
-    // offset from the anchored shape's frame; the anchor position/yaw come from the shape's live dynamic transform
-    // (the companion renderer packed it this frame). Degrees → radians for the offset yaw/pitch.
-    private CameraFeedRequest BuildCreationCameraRequest(CreationCameraDocument camera, string feedName, DynamicTransform shapeTransform) {
+    // A creation camera → a live CameraEye (a Body-anchored eye whose stored pose is the camera's offset from the
+    // anchored shape's frame). Degrees → radians for the offset yaw/pitch.
+    private static CameraEye BuildCreationCameraEye(CreationCameraDocument camera) {
         var offsetYaw = ((camera.Yaw ?? 0f) * (MathF.PI / 180f));
         var offsetPitch = ((camera.Pitch ?? 0f) * (MathF.PI / 180f));
-        var eye = new CameraEye(
-            Anchor: CameraAnchorKind.Shape,
+
+        return new CameraEye(
+            Anchor: SdfAnchorKind.Body,
             AnchorId: camera.ShapeId,
             FieldOfViewRadians: ((camera.Fov is { } fov) ? (float?)(fov * (MathF.PI / 180f)) : null),
             FocusDistance: camera.Focus,
@@ -998,48 +1614,306 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             Position: camera.Position,
             Yaw: offsetYaw
         );
-        // The anchored shape's live world heading (yaw about +Y) from its packed orientation.
-        var anchorYaw = YawOf(orientation: shapeTransform.Orientation);
-
-        return new CameraFeedRequest(
-            AnchorPosition: shapeTransform.Position,
-            AnchorYaw: anchorYaw,
-            Eye: eye,
-            Name: feedName,
-            WiredScreens: WiredScreenSet(feedName: feedName)
-        );
     }
 
-    // The screen indices wired to a given feed name this frame (the self-reference set for that feed) — a screen shows
-    // this feed either through a face's tune (companion faces are dynamic-claimant slots) or a world.wire.
-    private IReadOnlySet<int> WiredScreenSet(string feedName) {
+    // Gets-or-creates the persistent SdfCameraView for `viewName` and rebinds its rig/anchor for THIS frame, then
+    // (re-)registers it with the stack, returning its ViewId. CameraEye itself IS the rig (see
+    // CameraEye.Resolve(in SdfAnchor, float)); a null anchorName leaves the view unanchored (a World-anchored eye,
+    // which ignores the anchor parameter anyway). `isLive` is the ViewStack round-robin gate (null = always live,
+    // the companion-camera default — see CollectCompanionViews's remarks on why those must stay unconditional).
+    private ViewId RegisterCameraView(ViewStack views, string viewName, CameraEye eye, string? anchorName, Func<bool>? isLive = null) {
+        if (!m_cameraViews.TryGetValue(key: viewName, value: out var view)) {
+            view = new SdfCameraView(
+                dynamicTransformCapacity: WorstCaseDynamicTransformCapacity,
+                hostsOnDirectX: m_viewsHostOnDirectX,
+                instanceCapacity: WorstCaseInstanceCapacity,
+                programWordCapacity: WorstCaseProgramWordCapacity,
+                services: m_services!
+            );
+            m_cameraViews[viewName] = view;
+        }
+
+        view.Rig = eye;
+        view.AnchorSource = ((anchorName is not null) ? m_anchorTable : null);
+        view.AnchorIdSource = ((anchorName is not null) ? (() => (m_anchorTable.TryResolveId(name: anchorName, anchorId: out var id) ? id : -1)) : null);
+
+        return views.Register(band: ScreenSlotPriority.Ambient, content: view, isLive: isLive, name: viewName);
+    }
+
+    /// <summary>
+    /// Arms the reveal transition: the hypervisor-identity primitive's
+    /// defining moment, expressed on <see cref="ViewTransition"/>: a tight, console-framed <see cref="SdfCameraView"/>
+    /// (<see cref="RevealTransitionConsoleView"/>, anchored on <c>console.0</c> — the fourth-wall's "the player was
+    /// INSIDE that machine" read) eases into a pulled-back, room-framed one (<see cref="RevealTransitionRoomView"/>,
+    /// anchored on <c>world.spawn</c>) over <see cref="RevealTransitionSeconds"/>. Called from the SAME
+    /// <c>reveal world</c> event <see cref="IOverworldControlHost.RequestRevealNow"/> latches for
+    /// <see cref="ScreenLayoutDirector"/>'s own (unchanged) camera/rect easing — this is ADDITIVE: it registers real
+    /// content into the view stack and samples it every frame (<see cref="AdvanceRevealTransition"/>, narrated to
+    /// stderr on start/settle), proving the primitive end to end, but its sampled <see cref="ViewLayout"/> is not YET
+    /// spliced into the live multi-viewport compositor (<see cref="ScreenLayoutDirector"/> still owns those pixels) —
+    /// that splice is the same scope as the full staged-layout-walk migration this wave deliberately left for a later
+    /// pass (see the wave's handoff notes). A no-op if the view stack was never installed (a headless/no-GPU run).
+    /// </summary>
+    private void BeginRevealTransition() {
+        if ((m_views is not { } views) || (m_revealTransition is not null)) {
+            return; // already armed this session — the reveal is a one-shot latch, like the camera easing it mirrors.
+        }
+
+        var consoleEye = new CameraEye(
+            Anchor: SdfAnchorKind.Instance,
+            AnchorId: 0,
+            FieldOfViewRadians: null,
+            FocusDistance: 2.5f,
+            Id: -1,
+            Pitch: 0f,
+            Position: new Vector3(x: 0f, y: 0f, z: 2.5f),
+            Yaw: MathF.PI
+        );
+        var roomEye = new CameraEye(
+            Anchor: SdfAnchorKind.Instance,
+            AnchorId: 0,
+            FieldOfViewRadians: null,
+            FocusDistance: 10f,
+            Id: -2,
+            Pitch: -0.5f,
+            Position: new Vector3(x: 0f, y: 10f, z: 14f),
+            Yaw: MathF.PI
+        );
+
+        var consoleId = RegisterCameraView(views: views, viewName: RevealTransitionConsoleView, eye: consoleEye, anchorName: "console.0");
+        var roomId = RegisterCameraView(views: views, viewName: RevealTransitionRoomView, eye: roomEye, anchorName: "world.spawn");
+        var fullscreen = new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f);
+
+        m_revealTransition = new ViewTransition(
+            durationSeconds: RevealTransitionSeconds,
+            from: new ViewLayout(Bindings: [new ViewBinding(View: consoleId, Region: fullscreen)]),
+            to: new ViewLayout(Bindings: [new ViewBinding(View: roomId, Region: fullscreen)])
+        );
+        m_revealTransitionElapsed = 0f;
+
+        Console.Error.WriteLine(value: $"[view-reveal] transition armed: {RevealTransitionConsoleView} -> {RevealTransitionRoomView} over {RevealTransitionSeconds:0.0}s");
+    }
+
+    // Samples the armed reveal transition on the render clock (deterministic — never wall time), narrating exactly
+    // once when it settles. A no-op once nothing is armed (the common case — most runs never fire `reveal`).
+    private void AdvanceRevealTransition(float deltaSeconds) {
+        if (m_revealTransition is not { } transition) {
+            return;
+        }
+
+        m_revealTransitionElapsed += MathF.Max(x: deltaSeconds, y: 0f);
+
+        var layout = transition.Sample(elapsedSeconds: m_revealTransitionElapsed, complete: out var complete);
+
+        _ = layout; // sampled for its side effect (proving Sample() runs every frame) — see BeginRevealTransition's
+                    // remarks for why the result is not yet consumed by the compositor.
+
+        if (!complete) {
+            return;
+        }
+
+        Console.Error.WriteLine(value: $"[view-reveal] transition complete: {RevealTransitionRoomView} settled");
+        m_revealTransition = null; // one-shot — done narrating, stop sampling every frame for nothing.
+
+        // The same leak class ReleaseUnwiredNestedViews closes for the nested/museum exhibits (see its remarks): a
+        // Register that's never paired with a Release keeps the view in the stack's round-robin forever. Release
+        // immediately here (the one-shot completion edge) rather than waiting for next frame's PlanViews pass, AND
+        // remove both from the m_cameraViews cache — the cache must never serve a disposed instance back to
+        // RegisterCameraView's lazy-init check, which is exactly what makes a SECOND `reveal` re-arm cleanly.
+        if (m_views is { } views) {
+            views.Release(name: RevealTransitionConsoleView);
+            views.Release(name: RevealTransitionRoomView);
+        }
+
+        _ = m_cameraViews.Remove(key: RevealTransitionConsoleView);
+        _ = m_cameraViews.Remove(key: RevealTransitionRoomView);
+    }
+
+    /// <summary>The demonstrative NestedWorldView's wiring name. A
+    /// screen <c>world.wire</c>d to <c>named:nested:0</c> shows a TRULY SEPARATE world (its own
+    /// <see cref="SdfCompositionFrameSource"/>, unrelated to the room's program/anchors), not just a differently-posed
+    /// camera on this one. See <see cref="EnsureNestedWorldViewRegistered"/>.</summary>
+    private const string NestedWorldViewName = "nested:0";
+
+    private NestedWorldView? m_nestedWorldView;
+
+    // Lazily builds + registers the demonstrative NestedWorldView the FIRST time something actually wires to
+    // NestedWorldViewName — a no-op for any other name, and a no-op once already registered (the nested world is
+    // entirely self-contained, so once registered and still wired it never needs touching again). Its counterpart is
+    // ReleaseUnwiredNestedViews (called every PlanViews, after this), which nulls m_nestedWorldView back out once no
+    // wire references this name anymore — this method's `is not null` guard is what then rebuilds a fresh instance
+    // on the next re-wire.
+    private void EnsureNestedWorldViewRegistered(ViewStack views, string name) {
+        if (!string.Equals(a: name, b: NestedWorldViewName, comparisonType: StringComparison.Ordinal) || (m_nestedWorldView is not null)) {
+            return;
+        }
+
+        var nestedFrameSource = new SdfCompositionFrameSource(dresser: new NestedWorldDresser(), emitters: [new NestedWorldEmitter()]);
+
+        m_nestedWorldView = new NestedWorldView(services: m_services!, hostsOnDirectX: m_viewsHostOnDirectX, frameSource: nestedFrameSource);
+
+        _ = views.Register(band: ScreenSlotPriority.Ambient, content: m_nestedWorldView, name: NestedWorldViewName);
+    }
+
+    // The nested world's own content: the shared drift-monolith exhibit (Puck.SdfVm.Debug.SdfDriftMonolith — the same
+    // program the gallery/Post ride) rendered ALONE in its own program, entirely independent of the room. Its Emit
+    // owns the whole material palette (positional strides), so this emitter must be the ONLY member of its composed
+    // list — exactly the intended standalone usage its own remarks document.
+    private sealed class NestedWorldEmitter : ISdfSceneEmitter {
+        public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) =>
+            Puck.SdfVm.Debug.SdfDriftMonolith.Emit(builder: builder);
+
+        public bool OwnsMaterialScope => true;
+    }
+
+    // The nested world's own dresser: one fixed camera framing the monolith — static (the exhibit itself animates
+    // nothing sim-side), so ProgramChanged is always false after the engine's own initial upload.
+    private sealed class NestedWorldDresser : ISdfFrameDresser {
+        private static readonly Vector3 Eye = new(x: 0f, y: 2f, z: 5f);
+
+        public SdfFrame Dress(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+            var camera = CameraSnapshot.LookAt(fieldOfViewRadians: CameraEye.DefaultFieldOfViewRadians, position: Eye, target: Vector3.Zero, viewportHeight: height, viewportWidth: width);
+
+            return new SdfFrame(
+                Program: program,
+                ProgramChanged: false,
+                Time: 0f,
+                Views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f))],
+                WarpAmount: 0f
+            ) {
+                DynamicTransforms = transforms,
+            };
+        }
+    }
+
+    // THE REPLAY MUSEUM's second exhibit + THE DROSTE DOOR's interior: two more standalone nested worlds, same
+    // lazy-register-on-first-wire discipline as EnsureNestedWorldViewRegistered above (a new, independent pair — the
+    // existing nested:0 machinery is left untouched). Both reuse Puck.SdfVm.Debug.SdfDebugRenderer's gallery exhibit
+    // emission (already a dependency of this file via SdfDriftMonolith above) rather than hand-authoring a second
+    // Droste/wallpaper scene. Same release counterpart as nested:0 too — ReleaseUnwiredNestedViews nulls these
+    // fields back out once their name drops out of a frame's wire-driven want-set, so the `is null` guards below
+    // rebuild fresh instances on the next re-wire.
+    private NestedWorldView? m_museumWallpaperView;
+    private NestedWorldView? m_drosteDoorView;
+
+    private void EnsureMuseumNestedViewsRegistered(ViewStack views, string name) {
+        if (string.Equals(a: name, b: MuseumRenderer.WallpaperViewName, comparisonType: StringComparison.Ordinal) && (m_museumWallpaperView is null)) {
+            // Camera pose mirrors SdfGalleryScene's own WallpaperP4G entry (Target (0,-1,0), Yaw 0.5, Pitch 0.9,
+            // Distance 7) — that table is private to the gallery's OWN cycling tour, so the pose is copied here as a
+            // literal rather than threading a new public seam through it for one reader.
+            var wallpaperSource = new SdfCompositionFrameSource(
+                dresser: new GalleryExhibitDresser(target: new Vector3(x: 0f, y: -1f, z: 0f), yaw: 0.5f, pitch: 0.9f, distance: 7.0f),
+                emitters: [new GalleryExhibitEmitter(exhibit: Puck.SdfVm.Debug.SdfGalleryExhibit.WallpaperP4G)]
+            );
+
+            m_museumWallpaperView = new NestedWorldView(services: m_services!, hostsOnDirectX: m_viewsHostOnDirectX, frameSource: wallpaperSource);
+
+            _ = views.Register(band: ScreenSlotPriority.Ambient, content: m_museumWallpaperView, name: MuseumRenderer.WallpaperViewName);
+
+            return;
+        }
+
+        if (string.Equals(a: name, b: MuseumRenderer.DoorViewName, comparisonType: StringComparison.Ordinal) && (m_drosteDoorView is null)) {
+            // See DoorInteriorEmitter's remarks: a P6M wallpaper fold, not LogSphere (the earlier LogSphere attempts
+            // read flat black at THIS content's natural scale under an ad hoc pose — diagnosed as a camera-framing
+            // artifact of the fold's own shell-boundary residual, not a NestedWorldView/composition defect; see
+            // docs/sdf-backlog.md item 29). Pose mirrors the museum's own WallpaperP4G framing (steep pitch onto the
+            // tiled plane).
+            var doorSource = new SdfCompositionFrameSource(
+                dresser: new GalleryExhibitDresser(target: Vector3.Zero, yaw: 0.5f, pitch: 0.6f, distance: 7f),
+                emitters: [new DoorInteriorEmitter()]
+            );
+
+            m_drosteDoorView = new NestedWorldView(services: m_services!, hostsOnDirectX: m_viewsHostOnDirectX, frameSource: doorSource);
+
+            _ = views.Register(band: ScreenSlotPriority.Ambient, content: m_drosteDoorView, name: MuseumRenderer.DoorViewName);
+        }
+    }
+
+    // Wraps one Puck.SdfVm.Debug.SdfDebugRenderer gallery exhibit as a standalone nested world's sole content — the
+    // museum/door's own generalization of NestedWorldEmitter above (that one is fixed to the drift monolith; this one
+    // is parameterized by exhibit, since both new nested worlds want a DIFFERENT already-authored gallery scene, not
+    // a third hand-rolled one).
+    private sealed class GalleryExhibitEmitter(Puck.SdfVm.Debug.SdfGalleryExhibit exhibit) : ISdfSceneEmitter {
+        private readonly Puck.SdfVm.Debug.SdfDebugRenderer m_renderer = new();
+
+        public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) =>
+            m_renderer.EmitGallery(builder: builder, exhibit: exhibit);
+
+        public bool OwnsMaterialScope => true;
+    }
+
+    // THE DROSTE DOOR's interior: a hand-authored P6M wallpaper fold (hexagonal kaleidoscope symmetry — the SAME
+    // op family the museum's own WallpaperP4G exhibit already proved renders reliably in this standalone-nested-
+    // world context). The LogSphere family was tried first and read flat black here at an ad hoc pose — the
+    // logsphere-hunt (docs/sdf-backlog.md item 29) proved this is NOT a NestedWorldView/composition gap: a
+    // structural bisection (bare direct build vs. this exact composition+material-scope+WorstCase-capacity shape
+    // vs. two more variants) rendered byte-identical pixels for both LogSphere gallery exhibits at every pose
+    // tested, and SdfFrame.AmbientScale/SunScale default to 1.0 in every path. The actual driver is LogSphere's own
+    // fold-safe-step-bound residual (item 24): a camera EYE near a shell-BOUNDARY radius reads near-total black,
+    // and the fold is inherently under-lit up close from most vantage points — a camera-framing constraint on
+    // whoever authors LogSphere content here, not an engine defect. P6M sidesteps it because a wallpaper fold has
+    // no such boundary-radius sensitivity. A field of tori tiled across the XZ plane in P6M's 6-fold rotational
+    // symmetry — an endless identical ring repeating in every direction reads as "ordinary doorway, impossible
+    // other side" on its own, no LogSphere needed (the brief's own "p4g/p6m-folded OR Droste-spiraled" either/or).
+    private sealed class DoorInteriorEmitter : ISdfSceneEmitter {
+        public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.55f, y: 0.30f, z: 0.70f), Specular: 0.4f, Shininess: 48f));
+            var floorMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.14f, y: 0.10f, z: 0.18f)));
+
+            _ = builder.ResetPoint().Plane(normal: Vector3.UnitY, offset: 1.1f, material: floorMaterial);
+            _ = builder.ResetPoint()
+                .WallpaperFold(group: SdfWallpaperGroup.P6M, cell: new Vector2(x: 1.6f, y: 1.6f), limit: new Vector2(x: 4f, y: 4f), plane: SdfWallpaperPlane.XZ)
+                .Torus(majorRadius: 0.5f, minorRadius: 0.12f, material: material);
+        }
+
+        public bool OwnsMaterialScope => true;
+    }
+
+    // A fixed-pose dresser parameterized by the same (Target, Yaw, Pitch, Distance) orbit convention
+    // ScreenLayoutDirector's workpiece/scenario cameras use (eye = target + distance * (sin(yaw)cos(pitch),
+    // sin(pitch), cos(yaw)cos(pitch))) — the museum/door's own generalization of NestedWorldDresser above.
+    private sealed class GalleryExhibitDresser(Vector3 target, float yaw, float pitch, float distance) : ISdfFrameDresser {
+        public SdfFrame Dress(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+            var eye = (target + (new Vector3(
+                x: (MathF.Sin(x: yaw) * MathF.Cos(x: pitch)),
+                y: MathF.Sin(x: pitch),
+                z: (MathF.Cos(x: yaw) * MathF.Cos(x: pitch))
+            ) * distance));
+            var camera = CameraSnapshot.LookAt(fieldOfViewRadians: CameraEye.DefaultFieldOfViewRadians, position: eye, target: target, viewportHeight: height, viewportWidth: width);
+
+            return new SdfFrame(
+                Program: program,
+                ProgramChanged: false,
+                Time: 0f,
+                Views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f))],
+                WarpAmount: 0f
+            ) {
+                DynamicTransforms = transforms,
+            };
+        }
+    }
+
+    // The stable anchor name a companion shape's creation camera binds — PublishAnchors publishes it every tick from
+    // the companion emitter's live pack.
+    private static string ShapeAnchorName(int companionIndex, int shapeId) => $"shape.{companionIndex}.{shapeId}";
+
+    // The stable anchor name a world placement's camera binds — PublishAnchors publishes it every tick from the world
+    // scene's live placement pose.
+    private static string PlacementAnchorName(int placementId) => $"placement.{placementId}";
+
+    // The screen indices wired to a given view name this frame (the self-reference set for that view) — a screen
+    // shows this view either through a face's tune (companion faces are dynamic-claimant slots) or a world.wire.
+    private IReadOnlySet<int> WiredScreenSet(string viewName) {
         var set = new HashSet<int>();
 
         foreach (var (screenIndex, name) in m_wiredFeedByScreen) {
-            if (string.Equals(a: name, b: feedName, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(a: name, b: viewName, comparisonType: StringComparison.Ordinal)) {
                 _ = set.Add(item: screenIndex);
             }
         }
 
         return set;
-    }
-
-    private static int IndexOfShape(IReadOnlyList<ShapeDocument> shapes, int shapeId) {
-        for (var index = 0; (index < shapes.Count); index++) {
-            if (shapes[index].Id == shapeId) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
-
-    // The heading (yaw about +Y) a quaternion orientation faces — the one axis a companion's upright frame turns
-    // around (matching CameraEye.Resolve's yaw-only anchor composition).
-    private static float YawOf(Quaternion orientation) {
-        var forward = Vector3.Transform(value: Vector3.UnitZ, rotation: orientation);
-
-        return MathF.Atan2(y: forward.X, x: forward.Z);
     }
 
     // ---- The generic dynamic screen-claimant seam --------------------------------------------------------------
@@ -1144,7 +2018,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         var stand = m_room.Consoles[consoleIndex];
         var screenHalfHeight = ((stand.HalfExtents.X * 0.8f) / ScreenAspect);
 
-        return new Vector3(stand.Center.X, (m_room.FloorY + (2f * stand.HalfExtents.Y) + screenHalfHeight), stand.Center.Y);
+        return new Vector3(x: stand.Center.X, y: ((m_room.FloorY + (2f * stand.HalfExtents.Y)) + screenHalfHeight), z: stand.Center.Y);
     }
 
     // A console's diegetic-screen half-height (the SAME value BuildProgram/ScreenCenterLocal derive) — the pane camera
@@ -1155,41 +2029,14 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         return ((stand.HalfExtents.X * 0.8f) / ScreenAspect);
     }
 
-    // Fills the unified dynamic-transform buffer for this frame: players (OverworldWorld's own slots, unchanged)
-    // followed by the per-console control clusters (neutral pose, or depressed/tilted by the console's current
-    // joypad state). REUSED buffer, no per-frame allocation. No cartridge slots — the cart choice lives at the
-    // cabinet (see the constructor), so there are no physical cartridge instances to place.
-    private void PackDynamicTransforms(WorldCoord3 renderOrigin, float alpha) {
-        var players = m_world.DynamicTransforms(renderOrigin: renderOrigin, alpha: alpha);
-
-        for (var slot = 0; (slot < OverworldWorld.MaxPlayers); slot++) {
-            // A driving player's avatar follows their brick sprite (presentation override); everyone else renders at
-            // their simulation body.
-            m_dynamicTransforms[slot] = ((PresentationOverride?.Invoke(slot) is { } overridden)
-                ? (players[slot] with { Position = overridden.ToRenderRelative(origin: renderOrigin) })
-                : players[slot]);
-        }
-
-        // The world-sculpt camera anchors on the CREATING slot's rendered position (the player is the cursor).
-        m_primaryPlayerRenderPosition = m_dynamicTransforms[0].Position;
-
-        PackControlTransforms();
-        PackCreatorTransforms();
-    }
-
-    // The creator pool's per-frame transforms — delegated to the renderer (the ghost + placed shapes at their live
-    // transforms, unused slots hidden below the floor).
-    private void PackCreatorTransforms() {
-        m_creatorRenderer.PackTransforms(hiddenPosition: HiddenPosition(), transforms: m_dynamicTransforms);
-        m_worldRenderer.PackTransforms(hiddenPosition: HiddenPosition(), timeSeconds: m_time, transforms: m_dynamicTransforms);
-        m_companionRenderer.PackTransforms(hiddenPosition: HiddenPosition(), transforms: m_dynamicTransforms);
-    }
-
     /// <summary>The live companion roster (the companion verbs + the screen mux read it here).</summary>
     public CompanionRoster Companions => m_companions;
 
-    /// <summary>The room-wide region companions wander inside (see the constructor).</summary>
-    public WorkbenchRegion CompanionBounds { get; }
+    /// <summary>The room-wide region companions wander inside — recomputed against the CURRENT room, not just the
+    /// one live at construction (see <see cref="ComputeCompanionBounds"/> and <see cref="ConsumePendingWorldLoad"/>).</summary>
+    public WorkbenchRegion CompanionBounds => m_companionBounds;
+
+    private WorkbenchRegion m_companionBounds;
 
     // The companions' steering target: the nearest RENDERED player this frame (hidden/free slots park far below the
     // floor, so they lose every distance contest naturally).
@@ -1197,7 +2044,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         var best = ((Vector3 Position, float Distance)?)null;
 
         for (var slot = 0; (slot < OverworldWorld.MaxPlayers); slot++) {
-            var position = m_dynamicTransforms[slot].Position;
+            var position = m_playerRenderTransforms[slot].Position;
             var distance = Vector3.Distance(value1: from, value2: position);
 
             if ((position.Y > (m_room.FloorY - 2f)) && ((best is not { } current) || (distance < current.Distance))) {
@@ -1212,13 +2059,60 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     /// <param name="rosterIndex">The joining companion's roster index.</param>
     public Vector3 CompanionSpawnPosition(int rosterIndex) {
         var center = new Vector3(
-            (0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)),
-            (m_room.FloorY + 0.9f),
-            (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))
+            x: (0.5f * (m_room.BoundsMin.X + m_room.BoundsMax.X)),
+            y: (m_room.FloorY + 0.9f),
+            z: (0.5f * (m_room.BoundsMin.Y + m_room.BoundsMax.Y))
         );
 
-        return (center + new Vector3((1.6f + (0.9f * rosterIndex)), 0f, (1.2f - (0.8f * rosterIndex))));
+        return (center + new Vector3(x: (1.6f + (0.9f * rosterIndex)), y: 0f, z: (1.2f - (0.8f * rosterIndex))));
     }
+
+    // ---- The deterministic garden -----------------------------------------------------------------------------
+    // Thin forwarders onto OverworldWorld (the garden's actual sim state — see its own remarks) — GardenCommandModule
+    // reaches them the same way every other authoring surface reaches this source's composition point.
+
+    /// <summary>Plants a garden near player slot 0 (or a fixed workbench-adjacent spot when it's empty). Forwards to
+    /// <see cref="OverworldWorld.PlantGardenNearPlayer"/>.</summary>
+    /// <param name="seed">The seed to plant, or <see langword="null"/> to derive one from the current tick.</param>
+    /// <returns>The slot index, or -1 when the garden is full.</returns>
+    public int PlantGarden(uint? seed) =>
+        m_world.PlantGardenNearPlayer(seed: seed);
+
+    /// <summary>Uproots every planted garden. Forwards to <see cref="OverworldWorld.ClearGardens"/>.</summary>
+    public void ClearGardens() =>
+        m_world.ClearGardens();
+
+    /// <summary>The planted-garden slots. Forwards to <see cref="OverworldWorld.Gardens"/>.</summary>
+    public IReadOnlyList<OverworldWorld.GardenPlant?> Gardens => m_world.Gardens;
+
+    // ---- The RTS scenario ------------------------------------------------------------------------------------------
+    // Thin forwarders onto OverworldWorld (the RTS unit pool's actual sim state) — RtsCommandModule reaches them the
+    // same way GardenCommandModule reaches the garden pool. Console-facing coordinates arrive as float/double text;
+    // the FixedQ4816 boundary conversion happens HERE (mirrors OverworldWorld.QuantizeMove's own float→fixed seam),
+    // so OverworldWorld's own RTS API stays purely fixed-point.
+
+    /// <summary>Spawns an RTS unit at the given room-local XZ. Forwards to <see cref="OverworldWorld.SpawnRtsUnit"/>.</summary>
+    /// <param name="x">The room-local X to spawn at.</param>
+    /// <param name="z">The room-local Z to spawn at.</param>
+    /// <returns>The slot index, or -1 when full or blocked.</returns>
+    public int SpawnRtsUnit(double x, double z) =>
+        m_world.SpawnRtsUnit(x: FixedQ4816.FromDouble(value: x), z: FixedQ4816.FromDouble(value: z));
+
+    /// <summary>Selects every active unit inside the given box. Forwards to <see cref="OverworldWorld.SelectRtsUnitsInBox"/>.</summary>
+    public int SelectRtsUnitsInBox(double minX, double minZ, double maxX, double maxZ) =>
+        m_world.SelectRtsUnitsInBox(minX: FixedQ4816.FromDouble(value: minX), minZ: FixedQ4816.FromDouble(value: minZ), maxX: FixedQ4816.FromDouble(value: maxX), maxZ: FixedQ4816.FromDouble(value: maxZ));
+
+    /// <summary>Orders every selected unit to move to the given room-local XZ. Forwards to
+    /// <see cref="OverworldWorld.MoveSelectedRtsUnits"/>.</summary>
+    public int MoveSelectedRtsUnits(double x, double z) =>
+        m_world.MoveSelectedRtsUnits(targetX: FixedQ4816.FromDouble(value: x), targetZ: FixedQ4816.FromDouble(value: z));
+
+    /// <summary>Despawns every RTS unit. Forwards to <see cref="OverworldWorld.ClearRtsUnits"/>.</summary>
+    public void ClearRtsUnits() =>
+        m_world.ClearRtsUnits();
+
+    /// <summary>The RTS unit pool. Forwards to <see cref="OverworldWorld.RtsUnits"/>.</summary>
+    public IReadOnlyList<OverworldWorld.RtsUnit> RtsUnits => m_world.RtsUnits;
 
     // ---- Creator mode (the in-engine SDF authoring surface) ------------------------------------------------------
     // The model lives in Puck.Demo.Creator.CreatorScene (shared with the render node's CreatorController and the
@@ -1252,6 +2146,35 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     public int WorldSculptBarPage => (int)m_worldController.ActivePage;
     /// <summary>The creating pad's live button mask while world-sculpt is active (the bar's pressed highlights).</summary>
     public GamepadButtons WorldSculptHeldButtons { get; private set; }
+
+    /// <summary>Whether the workbench authoring HUB (the mode picker) is up. Bare primitive — the render node owns the
+    /// picker logic through this + the registry forwarders, this source only holds the two picker cells.</summary>
+    public bool HubActive => m_hubActive;
+    /// <summary>The hub's highlighted mode index (into <c>AuthoringModeRegistry</c>). Bare primitive.</summary>
+    public int HubSelection => m_hubSelection;
+
+    /// <summary>Opens or closes the workbench authoring hub; closing resets the highlight so it always reopens on the
+    /// first mode (WORLD — the reveal-ladder default).</summary>
+    /// <param name="active">Whether the hub should be up.</param>
+    public void SetHubActive(bool active) {
+        m_hubActive = active;
+
+        if (!active) {
+            m_hubSelection = 0;
+        }
+    }
+
+    /// <summary>Cycles the hub's highlighted mode by <paramref name="delta"/>, wrapping across <paramref name="count"/>
+    /// entries (the count comes from the registry, which this source may not name).</summary>
+    /// <param name="delta">The signed step (d-pad left = -1, right = +1).</param>
+    /// <param name="count">The number of authoring modes.</param>
+    public void AdvanceHubSelection(int delta, int count) {
+        if (count <= 0) {
+            return;
+        }
+
+        m_hubSelection = ((((m_hubSelection + delta) % count) + count) % count);
+    }
 
     /// <summary>Enters or leaves world-sculpt mode; entering resets the controller's edge tracking so a held button
     /// never fires a stale edge into the mode.</summary>
@@ -1302,11 +2225,34 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         var movementLock = OverworldWorld.ParseMovementLock(value: committed.MovementLock);
 
         m_world.LoadWorld(movementLock: movementLock, room: room, walkGrid: walkGrid);
-        // The rendered walls follow the sim's walls: swap the room this source emits and force a program rebuild.
+        // The rendered walls follow the sim's walls: swap the room this source emits and force a room-composition
+        // rebuild (a room swap changes NO tracked AdvanceRoomRevision condition on its own, so this bump is the only
+        // way the emitters — which all read m_room live — get a fresh Emit call with the new walls/bounds).
         m_room = room;
-        m_program = null;
+        m_roomRevision++;
+        // The companion wander bounds are derived from m_room (see ComputeCompanionBounds) — recompute them NOW that
+        // it changed, or a loaded world's companions stay confined to the room this source started with (rank-19).
+        m_companionBounds = ComputeCompanionBounds();
+        // Inhabitants as data: any `companion` placement in the just-applied document joins the live roster (fresh
+        // ones only — CompanionRoster.SpawnFromWorld dedupes), so a world.load (or the boot-time commit) can
+        // populate the room without a companion.add per resident.
+        m_companions.SpawnFromWorld(bounds: m_companionBounds, document: committed, store: m_worldStore);
+        // PERSISTENCE: apply any re-forged cabinet condition the document carries (see WorldScene.FindCabinet*
+        // Condition's remarks — a null field means "nothing re-forged", so this only ADDS onto the boot-authored
+        // condition, never erases one) through the SAME queued edit the live condition.set verb uses, so the node's
+        // next DrainControlRequests writes it onto the running brick + console-source record exactly like a live
+        // re-forge would.
+        for (var cabinetIndex = 0; (cabinetIndex < room.Consoles.Count); cabinetIndex++) {
+            if (WorldScene.FindCabinetExitCondition(cabinetIndex: cabinetIndex, document: committed) is { } exit) {
+                m_pendingConditionEdits.Enqueue(item: new PendingConditionEdit(Exit: exit, ExitSet: true, Index: cabinetIndex, Victory: null, VictorySet: false));
+            }
 
-        return $"[world] applied — bounds ({room.BoundsMin.X:F0},{room.BoundsMin.Y:F0})..({room.BoundsMax.X:F0},{room.BoundsMax.Y:F0}), walk grid {(walkGrid is null ? "walls-only" : "baked")}, movement {movementLock}";
+            if (WorldScene.FindCabinetVictoryCondition(cabinetIndex: cabinetIndex, document: committed) is { } victory) {
+                m_pendingConditionEdits.Enqueue(item: new PendingConditionEdit(Exit: null, ExitSet: false, Index: cabinetIndex, Victory: victory, VictorySet: true));
+            }
+        }
+
+        return $"[world] applied — bounds ({room.BoundsMin.X:F0},{room.BoundsMin.Y:F0})..({room.BoundsMax.X:F0},{room.BoundsMax.Y:F0}), walk grid {((walkGrid is null) ? "walls-only" : "baked")}, movement {movementLock}";
     }
 
     // The world-sculpt town-read camera: a lifted orbit behind/above the creating slot (steep pitch, generous
@@ -1389,13 +2335,13 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
 
     /// <summary>Loads the document's boot world and composes the <c>--scenario</c> capture driver — the render node
     /// calls this once at resource build so its own type coupling stays flat (this source is the composition point for
-    /// the scenario objects). The former companion / wire / face / world-roundtrip boot-time capture aids are gone; the
-    /// live in-session paths (<c>companion.add</c> / <c>world.wire</c> / <c>companion.face</c> / <c>world.verify</c>
+    /// the scenario objects). The live in-session paths (<c>companion.add</c> / <c>world.wire</c> /
+    /// <c>companion.face</c> / <c>world.verify</c>
     /// console verbs) are the only way to reach them now.</summary>
     /// <param name="services">The application services (the bound scenario options).</param>
     /// <param name="bootWorld">The document's world handle (<see cref="Puck.Scene.OverworldNode.World"/>) resolved +
-    /// committed at boot, or null for the plain room. The render node threads it from the run document (it is a
-    /// durable document field, not an env var). The first tick-boundary ConsumePendingWorldLoad swaps the
+    /// committed at boot, or null for the plain room. The render node threads it from the run document. The first
+    /// tick-boundary ConsumePendingWorldLoad swaps the
     /// room/collision/walk-grid to it.</param>
     public void InstallScenario(IServiceProvider services, string? bootWorld = null) {
         ArgumentNullException.ThrowIfNull(services);
@@ -1461,60 +2407,54 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         return $"[creator.load: {loaded} shape(s) from '{document.Name}' (style {document.BakeStyle}, intent {document.Intent})]";
     }
 
-    /// <summary>The packed-word floor the engine's program buffer must reserve — the WORST-CASE program this source
-    /// can ever build (every console's diegetic screen lit, the creator pool in its largest emission form), probed
-    /// once and cached. The probe program is only measured, never rendered.</summary>
-    public int WorstCaseProgramWordCapacity => (m_worstCase ??= MeasureWorstCaseEnvelope()).Words;
+    /// <summary>The packed-word floor the engine's program buffer must reserve — the MAX across every non-composing
+    /// takeover's own worst-case probe (see <see cref="SdfCompositionFrameSource.WorstCaseProgramWordCapacity"/>): the
+    /// room, the SDF-debug composition, and the GRAVITY ARC's planetoid composition never compose together in one
+    /// program (each REPLACES the others), so their envelopes need only the larger, not the sum — the generalization
+    /// of the old hand-rolled <c>MeasureWorstCaseEnvelope</c>. The AGB takeover needs no term here (a single
+    /// fullscreen slab is strictly dominated by the room's own worst case — see <see cref="BuildAgbDebugProgram"/>'s
+    /// remarks).</summary>
+    public int WorstCaseProgramWordCapacity => Math.Max(Math.Max(m_roomComposition.WorstCaseProgramWordCapacity, m_sdfDebugComposition.WorstCaseProgramWordCapacity), m_gravityComposition.WorstCaseProgramWordCapacity);
 
     /// <summary>The instance-count floor the engine's mask buffer must reserve (see
     /// <see cref="WorstCaseProgramWordCapacity"/>).</summary>
-    public int WorstCaseInstanceCapacity => (m_worstCase ??= MeasureWorstCaseEnvelope()).Instances;
+    public int WorstCaseInstanceCapacity => Math.Max(Math.Max(m_roomComposition.WorstCaseInstanceCapacity, m_sdfDebugComposition.WorstCaseInstanceCapacity), m_gravityComposition.WorstCaseInstanceCapacity);
 
-    private (int Words, int Instances) MeasureWorstCaseEnvelope() {
-        var fullBootMask = ((m_room.Consoles.Count >= 32) ? uint.MaxValue : ((1u << m_room.Consoles.Count) - 1u));
-        var probe = BuildProgram(bootedMask: fullBootMask, probeWorstCase: true);
-
-        // The SDF-debug mode's takeover is EITHER the room's own debug subject OR a bench workload (up to 4096
-        // instances) — never both, and 4096 bench instances cannot pile onto the room's instances in one program (past
-        // the cap). So the bench worst case is a SEPARATE probe and the envelope is the MAX, not the sum. This reserves
-        // 4096 instance slots always (the parked-slot machinery keeps reserved-but-inactive slots cheap per frame; the
-        // one-time cost is the mask/bounds buffer sizing, reported by sdf.info / the bench header).
-        var benchBuilder = new Puck.SdfVm.SdfProgramBuilder();
-
-        m_sdfDebug.EmitBenchProbe(builder: benchBuilder);
-
-        var benchProbe = benchBuilder.Build();
-
-        return (Math.Max(probe.Words.Length, benchProbe.Words.Length), Math.Max(probe.Instances.Count, benchProbe.Instances.Count));
-    }
+    /// <summary>The dynamic-transform slot FLOOR the render assembly reserves — the max of the room composition's own
+    /// moving-slot population, the SDF-debug composition's storm-bench ceiling, and the GRAVITY ARC's one walker slot.
+    /// The engine sizes its per-frame dynamic-transform buffer ONCE at construction, so a storm MOTION program (up to
+    /// that many moving instances) can only upload if this floor was passed to the assembly — the room's small
+    /// population never approaches it, so this is entirely the storm reservation (a one-time buffer sizing; the
+    /// reserved-but-unused slots cost no per-frame work outside a storm run).</summary>
+    public int WorstCaseDynamicTransformCapacity => Math.Max(Math.Max(m_roomComposition.WorstCaseDynamicTransformCapacity, m_sdfDebugComposition.WorstCaseDynamicTransformCapacity), m_gravityComposition.WorstCaseDynamicTransformCapacity);
 
     // Each console's control cluster: a d-pad cross (tilts toward the held direction) and two round buttons (A/B,
     // depress a few centimeters when held). Reads the SAME per-frame joypad state the console's machine consumes —
     // never re-derived from raw input — so an unbooted/unassigned console (whose provider is absent from
     // m_controlsSource's backing dictionary, or simply never pressed) stays in its neutral pose.
-    private void PackControlTransforms() {
+    private void PackControlTransforms(Span<DynamicTransform> slots, int slotBase) {
         for (var consoleIndex = 0; (consoleIndex < m_room.Consoles.Count); consoleIndex++) {
             var stand = m_room.Consoles[consoleIndex];
             var buttons = (m_controlsSource?.Invoke(consoleIndex) ?? JoypadButtons.None);
             var anchor = ControlClusterAnchor(stand: stand);
-            var dPadPressed = (buttons & (JoypadButtons.Left | JoypadButtons.Right | JoypadButtons.Up | JoypadButtons.Down));
+            var dPadPressed = buttons & (JoypadButtons.Left | JoypadButtons.Right | JoypadButtons.Up | JoypadButtons.Down);
             // Composed per-axis (not a single switch on the exact combo) so a diagonal press (Left+Up, a real GB
             // joypad state) tilts both axes at once instead of falling through to a neutral pose.
             var tiltZ = (((dPadPressed & JoypadButtons.Right) != 0) ? DPadTiltRadians : (((dPadPressed & JoypadButtons.Left) != 0) ? -DPadTiltRadians : 0f));
             var tiltX = (((dPadPressed & JoypadButtons.Up) != 0) ? DPadTiltRadians : (((dPadPressed & JoypadButtons.Down) != 0) ? -DPadTiltRadians : 0f));
             var dPadTilt = (Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: tiltX) * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: tiltZ));
 
-            var baseSlot = (m_controlSlotBase + (consoleIndex * ControlsPerConsole));
+            var baseSlot = (slotBase + (consoleIndex * ControlsPerConsole));
 
-            m_dynamicTransforms[baseSlot + DPadControlOffset] = new DynamicTransform(
-                Position: (dPadPressed != JoypadButtons.None ? DepressedInward(position: anchor.DPad) : anchor.DPad),
+            slots[(baseSlot + DPadControlOffset)] = new DynamicTransform(
+                Position: ((dPadPressed != JoypadButtons.None) ? DepressedInward(position: anchor.DPad) : anchor.DPad),
                 Orientation: dPadTilt
             );
-            m_dynamicTransforms[baseSlot + AButtonControlOffset] = new DynamicTransform(
+            slots[(baseSlot + AButtonControlOffset)] = new DynamicTransform(
                 Position: (((buttons & JoypadButtons.A) != 0) ? DepressedInward(position: anchor.A) : anchor.A),
                 Orientation: Quaternion.Identity
             );
-            m_dynamicTransforms[baseSlot + BButtonControlOffset] = new DynamicTransform(
+            slots[(baseSlot + BButtonControlOffset)] = new DynamicTransform(
                 Position: (((buttons & JoypadButtons.B) != 0) ? DepressedInward(position: anchor.B) : anchor.B),
                 Orientation: Quaternion.Identity
             );
@@ -1525,8 +2465,7 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // depress, the cheap fallback the mission allows when a per-shape tilt isn't warranted (the buttons are round,
     // not directional).
     private static Vector3 DepressedInward(Vector3 position) =>
-        (position - new Vector3(0f, 0f, ControlDepress));
-
+        (position - new Vector3(x: 0f, y: 0f, z: ControlDepress));
     private (Vector3 DPad, Vector3 A, Vector3 B) ControlClusterAnchor(ConsoleStand stand) {
         // Centered-low on the pedestal's front face (+Z, the same face the screen and the stand's cartridge slot
         // share); the d-pad sits left of center, A/B sit right of center — a minimal cluster sized to read at room
@@ -1534,15 +2473,14 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // right half).
         var faceZ = (stand.Center.Y + stand.HalfExtents.Z);
         var faceY = (m_room.FloorY + (stand.HalfExtents.Y * 0.65f));
-        var dPad = new Vector3((stand.Center.X - (stand.HalfExtents.X * 0.15f)), faceY, faceZ);
-        var buttonA = new Vector3((stand.Center.X + (stand.HalfExtents.X * 0.45f)), (faceY + 0.06f), faceZ);
-        var buttonB = new Vector3((stand.Center.X + (stand.HalfExtents.X * 0.25f)), (faceY - 0.06f), faceZ);
+        var dPad = new Vector3(x: (stand.Center.X - (stand.HalfExtents.X * 0.15f)), y: faceY, z: faceZ);
+        var buttonA = new Vector3(x: (stand.Center.X + (stand.HalfExtents.X * 0.45f)), y: (faceY + 0.06f), z: faceZ);
+        var buttonB = new Vector3(x: (stand.Center.X + (stand.HalfExtents.X * 0.25f)), y: (faceY - 0.06f), z: faceZ);
 
         return (dPad, buttonA, buttonB);
     }
-
     private Vector3 HiddenPosition() =>
-        new(0f, (m_room.FloorY - 1000f), 0f);
+        new(x: 0f, y: (m_room.FloorY - 1000f), z: 0f);
 
     // Ease the workbench power-on glow toward the editor unlock (1 when EditorRevealed, else 0). A linear ramp on the
     // render clock — enough that the panel's emissive fades in smoothly; the discrete bucket quantization below keeps the
@@ -1550,18 +2488,42 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     // only; the sim never sees the glow.
     private void AdvanceWorkbenchGlow(float deltaSeconds) {
         var target = (m_editorRevealed ? 1f : 0f);
-        var step = (WorkbenchGlowRate * MathF.Max(deltaSeconds, 0f));
+        var step = (WorkbenchGlowRate * MathF.Max(x: deltaSeconds, y: 0f));
 
         m_workbenchGlow = ((m_workbenchGlow < target)
-            ? MathF.Min(target, (m_workbenchGlow + step))
-            : MathF.Max(target, (m_workbenchGlow - step)));
+            ? MathF.Min(x: target, y: (m_workbenchGlow + step))
+            : MathF.Max(x: target, y: (m_workbenchGlow - step)));
     }
 
     // The current glow quantized into a bucket 0..WorkbenchGlowBuckets — the program-rebuild key for the workbench
     // panel's emissive (so the ramp rebuilds a bounded number of times, never once per frame at rest). 0 = dark, the
-    // top bucket = fully lit.
+    // top bucket = fully lit. Keys on the SmoothStep-EASED glow (WorkbenchGlowEased), the exact value EmitWorkbench
+    // bakes, so the rebuild fires precisely when the baked panel would visibly change — never a bucket/emissive skew.
     private int WorkbenchGlowBucket() =>
-        (int)MathF.Round(Math.Clamp(value: m_workbenchGlow, min: 0f, max: 1f) * WorkbenchGlowBuckets);
+        (int)MathF.Round(x: (WorkbenchGlowEased() * WorkbenchGlowBuckets));
+
+    // The eased power-on glow: the linear ramp shaped by SmoothStep (0..1, clamped), so the panel accelerates on then
+    // settles — the ONE easing shared by the rebuild-bucket key and EmitWorkbench's baked emissive/albedo read.
+    private float WorkbenchGlowEased() {
+        var t = Math.Clamp(value: m_workbenchGlow, min: 0f, max: 1f);
+
+        return ((t * t) * (3f - (2f * t)));
+    }
+
+    // The editor-reveal beat's bell (Q35): 0 at the ends, 1 at the mid-beat peak (sin over the span), so both the light
+    // pulse and the camera nudge swell in and out with no snap. Zero once the beat has elapsed (or before it is armed).
+    private float EditorRevealBeat() {
+        if (m_editorRevealBeatTime >= EditorRevealBeatSeconds) {
+            return 0f;
+        }
+
+        return MathF.Sin(x: ((MathF.PI * m_editorRevealBeatTime) / EditorRevealBeatSeconds));
+    }
+
+    // The beat's room-camera target nudge (Q35): a small look-point lift scaled by the bell, fed to the director's
+    // RoomTargetNudge hook so it rides the existing eased room framing. Zero at rest → the room frames unchanged.
+    private Vector3 EditorRevealBeatTargetNudge() =>
+        new(x: 0f, y: (EditorRevealBeatTargetLift * EditorRevealBeat()), z: 0f);
 
     // Instance bounding-sphere radii (world units), each the worst-case reach of its wrapped geometry from the chosen
     // center plus a generous rounding/margin — a fat bound only costs a rare extra evaluation, a tight one clips
@@ -1588,43 +2550,21 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
 
         return mask;
     }
-    private SdfProgram BuildProgram(uint bootedMask, bool probeWorstCase = false) {
-        // The render anchor IS the spawn anchor, so the room is authored directly in the spawn cell's local frame
-        // (origin delta identically zero); the per-slot player boxes ride the dynamic-transform buffer, which the
-        // frame source already feeds render-relative to the same anchor.
+    // Whether the room's studio-suppressible content should emit this call — PROBE always emits everything (the
+    // worst-case envelope must cover every legal program); a live studio review (--scenario Studio) drops it (the
+    // workpiece alone, no room/cabinets/players/workbench/terminal/bar). Shared by every room emitter that block
+    // gated in the old BuildProgram (see OverworldFrameSource.Emitters.cs).
+    private bool StudioSuppressed(in SdfEmitContext context) => (!context.Probe && m_scenarioStudio);
+
+    // THE ROOM SHELL: the floor plane, the four perimeter walls, and the cartridge-shelf brackets (RoomEmitter). The
+    // render anchor IS the spawn anchor, so the room is authored directly in the spawn cell's local frame (origin
+    // delta identically zero).
+    private void EmitFloorWallsShelf(SdfProgramBuilder builder) {
         var origin = Vector3.Zero;
-        var builder = new SdfProgramBuilder();
+        var floorMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.34f, y: 0.36f, z: 0.42f)));
+        var wallMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.50f, y: 0.46f, z: 0.58f)));
+        var shelfMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.40f, y: 0.38f, z: 0.35f)));
 
-        // SDF-DEBUG takeover: while the mode is up (and not probing), the program is ONLY the debug subject (+ optional
-        // floor) at the world origin — the room is replaced. The probe below still emits the full room AND folds the
-        // debug subject's worst case in (EmitProbe), so the frozen envelope covers both; a live debug program is a
-        // strict subset of that sum.
-        if (!probeWorstCase && m_sdfDebug.Active) {
-            m_sdfDebug.Emit(builder: builder);
-
-            return builder.Build();
-        }
-
-        // AGB-DEBUG takeover: the native GBA scene is ONE fullscreen diegetic slab sampling the ARM7TDMI framebuffer
-        // (see the OverworldFrameSource.AgbDebug partial). Like the SDF-debug branch it replaces the room; the probe
-        // path never takes it (the room worst case strictly dominates one slab, so the frozen envelope already covers it).
-        if (!probeWorstCase && m_agbActive) {
-            return BuildAgbDebugProgram();
-        }
-
-        var floorMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.34f, 0.36f, 0.42f)));
-        var wallMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.50f, 0.46f, 0.58f)));
-        var playerMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.93f, 0.52f, 0.18f)));
-        var screenOffMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.08f, 0.09f, 0.10f)));
-        var shelfMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.40f, 0.38f, 0.35f)));
-        var controlMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.15f, 0.15f, 0.17f)));
-
-        // THE ROOM CONTENT — floor, perimeter walls, console stands, and the shelf brackets. A studio scenario
-        // (ScenarioBackdrop.Studio) SKIPS all of it: the workpiece is reviewed alone against the renderer's neutral
-        // sky. Skipping is probe-safe — the worst-case probe (probeWorstCase) always emits the full room, so the
-        // engine's buffers still reserve the room-framed ceiling; a studio program is a strict subset that fits. No
-        // backdrop shape is added, so the worst-case envelope needs no new member.
-        if (probeWorstCase || !m_scenarioStudio) {
         // Floor: a plane whose surface sits at world y = FloorY. In render-relative space (p = world − origin) the plane
         // equation dot(p, n) + offset must still vanish there, so offset = origin.Y − FloorY (= −FloorY when origin = 0).
         _ = builder.ResetPoint().Plane(normal: Vector3.UnitY, offset: (origin.Y - m_room.FloorY), material: floorMaterial);
@@ -1645,41 +2585,62 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         var wallCenterY = (m_room.FloorY + wallHeight);
 
         // Wall centers are rebased into render-relative space (− origin); the half-extents are differences, hence anchor-invariant.
-        AddWall(builder: builder, center: (new Vector3(maxX, wallCenterY, midZ) - origin), halfExtents: new Vector3(wallThickness, wallHeight, halfSpanZ), material: wallMaterial);
-        AddWall(builder: builder, center: (new Vector3(minX, wallCenterY, midZ) - origin), halfExtents: new Vector3(wallThickness, wallHeight, halfSpanZ), material: wallMaterial);
-        AddWall(builder: builder, center: (new Vector3(midX, wallCenterY, maxZ) - origin), halfExtents: new Vector3(halfSpanX, wallHeight, wallThickness), material: wallMaterial);
-        AddWall(builder: builder, center: (new Vector3(midX, wallCenterY, minZ) - origin), halfExtents: new Vector3(halfSpanX, wallHeight, wallThickness), material: wallMaterial);
+        AddWall(builder: builder, center: (new Vector3(x: maxX, y: wallCenterY, z: midZ) - origin), halfExtents: new Vector3(x: wallThickness, y: wallHeight, z: halfSpanZ), material: wallMaterial);
+        AddWall(builder: builder, center: (new Vector3(x: minX, y: wallCenterY, z: midZ) - origin), halfExtents: new Vector3(x: wallThickness, y: wallHeight, z: halfSpanZ), material: wallMaterial);
+        AddWall(builder: builder, center: (new Vector3(x: midX, y: wallCenterY, z: maxZ) - origin), halfExtents: new Vector3(x: halfSpanX, y: wallHeight, z: wallThickness), material: wallMaterial);
+        AddWall(builder: builder, center: (new Vector3(x: midX, y: wallCenterY, z: minZ) - origin), halfExtents: new Vector3(x: halfSpanX, y: wallHeight, z: wallThickness), material: wallMaterial);
 
-        // The console stands: each is a pedestal (its accent color, boot target + obstacle) with a screen slab
-        // sitting on top facing the room (+Z, toward the player area — the stands sit near the −Z wall). An UNBOOTED
-        // stand's screen is the powered-off dark box; a boot swaps that one instruction for a diegetic screen-surface
-        // slab (identical instruction count, constant material table) whose world frame MATCHES the geometry:
-        // worldOrigin sits on the slab's front face (center + halfExtents.Z along +Z, the face normal),
-        // worldRight/worldUp are the slab's local +X/+Y in world space (no rotation is applied to the point before
-        // the Box, so they are simply +X/+Y). The screen-surface table therefore changes ONLY on boot rebuilds —
-        // exactly when the program re-uploads anyway.
-        //
-        // Each stand is ONE static per-object instance: pedestal, screen, cartridge-slot patch, control housing, and
-        // the stand's 3 control-cluster pieces (which ride their own dynamic-transform slots but only travel a few
-        // centimeters around the stand) all fold into a single bound centered on the pedestal — StandInstanceRadius
-        // is sized generously past the farthest member (the screen slab) so the beam prepass's tile cull never clips
-        // any of them. The control pieces are emitted HERE (not in the trailing loop the flat layout used) so the
-        // whole stand is one CONTIGUOUS instruction range — BeginInstance/EndInstance cannot straddle a gap.
+        // The cartridge shelf: one static wall-mounted bracket per shelf slot (a simple slab, always present). The
+        // brackets are inert wall furniture — the cart choice lives at the cabinet, so no cartridge boxes rest on
+        // them. One static instance PER SLOT (not one for the whole strip): a full 8-slot shelf spans ~15 world
+        // units, so a single enclosing sphere would cover most of the room and defeat the tile cull; per-slot bounds
+        // stay tight (ShelfInstanceRadius).
+        for (var index = 0; (index < m_room.Shelf.Count); index++) {
+            var anchor = m_room.Shelf[index];
+            var bracketCenter = new Vector3(x: anchor.Center.X, y: (m_room.FloorY + (anchor.HalfExtents.Y * 0.5f)), z: anchor.Center.Y);
+
+            _ = builder.BeginInstance(boundCenter: bracketCenter, boundRadius: ShelfInstanceRadius);
+            _ = builder.ResetPoint().Translate(offset: (bracketCenter - origin)).Box(halfExtents: new Vector3(x: anchor.HalfExtents.X, y: (anchor.HalfExtents.Y * 0.5f), z: anchor.HalfExtents.Z), round: 0.03f, material: shelfMaterial);
+            _ = builder.EndInstance();
+        }
+    }
+
+    // THE CONSOLE STANDS (ConsoleStandEmitter): each is a pedestal (its accent color, boot target + obstacle) with a
+    // screen slab sitting on top facing the room (+Z, toward the player area — the stands sit near the −Z wall). An
+    // UNBOOTED stand's screen is the powered-off dark box; a boot swaps that one instruction for a diegetic
+    // screen-surface slab (identical instruction count, constant material table) whose world frame MATCHES the
+    // geometry: worldOrigin sits on the slab's front face (center + halfExtents.Z along +Z, the face normal),
+    // worldRight/worldUp are the slab's local +X/+Y in world space (no rotation is applied to the point before the
+    // Box, so they are simply +X/+Y). The screen-surface table therefore changes ONLY on boot rebuilds — exactly when
+    // the program re-uploads anyway.
+    //
+    // Each stand is ONE static per-object instance: pedestal, screen, cartridge-slot patch, control housing, and
+    // the stand's 3 control-cluster pieces (which ride their own dynamic-transform slots — controlSlotBase, this
+    // emitter's own SdfEmitContext.SlotBase — but only travel a few centimeters around the stand) all fold into a
+    // single bound centered on the pedestal — StandInstanceRadius is sized generously past the farthest member (the
+    // screen slab) so the beam prepass's tile cull never clips any of them. The control pieces are emitted HERE (not
+    // in a trailing loop) so the whole stand is one CONTIGUOUS instruction range — BeginInstance/EndInstance cannot
+    // straddle a gap.
+    private void EmitConsoleStands(SdfProgramBuilder builder, uint bootedMask, bool probeWorstCase, int controlSlotBase) {
+        var origin = Vector3.Zero;
+        var screenOffMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.08f, y: 0.09f, z: 0.10f)));
+        var controlMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.15f, y: 0.15f, z: 0.17f)));
+
         for (var index = 0; (index < m_room.Consoles.Count); index++) {
             var stand = m_room.Consoles[index];
-            var accent = m_consoleAccents[index % m_consoleAccents.Count];
+            var accent = m_consoleAccents[(index % m_consoleAccents.Count)];
             var bodyMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: accent));
             // The lit material is ALWAYS added (constant material table across rebuilds — the program buffer is sized
             // once); the boot bit only selects which index the screen references.
-            var screenLitMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: ((accent * 0.35f) + new Vector3(0.55f, 0.62f, 0.45f))));
+            var screenLitMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: ((accent * 0.35f) + new Vector3(x: 0.55f, y: 0.62f, z: 0.45f))));
             var screenMaterial = ((0u != (bootedMask & (1u << index))) ? screenLitMaterial : screenOffMaterial);
-            var pedestalCenter = new Vector3(stand.Center.X, (m_room.FloorY + stand.HalfExtents.Y), stand.Center.Y);
+            var pedestalCenter = new Vector3(x: stand.Center.X, y: (m_room.FloorY + stand.HalfExtents.Y), z: stand.Center.Y);
             // Sized close to the GB's 10:9 aspect (width : height) so a bound screen source isn't grossly stretched.
             var screenHalfWidth = (stand.HalfExtents.X * 0.8f);
-            var screenHalfExtents = new Vector3(screenHalfWidth, (screenHalfWidth / ScreenAspect), 0.08f);
-            var screenCenter = new Vector3(stand.Center.X, (m_room.FloorY + (2f * stand.HalfExtents.Y) + screenHalfExtents.Y), stand.Center.Y);
-            var screenFaceOrigin = (screenCenter + new Vector3(0f, 0f, screenHalfExtents.Z) - origin);
-            var buttonMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.15f, 0.20f)));
+            var screenHalfExtents = new Vector3(x: screenHalfWidth, y: (screenHalfWidth / ScreenAspect), z: 0.08f);
+            var screenCenter = new Vector3(x: stand.Center.X, y: ((m_room.FloorY + (2f * stand.HalfExtents.Y)) + screenHalfExtents.Y), z: stand.Center.Y);
+            var screenFaceOrigin = ((screenCenter + new Vector3(x: 0f, y: 0f, z: screenHalfExtents.Z)) - origin);
+            var buttonMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.85f, y: 0.15f, z: 0.20f)));
 
             _ = builder.BeginInstance(boundCenter: pedestalCenter, boundRadius: StandInstanceRadius);
             _ = builder.ResetPoint().Translate(offset: (pedestalCenter - origin)).Box(halfExtents: stand.HalfExtents, round: 0.05f, material: bodyMaterial);
@@ -1710,107 +2671,48 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             // The stand's cartridge slot: a shallow notch-colored patch on the pedestal's front face (a visual seat,
             // not an obstacle — cartridges resolve against the stand box itself), so an inserted-but-unbooted
             // cartridge has a place to visibly sit even before the screen lights.
-            var slotCenter = new Vector3((stand.Center.X - (stand.HalfExtents.X * 0.55f)), (m_room.FloorY + (stand.HalfExtents.Y * 1.5f)), (stand.Center.Y + stand.HalfExtents.Z - 0.02f));
+            var slotCenter = new Vector3(x: (stand.Center.X - (stand.HalfExtents.X * 0.55f)), y: (m_room.FloorY + (stand.HalfExtents.Y * 1.5f)), z: ((stand.Center.Y + stand.HalfExtents.Z) - 0.02f));
 
-            _ = builder.ResetPoint().Translate(offset: (slotCenter - origin)).Box(halfExtents: new Vector3(0.16f, 0.20f, 0.02f), round: 0.01f, material: bodyMaterial);
+            _ = builder.ResetPoint().Translate(offset: (slotCenter - origin)).Box(halfExtents: new Vector3(x: 0.16f, y: 0.20f, z: 0.02f), round: 0.01f, material: bodyMaterial);
 
             // The control cluster: a static housing bump behind the animated pieces (the d-pad/button shapes ride
             // their own dynamic-transform slots below), so the cluster reads as recessed into the pedestal.
             var anchor = ControlClusterAnchor(stand: stand);
-            var housingCenter = new Vector3(((anchor.DPad.X + anchor.A.X) * 0.5f), anchor.DPad.Y, (stand.Center.Y + stand.HalfExtents.Z - 0.01f));
+            var housingCenter = new Vector3(x: ((anchor.DPad.X + anchor.A.X) * 0.5f), y: anchor.DPad.Y, z: ((stand.Center.Y + stand.HalfExtents.Z) - 0.01f));
 
-            _ = builder.ResetPoint().Translate(offset: (housingCenter - origin)).Box(halfExtents: new Vector3((stand.HalfExtents.X * 0.7f), 0.12f, 0.01f), round: 0.02f, material: controlMaterial);
+            _ = builder.ResetPoint().Translate(offset: (housingCenter - origin)).Box(halfExtents: new Vector3(x: (stand.HalfExtents.X * 0.7f), y: 0.12f, z: 0.01f), round: 0.02f, material: controlMaterial);
 
             // The stand's animated control cluster: a d-pad cross (two crossed boxes) and two round buttons (A/B),
             // one dynamic-transform slot per piece — folded into THIS stand's instance (they ride a dynamic slot but
             // only travel a few centimeters, well inside StandInstanceRadius's margin). PackControlTransforms
             // depresses/tilts pressed pieces every frame; the instruction count here never changes.
-            var baseSlot = (m_controlSlotBase + (index * ControlsPerConsole));
+            var baseSlot = (controlSlotBase + (index * ControlsPerConsole));
 
-            _ = builder.ResetPoint().TransformDynamic(slot: (baseSlot + DPadControlOffset)).Box(halfExtents: new Vector3(0.09f, 0.03f, 0.015f), round: 0.005f, material: controlMaterial);
-            _ = builder.ResetPoint().TransformDynamic(slot: (baseSlot + DPadControlOffset)).Box(halfExtents: new Vector3(0.03f, 0.09f, 0.015f), round: 0.005f, material: controlMaterial);
+            _ = builder.ResetPoint().TransformDynamic(slot: (baseSlot + DPadControlOffset)).Box(halfExtents: new Vector3(x: 0.09f, y: 0.03f, z: 0.015f), round: 0.005f, material: controlMaterial);
+            _ = builder.ResetPoint().TransformDynamic(slot: (baseSlot + DPadControlOffset)).Box(halfExtents: new Vector3(x: 0.03f, y: 0.09f, z: 0.015f), round: 0.005f, material: controlMaterial);
             _ = builder.ResetPoint().TransformDynamic(slot: (baseSlot + AButtonControlOffset)).Sphere(radius: 0.035f, material: buttonMaterial);
             _ = builder.ResetPoint().TransformDynamic(slot: (baseSlot + BButtonControlOffset)).Sphere(radius: 0.035f, material: buttonMaterial);
             _ = builder.EndInstance();
         }
+    }
 
-        // The cartridge shelf: one static wall-mounted bracket per shelf slot (a simple slab, always present). The
-        // brackets are inert wall furniture — the cart choice lives at the cabinet, so no cartridge boxes rest on
-        // them. One static instance PER SLOT (not one for the whole strip): a full 8-slot shelf spans ~15 world
-        // units, so a single enclosing sphere would cover most of the room and defeat the tile cull; per-slot bounds
-        // stay tight (ShelfInstanceRadius).
-        for (var index = 0; (index < m_room.Shelf.Count); index++) {
-            var anchor = m_room.Shelf[index];
-            var bracketCenter = new Vector3(anchor.Center.X, (m_room.FloorY + (anchor.HalfExtents.Y * 0.5f)), anchor.Center.Y);
+    // ONE player box per FIXED slot (PlayerBoxEmitter), placed by its per-frame dynamic transform (active slots at
+    // the player, free slots hidden below the floor). One dynamic instance per slot: the bound tracks the slot's own
+    // position (boundOffset zero — the box is centered on the slot). A FREE slot's box is PARKED (Active=false) so the
+    // beam cull skips it with one branch instead of testing its hidden sphere per tile; a join/leave flips the active
+    // mask and rebuilds (ActivePlayerMask), so the reserved slot count is unchanged — the once-sized buffers stay
+    // valid. The probe keeps every slot active (worst case).
+    private void EmitPlayerBoxes(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
+        var playerMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.93f, y: 0.52f, z: 0.18f)));
 
-            _ = builder.BeginInstance(boundCenter: bracketCenter, boundRadius: ShelfInstanceRadius);
-            _ = builder.ResetPoint().Translate(offset: (bracketCenter - origin)).Box(halfExtents: new Vector3(anchor.HalfExtents.X, (anchor.HalfExtents.Y * 0.5f), anchor.HalfExtents.Z), round: 0.03f, material: shelfMaterial);
-            _ = builder.EndInstance();
-        }
-
-        // One player box per FIXED slot, placed by its per-frame dynamic transform (active slots at the player, free
-        // slots hidden below the floor). One dynamic instance per slot: the bound tracks the slot's own position
-        // (boundOffset zero — the box is centered on the slot). A FREE slot's box is PARKED (Active=false) so the beam
-        // cull skips it with one branch instead of testing its hidden sphere per tile; a join/leave flips the active
-        // mask and rebuilds (ActivePlayerMask), so the reserved slot count is unchanged — the once-sized buffers stay
-        // valid. The probe keeps every slot active (worst case). Room content too — a studio review shows the workpiece
-        // alone, never a player avatar.
         for (var slot = 0; (slot < OverworldWorld.MaxPlayers); slot++) {
             var occupied = (probeWorstCase || ((slot < m_world.Slots.Count) && (m_world.Slots[slot] is not null)));
+            var dynamicSlot = (slotBase + slot);
 
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: PlayerInstanceRadius, active: occupied);
-            _ = builder.ResetPoint().TransformDynamic(slot: slot).Box(halfExtents: m_room.PlayerHalfExtents, round: 0.06f, material: playerMaterial);
+            _ = builder.BeginInstanceDynamic(slot: dynamicSlot, boundOffset: Vector3.Zero, boundRadius: PlayerInstanceRadius, active: occupied);
+            _ = builder.ResetPoint().TransformDynamic(slot: dynamicSlot).Box(halfExtents: m_room.PlayerHalfExtents, round: 0.06f, material: playerMaterial);
             _ = builder.EndInstance();
         }
-
-        // THE DIEGETIC WORKBENCH (Stage 3): the room-only editor prop — a desk + a terminal panel that lights up when
-        // the editor reveal fires. Emitted with the room content; the probe always emits it in its LIT (brightest)
-        // form, so its one static instance + words join the worst-case envelope — MeasureWorstCaseEnvelope's binding
-        // rule for any new emission. Its panel's emissive is proportional to the eased glow (0 dark → peak lit).
-        EmitWorkbench(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
-        }
-
-        // The CREATOR pool: the scene's palette + ghost + one instance per placed-shape slot, emitted by the
-        // renderer (Puck.Demo.Creator.CreatorSceneRenderer). Slot/material counts are constant across rebuilds; the
-        // per-slot instruction count may vary below the probed worst case (MeasureWorstCaseEnvelope), which the
-        // engine's buffers were sized against.
-        // Studio suppresses the preview EASEL (the post + bake-preview screen slab) AND every creator-mode ADORNMENT —
-        // the placement ghost, the RIG's goal markers, and the selection highlight — so a review shows the CREATURE
-        // alone, never a floating cursor/marker photobombing the shot. Probe-safe — the worst-case probe still emits
-        // all of it (probeWorstCase wins inside EmitPool), so the reserved buffer ceiling is unchanged; studio's program
-        // is a strict subset. Suppression is by emission, not scene-state mutation (sticky ghost/selection fields stay).
-        m_creatorRenderer.EmitPool(builder: builder, probeWorstCase: probeWorstCase, suppressEasel: m_scenarioStudio, suppressAdornments: m_scenarioStudio);
-
-        // The WORLD SCULPTOR's authored content: terrain, lights, override ghosts, every stamped placement (each a
-        // static instance), and its two dynamic slots — emitted by Puck.Demo.World.WorldSceneRenderer under the same
-        // worst-case-probe discipline as the creator pool (the synthetic probe covers the densest legal scene).
-        m_worldRenderer.EmitWorld(builder: builder, probeWorstCase: probeWorstCase);
-
-        // The COMPANION pool: presentation-only sculpted creatures (roots + shape slots reserved for the full
-        // roster regardless of how many are loaded — constant slot topology, same probe discipline). A screen-faced
-        // companion's face slab lands on the slot the ScreenSlotLedger granted it this pass, read through
-        // CompanionFaceSlot (the ledger owns that resolved slot — F-STATE-2, no mirror on CompanionState). The probe
-        // needs no resolver (it emits its own placeholder-index face slab unconditionally).
-        m_companionRenderer.EmitCompanions(builder: builder, faceSlotResolver: CompanionFaceSlot, probeWorstCase: probeWorstCase);
-
-        // THE DIEGETIC LINK CABLE (whimsy): a static instance emitted ONLY while two cabinets are linked (or under
-        // the worst-case probe, which always emits it — see EmitLinkCable's remarks).
-        EmitLinkCable(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
-
-        // THE STUDIO CYCLORAMA: the neutral gray backdrop shell, emitted only for a studio review (or under the probe,
-        // which always emits it so the worst-case envelope covers it — MeasureWorstCaseEnvelope's binding rule for any
-        // optional emission). One static instance; its bound intentionally spans the scene (it IS the background every
-        // missed-ray tile needs — there is nothing else large to cull against in a studio review).
-        EmitStudioBackdrop(builder: builder, origin: origin, probeWorstCase: probeWorstCase);
-
-        // THE SDF-DEBUG subject's worst case joins the probe (a full MaxOps stack + the wordiest shape + floor), so the
-        // frozen envelope covers a live debug program — MeasureWorstCaseEnvelope's binding rule for any new emission.
-        // Only the probe path reaches here (a live debug frame returned at the early branch above).
-        if (probeWorstCase) {
-            m_sdfDebug.EmitProbe(builder: builder);
-        }
-
-        return builder.Build();
     }
 
     // The diegetic WORKBENCH prop (Stage 3): a desk (a thin slab on two legs) with a stout terminal SCREEN PANEL, one
@@ -1823,17 +2725,18 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
     private void EmitWorkbench(SdfProgramBuilder builder, Vector3 origin, bool probeWorstCase) {
         var (centerX, centerZ) = m_world.WorkbenchCenterLocal;
         // The panel's emissive: the probe uses the LIT peak (envelope worst case); a live build scales the peak by the
-        // eased glow, so the powered-off panel is a plain matte box (emissive 0) and a fully-revealed one glows.
-        var glow = (probeWorstCase ? 1f : Math.Clamp(value: m_workbenchGlow, min: 0f, max: 1f));
-        var deskMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.30f, 0.26f, 0.22f)));
-        var frameMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.12f, 0.13f, 0.15f)));
+        // SmoothStep-eased glow (WorkbenchGlowEased — the SAME value the rebuild bucket keys on), so the powered-off
+        // panel is a plain matte box (emissive 0) and a fully-revealed one glows, easing in on a smooth curve.
+        var glow = (probeWorstCase ? 1f : WorkbenchGlowEased());
+        var deskMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.30f, y: 0.26f, z: 0.22f)));
+        var frameMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.12f, y: 0.13f, z: 0.15f)));
         // The lit panel: a cool CRT teal that brightens from near-black (dark) to a self-illuminated glow. The albedo
         // itself lifts a touch with the glow so the OFF panel reads as a dead dark screen, not a dim colored one.
-        var panelAlbedo = Vector3.Lerp(value1: new Vector3(0.05f, 0.06f, 0.07f), value2: new Vector3(0.45f, 0.85f, 0.70f), amount: glow);
+        var panelAlbedo = Vector3.Lerp(value1: new Vector3(x: 0.05f, y: 0.06f, z: 0.07f), value2: new Vector3(x: 0.45f, y: 0.85f, z: 0.70f), amount: glow);
         var panelMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: panelAlbedo, Emissive: (WorkbenchLitEmissive * glow)));
 
         var floorY = m_room.FloorY;
-        var deskCenter = new Vector3(centerX, (floorY + WorkbenchDeskTopY), centerZ);
+        var deskCenter = new Vector3(x: centerX, y: (floorY + WorkbenchDeskTopY), z: centerZ);
         var legY = (floorY + WorkbenchLegHalfHeight);
         var legFrontZ = (centerZ - (WorkbenchDeskHalfDepth * 0.7f));
         var legBackZ = (centerZ + (WorkbenchDeskHalfDepth * 0.7f));
@@ -1842,25 +2745,186 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
         // The monitor rides above the desk, tilted slightly back. Its dark backing/hood sits BEHIND (+Z) the glowing
         // panel; the emissive panel is pushed clearly IN FRONT (−Z, the room-facing side the player approaches) so the
         // lit face is the surface every ray hits first — never occluded by the hood (the sliver-behind-a-frame bug).
-        var monitorCenter = new Vector3(centerX, (deskCenter.Y + WorkbenchPanelRiseY), centerZ);
+        var monitorCenter = new Vector3(x: centerX, y: (deskCenter.Y + WorkbenchPanelRiseY), z: centerZ);
         var panelTilt = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: WorkbenchPanelTiltRadians);
 
         _ = builder.BeginInstance(boundCenter: deskCenter, boundRadius: WorkbenchInstanceRadius);
         // Desktop slab.
-        _ = builder.ResetPoint().Translate(offset: (deskCenter - origin)).Box(halfExtents: new Vector3(WorkbenchDeskHalfWidth, WorkbenchDeskHalfHeight, WorkbenchDeskHalfDepth), round: 0.03f, material: deskMaterial);
+        _ = builder.ResetPoint().Translate(offset: (deskCenter - origin)).Box(halfExtents: new Vector3(x: WorkbenchDeskHalfWidth, y: WorkbenchDeskHalfHeight, z: WorkbenchDeskHalfDepth), round: 0.03f, material: deskMaterial);
         // Two legs (front-left, back-right — a diagonal pair reads as support without four separate members).
-        _ = builder.ResetPoint().Translate(offset: (new Vector3(legLeftX, legY, legFrontZ) - origin)).Box(halfExtents: new Vector3(0.05f, WorkbenchLegHalfHeight, 0.05f), round: 0.01f, material: deskMaterial);
-        _ = builder.ResetPoint().Translate(offset: (new Vector3(legRightX, legY, legBackZ) - origin)).Box(halfExtents: new Vector3(0.05f, WorkbenchLegHalfHeight, 0.05f), round: 0.01f, material: deskMaterial);
+        _ = builder.ResetPoint().Translate(offset: (new Vector3(x: legLeftX, y: legY, z: legFrontZ) - origin)).Box(halfExtents: new Vector3(x: 0.05f, y: WorkbenchLegHalfHeight, z: 0.05f), round: 0.01f, material: deskMaterial);
+        _ = builder.ResetPoint().Translate(offset: (new Vector3(x: legRightX, y: legY, z: legBackZ) - origin)).Box(halfExtents: new Vector3(x: 0.05f, y: WorkbenchLegHalfHeight, z: 0.05f), round: 0.01f, material: deskMaterial);
         // The monitor's dark matte backing plate: sits directly BEHIND the panel along the tilted local +Z (the
         // laid-back screen's underside), a hair thinner and the same footprint, so it gives the terminal a solid body
         // without ever occluding the up-facing glowing face the camera and player both see.
-        _ = builder.ResetPoint().Translate(offset: (monitorCenter - origin)).Rotate(rotation: panelTilt).Translate(offset: new Vector3(0f, 0f, (WorkbenchPanelHalfDepth * 1.6f))).Box(halfExtents: new Vector3((WorkbenchPanelHalfWidth + 0.04f), (WorkbenchPanelHalfHeight + 0.04f), (WorkbenchPanelHalfDepth * 0.6f)), round: 0.03f, material: frameMaterial);
+        _ = builder.ResetPoint().Translate(offset: (monitorCenter - origin)).Rotate(rotation: panelTilt).Translate(offset: new Vector3(x: 0f, y: 0f, z: (WorkbenchPanelHalfDepth * 1.6f))).Box(halfExtents: new Vector3(x: (WorkbenchPanelHalfWidth + 0.04f), y: (WorkbenchPanelHalfHeight + 0.04f), z: (WorkbenchPanelHalfDepth * 0.6f)), round: 0.03f, material: frameMaterial);
         // The screen panel: dark box when locked, an emissive CRT glow when revealed. Tilted back so its lit face
         // points up-and-toward the room — visible from a floor-level approach AND the high iso reveal camera. Emissive
         // lifts every visible face uniformly, so the whole panel reads as powered-on.
-        _ = builder.ResetPoint().Translate(offset: (monitorCenter - origin)).Rotate(rotation: panelTilt).Box(halfExtents: new Vector3(WorkbenchPanelHalfWidth, WorkbenchPanelHalfHeight, WorkbenchPanelHalfDepth), round: 0.02f, material: panelMaterial);
+        _ = builder.ResetPoint().Translate(offset: (monitorCenter - origin)).Rotate(rotation: panelTilt).Box(halfExtents: new Vector3(x: WorkbenchPanelHalfWidth, y: WorkbenchPanelHalfHeight, z: WorkbenchPanelHalfDepth), round: 0.02f, material: panelMaterial);
         _ = builder.EndInstance();
     }
+
+    // THE DIEGETIC CONSOLE TERMINAL (diegetic-UI Tier 0): a modest pedestal + a room-facing CRT slab that samples the
+    // console named feed at the terminal's headroom screen slot — the control plane made flesh. ONE static instance
+    // bounded on the pedestal (TerminalInstanceRadius). Placed against the +Z (near) wall, offset toward −X, its CRT
+    // facing −Z back into the room; the sampling frame is the +Z cabinet convention mirrored 180° about Y (worldRight
+    // −X, worldUp +Y, front face on −Z) so the console reads un-mirrored exactly as a cabinet does from its own front.
+    // Visual-only (no collision — the sim's FixedRoom never learns it exists), like the workbench. HIDDEN (the `terminal
+    // off` verb) swaps the CRT slab for a dark box — the same instruction-count-neutral boot/unboot swap the cabinets
+    // use, so the eased rebuilds never resize a buffer. The probe emits the LIT (slab) form unconditionally so the
+    // worst-case envelope reserves the extra screen surface — MeasureWorstCaseEnvelope's binding rule for any new
+    // emission; the terminal is the eighth (last) screen surface at a full house (4 cabinets + 3 companion faces + it).
+    private void EmitTerminal(SdfProgramBuilder builder, Vector3 origin, bool probeWorstCase) {
+        var floorY = m_room.FloorY;
+        var centerX = (m_room.BoundsMin.X + TerminalInsetX);
+        var centerZ = (m_room.BoundsMax.Y - TerminalInsetZ);
+        // The bezel/screen-well palette (docs/ui-design-tokens.md section 6's "CRT quote"): the pedestal body reads as
+        // the OUTER bezel tone, the hood tucked behind the glass as the darker INNER bezel tone, and the powered-off
+        // glass as the screen well's dark end — the same well a lit ScreenSlab's shader tints from underneath. Literal
+        // floats (not a DesignTokens reference — this source is at its exact CA1506 coupling ceiling and cannot name
+        // the type) transcribing BezelOuter #23282B / BezelInner #14181A / ScreenWellInner #05100C exactly.
+        var bodyMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.1373f, y: 0.1569f, z: 0.1686f)));
+        var hoodMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.0784f, y: 0.0941f, z: 0.1020f)));
+        var screenOffMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.0196f, y: 0.0627f, z: 0.0471f)));
+
+        var pedestalCenter = new Vector3(x: centerX, y: (floorY + TerminalPedestalHalfHeight), z: centerZ);
+        var screenHalfHeight = (TerminalScreenHalfWidth / TerminalCrtAspect);
+        var screenHalfExtents = new Vector3(x: TerminalScreenHalfWidth, y: screenHalfHeight, z: TerminalScreenHalfDepth);
+        var screenCenter = new Vector3(x: centerX, y: (((floorY + (2f * TerminalPedestalHalfHeight)) + TerminalScreenGap) + screenHalfHeight), z: centerZ);
+        // The CRT front face is on −Z (toward the room); its world-space sampling frame is the +Z cabinet frame turned
+        // 180° about Y — worldRight −X, worldUp +Y — so the sampled image is un-mirrored from the −Z viewing side.
+        var screenFaceOrigin = ((screenCenter + new Vector3(x: 0f, y: 0f, z: -TerminalScreenHalfDepth)) - origin);
+        // The pedestal is always present (like the workbench); only the CRT face toggles between the live screen slab
+        // and a powered-off dark box. The probe always takes the slab form so the worst-case envelope covers the extra
+        // screen surface.
+        var showScreen = (probeWorstCase || m_terminalVisible);
+
+        _ = builder.BeginInstance(boundCenter: pedestalCenter, boundRadius: TerminalInstanceRadius);
+        // The pedestal body.
+        _ = builder.ResetPoint().Translate(offset: (pedestalCenter - origin)).Box(halfExtents: new Vector3(x: TerminalPedestalHalfWidth, y: TerminalPedestalHalfHeight, z: TerminalPedestalHalfDepth), round: 0.05f, material: bodyMaterial);
+        // The dark hood/bezel sits directly BEHIND (+Z) the CRT face, a hair larger, so the terminal has a solid body
+        // without ever occluding the −Z-facing screen the player and camera see (the sliver-behind-a-frame bug).
+        _ = builder.ResetPoint().Translate(offset: ((screenCenter + new Vector3(x: 0f, y: 0f, z: (TerminalScreenHalfDepth * 0.9f))) - origin)).Box(halfExtents: new Vector3(x: (TerminalScreenHalfWidth + 0.05f), y: (screenHalfHeight + 0.05f), z: (TerminalScreenHalfDepth * 0.8f)), round: 0.03f, material: hoodMaterial);
+
+        if (showScreen) {
+            // The CRT slab: samples the console named feed at TerminalScreenSlot (0 = unbound → the flat screen material,
+            // a blank dark CRT, e.g. on a host with no glyph atlas). The Anchored ledger claim (InstallFeeds) guarantees
+            // the terminal seats THIS exact slot, so the baked screenIndex and the resolved source always agree.
+            _ = builder.ResetPoint().Translate(offset: (screenCenter - origin)).ScreenSlab(
+                halfExtents: screenHalfExtents,
+                round: 0.03f,
+                worldOrigin: screenFaceOrigin,
+                worldRight: -Vector3.UnitX,
+                worldUp: Vector3.UnitY,
+                screenIndex: TerminalScreenSlot
+            );
+        } else {
+            // Hidden (the `terminal off` dev toggle): the powered-off dark CRT box, an instruction-count-neutral swap for
+            // the slab above (mirrors a cabinet's unbooted screen).
+            _ = builder.ResetPoint().Translate(offset: (screenCenter - origin)).Box(halfExtents: screenHalfExtents, round: 0.03f, material: screenOffMaterial);
+        }
+
+        _ = builder.EndInstance();
+    }
+
+    // THE DIEGETIC UI BAR (Tier 2): the live path delegates to the installed director (which lays the real panels +
+    // embossed labels from the current binding-bar frame), gated on the visibility latch; the probe path emits a
+    // synthetic MAX-size bar directly so MeasureWorstCaseEnvelope reserves the envelope BEFORE the director installs
+    // (the probe runs at spec construction, ahead of the render assembly's InstallDiegeticUi). The real emit is a
+    // strict subset of the probe (fewer visible chips, shorter labels), so the once-sized buffers always fit —
+    // MeasureWorstCaseEnvelope's binding rule for any new optional emission, mirroring EmitTerminal's lit-form probe.
+    private void EmitDiegeticBar(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
+        if (probeWorstCase) {
+            EmitDiegeticBarProbe(builder: builder, slotBase: slotBase);
+
+            return;
+        }
+
+        if (m_diegeticUiVisible) {
+            m_diegeticEmit?.Invoke(obj: builder);
+        }
+    }
+
+    // The synthetic worst-case bar: ONE dynamic instance carrying the maximum structure the director can ever emit —
+    // a backing plate, DiegeticBarMaxChips panels, and DiegeticBarMaxLabelChars glyph cells per chip — plus the seven
+    // materials the director adds (backing, the four chip tiers — rest/held/accent/disabled — and the two label
+    // tones — embossed/accent-ink). Positions/UVs are placeholders, and the panels use Box rather than the director's
+    // RoundedRectangle: every shape instruction packs to the SAME fixed word width (SdfProgram's uniform per-instruction
+    // packing), so Box reserves an identical envelope while keeping this ceilinged source clear of the SdfLift type the
+    // rounded-rectangle op would add. The probe measures word/instance COUNT, never appearance or material count (a
+    // program's material list is NOT a frozen capacity — see SdfProgramBuilder.AddMaterial — so extra materials never
+    // risk outgrowing a buffer; they are still mirrored here purely so this comment and the director's real material
+    // set never drift apart). Literal floats (not a DesignTokens reference — this source is at its exact CA1506
+    // coupling ceiling) transcribing PlateMid #24272B / EmbossFill #DFE6E1 / EngraveFill #14171A / Accent #FF6A2B /
+    // AccentInk #160A04 exactly — see DiegeticUiDirector's own material palette for the token derivation. KEEP IN
+    // SYNC with DiegeticUiDirector's Emit (its structure must never exceed this: ≤ DiegeticBarMaxChips visible chips,
+    // ≤ DiegeticBarMaxLabelChars label glyphs per chip, one backing plate).
+    private void EmitDiegeticBarProbe(SdfProgramBuilder builder, int slotBase) {
+        var backingMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.1412f, y: 0.1529f, z: 0.1686f)));
+        var chipRestMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.8745f, y: 0.9020f, z: 0.8824f), Emissive: 0.06f));
+        var chipHeldMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.0784f, y: 0.0902f, z: 0.1020f)));
+        var chipAccentMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 1.0f, y: 0.4157f, z: 0.1686f), Emissive: 0.55f));
+        var chipDisabledMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.0784f, y: 0.0902f, z: 0.1020f)));
+        var labelMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.8745f, y: 0.9020f, z: 0.8824f), Emissive: 0.10f));
+        var labelAccentInkMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.0863f, y: 0.0392f, z: 0.0157f)));
+        var chipMaterials = new[] { chipRestMaterial, chipHeldMaterial, chipAccentMaterial, chipDisabledMaterial };
+
+        _ = builder.BeginInstanceDynamic(slot: slotBase, boundOffset: Vector3.Zero, boundRadius: DiegeticBarBoundRadius, active: true);
+        _ = builder.ResetPoint().TransformDynamic(slot: slotBase).Translate(offset: new Vector3(x: 0f, y: 0f, z: -0.01f)).Box(halfExtents: new Vector3(x: 0.6f, y: 0.15f, z: 0.01f), round: 0.06f, material: backingMaterial);
+
+        for (var chip = 0; (chip < DiegeticBarMaxChips); chip++) {
+            var chipX = (-0.55f + (chip * 0.1f));
+            var chipMaterial = chipMaterials[(chip % chipMaterials.Length)];
+            var chipLabelMaterial = ((chipMaterial == chipAccentMaterial) ? labelAccentInkMaterial : labelMaterial);
+
+            _ = builder.ResetPoint().TransformDynamic(slot: slotBase).Translate(offset: new Vector3(x: chipX, y: 0f, z: 0.01f)).Box(halfExtents: new Vector3(x: 0.045f, y: 0.045f, z: 0.01f), round: 0.012f, material: chipMaterial);
+
+            for (var glyph = 0; (glyph < DiegeticBarMaxLabelChars); glyph++) {
+                _ = builder.ResetPoint().TransformDynamic(slot: slotBase).Translate(offset: new Vector3(x: (chipX + (glyph * 0.02f)), y: 0f, z: 0.02f)).Glyph(uvBottomLeft: new Vector2(x: 0f, y: 0.1f), uvTopRight: new Vector2(x: 0.1f, y: 0f), halfWidth: 0.02f, halfHeight: 0.03f, extrudeHalfDepth: 0.006f, distanceScale: 0.05f, material: chipLabelMaterial);
+            }
+        }
+
+        // The hub mode readout's worst case: DiegeticTitleMaxChars glyph cells riding the SAME dynamic slot + label
+        // material as the chip labels, above the cluster. KEEP IN SYNC with DiegeticUiDirector.Emit's HubTitle run.
+        for (var glyph = 0; (glyph < DiegeticTitleMaxChars); glyph++) {
+            _ = builder.ResetPoint().TransformDynamic(slot: slotBase).Translate(offset: new Vector3(x: (glyph * 0.03f), y: 0.2f, z: 0.02f)).Glyph(uvBottomLeft: new Vector2(x: 0f, y: 0.1f), uvTopRight: new Vector2(x: 0.1f, y: 0f), halfWidth: 0.03f, halfHeight: 0.04f, extrudeHalfDepth: 0.006f, distanceScale: 0.05f, material: labelMaterial);
+        }
+
+        _ = builder.EndInstance();
+
+        // The terminal nameplate's worst case: ONE static instance carrying DiegeticNameplateMaxChars glyph cells (the
+        // director lays them with SdfProgramBuilder.Text, ResetPoint+Translate+Rotate+Glyph per glyph — matched here) and
+        // its one material. KEEP IN SYNC with DiegeticUiDirector.EmitNameplate.
+        // Literal EmbossFill #DFE6E1 (see EmitDiegeticBarProbe's remark on why this source cannot name DesignTokens).
+        var nameplateMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.8745f, y: 0.9020f, z: 0.8824f), Emissive: 0.12f));
+
+        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 0.6f);
+
+        for (var glyph = 0; (glyph < DiegeticNameplateMaxChars); glyph++) {
+            _ = builder.ResetPoint().Translate(offset: new Vector3(x: (glyph * 0.05f), y: 0f, z: 0f)).Rotate(rotation: Quaternion.Identity).Glyph(uvBottomLeft: new Vector2(x: 0f, y: 0.1f), uvTopRight: new Vector2(x: 0.1f, y: 0f), halfWidth: 0.02f, halfHeight: 0.03f, extrudeHalfDepth: 0.008f, distanceScale: 0.05f, material: nameplateMaterial);
+        }
+
+        _ = builder.EndInstance();
+    }
+
+    /// <summary>The diegetic terminal NAMEPLATE's face-centre in world space — pulled live by the diegetic-UI director
+    /// each build so its embossed sign tracks the terminal (which moves when a world loads). Sits on the pedestal's
+    /// upper front face (the −Z, room-facing side). Primitive-typed (Vector3) so the director wires it without this
+    /// source — at its coupling ceiling — naming the director.</summary>
+    public Vector3 TerminalNameplateCentre() {
+        var centerX = (m_room.BoundsMin.X + TerminalInsetX);
+        var centerZ = (m_room.BoundsMax.Y - TerminalInsetZ);
+
+        return new Vector3(x: centerX, y: (m_room.FloorY + (TerminalPedestalHalfHeight * 1.35f)), z: (centerZ - TerminalPedestalHalfDepth));
+    }
+
+    /// <summary>The nameplate face's world +X (advance) axis — −X, mirroring the terminal CRT's own frame so the sign
+    /// reads un-mirrored from the −Z viewing side (see <see cref="TerminalNameplateCentre"/>).</summary>
+    public Vector3 TerminalNameplateRight() => -Vector3.UnitX;
+
+    /// <summary>The nameplate face's world +Y axis (see <see cref="TerminalNameplateCentre"/>).</summary>
+    public Vector3 TerminalNameplateUp() => Vector3.UnitY;
 
     // Two thin dark capsules sagging from each linked cabinet's screen-top to a shared low midpoint, plus a small
     // sphere marking the sag — ONE static instance (SmoothUnion between the two capsules + the sag sphere, INSIDE
@@ -1873,25 +2937,34 @@ public sealed partial class OverworldFrameSource : ISdfFrameSource, IOverworldCo
             return;
         }
 
-        var (indexA, indexB) = (probeWorstCase ? (0, Math.Min(1, m_room.Consoles.Count - 1)) : m_currentLinkedPair!.Value);
+        var (indexA, indexB) = (probeWorstCase ? (0, Math.Min(val1: 1, val2: (m_room.Consoles.Count - 1))) : m_currentLinkedPair!.Value);
 
         if ((indexA < 0) || (indexB < 0) || (indexA >= m_room.Consoles.Count) || (indexB >= m_room.Consoles.Count)) {
             return; // fewer than two consoles exist (a bare-room probe) — nothing to swag a cable between.
         }
 
+        // The presentation-only TRANSFER GLOW: the render node reports a 0..1 intensity from the linked ports' live
+        // serial-transfer state (decayed), so the cable lights data-cyan while the pair exchanges bytes and settles to
+        // its plain dark rubber when idle. A brighter emissive bead pools at the sag's low point — a cheap read of
+        // "energy on the wire" without a traveling-pulse clock. The worst-case probe emits the plain cable (glow 0), so
+        // the emissive lift never grows the program's word/instance envelope.
+        var glow = (probeWorstCase ? 0f : Math.Clamp(value: (LinkCableGlowSource?.Invoke() ?? 0f), min: 0f, max: 1f));
+        var cableAlbedo = Vector3.Lerp(value1: new Vector3(x: 0.05f, y: 0.05f, z: 0.06f), value2: new Vector3(x: 0.15f, y: 0.85f, z: 1f), amount: glow);
+        var cableMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: cableAlbedo, Emissive: (glow * 1.6f)));
+        var beadMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: cableAlbedo, Emissive: (glow * 2.6f)));
+
         // World-space (== render-relative here; the render anchor IS the spawn anchor, so origin is always zero —
         // see BuildProgram's own comment) screen-top positions, exactly matching ScreenCenterLocal's placement.
-        var cableMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.05f, 0.05f, 0.06f)));
         var topA = ScreenCenterLocal(consoleIndex: indexA);
         var topB = ScreenCenterLocal(consoleIndex: indexB);
-        var sag = (Vector3.Lerp(value1: topA, value2: topB, amount: 0.5f) - new Vector3(0f, CableSagDrop, 0f));
+        var sag = (Vector3.Lerp(value1: topA, value2: topB, amount: 0.5f) - new Vector3(x: 0f, y: CableSagDrop, z: 0f));
         var boundCenter = Vector3.Lerp(value1: topA, value2: topB, amount: 0.5f);
-        var boundRadius = (Vector3.Distance(value1: topA, value2: topB) * 0.5f + CableSagDrop + CableSagRadius + 0.2f);
+        var boundRadius = ((((Vector3.Distance(value1: topA, value2: topB) * 0.5f) + CableSagDrop) + CableSagRadius) + 0.2f);
 
         _ = builder.BeginInstance(boundCenter: boundCenter, boundRadius: boundRadius);
         _ = builder.ResetPoint().Translate(offset: (topA - origin)).Capsule(endpoint: (sag - topA), radius: CableRadius, material: cableMaterial, blend: SdfBlendOp.Union);
         _ = builder.ResetPoint().Translate(offset: (topB - origin)).Capsule(endpoint: (sag - topB), radius: CableRadius, material: cableMaterial, blend: SdfBlendOp.SmoothUnion, smooth: CableSmooth);
-        _ = builder.ResetPoint().Translate(offset: (sag - origin)).Sphere(radius: CableSagRadius, material: cableMaterial, blend: SdfBlendOp.SmoothUnion, smooth: CableSmooth);
+        _ = builder.ResetPoint().Translate(offset: (sag - origin)).Sphere(radius: CableSagRadius, material: beadMaterial, blend: SdfBlendOp.SmoothUnion, smooth: CableSmooth);
         _ = builder.EndInstance();
     }
     // The studio cyclorama: a large neutral-gray SHELL centered on the workbench (the orbit target) that the review

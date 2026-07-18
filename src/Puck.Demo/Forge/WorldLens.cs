@@ -13,10 +13,10 @@ internal static class WorldLensProtocol {
     /// EXIT condition reads — the membrane's two directions share one page. Both the host peripheral
     /// (<see cref="SensorPagePeripheral"/>) and the forged ROM reference these addresses, so the contract is one truth.</summary>
     public const ushort SensorPageBase = 0xC000;
-    public const ushort PlayerTileXAddress = 0xC000;
-    public const ushort PlayerTileYAddress = 0xC001;
     public const ushort FacingAddress = 0xC002;
     public const ushort HeartbeatAddress = 0xC003;
+    public const ushort PlayerTileXAddress = 0xC000;
+    public const ushort PlayerTileYAddress = 0xC001;
 
     /// <summary>The WIN flag: the ROM writes <see cref="WinMagic"/> here the frame the player's sprite reaches the goal
     /// tile. The host polls it (the exit-condition seam) to break the fourth wall — the player who reaches their goal
@@ -80,7 +80,7 @@ internal readonly record struct WorldLensState(byte PlayerTileX, byte PlayerTile
 /// <item><b>Plan A</b> (<see cref="SensorPagePeripheral"/>): write a compact SENSOR PAGE to work RAM; a real, portable
 /// ROM reads it and renders with its own tile engine. The honest membrane, and physical-cartridge friendly.</item>
 /// <item><b>Plan B</b> (not built): write VRAM (tiles/map/OAM) directly — the host forges the GB frame live and the ROM
-/// is a thin display. A future <c>VramStreamPeripheral</c> implements this SAME interface.</item>
+/// is a thin display. Streaming peripherals implement the same interface.</item>
 /// </list>
 /// It is handed the whole <see cref="MachineInstance"/> so any realization can reach whatever memory it needs (Plan A:
 /// <see cref="SystemMemory"/>; Plan B: the video RAM) without widening the seam.

@@ -73,7 +73,7 @@ internal sealed class BindingBarAdapter {
         }
 
         var family = ResolveFamily();
-        var slots = new BindingSlotView[activeSlots.Count * BindingBarLayout.SlotButtons.Length];
+        var slots = new BindingSlotView[(activeSlots.Count * BindingBarLayout.SlotButtons.Length)];
 
         for (var bar = 0; (bar < activeSlots.Count); bar++) {
             var playerSlot = activeSlots[bar];
@@ -128,6 +128,7 @@ internal sealed class BindingBarAdapter {
         for (var index = 0; (index < slots.Length); index++) {
             slots[index] = new BindingSlotView(
                 Alpha: 0.3f,
+                Bound: false,
                 Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
                 Icon: BindingIconId.None,
                 Pressed: false,
@@ -138,6 +139,7 @@ internal sealed class BindingBarAdapter {
         // A lit slot showing a bound-action ICON plus its button badge (bumpers/faces/d-pad verbs).
         BindingSlotView Verb(int slot, BindingIconId icon, GamepadButtons button) => new(
             Alpha: 1f,
+            Bound: true,
             Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
             Icon: icon,
             Pressed: (0 != (heldButtons & button)),
@@ -146,6 +148,7 @@ internal sealed class BindingBarAdapter {
         // A lit slot showing ONLY its button badge (the sticks read as "move"/"rotate"; the d-pad arrows as axes).
         BindingSlotView Badge(int slot, GamepadButtons button) => new(
             Alpha: 1f,
+            Bound: true,
             Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
             Icon: BindingIconId.None,
             Pressed: (0 != (heldButtons & button)),
@@ -262,6 +265,7 @@ internal sealed class BindingBarAdapter {
         for (var index = 0; (index < slots.Length); index++) {
             slots[index] = new BindingSlotView(
                 Alpha: 0.3f,
+                Bound: false,
                 Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
                 Icon: BindingIconId.None,
                 Pressed: false,
@@ -271,6 +275,7 @@ internal sealed class BindingBarAdapter {
 
         BindingSlotView Verb(int slot, BindingIconId icon, GamepadButtons button) => new(
             Alpha: 1f,
+            Bound: true,
             Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
             Icon: icon,
             Pressed: (0 != (heldButtons & button)),
@@ -278,6 +283,7 @@ internal sealed class BindingBarAdapter {
         );
         BindingSlotView Badge(int slot, GamepadButtons button) => new(
             Alpha: 1f,
+            Bound: true,
             Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
             Icon: BindingIconId.None,
             Pressed: (0 != (heldButtons & button)),
@@ -344,6 +350,144 @@ internal sealed class BindingBarAdapter {
         ));
     }
 
+    /// <summary>Publishes the TRACKER bar — the music tracker's honest, minimal chord row so the mode is a real hub
+    /// sibling instead of leaving whatever page was last published frozen on screen. The console stays tracker's
+    /// detailed surface (<c>ActivePageId = "tracker"</c>); this row just mirrors the pad verbs the tracker binds:
+    /// North exits, West saves, East plays/stops the preview, the bumpers/sticks nudge the note a semitone/octave, and
+    /// the d-pad moves the row cursor / switches pattern. Published every tick so it can never go stale.</summary>
+    /// <param name="heldButtons">The creating pad's live button mask (pressed highlights).</param>
+    public void PublishTracker(GamepadButtons heldButtons) {
+        const int DpadUpSlot = 0;
+        const int DpadRightSlot = 1;
+        const int DpadDownSlot = 2;
+        const int DpadLeftSlot = 3;
+        const int LeftShoulderSlot = 4;
+        const int LeftStickSlot = 5;
+        const int NorthSlot = 6;
+        const int WestSlot = 7;
+        const int SouthSlot = 8;
+        const int EastSlot = 9;
+        const int RightShoulderSlot = 10;
+        const int RightStickSlot = 11;
+
+        var family = ResolveFamily();
+        var slots = new BindingSlotView[BindingBarLayout.SlotButtons.Length];
+
+        for (var index = 0; (index < slots.Length); index++) {
+            slots[index] = new BindingSlotView(
+                Alpha: 0.3f,
+                Bound: false,
+                Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
+                Icon: BindingIconId.None,
+                Pressed: false,
+                Visible: true
+            );
+        }
+
+        BindingSlotView Verb(int slot, BindingIconId icon, GamepadButtons button) => new(
+            Alpha: 1f,
+            Bound: true,
+            Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
+            Icon: icon,
+            Pressed: (0 != (heldButtons & button)),
+            Visible: true
+        );
+        BindingSlotView Badge(int slot, GamepadButtons button) => new(
+            Alpha: 1f,
+            Bound: true,
+            Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
+            Icon: BindingIconId.None,
+            Pressed: (0 != (heldButtons & button)),
+            Visible: true
+        );
+
+        slots[NorthSlot] = Verb(slot: NorthSlot, icon: BindingIconId.CreatorExit, button: GamepadButtons.ButtonNorth);
+        slots[WestSlot] = Verb(slot: WestSlot, icon: BindingIconId.CreatorRecord, button: GamepadButtons.ButtonWest);
+        slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorPlay, button: GamepadButtons.ButtonEast);
+        slots[SouthSlot] = Badge(slot: SouthSlot, button: GamepadButtons.ButtonSouth);
+        slots[LeftShoulderSlot] = Badge(slot: LeftShoulderSlot, button: GamepadButtons.LeftShoulder);
+        slots[RightShoulderSlot] = Badge(slot: RightShoulderSlot, button: GamepadButtons.RightShoulder);
+        slots[LeftStickSlot] = Badge(slot: LeftStickSlot, button: GamepadButtons.LeftStickPress);
+        slots[RightStickSlot] = Badge(slot: RightStickSlot, button: GamepadButtons.RightStickPress);
+        slots[DpadUpSlot] = Badge(slot: DpadUpSlot, button: GamepadButtons.DpadUp);
+        slots[DpadDownSlot] = Badge(slot: DpadDownSlot, button: GamepadButtons.DpadDown);
+        slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);
+        slots[DpadRightSlot] = Badge(slot: DpadRightSlot, button: GamepadButtons.DpadRight);
+
+        m_store.Publish(frame: new BindingBarFrame(
+            ActivePageId: "tracker",
+            BarCount: 1,
+            Family: family,
+            Modifiers: new BindingModifierSlotView[] {
+                new(Glyph: BindingGlyphId.TriggerLeft, Held: false),
+                new(Glyph: BindingGlyphId.TriggerRight, Held: false),
+            },
+            Slots: slots
+        ));
+    }
+
+    /// <summary>Publishes the workbench HUB's flat mode-picker page: D-pad left/right cycle the highlighted authoring
+    /// mode, South confirms into it, East closes the hub. Selection is a CURSOR (not a face-button-per-mode), so it
+    /// scales to N <see cref="AuthoringModeRegistry"/> entries with zero bar edits. South's icon is the highlighted
+    /// mode's glyph (the confirm target is always visible), and <c>ActivePageId = "hub-&lt;id&gt;"</c> so the diegetic
+    /// bar embosses the mode name (e.g. "HUB WORLD"). No modifiers — a learnable, flat picker.</summary>
+    /// <param name="heldButtons">The creating pad's live button mask (pressed highlights).</param>
+    /// <param name="selection">The highlighted mode index (into the registry).</param>
+    public void PublishHub(GamepadButtons heldButtons, int selection) {
+        // Layout indices into BindingBarLayout.SlotButtons (the WoW cluster order); only the picker's four are bound.
+        const int DpadRightSlot = 1;
+        const int DpadLeftSlot = 3;
+        const int SouthSlot = 8;
+        const int EastSlot = 9;
+
+        var family = ResolveFamily();
+        var slots = new BindingSlotView[BindingBarLayout.SlotButtons.Length];
+
+        for (var index = 0; (index < slots.Length); index++) {
+            slots[index] = new BindingSlotView(
+                Alpha: 0.3f,
+                Bound: false,
+                Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
+                Icon: BindingIconId.None,
+                Pressed: false,
+                Visible: true
+            );
+        }
+
+        BindingSlotView Verb(int slot, BindingIconId icon, GamepadButtons button) => new(
+            Alpha: 1f,
+            Bound: true,
+            Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
+            Icon: icon,
+            Pressed: (0 != (heldButtons & button)),
+            Visible: true
+        );
+        BindingSlotView Badge(int slot, GamepadButtons button) => new(
+            Alpha: 1f,
+            Bound: true,
+            Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[slot], family: family),
+            Icon: BindingIconId.None,
+            Pressed: (0 != (heldButtons & button)),
+            Visible: true
+        );
+
+        slots[DpadLeftSlot] = Badge(slot: DpadLeftSlot, button: GamepadButtons.DpadLeft);
+        slots[DpadRightSlot] = Badge(slot: DpadRightSlot, button: GamepadButtons.DpadRight);
+        slots[SouthSlot] = Verb(slot: SouthSlot, icon: AuthoringModeRegistry.GlyphAt(index: selection), button: GamepadButtons.ButtonSouth);
+        slots[EastSlot] = Verb(slot: EastSlot, icon: BindingIconId.CreatorExit, button: GamepadButtons.ButtonEast);
+
+        m_store.Publish(frame: new BindingBarFrame(
+            ActivePageId: $"hub-{AuthoringModeRegistry.IdAt(index: selection)}",
+            BarCount: 1,
+            Family: family,
+            Modifiers: new BindingModifierSlotView[] {
+                new(Glyph: BindingGlyphId.TriggerLeft, Held: false),
+                new(Glyph: BindingGlyphId.TriggerRight, Held: false),
+            },
+            Slots: slots
+        ));
+    }
+
     private void PublishCore(Func<string, bool> isActive, string? contextIcon) {
         var view = m_bindings.ViewFor(slot: 0);
         var family = ResolveFamily();
@@ -370,8 +514,10 @@ internal sealed class BindingBarAdapter {
             if (button is null) {
                 // An UNMAPPED slot still renders — a dim, empty plate with its gamepad-glyph badge — so the player
                 // can see the physical button exists and is free, rather than the cluster silently missing sockets.
+                // This IS the chip's DISABLED tier-0 state (docs/ui-design-tokens.md section 5).
                 destination[index] = new BindingSlotView(
                     Alpha: (0.35f * barAlpha),
+                    Bound: false,
                     Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
                     Icon: BindingIconId.None,
                     Pressed: false,
@@ -381,12 +527,15 @@ internal sealed class BindingBarAdapter {
                 continue;
             }
 
-            var icon = (((contextIcon is not null) && string.Equals(a: button.Command, b: DemoActionCommandModule.ContextCommand, comparisonType: StringComparison.OrdinalIgnoreCase))
-                ? contextIcon
-                : button.Icon);
+            // The context-primary action (overworld.context, e.g. "interact") IS the chip's ACCENT tier-1 state —
+            // the one place the demo already tracks "the primary thing to do right now" as a distinct signal.
+            var isContextAction = ((contextIcon is not null) && string.Equals(a: button.Command, b: DemoActionCommandModule.ContextCommand, comparisonType: StringComparison.OrdinalIgnoreCase));
+            var icon = (isContextAction ? contextIcon : button.Icon);
 
             destination[index] = new BindingSlotView(
+                Accent: isContextAction,
                 Alpha: (1f * barAlpha),
+                Bound: true,
                 Glyph: BindingGlyphResolver.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
                 Icon: BindingGlyphResolver.ResolveIcon(icon: icon),
                 Pressed: isActive(button.Command),
@@ -394,7 +543,6 @@ internal sealed class BindingBarAdapter {
             );
         }
     }
-
     private static BindingModifierSlotView[] BuildModifierSlots(BindingPageView view) {
         var modifiers = new BindingModifierSlotView[view.Modifiers.Count];
 
@@ -410,7 +558,6 @@ internal sealed class BindingBarAdapter {
 
         return modifiers;
     }
-
     private static BindingPageButtonView? FindButton(BindingPageView view, string source) {
         foreach (var button in view.Buttons) {
             if (string.Equals(a: button.Source, b: source, comparisonType: StringComparison.OrdinalIgnoreCase)) {
@@ -420,7 +567,6 @@ internal sealed class BindingBarAdapter {
 
         return null;
     }
-
     private static bool IsActive(in CommandSnapshot snapshot, RouterIntentSource source, string command) {
         if (!source.TryGetCommandId(
             name: command,

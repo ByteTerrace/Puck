@@ -56,16 +56,26 @@ public sealed class TextCommandSource : ICommandSource {
         // Honor the HOLD gate BEFORE draining and AGAIN after each submitted line: a line whose handler arms the gate
         // (a step/settle verb) stops the drain for this frame, and the remaining queued lines wait for the gate to
         // release on a later frame — the queue itself is FIFO, so their order is preserved across the pause.
-        while (
-            !(HoldGate?.Invoke() ?? false) &&
-            m_pending.TryDequeue(result: out var line)
-        ) {
+        //
+        // The deferred-mutation barrier holds ONLY Immediate-routed lines: a pending simulation submission means an
+        // inline read-back would observe pre-mutation state, so it waits for the snapshot to apply. Further
+        // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order, so a burst
+        // of scripted mutations lands in one tick instead of one per frame.
+        while (!(HoldGate?.Invoke() ?? false) && m_pending.TryPeek(result: out var line)) {
             // Blank lines and '#' COMMENT lines are skipped, so a piped driving SCRIPT can be self-documenting: an
             // agent pipes a commented list of verbs (a "# what this run proves" header, per-step notes) and only the
             // real verbs run. A comment is a line whose first non-whitespace character is '#'.
             var content = line.AsSpan().TrimStart();
+            var isComment = (content.IsEmpty || (content[0] == '#'));
 
-            if (content.IsEmpty || (content[0] == '#')) {
+            if (!isComment && m_registry.HasPendingSimulationSubmission && !m_registry.RoutesToSimulation(line: line)) {
+                break;
+            }
+
+            // Collect is the queue's only consumer, so the peeked line is the one dequeued.
+            _ = m_pending.TryDequeue(result: out _);
+
+            if (isComment) {
                 continue;
             }
 

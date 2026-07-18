@@ -9,7 +9,7 @@ internal sealed record BakedTileSet(byte[] TileData) {
 
 /// <summary>A baked CGB palette table in palette-RAM wire form.</summary>
 /// <param name="Rgb555Data">The palettes' bytes: <see cref="Count"/> × 4 colours × 2 bytes (little-endian RGB555,
-/// ROUNDED from 8-bit — the bake's own conversion, distinct from the legacy truncating encoder).</param>
+/// rounded from 8-bit with the bake pipeline's conversion).</param>
 /// <param name="Count">How many 4-colour palettes the table holds.</param>
 internal sealed record BakedPaletteSet(byte[] Rgb555Data, int Count);
 

@@ -12,27 +12,26 @@ namespace Puck.Demo.Forge.Framework;
 /// directions at once. The battery asserts: several transfers land correctly on both sides, an UNLINKED machine's
 /// external-clock receive times out to its fallback label instead of hanging, and the whole two-machine scenario is
 /// REPLAY-IDENTICAL across two fresh runs (snapshot equality, the <c>SerialLinkStage</c> idiom). This is a
-/// self-verify harness only — no game consumes <see cref="LinkModule"/> yet (link-fed multiplayer is a follow-on
-/// arc); it is not wired into any forge CLI flag or Program.cs, by design.
+/// self-verify harness for the low-level link helpers. Game protocols consume the higher-level
+/// <see cref="LinkProtocolModule"/>.
 /// </summary>
 internal static class LinkModuleVerify {
+    private const ushort PollBudget = 2048;
+    private const byte ReceiverSendBase = 0x90;
+    private const byte SenderSendBase = 0x40;
     private const ulong TCyclesPerFrame = 70224UL;
     private const byte TransferCount = 5;
-    private const byte SenderSendBase = 0x40;
-    private const byte ReceiverSendBase = 0x90;
-    private const ushort PollBudget = 2048;
 
     // Game-owned WRAM (0xC200+): the sender/receiver stage their own send/receive bytes and a transfer index here —
     // LinkModule owns none of it, per the module's no-WRAM contract.
     private const ushort SendByte = FrameworkMemoryMap.GameRam;
     private const ushort RecvBuffer = (ushort)(FrameworkMemoryMap.GameRam + 1); // TransferCount bytes.
-    private const ushort TransferIndex = (ushort)(RecvBuffer + TransferCount);
-    private const ushort TimeoutFlag = (ushort)(TransferIndex + 1);
     private const ushort DoneFlag = (ushort)(TimeoutFlag + 1);
+    private const ushort TimeoutFlag = (ushort)(TransferIndex + 1);
+    private const ushort TransferIndex = (ushort)(RecvBuffer + TransferCount);
     // A one-byte scratch landing spot for LinkModule.EmitReadByte (a fixed-address helper); the tick body then
     // copies it into the runtime-indexed RecvBuffer slot.
     private const ushort ReadScratch = (ushort)(DoneFlag + 1);
-
     private const byte StatePlay = 0;
 
     /// <summary>Runs the whole loopback battery. Throws loudly on any violation.</summary>
@@ -73,7 +72,6 @@ internal static class LinkModuleVerify {
             throw new InvalidOperationException(message: "LinkModule verification failed: an unconnected receiver reported a completed transfer with no peer attached.");
         }
     }
-
     private static void AssertExchange(LinkScenarioResult result) {
         if (result.SenderTimeout != 0) {
             throw new InvalidOperationException(message: "LinkModule verification failed: the linked sender hit its poll timeout despite a live peer.");
@@ -170,7 +168,7 @@ internal static class LinkModuleVerify {
         );
 
         return fw.BuildRom(
-            title: internalClock ? "LINKSEND" : "LINKRECV",
+            title: (internalClock ? "LINKSEND" : "LINKRECV"),
             bootSpec: new FrameworkBootSpec(
                 BgPalettes: linked.BackgroundPalettes,
                 InitialMap: linked.Screen(name: "play").Map,
@@ -182,7 +180,6 @@ internal static class LinkModuleVerify {
             )
         );
     }
-
     private static void EmitPlayEnter(Sm83Emitter e, byte sendBase) {
         e.LoadAImmediate(value: sendBase);
         e.StoreAToAddress(address: SendByte);
@@ -246,7 +243,6 @@ internal static class LinkModuleVerify {
 
         e.MarkLabel(label: skip);
     }
-
     private static byte[] BuildBlankTile() {
         var indices = new byte[64];
 
@@ -254,7 +250,6 @@ internal static class LinkModuleVerify {
 
         return HgbImage.EncodeTile2bpp(tileIndices: indices);
     }
-
     private static byte[] BuildPalette() =>
         HgbImage.EncodePalette(palette: [
             new HgbImage.Rgb(R: 0x10, G: 0x18, B: 0x30),
@@ -273,7 +268,6 @@ internal static class LinkModuleVerify {
         byte[] ReceiverReceived,
         MachineSnapshot ReceiverState
     );
-
     private sealed class Driver : IDisposable {
         private readonly ICpu m_cpu;
         private readonly IJoypad m_joypad;
@@ -293,7 +287,6 @@ internal static class LinkModuleVerify {
         public MachineInstance Machine => m_machine;
 
         public byte Read(ushort address) => m_bus.ReadByte(address: address);
-
         public void RunFrames(JoypadButtons buttons, int frames) {
             for (var frame = 0; (frame < frames); frame++) {
                 m_joypad.SetButtons(pressed: buttons);
@@ -302,11 +295,8 @@ internal static class LinkModuleVerify {
 
             VerifyMachineSettle.SettleOutOfOamDma(machine: m_machine.Machine, cpu: m_cpu, label: "link-module");
         }
-
         public void SettleAfterSessionRun() => VerifyMachineSettle.SettleOutOfOamDma(machine: m_machine.Machine, cpu: m_cpu, label: "link-module");
-
         public MachineSnapshot Snapshot() => m_machine.Machine.Snapshot();
-
         public void Dispose() => m_machine.Dispose();
     }
 }

@@ -1,237 +1,161 @@
-# Machine-fleet performance plan — measured
+# Machine-fleet performance plan
 
-Status: **plan of record**, the successor to the briefing
-([machine-fleet-briefing.md](machine-fleet-briefing.md)). Every
-number below is measured on the dev box (the RTX 4070 machine, 16 logical
-processors, .NET 10 Release) with the `--bench` instrument; nothing is
-estimated. The vision conclusions the workloads serve are recorded in the
-briefing §1.
+This document records the fleet benchmark, reference measurements, accepted
+optimizations, and regression guards. The workloads are defined in
+[machine-fleet-briefing.md](machine-fleet-briefing.md).
 
-## 1. The instrument
+Measurements are hardware-specific. Preserve the machine description and raw
+report when refreshing them; do not compare values from different systems as a
+single trend.
 
-`--bench` in the Humble Post exe (diagnostic, not a battery stage):
+## Benchmark
 
+The Humble Post executable exposes a diagnostic benchmark:
+
+```powershell
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --bench `
+  [--bench-rom <path>] [--bench-frames <minimum>] `
+  [--bench-fleet <comma-separated-counts>] [--artifacts <directory>]
 ```
-dotnet run --project experimental/Puck.HumbleGamingBrick.Post -c Release -- --bench
-  [--bench-rom <path>] [--bench-frames <floor>] [--bench-fleet <csv of N>] [--artifacts <dir>]
-```
 
-One run reports the fleet scaling curve in both shapes (independent
-per-machine streams / one shared choir stream) single- and multi-threaded,
-burst catch-up, `Create`/`Snapshot`/`Restore`/`Fork` latency + allocation,
-the mailbox-check cycle, and per-machine footprint; report lands at
-`artifacts/gb-post/bench-report.txt`. Built-in honesty guards: every fleet
-cell carries a same-stream machine pair that must end byte-identical, and
-the multi-threaded cell must end byte-identical to the single-threaded one
-— a run that breaks determinism exits 1. Default ROM is the Tier-A
-synthetic; the numbers below are from a real commercial GBC cartridge (real
-instruction mix, `Cgb`), with the synthetic run bracketed where it differs.
+The report covers:
 
-## 2. Measured facts (dev box)
+- independent and shared-timeline fleets;
+- serial and parallel stepping;
+- one-machine and parallel burst catch-up;
+- `Create`, `Snapshot`, `Restore`, and `Fork` latency and allocation;
+- a restore/run/read-cartridge-RAM/snapshot mailbox cycle;
+- managed memory per resident machine.
 
-Fleet scaling, machine-frames/s (Gold; synthetic within ±4%). These are the
-numbers with M3 devirtualization in place, which buys **1.6×** across the
-board over a non-devirtualized tick fan-out:
+Each fleet cell includes equal-input machines that must finish byte-identically.
+Parallel results must also match serial results. A determinism mismatch fails the
+run instead of publishing a throughput number.
 
-| N | independent 1T | independent MT | choir 1T | choir MT |
-|---|---|---|---|---|
+The Advanced Post executable carries the same `--bench` diagnostic (fleet
+sizes x independent/shared-stream x serial/parallel, Create/Snapshot/Restore/Fork
+latency and allocation, plus the serial-vs-parallel bit-lock guard); the AGB
+fleet budget is no longer unmeasured. Event-scheduling the prescaler/cascade
+timers (the AGB throughput arc) measured MKSC (a Direct-Sound title) at
+167→349 machine-frames/s single-machine and 1,508→3,030 machine-frames/s at
+16-parallel; a synthetic no-audio control ROM confirmed the already-fast path
+is unregressed. This document otherwise remains Humble-only below; refresh it
+with an Advanced reference-measurement table the next time the AGB fleet is
+benchmarked on this development system.
+
+## Reference measurements
+
+The following Release measurements use a commercial CGB cartridge on a
+16-logical-processor development system. The synthetic cartridge remains within
+approximately four percent for the fleet curve.
+
+| Machines | independent serial | independent parallel | choir serial | choir parallel |
+|---:|---:|---:|---:|---:|
 | 1 | 520 | 529 | 530 | 530 |
-| 4 | 530 | 1 926 | 528 | 2 039 |
-| 16 | 559 | 4 232 | 540 | 4 495 |
-| 64 | 562 | 4 473 | 548 | 4 186 |
-| 256 | 556 | 4 471 | 550 | 4 115 |
+| 4 | 530 | 1,926 | 528 | 2,039 |
+| 16 | 559 | 4,232 | 540 | 4,495 |
+| 64 | 562 | 4,473 | 548 | 4,186 |
+| 256 | 556 | 4,471 | 550 | 4,115 |
 
-- **Single-threaded stepping is flat** at ~520–560 machine-frames/s
-  (**~9.3 machines at realtime**) from N=1 to N=256 in both shapes:
-  per-machine cost is constant, there is no shared-anything falloff, and
-  choir compute ≡ independent compute (the choir's cheapness must come
-  from stepping FEWER machines, not from stepping the same machine more
-  cheaply — lever 2).
-- **Parallel stepping pays ~8× today with zero engine changes**: plateau
-  ~4 200–4 500 machine-frames/s from N=16 up = **~75 machines at
-  realtime**, and the bench proves serial-vs-parallel bit-exactness every
-  run (machines share nothing; only the timeline needs a concurrency
-  story).
-- Per-operation (Gold):
+Single-threaded throughput is approximately 520–560 machine-frames per second
+across the measured fleet sizes. Parallel stepping plateaus near 4,200–4,500
+machine-frames per second. The latter supports about 75 continuously stepped
+60 Hz machines before presentation and engine headroom.
 
-  | Op | Latency | Allocation |
-  |---|---|---|
-  | `Create` | ~3.0–3.5 ms | 268 KB |
-  | `Snapshot` | 81 µs | 678 KB; snapshot size 175 KB |
-  | `Restore` | **30 µs** | **32 B** |
-  | `Fork` | 3.4 ms | 935 KB |
+| Operation | Typical latency | Typical allocation |
+|---|---:|---:|
+| `Create` | 3.0–3.5 ms | 268 KiB |
+| `Snapshot` | refresh required | refresh required |
+| `Restore` | 30 us | 32 B |
+| `Fork` | 62 us pooled | refresh required |
 
-- **Burst catch-up**: one machine replays at 8.8× realtime (a dormant hour
-  = 407 s of replay); 16 in parallel sustain 4.5× realtime each.
-- **Mailbox check** (restore → run 15 frames → read cart RAM → snapshot):
-  35 ms — the freeze/wake ends are noise; the cost IS the emulated
-  frames.
-- **Footprint**: ~345 KB managed per resident machine (64-machine fleet) —
-  300 resident machines ≈ 100 MB; dormant machines are just their
-  142–175 KB snapshots. Memory is a non-issue at the vision's scale.
-- **Frame-cost attribution** (dotnet-trace, N=1 and N=16 profiles agree;
-  share of emulation time): SM83 CPU core ~63–70% (decode/execute with the
-  bus access inlined into `StepInstruction`), PPU ~15–20%, per-cycle
-  component `Tick()`s (timer, serial, HDMA, APU generator, MBC3) ~7–11%,
-  `ComponentClock.AdvanceCpuTCycle` fan-out ~5–8%.
+The current Humble `Fork` latency reflects the shared `Puck.Snapshots`
+substrate and parked-instance pooling. The equivalent Advanced-core measurement
+is 42 us. Snapshot latency/allocation and fork allocation have not been
+re-measured on the current substrate; refresh those cells with the diagnostic
+benchmark before using them for a capacity decision.
 
-## 3. Verdicts
+Additional observations:
 
-- **M3 (devirtualize the tick fan-out): measured 1.6×** — far past the
-  ~1.2× a sampling attribution predicts. The lesson is recorded here
-  deliberately: eliminating interface dispatch also lets the JIT INLINE
-  the component `Tick()` bodies into the fan-out, and a sampling profile
-  cannot see inlining headroom — treat dispatch-share as a floor on the
-  win, not a ceiling. `ComponentClock` holds every component as a typed
-  sealed field (the cartridge's RTC facet is the one interface slot,
-  null-skipped for untimed mappers), the constructor verifies each
-  declared `ClockDomain` against its hard-coded slot, and Contract §3.5
-  order (timer before serial) is pinned in code. Guards: identical Gold
-  frame hashes on all three costumes, identical battery pass set, bench
-  determinism guards green. M3's second half — idle-span fast-forward —
-  is lever 4, open. The CPU core's own ~65% is a separate
-  whole-loop-flattening question.
-- **The fleet target** (briefing §5 step 3, both shapes per the settled
-  posture): **64 realtime-stepped machines** (any mix of choir cursors and
-  independents) **with ≥25% frame headroom** on the dev box — met
-  in the bench (75 at realtime = 64 + 17% from the parallel-stepping lever;
-  the remaining headroom comes from its engine-side integration) — plus
-  **hundreds+ resident** via dormancy at ~zero step cost, and **choir
-  spectacle of arbitrary width** via lever 2 (step one, present many).
+- One machine catches up at about 8.8 times real time. Sixteen parallel replays
+  sustain about 4.5 times real time each.
+- Restore, run 15 frames, read cartridge RAM, and snapshot takes about 35 ms;
+  emulated frames dominate the cost.
+- Resident managed memory is about 345 KiB per machine. Dormant machines retain
+  their snapshot images instead of active component graphs.
+- CPU execution accounts for roughly 63–70 percent of emulation time, PPU work
+  15–20 percent, component ticks 7–11 percent, and clock fan-out 5–8 percent.
 
-## 4. Levers, in measured-payoff order
+## Accepted architecture
 
-0. **Instancing: per-object bounds skip + per-tile instance masks.**
-   ⚠️ Unlike the rest of this doc, lever 0's numbers are
-   measured on the SURFACE (Surface Laptop 5, i7-1255U, Iris Xe iGPU, 12
-   logical processors) — the machine that exposes the wall — NOT the RTX 4070
-   dev box; expect roughly an order of magnitude more headroom there
-   (unverified). The prototype content (shelf + cartridges + animated
-   controls, ~45 SDF instructions, ~24 dynamic) exposes the world renderer's
-   per-pixel views scaling wall: 206 ms/frame at 1280×800, 96% in kernel. The
-   avatars VM (8 avatars × ~60 instructions ≈ 500 total) carries the
-   load-bearing mechanism: **per-object instancing** — an
-   instance table (instruction range + posed bounding sphere), per-tile
-   instance bitmasks from the beam prepass, per-frame re-posed bounds, and
-   per-instance march chord clamp. A ray evaluates only ~60 instructions of
-   objects overlapping its tile, not the full VM.
+### Concrete component fan-out
 
-   **Measured (Surface):** (1a) exact Union bounding-sphere skip per
-   instruction/segment + host-baked bounds table: 206 ms → 71 ms. (1b) The
-   instancing layer (`BeginInstance`/`BeginInstanceDynamic`/`EndInstance`,
-   1024-instance ceiling with a derived ceil(count/32)-word per-tile mask,
-   world set always evaluated via a merged world-segment list so map() costs
-   O(world + visible instances' segments) — never O(all segments),
-   zero-instance programs byte-identical) + the overworld declaring ~23
-   instances: ~65–100 ms with heavy iGPU power-state variance — the Iris Xe
-   is bandwidth-starved at full-res marching regardless of culling, so the
-   Surface's playability lever is internal render scale, not more culling.
-   The dev-box acceptance run (target ≤10 ms views at 1280×800) is PENDING —
-   re-measure with `PUCK_TIMING=1` on the 4070 and record it here.
+`ComponentClock` stores concrete component fields and directly invokes their
+tick methods. The cartridge's optional timed facet remains the only interface
+slot. Construction validates each declared `ClockDomain`, and the call order
+keeps timer before serial. This structure measured about 1.6 times faster than
+interface dispatch in the same benchmark.
 
-   This is the scaling substrate for the fleet arc: "hundreds of machines" =
-   hundreds of instances; diegetic world-lens machines, cartridges, and players
-   are all instances. Per-tile instance masks are the win, not per-instruction
-   bounds alone. The `world-instanced` Post stage proves instanced ≡ flat
-   pixels (bit-identical on Vulkan).
+### Parallel machine execution
 
-1. **Fleet stepping task-per-machine.** The
-   engine-side split (`GamingBrickChildNode.PrepareStep`/`ExecuteStep`
-   driven by `WorldProducerNode.StepBricks`) enforces the
-   **timeline-access rule**: PREPARE runs serially on the render thread
-   (segment `Fill` advances shared-timeline cursors; the pad service is a
-   shared drainer), EXECUTE — the emulation + framebuffer repack — fans
-   out one task per machine, and all GPU work stays serial behind the
-   `Parallel.For` barrier so submit order is unchanged. Stepping
-   eligibility mirrors the produce loop exactly (a pane steps on the
-   frame its view exists). Guards: `--validate-overworld`, the engine
-   determinism/replay gate (Puck.Post Tier A), the full engine Post
-   battery green, and in-capture bit-lock
-   (cgb ≡ agb, 0 pixel diffs at frame 150 across staggered boots
-   240/480/720). A byte-identical capture against a serial-stepping binary
-   proves the split semantically exact.
-   **Capture lesson (recorded deliberately):** whole-app PNG captures
-   are only *marginally* stable across runs — the tick-per-frame
-   allocation sits near a wall-clock boundary, so cross-run/cross-build
-   PNG equality is NOT a valid determinism guard; the repo's own proof
-   style (pane-vs-pane bit-lock WITHIN one capture) and the fixed-tick
-   validators are the honest gates.
-2. **Choir amortization.** Identical-machine consoles
-   (key = ROM + boot model (`runAs` wins over costume) + speed policy —
-   never presentation) group behind the first as leader; once a follower
-   and its leader are both at the shared timeline's head,
-   `OverworldRenderNode.ParkConvergedChoirMembers` verifies the two machines
-   are BYTE-IDENTICAL (`TryParkBehind`'s `ContentEquals` — a failed
-   compare refuses the park loudly and permanently) and the follower stops
-   stepping, mirroring the leader's staged framebuffer. A W-wide converged
-   choir costs one stepped machine + W presents. Proven with
-   [examples/overworld-choir.json](examples/overworld-choir.json) (cgb+cgb+agb,
-   staggered boots): park fired after catch-up, leader ≡ parked follower
-   AND parked mirror ≡ the independently-stepped agb machine, both at
-   0/144 000 pixel diffs — the amortization is observationally invisible.
-   The heterogeneous default overworld forms no choirs (key respects machine
-   identity). A divergence event = unpark: `Restore(leader
-   snapshot)` (30 µs) and resume stepping — the parked cursor already
-   tracks the head.
-3. **The dormancy protocol** (simulate-on-demand, settled): the park
-   mechanism above IS the freeze machinery — a parked machine stops
-   stepping while staying assembled, and wake = `Restore` (30 µs) +
-   timeline catch-up. Doctrine: **freeze-and-wake by default; replay only
-   when the fiction demands lived time** (replay costs 1/8.8 of the
-   dormant span; 16 concurrent replays sustain 4.5× realtime each). The
-   attention-keyed consumer (power-off/re-boot, world mailboxes) is the
-   overworld plan's next-step territory and lands with its gameplay.
-4. **Idle fast-forward: MEASURED AND CLOSED** (`--halt-share`
-   in the Humble Post exe). Gold halts **26.6–30.0%** of machine time —
-   but a halted cycle's remaining cost is dominated by un-skippable PPU
-   dot-drawing and APU generation (the CPU decode that dominates running
-   cost is already absent during HALT), so the lever's ceiling is ~10%
-   for an SM83 event-scheduler redesign — the highest timing-risk surgery
-   in the codebase (Contract §3.5, mealybug PPU knowledge). Not worth it
-   on these numbers. Revisit condition: a future whole-loop flattening of
-   the CPU core's ~65% that builds event infrastructure anyway.
-5. **Spawn pooling**: `Create` is 3 ms — a dropped frame if done
-   mid-frame. Pre-warm a machine pool for stumble-upon moments; note
-   pooled-`Create` + `Restore` (48 µs) strictly beats `Fork` (3.5 ms,
-   which is Create+Snapshot+Restore in one call) for ghost spawns.
-6. **Snapshot allocation diet**: `Snapshot` allocates 3.6–3.9× its own
-   payload (the `StateWriter` path). Only matters for high-frequency
-   rewind/ghost mechanics (>100 snapshots/s); pick up when a mechanic
-   demands it, then guard with `snapshot-round-trip` + `fork-determinism`.
-7. **M3 devirtualization**: measured 1.6× (verdict above).
-8. **Instancing instance-decoder**: Decode per-tile 64-bit masks to instance
-   IDs in the march prepass; the beam prepass already builds them. The
-   on-the-fly decode adds noise to beam-sample cost; pre-decoded storage (one
-   16-entry array per tile, refreshed per frame if the world changed) is the
-   measured-payoff question — measure when port (lever 0.1b) lands.
+`OverworldRenderNode` calls `PrepareStep` serially because timeline cursors and
+input drainers are shared. It then executes independent machines, or linked
+pairs as single units, in parallel. The barrier completes before GPU work, so
+render submission order remains deterministic.
 
-## 5. Reserved seams — modeled, not built
+### Choir parking
 
-- **Engine→machine sensor feed** (camera / world-lens): when the
-  `peripheral` seam lands, add a bench axis that writes a synthetic sensor
-  page per machine-frame before stepping; until then the cost model is
-  "one more per-frame copy of ≤ a framebuffer".
-- **Link-pair co-stepping** (short-term interactions): LANDED as
-  `SerialLinkSession` — a linked pair steps as one serialized unit in a
-  deterministic instruction-granularity interleave (one work item in any
-  parallel fleet pass), so plan capacity as pairs ≈ machines/2, exactly as
-  modeled. Gated by the Humble battery's Tier C `serial-link` stage. The
-  bench's dedicated pair mode is still open.
-- **Realtime promote/demote**: the COST is already paid — migration =
-  `Snapshot` + `Restore` ≈ 300 µs, invisible inside one frame. What
-  remains open is the cross-costume migration RULES
-  (overworld-demo-plan.md), not performance.
-- **Recursive machine-feeds-machine**: expected one frame of latency per
-  hop; deprioritized per the settled weighting.
-- **Machine→engine events / mailbox conventions**: carrier undesigned
-  (briefing §1); the mailbox-check cycle above is the standing cost
-  model.
+Machines group only when ROM, effective boot model, speed policy, and other
+simulation configuration match. `TryParkBehind` requires `ContentEquals` before
+the follower stops stepping. A parked follower mirrors the leader's staged
+framebuffer; presentation choices are not part of the grouping key.
 
-## 6. Regression guards (every lever change)
+### Dormancy
 
-Humble Post Tier A green (all six stages), the bench's own determinism
-guards on a full default run, the trio-lockstep machine-frames/s recorded
-before/after in the change description, and `--validate-overworld` when the
-change touches engine-side integration. Timer-before-serial ordering at
-equal timestamps is Contract — any tick-path restructuring needs a
-frame-hash regression guard across the change.
+Freeze-and-wake is the default: keep a snapshot, restore on demand, then catch
+up only as required by the fiction. Replay from an earlier epoch is more
+expensive and should be selected deliberately.
+
+## Landed optimizations
+
+- **Spawn pooling and snapshot allocation reduction** landed as ARC C
+  (`95936fe`): `MachineInstance.Fork` restores into a bounded pool of parked
+  instances instead of rebuilding a DI container, and the shared
+  `Puck.Snapshots` writer is reused instead of newing one per call. Both
+  Humble and Advanced cores migrated onto the one substrate.
+
+## Deferred optimizations
+
+- **Idle fast-forward:** measured HALT occupancy is about 27–30 percent, while
+  PPU and APU work still advances. The estimated gain does not justify an SM83
+  event-scheduler rewrite by itself.
+- **Instance-mask decoding:** pre-decode per-tile instance masks only after a
+  profile shows that repeated bit decoding contributes meaningful renderer
+  cost.
+- **Sensor-feed benchmark axis:** add a deterministic framebuffer-sized input
+  copy when fleet sensor use becomes a material workload.
+- **Linked-pair benchmark axis:** measure pair throughput separately when link
+  gameplay becomes a capacity constraint.
+
+## Renderer context
+
+Fleet density also stresses the SDF renderer. Per-object bounds and per-tile
+instance masks are the required scaling substrate: a ray evaluates world
+segments plus visible-instance segments, not every instance in the scene. GPU
+renderer measurements belong with the SDF performance artifacts and must name
+the GPU, backend, resolution, content, and render scale. They are not directly
+comparable to emulator machine-frames per second.
+
+## Regression guards
+
+For emulator-side fleet changes:
+
+1. Run Humble POST Tier A.
+2. Run the benchmark through its full serial/parallel equality checks.
+3. Record the reference ROM, configuration, fleet sizes, and before/after
+   machine-frames per second.
+4. Preserve timer-before-serial ordering and compare deterministic frame hashes
+   when changing the tick path.
+
+For demo integration, run the demo's fixed-tick validation and smoke command.
+For shared engine stepping, also run the engine battery selected by the
+`verifying-puck-changes` skill.

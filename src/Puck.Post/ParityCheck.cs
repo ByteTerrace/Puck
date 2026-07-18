@@ -57,10 +57,10 @@ internal sealed record ParityMetrics {
         for (var pixel = 0; (pixel < totalPixels); pixel++) {
             var offset = (pixel * 4);
             var delta = Math.Max(
-                Math.Abs(value: (reference[offset] - comparand[offset])),
-                Math.Max(
-                    Math.Abs(value: (reference[offset + 1] - comparand[offset + 1])),
-                    Math.Abs(value: (reference[offset + 2] - comparand[offset + 2]))
+                val1: Math.Abs(value: (reference[offset] - comparand[offset])),
+                val2: Math.Max(
+                    val1: Math.Abs(value: (reference[(offset + 1)] - comparand[(offset + 1)])),
+                    val2: Math.Abs(value: (reference[(offset + 2)] - comparand[(offset + 2)]))
                 )
             );
 
@@ -69,7 +69,7 @@ internal sealed record ParityMetrics {
             if (delta > 0) {
                 differs[pixel] = true;
                 differingPixels++;
-                maxChannelDelta = Math.Max(maxChannelDelta, delta);
+                maxChannelDelta = Math.Max(val1: maxChannelDelta, val2: delta);
 
                 if (delta == 1) {
                     unitDeltaPixels++;
@@ -194,7 +194,7 @@ internal sealed record ParityThresholdSet {
 /// </summary>
 internal static class ParityThresholds {
     // Declaration order matters: the posture fields must initialize before the public sets below read them.
-    private static readonly bool s_strict = string.Equals(Environment.GetEnvironmentVariable(variable: "PUCK_PARITY_STRICT"), "1", StringComparison.Ordinal);
+    private static readonly bool s_strict = string.Equals(a: Environment.GetEnvironmentVariable(variable: "PUCK_PARITY_STRICT"), b: "1", comparisonType: StringComparison.Ordinal);
 
     // The one relaxed envelope (KEEP IN SYNC with the demo's copy): mean is the load-bearing guard — worst measured
     // benign noise is ~0.06 (all-±1 at ~6% spread), a real region divergence lands in the multiple-of-1.0 range.
@@ -291,6 +291,27 @@ internal static class ParityThresholds {
         MinIsolatedFraction = 0.0, // disabled: benign ±1 noise follows gradient bands and is legitimately clustered.
         MinUnitDeltaFraction = 0.95, // THE guard: benign deltas are OVERWHELMINGLY ±1; a real divergence shifts the mass off it.
     } : s_relaxed);
+
+    /// <summary>The thresholds for scenes marching a discontinuous folded field, including LogSphere Droste shells.
+    /// The fold-safe step bound makes marching accurate at fold boundaries
+    /// — marchers stop and resample at every shell boundary instead of striding through — which multiplies the
+    /// boundary-adjacent samples per ray. Each such sample sits on a knife-edge <c>round()</c>: a ±1-ULP cross-backend
+    /// field difference flips which shell the sample lands in, and with twist the neighbor shell is a rotated copy, so
+    /// the pixel legitimately diverges by a whole material/shading class. Parity cannot detect a rendering defect
+    /// shared by both backends, so separate solidity stages guard correctness. With both backends visually correct and
+    /// artifact-free, world-log-sphere measured mean 0.83 / spread 6.44% / maxΔ192 / unitΔ 0.63;
+    /// world-drift-monolith mean 0.53 / spread 8.86% / maxΔ222. The mean cap sits ~2.4× over that worst benign
+    /// measurement — a missing/relocated/recolored REGION still blows far past it — and the spread cap keeps a wrong
+    /// LAYOUT caught. Magnitude/isolation/unit-mass guards are structurally meaningless at fold boundaries and stay
+    /// disabled in BOTH postures: no strict calibration exists for honest discontinuity marching, so strict equals
+    /// relaxed here by design (correctness for these scenes is gated by the solidity stages, not the diff).</summary>
+    public static readonly ParityThresholdSet WorldFoldBoundary = new() {
+        MaxChannelDelta = 255, // disabled: a shell flip is a legitimate whole-class delta.
+        MaxMeanAbsError = 2.0, // ~2.4x over the worst measured benign fold-boundary mean (0.83); a real region bug blows past it.
+        MaxPercentDiffering = 20.0, // matches the relaxed envelope: FP noise redistributes freely; a wrong LAYOUT still trips it.
+        MinIsolatedFraction = 0.0, // disabled: boundary flips cluster along shell seams by design.
+        MinUnitDeltaFraction = 0.0, // disabled: shell flips are multi-LSB by design.
+    };
 }
 
 /// <summary>Shared parity plumbing for the cross-backend stages: the amplified diff heatmap and a one-line
@@ -310,18 +331,18 @@ internal static class ParityCheck {
         for (var pixel = 0; (pixel < pixelCount); pixel++) {
             var offset = (pixel * 4);
             var delta = Math.Max(
-                Math.Abs(value: (reference[offset] - comparand[offset])),
-                Math.Max(
-                    Math.Abs(value: (reference[offset + 1] - comparand[offset + 1])),
-                    Math.Abs(value: (reference[offset + 2] - comparand[offset + 2]))
+                val1: Math.Abs(value: (reference[offset] - comparand[offset])),
+                val2: Math.Max(
+                    val1: Math.Abs(value: (reference[(offset + 1)] - comparand[(offset + 1)])),
+                    val2: Math.Abs(value: (reference[(offset + 2)] - comparand[(offset + 2)]))
                 )
             );
-            var value = (byte)Math.Min(255, (delta * 64));
+            var value = (byte)Math.Min(val1: 255, val2: (delta * 64));
 
             diff[offset] = value;
-            diff[offset + 1] = value;
-            diff[offset + 2] = value;
-            diff[offset + 3] = byte.MaxValue;
+            diff[(offset + 1)] = value;
+            diff[(offset + 2)] = value;
+            diff[(offset + 3)] = byte.MaxValue;
         }
 
         PngEncoder.Write(height: height, path: path, rgba: diff, width: width);
@@ -353,10 +374,10 @@ internal static class ParityCheck {
     public static PostStageOutcome WriteEvaluateReport(string artifactsDirectory, string prefix, byte[] referencePixels, byte[] comparandPixels, int width, int height, ParityThresholdSet thresholds, string passLabel) {
         _ = Directory.CreateDirectory(path: artifactsDirectory);
 
-        var diffPath = Path.Combine(artifactsDirectory, $"{prefix}-diff.png");
+        var diffPath = Path.Combine(path1: artifactsDirectory, path2: $"{prefix}-diff.png");
 
-        PngEncoder.Write(height: height, path: Path.Combine(artifactsDirectory, $"{prefix}-vulkan.png"), rgba: referencePixels, width: width);
-        PngEncoder.Write(height: height, path: Path.Combine(artifactsDirectory, $"{prefix}-directx.png"), rgba: comparandPixels, width: width);
+        PngEncoder.Write(height: height, path: Path.Combine(path1: artifactsDirectory, path2: $"{prefix}-vulkan.png"), rgba: referencePixels, width: width);
+        PngEncoder.Write(height: height, path: Path.Combine(path1: artifactsDirectory, path2: $"{prefix}-directx.png"), rgba: comparandPixels, width: width);
         WriteDiffImage(comparand: comparandPixels, height: height, path: diffPath, reference: referencePixels, width: width);
 
         var metrics = ParityMetrics.Compute(reference: referencePixels, comparand: comparandPixels, width: width, height: height);
@@ -396,8 +417,8 @@ internal static class ParityCheck {
 
         var vulkanMetrics = ParityMetrics.Compute(reference: vulkanFlatPixels, comparand: vulkanInstancedPixels, width: width, height: height);
 
-        WriteDiffImage(comparand: vulkanInstancedPixels, height: height, path: Path.Combine(artifactsDirectory, $"{stageName}-vulkan-flat-diff.png"), reference: vulkanFlatPixels, width: width);
+        WriteDiffImage(comparand: vulkanInstancedPixels, height: height, path: Path.Combine(path1: artifactsDirectory, path2: $"{stageName}-vulkan-flat-diff.png"), reference: vulkanFlatPixels, width: width);
 
-        return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"instanced != flat: Vulkan bit-identical={vulkanIdentical} ({Describe(metrics: vulkanMetrics)}); Direct3D 12 {Describe(metrics: directXMetrics)}{(directXFailures.Count == 0 ? "" : $" — {string.Join(separator: "; ", values: directXFailures)}")}");
+        return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"instanced != flat: Vulkan bit-identical={vulkanIdentical} ({Describe(metrics: vulkanMetrics)}); Direct3D 12 {Describe(metrics: directXMetrics)}{((directXFailures.Count == 0) ? "" : $" — {string.Join(separator: "; ", values: directXFailures)}")}");
     }
 }

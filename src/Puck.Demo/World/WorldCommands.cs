@@ -1,7 +1,8 @@
 using System.Numerics;
 using Puck.Assets;
 using Puck.Demo.Editing;
-using static Puck.Demo.CommandArgs;
+using Puck.SdfVm;
+using static Puck.Commands.CommandArgs;
 
 namespace Puck.Demo.World;
 
@@ -49,7 +50,7 @@ internal static class WorldCommands {
         }
 
         _ = resolvedSources; // Resolution success is already proven by an empty `missing`; LoadDocument re-resolves
-                              // internally (the cache is populated fresh either way).
+                             // internally (the cache is populated fresh either way).
 
         var loaded = scene.LoadDocument(document: document, store: store);
 
@@ -197,7 +198,7 @@ internal static class WorldCommands {
             return "[world.move: usage — world.move <x> <y> <z>]";
         }
 
-        SetTargetPositionExact(scene: scene, position: new Vector3(xyz[0], xyz[1], xyz[2]));
+        SetTargetPositionExact(scene: scene, position: new Vector3(x: xyz[0], y: xyz[1], z: xyz[2]));
 
         return $"[world.move: ({xyz[0]:F2}, {xyz[1]:F2}, {xyz[2]:F2})]";
     }
@@ -262,6 +263,7 @@ internal static class WorldCommands {
     }
 
     /// <summary>Sets (or clears) the selected placement's repeat block.</summary>
+    /// <param name="scene">The world scene to modify.</param>
     /// <param name="args"><c>&lt;countX&gt; &lt;countZ&gt; [spacingX] [spacingZ]</c>, or <c>clear</c>.</param>
     public static string Repeat(WorldScene scene, string[] args) {
         if (scene.TargetIsGhost) {
@@ -287,6 +289,7 @@ internal static class WorldCommands {
     }
 
     /// <summary>Grows/shrinks the authored lot bounds.</summary>
+    /// <param name="scene">The world scene to modify.</param>
     /// <param name="args"><c>&lt;±x&gt; &lt;±z&gt;</c>.</param>
     public static string Bounds(WorldScene scene, string[] args) {
         if (!TryParseFloats(args: args, count: 2, start: 0, values: out var xz)) {
@@ -299,6 +302,8 @@ internal static class WorldCommands {
     }
 
     /// <summary>Rebinds the selected placement to a different creation.</summary>
+    /// <param name="scene">The world scene to modify.</param>
+    /// <param name="store">The content-addressed store used to resolve the replacement.</param>
     /// <param name="args">The replacement creation's ref name or hash.</param>
     public static string Rebind(WorldScene scene, ContentAddressedStore store, string[] args) {
         if (args.Length == 0) {
@@ -334,7 +339,7 @@ internal static class WorldCommands {
         }
 
         if (args.Length == 0) {
-            return $"[world.mirror: {scene.SelectedPlacement?.Mirror ?? "off"} — give x, z, or off to change it]";
+            return $"[world.mirror: {(scene.SelectedPlacement?.Mirror ?? "off")} — give x, z, or off to change it]";
         }
 
         var axis = (args[0].ToLowerInvariant() switch {
@@ -354,7 +359,7 @@ internal static class WorldCommands {
         history?.Push(snapshot: baseline);
         history?.Push(snapshot: scene.CaptureSnapshot());
 
-        return $"[world.mirror: #{scene.SelectedPlacement?.Id} {axis ?? "off"}]";
+        return $"[world.mirror: #{scene.SelectedPlacement?.Id} {(axis ?? "off")}]";
     }
 
     /// <summary>Sets or clears the selected placement's wallpaper pattern (console-assist <c>WallpaperFold</c> —
@@ -395,8 +400,8 @@ internal static class WorldCommands {
         float? limitZ = null;
 
         if ((args.Length >= 5) && TryParseFloat(text: args[3], value: out var lx) && TryParseFloat(text: args[4], value: out var lz)) {
-            limitX = MathF.Max(lx, 1f);
-            limitZ = MathF.Max(lz, 1f);
+            limitX = MathF.Max(x: lx, y: 1f);
+            limitZ = MathF.Max(x: lz, y: 1f);
         }
 
         int? stride = null;
@@ -467,15 +472,15 @@ internal static class WorldCommands {
     }
 
     /// <summary>The screen wiring verbs — <c>world.wire &lt;source&gt; &lt;screen&gt;</c>,
-    /// <c>world.wire list</c>, <c>world.wire clear &lt;screen&gt;</c>. A source is <c>brick:N</c> (a booted cabinet),
-    /// <c>feed:N</c> (a camera feed), <c>named:NAME</c> (a host feed like the emote face), or <c>none</c> (clear).
+    /// <c>world.wire list</c>, <c>world.wire clear &lt;screen&gt;</c>. A source is <c>guest:N</c> (a booted cabinet),
+    /// <c>camera:N</c> (a camera feed), <c>named:NAME</c> (a host feed like the emote face), or <c>none</c> (clear).
     /// Wiring is pure data, never a heuristic. Snapshot-covered (undo-able).</summary>
     /// <param name="scene">The live scene.</param>
     /// <param name="history">The edit history (undo/redo).</param>
     /// <param name="args">The source (or list/clear) and screen index.</param>
     public static string Wire(WorldScene scene, EditHistory<WorldScene.Snapshot>? history, string[] args) {
         if (args.Length == 0) {
-            return "[world.wire: usage — world.wire <brick:N|feed:N|named:NAME|none> <screen> | world.wire list | world.wire clear <screen>]";
+            return "[world.wire: usage — world.wire <guest:N|camera:N|named:NAME|none> <screen> | world.wire list | world.wire clear <screen>]";
         }
 
         var head = args[0].ToLowerInvariant();
@@ -489,7 +494,7 @@ internal static class WorldCommands {
         }
 
         if ((args.Length < 2) || !TryParseInt(text: args[1], value: out var screenIndex)) {
-            return "[world.wire: usage — world.wire <brick:N|feed:N|named:NAME|none> <screen>]";
+            return "[world.wire: usage — world.wire <guest:N|camera:N|named:NAME|none> <screen>]";
         }
 
         if (!TryParseWireSource(text: args[0], source: out var source, out var parseError)) {
@@ -499,13 +504,13 @@ internal static class WorldCommands {
         var baseline = scene.CaptureSnapshot();
 
         if (!scene.WireScreen(screenIndex: screenIndex, source: source)) {
-            return $"[world.wire: screen {screenIndex} is out of range (0..{Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces - 1})]";
+            return $"[world.wire: screen {screenIndex} is out of range (0..{(Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces - 1)})]";
         }
 
         history?.Push(snapshot: baseline);
         history?.Push(snapshot: scene.CaptureSnapshot());
 
-        return ((source.Kind == ScreenWireKind.None)
+        return ((source.Kind == ScreenSourceKind.None)
             ? $"[world.wire: screen {screenIndex} cleared — falls back to its default]"
             : $"[world.wire: screen {screenIndex} ← {source}]");
     }
@@ -524,30 +529,30 @@ internal static class WorldCommands {
 
         switch (args[0].ToLowerInvariant()) {
             case "on": {
-                scene.SetSnapEnabled(enabled: true);
+                    scene.SetSnapEnabled(enabled: true);
 
-                return SnapState(scene: scene);
-            }
+                    return SnapState(scene: scene);
+                }
             case "off": {
-                scene.SetSnapEnabled(enabled: false);
+                    scene.SetSnapEnabled(enabled: false);
 
-                return SnapState(scene: scene);
-            }
+                    return SnapState(scene: scene);
+                }
             case "pitch": {
-                return SnapPitch(scene: scene, args: args);
-            }
+                    return SnapPitch(scene: scene, args: args);
+                }
             case "rot": {
-                return SnapRotate(scene: scene, args: args);
-            }
+                    return SnapRotate(scene: scene, args: args);
+                }
             case "ref": {
-                return SnapReference(scene: scene, args: args);
-            }
+                    return SnapReference(scene: scene, args: args);
+                }
             case "grid": {
-                return SnapGrid(scene: scene, args: args);
-            }
+                    return SnapGrid(scene: scene, args: args);
+                }
             default: {
-                return SnapUsage;
-            }
+                    return SnapUsage;
+                }
         }
     }
 
@@ -567,23 +572,21 @@ internal static class WorldCommands {
 
         return $"[world.snap: {(snap.Enabled ? "on" : "off")} | pitch ({snap.Pitch.X:F2}, {snap.Pitch.Y:F2}, {snap.Pitch.Z:F2}) | rot {rotation} | grid {(scene.SnapGridVisible ? "show" : "hide")} | ref {reference} | target ({target.X:F2}, {target.Y:F2}, {target.Z:F2}) yaw {scene.TargetYawDegrees:F1}°]";
     }
-
     private static string SnapPitch(WorldScene scene, string[] args) {
         if ((args.Length == 2) && TryParseFloat(text: args[1], value: out var uniform)) {
-            scene.SetSnapPitch(pitch: new Vector3(uniform));
+            scene.SetSnapPitch(pitch: new Vector3(value: uniform));
 
             return SnapState(scene: scene);
         }
 
         if (TryParseFloats(args: args, count: 3, start: 1, values: out var xyz)) {
-            scene.SetSnapPitch(pitch: new Vector3(xyz[0], xyz[1], xyz[2]));
+            scene.SetSnapPitch(pitch: new Vector3(x: xyz[0], y: xyz[1], z: xyz[2]));
 
             return SnapState(scene: scene);
         }
 
         return "[world.snap pitch: usage — world.snap pitch <x> <y> <z>, or world.snap pitch <n>]";
     }
-
     private static string SnapRotate(WorldScene scene, string[] args) {
         RotationSnap? mode = (((args.Length >= 2) ? args[1].ToLowerInvariant() : null) switch {
             "90" => RotationSnap.Deg90,
@@ -600,7 +603,6 @@ internal static class WorldCommands {
 
         return SnapState(scene: scene);
     }
-
     private static string SnapReference(WorldScene scene, string[] args) {
         if (args.Length == 1) {
             return (scene.TrySetSnapReferenceSelected(echo: out var echo) ? $"[world.snap: {echo}]" : $"[world.snap ref: {echo}]");
@@ -618,7 +620,6 @@ internal static class WorldCommands {
 
         return "[world.snap ref: usage — world.snap ref [<id>], or world.snap ref clear]";
     }
-
     private static string SnapGrid(WorldScene scene, string[] args) {
         if ((args.Length >= 2) && string.Equals(a: args[1], b: "show", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             scene.SetSnapGridVisible(visible: true);
@@ -634,7 +635,6 @@ internal static class WorldCommands {
 
         return "[world.snap grid: usage — world.snap grid <show|hide>]";
     }
-
     private static string CameraAdd(WorldScene scene, EditHistory<WorldScene.Snapshot>? history, string[] args) {
         // world.camera add                    -> lot center, level
         // world.camera add x y z              -> that world position, level
@@ -650,7 +650,7 @@ internal static class WorldCommands {
                 return "[world.camera add: x y z must be numbers]";
             }
 
-            position = new Vector3(xyz[0], xyz[1], xyz[2]);
+            position = new Vector3(x: xyz[0], y: xyz[1], z: xyz[2]);
         }
 
         if ((rest.Length >= 4) && !TryParseFloat(text: rest[3], value: out yawDegrees)) {
@@ -675,9 +675,8 @@ internal static class WorldCommands {
         history?.Push(snapshot: baseline);
         history?.Push(snapshot: scene.CaptureSnapshot());
 
-        return $"[world.camera: eye #{cameraId} at ({position.X:F1}, {position.Y:F1}, {position.Z:F1}) yaw {yawDegrees:F0}° — wire its feed with world.wire feed:{cameraId} <screen>]";
+        return $"[world.camera: eye #{cameraId} at ({position.X:F1}, {position.Y:F1}, {position.Z:F1}) yaw {yawDegrees:F0}° — wire its feed with world.wire camera:{cameraId} <screen>]";
     }
-
     private static string CameraDelete(WorldScene scene, EditHistory<WorldScene.Snapshot>? history, string[] args) {
         if ((args.Length < 2) || !TryParseInt(text: args[1], value: out var id)) {
             return "[world.camera del: usage — world.camera del <id>]";
@@ -694,7 +693,6 @@ internal static class WorldCommands {
 
         return $"[world.camera: eye #{id} deleted]";
     }
-
     private static string CameraList(WorldScene scene) {
         if (scene.Cameras.Count == 0) {
             return "[world.camera list: none placed — world.camera add drops one]";
@@ -703,14 +701,13 @@ internal static class WorldCommands {
         var lines = new List<string>(capacity: scene.Cameras.Count);
 
         foreach (var eye in scene.Cameras) {
-            var anchor = ((eye.Anchor == CameraAnchorKind.Placement) ? $" @placement:{eye.AnchorId}" : "");
+            var anchor = ((eye.Anchor == SdfAnchorKind.Instance) ? $" @placement:{eye.AnchorId}" : "");
 
-            lines.Add(item: $"#{eye.Id} ({eye.Position.X:F1}, {eye.Position.Y:F1}, {eye.Position.Z:F1}) yaw {eye.Yaw * (180f / MathF.PI):F0}°{anchor}");
+            lines.Add(item: $"#{eye.Id} ({eye.Position.X:F1}, {eye.Position.Y:F1}, {eye.Position.Z:F1}) yaw {(eye.Yaw * (180f / MathF.PI)):F0}°{anchor}");
         }
 
         return $"[world.camera list: {string.Join(separator: ", ", values: lines)}]";
     }
-
     private static string WireList(WorldScene scene) {
         if (scene.Wiring.Count == 0) {
             return "[world.wire list: nothing wired — every screen shows its default]";
@@ -724,7 +721,6 @@ internal static class WorldCommands {
 
         return $"[world.wire list: {string.Join(separator: ", ", values: lines)}]";
     }
-
     private static string WireClear(WorldScene scene, EditHistory<WorldScene.Snapshot>? history, string[] args) {
         if ((args.Length < 2) || !TryParseInt(text: args[1], value: out var screenIndex)) {
             return "[world.wire clear: usage — world.wire clear <screen>]";
@@ -742,16 +738,16 @@ internal static class WorldCommands {
         return $"[world.wire: screen {screenIndex} cleared — falls back to its default]";
     }
 
-    // Parses a wiring source token: brick:N / feed:N / named:NAME / none. Friendly error otherwise.
-    /// <summary>Parses a wiring-grammar source token (<c>brick:N</c>, <c>feed:N</c>, <c>named:NAME</c>, or
+    // Parses a wiring source token: guest:N / camera:N / named:NAME / none. Friendly error otherwise.
+    /// <summary>Parses a wiring-grammar source token (<c>guest:N</c>, <c>camera:N</c>, <c>named:NAME</c>, or
     /// <c>none</c>) — the single source of truth the <c>world.wire</c> verb and the headless capture aid both use so
     /// the grammar can never drift between them.</summary>
     /// <param name="text">The source token.</param>
-    /// <param name="source">The parsed source (<see cref="ScreenWireSource.None"/> on failure).</param>
+    /// <param name="source">The parsed source (<see cref="ScreenSourceRef.None"/> on failure).</param>
     /// <param name="error">The parse error, or empty on success.</param>
     /// <returns>Whether the token parsed.</returns>
-    public static bool TryParseWireSource(string text, out ScreenWireSource source, out string error) {
-        source = ScreenWireSource.None;
+    public static bool TryParseWireSource(string text, out ScreenSourceRef source, out string error) {
+        source = ScreenSourceRef.None;
         error = "";
 
         if (string.Equals(a: text, b: "none", comparisonType: StringComparison.OrdinalIgnoreCase)) {
@@ -761,7 +757,7 @@ internal static class WorldCommands {
         var colon = text.IndexOf(value: ':');
 
         if (colon < 0) {
-            error = $"'{text}' is not a source — use brick:N, feed:N, named:NAME, or none";
+            error = $"'{text}' is not a source — use guest:N, camera:N, named:NAME, or none";
 
             return false;
         }
@@ -770,44 +766,44 @@ internal static class WorldCommands {
         var rest = text[(colon + 1)..];
 
         switch (kind) {
-            case "brick": {
-                if (!TryParseInt(text: rest, value: out var brickIndex) || (brickIndex < 0)) {
-                    error = $"'{rest}' is not a console index";
+            case "guest": {
+                    if (!TryParseInt(text: rest, value: out var guestIndex) || (guestIndex < 0)) {
+                        error = $"'{rest}' is not a console index";
 
-                    return false;
+                        return false;
+                    }
+
+                    source = ScreenSourceRef.Guest(consoleIndex: guestIndex);
+
+                    return true;
                 }
+            case "camera": {
+                    if (!TryParseInt(text: rest, value: out var cameraIndex) || (cameraIndex < 0)) {
+                        error = $"'{rest}' is not a feed index";
 
-                source = ScreenWireSource.Brick(consoleIndex: brickIndex);
+                        return false;
+                    }
 
-                return true;
-            }
-            case "feed": {
-                if (!TryParseInt(text: rest, value: out var feedIndex) || (feedIndex < 0)) {
-                    error = $"'{rest}' is not a feed index";
+                    source = ScreenSourceRef.Camera(feedIndex: cameraIndex);
 
-                    return false;
+                    return true;
                 }
-
-                source = ScreenWireSource.Feed(feedIndex: feedIndex);
-
-                return true;
-            }
             case "named": {
-                if (rest.Length == 0) {
-                    error = "named: needs a feed name";
+                    if (rest.Length == 0) {
+                        error = "named: needs a feed name";
+
+                        return false;
+                    }
+
+                    source = ScreenSourceRef.Named(name: rest);
+
+                    return true;
+                }
+            default: {
+                    error = $"'{kind}' is not a source kind — guest, camera, named, or none";
 
                     return false;
                 }
-
-                source = ScreenWireSource.Named(name: rest);
-
-                return true;
-            }
-            default: {
-                error = $"'{kind}' is not a source kind — brick, feed, named, or none";
-
-                return false;
-            }
         }
     }
 
@@ -842,7 +838,6 @@ internal static class WorldCommands {
 
         return false;
     }
-
     private static void SetTargetPositionExact(WorldScene scene, Vector3 position) {
         // The scene's exact-set is path-independent (snaps the requested absolute position, no magnetize band) and
         // resyncs the pad accumulator — the correct semantics for a console SET (the analog Move path integrates a
@@ -850,7 +845,6 @@ internal static class WorldCommands {
         // round-trip produced (Move's moveSpeed=4 with deltaSeconds=1).
         scene.SetTargetPositionExact(requested: position);
     }
-
     private static void SetTargetYawExact(WorldScene scene, float yawDegrees) {
         var current = scene.TargetYawDegrees;
         var delta = (yawDegrees - current);
@@ -859,7 +853,6 @@ internal static class WorldCommands {
         // deltaSeconds=1/90 so the applied degrees equal the requested delta exactly (mirrors Move's approach above).
         scene.Rotate(deltaSeconds: (1f / 90f), rate: delta);
     }
-
     private static float SetTargetScaleExact(WorldScene scene, float scale) {
         var clamped = Math.Clamp(value: scale, max: WorldScene.MaxScale, min: WorldScene.MinScale);
         var current = scene.TargetScale;
@@ -870,13 +863,12 @@ internal static class WorldCommands {
 
         // ScaleTarget integrates exp(rate*1.2*deltaSeconds); solving rate for an exact target ratio in one step.
         var ratio = (clamped / current);
-        var rate = (MathF.Log(ratio) / 1.2f);
+        var rate = (MathF.Log(x: ratio) / 1.2f);
 
         scene.ScaleTarget(deltaSeconds: 1f, rate: rate);
 
         return scene.TargetScale;
     }
-
     private static bool TryResolveCreationHash(ContentAddressedStore store, string nameOrHash, out string hash) {
         if (nameOrHash.StartsWith(value: "sha256/", comparisonType: StringComparison.Ordinal) && store.Contains(hash: nameOrHash)) {
             hash = nameOrHash;

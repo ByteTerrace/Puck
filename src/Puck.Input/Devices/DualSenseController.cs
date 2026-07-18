@@ -15,8 +15,8 @@ namespace Puck.Input.Devices;
 /// and the Bluetooth full-mode request are not implemented, so rumble is USB-only.
 /// </summary>
 internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser, ITriggerEffectParser {
-    private const byte UsbInputReportId = 0x01;
     private const byte BluetoothInputReportId = 0x31;
+    private const byte UsbInputReportId = 0x01;
     private const byte UsbOutputReportId = 0x02;
     // Feature report 0x05 carries the factory IMU calibration (per-axis gyro bias + sensitivity). Without it the
     // raw gyro counts have no correct per-device scale; the real sensitivity is ~64x the bare 1024 LSB/deg/s
@@ -44,31 +44,31 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     // larger OutputReportByteLength (the max across the device's output reports) and requires a write of that
     // full length, so the buffer is sized to it and zero-padded past byte 78 — but the CRC sits at byte 74.
     private const int BluetoothOutputReportLength = 78;
-    private const int UsbCommonOffset = 1;
     private const int BluetoothCommonOffset = 3;
     private const byte OutputCrcSeed = 0xA2;
+    private const int UsbCommonOffset = 1;
     // Common-block-relative offsets (valid_flag0=0, valid_flag1=1). Each trigger block is a mode byte + ten
     // parameter bytes; the two are disjoint (right at 10..20, left at 21..31).
     private const int MotorRightOffset = 2;
-    private const int MotorLeftOffset = 3;
-    private const int RightTriggerOffset = 10;
     private const int LeftTriggerOffset = 21;
-    private const int ValidFlag2Offset = 38;
-    private const int LightbarSetupByteOffset = 41;
-    private const int PlayerLedsOffset = 43;
     private const int LightbarRedOffset = 44;
+    private const int LightbarSetupByteOffset = 41;
+    private const int MotorLeftOffset = 3;
+    private const int PlayerLedsOffset = 43;
+    private const int RightTriggerOffset = 10;
+    private const int ValidFlag2Offset = 38;
 
     // The two touchpad contacts are 4 bytes each, at common offsets 32 and 36 (after the IMU + timestamp block).
     private const int Touch0Offset = 32;
     private const int Touch1Offset = 36;
     // The touchpad reports 12-bit coordinates over a nominal 1920×1080 surface (DS_TOUCHPAD_WIDTH/HEIGHT).
     private const float TouchpadWidth = 1920f;
-    private const float TouchpadHeight = 1080f;
     private const int StickCenter = 128;
-    private const float StickRange = 127f;
     private const float StickDeadzone = 0.12f;
-    private const byte TriggerThreshold = 8;
+    private const float StickRange = 127f;
+    private const float TouchpadHeight = 1080f;
     private const float TriggerRange = 255f;
+    private const byte TriggerThreshold = 8;
     // DualSense gyro resolution is 1024 LSB per deg/s (DS_GYRO_RES_PER_DEG_S), but the per-device factory
     // calibration sensitivity is ~64x that figure, so the bare 1024 value is NOT a usable uncalibrated scale —
     // it reads ~64x too weak and yaw (which has no gravity reference) goes effectively dead. The uncalibrated
@@ -78,9 +78,9 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     // gyro block (gyro at common 15..20, accel at 21..26), then a 32-bit sensor timestamp at common 27..30.
     private const int AccelerometerOffset = 21;
     private const float AccelerometerGPerLsb = (1f / 8192f);
-    // The free-running motion-sensor timestamp: a 32-bit LE counter at common 27..30. Its unit is 1/3 µs (the
-    // hid-playstation driver divides it by 3 to reach microseconds), so a raw delta converts to seconds by
-    // dividing by 3,000,000 — the true inter-report dt the orientation fusion integrates over.
+    // The free-running motion-sensor timestamp: a 32-bit LE counter at common 27..30. The raw value is in thirds
+    // of a microsecond, so a raw delta converts to seconds by dividing by 3,000,000 — the true inter-report dt
+    // the orientation fusion integrates over.
     private const int SensorTimestampOffset = 27;
     private const float SensorTimestampSecondsPerUnit = (1f / 3_000_000f);
     // Rate-limit equal-or-weaker rumble writes to a >=30 ms coalescing cadence so a per-tick streamer can't flood
@@ -118,7 +118,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
         var outputLength = device.OutputReportByteLength;
 
         m_device = device;
-        m_outputBuffer = new byte[(outputLength > 0) ? outputLength : 64];
+        m_outputBuffer = new byte[((outputLength > 0) ? outputLength : 64)];
         // The first Bluetooth output write must clear the boot light-bar animation, or later RGB writes are
         // ignored by the firmware. USB has no such gate.
         m_lightbarSetupPending = (device.Transport == HidTransport.Bluetooth);
@@ -131,7 +131,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     public GamepadType Type => GamepadType.PlayStation5;
     /// <inheritdoc />
     // The DualSense has a 6-axis IMU and pressure-sensitive L2/R2 triggers.
-    public GamepadInputCapabilities InputCapabilities => (GamepadInputCapabilities.Gyro | GamepadInputCapabilities.AnalogTriggers);
+    public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.Gyro | GamepadInputCapabilities.AnalogTriggers;
 
     /// <inheritdoc />
     public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
@@ -276,24 +276,24 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
             buffer[0] = UsbOutputReportId;                            // 0x02
         }
 
-        buffer[common] = (FlagCompatibleVibration | FlagHapticsSelect | FlagRightTriggerFeedback | FlagLeftTriggerFeedback); // valid_flag0
-        buffer[common + 1] = (FlagLightbarControl | FlagPlayerIndicatorControl);                                             // valid_flag1
-        buffer[common + MotorRightOffset] = m_lastHigh;              // motor_right (weak / high band)
-        buffer[common + MotorLeftOffset] = m_lastLow;               // motor_left (strong / low band)
+        buffer[common] = FlagCompatibleVibration | FlagHapticsSelect | FlagRightTriggerFeedback | FlagLeftTriggerFeedback; // valid_flag0
+        buffer[(common + 1)] = FlagLightbarControl | FlagPlayerIndicatorControl;                                             // valid_flag1
+        buffer[(common + MotorRightOffset)] = m_lastHigh;              // motor_right (weak / high band)
+        buffer[(common + MotorLeftOffset)] = m_lastLow;               // motor_left (strong / low band)
         DualSenseAdaptiveTrigger.WriteTriggerBlock(block: buffer.AsSpan(start: (common + RightTriggerOffset), length: DualSenseAdaptiveTrigger.TriggerBlockLength), spec: in m_rightTriggerEffect);
         DualSenseAdaptiveTrigger.WriteTriggerBlock(block: buffer.AsSpan(start: (common + LeftTriggerOffset), length: DualSenseAdaptiveTrigger.TriggerBlockLength), spec: in m_leftTriggerEffect);
 
         if (m_lightbarSetupPending) {
             // One-time on Bluetooth: end the boot light-bar animation so the RGB below actually applies.
-            buffer[common + ValidFlag2Offset] = FlagLightbarSetup;
-            buffer[common + LightbarSetupByteOffset] = LightbarSetupLightOut;
+            buffer[(common + ValidFlag2Offset)] = FlagLightbarSetup;
+            buffer[(common + LightbarSetupByteOffset)] = LightbarSetupLightOut;
             m_lightbarSetupPending = false;
         }
 
-        buffer[common + PlayerLedsOffset] = m_playerLeds;           // player LED bitmask
-        buffer[common + LightbarRedOffset] = m_lightbarRed;
-        buffer[common + LightbarRedOffset + 1] = m_lightbarGreen;
-        buffer[common + LightbarRedOffset + 2] = m_lightbarBlue;
+        buffer[(common + PlayerLedsOffset)] = m_playerLeds;           // player LED bitmask
+        buffer[(common + LightbarRedOffset)] = m_lightbarRed;
+        buffer[((common + LightbarRedOffset) + 1)] = m_lightbarGreen;
+        buffer[((common + LightbarRedOffset) + 2)] = m_lightbarBlue;
 
         if (bluetooth) {
             // Little-endian CRC32 (seeded 0xA2) at the end of the 78-byte logical report (byte 74), over the
@@ -337,11 +337,11 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
         }
 
         // Bluetooth input reports carry a trailing CRC32 (seed 0xA1), but we don't validate it: the Bluetooth
-        // link layer already guarantees frame integrity, and a rare glitched frame self-corrects on the next one
-        // (SDL's PS5 driver skips it for the same reasons). Only the output CRC, which the firmware enforces, matters.
-        var buttons0 = report[dataStart + 7];
-        var buttons1 = report[dataStart + 8];
-        var buttons2 = report[dataStart + 9];
+        // link layer already guarantees frame integrity, so the CRC is skipped, and a rare glitched frame
+        // self-corrects on the next one. Only the output CRC, which the firmware enforces, matters.
+        var buttons0 = report[(dataStart + 7)];
+        var buttons1 = report[(dataStart + 8)];
+        var buttons2 = report[(dataStart + 9)];
         var buttons = GamepadButtons.None;
 
         // Face buttons by physical position: Cross (bottom) → South, Circle (right) → East, Square (left) →
@@ -351,7 +351,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
         if (0 != (buttons0 & 0x10)) { buttons |= GamepadButtons.ButtonWest; }    // Square
         if (0 != (buttons0 & 0x80)) { buttons |= GamepadButtons.ButtonNorth; }   // Triangle
 
-        ApplyDpad(hat: (buttons0 & 0x0F), buttons: ref buttons);
+        ApplyDpad(hat: buttons0 & 0x0F, buttons: ref buttons);
 
         if (0 != (buttons1 & 0x01)) { buttons |= GamepadButtons.LeftShoulder; }  // L1
         if (0 != (buttons1 & 0x02)) { buttons |= GamepadButtons.RightShoulder; } // R1
@@ -366,9 +366,9 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
 
         // The accel, sensor-timestamp, and touchpad blocks sit past the gyro; only read each when the report is
         // long enough (the full USB/BT reports are, but guard so a short report never reads out of bounds).
-        var hasAccelerometer = (report.Length >= (dataStart + AccelerometerOffset + 6));
-        var hasSensorTimestamp = (report.Length >= (dataStart + SensorTimestampOffset + 4));
-        var hasTouch = (report.Length >= (dataStart + Touch1Offset + 4));
+        var hasAccelerometer = (report.Length >= ((dataStart + AccelerometerOffset) + 6));
+        var hasSensorTimestamp = (report.Length >= ((dataStart + SensorTimestampOffset) + 4));
+        var hasTouch = (report.Length >= ((dataStart + Touch1Offset) + 4));
         var gyro = ReadGyro(report: report, offset: (dataStart + 15));
         var accelerometer = (hasAccelerometer ? ReadVector3Int16(report: report, offset: (dataStart + AccelerometerOffset), scale: AccelerometerGPerLsb) : default);
         var sensorTimestamp = (hasSensorTimestamp ? BinaryPrimitives.ReadUInt32LittleEndian(source: report[(dataStart + SensorTimestampOffset)..]) : 0u);
@@ -377,11 +377,11 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
             Accelerometer: accelerometer,
             Buttons: buttons,
             Gyro: gyro,
-            LeftStick: ReadStick(rawX: report[dataStart], rawY: report[dataStart + 1]),
-            LeftTrigger: NormalizeTrigger(raw: report[dataStart + 4]),
+            LeftStick: ReadStick(rawX: report[dataStart], rawY: report[(dataStart + 1)]),
+            LeftTrigger: NormalizeTrigger(raw: report[(dataStart + 4)]),
             Orientation: UpdateOrientation(gyro: gyro, accelerometer: accelerometer, hasAccelerometer: hasAccelerometer, deltaSeconds: SensorDeltaSeconds(sensorTimestamp: sensorTimestamp, hasSensorTimestamp: hasSensorTimestamp)),
-            RightStick: ReadStick(rawX: report[dataStart + 2], rawY: report[dataStart + 3]),
-            RightTrigger: NormalizeTrigger(raw: report[dataStart + 5]),
+            RightStick: ReadStick(rawX: report[(dataStart + 2)], rawY: report[(dataStart + 3)]),
+            RightTrigger: NormalizeTrigger(raw: report[(dataStart + 5)]),
             SensorTimestamp: sensorTimestamp,
             Touch0: (hasTouch ? ReadTouch(report: report, offset: (dataStart + Touch0Offset)) : default),
             Touch1: (hasTouch ? ReadTouch(report: report, offset: (dataStart + Touch1Offset)) : default)
@@ -406,7 +406,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
             return 0f;
         }
 
-        var delta = (m_hasSensorTimestamp ? unchecked(sensorTimestamp - m_lastSensorTimestamp) : 0u);
+        var delta = (m_hasSensorTimestamp ? unchecked((sensorTimestamp - m_lastSensorTimestamp)) : 0u);
 
         m_hasSensorTimestamp = true;
         m_lastSensorTimestamp = sensorTimestamp;
@@ -420,8 +420,8 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
         // contact: bit 7 set ⇒ no finger; low 7 bits are the incrementing contact id. The 12-bit X/Y are packed
         // across the next three bytes: x = byte1 | (byte2 low nibble << 8); y = (byte2 high nibble) | (byte3 << 4).
         var contact = report[offset];
-        var x = (report[offset + 1] | ((report[offset + 2] & 0x0F) << 8));
-        var y = ((report[offset + 2] >> 4) | (report[offset + 3] << 4));
+        var x = report[(offset + 1)] | ((report[(offset + 2)] & 0x0F) << 8);
+        var y = (report[(offset + 2)] >> 4) | (report[(offset + 3)] << 4);
 
         return new GamepadTouchPoint(
             Id: ((byte)(contact & 0x7F)),

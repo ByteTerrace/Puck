@@ -1,0 +1,30 @@
+# Puck.Demo link-cable driving — boot two cabinets, cable them together, drive a
+# scripted joypad tape onto each linked end, then unplug the cable, all over stdin.
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/overworld-link-saves.json --exit-after-seconds 15 < docs/examples/scripts/link-cable.console
+# Run (PowerShell): Get-Content docs/examples/scripts/link-cable.console | dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/overworld-link-saves.json --exit-after-seconds 15
+
+# Boot the two cabinets (each inserts its selected cart and powers on), settle the layout.
+boot 0
+boot 1
+settle
+state
+
+# Cable them together as a linked serial pair (console 0 becomes the primary). The pair
+# now advances in lockstep — one shared step budget per frame.
+link 0 1
+step 5
+
+# Drive a scripted joypad tape onto EACH linked end. A linked primary's segment ticks set
+# the pair's budget, so both step together while the tapes play; each cabinet seats back at
+# the shared timeline head when its tape ends. Grammar: keys '+'-joined, *N holds N frames,
+# xN repeats, none/- releases.
+press 0 up a*4 down b*4
+press 1 a - a - a - start*2
+step 30
+state
+
+# Unplug the cable (re-issuing link on the same linked pair toggles it off) — both step
+# independently again.
+link 0 1
+step 5
+state

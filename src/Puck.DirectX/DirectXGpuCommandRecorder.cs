@@ -26,7 +26,7 @@ namespace Puck.DirectX;
 public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
     /// <inheritdoc/>
     public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var allocator = (ID3D12CommandAllocator*)state.Allocator;
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
 
@@ -36,10 +36,18 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
 
     /// <inheritdoc/>
     public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         ((ID3D12GraphicsCommandList*)state.CommandList)->Close();
     }
+
+    /// <inheritdoc/>
+    public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
+        DirectXDebugLabel.Begin(commandList: (ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList, label: label);
+
+    /// <inheritdoc/>
+    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
+        DirectXDebugLabel.End(commandList: (ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList);
 
     /// <inheritdoc/>
     public void BeginRenderPass(
@@ -50,7 +58,7 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         uint width,
         uint height
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
         var renderTarget = (ID3D12Resource*)renderPassHandle;
 
@@ -110,7 +118,7 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
 
     /// <inheritdoc/>
     public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
 
         // Close the render pass (the store op runs) before the read-state barrier — same OS gate as BeginRenderPass.
@@ -130,9 +138,9 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
 
     /// <inheritdoc/>
     public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
-        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(pipelineHandle).Target!;
+        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineHandle).Target!;
 
         commandList->SetGraphicsRootSignature((ID3D12RootSignature*)layout.RootSignatureHandle);
         commandList->SetPipelineState((ID3D12PipelineState*)layout.PsoHandle);
@@ -141,9 +149,9 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
 
     /// <inheritdoc/>
     public void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, nint vertexBufferHandle) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
-        var view = (DirectXVertexBufferView)GCHandle.FromIntPtr(vertexBufferHandle).Target!;
+        var view = (DirectXVertexBufferView)GCHandle.FromIntPtr(value: vertexBufferHandle).Target!;
         var vbv = new D3D12_VERTEX_BUFFER_VIEW {
             BufferLocation = view.BufferLocation,
             SizeInBytes = view.SizeBytes,
@@ -160,10 +168,10 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         nint pipelineLayoutHandle,
         nint descriptorSetHandle
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
-        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(pipelineLayoutHandle).Target!;
-        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(descriptorSetHandle).Target!;
+        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!;
+        var set = (DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!;
         var heap = (ID3D12DescriptorHeap*)set.HeapHandle;
 
         commandList->SetDescriptorHeaps(1, &heap);
@@ -185,9 +193,9 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         uint offset,
         ReadOnlySpan<byte> data
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
-        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(pipelineLayoutHandle).Target!;
+        var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!;
 
         if (0 > layout.RootConstantsParamIndex) {
             return;
@@ -198,14 +206,14 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
                 RootParameterIndex: (uint)layout.RootConstantsParamIndex,
                 Num32BitValuesToSet: (uint)(data.Length / 4),
                 pSrcData: pData,
-                DestOffsetIn32BitValues: offset / 4
+                DestOffsetIn32BitValues: (offset / 4)
             );
         }
     }
 
     /// <inheritdoc/>
     public void SetScissor(nint deviceHandle, nint commandBufferHandle, int x, int y, uint width, uint height) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var scissor = new RECT {
             bottom = (y + (int)height),
             left = x,
@@ -225,7 +233,7 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         uint firstVertex,
         uint firstInstance
     ) {
-        var state = DecodeState(commandBufferHandle);
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         ((ID3D12GraphicsCommandList*)state.CommandList)->DrawInstanced(
             VertexCountPerInstance: vertexCount,
@@ -236,17 +244,17 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
     }
 
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
-        (DirectXCommandBufferState)GCHandle.FromIntPtr(commandBufferHandle).Target!;
+        (DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!;
     private static D3D12_RESOURCE_BARRIER CreateTransition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
         var barrier = new D3D12_RESOURCE_BARRIER {
             Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         };
 
         barrier.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            pResource = resource,
-            Subresource = 0xFFFFFFFF,
-            StateBefore = before,
             StateAfter = after,
+            StateBefore = before,
+            Subresource = 0xFFFFFFFF,
+            pResource = resource,
         };
 
         return barrier;

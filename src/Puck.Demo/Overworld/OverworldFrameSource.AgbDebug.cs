@@ -4,8 +4,8 @@ using Puck.SdfVm;
 namespace Puck.Demo.Overworld;
 
 /// <summary>
-/// The AGB-DEBUG mode's frame-source surface: the native GBA scene renders as ONE fullscreen diegetic
-/// <see cref="SdfProgramBuilder.ScreenSlab"/> that samples the live ARM7TDMI framebuffer (published by the DI-held
+/// The AGB-DEBUG mode's frame-source surface: the native AGB scene renders as ONE fullscreen diegetic
+/// screen slab emitted by <see cref="SdfProgramBuilder"/> that samples the live ARM7TDMI framebuffer (published by the DI-held
 /// <c>AgbDebugService</c> and pushed in each produced frame by the render node), framed head-on so it fills the view —
 /// the raster sibling of the SDF-debug takeover. This partial holds ONLY PRIMITIVE state (a bool, a native handle, a
 /// colour) and emits the slab, so composing it adds no facade TYPE to this source, which sits at its exact analyzer
@@ -17,12 +17,12 @@ public sealed partial class OverworldFrameSource {
     public const int AgbDebugScreenSlot = 4;
 
     // The fullscreen slab's authored size + the head-on camera distance that makes it fill the vertical FoV (the
-    // director's own FieldOfViewRadians = 50°, so tan(25°)). The GBA panel is 3:2 (240×160), wider than the GB slab.
+    // director's own FieldOfViewRadians = 50°, so tan(25°)). The AGB panel is 3:2 (240×160), wider than the humble slab.
     private const float AgbSlabHalfHeight = 1.0f;
     private const float AgbSlabAspect = (240f / 160f);
     private const float AgbSlabDepth = 0.05f;
-    private static readonly float s_agbCameraDistance = (AgbSlabHalfHeight / MathF.Tan(x: (25f * (MathF.PI / 180f))));
 
+    private static readonly float s_agbCameraDistance = (AgbSlabHalfHeight / MathF.Tan(x: (25f * (MathF.PI / 180f))));
     private bool m_agbActive;
     private nint m_agbScreenHandle;
     private Vector3 m_agbScreenGlow;
@@ -40,17 +40,14 @@ public sealed partial class OverworldFrameSource {
     public Vector3 AgbDebugScreenGlow => m_agbScreenGlow;
 
     /// <summary>Pushes this frame's native AGB scene state (active + the live framebuffer handle + glow) from the render
-    /// node, which owns the machine's per-frame step + GPU upload. A change in the active flag forces a program rebuild
-    /// (the fullscreen slab replaces the room, and the room must return on exit) — exactly as a boot does.</summary>
+    /// node, which owns the machine's per-frame step + GPU upload. No manual rebuild is needed on the active flag's
+    /// edge: <see cref="CaptureFrame"/> already picks between the cached AGB program and the room composition by this
+    /// flag every call, and <see cref="Dress"/>'s reference-diff sees the switch as a real change either way.</summary>
     /// <param name="active">Whether the AGB scene is active this frame.</param>
     /// <param name="handle">The live framebuffer view handle (0 when inactive).</param>
     /// <param name="glow">The screen's room glow (zero when inactive).</param>
     public void SetAgbDebugScreen(bool active, nint handle, Vector3 glow) {
-        if (m_agbActive != active) {
-            m_agbActive = active;
-            m_program = null; // enter/exit swaps the fullscreen slab for the room (and back) — rebuild like a boot
-        }
-
+        m_agbActive = active;
         m_agbScreenHandle = handle;
         m_agbScreenGlow = glow;
     }
@@ -65,12 +62,12 @@ public sealed partial class OverworldFrameSource {
     // envelope (one slab << the full room), so the frozen capacity probe already covers it — no probe addition needed.
     private static SdfProgram BuildAgbDebugProgram() {
         var builder = new SdfProgramBuilder();
-        var halfExtents = new Vector3((AgbSlabHalfHeight * AgbSlabAspect), AgbSlabHalfHeight, AgbSlabDepth);
+        var halfExtents = new Vector3(x: (AgbSlabHalfHeight * AgbSlabAspect), y: AgbSlabHalfHeight, z: AgbSlabDepth);
 
         _ = builder.ResetPoint().ScreenSlab(
             halfExtents: halfExtents,
             round: 0.02f,
-            worldOrigin: new Vector3(0f, 0f, AgbSlabDepth),
+            worldOrigin: new Vector3(x: 0f, y: 0f, z: AgbSlabDepth),
             worldRight: Vector3.UnitX,
             worldUp: Vector3.UnitY,
             screenIndex: AgbDebugScreenSlot

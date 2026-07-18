@@ -34,9 +34,29 @@ public sealed class VulkanRenderer(
     IVulkanFramePresenter framePresenter,
     IVulkanCommandBufferRecorder commandBufferRecorder
 ) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext {
-    private VulkanCommandResources? m_commandResources;
+    // Vulkan validation is a developer diagnostic, opt-in via PUCK_VULKAN_DEBUG (the peer of PUCK_D3D12_DEBUG on the
+    // Direct3D 12 backend). Default OFF: the validation layer and its debug-utils messenger add per-call CPU overhead
+    // and never fire in a normal run. Set PUCK_VULKAN_DEBUG=1 to load the layer and surface validation messages to the
+    // console. The debug-utils EXTENSION (and the command-buffer labels it carries) is enabled independently of this —
+    // see VulkanInstanceFactory — so GPU-capture debug groups survive a validation-off run.
+    private static readonly bool s_validationEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_VULKAN_DEBUG") is not null);
+
+    /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
+    /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
+    /// (its own image-available semaphore and in-flight fence; the per-image render-finished semaphores ride
+    /// along), so two presents can be pending without reusing a semaphore that still has a queued wait. Matches
+    /// the node-side <c>SdfWorldEngine.FrameRingSize</c> — the engine ring guards resource reuse, this ring
+    /// bounds host latency.</summary>
+    private const int PresentFrameRingSize = 2;
+
+    // Per RING SLOT (like m_synchronizations): a slot's per-image command buffers are only re-recorded after
+    // WaitForFrameSlot proved that slot's previous present retired — sharing one set across slots let an acquired
+    // image's buffer be re-recorded while its prior blit (the OTHER slot's present) was still executing
+    // (VUID-vkBeginCommandBuffer-commandBuffer-00049, caught by the validation layer under VRR present churn).
+    private readonly VulkanCommandResources?[] m_commandResources = new VulkanCommandResources?[PresentFrameRingSize];
     private VulkanLogicalDevice? m_device;
     private VulkanFramebufferSet? m_framebufferSet;
+    private int m_frameSlot;
     private uint m_height;
     private VulkanInstance? m_instance;
     private bool m_needsRecreate;
@@ -44,8 +64,9 @@ public sealed class VulkanRenderer(
     private VulkanRenderPass? m_renderPass;
     private VulkanSurface? m_surface;
     private VulkanSwapchain? m_swapchain;
-    private VulkanFrameSynchronization? m_synchronization;
+    private readonly VulkanFrameSynchronization?[] m_synchronizations = new VulkanFrameSynchronization?[PresentFrameRingSize];
     private uint m_width;
+    private ulong m_skippedPresentCount;
 
     /// <summary>Raised after the swapchain-dependent resources are (re)created — on the first frame and
     /// after every resize. Callers rebuild any pipelines or descriptor sets bound to
@@ -107,7 +128,7 @@ public sealed class VulkanRenderer(
             m_instance = instanceFactory.Create(
                 applicationName: options.ApplicationName,
                 displayKind: binding.DisplayKind,
-                enableValidation: true
+                enableValidation: s_validationEnabled
             );
             m_surface = surfaceFactory.Create(
                 binding: binding,
@@ -180,11 +201,11 @@ public sealed class VulkanRenderer(
         }
 
         var outcome = framePresenter.Present(
-            commandResources: m_commandResources!,
-            frameSynchronization: m_synchronization!,
+            commandResources: m_commandResources[m_frameSlot]!,
+            frameSynchronization: m_synchronizations[m_frameSlot]!,
             logicalDevice: m_device,
             recordAcquiredImage: imageIndex => commandBufferRecorder.RecordImage(
-                commandResources: m_commandResources!,
+                commandResources: m_commandResources[m_frameSlot]!,
                 drawCommands: drawCommands,
                 framebufferSet: m_framebufferSet!,
                 graphicsPipelines: graphicsPipelines,
@@ -195,20 +216,54 @@ public sealed class VulkanRenderer(
             swapchain: m_swapchain
         );
 
-        if (outcome.Result == VulkanFramePresentationResult.RecreatePresentationResources) {
+        if (outcome.Result == VulkanFramePresentationResult.Presented) {
+            // The frame's blit submitted and armed this slot's in-flight fence — advance the presentation ring. A
+            // skipped/recreate outcome leaves the slot in place (its fence state is unchanged or the whole chain is
+            // about to be rebuilt), so the ring can never run ahead of what was actually submitted.
+            m_frameSlot = ((m_frameSlot + 1) % PresentFrameRingSize);
+        } else if (outcome.Result == VulkanFramePresentationResult.RecreatePresentationResources) {
             m_needsRecreate = true;
         } else if (outcome.Result == VulkanFramePresentationResult.ResetVulkanResources) {
             // Device/surface lost — surface it as the neutral recoverable signal for the host pump (this outcome was
             // produced but consumed nowhere before; it is now the device-loss recovery trigger).
             throw new DeviceLostException(message: "Vulkan present reported a lost device or surface.");
+        } else if (outcome.Result == VulkanFramePresentationResult.Skipped) {
+            // The fence/acquire was not ready this tick — no GPU work submitted. Tallied for the host's [frame-timing]
+            // digest (IPresentationSkipFeedback); not itself an error, so nothing else reacts to it. Under the frame
+            // ring this path is LIVE whenever the swapchain is backpressured (no image acquirable at timeout 0) — the
+            // produced frame's compute still ran; only its blit is dropped.
+            unchecked {
+                m_skippedPresentCount++;
+            }
         }
     }
+    /// <summary>The running total of <see cref="VulkanFramePresentationResult.Skipped"/> outcomes since this renderer
+    /// was created — the backing read for <see cref="IPresentationSkipFeedback.SkippedPresentCount"/>.</summary>
+    public ulong SkippedPresentCount => m_skippedPresentCount;
+
     public void WaitForGpuIdle() {
         if (m_device is null) {
             return;
         }
 
         m_device.WaitIdle();
+    }
+    /// <summary>The frame-ring gate: blocks until the CURRENT presentation slot's in-flight fence signals — the fence
+    /// armed by the present <see cref="PresentFrameRingSize"/> frames ago, whose blit was queued AFTER that whole
+    /// frame's compute submits, so its signal proves that frame's GPU work fully retired. This is the pipelined
+    /// replacement for the per-frame <see cref="WaitForGpuIdle"/> drain (which remains the recovery/teardown path):
+    /// with a ring of 2 the host produces frame N while the GPU still executes frame N−1. A no-op before the first
+    /// frame (fences are created signaled) or when presentation resources are not built.</summary>
+    public void WaitForFrameSlot() {
+        if (
+            (m_device is null) ||
+            (m_synchronizations[m_frameSlot] is not { } synchronization)
+        ) {
+            return;
+        }
+
+        // Unbounded like vkDeviceWaitIdle; a device loss surfaces as the neutral DeviceLostException for recovery.
+        synchronization.WaitForInFlightFence(timeout: ulong.MaxValue).ThrowIfFailed(operation: "vkWaitForFences");
     }
     /// <summary>Recreates the lost chain IN PLACE — keeping this renderer's object identity so the published
     /// device-context capability and every node that resolved it stay valid (they release + rebuild their own resources).
@@ -242,7 +297,7 @@ public sealed class VulkanRenderer(
             m_instance = instanceFactory.Create(
                 applicationName: options.ApplicationName,
                 displayKind: binding.DisplayKind,
-                enableValidation: true
+                enableValidation: s_validationEnabled
             );
             m_surface = surfaceFactory.Create(
                 binding: binding,
@@ -303,7 +358,7 @@ public sealed class VulkanRenderer(
     /// <param name="presentTimestampTicks">When this returns <see langword="true"/>, the present's timestamp in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
     /// <returns><see langword="true"/> when a usable sample exists; otherwise <see langword="false"/>.</returns>
     public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) =>
-        framePresenter.TryGetPresentTiming(out presentCount, out presentTimestampTicks);
+        framePresenter.TryGetPresentTiming(presentCount: out presentCount, presentTimestampTicks: out presentTimestampTicks);
 
     nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Handle;
 
@@ -366,24 +421,35 @@ public sealed class VulkanRenderer(
             renderPass: m_renderPass,
             swapchain: m_swapchain
         );
-        m_commandResources = commandResourcesFactory.Create(
-            commandBufferCount: (uint)m_framebufferSet.FramebufferHandles.Count,
-            logicalDevice: device
-        );
-        m_synchronization = frameSynchronizationFactory.Create(
-            logicalDevice: device,
-            renderFinishedSemaphoreCount: m_commandResources.CommandBufferHandles.Count
-        );
+        // One full set of per-image command buffers AND one synchronization object PER presentation ring slot
+        // (fences start signaled, so the first WaitForFrameSlot on each slot passes free); the ring restarts at
+        // slot 0 with every rebuilt chain.
+        for (var slot = 0; (slot < PresentFrameRingSize); slot++) {
+            m_commandResources[slot] = commandResourcesFactory.Create(
+                commandBufferCount: (uint)m_framebufferSet.FramebufferHandles.Count,
+                logicalDevice: device
+            );
+            m_synchronizations[slot] = frameSynchronizationFactory.Create(
+                logicalDevice: device,
+                renderFinishedSemaphoreCount: m_commandResources[slot]!.CommandBufferHandles.Count
+            );
+        }
+
+        m_frameSlot = 0;
 
         PresentationResourcesRecreated?.Invoke();
     }
     private void DisposePresentationResources() {
         TryWaitIdle();
 
-        m_synchronization?.Dispose();
-        m_synchronization = null;
-        m_commandResources?.Dispose();
-        m_commandResources = null;
+        for (var slot = 0; (slot < PresentFrameRingSize); slot++) {
+            m_synchronizations[slot]?.Dispose();
+            m_synchronizations[slot] = null;
+            m_commandResources[slot]?.Dispose();
+            m_commandResources[slot] = null;
+        }
+
+        m_frameSlot = 0;
         m_framebufferSet?.Dispose();
         m_framebufferSet = null;
         m_renderPass?.Dispose();

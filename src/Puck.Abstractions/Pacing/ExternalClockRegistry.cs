@@ -73,7 +73,7 @@ public sealed class ExternalClockRegistry {
 
     // Whether this source's publishes are forwarded to the pacer; read lock-free on every publish.
     internal bool IsElected(ExternalClockSource source) =>
-        ReferenceEquals(m_elected, source);
+        ReferenceEquals(objA: m_elected, objB: source);
 
     // Applies the policy over the current registrations. Named: elect the named source when present. Auto: elect the
     // sole source, and un-elect when plurality appears (no arbitrary winner, ever). Off: never elect. The structural

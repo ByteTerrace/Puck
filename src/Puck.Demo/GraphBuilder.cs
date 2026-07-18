@@ -1,5 +1,8 @@
+using Puck.Assets;
 using Puck.Hosting;
 using Puck.Scene;
+using Puck.Scripting;
+using Puck.SdfVm;
 
 namespace Puck.Demo;
 
@@ -29,6 +32,9 @@ internal static class GraphBuilder {
 
         return graph switch {
             OverworldNode overworld => DemoRunRegistrar.CreateOverworldRootNode(
+                // The document-level addons — built into the sim-tick scripting runtime the node drives; null when the
+                // run declares none. Built here (not the node) so the scripting-type coupling stays off the node.
+                addons: BuildAddonRuntime(addons: document.Addons),
                 capturePath: capture,
                 // Nullable-optional-field pattern: an omitted `consoles` arrives null despite the initializer.
                 consoles: (overworld.Consoles ?? []),
@@ -42,9 +48,11 @@ internal static class GraphBuilder {
                 // The boot-load world handle: the overworld resolves + commits it at boot so the room (and the reveal
                 // target) is that sculpted world, not the default room (see OverworldFrameSource.LoadBootWorld).
                 world: overworld.World,
-                // The far spawn cell (both axes) — the planet-scale coordinate-stability toggle (former
-                // PUCK_OVERWORLD_CELL). Null (the default) is the origin cell; normalized at the node.
-                cell: overworld.Cell
+                // The far spawn cell on both axes. Null (the default) is the origin cell; normalized at the node.
+                cell: overworld.Cell,
+                // The durable render-scale quality tier for the settled revealed room (validated at parse). Null (the
+                // default) is native / full resolution; the live path is the `render-scale` console verb.
+                revealedRenderScale: overworld.RevealedRenderScale
             ),
             WorldNode world => CreateWorldRootNode(
                 capturePath: capture,
@@ -68,20 +76,100 @@ internal static class GraphBuilder {
     public static string? UnsupportedReason(PuckRunDocument document, bool hostsOnDirectX) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        return (document.Graph is WorldNode world)
+        // Addons are a document-level concern (any graph kind may declare them), so their filesystem pre-flight runs
+        // first — the validator is filesystem-free, so existence + the optional integrity pin are checked here.
+        if (AddonsUnsupportedReason(addons: document.Addons) is { } addonReason) {
+            return addonReason;
+        }
+
+        return ((document.Graph is WorldNode world)
             ? WorldUnsupportedReason(hostsOnDirectX: hostsOnDirectX, viewports: (document.Viewports ?? []), world: world)
-            : null;
+            : null);
+    }
+
+    // Builds the demo's WASM-addon runtime from the document's addon list (or null when none are declared) — the sim-tick
+    // scripting seam the overworld node drives. Kept in the graph builder so the node names only the runtime interface.
+    private static Overworld.IAddonControlHost? BuildAddonRuntime(IReadOnlyList<AddonDocument>? addons) {
+        var descriptors = MapAddons(addons: addons);
+
+        return ((descriptors.Length == 0) ? null : Overworld.AddonRuntime.Create(descriptors: descriptors));
+    }
+
+    // Maps the document's addon list to the neutral loader requests, resolving each relative module path against the
+    // output directory (AppContext.BaseDirectory) so a run document's `modulePath` finds the Content-copied module —
+    // mirroring how the demo resolves its other shipped assets. A validated document always names a module path.
+    private static AddonDescriptor[] MapAddons(IReadOnlyList<AddonDocument>? addons) {
+        if ((addons is null) || (addons.Count == 0)) {
+            return [];
+        }
+
+        var descriptors = new AddonDescriptor[addons.Count];
+
+        for (var index = 0; (index < addons.Count); ++index) {
+            var addon = addons[index];
+
+            descriptors[index] = new AddonDescriptor(
+                Enabled: (addon.Enabled ?? true),
+                FuelPerTick: addon.FuelPerTick,
+                ModuleHash: addon.ModuleHash,
+                ModulePath: ResolveAddonPath(modulePath: addon.ModulePath),
+                Name: addon.Name,
+                Slot: addon.Slot
+            );
+        }
+
+        return descriptors;
+    }
+
+    // The addon filesystem pre-flight: every declared module must exist at its resolved path, and — when an integrity
+    // pin is present — the module's computed content hash must match. A miss exits 2 with an attributed message (the
+    // WorldUnsupportedReason romPath precedent), never a mid-load fault buried in the run.
+    private static string? AddonsUnsupportedReason(IReadOnlyList<AddonDocument>? addons) {
+        if ((addons is null) || (addons.Count == 0)) {
+            return null;
+        }
+
+        for (var index = 0; (index < addons.Count); ++index) {
+            var addon = addons[index];
+            var path = ResolveAddonPath(modulePath: addon.ModulePath);
+
+            if (string.IsNullOrEmpty(value: path) || !File.Exists(path: path)) {
+                return $"addons[{index}] ('{addon.Name}'): modulePath '{addon.ModulePath}' does not exist (resolved to '{path}').";
+            }
+
+            if (addon.ModuleHash is { } expected) {
+                var actual = AssetContentHash.Compute(content: File.ReadAllBytes(path: path)).ToString();
+
+                if (!string.Equals(a: actual, b: expected, comparisonType: StringComparison.Ordinal)) {
+                    return $"addons[{index}] ('{addon.Name}'): moduleHash mismatch — declared {expected}, computed {actual}.";
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // Resolves a run document's (machine-local) module path: an absolute path is used as-is; a relative path resolves
+    // against the demo's output directory, where the ghost's Content-copied .wat lands.
+    private static string ResolveAddonPath(string? modulePath) {
+        if (string.IsNullOrWhiteSpace(value: modulePath)) {
+            return "";
+        }
+
+        return (Path.IsPathRooted(path: modulePath)
+            ? modulePath
+            : Path.Combine(path1: AppContext.BaseDirectory, path2: modulePath));
     }
 
     // The ONE statement of the world graph's CAPABILITY gaps — deferred or host-dependent paths a VALID document may
-    // name (retired shapes like `child` are the validator's job: host-independent, never valid). Cross-backend
+    // name. Invalid graph shapes are the validator's responsibility. Cross-backend
     // `produce` (a bespoke producer device + shared-image handoff) is DEFERRED until the shared same-device host is
     // stable — an explicit produce that disagrees with the host is rejected loudly, never silently re-hosted; a null
     // produce simply renders on the host.
     private static string? WorldUnsupportedReason(WorldNode world, IReadOnlyList<Viewport> viewports, bool hostsOnDirectX) {
         var hostBackend = (hostsOnDirectX ? "directx" : "vulkan");
 
-        if ((world.Produce is not null) && world.TryResolveProduce(backend: out var produce) && !string.Equals(produce, hostBackend, StringComparison.Ordinal)) {
+        if ((world.Produce is not null) && world.TryResolveProduce(backend: out var produce) && !string.Equals(a: produce, b: hostBackend, comparisonType: StringComparison.Ordinal)) {
             return $"graph.produce:\"{produce}\" on a {hostBackend} host is the cross-backend producer path, which is not yet re-hosted on the shared world renderer; render on the host backend (drop 'produce' or match host.backend).";
         }
 
@@ -115,6 +203,12 @@ internal static class GraphBuilder {
         }
 
         var children = BuildWorldChildren(hostsOnDirectX: hostsOnDirectX, serviceProvider: serviceProvider, viewports: viewports);
+        // The resolved host config (registered as a singleton by HostSettings.Apply) carries the document's
+        // RayQuery/Timing toggles — threaded straight into the spec now that the builder no longer resolves
+        // HostSettings itself; SdfEngineNode falls back to the PUCK_RAY_QUERY environment read when RayQuery is null,
+        // so that env var keeps working verbatim with no host in the loop; GPU timing has no env fallback — it is armed
+        // live (the gpu.timing switch / the world.timing verb) or seeded from the run-doc host.timing field.
+        var hostSettings = (serviceProvider.GetService(serviceType: typeof(HostSettings)) as HostSettings);
 
         return SdfWorldRenderBuilder.Build(
             serviceProvider: serviceProvider,
@@ -126,7 +220,9 @@ internal static class GraphBuilder {
                 CapturePath = capturePath,
                 Children = children,
                 HostsOnDirectX = hostsOnDirectX,
+                RayQuery = hostSettings?.RayQuery,
                 ScreenSources = BuildWorldScreenSources(children: children, screenSources: document.ScreenSources),
+                Timing = hostSettings?.Timing,
             }
         ).Root;
     }
@@ -144,16 +240,16 @@ internal static class GraphBuilder {
         foreach (var entry in screenSources) {
             switch (entry.Source) {
                 case ViewportScreenSource viewport: {
-                    var brick = (GamingBrickChildNode)children![viewport.Slot];
+                        var brick = (GamingBrickChildNode)children![viewport.Slot];
 
-                    providers[entry.ScreenIndex] = () => (brick.IsAssigned ? brick.NativeImageViewHandle : 0);
+                        providers[entry.ScreenIndex] = () => (brick.IsAssigned ? brick.NativeImageViewHandle : 0);
 
-                    break;
-                }
+                        break;
+                    }
                 default:
                     // The seam future provider kinds grow through: a kind added to the MODEL before it is hosted here
                     // must fail loudly at build, not silently render the procedural fallback.
-                    throw new NotSupportedException(message: $"screenSources[{entry.ScreenIndex}]: provider '{entry.Source?.GetType().Name ?? "null"}' is not yet hosted by the world render path.");
+                    throw new NotSupportedException(message: $"screenSources[{entry.ScreenIndex}]: provider '{(entry.Source?.GetType().Name ?? "null")}' is not yet hosted by the world render path.");
             }
         }
 

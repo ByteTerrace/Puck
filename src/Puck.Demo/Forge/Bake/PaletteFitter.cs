@@ -24,10 +24,10 @@ internal static class PaletteFitter {
     private const int PreMergeCeiling = 48;
 
     private sealed class Cluster {
-        public required List<HistogramEntry> Histogram { get; set; }
         public required ushort[] Colours { get; set; }
-        public required List<int> Tiles { get; init; }
+        public required List<HistogramEntry> Histogram { get; set; }
         public long PixelCount { get; set; }
+        public required List<int> Tiles { get; init; }
     }
 
     /// <summary>Fits palettes to a set of tile histograms.</summary>
@@ -96,9 +96,9 @@ internal static class PaletteFitter {
         }
 
         colours.Sort(comparison: static (left, right) => {
-            var byLuminance = BakeColor.Luminance(colour: right).CompareTo(BakeColor.Luminance(colour: left));
+            var byLuminance = BakeColor.Luminance(colour: right).CompareTo(value: BakeColor.Luminance(colour: left));
 
-            return ((byLuminance != 0) ? byLuminance : left.CompareTo(right));
+            return ((byLuminance != 0) ? byLuminance : left.CompareTo(value: right));
         });
 
         return [.. colours];
@@ -216,7 +216,6 @@ internal static class PaletteFitter {
 
         Merge(clusters: clusters, into: bestI, from: bestJ, usableColours: usableColours);
     }
-
     private static long PairCost(ushort[] candidate, Cluster cluster, IReadOnlyList<List<HistogramEntry>> tiles) {
         var cost = 0L;
 
@@ -226,7 +225,6 @@ internal static class PaletteFitter {
 
         return cost;
     }
-
     private static void Merge(List<Cluster> clusters, int into, int from, int usableColours) {
         var target = clusters[into];
         var source = clusters[from];
@@ -323,7 +321,7 @@ internal static class PaletteFitter {
 
         sorted[..Math.Min(val1: colours.Length, val2: 4)].Sort();
 
-        return ((ulong)sorted[0] | ((ulong)sorted[1] << 16) | ((ulong)sorted[2] << 32) | ((ulong)sorted[3] << 48));
+        return (ulong)sorted[0] | ((ulong)sorted[1] << 16) | ((ulong)sorted[2] << 32) | ((ulong)sorted[3] << 48);
     }
 
     // Merges two colour-ascending histograms, summing counts — a deterministic sorted-list merge.
@@ -346,7 +344,6 @@ internal static class PaletteFitter {
 
         return merged;
     }
-
     private static long TotalCount(List<HistogramEntry> histogram) {
         var total = 0L;
 
@@ -379,7 +376,6 @@ internal static class PaletteFitter {
 
         return (bestBox, bestChannel);
     }
-
     private static (int Range, int Channel) ChannelSpread(List<HistogramEntry> box) {
         Span<int> min = stackalloc int[3];
         Span<int> max = stackalloc int[3];
@@ -408,14 +404,13 @@ internal static class PaletteFitter {
 
         return (bestRange, bestChannel);
     }
-
     private static void SplitBox(List<List<HistogramEntry>> boxes, int boxIndex, int channel) {
         var box = boxes[boxIndex];
 
         box.Sort(comparison: (left, right) => {
-            var byChannel = BakeColor.Channel(channel: channel, colour: left.Colour).CompareTo(BakeColor.Channel(channel: channel, colour: right.Colour));
+            var byChannel = BakeColor.Channel(channel: channel, colour: left.Colour).CompareTo(value: BakeColor.Channel(channel: channel, colour: right.Colour));
 
-            return ((byChannel != 0) ? byChannel : left.Colour.CompareTo(right.Colour));
+            return ((byChannel != 0) ? byChannel : left.Colour.CompareTo(value: right.Colour));
         });
 
         var total = TotalCount(histogram: box);

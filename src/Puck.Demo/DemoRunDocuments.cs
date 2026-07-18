@@ -3,10 +3,9 @@ using Puck.Scene;
 namespace Puck.Demo;
 
 /// <summary>
-/// The synthesizer that turns the legacy CLI flags into the SAME <see cref="PuckRunDocument"/> the <c>--run</c> path
+/// Synthesizes CLI validation and overworld options into the same <see cref="PuckRunDocument"/> the <c>--run</c> path
 /// consumes. Every <c>--validate-overworld</c>/<c>--overworld</c> flag is a thin alias that builds a document, so there is
-/// no second imperative path to keep in sync. The flags flow straight from <c>Program</c>'s parsed CLI values —
-/// there is no separate legacy flag-bundle record parallel to this synthesis.
+/// no second imperative path to keep in sync. The values flow straight from <c>Program</c>'s parsed CLI result.
 /// </summary>
 internal static class DemoRunDocuments {
     /// <summary>Turns the resolved CLI flags into the run document the single data-driven path consumes: the
@@ -111,7 +110,7 @@ internal static class DemoRunDocuments {
         return machines;
     }
 
-    // Whether a --rom path names a Game Boy Advance cartridge (the ARM7TDMI native path) rather than an SM83 GB/GBC
+    // Whether a --rom path names an AGB cartridge (the ARM7TDMI native path) rather than an SM83 (DMG/CGB)
     // cartridge. Detected by extension — the reliable signal for a launch flag, and file-I/O-free at document synthesis
     // (document validation never touches the filesystem; the run path loads the bytes).
     private static bool IsGbaRom(string romPath) =>
@@ -146,7 +145,6 @@ internal static class DemoRunDocuments {
 
         return null;
     }
-
     private static PuckRunDocument Gate(HostDocument host, string gate) {
         return new PuckRunDocument {
             Host = host,

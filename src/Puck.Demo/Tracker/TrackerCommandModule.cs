@@ -3,7 +3,7 @@ using Puck.Commands;
 using Puck.Demo.Forge;
 using Puck.Demo.Overworld;
 using Puck.Hosting;
-using static Puck.Demo.CommandArgs;
+using static Puck.Commands.CommandArgs;
 
 namespace Puck.Demo.Tracker;
 
@@ -46,9 +46,9 @@ internal sealed class TrackerCommandModule(IServiceProvider services, IRenderNod
     private IEnumerable<CommandDefinition> GetDocumentCommands() {
         yield return Plain(
             description: "Lists the saved tunes under ./tunes/.",
-            handler: _ => new CommandResult((AudioDocumentStore.List() is { Count: > 0 } names)
+            handler: _ => new CommandResult(((AudioDocumentStore.List() is { Count: > 0 } names)
                 ? $"[tracker.list: {string.Join(separator: ", ", values: names)}]"
-                : "[tracker.list: none saved yet — tracker.save <name> writes one]"),
+                : "[tracker.list: none saved yet — tracker.save <name> writes one]")),
             name: "tracker.list"
         );
         yield return WithArgs(
@@ -66,8 +66,7 @@ internal sealed class TrackerCommandModule(IServiceProvider services, IRenderNod
                     scene.Load(document: document);
 
                     return string.Join(separator: '\n', values: (new[] { $"[tracker.load: \"{document.Name}\" ({document.Patterns!.Count} pattern(s), tempo {document.Tempo})]" }).Concat(second: scene.RenderRows()));
-                }
-                catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
+                } catch (Exception exception) when (CommandArgs.IsMalformedInput(exception: exception)) {
                     return $"[tracker.load: '{args[0]}' is unreadable — {exception.Message}]";
                 }
             }),
@@ -146,9 +145,9 @@ internal sealed class TrackerCommandModule(IServiceProvider services, IRenderNod
         );
         yield return Plain(
             description: "FORGES the working tune into a JUKEBOX cart (GPU-free) and hot-swaps it into the nearest cabinet in-session — the tune half of the subject-neutral author→forge→hot-swap loop. Enter tracker mode and author a tune first; Cycle/boot a cabinet to it to hear the loop.",
-            handler: _ => new CommandResult((m_creatorHost is null)
+            handler: _ => new CommandResult(((m_creatorHost is null)
                 ? "[tracker.forge: unavailable — the overworld is not the active root]"
-                : m_creatorHost.RequestTuneForge()),
+                : m_creatorHost.RequestTuneForge())),
             name: "tracker.forge"
         );
     }
@@ -187,7 +186,6 @@ internal sealed class TrackerCommandModule(IServiceProvider services, IRenderNod
             inactiveMessage: "[tracker: enter tracker mode first (console: tracker)]",
             unavailableMessage: "[tracker: enter tracker mode first (console: tracker)]"
         );
-
     private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<TrackerScene, string[], string> handler) =>
         CommandAvailability.WithTargetArgs(
             getTarget: () => Scene,

@@ -53,8 +53,8 @@ internal sealed class AssetLinker {
     /// <summary>The hardware palette-slot capacity per plane (8 background, 8 object).</summary>
     public const int PaletteSlotCapacity = 8;
 
-    private const int TileByteCount = 16;
     private const int PaletteByteCount = 8;
+    private const int TileByteCount = 16;
 
     private readonly RomDataBuilder m_data;
     private readonly List<byte[]> m_tileSegments = [];
@@ -199,14 +199,14 @@ internal sealed class AssetLinker {
 
         var frames = m_data.Add(name: $"{name}-frames", bytes: [.. rowBytes]);
         var addresses = new ushort[sprites.Frames.Count];
-        var frameTable = new byte[sprites.Frames.Count * 4];
+        var frameTable = new byte[(sprites.Frames.Count * 4)];
 
         for (var frame = 0; (frame < sprites.Frames.Count); frame++) {
             addresses[frame] = (ushort)(frames.Address + offsets[frame]);
-            frameTable[(frame * 4) + 0] = (byte)(addresses[frame] & 0xFF);
-            frameTable[(frame * 4) + 1] = (byte)(addresses[frame] >> 8);
-            frameTable[(frame * 4) + 2] = (byte)entryCounts[frame];
-            frameTable[(frame * 4) + 3] = 0x00;
+            frameTable[((frame * 4) + 0)] = (byte)(addresses[frame] & 0xFF);
+            frameTable[((frame * 4) + 1)] = (byte)(addresses[frame] >> 8);
+            frameTable[((frame * 4) + 2)] = (byte)entryCounts[frame];
+            frameTable[((frame * 4) + 3)] = 0x00;
         }
 
         return new LinkedSpriteSet(
@@ -270,7 +270,7 @@ internal sealed class AssetLinker {
         var relocated = new byte[attributes.Length];
 
         for (var cell = 0; (cell < attributes.Length); cell++) {
-            var palette = (attributes[cell] & 0x07);
+            var palette = attributes[cell] & 0x07;
 
             if (palette >= paletteCount) {
                 throw new InvalidDataException(message: $"'{name}' attribute cell {cell} references palette {palette} of {paletteCount}.");
@@ -286,8 +286,8 @@ internal sealed class AssetLinker {
     // priority bits ride along.
     private static void AppendRelocatedRows(string name, int frame, byte[] rows, PbakSpriteSet sprites, byte tileBase, byte paletteBase, List<byte> destination) {
         for (var offset = 0; (offset < rows.Length); offset += 4) {
-            var tile = rows[offset + 2];
-            var palette = (rows[offset + 3] & 0x07);
+            var tile = rows[(offset + 2)];
+            var palette = rows[(offset + 3)] & 0x07;
 
             if (tile >= sprites.TileCount) {
                 throw new InvalidDataException(message: $"'{name}' frame {frame} references tile {tile} of {sprites.TileCount}.");
@@ -297,19 +297,17 @@ internal sealed class AssetLinker {
                 throw new InvalidDataException(message: $"'{name}' frame {frame} references palette {palette} of {sprites.PaletteCount}.");
             }
 
-            destination.Add(item: rows[offset + 0]);
-            destination.Add(item: rows[offset + 1]);
+            destination.Add(item: rows[(offset + 0)]);
+            destination.Add(item: rows[(offset + 1)]);
             destination.Add(item: (byte)(tileBase + tile));
-            destination.Add(item: (byte)((paletteBase + palette) | (rows[offset + 3] & 0xF8)));
+            destination.Add(item: (byte)((paletteBase + palette) | (rows[(offset + 3)] & 0xF8)));
         }
     }
-
     private static void ThrowIfSealed(bool sealedFlag, string name, string table) {
         if (sealedFlag) {
             throw new InvalidOperationException(message: $"The {table} is sealed; '{name}' cannot be added.");
         }
     }
-
     private static void SealGuard(ref bool sealedFlag, int count, string table) {
         if (sealedFlag) {
             throw new InvalidOperationException(message: $"The {table} is already sealed.");
@@ -321,7 +319,6 @@ internal sealed class AssetLinker {
 
         sealedFlag = true;
     }
-
     private static byte ValidatePalettes(string name, byte[] paletteData, int currentCount, string plane) {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(paletteData);
@@ -338,7 +335,6 @@ internal sealed class AssetLinker {
 
         return (byte)currentCount;
     }
-
     private static byte[] Concatenate(List<byte[]> segments) {
         var length = 0;
 

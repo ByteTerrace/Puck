@@ -43,17 +43,17 @@ public readonly record struct FixedRoom(FixedQ4816 FloorTop, FixedQ4816 MinX, Fi
         // Each console stand (and, identically, each shelf slot) becomes a full-height keep-out box: its faces expanded
         // by the player half-extents, so the body's center clamps to a surface its own face rests flush against — the
         // same fold-in as the walls.
-        var consoles = ToFixedObstacles(centers: room.Consoles.Select(static stand => (stand.Center, stand.HalfExtents)), halfX: halfX, halfZ: halfZ);
-        var shelf = ToFixedObstacles(centers: room.Shelf.Select(static slot => (slot.Center, slot.HalfExtents)), halfX: halfX, halfZ: halfZ);
+        var consoles = ToFixedObstacles(centers: room.Consoles.Select(selector: static stand => (stand.Center, stand.HalfExtents)), halfX: halfX, halfZ: halfZ);
+        var shelf = ToFixedObstacles(centers: room.Shelf.Select(selector: static slot => (slot.Center, slot.HalfExtents)), halfX: halfX, halfZ: halfZ);
 
         return new FixedRoom(
             Consoles: consoles,
             FloorTop: (FixedQ4816.FromDouble(value: room.FloorY) + halfY),
             InteractRange: FixedQ4816.FromDouble(value: room.ConsoleInteractRange),
-            MaxX: (FixedQ4816.FromDouble(value: room.BoundsMax.X) - wall - halfX),
-            MaxZ: (FixedQ4816.FromDouble(value: room.BoundsMax.Y) - wall - halfZ),
-            MinX: (FixedQ4816.FromDouble(value: room.BoundsMin.X) + wall + halfX),
-            MinZ: (FixedQ4816.FromDouble(value: room.BoundsMin.Y) + wall + halfZ),
+            MaxX: ((FixedQ4816.FromDouble(value: room.BoundsMax.X) - wall) - halfX),
+            MaxZ: ((FixedQ4816.FromDouble(value: room.BoundsMax.Y) - wall) - halfZ),
+            MinX: ((FixedQ4816.FromDouble(value: room.BoundsMin.X) + wall) + halfX),
+            MinZ: ((FixedQ4816.FromDouble(value: room.BoundsMin.Y) + wall) + halfZ),
             Shelf: shelf,
             ShelfInteractRange: FixedQ4816.FromDouble(value: room.ShelfInteractRange),
             WalkGrid: walkGrid
@@ -270,7 +270,7 @@ public sealed class PlatformerBody {
         // expressed in the SPAWN cell's local frame, so this single-room prototype assumes the body stays in that cell —
         // which the clamp guarantees, making Normalize a no-op here. A room SPANNING cells would first have to rebase the
         // planes into the body's current cell (via Delta) before the clamp above.
-        Position = (Position with { Local = nextLocal }).Normalize();
+        Position = Position.WithLocal(local: nextLocal);
     }
 
     private static void ResolveAgainstObstacle(FixedConsole obstacle, ref FixedVector3 nextLocal, ref FixedVector3 velocity) {
@@ -289,14 +289,11 @@ public sealed class PlatformerBody {
         var depthZ = FixedQ4816.Min(x: toMinZ, y: toMaxZ);
 
         if (depthX <= depthZ) {
-            if (toMinX <= toMaxX) { nextLocal = (nextLocal with { X = obstacle.MinX }); velocity = (velocity with { X = FixedQ4816.Min(x: velocity.X, y: FixedQ4816.Zero) }); }
-            else { nextLocal = (nextLocal with { X = obstacle.MaxX }); velocity = (velocity with { X = FixedQ4816.Max(x: velocity.X, y: FixedQ4816.Zero) }); }
+            if (toMinX <= toMaxX) { nextLocal = (nextLocal with { X = obstacle.MinX }); velocity = (velocity with { X = FixedQ4816.Min(x: velocity.X, y: FixedQ4816.Zero) }); } else { nextLocal = (nextLocal with { X = obstacle.MaxX }); velocity = (velocity with { X = FixedQ4816.Max(x: velocity.X, y: FixedQ4816.Zero) }); }
         } else {
-            if (toMinZ <= toMaxZ) { nextLocal = (nextLocal with { Z = obstacle.MinZ }); velocity = (velocity with { Z = FixedQ4816.Min(x: velocity.Z, y: FixedQ4816.Zero) }); }
-            else { nextLocal = (nextLocal with { Z = obstacle.MaxZ }); velocity = (velocity with { Z = FixedQ4816.Max(x: velocity.Z, y: FixedQ4816.Zero) }); }
+            if (toMinZ <= toMaxZ) { nextLocal = (nextLocal with { Z = obstacle.MinZ }); velocity = (velocity with { Z = FixedQ4816.Min(x: velocity.Z, y: FixedQ4816.Zero) }); } else { nextLocal = (nextLocal with { Z = obstacle.MaxZ }); velocity = (velocity with { Z = FixedQ4816.Max(x: velocity.Z, y: FixedQ4816.Zero) }); }
         }
     }
-
     private static FixedVector2 MoveToward(FixedVector2 current, FixedVector2 target, FixedQ4816 maxDelta) {
         var delta = (target - current);
         var distance = delta.Length;

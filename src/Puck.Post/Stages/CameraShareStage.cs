@@ -187,7 +187,7 @@ internal sealed class CameraShareStage : IPostStage {
             InstanceHandle: deviceContext.Instance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
             SharedHandle: sharedHandle,
-            UsageFlags: (VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource),
+            UsageFlags: VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource,
             Width: RenderSize
         ));
 

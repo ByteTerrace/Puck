@@ -14,10 +14,8 @@
 
 using System;
 
-namespace Internal.Runtime.CompilerHelpers
-{
-    internal static partial class ThrowHelpers
-    {
+namespace Internal.Runtime.CompilerHelpers {
+    internal static partial class ThrowHelpers {
         // 0 message args -> (int)
         internal static void ThrowInvalidProgramException(int id) => Environment.FailFast(null);
         internal static void ThrowBadImageFormatException(int id) => Environment.FailFast(null);

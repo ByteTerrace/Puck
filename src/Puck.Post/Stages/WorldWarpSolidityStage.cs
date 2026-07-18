@@ -8,7 +8,7 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage — the D1 Lipschitz CORRECTNESS proof, and the one gate cross-backend PARITY cannot provide: both
+/// Tier-C stage — the Lipschitz correctness proof that cross-backend parity cannot provide: both
 /// backends overstep a non-1-Lipschitz field IDENTICALLY, so a parity diff of two equally-wrong renders passes while
 /// both are wrong. This stage instead renders a shape KNOWN to be solid on ONE backend (the Vulkan host) and asserts
 /// its interior has no punched-through holes.
@@ -36,7 +36,7 @@ internal sealed class WorldWarpSolidityStage : IPostStage {
     // not. A truly broken / unframed / black render (far below even the eroded 28157) is INFRA, not a holing FAIL.
     private const int VacuityFloor = 8000;
     // The primary teeth: coverage this low means the silhouette eroded — the field overstepped. 42000 clears the
-    // clamped 50923 by ~17% (survives later D1 increments' benign edge shifts) yet sits far above the unclamped 28157.
+    // clamped 50923 by ~17% yet sits far above the unclamped 28157.
     private const int MinBladeCoverage = 42000;
     // Secondary catch: interior sky pixels fully walled in by blade (overstep holes that DON'T reach the silhouette).
     // The clamp leaves ~0.24%; this covers the wavy blade's self-occluding folds without masking a real interior hole.
@@ -63,11 +63,11 @@ internal sealed class WorldWarpSolidityStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildLiarsSpiralScene() {
         var builder = new SdfProgramBuilder();
-        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.55f, 0.1f), Emissive: 0.7f));
+        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.55f, z: 0.1f), Emissive: 0.7f));
 
         return builder
             .TwistY(rate: 3.0f)
-            .Box(halfExtents: new Vector3(1.6f, 1.2f, 0.08f), round: 0.02f, material: brass)
+            .Box(halfExtents: new Vector3(x: 1.6f, y: 1.2f, z: 0.08f), round: 0.02f, material: brass)
             .Build();
     }
 
@@ -80,7 +80,7 @@ internal sealed class WorldWarpSolidityStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var artifactPath = Path.Combine(context.ArtifactsDirectory, "world-warp-solidity.png");
+        var artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-warp-solidity.png");
 
         PngEncoder.Write(height: (int)Height, path: artifactPath, rgba: pixels, width: (int)Width);
 
@@ -105,9 +105,8 @@ internal sealed class WorldWarpSolidityStage : IPostStage {
             return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"the liar's spiral holed: {enclosedHoles} interior sky pixels enclosed by blade ({(enclosedFraction * 100.0):0.##}% of {solidPixels} blade pixels) — the rate-3.0 twist oversteps WITHOUT the Lipschitz step clamp (> {(MaxEnclosedHoleFraction * 100.0):0.##}% allowed)");
         }
 
-        return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"the liar's spiral (twist rate 3.0) renders SOLID on the Vulkan host: {solidPixels} blade pixels, {enclosedHoles} enclosed ({(enclosedFraction * 100.0):0.###}%) — the D1 Lipschitz step clamp holds the field 1-Lipschitz-safe (unclamped this erodes to ~28157)");
+        return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"the liar's spiral (twist rate 3.0) renders SOLID on the Vulkan host: {solidPixels} blade pixels, {enclosedHoles} enclosed ({(enclosedFraction * 100.0):0.###}%) — the Lipschitz step clamp holds the field 1-Lipschitz-safe (unclamped this erodes to ~28157)");
     }
-
     private static int CountSolid(byte[] pixels) {
         var count = 0;
 
@@ -171,14 +170,13 @@ internal sealed class WorldWarpSolidityStage : IPostStage {
 
         return enclosed;
     }
-
     private static SdfFrame BuildFrame(SdfProgram program) {
         // An ELEVATED camera looking down the blade: its rays descend in Y as they travel, so the Y-keyed twist angle
         // changes along each ray — exactly the condition that makes a non-1-Lipschitz twist overstep. A face-on camera
         // (constant Y per ray) would see a constant rotation and never hole, hiding the very defect this stage guards.
         var camera = CameraSnapshot.LookAt(
-            position: new Vector3(1.7f, 3.2f, 6.4f),
-            target: new Vector3(0f, 0.1f, 0f),
+            position: new Vector3(x: 1.7f, y: 3.2f, z: 6.4f),
+            target: new Vector3(x: 0f, y: 0.1f, z: 0f),
             fieldOfViewRadians: FieldOfViewRadians,
             viewportWidth: Width,
             viewportHeight: Height

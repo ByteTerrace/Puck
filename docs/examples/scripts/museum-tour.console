@@ -1,0 +1,109 @@
+# Puck.Demo console-driving TOUR — THE REPLAY MUSEUM + THE DROSTE DOOR (personal-touch features): wire the
+# museum's exhibits and the door's interior, then capture proof that both breathe.
+#
+# The museum is four wall screens (slots 6-9) along the room's +Z wall, to the right of the diegetic terminal, each
+# on its own plinth with an engraved placard. Two exhibits BREATHE today — real NestedWorldView content, the SAME
+# discipline the existing nested:0 canary established:
+#   - screen 6 -> named:nested:0              the shared drift-monolith torture scene ("the parity monolith")
+#   - screen 7 -> named:museum:wallpaper-p4g  a standalone P4G wallpaper-fold nested world
+# Screens 8 and 9 stay UNWIRED on purpose — their placards name what would exhibit there (the Mario Tennis M5 golden
+# replay and the Pokemon Gold cable-club trade) and why it doesn't exist as a loadable artifact yet (see the task
+# report's inventory). An unwired screen falls back to its flat/procedural material, which IS the honest picture.
+#
+# The door (slot 10, near the +X/workbench wall's south end) wires to named:door:logsphere — a second standalone
+# nested world: a hand-authored P6M wallpaper fold (a field of identical tori tiled in 6-fold rotational symmetry,
+# receding in every direction) — the opening reads as an ordinary doorway whose other side is visibly impossible.
+# (The view name keeps its working title from the LogSphere/Droste-spiral attempt that preceded this fold — both
+# LogSphere gallery exhibits rendered flat black in a standalone nested world even fully isolated, a real gap
+# between the SDF-debug takeover's own frame construction and this minimal one; see OverworldFrameSource's
+# DoorInteriorEmitter remarks. The brief's own "p4g/p6m-folded OR Droste-spiraled" covers this fold either way.)
+#
+# CAPTURE STRATEGY: `player.move <slot> <x> <z>` (the gravity arc's opening move) now walks/teleports the player to a
+# room-local XZ as a real tick-boundary sim op — SHOT 1 below genuinely stands the player in front of the museum span
+# (2.5, 6.5), and SHOT 2 genuinely walks them up to the Droste door (6.0, -5.5), both refused rather than clamped if
+# the walk grid ever blocked the destination. That closes the ORIGINAL gap ("no scriptable player-move/teleport verb
+# exists"), but it does NOT change what the room's STANDARD chase camera can see: `ScreenLayoutDirector`'s framing is
+# `eye = centroid + (0, up, +Z)` / `target = centroid` — an offset with NO player-facing/yaw term, so it always looks
+# in the SAME -Z-and-down direction regardless of where the player stands. The museum's screens (mounted on the +Z
+# wall, facing -Z INTO the room) and the door's opening (mounted on the +X wall, facing -X) both face AWAY from a
+# camera that only ever arrives from beyond the +Z side looking -Z — moving the player changes what corner of the
+# room is centered in frame (verified: standing at the wall gives a materially closer, better-lit establishing shot
+# of the room than the original distant corner view), but it structurally cannot turn the camera to face either
+# exhibit head-on. So the museum/door's real screens (headroom slots 6-10) still sit outside a face-on view, and
+# each shot ALSO wires the exhibit directly onto cabinet 2 for the capture — the SAME already-visible, already-
+# legible screen surface world-views.console's own canary shows clearly (a placed `world.camera` was tried too;
+# its own render lands as a SECOND small inset — legible in principle, per world-views.console's own TV-in-TV proof,
+# but doubly small here). This is a temporary PROOF wire (it does not replace the museum/door's real architecture on
+# screens 6/7/10, which stays wired throughout and is confirmed by the `world.wire list` echoes below) — it exists
+# only so the captured PNG shows the exhibit's actual content unambiguously, not a distant pixel. Cabinet 2 is
+# booted first for the same reason world-views.console boots its cabinets: an UNBOOTED cabinet's screen is a plain
+# powered-off box, not real ScreenSlab geometry — wiring one is a silent no-op.
+#
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 30 < docs/examples/scripts/museum-tour.console
+# Run (PowerShell): Get-Content docs/examples/scripts/museum-tour.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 30
+
+state
+
+# Force the fourth-wall reveal now (a real connected controller may already be immersed in a booted cabinet) so the
+# room — and the museum/door built into it — is what the room camera actually shows.
+reveal world
+settle
+
+# Hide the overlay toast/hub/tracker/plaque panels so a scripted capture reads as a clean shot of the room rather
+# than the console's own operator feedback (the diegetic bar/console text panel already don't draw on a capture
+# frame — see ConsoleOverlayNode's own "panel not drawing this frame" narration; the binding-bar overlay itself
+# stays — a separate surface with its own controls).
+ui.panels off
+
+cart 2 1
+boot 2
+step 20
+settle
+state
+
+# --- SHOT 1: the museum wakes up ------------------------------------------------------------------------------------
+# Wire the museum's real architecture (screens 6/7 — this IS what a walk-up player sees), then ALSO put the drift
+# monolith on cabinet 2 for a legible proof shot (see the header). Walk the player up to stand in front of the
+# museum span (room-local X 2.5 sits between screens 1/2 of the four; Z 6.5 is close to the +Z wall's walkable
+# clamp, ~7.35) — a real tick-boundary teleport, not a camera trick.
+world.wire named:nested:0 6
+world.wire named:museum:wallpaper-p4g 7
+world.wire named:nested:0 2
+world.wire list
+player.move 0 2.5 6.5
+step 30
+settle
+state
+capture artifacts/console/museum-tour-hall.png
+
+# `capture` writes on the NEXT produced frame — hold a few more before rewiring for shot 2, or the flushed PNG could
+# land a frame late against the wire change below.
+step 5
+
+# --- SHOT 2: the Droste door ---------------------------------------------------------------------------------------
+# Wire the door's real architecture (screen 10), then ALSO put its folded interior on cabinet 2 for the same proof
+# shot — the museum's screens 6/7 stay wired throughout (world.wire list below confirms all three at once). Walk the
+# player up close to the door (its frame centers near room-local X 6.6, Z -5.5 — see MuseumRenderer; X 6.0 stands
+# right in front of it, clear of the nearest console's keep-out box).
+world.wire named:door:logsphere 10
+world.wire named:door:logsphere 2
+world.wire list
+player.move 0 6.0 -5.5
+step 30
+settle
+state
+capture artifacts/console/museum-tour-door.png
+
+# `capture` writes on the NEXT produced frame — hold a few more before the cleanup below, or the flushed PNG would
+# already show the wires cleared (captured a frame late).
+step 5
+
+# Clear every wire this script added — a re-run starts from the same unwired museum.
+world.wire clear 6
+world.wire clear 7
+world.wire clear 10
+world.wire clear 2
+world.wire list
+
+# The final state read is the pass condition.
+state

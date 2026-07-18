@@ -25,8 +25,8 @@ internal static class BrickfallTitleBake {
 
     // Background palette slots 1..7 — slot 0 belongs to the gameplay palette the play screen renders with.
     private const int PaletteBudget = 7;
-    private const int NativeWidth = 160;
     private const int NativeHeight = 144;
+    private const int NativeWidth = 160;
     private const float TanHalfFov = 0.41421356f; // tan(45°/2)
 
     /// <summary>Bakes the title scene and installs it as the cartridge's title art. Never throws.</summary>
@@ -75,7 +75,7 @@ internal static class BrickfallTitleBake {
     private static BakeView TitleView(BakeStyle style) {
         var camera = CameraSnapshot.LookAt(
             fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-            position: new Vector3(0f, 0f, ((NativeHeight / 16f) / TanHalfFov)),
+            position: new Vector3(x: 0f, y: 0f, z: ((NativeHeight / 16f) / TanHalfFov)),
             target: Vector3.Zero,
             viewportHeight: (uint)(NativeHeight * style.SupersampleFactor),
             viewportWidth: (uint)(NativeWidth * style.SupersampleFactor)
@@ -89,19 +89,19 @@ internal static class BrickfallTitleBake {
     // bold dither as REPEATED 4×4 patterns, which the tile dedupe then collapses.
     private static SdfProgram BuildTitleScene() {
         var builder = new SdfProgramBuilder();
-        var sky = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.09f, 0.08f, 0.20f), Emissive: 1.4f));
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.15f, 0.16f, 0.24f), Emissive: 1.1f));
-        var cyan = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.30f, 0.70f, 0.80f), Emissive: 1.0f));
-        var cyanDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.20f, 0.48f, 0.56f), Emissive: 1.0f));
-        var orange = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.62f, 0.22f), Emissive: 1.0f));
-        var orangeDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.66f, 0.42f, 0.15f), Emissive: 1.0f));
-        var white = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.90f, 0.92f, 0.96f), Emissive: 1.0f));
-        var whiteDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.60f, 0.62f, 0.68f), Emissive: 1.0f));
-        var brick = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(1.00f, 0.72f, 0.28f), Emissive: 1.6f));
+        var sky = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.09f, y: 0.08f, z: 0.20f), Emissive: 1.4f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.15f, y: 0.16f, z: 0.24f), Emissive: 1.1f));
+        var cyan = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.30f, y: 0.70f, z: 0.80f), Emissive: 1.0f));
+        var cyanDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.20f, y: 0.48f, z: 0.56f), Emissive: 1.0f));
+        var orange = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.62f, z: 0.22f), Emissive: 1.0f));
+        var orangeDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.66f, y: 0.42f, z: 0.15f), Emissive: 1.0f));
+        var white = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.90f, y: 0.92f, z: 0.96f), Emissive: 1.0f));
+        var whiteDim = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.60f, y: 0.62f, z: 0.68f), Emissive: 1.0f));
+        var brick = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 1.00f, y: 0.72f, z: 0.28f), Emissive: 1.6f));
 
         // Backdrop + ground band (rows 16..17).
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, 0f, -2f)).Box(halfExtents: new Vector3(30f, 20f, 0.5f), round: 0f, material: sky);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(0f, -8f, 0f)).Box(halfExtents: new Vector3(12f, 1f, 0.2f), round: 0f, material: ground);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0f, z: -2f)).Box(halfExtents: new Vector3(x: 30f, y: 20f, z: 0.5f), round: 0f, material: sky);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -8f, z: 0f)).Box(halfExtents: new Vector3(x: 12f, y: 1f, z: 0.2f), round: 0f, material: ground);
 
         // The skyline: block-stacked columns (unit blocks, courses alternating bright/dim so the stacks READ as
         // blocks), leaving a well-like gap around x ∈ [-1, 3] for the falling brick.
@@ -128,8 +128,8 @@ internal static class BrickfallTitleBake {
             for (var level = 0; (level < height); level++) {
                 _ = builder
                     .ResetPoint()
-                    .Translate(offset: new Vector3(x, (-6.5f + level), 0f))
-                    .Box(halfExtents: new Vector3(0.5f, 0.5f, 0.2f), round: 0f, material: (((level % 2) == 0) ? bright : dim));
+                    .Translate(offset: new Vector3(x: x, y: (-6.5f + level), z: 0f))
+                    .Box(halfExtents: new Vector3(x: 0.5f, y: 0.5f, z: 0.2f), round: 0f, material: (((level % 2) == 0) ? bright : dim));
             }
         }
 
@@ -138,10 +138,10 @@ internal static class BrickfallTitleBake {
         // reads as MOTION against the locked skyline.
         var tilt = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-16f * (MathF.PI / 180f)));
 
-        _ = builder.ResetPoint().Translate(offset: new Vector3(1.0f, 4.4f, 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(2.2f, 0.75f, 0.2f), round: 0.05f, material: brick);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(1.0f, 4.4f, 0f)).Rotate(rotation: tilt).Translate(offset: new Vector3(-1.45f, 1.5f, 0f)).Box(halfExtents: new Vector3(0.75f, 0.75f, 0.2f), round: 0.05f, material: brick);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(-0.8f, 7.2f, 0f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (24f * (MathF.PI / 180f)))).Box(halfExtents: new Vector3(0.5f, 0.5f, 0.2f), round: 0.05f, material: orange);
-        _ = builder.ResetPoint().Translate(offset: new Vector3(3.3f, 6.4f, 0f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-32f * (MathF.PI / 180f)))).Box(halfExtents: new Vector3(0.5f, 0.5f, 0.2f), round: 0.05f, material: white);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 1.0f, y: 4.4f, z: 0f)).Rotate(rotation: tilt).Box(halfExtents: new Vector3(x: 2.2f, y: 0.75f, z: 0.2f), round: 0.05f, material: brick);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 1.0f, y: 4.4f, z: 0f)).Rotate(rotation: tilt).Translate(offset: new Vector3(x: -1.45f, y: 1.5f, z: 0f)).Box(halfExtents: new Vector3(x: 0.75f, y: 0.75f, z: 0.2f), round: 0.05f, material: brick);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.8f, y: 7.2f, z: 0f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (24f * (MathF.PI / 180f)))).Box(halfExtents: new Vector3(x: 0.5f, y: 0.5f, z: 0.2f), round: 0.05f, material: orange);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 3.3f, y: 6.4f, z: 0f)).Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-32f * (MathF.PI / 180f)))).Box(halfExtents: new Vector3(x: 0.5f, y: 0.5f, z: 0.2f), round: 0.05f, material: white);
 
         return builder.Build();
     }

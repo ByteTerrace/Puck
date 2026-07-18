@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        The SM83-family GamingBrick core, including its IScreenMachineEngine adapter (Hosting/): GamingBrickEngine
+        (IScreenMachineEngine, id "gaming-brick") builds a MachineHost (IScreenMachine + IMachineMemoryPeek) that hosts
+        the machine as a frame + input endpoint — advanced by an exact integer tick budget, read as an unresampled
+        160x144 framebuffer image handle, fed a neutral MachinePadState folded to the console's joypad by the internal
+        BrickPad adapter. A host wires it by engine id and never names the emulator. Backend-neutral: only the IGpu*
+        seams from Puck.Abstractions, never Vulkan or DirectX types.
+    -->
+    <PropertyGroup>
+        <RootNamespace>Puck.HumbleGamingBrick</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*,)" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Snapshots" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Snapshots\Puck.Snapshots.csproj" />
+    </ItemGroup>
+</Project>

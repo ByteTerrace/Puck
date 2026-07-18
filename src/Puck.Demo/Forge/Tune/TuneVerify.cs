@@ -66,9 +66,7 @@ internal static class TuneVerify {
         }
 
         public byte Read(ushort address) => m_bus.ReadByte(address: address);
-
-        public int ReadWide(ushort address) => (Read(address: address) | (Read(address: (ushort)(address + 1)) << 8));
-
+        public int ReadWide(ushort address) => Read(address: address) | (Read(address: (ushort)(address + 1)) << 8);
         public void RunFrames(JoypadButtons buttons, int frames) {
             for (var frame = 0; (frame < frames); frame++) {
                 m_joypad.SetButtons(pressed: buttons);
@@ -77,12 +75,10 @@ internal static class TuneVerify {
 
             VerifyMachineSettle.SettleOutOfOamDma(machine: m_machine.Machine, cpu: m_cpu, label: "tune");
         }
-
         public void Press(JoypadButtons buttons) {
             RunFrames(buttons: buttons, frames: 8);
             RunFrames(buttons: JoypadButtons.None, frames: 6);
         }
-
         public void Dispose() => m_machine.Dispose();
     }
 }

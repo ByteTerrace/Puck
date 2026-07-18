@@ -12,19 +12,18 @@ namespace Puck.Demo.Forge;
 /// edge — the same press frame replays the same seeded well.
 /// </summary>
 internal sealed class ChromaGame {
+    private const byte DiffPushBudget = 16;
     private const byte GameLcdc = Hw.LcdBackgroundAndObjects;
     private const byte GameOverFrames = 90;
     private const byte LetterCount = 26;
+    private const ushort MapWellBase = (ushort)((Hw.VramBackgroundMap + (ChromaProtocol.WellScreenRow * 32)) + ChromaProtocol.WellScreenColumn);
     private const byte ResolveGuardLimit = 40;
-    private const byte DiffPushBudget = 16;
-    private const ushort MapWellBase = (ushort)(Hw.VramBackgroundMap + (ChromaProtocol.WellScreenRow * 32) + ChromaProtocol.WellScreenColumn);
     // The idle threshold before the title/high-score screens fall into attract/back to title: 600 frames (0x0258).
     private const byte IdleThresholdLow = 0x58;
     private const byte IdleThresholdHigh = 0x02;
 
     private readonly GameFramework m_fw;
     private readonly int m_cursorSlot;
-
     private readonly RomTable m_bgPalettes;
     private readonly RomTable m_objPalettes;
     private readonly RomTable m_tiles;
@@ -36,7 +35,6 @@ internal sealed class ChromaGame {
     private readonly RomTable m_strNewHigh;
     private readonly RomTable m_strHiScores;
     private readonly RomTable? m_titleAttributes;
-
     private readonly int m_subGridPtr;
     private readonly int m_subMapAddr;
     private readonly int m_subScan;
@@ -67,8 +65,7 @@ internal sealed class ChromaGame {
 
         if (titleArt is not null) {
             manifest.DefineArtScreen(name: "title", art: titleArt, overlays: ChromaTables.TitleMenuOverlays);
-        }
-        else {
+        } else {
             manifest.DefineScreen(name: "title", cells: ChromaTables.BuildTitleBannerCells(), overlays: ChromaTables.TitleMenuOverlays);
         }
 
@@ -681,7 +678,6 @@ internal sealed class ChromaGame {
         e.StoreAToAddress(address: ChromaProtocol.ClearedFlag);
         e.Return();
     }
-
     private void EmitHideSprites(Sm83Emitter e) {
         e.MarkLabel(label: m_subHideSprites);
         m_fw.Oam.EmitHideRange(baseSlot: m_cursorSlot, count: 1);
@@ -700,7 +696,7 @@ internal sealed class ChromaGame {
         for (var slot = 0; (slot < (ChromaProtocol.HiScoreEntryCount - 1)); slot++) {
             var take = e.NewLabel();
             var skip = e.NewLabel();
-            var entryScore = (ushort)(ChromaProtocol.HiScoreMirror + (slot * ChromaProtocol.HiScoreEntryByteCount) + 3);
+            var entryScore = (ushort)((ChromaProtocol.HiScoreMirror + (slot * ChromaProtocol.HiScoreEntryByteCount)) + 3);
 
             for (var index = 0; (index < 3); index++) {
                 e.LoadAFromAddress(address: (ushort)(ChromaProtocol.Score + index));
@@ -711,8 +707,7 @@ internal sealed class ChromaGame {
 
                 if (index < 2) {
                     e.JumpRelative(condition: Condition.NotZero, label: skip); // entry > score → try the next slot.
-                }
-                else {
+                } else {
                     e.JumpRelative(label: skip); // Equal or greater on the last byte → not strictly greater.
                 }
             }
@@ -733,8 +728,8 @@ internal sealed class ChromaGame {
         e.Arithmetic(op: AluOp.Subtract, source: Reg8.C);
         e.JumpRelative(condition: Condition.Zero, label: noShift);
         e.Load(destination: Reg8.B, source: Reg8.A);
-        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)(ChromaProtocol.HiScoreMirror + (4 * ChromaProtocol.HiScoreEntryByteCount) - 1));
-        e.LoadImmediate(pair: Reg16.De, value: (ushort)(ChromaProtocol.HiScoreMirror + (5 * ChromaProtocol.HiScoreEntryByteCount) - 1));
+        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)((ChromaProtocol.HiScoreMirror + (4 * ChromaProtocol.HiScoreEntryByteCount)) - 1));
+        e.LoadImmediate(pair: Reg16.De, value: (ushort)((ChromaProtocol.HiScoreMirror + (5 * ChromaProtocol.HiScoreEntryByteCount)) - 1));
         e.MarkLabel(label: shiftLoop);
         e.LoadAFromHlDecrement();
         e.StoreAToDe();
@@ -855,7 +850,6 @@ internal sealed class ChromaGame {
         e.Call(label: m_subDiffPush);
         e.Return();
     }
-
     private static void EmitDecClamp(Sm83Emitter e, ushort address, byte minimum) {
         var skip = e.NewLabel();
 
@@ -866,7 +860,6 @@ internal sealed class ChromaGame {
         e.StoreAToAddress(address: address);
         e.MarkLabel(label: skip);
     }
-
     private static void EmitIncClamp(Sm83Emitter e, ushort address, byte maximum) {
         var skip = e.NewLabel();
 
@@ -894,7 +887,6 @@ internal sealed class ChromaGame {
         e.StoreAToAddress(address: ChromaProtocol.IdleTimer);
         e.StoreAToAddress(address: ChromaProtocol.IdleTimerHigh);
     }
-
     private void EmitTitleTick(Sm83Emitter e) {
         var noStart = e.NewLabel();
         var noSelect = e.NewLabel();
@@ -925,7 +917,6 @@ internal sealed class ChromaGame {
         m_fw.States.EmitRequestState(id: ChromaProtocol.StateAttract);
         e.MarkLabel(label: stay);
     }
-
     private void EmitAttractEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Input.EmitScriptStart(script: m_attractScript);
@@ -937,7 +928,6 @@ internal sealed class ChromaGame {
         e.Call(label: m_subWellPaint);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitAttractTick(Sm83Emitter e) {
         var noReal = e.NewLabel();
         var running = e.NewLabel();
@@ -961,7 +951,6 @@ internal sealed class ChromaGame {
         e.MarkLabel(label: running);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitHighScoresEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Bg.EmitLcdOff();
@@ -987,7 +976,6 @@ internal sealed class ChromaGame {
         e.StoreAToAddress(address: ChromaProtocol.IdleTimer);
         e.StoreAToAddress(address: ChromaProtocol.IdleTimerHigh);
     }
-
     private void EmitHighScoresTick(Sm83Emitter e) {
         var back = e.NewLabel();
         var stay = e.NewLabel();
@@ -1003,7 +991,6 @@ internal sealed class ChromaGame {
         m_fw.States.EmitRequestState(id: ChromaProtocol.StateTitle);
         e.MarkLabel(label: stay);
     }
-
     private void EmitPlayEnter(Sm83Emitter e) {
         // Repaint the play screen FROM STATE (never resetting it) so resuming from pause redraws cleanly; the well
         // reset itself happens on the title's START edge / the attract enter.
@@ -1014,7 +1001,6 @@ internal sealed class ChromaGame {
         e.Call(label: m_subWellPaint);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitPlayTick(Sm83Emitter e) {
         var pause = e.NewLabel();
         var noPause = e.NewLabel();
@@ -1031,12 +1017,10 @@ internal sealed class ChromaGame {
         e.MarkLabel(label: noPause);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitPauseEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Text.EmitPrintQueued(text: m_strPause, row: 8, column: 7);
     }
-
     private void EmitPauseTick(Sm83Emitter e) {
         var resume = e.NewLabel();
         var stay = e.NewLabel();
@@ -1052,7 +1036,6 @@ internal sealed class ChromaGame {
         m_fw.States.EmitRequestState(id: ChromaProtocol.StatePlay);
         e.MarkLabel(label: stay);
     }
-
     private void EmitGameOverEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Text.EmitPrintQueued(text: m_strGameOver, row: 8, column: 5);
@@ -1064,12 +1047,11 @@ internal sealed class ChromaGame {
         // SRAM win region (the room XORs it across cabinets to drive the editor reveal).
         m_fw.Victory.EmitStoreShare();
     }
-
     private void EmitGameOverTick(Sm83Emitter e) {
         var resolve = e.NewLabel();
         var qualify = e.NewLabel();
         var noQualify = e.NewLabel();
-        var entry4Score = (ushort)(ChromaProtocol.HiScoreMirror + ((ChromaProtocol.HiScoreEntryCount - 1) * ChromaProtocol.HiScoreEntryByteCount) + 3);
+        var entry4Score = (ushort)((ChromaProtocol.HiScoreMirror + ((ChromaProtocol.HiScoreEntryCount - 1) * ChromaProtocol.HiScoreEntryByteCount)) + 3);
 
         e.LoadAFromAddress(address: FrameworkMemoryMap.InputPressed);
         e.Load(destination: Reg8.B, source: Reg8.A);
@@ -1107,7 +1089,6 @@ internal sealed class ChromaGame {
         e.MarkLabel(label: qualify);
         m_fw.States.EmitRequestState(id: ChromaProtocol.StateScoreEntry);
     }
-
     private void EmitScoreEntryEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         e.XorA();
@@ -1123,7 +1104,6 @@ internal sealed class ChromaGame {
         m_fw.Text.EmitPrintBcdDirect(bcdAddress: ChromaProtocol.Score, byteCount: 3, row: 6, column: 7);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitScoreEntryTick(Sm83Emitter e) {
         var confirm = e.NewLabel();
         var noUp = e.NewLabel();

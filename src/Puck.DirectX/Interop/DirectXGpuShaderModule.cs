@@ -15,7 +15,7 @@ public sealed class DirectXGpuShaderModule : IGpuShaderModule, IDisposable {
     /// <summary>Initializes a new instance pinning a copy of the given bytecode.</summary>
     public DirectXGpuShaderModule(ReadOnlyMemory<byte> bytecode) {
         m_bytecode = bytecode.ToArray();
-        m_pin = GCHandle.Alloc(m_bytecode, GCHandleType.Pinned);
+        m_pin = GCHandle.Alloc(type: GCHandleType.Pinned, value: m_bytecode);
     }
 
     /// <summary>Gets the size, in bytes, of the DXIL blob.</summary>

@@ -6,7 +6,8 @@ namespace Puck.Scene;
 /// <summary>
 /// The parse -> validate -> build front door for run documents. <see cref="Parse"/> deserializes UTF-8 bytes through
 /// the source-generation context (the only sanctioned, reflection-free path) and then runs the thick
-/// <see cref="RunDocumentValidator"/>, so any returned document is guaranteed buildable. <see cref="CreateFrameSource"/>
+/// <see cref="RunDocumentValidator"/>, so any returned document is guaranteed buildable.
+/// <see cref="CreateFrameSource(PuckRunDocument)"/>
 /// compiles a document's scene + viewports into the <see cref="JsonSdfFrameSource"/> a producer node consumes.
 /// </summary>
 public static class RunDocument {

@@ -44,7 +44,6 @@ internal static class BakeForge {
 
         return 0;
     }
-
     private static void BakeOne(IGpuDeviceContext device, CreationDocument document, IGpuComputeServices gpu, string name, string outputDirectory, int overlayMode, BakeStyle style, BakeTarget target) {
         var plan = CreationBakePlanner.Plan(document: document, style: style, target: target);
         var result = BakePipeline.Run(device: device, gpu: gpu, overlayMode: overlayMode, plan: plan);
@@ -78,22 +77,22 @@ internal static class BakeForge {
     // smooth-union tree — colourful enough that the CGB fit has real work and the DMG ramp reads in shades.
     private static CreationDocument SceneSubject() {
         var palette = new List<PaletteEntryDocument> {
-            new(Albedo: new Vector3(0.30f, 0.62f, 0.32f), Emissive: null, Shininess: null, Specular: null),
-            new(Albedo: new Vector3(0.98f, 0.85f, 0.25f), Emissive: 1.5f, Shininess: null, Specular: null),
-            new(Albedo: new Vector3(0.62f, 0.32f, 0.22f), Emissive: null, Shininess: null, Specular: null),
-            new(Albedo: new Vector3(0.55f, 0.35f, 0.75f), Emissive: null, Shininess: null, Specular: null),
-            new(Albedo: new Vector3(0.45f, 0.30f, 0.18f), Emissive: null, Shininess: null, Specular: null),
-            new(Albedo: new Vector3(0.25f, 0.55f, 0.28f), Emissive: null, Shininess: null, Specular: null),
+            new(Albedo: new Vector3(x: 0.30f, y: 0.62f, z: 0.32f), Emissive: null, Shininess: null, Specular: null),
+            new(Albedo: new Vector3(x: 0.98f, y: 0.85f, z: 0.25f), Emissive: 1.5f, Shininess: null, Specular: null),
+            new(Albedo: new Vector3(x: 0.62f, y: 0.32f, z: 0.22f), Emissive: null, Shininess: null, Specular: null),
+            new(Albedo: new Vector3(x: 0.55f, y: 0.35f, z: 0.75f), Emissive: null, Shininess: null, Specular: null),
+            new(Albedo: new Vector3(x: 0.45f, y: 0.30f, z: 0.18f), Emissive: null, Shininess: null, Specular: null),
+            new(Albedo: new Vector3(x: 0.25f, y: 0.55f, z: 0.28f), Emissive: null, Shininess: null, Specular: null),
         };
         var lean = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (18f * (MathF.PI / 180f)));
         var tip = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (90f * (MathF.PI / 180f)));
         var shapes = new List<ShapeDocument> {
-            Shape(id: 0, material: 0, position: new Vector3(0f, 0.2f, 0f), rotation: Quaternion.Identity, scale: new Vector3(3f, 1.1f, 3f), type: AvatarPrimitive.Ellipsoid),
-            Shape(id: 1, material: 1, position: new Vector3(1.8f, 2.4f, -1.0f), rotation: Quaternion.Identity, scale: new Vector3(0.8f), type: AvatarPrimitive.Sphere),
-            Shape(id: 2, material: 2, position: new Vector3(-1.4f, 0.9f, 0.2f), rotation: lean, scale: new Vector3(0.8f, 2.2f, 0.8f), type: AvatarPrimitive.Box),
-            Shape(id: 3, material: 3, position: new Vector3(0.6f, 1.0f, 0.6f), rotation: tip, scale: new Vector3(1.4f), type: AvatarPrimitive.Torus),
-            Shape(id: 4, material: 4, position: new Vector3(1.2f, 0.6f, 0.8f), rotation: Quaternion.Identity, scale: Vector3.One, type: AvatarPrimitive.Capsule),
-            (Shape(id: 5, material: 5, position: new Vector3(1.2f, 1.5f, 0.8f), rotation: Quaternion.Identity, scale: new Vector3(1.1f), type: AvatarPrimitive.Sphere)
+            Shape(id: 0, material: 0, position: new Vector3(x: 0f, y: 0.2f, z: 0f), rotation: Quaternion.Identity, scale: new Vector3(x: 3f, y: 1.1f, z: 3f), type: AvatarPrimitive.Ellipsoid),
+            Shape(id: 1, material: 1, position: new Vector3(x: 1.8f, y: 2.4f, z: -1.0f), rotation: Quaternion.Identity, scale: new Vector3(value: 0.8f), type: AvatarPrimitive.Sphere),
+            Shape(id: 2, material: 2, position: new Vector3(x: -1.4f, y: 0.9f, z: 0.2f), rotation: lean, scale: new Vector3(x: 0.8f, y: 2.2f, z: 0.8f), type: AvatarPrimitive.Box),
+            Shape(id: 3, material: 3, position: new Vector3(x: 0.6f, y: 1.0f, z: 0.6f), rotation: tip, scale: new Vector3(value: 1.4f), type: AvatarPrimitive.Torus),
+            Shape(id: 4, material: 4, position: new Vector3(x: 1.2f, y: 0.6f, z: 0.8f), rotation: Quaternion.Identity, scale: Vector3.One, type: AvatarPrimitive.Capsule),
+            (Shape(id: 5, material: 5, position: new Vector3(x: 1.2f, y: 1.5f, z: 0.8f), rotation: Quaternion.Identity, scale: new Vector3(value: 1.1f), type: AvatarPrimitive.Sphere)
                 with { Blend = SdfBlendOp.SmoothUnion, Group = 1, Smooth = 0.25f }),
         };
 
@@ -113,19 +112,19 @@ internal static class BakeForge {
             shapes.Add(item: Shape(
                 id: index,
                 material: index,
-                position: new Vector3((-3.3f + (index * 0.6f)), 1.2f, 0f),
+                position: new Vector3(x: (-3.3f + (index * 0.6f)), y: 1.2f, z: 0f),
                 rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (index * (4f * (MathF.PI / 180f)))),
-                scale: new Vector3(0.4f, 3.0f, 0.6f),
+                scale: new Vector3(x: 0.4f, y: 3.0f, z: 0.6f),
                 type: AvatarPrimitive.Box
             ));
         }
 
         return Document(intent: CreatorIntent.Object, name: "stress", palette: palette, shapes: shapes);
     }
-
     private static Vector3 RainbowHue(int index, int count) {
         var h6 = ((index * 6f) / count);
-        var x = (1f - MathF.Abs(((h6 % 2f) - 1f)));
+        var x = (1f - MathF.Abs(x: ((h6 % 2f) - 1f)));
+
         var (r, g, b) = ((int)h6 switch {
             0 => (1f, x, 0f),
             1 => (x, 1f, 0f),
@@ -135,9 +134,8 @@ internal static class BakeForge {
             _ => (1f, 0f, x),
         });
 
-        return new Vector3((0.15f + (0.85f * r)), (0.15f + (0.85f * g)), (0.15f + (0.85f * b)));
+        return new Vector3(x: (0.15f + (0.85f * r)), y: (0.15f + (0.85f * g)), z: (0.15f + (0.85f * b)));
     }
-
     private static ShapeDocument Shape(int id, int material, Vector3 position, Quaternion rotation, Vector3 scale, AvatarPrimitive type) =>
         new(
             Blend: SdfBlendOp.Union,
@@ -151,7 +149,6 @@ internal static class BakeForge {
             Smooth: 0f,
             Type: type
         );
-
     private static CreationDocument Document(CreatorIntent intent, string name, IReadOnlyList<PaletteEntryDocument>? palette, IReadOnlyList<ShapeDocument> shapes) =>
         new(
             BakeStyle: null,

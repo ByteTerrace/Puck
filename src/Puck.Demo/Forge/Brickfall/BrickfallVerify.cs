@@ -56,7 +56,7 @@ internal static class BrickfallVerify {
 
         for (var frame = 0; (frame < 100); frame++) {
             driver.RunFrames(buttons: JoypadButtons.None, frames: 1);
-            maxY = Math.Max(maxY, driver.Read(address: BrickfallProtocol.PieceY));
+            maxY = Math.Max(val1: maxY, val2: driver.Read(address: BrickfallProtocol.PieceY));
         }
 
         Assert(condition: (maxY > 0), message: "the attract script never moved the piece (scripted play is dead)");
@@ -127,7 +127,7 @@ internal static class BrickfallVerify {
 
         for (var column = 0; (column < BrickfallProtocol.WellColumns); column++) {
             if (!pieceColumns.Contains(item: column)) {
-                driver.Write(address: (ushort)(BrickfallProtocol.WellBase + ((BrickfallProtocol.WellRows - 1) * BrickfallProtocol.WellColumns) + column), value: BrickfallTables.TileBlockBase);
+                driver.Write(address: (ushort)((BrickfallProtocol.WellBase + ((BrickfallProtocol.WellRows - 1) * BrickfallProtocol.WellColumns)) + column), value: BrickfallTables.TileBlockBase);
             }
         }
 
@@ -148,7 +148,7 @@ internal static class BrickfallVerify {
         var scoreAfterClear = ReadBcd(driver: driver, address: BrickfallProtocol.Score, byteCount: 3);
 
         Assert(condition: (scoreAfterClear >= 40), message: $"a single line clear scored {scoreAfterClear} (< the 40-point base)");
-        Assert(condition: (WellBlockCount(driver: driver) == (4 - bottomCellCount)), message: $"the well holds {WellBlockCount(driver: driver)} cells after the clear (expected {4 - bottomCellCount})");
+        Assert(condition: (WellBlockCount(driver: driver) == (4 - bottomCellCount)), message: $"the well holds {WellBlockCount(driver: driver)} cells after the clear (expected {(4 - bottomCellCount)})");
 
         // (5) Pause: START freezes the piece for 90 frames (the frame counter keeps running), START resumes gravity.
         driver.Press(buttons: JoypadButtons.Start);
@@ -170,7 +170,7 @@ internal static class BrickfallVerify {
         // into GameOver → ScoreEntry → drive the initials to BCA → confirm → HighScores.
         for (var row = 2; (row <= 15); row++) {
             for (var column = 1; (column < BrickfallProtocol.WellColumns); column++) {
-                driver.Write(address: (ushort)(BrickfallProtocol.WellBase + (row * BrickfallProtocol.WellColumns) + column), value: BrickfallTables.TileBlockBase);
+                driver.Write(address: (ushort)((BrickfallProtocol.WellBase + (row * BrickfallProtocol.WellColumns)) + column), value: BrickfallTables.TileBlockBase);
             }
         }
 
@@ -198,11 +198,11 @@ internal static class BrickfallVerify {
         Assert(condition: (slot >= 0), message: "the BCA entry is missing from the high-score mirror");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[(slot * BrickfallProtocol.HiScoreEntryByteCount) + 3 + index] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
+            Assert(condition: (mirror[(((slot * BrickfallProtocol.HiScoreEntryByteCount) + 3) + index)] == finalScore[index]), message: "the persisted entry's score does not match the game's final score");
         }
 
         for (var entry = 1; (entry < BrickfallProtocol.HiScoreEntryCount); entry++) {
-            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {entry - 1} < entry {entry})");
+            Assert(condition: (EntryScore(mirror: mirror, entry: (entry - 1)) >= EntryScore(mirror: mirror, entry: entry)), message: $"the high-score table is not sorted (entry {(entry - 1)} < entry {entry})");
         }
 
         return (driver.ExportExternalRam(), mirror, ReadBcdValue(bytes: finalScore), slot);
@@ -221,10 +221,10 @@ internal static class BrickfallVerify {
         var sum = 0;
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        var stored = (sram[SaveModule.HeaderByteCount + payloadLength] | (sram[SaveModule.HeaderByteCount + payloadLength + 1] << 8));
+        var stored = sram[(SaveModule.HeaderByteCount + payloadLength)] | (sram[((SaveModule.HeaderByteCount + payloadLength) + 1)] << 8);
 
         Assert(condition: (sum == stored), message: $"the stored checksum 0x{stored:X4} does not match the independently computed 0x{sum:X4}");
         Assert(condition: payload.SequenceEqual(other: expectedMirror), message: "the persisted payload does not match the in-game mirror");
@@ -244,7 +244,7 @@ internal static class BrickfallVerify {
 
         for (var entry = 0; (entry < BrickfallProtocol.HiScoreEntryCount); entry++) {
             for (var index = 0; (index < 3); index++) {
-                payload[(entry * BrickfallProtocol.HiScoreEntryByteCount) + 3 + index] = 0x00;
+                payload[(((entry * BrickfallProtocol.HiScoreEntryByteCount) + 3) + index)] = 0x00;
             }
         }
 
@@ -260,7 +260,7 @@ internal static class BrickfallVerify {
 
         for (var row = 9; (row <= 15); row++) {
             for (var column = 1; (column < BrickfallProtocol.WellColumns); column++) {
-                driver.Write(address: (ushort)(BrickfallProtocol.WellBase + (row * BrickfallProtocol.WellColumns) + column), value: BrickfallTables.TileBlockBase);
+                driver.Write(address: (ushort)((BrickfallProtocol.WellBase + (row * BrickfallProtocol.WellColumns)) + column), value: BrickfallTables.TileBlockBase);
             }
         }
 
@@ -278,9 +278,9 @@ internal static class BrickfallVerify {
         Assert(condition: (FindEntry(mirror: mirror, initials: "AAA") == 0), message: "the beating score did not insert at slot 0");
 
         for (var index = 0; (index < 3); index++) {
-            Assert(condition: (mirror[3 + index] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
-            Assert(condition: (mirror[BrickfallProtocol.HiScoreEntryByteCount + index] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
-            Assert(condition: (mirror[BrickfallProtocol.HiScoreEntryByteCount + 3 + index] == 0x00), message: "the old leader's score did not shift down intact");
+            Assert(condition: (mirror[(3 + index)] == finalScore[index]), message: "the slot-0 entry's score does not match the game's final score");
+            Assert(condition: (mirror[(BrickfallProtocol.HiScoreEntryByteCount + index)] == payload[index]), message: "the old leader's initials did not shift down to slot 1");
+            Assert(condition: (mirror[((BrickfallProtocol.HiScoreEntryByteCount + 3) + index)] == 0x00), message: "the old leader's score did not shift down intact");
         }
     }
 
@@ -289,7 +289,7 @@ internal static class BrickfallVerify {
     private static void AssertCorruptionRecovery(byte[] rom, byte[] sram) {
         var corrupted = (byte[])sram.Clone();
 
-        corrupted[SaveModule.HeaderByteCount + 5] ^= 0x5A;
+        corrupted[(SaveModule.HeaderByteCount + 5)] ^= 0x5A;
 
         using var driver = new Driver(rom: rom, externalRam: corrupted);
 
@@ -340,26 +340,24 @@ internal static class BrickfallVerify {
         payload.CopyTo(array: sram, index: SaveModule.HeaderByteCount);
 
         foreach (var value in payload) {
-            sum = ((sum + value) & 0xFFFF);
+            sum = (sum + value) & 0xFFFF;
         }
 
-        sram[SaveModule.HeaderByteCount + payload.Length] = (byte)(sum & 0xFF);
-        sram[SaveModule.HeaderByteCount + payload.Length + 1] = (byte)((sum >> 8) & 0xFF);
+        sram[(SaveModule.HeaderByteCount + payload.Length)] = (byte)(sum & 0xFF);
+        sram[((SaveModule.HeaderByteCount + payload.Length) + 1)] = (byte)((sum >> 8) & 0xFF);
 
         return sram;
     }
-
     private static (int X, int Y)[] PieceCells(byte type) {
         var table = BrickfallTables.BuildPieceTable();
         var cells = new (int X, int Y)[4];
 
         for (var index = 0; (index < 4); index++) {
-            cells[index] = (table[(type * 32) + (index * 2)], table[(type * 32) + (index * 2) + 1]);
+            cells[index] = (table[((type * 32) + (index * 2))], table[(((type * 32) + (index * 2)) + 1)]);
         }
 
         return cells;
     }
-
     private static int WellBlockCount(Driver driver) {
         var count = 0;
 
@@ -371,9 +369,8 @@ internal static class BrickfallVerify {
 
         return count;
     }
-
     private static byte[] ReadMirror(Driver driver) {
-        var mirror = new byte[BrickfallProtocol.HiScoreEntryCount * BrickfallProtocol.HiScoreEntryByteCount];
+        var mirror = new byte[(BrickfallProtocol.HiScoreEntryCount * BrickfallProtocol.HiScoreEntryByteCount)];
 
         for (var index = 0; (index < mirror.Length); index++) {
             mirror[index] = driver.Read(address: (ushort)(BrickfallProtocol.HiScoreMirror + index));
@@ -381,13 +378,12 @@ internal static class BrickfallVerify {
 
         return mirror;
     }
-
     private static int FindEntry(byte[] mirror, string initials) {
         for (var entry = 0; (entry < BrickfallProtocol.HiScoreEntryCount); entry++) {
             var matches = true;
 
             for (var index = 0; (index < 3); index++) {
-                if (mirror[(entry * BrickfallProtocol.HiScoreEntryByteCount) + index] != TextModule.TileFor(fontTileBase: BrickfallTables.FontTileBase, character: initials[index])) {
+                if (mirror[((entry * BrickfallProtocol.HiScoreEntryByteCount) + index)] != TextModule.TileFor(fontTileBase: BrickfallTables.FontTileBase, character: initials[index])) {
                     matches = false;
 
                     break;
@@ -401,13 +397,11 @@ internal static class BrickfallVerify {
 
         return -1;
     }
-
     private static int EntryScore(byte[] mirror, int entry) {
         var offset = ((entry * BrickfallProtocol.HiScoreEntryByteCount) + 3);
 
-        return ReadBcdValue(bytes: [mirror[offset], mirror[offset + 1], mirror[offset + 2]]);
+        return ReadBcdValue(bytes: [mirror[offset], mirror[(offset + 1)], mirror[(offset + 2)]]);
     }
-
     private static int ReadBcd(Driver driver, ushort address, int byteCount) {
         var bytes = new byte[byteCount];
 
@@ -417,17 +411,15 @@ internal static class BrickfallVerify {
 
         return ReadBcdValue(bytes: bytes);
     }
-
     private static int ReadBcdValue(byte[] bytes) {
         var value = 0;
 
         foreach (var packed in bytes) {
-            value = ((value * 100) + (((packed >> 4) & 0x0F) * 10) + (packed & 0x0F));
+            value = (((value * 100) + (((packed >> 4) & 0x0F) * 10)) + (packed & 0x0F));
         }
 
         return value;
     }
-
     private static void Assert(bool condition, string message) {
         if (!condition) {
             throw new InvalidOperationException(message: $"brickfall ROM verification failed: {message}");
@@ -458,11 +450,8 @@ internal static class BrickfallVerify {
         }
 
         public byte Read(ushort address) => m_bus.ReadByte(address: address);
-
-        public int ReadWide(ushort address) => (Read(address: address) | (Read(address: (ushort)(address + 1)) << 8));
-
+        public int ReadWide(ushort address) => Read(address: address) | (Read(address: (ushort)(address + 1)) << 8);
         public void Write(ushort address, byte value) => m_bus.WriteByte(address: address, value: value);
-
         public void RunFrames(JoypadButtons buttons, int frames) {
             for (var frame = 0; (frame < frames); frame++) {
                 m_joypad.SetButtons(pressed: buttons);
@@ -471,12 +460,10 @@ internal static class BrickfallVerify {
 
             VerifyMachineSettle.SettleOutOfOamDma(machine: m_machine.Machine, cpu: m_cpu, label: "brickfall");
         }
-
         public void Press(JoypadButtons buttons) {
             RunFrames(buttons: buttons, frames: 2);
             RunFrames(buttons: JoypadButtons.None, frames: 2);
         }
-
         public bool RunUntilState(byte state, JoypadButtons buttons, int maxFrames) {
             for (var frame = 0; (frame < maxFrames); frame++) {
                 RunFrames(buttons: buttons, frames: 1);
@@ -488,9 +475,7 @@ internal static class BrickfallVerify {
 
             return false;
         }
-
         public byte[] ExportExternalRam() => m_cartridge.ExportExternalRam();
-
         public void Dispose() => m_machine.Dispose();
     }
 }

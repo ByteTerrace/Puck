@@ -14,13 +14,10 @@
 // threads racing a first-access block until the .cctor completes rather than observing a
 // half-built base; matters mainly for .cctors first triggered after startup from a worker thread.
 
-namespace System.Runtime.CompilerServices
-{
+namespace System.Runtime.CompilerServices {
     // NonGC variant + shared CheckStaticClassConstruction core: Puck.Runtime.
-    internal static partial class ClassConstructorRunner
-    {
-        private static object CheckStaticClassConstructionReturnGCStaticBase(ref StaticClassConstructionContext context, object gcStaticBase)
-        {
+    internal static partial class ClassConstructorRunner {
+        private static object CheckStaticClassConstructionReturnGCStaticBase(ref StaticClassConstructionContext context, object gcStaticBase) {
             CheckStaticClassConstruction(ref context);
             return gcStaticBase;
         }

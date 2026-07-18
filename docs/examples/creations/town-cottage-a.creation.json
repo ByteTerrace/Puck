@@ -193,7 +193,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 1,
@@ -222,7 +224,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 2,
@@ -251,7 +255,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 3,
@@ -280,7 +286,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 4,
@@ -309,7 +317,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 5,
@@ -338,7 +348,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 6,
@@ -367,7 +379,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 7,
@@ -396,7 +410,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 8,
@@ -425,7 +441,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 9,
@@ -454,7 +472,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 10,
@@ -483,7 +503,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     },
     {
       "id": 11,
@@ -512,7 +534,9 @@
       "group": 0,
       "mirror": false,
       "twist": 0,
-      "onion": 0
+      "onion": 0,
+      "bend": 0,
+      "dilate": 0
     }
   ],
   "frames": null,

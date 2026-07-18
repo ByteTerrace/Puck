@@ -59,17 +59,17 @@ internal static class FlagshipAdventurer {
 
         // ---- the body: a rounded egg torso, wider than tall, sitting low so the head can dominate ----------------
         // An ellipsoid reads as a plump little belly; smooth blends it into the belt below and the head above.
-        _ = PlaceNamed(scene: scene, name: "torso", type: AvatarPrimitive.Ellipsoid, position: new Vector3(0f, 0.66f, 0f), scale: new Vector3(0.92f, 1.0f, 0.86f), material: TunicGreen, smooth: 0.16f);
+        _ = PlaceNamed(scene: scene, name: "torso", type: AvatarPrimitive.Ellipsoid, position: new Vector3(x: 0f, y: 0.66f, z: 0f), scale: new Vector3(x: 0.92f, y: 1.0f, z: 0.86f), material: TunicGreen, smooth: 0.16f);
         // The belt: a flattened brown band at the waist, overlapping the torso bottom — the two-tone split (green
         // tunic above, brown boots below), fused in so it reads as a belt, not a stacked disc.
-        _ = PlaceNamed(scene: scene, name: "belt", type: AvatarPrimitive.Cylinder, position: new Vector3(0f, 0.46f, 0f), scale: new Vector3(0.86f, 0.22f, 0.82f), material: BootBrown, smooth: 0.08f);
+        _ = PlaceNamed(scene: scene, name: "belt", type: AvatarPrimitive.Cylinder, position: new Vector3(x: 0f, y: 0.46f, z: 0f), scale: new Vector3(x: 0.86f, y: 0.22f, z: 0.82f), material: BootBrown, smooth: 0.08f);
         // The collar: a slim cream band at the neck line, overlapping BOTH torso-top and head-bottom, so the face's
         // cream reaches down into the tunic (the reference's belly-cream reaching up) and the head-body seam vanishes.
-        _ = PlaceNamed(scene: scene, name: "collar", type: AvatarPrimitive.Cylinder, position: new Vector3(0f, 0.92f, 0.02f), scale: new Vector3(0.62f, 0.12f, 0.58f), material: SkinCream, smooth: 0.06f);
+        _ = PlaceNamed(scene: scene, name: "collar", type: AvatarPrimitive.Cylinder, position: new Vector3(x: 0f, y: 0.92f, z: 0.02f), scale: new Vector3(x: 0.62f, y: 0.12f, z: 0.58f), material: SkinCream, smooth: 0.06f);
 
         // ---- the head: OVERSIZED (the chibi proportion — ~40% of the height), cream skin, sitting RIGHT on the body
         // Its bottom (centre 1.12 − radius ~0.44) overlaps the collar/torso top: no thin neck gap, so the two fuse.
-        _ = PlaceNamed(scene: scene, name: "head", type: AvatarPrimitive.Sphere, position: new Vector3(0f, 1.12f, 0.02f), scale: new Vector3(1.14f), material: SkinCream, smooth: 0.12f);
+        _ = PlaceNamed(scene: scene, name: "head", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0f, y: 1.12f, z: 0.02f), scale: new Vector3(value: 1.14f), material: SkinCream, smooth: 0.12f);
 
         // ---- the face: two big white-eyeball eyes (dark pupil + emissive shine), a carved friendly smile ----------
         BuildFace(scene: scene);
@@ -84,10 +84,10 @@ internal static class FlagshipAdventurer {
         // The arm ROOTS start INSIDE the body (the shoulder overlaps the torso, ~±0.44 vs the body's ~±0.39 surface)
         // so the arms read as attached, never floating sticks; they hang down-and-slightly-out to plump little hands.
         // Legs are stubby, boots planted just below the belt.
-        DefineLimb(scene: scene, name: "armLeft", root: new Vector3(-0.44f, 0.78f, 0.06f), mid: new Vector3(-0.56f, 0.58f, 0.08f), tip: new Vector3(-0.62f, 0.42f, 0.1f), material: TunicGreen, handMaterial: SkinCream);
-        DefineLimb(scene: scene, name: "armRight", root: new Vector3(0.44f, 0.78f, 0.06f), mid: new Vector3(0.56f, 0.58f, 0.08f), tip: new Vector3(0.62f, 0.42f, 0.1f), material: TunicGreen, handMaterial: SkinCream);
-        DefineLimb(scene: scene, name: "legLeft", root: new Vector3(-0.26f, 0.34f, 0f), mid: new Vector3(-0.27f, 0.22f, 0.02f), tip: new Vector3(-0.28f, 0.1f, 0.08f), material: TunicGreen, handMaterial: BootBrown, foot: true);
-        DefineLimb(scene: scene, name: "legRight", root: new Vector3(0.26f, 0.34f, 0f), mid: new Vector3(0.27f, 0.22f, 0.02f), tip: new Vector3(0.28f, 0.1f, 0.08f), material: TunicGreen, handMaterial: BootBrown, foot: true);
+        DefineLimb(scene: scene, name: "armLeft", root: new Vector3(x: -0.44f, y: 0.78f, z: 0.06f), mid: new Vector3(x: -0.56f, y: 0.58f, z: 0.08f), tip: new Vector3(x: -0.62f, y: 0.42f, z: 0.1f), material: TunicGreen, handMaterial: SkinCream);
+        DefineLimb(scene: scene, name: "armRight", root: new Vector3(x: 0.44f, y: 0.78f, z: 0.06f), mid: new Vector3(x: 0.56f, y: 0.58f, z: 0.08f), tip: new Vector3(x: 0.62f, y: 0.42f, z: 0.1f), material: TunicGreen, handMaterial: SkinCream);
+        DefineLimb(scene: scene, name: "legLeft", root: new Vector3(x: -0.26f, y: 0.34f, z: 0f), mid: new Vector3(x: -0.27f, y: 0.22f, z: 0.02f), tip: new Vector3(x: -0.28f, y: 0.1f, z: 0.08f), material: TunicGreen, handMaterial: BootBrown, foot: true);
+        DefineLimb(scene: scene, name: "legRight", root: new Vector3(x: 0.26f, y: 0.34f, z: 0f), mid: new Vector3(x: 0.27f, y: 0.22f, z: 0.02f), tip: new Vector3(x: 0.28f, y: 0.1f, z: 0.08f), material: TunicGreen, handMaterial: BootBrown, foot: true);
 
         // ---- the march: the planted-foot walk-pair (frames 1-2), then two personality frames (a bob) --------------
         // Gait sweeps the "leg" chains through an ellipse, legLeft/legRight half a cycle apart — a confident stride.
@@ -138,14 +138,14 @@ internal static class FlagshipAdventurer {
 
     // Paints the recipe's named palette slots (the three-color story + eye/accent slots). Every value a literal.
     private static void PaintPalette(CreatorScene scene) {
-        scene.SetPaletteEntry(index: TunicGreen, material: new SdfMaterial(Albedo: new Vector3(0.28f, 0.60f, 0.38f)));
-        scene.SetPaletteEntry(index: CapGreen, material: new SdfMaterial(Albedo: new Vector3(0.17f, 0.44f, 0.28f)));
-        scene.SetPaletteEntry(index: SkinCream, material: new SdfMaterial(Albedo: new Vector3(0.96f, 0.86f, 0.70f)));
-        scene.SetPaletteEntry(index: BootBrown, material: new SdfMaterial(Albedo: new Vector3(0.40f, 0.26f, 0.16f)));
-        scene.SetPaletteEntry(index: PackRed, material: new SdfMaterial(Albedo: new Vector3(0.82f, 0.22f, 0.18f)));
-        scene.SetPaletteEntry(index: EmblemGold, material: new SdfMaterial(Albedo: new Vector3(0.96f, 0.79f, 0.34f), Emissive: 0.35f, Specular: 0.4f, Shininess: 48f));
-        scene.SetPaletteEntry(index: EyeDark, material: new SdfMaterial(Albedo: new Vector3(0.08f, 0.08f, 0.11f), Specular: 0.5f, Shininess: 64f));
-        scene.SetPaletteEntry(index: EyeShine, material: new SdfMaterial(Albedo: new Vector3(1.0f, 1.0f, 1.0f), Emissive: 0.6f));
+        scene.SetPaletteEntry(index: TunicGreen, material: new SdfMaterial(Albedo: new Vector3(x: 0.28f, y: 0.60f, z: 0.38f)));
+        scene.SetPaletteEntry(index: CapGreen, material: new SdfMaterial(Albedo: new Vector3(x: 0.17f, y: 0.44f, z: 0.28f)));
+        scene.SetPaletteEntry(index: SkinCream, material: new SdfMaterial(Albedo: new Vector3(x: 0.96f, y: 0.86f, z: 0.70f)));
+        scene.SetPaletteEntry(index: BootBrown, material: new SdfMaterial(Albedo: new Vector3(x: 0.40f, y: 0.26f, z: 0.16f)));
+        scene.SetPaletteEntry(index: PackRed, material: new SdfMaterial(Albedo: new Vector3(x: 0.82f, y: 0.22f, z: 0.18f)));
+        scene.SetPaletteEntry(index: EmblemGold, material: new SdfMaterial(Albedo: new Vector3(x: 0.96f, y: 0.79f, z: 0.34f), Emissive: 0.35f, Specular: 0.4f, Shininess: 48f));
+        scene.SetPaletteEntry(index: EyeDark, material: new SdfMaterial(Albedo: new Vector3(x: 0.08f, y: 0.08f, z: 0.11f), Specular: 0.5f, Shininess: 64f));
+        scene.SetPaletteEntry(index: EyeShine, material: new SdfMaterial(Albedo: new Vector3(x: 1.0f, y: 1.0f, z: 1.0f), Emissive: 0.6f));
     }
 
     // The face: a pair of big eyes on the head front (+Z), each a WHITE eyeball with a dark pupil and a bright
@@ -161,15 +161,15 @@ internal static class FlagshipAdventurer {
         // The white eyeball — a bright emissive white, placed once at +X and mirrored to −X for the symmetric pair.
         // Emissive so it glows out of the cap's shadow (a dark-only eye vanishes under the brim). Sized big-but-not-
         // dominating, set a touch wider apart so both read as a clear pair from the front.
-        _ = PlaceNamed(scene: scene, name: "eyeWhite", type: AvatarPrimitive.Sphere, position: new Vector3(0.26f, 1.16f, 0.32f), scale: new Vector3(0.36f), material: EyeShine, mirror: true);
+        _ = PlaceNamed(scene: scene, name: "eyeWhite", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0.26f, y: 1.16f, z: 0.32f), scale: new Vector3(value: 0.36f), material: EyeShine, mirror: true);
         // The pupil — a smaller dark sphere on the eyeball's front, sitting slightly inner so the two look a touch
         // toward each other (a warm, friendly gaze). Near the scale floor, so it reads as a neat dot in the white.
-        _ = PlaceNamed(scene: scene, name: "pupil", type: AvatarPrimitive.Sphere, position: new Vector3(0.24f, 1.14f, 0.46f), scale: new Vector3(0.22f), material: EyeDark, mirror: true);
+        _ = PlaceNamed(scene: scene, name: "pupil", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0.24f, y: 1.14f, z: 0.46f), scale: new Vector3(value: 0.22f), material: EyeDark, mirror: true);
         // The smile: a small dark shape PLACED on the face (not carved) — a reliable, gentle read. A slim, gently-wide
         // ellipsoid laid across the lower face (modest X, thin Y) reads as a soft happy mouth; a subtract carve on a
         // small chibi head tends to gouge a gash, so a placed shape is the surer cute read. Dark brown, so it sits like
         // ink on the cream skin without a harsh black — kept small so it never becomes a muzzle/beak.
-        _ = PlaceNamed(scene: scene, name: "smile", type: AvatarPrimitive.Ellipsoid, position: new Vector3(0f, 0.98f, 0.44f), scale: new Vector3(0.34f, 0.2f, 0.2f), material: BootBrown);
+        _ = PlaceNamed(scene: scene, name: "smile", type: AvatarPrimitive.Ellipsoid, position: new Vector3(x: 0f, y: 0.98f, z: 0.44f), scale: new Vector3(x: 0.34f, y: 0.2f, z: 0.2f), material: BootBrown);
     }
 
     // The cap: a soft pointed adventurer's hat that SITS DOWN OVER the head — a wide dome band pulled low enough to
@@ -180,36 +180,40 @@ internal static class FlagshipAdventurer {
     private static void BuildCap(CreatorScene scene) {
         // The dome: a broad squashed sphere pulled low over the crown — wide enough (X/Z 1.0) that its skirt hangs
         // below the crown line all around, so no dark head-top shows between face and hat. The group base for the hat.
-        var domeId = PlaceNamed(scene: scene, name: "capDome", type: AvatarPrimitive.Sphere, position: new Vector3(0f, 1.4f, 0.0f), scale: new Vector3(1.0f, 0.5f, 1.0f), material: CapGreen, smooth: 0.12f);
+        var domeId = PlaceNamed(scene: scene, name: "capDome", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0f, y: 1.4f, z: 0.0f), scale: new Vector3(x: 1.0f, y: 0.5f, z: 1.0f), material: CapGreen, smooth: 0.12f);
         // The brim: a slim flattened ring at the hat's base, a hair wider than the dome — the little turned-up edge
         // that reads unmistakably as "hat brim." Smooth-unioned into the dome group.
-        var brimId = PlaceNamed(scene: scene, name: "capBrim", type: AvatarPrimitive.Cylinder, position: new Vector3(0f, 1.32f, 0.0f), scale: new Vector3(1.06f, 0.1f, 1.04f), material: CapGreen, blend: SdfBlendOp.SmoothUnion, smooth: 0.1f);
+        var brimId = PlaceNamed(scene: scene, name: "capBrim", type: AvatarPrimitive.Cylinder, position: new Vector3(x: 0f, y: 1.32f, z: 0.0f), scale: new Vector3(x: 1.06f, y: 0.1f, z: 1.04f), material: CapGreen, blend: SdfBlendOp.SmoothUnion, smooth: 0.1f);
+
         LinkInto(scene: scene, name: "capDome", partnerId: brimId);
         // The peak: a SHORT, stout round-cone rising from the dome and flopping forward — a jaunty little point, not a
         // tall gnome cone. Its base overlaps well down into the dome so they fuse; smooth-unioned into the group.
-        var peakId = PlaceNamed(scene: scene, name: "capPeak", type: AvatarPrimitive.RoundCone, position: new Vector3(0f, 1.5f, 0.12f), rotation: Tilt(pitchDegrees: 40f), scale: new Vector3(0.6f, 0.52f, 0.6f), material: CapGreen, blend: SdfBlendOp.SmoothUnion, smooth: 0.18f);
+        var peakId = PlaceNamed(scene: scene, name: "capPeak", type: AvatarPrimitive.RoundCone, position: new Vector3(x: 0f, y: 1.5f, z: 0.12f), rotation: Tilt(pitchDegrees: 40f), scale: new Vector3(x: 0.6f, y: 0.52f, z: 0.6f), material: CapGreen, blend: SdfBlendOp.SmoothUnion, smooth: 0.18f);
+
         LinkInto(scene: scene, name: "capDome", partnerId: peakId);
         // The pom: a small cream bobble at the flopped-forward peak's tip — the terminal detail that finishes a hat.
-        _ = PlaceNamed(scene: scene, name: "capPom", type: AvatarPrimitive.Sphere, position: new Vector3(0f, 1.68f, 0.46f), scale: new Vector3(0.22f), material: SkinCream);
+        _ = PlaceNamed(scene: scene, name: "capPom", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0f, y: 1.68f, z: 0.46f), scale: new Vector3(value: 0.22f), material: SkinCream);
     }
 
     // The backpack: a rounded red box hugging the body's back (−Z), a darker lid, a gold emissive emblem patch (the
     // identity accent — the deer-llama's yellow emblem), and two brown straps over the shoulders grounding it to the
     // body. Sits at the body's height so it reads as WORN, not floating. The pack + lid + emblem group so they fuse.
     private static void BuildBackpack(CreatorScene scene) {
-        var packId = PlaceNamed(scene: scene, name: "pack", type: AvatarPrimitive.Box, position: new Vector3(0f, 0.72f, -0.62f), scale: new Vector3(0.66f, 0.72f, 0.4f), material: PackRed, smooth: 0.16f);
+        var packId = PlaceNamed(scene: scene, name: "pack", type: AvatarPrimitive.Box, position: new Vector3(x: 0f, y: 0.72f, z: -0.62f), scale: new Vector3(x: 0.66f, y: 0.72f, z: 0.4f), material: PackRed, smooth: 0.16f);
         // A rounded lid flap over the top of the pack, smooth-unioned into the pack's group.
-        var lidId = PlaceNamed(scene: scene, name: "packLid", type: AvatarPrimitive.Box, position: new Vector3(0f, 1.0f, -0.6f), scale: new Vector3(0.7f, 0.24f, 0.44f), material: PackRed, blend: SdfBlendOp.SmoothUnion, smooth: 0.12f);
+        var lidId = PlaceNamed(scene: scene, name: "packLid", type: AvatarPrimitive.Box, position: new Vector3(x: 0f, y: 1.0f, z: -0.6f), scale: new Vector3(x: 0.7f, y: 0.24f, z: 0.44f), material: PackRed, blend: SdfBlendOp.SmoothUnion, smooth: 0.12f);
+
         LinkInto(scene: scene, name: "pack", partnerId: lidId);
         // The emblem: a small gold, faintly-glowing ring on the back of the pack — the one story detail cartoonified to
         // a badge. A torus laid flat against the pack's back reads as a stitched patch ring.
-        var emblemId = PlaceNamed(scene: scene, name: "emblem", type: AvatarPrimitive.Torus, position: new Vector3(0f, 0.72f, -0.84f), rotation: Tilt(pitchDegrees: 90f), scale: new Vector3(0.5f, 0.5f, 0.5f), material: EmblemGold);
+        var emblemId = PlaceNamed(scene: scene, name: "emblem", type: AvatarPrimitive.Torus, position: new Vector3(x: 0f, y: 0.72f, z: -0.84f), rotation: Tilt(pitchDegrees: 90f), scale: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f), material: EmblemGold);
+
         LinkInto(scene: scene, name: "pack", partnerId: emblemId);
         // A gold stud in the emblem's centre (the "letter" dot) — a tiny sphere finishing the badge.
-        _ = PlaceNamed(scene: scene, name: "emblemStud", type: AvatarPrimitive.Sphere, position: new Vector3(0f, 0.72f, -0.86f), scale: new Vector3(0.18f), material: EmblemGold);
+        _ = PlaceNamed(scene: scene, name: "emblemStud", type: AvatarPrimitive.Sphere, position: new Vector3(x: 0f, y: 0.72f, z: -0.86f), scale: new Vector3(value: 0.18f), material: EmblemGold);
         // The straps: one brown capsule strap over the shoulder, mirrored to the other side — grounds the pack to the
         // body so it does not read as floating.
-        _ = PlaceNamed(scene: scene, name: "strap", type: AvatarPrimitive.Capsule, position: new Vector3(0.36f, 0.86f, 0.16f), rotation: Tilt(pitchDegrees: 28f), scale: new Vector3(0.13f, 0.46f, 0.13f), material: BootBrown, mirror: true);
+        _ = PlaceNamed(scene: scene, name: "strap", type: AvatarPrimitive.Capsule, position: new Vector3(x: 0.36f, y: 0.86f, z: 0.16f), rotation: Tilt(pitchDegrees: 28f), scale: new Vector3(x: 0.13f, y: 0.46f, z: 0.13f), material: BootBrown, mirror: true);
     }
 
     // ---- authoring helpers (drive the SAME verbs the pad/console would) --------------------------------------------
@@ -219,7 +223,7 @@ internal static class FlagshipAdventurer {
     private static int PlaceNamed(CreatorScene scene, string name, AvatarPrimitive type, Vector3 position, Vector3 scale, int material, Quaternion? rotation = null, float smooth = 0f, float onion = 0f, bool mirror = false, SdfBlendOp blend = SdfBlendOp.Union) {
         scene.Deselect();
 
-        var steps = (((int)type - (int)scene.GhostType) + CreatorScene.PrimitiveCount) % CreatorScene.PrimitiveCount;
+        var steps = ((((int)type - (int)scene.GhostType) + CreatorScene.PrimitiveCount) % CreatorScene.PrimitiveCount);
 
         for (var step = 0; (step < steps); step++) {
             scene.CyclePrimitive(direction: 1);
@@ -252,7 +256,7 @@ internal static class FlagshipAdventurer {
 
         scene.Place();
 
-        _ = scene.Select(idOrName: placedId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        _ = scene.Select(idOrName: placedId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
         _ = scene.RenameSelected(name: name);
         scene.Deselect();
 
@@ -263,7 +267,7 @@ internal static class FlagshipAdventurer {
     // evaluate as one instance (select the base, then the partner, then link — the chain-link grouping verb).
     private static void LinkInto(CreatorScene scene, string name, int partnerId) {
         _ = scene.Select(idOrName: name);
-        _ = scene.Select(idOrName: partnerId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        _ = scene.Select(idOrName: partnerId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
         _ = scene.LinkWithPrevious();
         scene.Deselect();
     }
@@ -277,7 +281,7 @@ internal static class FlagshipAdventurer {
         var sinPitch = (2f * ((q.W * q.X) - (q.Y * q.Z)));
         float yaw, pitch, roll;
 
-        if (MathF.Abs(sinPitch) >= 0.9999f) {
+        if (MathF.Abs(x: sinPitch) >= 0.9999f) {
             // Gimbal pole: fold roll into yaw.
             pitch = (MathF.CopySign(x: (MathF.PI / 2f), y: sinPitch));
             yaw = MathF.Atan2(y: (2f * ((q.W * q.Y) + (q.X * q.Z))), x: (1f - (2f * ((q.X * q.X) + (q.Y * q.Y)))));
@@ -308,25 +312,25 @@ internal static class FlagshipAdventurer {
     // Defines a "limb" (2-bone) chain from three FRESH shapes at root/mid/tip. Thick capsule bones read as chunky
     // little arms/legs; the tip is a hand (a cream sphere) or a boot (a brown ellipsoid toe stretched forward).
     private static void DefineLimb(CreatorScene scene, string name, Vector3 root, Vector3 mid, Vector3 tip, int material, int handMaterial, bool foot = false) {
-        var rootId = PlaceNamed(scene: scene, name: $"{name}Root", type: AvatarPrimitive.Capsule, position: root, scale: new Vector3(0.34f), material: material);
-        var midId = PlaceNamed(scene: scene, name: $"{name}Mid", type: AvatarPrimitive.Capsule, position: mid, scale: new Vector3(0.3f), material: material);
+        var rootId = PlaceNamed(scene: scene, name: $"{name}Root", type: AvatarPrimitive.Capsule, position: root, scale: new Vector3(value: 0.34f), material: material);
+        var midId = PlaceNamed(scene: scene, name: $"{name}Mid", type: AvatarPrimitive.Capsule, position: mid, scale: new Vector3(value: 0.3f), material: material);
         int tipId;
 
         if (foot) {
             // A boot: an ellipsoid whose Z is stretched (radii 0.42/0.28/0.34 at unit scale, so scaling Z up makes a
             // toe) and X/Y kept stout — reads as a planted little boot pointing where the hero walks, not a donut.
-            tipId = PlaceNamed(scene: scene, name: $"{name}Tip", type: AvatarPrimitive.Ellipsoid, position: tip, scale: new Vector3(0.62f, 0.5f, 0.92f), material: handMaterial);
+            tipId = PlaceNamed(scene: scene, name: $"{name}Tip", type: AvatarPrimitive.Ellipsoid, position: tip, scale: new Vector3(x: 0.62f, y: 0.5f, z: 0.92f), material: handMaterial);
         } else {
             // A hand: a plump little cream sphere at the arm's end.
-            tipId = PlaceNamed(scene: scene, name: $"{name}Tip", type: AvatarPrimitive.Sphere, position: tip, scale: new Vector3(0.3f), material: handMaterial);
+            tipId = PlaceNamed(scene: scene, name: $"{name}Tip", type: AvatarPrimitive.Sphere, position: tip, scale: new Vector3(value: 0.3f), material: handMaterial);
         }
 
         _ = scene.DefineChain(
             name: name,
             shapeIdsOrNames: [
-                rootId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                midId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                tipId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                rootId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                midId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                tipId.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
             ],
             kind: CreatorChainState.KindLimb
         );
@@ -342,14 +346,14 @@ internal static class FlagshipAdventurer {
         var armRightRest = FindChain(scene: scene, name: "armRight").Goal;
 
         // Frame 3: left arm swings forward (+Z), right arm back (−Z).
-        SetChainGoal(scene: scene, chainName: "armLeft", goal: (armLeftRest + new Vector3(0f, 0.02f, 0.22f)));
-        SetChainGoal(scene: scene, chainName: "armRight", goal: (armRightRest + new Vector3(0f, 0.02f, -0.22f)));
+        SetChainGoal(scene: scene, chainName: "armLeft", goal: (armLeftRest + new Vector3(x: 0f, y: 0.02f, z: 0.22f)));
+        SetChainGoal(scene: scene, chainName: "armRight", goal: (armRightRest + new Vector3(x: 0f, y: 0.02f, z: -0.22f)));
         _ = scene.RecordFrame();
         ResetTimelineCursor(scene: scene);
 
         // Frame 4: the mirror swing — right arm forward, left arm back.
-        SetChainGoal(scene: scene, chainName: "armLeft", goal: (armLeftRest + new Vector3(0f, 0.02f, -0.22f)));
-        SetChainGoal(scene: scene, chainName: "armRight", goal: (armRightRest + new Vector3(0f, 0.02f, 0.22f)));
+        SetChainGoal(scene: scene, chainName: "armLeft", goal: (armLeftRest + new Vector3(x: 0f, y: 0.02f, z: -0.22f)));
+        SetChainGoal(scene: scene, chainName: "armRight", goal: (armRightRest + new Vector3(x: 0f, y: 0.02f, z: 0.22f)));
         _ = scene.RecordFrame();
         ResetTimelineCursor(scene: scene);
 
@@ -375,7 +379,6 @@ internal static class FlagshipAdventurer {
         SelectGoal(scene: scene, chainName: chainName);
         _ = scene.SetTargetPosition(position: goal);
     }
-
     private static void RestoreChainGoal(CreatorScene scene, string chainName, Vector3 goal) {
         SelectGoal(scene: scene, chainName: chainName);
         _ = scene.SetTargetPosition(position: goal);

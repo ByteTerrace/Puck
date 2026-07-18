@@ -1,0 +1,36 @@
+{
+  "fonts": [
+    {
+      "key": "inter-regular",
+      "ttf": "Inter-Regular.ttf",
+      "family": "Inter",
+      "weight": 400,
+      "style": "Regular",
+      "uniformGrid": false
+    },
+    {
+      "key": "inter-medium",
+      "ttf": "Inter-Medium.ttf",
+      "family": "Inter",
+      "weight": 500,
+      "style": "Medium",
+      "uniformGrid": false
+    },
+    {
+      "key": "inter-semibold",
+      "ttf": "Inter-SemiBold.ttf",
+      "family": "Inter",
+      "weight": 600,
+      "style": "SemiBold",
+      "uniformGrid": false
+    },
+    {
+      "key": "jetbrains-mono-regular",
+      "ttf": "JetBrainsMono-Regular.ttf",
+      "family": "JetBrains Mono",
+      "weight": 400,
+      "style": "Regular",
+      "uniformGrid": true
+    }
+  ]
+}

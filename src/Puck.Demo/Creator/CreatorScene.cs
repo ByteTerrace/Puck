@@ -38,6 +38,13 @@ public sealed class CreatorScene {
     public const float MaxTwist = 3.0f;
     /// <summary>The largest onion shell thickness (the STYLE page's d-pad sweep clamps here).</summary>
     public const float MaxOnion = 0.2f;
+    /// <summary>The largest dilate (inflation) radius — mirrors <see cref="MaxOnion"/>'s clamp (a console-only knob;
+    /// see <see cref="SetDilate"/>).</summary>
+    public const float MaxDilate = 0.2f;
+    /// <summary>The largest bend rate, in radians per unit of local Y — a console-only knob (see
+    /// <see cref="SetBend"/>) moderated below <see cref="MaxTwist"/>'s ceiling: the bend operator's Lipschitz factor
+    /// is worse than twist's (see <see cref="Puck.SdfVm.SdfProgramBuilder.BendZ"/>'s remarks).</summary>
+    public const float MaxBend = 1.5f;
     /// <summary>The number of primitives in the cycle (the <see cref="AvatarPrimitive"/> set).</summary>
     public const int PrimitiveCount = 7;
     /// <summary>The bounded undo/redo history's snapshot capacity (see <see cref="EditHistory{T}"/>).</summary>
@@ -57,7 +64,6 @@ public sealed class CreatorScene {
         SdfBlendOp.SmoothIntersection,
         SdfBlendOp.Xor,
     ];
-
     private readonly WorkbenchRegion m_workbench;
     private readonly List<CreatorShapeState> m_shapes = new(capacity: Capacity);
     // Shape id -> current index in m_shapes, kept in sync with every ADD/REMOVE/CLEAR of m_shapes (a plain in-place
@@ -112,6 +118,8 @@ public sealed class CreatorScene {
     private float m_ghostSmooth;
     private bool m_ghostMirror;
     private float m_ghostTwist;
+    private float m_ghostBend;
+    private float m_ghostDilate;
     private float m_ghostOnion;
     // THE RIG (chains + IK — see CreatorChainState/CreatorIk): defined chains, keyed by their stable id.
     private readonly List<CreatorChainState> m_chains = [];
@@ -179,6 +187,10 @@ public sealed class CreatorScene {
     public bool TargetMirror => (TargetIsGhost ? m_ghostMirror : m_shapes[m_selectionIndex].Mirror);
     /// <summary>The TARGET's twist rate (<see cref="Puck.SdfVm.SdfOp.TwistY"/>).</summary>
     public float TargetTwist => (TargetIsGhost ? m_ghostTwist : m_shapes[m_selectionIndex].Twist);
+    /// <summary>The TARGET's bend rate (<see cref="Puck.SdfVm.SdfOp.BendY"/>).</summary>
+    public float TargetBend => (TargetIsGhost ? m_ghostBend : m_shapes[m_selectionIndex].Bend);
+    /// <summary>The TARGET's dilate (inflation) radius (<see cref="Puck.SdfVm.SdfOp.Dilate"/>).</summary>
+    public float TargetDilate => (TargetIsGhost ? m_ghostDilate : m_shapes[m_selectionIndex].Dilate);
     /// <summary>The TARGET's onion shell thickness (<see cref="Puck.SdfVm.SdfOp.Onion"/>).</summary>
     public float TargetOnion => (TargetIsGhost ? m_ghostOnion : m_shapes[m_selectionIndex].Onion);
     /// <summary>The ghost's blend op (what the next placed shape inherits).</summary>
@@ -189,6 +201,10 @@ public sealed class CreatorScene {
     public bool GhostMirror => m_ghostMirror;
     /// <summary>The ghost's twist rate (inherited on place).</summary>
     public float GhostTwist => m_ghostTwist;
+    /// <summary>The ghost's bend rate (inherited on place).</summary>
+    public float GhostBend => m_ghostBend;
+    /// <summary>The ghost's dilate (inflation) radius (inherited on place).</summary>
+    public float GhostDilate => m_ghostDilate;
     /// <summary>The ghost's onion shell thickness (inherited on place).</summary>
     public float GhostOnion => m_ghostOnion;
     /// <summary>Whether the SELECTED target is a chain GOAL rather than a shape or the ghost (see
@@ -246,11 +262,11 @@ public sealed class CreatorScene {
         }
 
         if (TargetIsGhost) {
-            m_ghostType = (AvatarPrimitive)((((int)m_ghostType + direction) % PrimitiveCount + PrimitiveCount) % PrimitiveCount);
+            m_ghostType = (AvatarPrimitive)(((((int)m_ghostType + direction) % PrimitiveCount) + PrimitiveCount) % PrimitiveCount);
         } else {
             var shape = m_shapes[m_selectionIndex];
 
-            m_shapes[m_selectionIndex] = shape with { Type = (AvatarPrimitive)((((int)shape.Type + direction) % PrimitiveCount + PrimitiveCount) % PrimitiveCount) };
+            m_shapes[m_selectionIndex] = shape with { Type = (AvatarPrimitive)(((((int)shape.Type + direction) % PrimitiveCount) + PrimitiveCount) % PrimitiveCount) };
         }
 
         MarkProgramChanged();
@@ -269,7 +285,7 @@ public sealed class CreatorScene {
         }
 
         const float moveSpeed = 3.2f;
-        var step = (new Vector3(planar.X, vertical, planar.Y) * (moveSpeed * deltaSeconds));
+        var step = (new Vector3(x: planar.X, y: vertical, z: planar.Y) * (moveSpeed * deltaSeconds));
 
         if (step == Vector3.Zero) {
             return;
@@ -282,7 +298,7 @@ public sealed class CreatorScene {
 
             m_chains[m_goalChainIndex] = (chain with { Goal = m_workbench.Clamp(position: (chain.Goal + step)) });
             SolveChains();
-            PushIfDragStarted(pushAfter);
+            PushIfDragStarted(dragStarted: pushAfter);
 
             return;
         }
@@ -309,7 +325,7 @@ public sealed class CreatorScene {
         }
 
         Revision++;
-        PushIfDragStarted(pushAfter);
+        PushIfDragStarted(dragStarted: pushAfter);
     }
 
     /// <summary>Spins the TARGET this frame — yaw about world up (stick X), pitch about world right (stick Y), roll
@@ -329,12 +345,12 @@ public sealed class CreatorScene {
         var step = (rotateSpeed * deltaSeconds);
         // World-space axis deltas (premultiplied onto the current orientation) — intuitive under the creator camera:
         // yaw and roll read the same regardless of how far the shape has already turned.
-        var delta = (Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (stick.X * step))
-            * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (-stick.Y * step))
+        var delta = ((Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (stick.X * step))
+            * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (-stick.Y * step)))
             * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (roll * step)));
 
         if (TargetIsGhost) {
-            m_ghostRotation = SnapRot(Quaternion.Normalize(value: (delta * m_ghostRotation)));
+            m_ghostRotation = SnapRot(orientation: Quaternion.Normalize(value: (delta * m_ghostRotation)));
         } else if (GroupScopeApplies()) {
             // The whole group turns about its centroid: every member's position orbits it and every member's
             // orientation composes the same delta — the group reads as one rigid body.
@@ -356,11 +372,11 @@ public sealed class CreatorScene {
         } else {
             var shape = m_shapes[m_selectionIndex];
 
-            m_shapes[m_selectionIndex] = shape with { Rotation = SnapRot(Quaternion.Normalize(value: (delta * shape.Rotation))) };
+            m_shapes[m_selectionIndex] = shape with { Rotation = SnapRot(orientation: Quaternion.Normalize(value: (delta * shape.Rotation))) };
         }
 
         Revision++;
-        PushIfDragStarted(pushAfter);
+        PushIfDragStarted(dragStarted: pushAfter);
     }
 
     /// <summary>Grows or shrinks the TARGET this frame (uniform), clamped to the scale envelope. Scale is baked into
@@ -375,13 +391,13 @@ public sealed class CreatorScene {
         var pushAfter = TouchDrag();
 
         // Multiplicative growth reads evenly across the range (a second of "up" always ~doubles, of "down" ~halves).
-        var factor = MathF.Exp((delta * 1.6f * deltaSeconds));
+        var factor = MathF.Exp(x: ((delta * 1.6f) * deltaSeconds));
 
         if (TargetIsGhost) {
             var next = Math.Clamp(value: (m_ghostScale.X * factor), max: MaxScale, min: MinScale);
 
             if (next != m_ghostScale.X) {
-                m_ghostScale = new Vector3(next);
+                m_ghostScale = new Vector3(value: next);
                 MarkProgramChanged();
             }
         } else if (GroupScopeApplies()) {
@@ -402,7 +418,7 @@ public sealed class CreatorScene {
                 if (next != member.Scale.X) {
                     m_shapes[index] = member with {
                         Position = m_workbench.Clamp(position: (centroid + ((member.Position - centroid) * factor))),
-                        Scale = new Vector3(next),
+                        Scale = new Vector3(value: next),
                     };
                     changed = true;
                 }
@@ -416,12 +432,12 @@ public sealed class CreatorScene {
             var next = Math.Clamp(value: (shape.Scale.X * factor), max: MaxScale, min: MinScale);
 
             if (next != shape.Scale.X) {
-                m_shapes[m_selectionIndex] = shape with { Scale = new Vector3(next) };
+                m_shapes[m_selectionIndex] = shape with { Scale = new Vector3(value: next) };
                 MarkProgramChanged();
             }
         }
 
-        PushIfDragStarted(pushAfter);
+        PushIfDragStarted(dragStarted: pushAfter);
     }
 
     /// <summary>Resets the TARGET's orientation to identity and its scale to unit — the quick "start this shape over"
@@ -466,7 +482,9 @@ public sealed class CreatorScene {
         }
 
         m_shapes.Add(item: new CreatorShapeState(
+            Bend: m_ghostBend,
             Blend: m_ghostBlend,
+            Dilate: m_ghostDilate,
             GroupId: ((m_ghostBlend != SdfBlendOp.Union) ? m_nextGroupId++ : 0),
             Id: m_nextShapeId++,
             MaterialIndex: m_ghostMaterial,
@@ -577,7 +595,7 @@ public sealed class CreatorScene {
         m_shapes.Add(item: source with {
             Id = m_nextShapeId++,
             Name = null,
-            Position = m_workbench.Clamp(position: (source.Position + new Vector3(0.35f, 0f, 0f))),
+            Position = m_workbench.Clamp(position: (source.Position + new Vector3(x: 0.35f, y: 0f, z: 0f))),
             // A duplicate of a grouped member joins the SAME group (the twin composes the same way); an ungrouped
             // twin stays ungrouped.
         });
@@ -624,7 +642,7 @@ public sealed class CreatorScene {
         // Resolve the joined group: reuse either member's existing group, else mint a new one; when BOTH have
         // (different) groups, the previous shape's whole group migrates into the current's.
         var groupId = ((current.GroupId != 0) ? current.GroupId : ((previous.GroupId != 0) ? previous.GroupId : m_nextGroupId++));
-        var migrating = ((previous.GroupId != 0) && (previous.GroupId != groupId) ? previous.GroupId : 0);
+        var migrating = (((previous.GroupId != 0) && (previous.GroupId != groupId)) ? previous.GroupId : 0);
 
         for (var index = 0; (index < m_shapes.Count); index++) {
             if ((index == m_selectionIndex) || (index == m_previousSelectionIndex) ||
@@ -651,7 +669,7 @@ public sealed class CreatorScene {
         }
 
         var current = Array.IndexOf(array: BlendCycle, value: TargetBlend);
-        var next = BlendCycle[(((current + direction) % BlendCycle.Length) + BlendCycle.Length) % BlendCycle.Length];
+        var next = BlendCycle[((((current + direction) % BlendCycle.Length) + BlendCycle.Length) % BlendCycle.Length)];
 
         if (TargetIsGhost) {
             m_ghostBlend = next;
@@ -679,7 +697,7 @@ public sealed class CreatorScene {
             return;
         }
 
-        var step = (delta * 0.35f * deltaSeconds);
+        var step = ((delta * 0.35f) * deltaSeconds);
 
         if (TargetIsGhost) {
             var next = Math.Clamp(value: (m_ghostSmooth + step), max: MaxSmooth, min: 0f);
@@ -697,7 +715,7 @@ public sealed class CreatorScene {
 
                 m_shapes[m_selectionIndex] = shape with { Smooth = next };
                 MarkProgramChanged();
-                PushIfDragStarted(pushAfter);
+                PushIfDragStarted(dragStarted: pushAfter);
             }
         }
     }
@@ -758,7 +776,7 @@ public sealed class CreatorScene {
             return;
         }
 
-        var step = (delta * 1.6f * deltaSeconds);
+        var step = ((delta * 1.6f) * deltaSeconds);
 
         if (TargetIsGhost) {
             var next = Math.Clamp(value: (m_ghostTwist + step), max: MaxTwist, min: -MaxTwist);
@@ -776,7 +794,7 @@ public sealed class CreatorScene {
 
                 m_shapes[m_selectionIndex] = shape with { Twist = next };
                 MarkProgramChanged();
-                PushIfDragStarted(pushAfter);
+                PushIfDragStarted(dragStarted: pushAfter);
             }
         }
     }
@@ -791,7 +809,7 @@ public sealed class CreatorScene {
             return;
         }
 
-        var step = (delta * 0.14f * deltaSeconds);
+        var step = ((delta * 0.14f) * deltaSeconds);
 
         if (TargetIsGhost) {
             var next = Math.Clamp(value: (m_ghostOnion + step), max: MaxOnion, min: 0f);
@@ -809,7 +827,7 @@ public sealed class CreatorScene {
 
                 m_shapes[m_selectionIndex] = shape with { Onion = next };
                 MarkProgramChanged();
-                PushIfDragStarted(pushAfter);
+                PushIfDragStarted(dragStarted: pushAfter);
             }
         }
     }
@@ -1016,6 +1034,51 @@ public sealed class CreatorScene {
         return clamped;
     }
 
+    /// <summary>Sets the TARGET's bend rate directly (clamped; a no-op on a chain goal). Rebuilds the program.</summary>
+    /// <param name="value">The rate (clamped to ±<see cref="MaxBend"/>).</param>
+    /// <returns>The applied rate.</returns>
+    public float SetBend(float value) {
+        if (TargetIsGoal) {
+            return TargetBend;
+        }
+
+        var clamped = Math.Clamp(value: value, max: MaxBend, min: -MaxBend);
+
+        if (TargetIsGhost) {
+            m_ghostBend = clamped;
+            MarkProgramChanged();
+        } else {
+            m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Bend = clamped };
+            MarkProgramChanged();
+            PushUndo();
+        }
+
+        return clamped;
+    }
+
+    /// <summary>Sets the TARGET's dilate (inflation) radius directly (clamped; a no-op on a chain goal). Rebuilds
+    /// the program.</summary>
+    /// <param name="value">The radius (clamped to [0, <see cref="MaxDilate"/>]).</param>
+    /// <returns>The applied radius.</returns>
+    public float SetDilate(float value) {
+        if (TargetIsGoal) {
+            return TargetDilate;
+        }
+
+        var clamped = Math.Clamp(value: value, max: MaxDilate, min: 0f);
+
+        if (TargetIsGhost) {
+            m_ghostDilate = clamped;
+            MarkProgramChanged();
+        } else {
+            m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Dilate = clamped };
+            MarkProgramChanged();
+            PushUndo();
+        }
+
+        return clamped;
+    }
+
     /// <summary>Sets the TARGET's onion shell thickness directly (clamped; a no-op on a chain goal). Rebuilds the
     /// program.</summary>
     /// <param name="value">The thickness (clamped to [0, <see cref="MaxOnion"/>]).</param>
@@ -1126,7 +1189,7 @@ public sealed class CreatorScene {
     /// <param name="objectPitch">The object grid's in-plane pitch (X/Z).</param>
     /// <param name="objectPatchRadius">The object grid's finite-patch radius.</param>
     public void WriteGridOverlay(float floorY, out uint flags, out Vector2 worldPitch, out Vector3 objectOrigin, out Quaternion objectFrame, out Vector2 objectPitch, out float objectPatchRadius) {
-        var overlay = GridOverlayState.From(snap: m_snap, gridVisible: m_snapGridVisible, floorY: floorY);
+        var overlay = GridOverlayFactory.From(snap: m_snap, gridVisible: m_snapGridVisible, floorY: floorY);
 
         flags = overlay.Flags;
         objectFrame = overlay.ObjectFrame;
@@ -1143,7 +1206,7 @@ public sealed class CreatorScene {
             Reference = new SnapReference(
                 FaceRadius: FaceRadiusFor(pitch: m_snap.Pitch),
                 Frame: shape.Rotation,
-                LocalHalfExtents: new Vector3(reach),
+                LocalHalfExtents: new Vector3(value: reach),
                 Origin: shape.Position,
                 Pitch: m_snap.Pitch
             ),
@@ -1153,7 +1216,6 @@ public sealed class CreatorScene {
 
         return true;
     }
-
     private bool TryFindShape(int id, out CreatorShapeState shape) {
         if (m_shapeIndexById.TryGetValue(key: id, value: out var index) && (index >= 0) && (index < m_shapes.Count)) {
             shape = m_shapes[index];
@@ -1199,17 +1261,15 @@ public sealed class CreatorScene {
     // The path-independent exact-set seam (console verbs): snap the requested absolute position with no magnetize band.
     private Vector3 SnapAndClampExact(Vector3 requested) =>
         (m_snap.Enabled
-            ? m_workbench.Clamp(position: GridSnap.Apply(intent: requested, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: new Vector3(float.NaN)))
+            ? m_workbench.Clamp(position: GridSnap.Apply(intent: requested, config: in m_snap, candidateLocalHalfExtents: TargetSnapHalfExtents(), previousSnapped: new Vector3(value: float.NaN)))
             : m_workbench.Clamp(position: requested));
-
     private Quaternion SnapRot(Quaternion orientation) =>
         ((m_snap.Enabled && (m_snap.Rotation != RotationSnap.Off)) ? GridSnap.SnapRotation(orientation: orientation, mode: m_snap.Rotation) : orientation);
 
     // The moving target's conservative half-extents about its origin (isotropic reach) — the candidate bound the
     // face-to-face butt-join needs (proposal §1c/§1e).
     private Vector3 TargetSnapHalfExtents() =>
-        new(AvatarDefinition.Reach(type: TargetTypeInternal, scale: TargetScaleInternal));
-
+        new(value: AvatarDefinition.Reach(type: TargetTypeInternal, scale: TargetScaleInternal));
     private static float FaceRadiusFor(Vector3 pitch) {
         var min = float.MaxValue;
 
@@ -1264,9 +1324,9 @@ public sealed class CreatorScene {
         }
 
         const float toRadians = (MathF.PI / 180f);
-        var rotation = SnapRot(Quaternion.Normalize(value: (
-            Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (yawDegrees * toRadians))
-            * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (pitchDegrees * toRadians))
+        var rotation = SnapRot(orientation: Quaternion.Normalize(value: (
+            (Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (yawDegrees * toRadians))
+            * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (pitchDegrees * toRadians)))
             * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (rollDegrees * toRadians)))));
 
         if (TargetIsGhost) {
@@ -1289,9 +1349,9 @@ public sealed class CreatorScene {
         }
 
         var clamped = new Vector3(
-            Math.Clamp(value: scale.X, max: MaxScale, min: MinScale),
-            Math.Clamp(value: scale.Y, max: MaxScale, min: MinScale),
-            Math.Clamp(value: scale.Z, max: MaxScale, min: MinScale)
+            x: Math.Clamp(value: scale.X, max: MaxScale, min: MinScale),
+            y: Math.Clamp(value: scale.Y, max: MaxScale, min: MinScale),
+            z: Math.Clamp(value: scale.Z, max: MaxScale, min: MinScale)
         );
 
         if (TargetIsGhost) {
@@ -1417,7 +1477,7 @@ public sealed class CreatorScene {
         }
 
         m_currentFrame = target;
-        ApplyPoses(frame: ((target == 0) ? m_restPose : m_frames[target - 1]));
+        ApplyPoses(frame: ((target == 0) ? m_restPose : m_frames[(target - 1)]));
     }
 
     /// <summary>RECORDS the current pose: at rest (or past the end) a new frame appends and becomes current; on a
@@ -1431,10 +1491,10 @@ public sealed class CreatorScene {
         if (m_currentFrame == 0) {
             // Recording FROM rest: the rest pose is the frame — capture it as both.
             m_restPose ??= Snapshot(name: "rest");
-            m_frames.Add(item: Snapshot(name: $"f{m_frames.Count + 1}"));
+            m_frames.Add(item: Snapshot(name: $"f{(m_frames.Count + 1)}"));
             m_currentFrame = m_frames.Count;
         } else {
-            m_frames[m_currentFrame - 1] = (Snapshot(name: m_frames[m_currentFrame - 1].Name));
+            m_frames[(m_currentFrame - 1)] = (Snapshot(name: m_frames[(m_currentFrame - 1)].Name));
         }
 
         Revision++;
@@ -1453,7 +1513,7 @@ public sealed class CreatorScene {
         m_frames.RemoveAt(index: (m_currentFrame - 1));
         RenumberFrames();
         m_currentFrame = Math.Min(val1: m_currentFrame, val2: m_frames.Count);
-        ApplyPoses(frame: ((m_currentFrame == 0) ? m_restPose : m_frames[m_currentFrame - 1]));
+        ApplyPoses(frame: ((m_currentFrame == 0) ? m_restPose : m_frames[(m_currentFrame - 1)]));
         Revision++;
         PushUndo();
 
@@ -1558,10 +1618,9 @@ public sealed class CreatorScene {
             Revision++;
         }
     }
-
     private void RenumberFrames() {
         for (var index = 0; (index < m_frames.Count); index++) {
-            var expected = $"f{index + 1}";
+            var expected = $"f{(index + 1)}";
 
             if (m_frames[index].Name.StartsWith(value: 'f') && (m_frames[index].Name != expected)) {
                 m_frames[index] = (m_frames[index] with { Name = expected });
@@ -1614,7 +1673,7 @@ public sealed class CreatorScene {
             return null;
         }
 
-        var ids = new[] { m_shapes[m_selectionIndex].Id, m_shapes[m_selectionIndex + 1].Id, m_shapes[m_selectionIndex + 2].Id };
+        var ids = new[] { m_shapes[m_selectionIndex].Id, m_shapes[(m_selectionIndex + 1)].Id, m_shapes[(m_selectionIndex + 2)].Id };
 
         if (TryCaptureChain(id: m_nextChainId, name: null, shapeIds: ids, kind: CreatorChainState.KindLimb) is not { } captured) {
             return null;
@@ -1661,7 +1720,7 @@ public sealed class CreatorScene {
             return false;
         }
 
-        return DeleteChain(idOrName: m_chains[m_chainCursor].Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return DeleteChain(idOrName: m_chains[m_chainCursor].Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// <summary>Cycles the RIG pad page's CURRENT-CHAIN cursor (which chain <see cref="NudgePole"/>/
@@ -1717,7 +1776,7 @@ public sealed class CreatorScene {
         const float poleSpeed = 3.2f;
         var chain = m_chains[m_chainCursor];
 
-        m_chains[m_chainCursor] = (chain with { Pole = (chain.Pole + (new Vector3(planar.X, 0f, planar.Y) * (poleSpeed * deltaSeconds))) });
+        m_chains[m_chainCursor] = (chain with { Pole = (chain.Pole + (new Vector3(x: planar.X, y: 0f, z: planar.Y) * (poleSpeed * deltaSeconds))) });
         SolveChains();
     }
 
@@ -1757,7 +1816,7 @@ public sealed class CreatorScene {
         var chain = m_chains[m_chainCursor];
         var next = (string.Equals(a: chain.Kind, b: CreatorChainState.KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase) ? CreatorChainState.KindSpine : CreatorChainState.KindLimb);
 
-        return SetKind(idOrName: chain.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), kind: next);
+        return SetKind(idOrName: chain.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), kind: next);
     }
 
     /// <summary>Sweeps every chain whose NAME starts with <paramref name="prefix"/> (case-insensitive) through a
@@ -1775,7 +1834,7 @@ public sealed class CreatorScene {
         var matches = new List<int>();
 
         for (var index = 0; (index < m_chains.Count); index++) {
-            if (m_chains[index].Name is { Length: > 0 } name && name.StartsWith(value: prefix, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if ((m_chains[index].Name is { Length: > 0 } name) && name.StartsWith(value: prefix, comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 matches.Add(item: index);
             }
         }
@@ -1807,7 +1866,7 @@ public sealed class CreatorScene {
                 var rest = restGoals[member];
                 // A flat ellipse in the chain's own goal-plane (X/Z), height a quarter of the stride so the "step"
                 // reads as a lift rather than a drag — planted at the bottom (cos ≈ -1) of the cycle.
-                var sweep = new Vector3((MathF.Sin(localPhase) * stride), (MathF.Max(0f, MathF.Cos(localPhase)) * (stride * 0.25f)), 0f);
+                var sweep = new Vector3(x: (MathF.Sin(x: localPhase) * stride), y: (MathF.Max(x: 0f, y: MathF.Cos(x: localPhase)) * (stride * 0.25f)), z: 0f);
 
                 m_chains[matches[member]] = (chain with { Goal = m_workbench.Clamp(position: (rest + sweep)) });
             }
@@ -1933,7 +1992,9 @@ public sealed class CreatorScene {
 
         foreach (var shape in m_shapes) {
             shapes.Add(item: new ShapeDocument(
+                Bend: shape.Bend,
                 Blend: shape.Blend,
+                Dilate: shape.Dilate,
                 Group: shape.GroupId,
                 Id: shape.Id,
                 Material: shape.MaterialIndex,
@@ -2024,7 +2085,9 @@ public sealed class CreatorScene {
             }
 
             m_shapes.Add(item: new CreatorShapeState(
+                Bend: (shape.Bend ?? 0f),
                 Blend: (shape.Blend ?? SdfBlendOp.Union),
+                Dilate: (shape.Dilate ?? 0f),
                 GroupId: (shape.Group ?? 0),
                 Id: shape.Id,
                 MaterialIndex: (shape.Material ?? 0),
@@ -2099,7 +2162,6 @@ public sealed class CreatorScene {
     // Group-scope transforms apply only when the scope is on AND the selected shape actually belongs to a group.
     private bool GroupScopeApplies() =>
         (m_groupScope && !TargetIsGhost && (m_shapes[m_selectionIndex].GroupId != 0));
-
     private Vector3 GroupCentroid(int groupId) {
         var sum = Vector3.Zero;
         var count = 0;
@@ -2193,6 +2255,8 @@ public sealed class CreatorScene {
             Frames: [.. m_frames],
             GhostBlend: m_ghostBlend,
             GhostMaterial: m_ghostMaterial,
+            GhostBend: m_ghostBend,
+            GhostDilate: m_ghostDilate,
             GhostMirror: m_ghostMirror,
             GhostOnion: m_ghostOnion,
             GhostPosition: m_ghostPosition,
@@ -2248,6 +2312,8 @@ public sealed class CreatorScene {
         m_ghostSmooth = snapshot.GhostSmooth;
         m_ghostMirror = snapshot.GhostMirror;
         m_ghostTwist = snapshot.GhostTwist;
+        m_ghostBend = snapshot.GhostBend;
+        m_ghostDilate = snapshot.GhostDilate;
         m_ghostOnion = snapshot.GhostOnion;
         m_goalChainIndex = -1;
         m_chainCursor = -1;
@@ -2282,6 +2348,8 @@ public sealed class CreatorScene {
         float GhostSmooth,
         bool GhostMirror,
         float GhostTwist,
+        float GhostBend,
+        float GhostDilate,
         float GhostOnion
     );
 
@@ -2303,7 +2371,8 @@ public sealed class CreatorScene {
     private static Vector3 PaletteHue(int index) {
         var hue = ((index * 0.61803399f) % 1f);
         var h6 = (hue * 6f);
-        var x = (1f - MathF.Abs(((h6 % 2f) - 1f)));
+        var x = (1f - MathF.Abs(x: ((h6 % 2f) - 1f)));
+
         var (r, g, b) = ((int)h6 switch {
             0 => (1f, x, 0f),
             1 => (x, 1f, 0f),
@@ -2313,6 +2382,6 @@ public sealed class CreatorScene {
             _ => (1f, 0f, x),
         });
 
-        return new Vector3((0.35f + (0.5f * r)), (0.35f + (0.5f * g)), (0.35f + (0.5f * b)));
+        return new Vector3(x: (0.35f + (0.5f * r)), y: (0.35f + (0.5f * g)), z: (0.35f + (0.5f * b)));
     }
 }

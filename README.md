@@ -29,14 +29,15 @@ Vulkan and Direct3D 12.
   emulator cores carry their own mirrored batteries.
 
 The full inventory — including controller input, live-camera and desktop
-content sources, VRR present timing, the Game Boy / GBA emulator cores, and
+content sources, VRR present timing, the GamingBrick emulator cores, and
 the bare-metal UEFI runtime — lives in the
 **[capability catalog](docs/capability-catalog.md)**.
 
 ## Quick start
 
-Requires Windows, .NET 10, a Vulkan GPU, and `dxc` on `PATH` (ships with the
-Vulkan SDK and the Windows SDK).
+Requires Windows, .NET 10, `dxc` on `PATH`, and a supported GPU with Vulkan
+1.3 or Direct3D 12 Shader Model 6.6. DXC ships with the Vulkan SDK and Windows
+SDK.
 
 ```powershell
 # The overworld — the demo, and the default with no flags at all:
@@ -50,10 +51,11 @@ dotnet run --project src/Puck.Post -c Release
 
 - [src](src) — the engine, split into focused `Puck.*` projects; see the
   [project map](docs/project-map.md)
-- [experimental](experimental) — the GamingBrick emulator cores (GB/GBC, GBA)
-  and the bare-metal runtime
+- [experimental](experimental) — independently layered GamingBrick emulator
+  cores (hosted from `src` through adapters) and the bare-metal runtime
 - [docs](docs/README.md) — capability catalog, project map,
-  [guide for contributors and agents](docs/agent-guide.md), design records
+  [guide for contributors and agents](docs/agent-guide.md), handbooks, and
+  current roadmaps
 - [schema](schema) — the generated run-document JSON Schema
 - [tools](tools) — formatting, validation, checked-in baselines
 

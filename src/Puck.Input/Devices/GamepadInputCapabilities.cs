@@ -11,7 +11,7 @@ public enum GamepadInputCapabilities {
     /// <summary>No optional input features beyond the buttons and sticks every family provides.</summary>
     None = 0,
     /// <summary>A motion sensor reporting angular velocity (gyro), in radians/second.</summary>
-    Gyro = 1 << 0,
+    Gyro = (1 << 0),
     /// <summary>Pressure-sensitive (analog) triggers rather than digital shoulder buttons.</summary>
-    AnalogTriggers = 1 << 1,
+    AnalogTriggers = (1 << 1),
 }

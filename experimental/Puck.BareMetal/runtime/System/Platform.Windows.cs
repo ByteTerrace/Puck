@@ -7,10 +7,8 @@ using System;
 using System.Runtime;
 using System.Runtime.InteropServices;
 
-namespace System
-{
-    public static unsafe partial class Console
-    {
+namespace System {
+    public static unsafe partial class Console {
         private const int STD_OUTPUT_HANDLE = -11;
 
         [DllImport("kernel32"), SuppressGCTransition]
@@ -22,22 +20,19 @@ namespace System
         [DllImport("kernel32"), SuppressGCTransition]
         private static extern int SetConsoleTextAttribute(IntPtr handle, ushort attributes);
 
-        public static void Write(char value)
-        {
+        public static void Write(char value) {
             // ASCII byte via WriteFile: works for a console, a pipe, or a redirected file alike.
             byte b = (byte)value;
             uint written;
             WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), &b, 1, &written, null);
         }
 
-        public static ConsoleColor ForegroundColor
-        {
+        public static ConsoleColor ForegroundColor {
             set => SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), (ushort)value);
         }
     }
 
-    public static unsafe partial class Environment
-    {
+    public static unsafe partial class Environment {
         [DllImport("kernel32"), SuppressGCTransition]
         private static extern long GetTickCount64();
 
@@ -55,19 +50,15 @@ namespace System
     }
 }
 
-namespace System.Threading
-{
-    public static class Thread
-    {
+namespace System.Threading {
+    public static class Thread {
         [DllImport("kernel32"), SuppressGCTransition]
         public static extern void Sleep(int millisecondsTimeout);
     }
 }
 
-namespace Internal.Runtime.CompilerHelpers
-{
-    internal static unsafe partial class StartupCodeHelpers
-    {
+namespace Internal.Runtime.CompilerHelpers {
+    internal static unsafe partial class StartupCodeHelpers {
         // The hosted process is started by the native PuckStart, not the CRT, so there is no argv.
         internal static void InitializeCommandLineArgsW(int argc, char** argv) { }
 

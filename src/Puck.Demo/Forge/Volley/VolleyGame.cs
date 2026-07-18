@@ -24,7 +24,6 @@ internal sealed class VolleyGame {
     private readonly int m_leftSlot;
     private readonly int m_rightSlot;
     private readonly int m_ballSlot;
-
     private readonly RomTable m_bgPalettes;
     private readonly RomTable m_objPalettes;
     private readonly RomTable m_tiles;
@@ -36,7 +35,6 @@ internal sealed class VolleyGame {
     private readonly RomTable m_strNewHigh;
     private readonly RomTable m_strHiScores;
     private readonly RomTable? m_titleAttributes;
-
     private readonly int m_subServe;
     private readonly int m_subGameReset;
     private readonly int m_subDrawSprites;
@@ -58,8 +56,7 @@ internal sealed class VolleyGame {
 
         if (titleArt is not null) {
             manifest.DefineArtScreen(name: "title", art: titleArt, overlays: VolleyTables.TitleMenuOverlays);
-        }
-        else {
+        } else {
             manifest.DefineScreen(name: "title", cells: VolleyTables.BuildTitleBannerCells(), overlays: VolleyTables.TitleMenuOverlays);
         }
 
@@ -236,7 +233,6 @@ internal sealed class VolleyGame {
         e.StoreAToAddress(address: OamManager.SpriteAddress(slot: m_ballSlot, byteIndex: 3));
         e.Return();
     }
-
     private static void EmitPaddleSprite(Sm83Emitter e, int slot, ushort paddleYAddress, byte screenX, int segment) {
         e.LoadAFromAddress(address: paddleYAddress);
         e.ArithmeticImmediate(op: AluOp.Add, value: (byte)(16 + (segment * 8)));
@@ -261,7 +257,6 @@ internal sealed class VolleyGame {
         m_fw.Bg.EmitQueueCell(row: VolleyTables.HudRow, column: VolleyTables.HudAiPointColumn);
         e.Return();
     }
-
     private void EmitHideSprites(Sm83Emitter e) {
         e.MarkLabel(label: m_subHideSprites);
         m_fw.Oam.EmitHideRange(baseSlot: m_leftSlot, count: 7);
@@ -280,7 +275,7 @@ internal sealed class VolleyGame {
         for (var slot = 0; (slot < (VolleyProtocol.HiScoreEntryCount - 1)); slot++) {
             var take = e.NewLabel();
             var skip = e.NewLabel();
-            var entryScore = (ushort)(VolleyProtocol.HiScoreMirror + (slot * VolleyProtocol.HiScoreEntryByteCount) + 3);
+            var entryScore = (ushort)((VolleyProtocol.HiScoreMirror + (slot * VolleyProtocol.HiScoreEntryByteCount)) + 3);
 
             for (var index = 0; (index < 3); index++) {
                 e.LoadAFromAddress(address: (ushort)(VolleyProtocol.Score + index));
@@ -291,8 +286,7 @@ internal sealed class VolleyGame {
 
                 if (index < 2) {
                     e.JumpRelative(condition: Condition.NotZero, label: skip); // entry > score → try the next slot.
-                }
-                else {
+                } else {
                     e.JumpRelative(label: skip); // equal or greater on the last byte → not strictly greater.
                 }
             }
@@ -313,8 +307,8 @@ internal sealed class VolleyGame {
         e.Arithmetic(op: AluOp.Subtract, source: Reg8.C);
         e.JumpRelative(condition: Condition.Zero, label: noShift);
         e.Load(destination: Reg8.B, source: Reg8.A);
-        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)(VolleyProtocol.HiScoreMirror + (4 * VolleyProtocol.HiScoreEntryByteCount) - 1));
-        e.LoadImmediate(pair: Reg16.De, value: (ushort)(VolleyProtocol.HiScoreMirror + (5 * VolleyProtocol.HiScoreEntryByteCount) - 1));
+        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)((VolleyProtocol.HiScoreMirror + (4 * VolleyProtocol.HiScoreEntryByteCount)) - 1));
+        e.LoadImmediate(pair: Reg16.De, value: (ushort)((VolleyProtocol.HiScoreMirror + (5 * VolleyProtocol.HiScoreEntryByteCount)) - 1));
         e.MarkLabel(label: shiftLoop);
         e.LoadAFromHlDecrement();
         e.StoreAToDe();
@@ -638,7 +632,6 @@ internal sealed class VolleyGame {
         e.StoreAToAddress(address: VolleyProtocol.IdleTimer);
         e.StoreAToAddress(address: VolleyProtocol.IdleTimerHigh);
     }
-
     private void EmitTitleTick(Sm83Emitter e) {
         var noStart = e.NewLabel();
         var noSelect = e.NewLabel();
@@ -669,7 +662,6 @@ internal sealed class VolleyGame {
         m_fw.States.EmitRequestState(id: VolleyProtocol.StateAttract);
         e.MarkLabel(label: stay);
     }
-
     private void EmitAttractEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Input.EmitScriptStart(script: m_attractScript);
@@ -680,7 +672,6 @@ internal sealed class VolleyGame {
         EmitTitleAttributesReset(e: e);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitAttractTick(Sm83Emitter e) {
         var noReal = e.NewLabel();
         var running = e.NewLabel();
@@ -704,7 +695,6 @@ internal sealed class VolleyGame {
         e.MarkLabel(label: running);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitHighScoresEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Bg.EmitLcdOff();
@@ -730,7 +720,6 @@ internal sealed class VolleyGame {
         e.StoreAToAddress(address: VolleyProtocol.IdleTimer);
         e.StoreAToAddress(address: VolleyProtocol.IdleTimerHigh);
     }
-
     private void EmitHighScoresTick(Sm83Emitter e) {
         var back = e.NewLabel();
         var stay = e.NewLabel();
@@ -746,7 +735,6 @@ internal sealed class VolleyGame {
         m_fw.States.EmitRequestState(id: VolleyProtocol.StateTitle);
         e.MarkLabel(label: stay);
     }
-
     private void EmitPlayEnter(Sm83Emitter e) {
         // Repaint the play screen FROM STATE (never resetting it) so resuming from pause redraws cleanly; the match
         // reset itself happens on the title's START edge / the attract enter.
@@ -756,7 +744,6 @@ internal sealed class VolleyGame {
         EmitTitleAttributesReset(e: e);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitPlayTick(Sm83Emitter e) {
         var pause = e.NewLabel();
         var noPause = e.NewLabel();
@@ -773,12 +760,10 @@ internal sealed class VolleyGame {
         e.MarkLabel(label: noPause);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitPauseEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Text.EmitPrintQueued(text: m_strPause, row: 8, column: 7);
     }
-
     private void EmitPauseTick(Sm83Emitter e) {
         var resume = e.NewLabel();
         var stay = e.NewLabel();
@@ -794,7 +779,6 @@ internal sealed class VolleyGame {
         m_fw.States.EmitRequestState(id: VolleyProtocol.StatePlay);
         e.MarkLabel(label: stay);
     }
-
     private void EmitGameOverEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Text.EmitPrintQueued(text: m_strGameOver, row: 8, column: 5);
@@ -806,12 +790,11 @@ internal sealed class VolleyGame {
         // SRAM win region (the room XORs it across cabinets to drive the editor reveal).
         m_fw.Victory.EmitStoreShare();
     }
-
     private void EmitGameOverTick(Sm83Emitter e) {
         var resolve = e.NewLabel();
         var qualify = e.NewLabel();
         var noQualify = e.NewLabel();
-        var entry4Score = (ushort)(VolleyProtocol.HiScoreMirror + ((VolleyProtocol.HiScoreEntryCount - 1) * VolleyProtocol.HiScoreEntryByteCount) + 3);
+        var entry4Score = (ushort)((VolleyProtocol.HiScoreMirror + ((VolleyProtocol.HiScoreEntryCount - 1) * VolleyProtocol.HiScoreEntryByteCount)) + 3);
 
         e.LoadAFromAddress(address: FrameworkMemoryMap.InputPressed);
         e.Load(destination: Reg8.B, source: Reg8.A);
@@ -849,7 +832,6 @@ internal sealed class VolleyGame {
         e.MarkLabel(label: qualify);
         m_fw.States.EmitRequestState(id: VolleyProtocol.StateScoreEntry);
     }
-
     private void EmitScoreEntryEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         e.XorA();
@@ -865,7 +847,6 @@ internal sealed class VolleyGame {
         m_fw.Text.EmitPrintBcdDirect(bcdAddress: VolleyProtocol.Score, byteCount: 3, row: 6, column: 7);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitScoreEntryTick(Sm83Emitter e) {
         var confirm = e.NewLabel();
         var noUp = e.NewLabel();

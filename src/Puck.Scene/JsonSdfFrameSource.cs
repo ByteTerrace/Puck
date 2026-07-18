@@ -64,8 +64,8 @@ public sealed class JsonSdfFrameSource : ISdfFrameSource {
             // Capture at the viewport's PIXEL extent so the camera's baked aspect ratio matches its sub-rect.
             views[index] = new SdfViewSnapshot(
                 Camera: m_cameras[index].Capture(
-                    viewportHeight: (uint)MathF.Max(1f, (region.Height * height)),
-                    viewportWidth: (uint)MathF.Max(1f, (region.Width * width))
+                    viewportHeight: (uint)MathF.Max(x: 1f, y: (region.Height * height)),
+                    viewportWidth: (uint)MathF.Max(x: 1f, y: (region.Width * width))
                 ),
                 Region: region
             );

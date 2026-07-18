@@ -1,7 +1,7 @@
 {
     "$schema": "../../schema/run.schema.json",
     "version": "puck.run.v1",
-    "_comment": "Rung 2 of the reveal ladder: reveal INTO the world the DATA FILE defines. The overworld opens IMMERSED in the built-in world-lens game (four agb cabinets, no ROM on disk — the world-lens is a pure-CPU cart); the moment a player reaches the goal tile the win flag (0xC004) rises, the fourth wall breaks, and the camera eases OUT of the machines and INTO the sculpted town this document names ('world': 'puckton'). Materialize the town first: `Puck.Demo --forge-town` (writes worlds/puckton.world.json + the CAS refs). Then `Puck.Demo --run docs/examples/overworld-town.json`. No env var. The world handle is resolved at run (parse validation never checks it); an unresolved handle narrates and leaves the plain room rather than failing. The 'cell' field places the whole room at a far world cell (both axes) to exercise the planet-scale coordinate-stability path — the sim is cell-agnostic, so motion is identical to the origin cell while the floating-origin render seam keeps it crisp.",
+    "_comment": "Rung 2 of the reveal ladder: reveal INTO the world the DATA FILE defines. The overworld opens IMMERSED in the built-in world-lens game (four agb cabinets, no ROM on disk — the world-lens is a pure-CPU cart); the moment a player reaches the goal tile the win flag (0xC004) rises, the fourth wall breaks, and the camera eases OUT of the machines and INTO the sculpted town this document names ('world': 'puckton'). Materialize the town first: `Puck.Demo --forge-town` (writes worlds/puckton.world.json + the CAS refs). Then `Puck.Demo --run docs/examples/overworld-town.json`. No env var. The world handle is resolved at run (parse validation never checks it); an unresolved handle narrates and leaves the plain room rather than failing. The 'cell' field places the whole room at a far world cell (both axes) to exercise the planet-scale coordinate-stability path — the sim is cell-agnostic, so motion is identical to the origin cell while the floating-origin render seam keeps it crisp. The 'revealedRenderScale' field is the world render-scale QUALITY TIER (native/three-quarter/half/quarter) the fullscreen revealed town renders at — the town is the demo's most expensive view, so 'half' trades softness for ~half the frame cost (bilinearly upsampled); native (the default) is full resolution. The live knob is the 'render-scale' console verb.",
     "host": {
         "presentMode": "vsync"
     },
@@ -11,6 +11,7 @@
         "world": "puckton",
         "cell": 4000000,
         "immersed": true,
+        "revealedRenderScale": "half",
         "consoles": [
             { "model": "agb", "peripheral": "world", "exit": { "address": "0xC004", "op": ">=", "value": 1, "label": "reached the goal" } },
             { "model": "agb", "peripheral": "world", "exit": { "address": "0xC004", "op": ">=", "value": 1, "label": "reached the goal" } },

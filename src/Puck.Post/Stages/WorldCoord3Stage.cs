@@ -3,14 +3,14 @@ using Puck.Maths;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-A stage A2. Checks that <see cref="WorldCoord3"/>'s cell carry (<see cref="WorldCoord3.Normalize"/>),
+/// Tier-A stage A2. Checks that <see cref="WorldCoord3"/>'s canonical construction,
 /// cell-aware difference (<see cref="WorldCoord3.Delta"/>), and translating add (<c>operator +</c>) are CORRECT —
 /// including the cross-cell paths a single-cell scene never exercises — each compared against an absolute fixed-point
 /// reference (<c>cell·CellSize + local</c>), plus the centred-offset invariant and far-cell translation invariance.
 /// </summary>
 internal sealed class WorldCoord3Stage : IPostStage {
-    private const int CellRawLog2 = (WorldCoord3.CellSizeLog2 + FixedQ4816.FractionBitCount);
     private const long CellRaw = (1L << CellRawLog2);
+    private const int CellRawLog2 = (WorldCoord3.CellSizeLog2 + FixedQ4816.FractionBitCount);
     private const long HalfCellRaw = (1L << (CellRawLog2 - 1));
 
     /// <inheritdoc/>
@@ -36,7 +36,7 @@ internal sealed class WorldCoord3Stage : IPostStage {
 
     // The full correctness battery on ONE axis; returns a failure description, or null on success.
     private static string? RunAxis(Axis axis) {
-        // Carry cases along the axis — offsets that reach and pass ±half a cell, so Normalize must re-anchor.
+        // Carry cases along the axis — offsets that reach and pass ±half a cell, so construction must re-anchor.
         (long Cell, long LocalRaw)[] carryCases = [
             (0L, 0L), (0L, (4L << 16)), (0L, -(4L << 16)),
             (0L, (HalfCellRaw - 1L)), (0L, -HalfCellRaw),
@@ -46,15 +46,53 @@ internal sealed class WorldCoord3Stage : IPostStage {
         ];
 
         foreach (var (cell, localRaw) in carryCases) {
-            var (normCell, normLocal) = Component(axis: axis, coord: Coord(axis: axis, cell: cell, localRaw: localRaw).Normalize());
+            var (normCell, normLocal) = Component(axis: axis, coord: Coord(axis: axis, cell: cell, localRaw: localRaw));
 
             if ((normLocal < -HalfCellRaw) || (normLocal >= HalfCellRaw)) {
-                return $"[{axis}] Normalize left the offset out of range for (cell {cell}, raw {localRaw})";
+                return $"[{axis}] construction left the offset out of range for (cell {cell}, raw {localRaw})";
             }
 
             if (((cell * CellRaw) + localRaw) != ((normCell * CellRaw) + normLocal)) {
-                return $"[{axis}] Normalize moved the position for (cell {cell}, raw {localRaw})";
+                return $"[{axis}] construction moved the position for (cell {cell}, raw {localRaw})";
             }
+        }
+
+        // Construction is canonical: aliases of the same physical point must be equal and hash identically.
+        var aliasFromLocalCarry = Coord(axis: axis, cell: 0L, localRaw: CellRaw);
+        var aliasFromCell = Coord(axis: axis, cell: 1L, localRaw: 0L);
+
+        if ((aliasFromLocalCarry != aliasFromCell) || (aliasFromLocalCarry.GetHashCode() != aliasFromCell.GetHashCode())) {
+            return $"[{axis}] equivalent cell/local aliases do not have structural equality";
+        }
+
+        // Canonicalization must fail rather than wrap when carrying crosses the signed cell boundary.
+        if (
+            TryCoord(axis: axis, cell: long.MaxValue, localRaw: HalfCellRaw, result: out _) ||
+            TryCoord(axis: axis, cell: long.MinValue, localRaw: (-HalfCellRaw - 1L), result: out _)
+        ) {
+            return $"[{axis}] TryCreate accepted a position beyond the signed cell range";
+        }
+
+        if (
+            !ThrowsOverflow(action: () => _ = Coord(axis: axis, cell: long.MaxValue, localRaw: HalfCellRaw)) ||
+            !ThrowsOverflow(action: () => _ = Coord(axis: axis, cell: long.MinValue, localRaw: (-HalfCellRaw - 1L)))
+        ) {
+            return $"[{axis}] construction did not throw at the signed cell boundary";
+        }
+
+        // Extreme offsets must carry in the CORRECT direction: a near-MaxValue positive offset RAISES the cell — the
+        // centring add must not overflow and flip the carry negative — and a near-MinValue offset lowers it. (The
+        // modular position invariant above wraps mod 2^64, so it cannot catch a sign-inverted carry on its own.)
+        var (hiCell, hiLocal) = Component(axis: axis, coord: Coord(axis: axis, cell: 0L, localRaw: long.MaxValue));
+
+        if ((hiCell < 0L) || (hiLocal < -HalfCellRaw) || (hiLocal >= HalfCellRaw)) {
+            return $"[{axis}] construction mis-carried a near-MaxValue offset (cell {hiCell}, local {hiLocal})";
+        }
+
+        var (loCell, loLocal) = Component(axis: axis, coord: Coord(axis: axis, cell: 0L, localRaw: long.MinValue));
+
+        if ((loCell > 0L) || (loLocal < -HalfCellRaw) || (loLocal >= HalfCellRaw)) {
+            return $"[{axis}] construction mis-carried a near-MinValue offset (cell {loCell}, local {loLocal})";
         }
 
         // Delta is the exact cell-aware difference for near cells.
@@ -71,6 +109,40 @@ internal sealed class WorldCoord3Stage : IPostStage {
             }
         }
 
+        // Delta spans the entire signed Q48.16 raw range exactly, then fails explicitly one raw unit beyond it.
+        var origin = Coord(axis: axis, cell: 0L, localRaw: 0L);
+        var maximumDelta = Coord(axis: axis, cell: (1L << 27), localRaw: -1L);
+        var minimumDelta = Coord(axis: axis, cell: -(1L << 27), localRaw: 0L);
+
+        if (
+            !maximumDelta.TryDelta(origin: origin, delta: out var maximum) ||
+            (Component(axis: axis, delta: maximum) != long.MaxValue) ||
+            !minimumDelta.TryDelta(origin: origin, delta: out var minimum) ||
+            (Component(axis: axis, delta: minimum) != long.MinValue)
+        ) {
+            return $"[{axis}] Delta did not preserve the signed Q48.16 boundary";
+        }
+
+        var positiveOverflow = Coord(axis: axis, cell: (1L << 27), localRaw: 0L);
+        var negativeOverflow = Coord(axis: axis, cell: -(1L << 27), localRaw: -1L);
+
+        if (
+            positiveOverflow.TryDelta(origin: origin, delta: out var positiveFailure) ||
+            negativeOverflow.TryDelta(origin: origin, delta: out var negativeFailure) ||
+            (positiveFailure != FixedVector3.Zero) ||
+            (negativeFailure != FixedVector3.Zero)
+        ) {
+            return $"[{axis}] TryDelta accepted an out-of-range displacement";
+        }
+
+        if (
+            !ThrowsOverflow(action: () => _ = positiveOverflow.Delta(origin: origin)) ||
+            !ThrowsOverflow(action: () => _ = negativeOverflow - origin) ||
+            !ThrowsOverflow(action: () => _ = positiveOverflow.ToRenderRelative(origin: origin))
+        ) {
+            return $"[{axis}] throwing displacement APIs silently accepted an out-of-range result";
+        }
+
         // operator+ translates and re-anchors: adding a local delta moves the absolute position by exactly that delta,
         // even across a cell boundary, and leaves the offset centred.
         long[] deltas = [0L, (3L << 16), -(3L << 16), HalfCellRaw, (-HalfCellRaw - 1L), ((2L * CellRaw) + 7L)];
@@ -79,7 +151,7 @@ internal sealed class WorldCoord3Stage : IPostStage {
             foreach (var d in deltas) {
                 var (movedCell, movedLocal) = Component(axis: axis, coord: (Coord(axis: axis, cell: cell, localRaw: localRaw) + Vec(axis: axis, raw: d)));
 
-                if (((cell * CellRaw) + localRaw + d) != ((movedCell * CellRaw) + movedLocal)) {
+                if ((((cell * CellRaw) + localRaw) + d) != ((movedCell * CellRaw) + movedLocal)) {
                     return $"[{axis}] operator+ wrong for (cell {cell},{localRaw}) + {d}";
                 }
 
@@ -87,6 +159,32 @@ internal sealed class WorldCoord3Stage : IPostStage {
                     return $"[{axis}] operator+ left the offset out of range for (cell {cell},{localRaw}) + {d}";
                 }
             }
+        }
+
+        // Translation widens before addition, so an extreme delta cannot wrap the local component before cell carry.
+        var translationSource = Coord(axis: axis, cell: 0L, localRaw: (HalfCellRaw - 1L));
+        var extremeDelta = Vec(axis: axis, raw: long.MaxValue);
+
+        if (!translationSource.TryTranslate(delta: extremeDelta, result: out var extremeTranslation)) {
+            return $"[{axis}] representable extreme translation was rejected";
+        }
+
+        var (extremeCell, extremeLocal) = Component(axis: axis, coord: extremeTranslation);
+        var expectedWide = ((Int128)(HalfCellRaw - 1L) + long.MaxValue);
+        var actualWide = (((Int128)extremeCell * CellRaw) + extremeLocal);
+
+        if (actualWide != expectedWide) {
+            return $"[{axis}] extreme translation wrapped before cell carry";
+        }
+
+        var cellBoundary = Coord(axis: axis, cell: long.MaxValue, localRaw: 0L);
+        var carryingDelta = Vec(axis: axis, raw: HalfCellRaw);
+
+        if (
+            cellBoundary.TryTranslate(delta: carryingDelta, result: out _) ||
+            !ThrowsOverflow(action: () => _ = cellBoundary + carryingDelta)
+        ) {
+            return $"[{axis}] translation silently wrapped the signed cell boundary";
         }
 
         // Far-cell translation invariance: a position and its origin shifted by the SAME huge cell delta yield the SAME
@@ -109,6 +207,23 @@ internal sealed class WorldCoord3Stage : IPostStage {
         Axis.Y => new(CellX: 0L, CellY: cell, CellZ: 0L, Local: Vec(axis: Axis.Y, raw: localRaw)),
         _ => new(CellX: 0L, CellY: 0L, CellZ: cell, Local: Vec(axis: Axis.Z, raw: localRaw)),
     };
+
+    private static bool TryCoord(Axis axis, long cell, long localRaw, out WorldCoord3 result) => axis switch {
+        Axis.X => WorldCoord3.TryCreate(cellX: cell, cellY: 0L, cellZ: 0L, local: Vec(axis: Axis.X, raw: localRaw), result: out result),
+        Axis.Y => WorldCoord3.TryCreate(cellX: 0L, cellY: cell, cellZ: 0L, local: Vec(axis: Axis.Y, raw: localRaw), result: out result),
+        _ => WorldCoord3.TryCreate(cellX: 0L, cellY: 0L, cellZ: cell, local: Vec(axis: Axis.Z, raw: localRaw), result: out result),
+    };
+
+    private static bool ThrowsOverflow(Action action) {
+        try {
+            action();
+
+            return false;
+        }
+        catch (OverflowException) {
+            return true;
+        }
+    }
 
     // A displacement vector with `raw` on the tested axis and zero on the others.
     private static FixedVector3 Vec(Axis axis, long raw) => axis switch {

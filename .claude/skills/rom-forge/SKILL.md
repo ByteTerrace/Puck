@@ -24,7 +24,7 @@ never a Post stage or gate.
 - `Framework/` — the SM83 game framework, 19 modules in
   `Puck.Demo.Forge.Framework`, deliberately dependent only on `Sm83Emitter` +
   the `HgbImage` encoders (lift-ready for
-  `experimental/Puck.HumbleGamingBrickRom` later): `FrameworkCartridge`,
+  `src/Puck.HumbleGamingBrickRom` later): `FrameworkCartridge`,
   `FrameworkKernel`, `FrameworkMemoryMap` (the WRAM source of truth),
   `GameFramework` (the facade — wires every module, `BuildRom` assembles),
   `RomDataBuilder`, `Hw`, `InputModule` (edges + attract-script override),
@@ -200,10 +200,9 @@ BG write queue → FrameCounter16++ → `reti`.
   (the `PBAK round-trip linked` stderr line).
 - `AvatarForge` runs ON the pipeline (12 views = 4 facings × 3 poses;
   timeline frames from a creation document become the walk poses, procedural
-  sway/bob is the fallback), but the public `AvatarSheet` record is a
-  COMPATIBILITY SEAM — `HgbCartridge.BuildOverworld` and
-  VerifyOverworld/VerifyBoot consume it; change its shape only with them in
-  the same change.
+  sway/bob is the fallback); `AvatarSheet` is consumed by
+  `HgbCartridge.BuildOverworld` and VerifyOverworld/VerifyBoot — reshape it and
+  its consumers together in the same change.
 
 ## Verify on a real machine
 

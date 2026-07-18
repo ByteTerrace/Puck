@@ -1,0 +1,35 @@
+# expo-world.txt — the reproducible authoring session for Assets/worlds/expo.world.json,
+# the Phase 5 §2.6 genre-neutrality proof artifact (a second world, deliberately far from
+# the default, that boots visibly different with ZERO code). Authored THE HONEST WAY: this
+# is a stdin script of mutation verbs + live session levers fed to a booted baked-default
+# Puck.World; the trailing world.save folds the live render levers and census into the
+# saved document (§2.1 session write-back). NEVER hand-edit expo.world.json — regenerate it:
+#
+#   dotnet run src/Puck.World/scripts/proof.cs -- expo-author
+#
+# Lines starting with '#' and blank lines are skipped by the feeder; every other line is one
+# console command. Row-valued verbs take one compact (whitespace-free) inline-JSON argument.
+#
+# --- Kits: a new free "glider" row + retunings + a table assignment policy ---
+# NOTE: world.kit.tune is a read-modify-write over the LIVE definition, and mutations buffer to the
+# tick boundary — so each kit is tuned exactly ONCE (chaining two tunes on the SAME kit would read
+# stale buffered state and the last whole-row upsert would win). A new full row uses world.kit.set.
+world.kit.set {"name":"glider","model":"Free","tuning":{"moveSpeed":6,"turnSpeed":3,"groundY":0,"jumpSpeed":5.5,"riseGravity":14,"fallGravity":23,"maxFallSpeed":20,"jumpCutMultiplier":0.45,"coyoteTime":0.09,"jumpBufferTime":0.1},"flavor":{"forward":0.5,"driftForward":false,"strafeWave":0.2,"turnWave":0,"upWave":0.12,"pitchWave":0.16,"rollTurn":0.28,"primaryThreshold":0,"altitudeBase":3,"altitudeRange":2},"primaryAction":null,"secondaryAction":null}
+world.kit.tune jumper jumpSpeed 9
+world.kit.tune flyer moveSpeed 9
+world.kit.tune runner moveSpeed 7
+world.kit.default jumper
+world.kit.assign table jumper flyer runner glider
+# --- Scene: warmer albedos and a four-pillar ring (a different boulder layout) ---
+world.scene.set {"groundAlbedo":[0.42,0.3,0.2],"stoneAlbedo":[0.62,0.5,0.38],"boulders":[{"id":"pillar-n","center":[0,0.7,-2.4],"radius":0.8,"smooth":0.45},{"id":"pillar-e","center":[2.4,0.7,0],"radius":0.8,"smooth":0.45},{"id":"pillar-s","center":[0,0.7,2.4],"radius":0.8,"smooth":0.45},{"id":"pillar-w","center":[-2.4,0.7,0],"radius":0.8,"smooth":0.45}]}
+# --- Spawns: a diagonal stagger (order maps seats) ---
+world.spawns.set [{"id":"seat-1","position":[0,0,0]},{"id":"seat-2","position":[2,0,-2]},{"id":"seat-3","position":[4,0,-4]},{"id":"seat-4","position":[6,0,-6]}]
+# --- Screens: trim to three asset-free displays (drop the webcam + native machine; retile screen 1 to a deterministic test pattern) ---
+world.screen.remove 4
+world.screen.remove 3
+world.screen.set {"index":1,"origin":[3,1.2,-3],"right":[1,0,0],"up":[0,1,0],"halfWidth":1.3,"halfHeight":1,"halfDepth":0.12,"round":0.08,"source":{"$type":"testPattern","width":320,"height":240},"route":{"engageable":false,"engageRadius":0}}
+# --- Live session levers: folded into Render / Population by world.save (§2.1 write-back) ---
+world.shadows medium
+world.ao on
+world.render-scale three-quarter
+world.population 32 wander

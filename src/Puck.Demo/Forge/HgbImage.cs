@@ -17,7 +17,7 @@ internal static class HgbImage {
             var dg = (G - other.G);
             var db = (B - other.B);
 
-            return ((dr * dr) + (dg * dg) + (db * db));
+            return (((dr * dr) + (dg * dg)) + (db * db));
         }
     }
 
@@ -34,7 +34,7 @@ internal static class HgbImage {
         outWidth = (width / factor);
         outHeight = (height / factor);
 
-        var destination = new byte[outWidth * outHeight * 4];
+        var destination = new byte[((outWidth * outHeight) * 4)];
         var samples = (factor * factor);
 
         for (var y = 0; (y < outHeight); y++) {
@@ -43,21 +43,21 @@ internal static class HgbImage {
 
                 for (var sy = 0; (sy < factor); sy++) {
                     for (var sx = 0; (sx < factor); sx++) {
-                        var offset = ((((y * factor) + sy) * width) + ((x * factor) + sx)) * 4;
+                        var offset = (((((y * factor) + sy) * width) + ((x * factor) + sx)) * 4);
 
                         r += rgba[offset];
-                        g += rgba[offset + 1];
-                        b += rgba[offset + 2];
-                        a += rgba[offset + 3];
+                        g += rgba[(offset + 1)];
+                        b += rgba[(offset + 2)];
+                        a += rgba[(offset + 3)];
                     }
                 }
 
                 var destinationOffset = (((y * outWidth) + x) * 4);
 
                 destination[destinationOffset] = (byte)(r / samples);
-                destination[destinationOffset + 1] = (byte)(g / samples);
-                destination[destinationOffset + 2] = (byte)(b / samples);
-                destination[destinationOffset + 3] = (byte)(a / samples);
+                destination[(destinationOffset + 1)] = (byte)(g / samples);
+                destination[(destinationOffset + 2)] = (byte)(b / samples);
+                destination[(destinationOffset + 3)] = (byte)(a / samples);
             }
         }
 
@@ -68,7 +68,7 @@ internal static class HgbImage {
     public static Rgb PixelAt(byte[] rgba, int width, int x, int y) {
         var offset = (((y * width) + x) * 4);
 
-        return new Rgb(R: rgba[offset], G: rgba[offset + 1], B: rgba[offset + 2]);
+        return new Rgb(R: rgba[offset], G: rgba[(offset + 1)], B: rgba[(offset + 2)]);
     }
 
     /// <summary>Derives a <paramref name="count"/>-colour palette from the pixels via a small median-cut: the colour
@@ -117,7 +117,7 @@ internal static class HgbImage {
 
                 var source = boxes[bestBox];
 
-                source.Sort(comparison: (left, right) => ChannelValue(colour: left, channel: channel).CompareTo(ChannelValue(colour: right, channel: channel)));
+                source.Sort(comparison: (left, right) => ChannelValue(colour: left, channel: channel).CompareTo(value: ChannelValue(colour: right, channel: channel)));
 
                 var mid = (source.Count / 2);
 
@@ -145,11 +145,11 @@ internal static class HgbImage {
         ArgumentNullException.ThrowIfNull(rgba);
         ArgumentNullException.ThrowIfNull(palette);
 
-        var indices = new byte[width * height];
+        var indices = new byte[(width * height)];
 
         for (var pixel = 0; (pixel < indices.Length); pixel++) {
             var offset = (pixel * 4);
-            var colour = new Rgb(R: rgba[offset], G: rgba[offset + 1], B: rgba[offset + 2]);
+            var colour = new Rgb(R: rgba[offset], G: rgba[(offset + 1)], B: rgba[(offset + 2)]);
             var bestIndex = 0;
             var bestDistance = int.MaxValue;
 
@@ -183,15 +183,15 @@ internal static class HgbImage {
             byte high = 0;
 
             for (var column = 0; (column < 8); column++) {
-                var value = (tileIndices[(row * 8) + column] & 0x03);
+                var value = tileIndices[((row * 8) + column)] & 0x03;
                 var bit = (7 - column);
 
                 low |= (byte)((value & 0x01) << bit);
                 high |= (byte)(((value >> 1) & 0x01) << bit);
             }
 
-            bytes[row * 2] = low;
-            bytes[(row * 2) + 1] = high;
+            bytes[(row * 2)] = low;
+            bytes[((row * 2) + 1)] = high;
         }
 
         return bytes;
@@ -207,13 +207,13 @@ internal static class HgbImage {
         var indices = new byte[64];
 
         for (var row = 0; (row < 8); row++) {
-            var low = tileBytes[row * 2];
-            var high = tileBytes[(row * 2) + 1];
+            var low = tileBytes[(row * 2)];
+            var high = tileBytes[((row * 2) + 1)];
 
             for (var column = 0; (column < 8); column++) {
                 var bit = (7 - column);
 
-                indices[(row * 8) + column] = (byte)(((low >> bit) & 0x01) | (((high >> bit) & 0x01) << 1));
+                indices[((row * 8) + column)] = (byte)(((low >> bit) & 0x01) | (((high >> bit) & 0x01) << 1));
             }
         }
 
@@ -235,7 +235,7 @@ internal static class HgbImage {
         var uniqueTiles = new List<byte[]>();
         var lookup = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
-        tileIds = new byte[tilesWide * tilesHigh];
+        tileIds = new byte[(tilesWide * tilesHigh)];
 
         var tileIndices = new byte[64];
 
@@ -243,7 +243,7 @@ internal static class HgbImage {
             for (var tileX = 0; (tileX < tilesWide); tileX++) {
                 for (var row = 0; (row < 8); row++) {
                     for (var column = 0; (column < 8); column++) {
-                        tileIndices[(row * 8) + column] = indices[((((tileY * 8) + row) * width) + ((tileX * 8) + column))];
+                        tileIndices[((row * 8) + column)] = indices[((((tileY * 8) + row) * width) + ((tileX * 8) + column))];
                     }
                 }
 
@@ -256,12 +256,12 @@ internal static class HgbImage {
                     lookup[key] = id;
                 }
 
-                tileIds[(tileY * tilesWide) + tileX] = (byte)id;
+                tileIds[((tileY * tilesWide) + tileX)] = (byte)id;
             }
         }
 
         tileCount = uniqueTiles.Count;
-        tileData = new byte[tileCount * 16];
+        tileData = new byte[(tileCount * 16)];
 
         for (var tile = 0; (tile < tileCount); tile++) {
             uniqueTiles[tile].CopyTo(array: tileData, index: (tile * 16));
@@ -283,10 +283,10 @@ internal static class HgbImage {
             var r = (palette[colour].R >> 3);
             var g = (palette[colour].G >> 3);
             var b = (palette[colour].B >> 3);
-            var rgb555 = (r | (g << 5) | (b << 10));
+            var rgb555 = r | (g << 5) | (b << 10);
 
-            bytes[colour * 2] = (byte)(rgb555 & 0xFF);
-            bytes[(colour * 2) + 1] = (byte)((rgb555 >> 8) & 0xFF);
+            bytes[(colour * 2)] = (byte)(rgb555 & 0xFF);
+            bytes[((colour * 2) + 1)] = (byte)((rgb555 >> 8) & 0xFF);
         }
 
         return bytes;
@@ -296,12 +296,12 @@ internal static class HgbImage {
         int minR = 255, minG = 255, minB = 255, maxR = 0, maxG = 0, maxB = 0;
 
         foreach (var colour in box) {
-            minR = Math.Min(minR, colour.R);
-            minG = Math.Min(minG, colour.G);
-            minB = Math.Min(minB, colour.B);
-            maxR = Math.Max(maxR, colour.R);
-            maxG = Math.Max(maxG, colour.G);
-            maxB = Math.Max(maxB, colour.B);
+            minR = Math.Min(val1: minR, val2: colour.R);
+            minG = Math.Min(val1: minG, val2: colour.G);
+            minB = Math.Min(val1: minB, val2: colour.B);
+            maxR = Math.Max(val1: maxR, val2: colour.R);
+            maxG = Math.Max(val1: maxG, val2: colour.G);
+            maxB = Math.Max(val1: maxB, val2: colour.B);
         }
 
         var rangeR = (maxR - minR);
@@ -324,14 +324,12 @@ internal static class HgbImage {
 
         return rangeR;
     }
-
     private static int ChannelValue(Rgb colour, int channel) =>
         (channel switch {
             0 => colour.R,
             1 => colour.G,
             _ => colour.B,
         });
-
     private static Rgb MeanColour(List<Rgb> box) {
         if (box.Count == 0) {
             return new Rgb(R: 0, G: 0, B: 0);

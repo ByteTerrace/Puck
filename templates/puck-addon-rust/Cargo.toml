@@ -1,0 +1,22 @@
+[package]
+name = "puck-addon"
+version = "0.1.0"
+edition = "2021"
+description = "Puck puck.addon.v1 WASM addon template — rename this crate for your own addon."
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+# Every author-facing addon ships as the smallest, most deterministic binary possible: no LTO
+# inlining surprises across builds, no panic-unwind machinery (a trap is a trap — the host treats
+# any panic as Unreachable and faults the addon deterministically either way), size over speed
+# because puck_on_tick is a handful of loads/adds/stores, not a hot numeric kernel.
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+
+[dev-dependencies]
+# fixed_tests.rs runs on the host target (not wasm32-unknown-unknown) via `cargo test`; no crates
+# needed beyond the standard test harness.

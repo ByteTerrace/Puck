@@ -11,8 +11,13 @@ namespace Puck.Input.Devices;
 /// </summary>
 [InlineArray(length: Count)]
 public struct GamepadButtonEdges : IEquatable<GamepadButtonEdges> {
-    /// <summary>The number of button bits in <see cref="GamepadButtons"/>; one stamp slot per bit.</summary>
-    public const int Count = 17;
+    /// <summary>
+    /// The number of button bits in <see cref="GamepadButtons"/>; one stamp slot per bit. KEEP IN SYNC with the
+    /// highest <see cref="GamepadButtons"/> flag (currently <see cref="GamepadButtons.TouchpadLeft"/> = bit 22):
+    /// a flag past this count makes the coalescer's edge stamp throw on the device I/O thread and fault the pad
+    /// on every fresh press of that button — found on real hardware by a triple-press validation pass.
+    /// </summary>
+    public const int Count = 23;
 
     private ulong m_element0;
 

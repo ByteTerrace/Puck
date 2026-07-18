@@ -17,6 +17,18 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle to begin recording into.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether recording began successfully.</returns>
     VkResult BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle);
+    /// <summary>Opens a named debug-marker label (<c>vkCmdBeginDebugUtilsLabelEXT</c>) scoping the commands recorded
+    /// until the matching <see cref="EndDebugLabel"/> — surfaced by GPU capture tools. A no-op when
+    /// <c>VK_EXT_debug_utils</c> is unavailable; it records no GPU work and never affects rendered output.</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the label is recorded into.</param>
+    /// <param name="label">The label text.</param>
+    void BeginDebugLabel(nint deviceHandle, nint commandBufferHandle, string label);
+    /// <summary>Closes the most recently opened <see cref="BeginDebugLabel"/> (<c>vkCmdEndDebugUtilsLabelEXT</c>) on the
+    /// command buffer. A no-op when <c>VK_EXT_debug_utils</c> is unavailable.</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the label is recorded into.</param>
+    void EndDebugLabel(nint deviceHandle, nint commandBufferHandle);
     /// <summary>Binds a single descriptor set at set number 0 for the graphics bind point.</summary>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>

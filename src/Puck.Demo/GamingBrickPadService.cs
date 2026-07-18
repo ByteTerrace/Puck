@@ -4,6 +4,7 @@ using Puck.Commands;
 using Puck.HumbleGamingBrick;
 using Puck.Input;
 using Puck.Input.Devices;
+using Puck.Input.Output;
 
 namespace Puck.Demo;
 
@@ -18,15 +19,15 @@ internal enum GamepadRouting {
 }
 
 /// <summary>
-/// A brick-pane run's SOLE per-frame gamepad drainer (the overworld and any document with gaming-brick viewports): it
-/// drains the <see cref="GamepadManager"/> exactly once per
-/// render frame (frame-keyed by the callers' shared render clock), folds each device's held state into a per-player
-/// map, and answers two questions — which <see cref="JoypadButtons"/> a brick pane holds this frame (per the
-/// <see cref="GamepadRouting"/> policy), and what movement the overworld's room player intends. When the overworld root
-/// is mirroring, the room player's movement REPLACES the bricks' directional input (walking the room walks the
-/// games) while face/start/select still pass through from the first controller. Single-drainer discipline is
-/// load-bearing: the manager's drain is destructive per device, so the global gamepad command source is suppressed
-/// for runs that use this service (the same rule the live overworld root uses).
+/// A brick-pane run's per-frame gamepad ROUTER (the overworld and any document with gaming-brick viewports): each
+/// frame it samples one <see cref="IInputArbiter"/> lane per player slot (the arbiter is the run's actual drainer —
+/// see <see cref="InputArbiter"/>) and answers two questions — which <see cref="JoypadButtons"/> a brick pane holds
+/// this frame (per the <see cref="GamepadRouting"/> policy), and what movement the overworld's room player intends.
+/// When the overworld root is mirroring, the room player's movement REPLACES the bricks' directional input (walking
+/// the room walks the games) while face/start/select still pass through from the first controller. The GB-specific
+/// pieces stay in <see cref="GamingBrickPadService"/> — its joypad projection and its brick-ownership routing
+/// table — while per-device state, hotplug resolution, and debug-page suppression are shed onto the arbiter's
+/// lanes, so that type never touches <see cref="GamepadManager.Drain"/> itself.
 /// </summary>
 /// <summary>Composition-root wiring for the pad-routing service, kept out of the top-level program to keep its
 /// class coupling in check (the same discipline as <see cref="GamepadDemoRegistration"/>).</summary>
@@ -36,7 +37,7 @@ internal static class GamingBrickPadRegistration {
     /// <param name="document">The validated run document.</param>
     /// <returns><see langword="true"/> when a pad-service pane is present.</returns>
     public static bool UsesPadService(Puck.Scene.PuckRunDocument document) =>
-        document.Viewports.Any(predicate: static viewport => viewport.Source is Puck.Scene.GamingBrickSource);
+        document.Viewports.Any(predicate: static viewport => (viewport.Source is Puck.Scene.GamingBrickSource));
 
     /// <summary>Registers the pad-routing service, configured from the document's input section. Registered
     /// unconditionally — it stays idle unless a pane samples it.</summary>
@@ -55,30 +56,47 @@ internal static class GamingBrickPadRegistration {
         return services;
     }
 }
-
 internal sealed class GamingBrickPadService(IServiceProvider serviceProvider, GamepadRouting routing) {
     private const float StickThreshold = 0.5f;
+    // How long an enqueued Rumble command holds before GamepadDevice auto-releases the motors (see
+    // FlushMotorHaptics's remarks) — long enough to bridge a produced-frame gap or two without the periodic refresh
+    // reading as a fresh retrigger on devices that flash on retrigger, short enough that a device left off the
+    // aggregate for a frame or two (its driving cabinet ejected, its pane torn down) doesn't stay felt for long.
+    private const uint MotorForwardDurationMs = 120u;
 
     // Host-side ownership overrides (the overworld's proximity takeover): brick ordinal → owning player index. An
     // owned brick is driven by that player's pad ALONE, bypassing both the multicast policy and the room mirror.
-    // Never sim state — ownership is input routing, so the deterministic world hash never sees it.
-    private readonly HashSet<int> m_brickInputBlockedPlayers = [];
+    // Never sim state — ownership is input routing, so the deterministic world hash never sees it. This is a
+    // brick↔player ROUTING TABLE (which pane maps to which seat), a GB-specific policy the arbiter's lane model has
+    // no opinion on — only the per-seat STATE the owner's lane resolves to sheds onto the arbiter below.
     private readonly Dictionary<int, int> m_brickOwners = [];
-    private readonly Dictionary<InputDeviceId, GamepadState> m_deviceStates = [];
-    private readonly List<GamepadDrain> m_drainBuffer = [];
-    // Per-player held state rebuilt from the device map after each drain; player indexes are small and stable.
-    private readonly Dictionary<int, GamepadState> m_playerStates = [];
+    // One PerPlayer arbiter lane per player slot, created lazily and held for the service's lifetime (lanes are
+    // reference-stable, so re-registering per frame would just discard state pointlessly).
+    private readonly Dictionary<int, object> m_playerLanes = [];
     // Per-player COMMAND-derived joypad images the overworld publishes each frame (PublishPlayerJoypad): the brick's input
     // as PROJECTED FROM THE SAME COMMANDS that drive the avatar, so a brick is a command sink like the world — not a
     // second raw-pad path. When a slot is published, it WINS over MapPad; an unpublished slot (a non-overworld document
     // with gaming-brick viewports) falls back to the raw pad map. Cleared and refilled by the overworld every frame.
     private readonly Dictionary<int, JoypadButtons> m_playerJoypads = [];
-
-    private ulong m_drainedFrame = ulong.MaxValue;
-    private GamepadManager? m_manager;
-    private bool m_managerResolved;
+    private IInputArbiter? m_arbiter;
+    private bool m_arbiterResolved;
     private JoypadButtons m_mirror;
     private bool m_mirrorActive;
+    // Lazily-resolved reference to the SAME GamepadManager the arbiter drains — held separately because output
+    // resolution (TryResolveDrivingOutput) and device→player resolution (TryGetPlayerIndex) are manager surface, not
+    // arbiter surface. Null-checked exactly like the arbiter for a headless document with no gamepad service.
+    private GamepadManager? m_manager;
+    private bool m_managerResolved;
+    // Per-device motor aggregation for the frame currently being produced (H-08): every reporting cabinet folds its
+    // own ICartridge.MotorLevel into the SAME physical device's entry through ReportMotor instead of
+    // enqueueing its own independent Rumble command — max is the honest mix (a cabinet's rumble means "something on
+    // THIS pane wants to be felt right now"; the loudest cabinet should win, not the average, and never a raw
+    // last-write overwrite that lets an idle cabinet cancel an active one sharing the seat). FlushMotorHaptics sends
+    // the aggregated result once the render node has produced every cabinet this frame — see both methods.
+    private readonly Dictionary<InputDeviceId, (IGamepadOutput Output, float Level)> m_pendingMotor = [];
+    // The level actually last enqueued per device, so FlushMotorHaptics can tell an unchanged repeat from a real
+    // change — see FlushMotorHaptics for the send/suppress rule this backs.
+    private readonly Dictionary<InputDeviceId, float> m_lastSentMotor = [];
 
     /// <summary>Samples the joypad a brick pane holds this frame.</summary>
     /// <param name="brickOrdinal">The brick's ordinal among the document's brick panes, in viewport-slot order.</param>
@@ -130,18 +148,6 @@ internal sealed class GamingBrickPadService(IServiceProvider serviceProvider, Ga
         );
     }
 
-    /// <summary>Samples a player's whole drained pad state this frame — the raw feed the overworld's binding-page
-    /// adapter replays into the paged resolver (sticks, triggers, and buttons together, under the same
-    /// single-drainer discipline as every other sampler here).</summary>
-    /// <param name="playerIndex">The player index to sample.</param>
-    /// <param name="frameKey">The caller's render-frame key.</param>
-    /// <returns>The player's current held state (neutral when no device is bound).</returns>
-    public GamepadState SamplePlayerRaw(int playerIndex, ulong frameKey) {
-        DrainOnce(frameKey: frameKey);
-
-        return PlayerState(playerIndex: playerIndex);
-    }
-
     /// <summary>Publishes the room player's movement as this frame's brick mirror (and marks mirroring active). The
     /// overworld root calls this every frame it advances; the bricks consume it on the same frame.</summary>
     /// <param name="mirror">The joypad image of the box player's movement.</param>
@@ -180,49 +186,190 @@ internal sealed class GamingBrickPadService(IServiceProvider serviceProvider, Ga
     /// <param name="playerIndex">The player slot.</param>
     /// <param name="enabled">Whether this player may currently drive bricks.</param>
     public void SetPlayerBrickInputEnabled(int playerIndex, bool enabled) {
-        if (enabled) {
-            _ = m_brickInputBlockedPlayers.Remove(item: playerIndex);
-        } else {
-            _ = m_brickInputBlockedPlayers.Add(item: playerIndex);
+        if (LaneFor(playerIndex: playerIndex) is { } lane) {
+            m_arbiter!.SuppressLane(laneToken: lane, suppressed: !enabled);
         }
     }
 
-    // Drain the manager exactly once per pumped frame, whichever consumer gets here first. All consumers run on the
-    // render thread (ProduceFrame), so no lock is needed.
-    private void DrainOnce(ulong frameKey) {
-        if (frameKey == m_drainedFrame) {
+    /// <summary>Samples the tilt/accelerometer reading the brick's DRIVING player's pad currently holds — the same
+    /// seat <see cref="SampleBrick"/> resolves for buttons, read as a motion channel instead of a joypad projection.
+    /// Centered (<see cref="Vector2.Zero"/>) when no player drives this brick, the seat is suppressed, or the driving
+    /// device reports no motion sensor and no right-stick deflection — the bit-identical "no controller" default.</summary>
+    /// <param name="brickOrdinal">The brick's ordinal among the document's brick panes, in viewport-slot order.</param>
+    /// <param name="frameKey">The caller's render-frame key (any value that changes once per pumped frame).</param>
+    /// <returns>The tilt sample, -1..1 per axis.</returns>
+    public Vector2 SampleTilt(int brickOrdinal, ulong frameKey) {
+        DrainOnce(frameKey: frameKey);
+
+        var playerIndex = ResolveDrivingPlayer(brickOrdinal: brickOrdinal);
+
+        return (PlayerBrickInputEnabled(playerIndex: playerIndex) ? DeriveTilt(state: PlayerState(playerIndex: playerIndex)) : default);
+    }
+
+    /// <summary>Resolves the <see cref="IGamepadOutput"/> haptics handle for the brick's DRIVING player — the same
+    /// seat <see cref="SampleBrick"/> resolves for buttons, mapped onto the connected DEVICE behind that seat (the
+    /// arbiter's lanes carry no device identity of their own; a lane is only ever a player-index policy). Returns
+    /// <see langword="false"/> when no player drives this brick, the seat is suppressed, or the driving player has no
+    /// connected device — an idle seat forwards nothing, exactly like an unbound controller output request. Read-only
+    /// and takes NO frame key: it resolves against whichever frame a real per-frame caller (<see cref="SampleBrick"/>,
+    /// <see cref="ReportMotor"/>, ...) most recently drained, WITHOUT ever calling <see cref="DrainOnce"/> itself, so
+    /// a debug/inspection caller (hgb.status) can never trigger — or pre-empt — the arbiter's destructive per-device
+    /// drain (M-09: the prior shape took a synthetic frame key from the caller and forced exactly that drain). Before
+    /// any real frame has drained this run it answers exactly like an unresolved seat: <see langword="false"/>.</summary>
+    /// <param name="brickOrdinal">The brick's ordinal among the document's brick panes, in viewport-slot order.</param>
+    /// <param name="output">The resolved output handle when found.</param>
+    /// <returns><see langword="true"/> when a connected device backs the driving seat.</returns>
+    public bool TryPeekOutputForBrick(int brickOrdinal, out IGamepadOutput output) =>
+        TryResolveDrivingOutput(brickOrdinal: brickOrdinal, output: out output);
+
+    /// <summary>Folds one cabinet's motor contribution for the frame into its driving device's running aggregate
+    /// (H-08) instead of enqueuing a Rumble command directly — <see cref="FlushMotorHaptics"/> sends the mixed
+    /// result once every cabinet has reported. A cabinet with no cartridge, no driving seat, or a suppressed seat
+    /// contributes nothing (silently, like every other sampler here). Max is the mixing rule: intensity, not an
+    /// average, so a lone active cabinet is never diluted by idle seatmates and an idle cabinet can never cancel
+    /// one that IS rumbling.</summary>
+    /// <param name="brickOrdinal">The brick's ordinal among the document's brick panes, in viewport-slot order.</param>
+    /// <param name="frameKey">The caller's render-frame key (any value that changes once per pumped frame).</param>
+    /// <param name="level">This cabinet's own motor level this frame, 0..1.</param>
+    public void ReportMotor(int brickOrdinal, ulong frameKey, float level) {
+        DrainOnce(frameKey: frameKey);
+
+        if (!TryResolveDrivingOutput(brickOrdinal: brickOrdinal, output: out var output)) {
             return;
         }
 
-        m_drainedFrame = frameKey;
+        var existing = (m_pendingMotor.TryGetValue(key: output.DeviceId, value: out var pending) ? pending.Level : 0f);
 
+        m_pendingMotor[output.DeviceId] = (output, Math.Max(existing, level));
+    }
+
+    /// <summary>Sends this frame's aggregated motor levels (see <see cref="ReportMotor"/>), exactly one
+    /// <see cref="RumbleEffect"/> command per contributing device, then clears the aggregate for the next frame.
+    /// Called once per produced frame by the render node, after every cabinet has had a chance to report — never
+    /// from a cabinet itself, so no cabinet's report can race another's flush.</summary>
+    /// <remarks>Send/suppress rule, read off <see cref="GamepadDevice"/>'s own output-loop application model
+    /// (ApplyRumbleAsync re-arms <c>m_rumbleExpiry</c> on every applied command and auto-releases the motors once it
+    /// elapses — the device DOES decay a rumble effect): a nonzero level is re-sent every frame regardless of
+    /// whether it changed, because that is the periodic refresh the decay needs to read as "still felt" rather than
+    /// silently timing out mid-cabinet-session; a level that stays at zero is suppressed (nothing to defeat, nothing
+    /// felt), and a transition TO zero is always sent once, as an explicit immediate release rather than waiting out
+    /// the decay window.</remarks>
+    public void FlushMotorHaptics() {
+        foreach (var (deviceId, (output, level)) in m_pendingMotor) {
+            var lastSent = m_lastSentMotor.GetValueOrDefault(key: deviceId);
+
+            if ((0f < level) || (level != lastSent)) {
+                _ = output.Rumble(effect: new RumbleEffect(LowFrequency: level, HighFrequency: level, DurationMilliseconds: MotorForwardDurationMs));
+                m_lastSentMotor[deviceId] = level;
+            }
+        }
+
+        m_pendingMotor.Clear();
+    }
+
+    // The shared device-resolution core TryPeekOutputForBrick / ReportMotor both ride: the same seat SampleBrick
+    // resolves for buttons, mapped onto the connected DEVICE behind it. Assumes the caller already decided whether a
+    // fresh drain belongs before this call (ReportMotor does; the read-only peek deliberately never does).
+    private bool TryResolveDrivingOutput(int brickOrdinal, out IGamepadOutput output) {
+        output = null!;
+
+        EnsureArbiter();
+        EnsureManager();
+
+        if ((m_arbiter is not { } arbiter) || (m_manager is not { } manager)) {
+            return false;
+        }
+
+        var playerIndex = ResolveDrivingPlayer(brickOrdinal: brickOrdinal);
+
+        if (!PlayerBrickInputEnabled(playerIndex: playerIndex)) {
+            return false;
+        }
+
+        foreach (var drain in arbiter.DrainedDevices) {
+            if (manager.TryGetPlayerIndex(deviceId: drain.DeviceId, playerIndex: out var resolved) && (resolved == playerIndex)) {
+                return manager.TryGetOutput(deviceId: drain.DeviceId, output: out output);
+            }
+        }
+
+        return false;
+    }
+
+    // Drain the arbiter exactly once per pumped frame, whichever consumer gets here first (DrainFrame is itself
+    // idempotent per frame key, so this is just a defensive forward — the discipline now lives in the arbiter, not
+    // in a per-service frame-key field).
+    private void DrainOnce(ulong frameKey) {
+        EnsureArbiter();
+        m_arbiter?.DrainFrame(frameKey: frameKey);
+    }
+    private void EnsureArbiter() {
+        if (!m_arbiterResolved) {
+            m_arbiterResolved = true;
+            m_arbiter = (serviceProvider.GetService(serviceType: typeof(IInputArbiter)) as IInputArbiter);
+        }
+    }
+    private void EnsureManager() {
         if (!m_managerResolved) {
             m_managerResolved = true;
             m_manager = (serviceProvider.GetService(serviceType: typeof(GamepadManager)) as GamepadManager);
         }
-
-        if (m_manager is null) {
-            return;
+    }
+    // The player index an UNOWNED brick's SharedImage rides (mirror → player 0; otherwise the routing policy),
+    // exposed separately from the joypad projection so a caller wanting the seat's RAW GamepadState (haptics output,
+    // tilt) resolves the identical seat SampleBrick would pick a JoypadButtons source from. Assumes DrainOnce already
+    // ran this frame. An OWNED brick's caller resolves the owner directly (SampleBrick's own first check) — this is
+    // only the pre-takeover policy SharedImage rides.
+    private int ResolveDrivingPlayer(int brickOrdinal) {
+        if (m_brickOwners.TryGetValue(key: brickOrdinal, value: out var owner)) {
+            return owner;
         }
 
-        // A device with nothing pending is absent from the drain; its last-known held state stays current.
-        m_manager.Drain(buffer: m_drainBuffer);
-
-        foreach (var drain in m_drainBuffer) {
-            m_deviceStates[drain.DeviceId] = drain.Latest;
+        if (m_mirrorActive) {
+            return 0;
         }
 
-        m_playerStates.Clear();
+        var multicast = (routing switch {
+            GamepadRouting.Multicast => true,
+            GamepadRouting.PerPlayer => false,
+            // "At most one pad connected" — the arbiter's whole-frame drain count stands in for the old
+            // resolved-player-state count (every connected device resolves to a player slot in practice).
+            _ => ((m_arbiter?.DrainedDevices.Count ?? 0) <= 1),
+        });
 
-        foreach (var (deviceId, state) in m_deviceStates) {
-            // A disconnected device no longer resolves a player index; its stale state simply stops mattering.
-            if (m_manager.TryGetPlayerIndex(deviceId: deviceId, playerIndex: out var playerIndex)) {
-                m_playerStates[playerIndex] = state;
-            }
+        return (multicast ? 0 : brickOrdinal);
+    }
+    // The tilt channel a GamepadState surfaces: the accelerometer (X/Y in g — flat at rest reads near zero on
+    // these axes, and GamepadState's own contract says it "doubles as a tilt sensor") when the device reports one,
+    // else the right stick (left stick already drives D-pad movement in MapPad) — the deterministic fallback for a
+    // pad with no motion hardware. A device with neither reads centered, the same neutral MBC7 saw before this seam.
+    private static Vector2 DeriveTilt(GamepadState state) {
+        if (state.Accelerometer != Vector3.Zero) {
+            return new Vector2(
+                x: Math.Clamp(value: state.Accelerometer.X, min: -1f, max: 1f),
+                y: Math.Clamp(value: state.Accelerometer.Y, min: -1f, max: 1f)
+            );
         }
+
+        return state.RightStick;
+    }
+    // Lazily registers (and caches) this slot's PerPlayer lane. Null only when no arbiter is available (a headless
+    // document with no gamepad service registered), in which case every sampler below reads neutral/unowned.
+    private object? LaneFor(int playerIndex) {
+        EnsureArbiter();
+
+        if (m_arbiter is null) {
+            return null;
+        }
+
+        if (!m_playerLanes.TryGetValue(key: playerIndex, value: out var lane)) {
+            lane = m_arbiter.RegisterLane(policy: InputLanePolicy.ForPlayer(playerIndex: playerIndex));
+            m_playerLanes[playerIndex] = lane;
+        }
+
+        return lane;
     }
     private GamepadState PlayerState(int playerIndex) =>
-        (m_playerStates.TryGetValue(key: playerIndex, value: out var state) ? state : GamepadState.Neutral);
+        ((LaneFor(playerIndex: playerIndex) is { } lane) ? m_arbiter!.Sample(laneToken: lane) : GamepadState.Neutral);
 
     // The pre-takeover routing an UNOWNED brick rides: the room mirror when active, otherwise the configured
     // multicast/per-player policy. Assumes DrainOnce already ran this frame.
@@ -239,21 +386,15 @@ internal sealed class GamingBrickPadService(IServiceProvider serviceProvider, Ga
                 return published;
             }
 
-            const JoypadButtons Directions = (JoypadButtons.Up | JoypadButtons.Down | JoypadButtons.Left | JoypadButtons.Right);
+            const JoypadButtons Directions = JoypadButtons.Up | JoypadButtons.Down | JoypadButtons.Left | JoypadButtons.Right;
 
-            return (m_mirror | (MapPad(state: PlayerState(playerIndex: 0)) & ~Directions));
+            return m_mirror | (MapPad(state: PlayerState(playerIndex: 0)) & ~Directions);
         }
 
-        var multicast = (routing switch {
-            GamepadRouting.Multicast => true,
-            GamepadRouting.PerPlayer => false,
-            _ => (m_playerStates.Count <= 1),
-        });
-
-        return MapPlayerPad(playerIndex: (multicast ? 0 : brickOrdinal));
+        return MapPlayerPad(playerIndex: ResolveDrivingPlayer(brickOrdinal: brickOrdinal));
     }
     private bool PlayerBrickInputEnabled(int playerIndex) =>
-        !m_brickInputBlockedPlayers.Contains(item: playerIndex);
+        !((LaneFor(playerIndex: playerIndex) is { } lane) && m_arbiter!.IsLaneSuppressed(laneToken: lane));
     // The brick input for a player: the COMMAND-derived joypad the overworld published wins (a brick as a command sink);
     // an unpublished slot (non-overworld brick document) falls back to the raw pad map.
     private JoypadButtons MapPlayerPad(int playerIndex) {

@@ -48,11 +48,11 @@ internal sealed class WorldStage : IPostStage {
     /// <returns>The five material ids, in declaration order.</returns>
     internal static (int Ground, int Crimson, int Azure, int Amber, int Jade) AddHeroPalette(SdfProgramBuilder builder) {
         return (
-            Ground: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.55f, 0.6f, 0.65f))),
-            Crimson: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.25f, 0.2f))),
-            Azure: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.45f, 0.85f))),
-            Amber: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.7f, 0.2f))),
-            Jade: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.7f, 0.45f)))
+            Ground: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.55f, y: 0.6f, z: 0.65f))),
+            Crimson: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.85f, y: 0.25f, z: 0.2f))),
+            Azure: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.45f, z: 0.85f))),
+            Amber: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.7f, z: 0.2f))),
+            Jade: builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.7f, z: 0.45f)))
         );
     }
 
@@ -63,20 +63,21 @@ internal sealed class WorldStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildHeroScene() {
         var builder = new SdfProgramBuilder();
+
         var (ground, crimson, azure, amber, jade) = AddHeroPalette(builder: builder);
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
-            .Translate(offset: new Vector3(-1.9f, 0.9f, -0.6f))
+            .Translate(offset: new Vector3(x: -1.9f, y: 0.9f, z: -0.6f))
             .Sphere(radius: 0.9f, material: crimson, blend: SdfBlendOp.SmoothUnion, smooth: 0.4f)
             .ResetPoint()
-            .Translate(offset: new Vector3(1.6f, 0.7f, 0.4f))
-            .Box(halfExtents: new Vector3(0.7f, 0.7f, 0.7f), round: 0.08f, material: azure)
+            .Translate(offset: new Vector3(x: 1.6f, y: 0.7f, z: 0.4f))
+            .Box(halfExtents: new Vector3(x: 0.7f, y: 0.7f, z: 0.7f), round: 0.08f, material: azure)
             .ResetPoint()
-            .Translate(offset: new Vector3(1.6f, 1.5f, 0.4f))
+            .Translate(offset: new Vector3(x: 1.6f, y: 1.5f, z: 0.4f))
             .Sphere(radius: 0.55f, material: amber, blend: SdfBlendOp.Subtraction)
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.2f, 0.35f, 1.7f))
+            .Translate(offset: new Vector3(x: -0.2f, y: 0.35f, z: 1.7f))
             .Torus(majorRadius: 0.8f, minorRadius: 0.22f, material: jade)
             .Build();
     }
@@ -89,8 +90,8 @@ internal sealed class WorldStage : IPostStage {
     /// <returns>The frame.</returns>
     internal static SdfFrame BuildHeroFrame(SdfProgram program, uint width, uint height) {
         var camera = CameraSnapshot.LookAt(
-            position: new Vector3(0.4f, 3.2f, 8.5f),
-            target: new Vector3(0f, 0.9f, 0f),
+            position: new Vector3(x: 0.4f, y: 3.2f, z: 8.5f),
+            target: new Vector3(x: 0f, y: 0.9f, z: 0f),
             fieldOfViewRadians: FieldOfViewRadians,
             viewportWidth: width,
             viewportHeight: height

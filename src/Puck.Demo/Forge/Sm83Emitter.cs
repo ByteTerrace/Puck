@@ -60,7 +60,7 @@ internal sealed class Sm83Emitter {
             throw new ArgumentException(message: "ld (hl), (hl) does not exist — that opcode slot is halt; call Halt().");
         }
 
-        m_code.Add(item: (byte)(0x40 + ((byte)destination * 8) + (byte)source));
+        m_code.Add(item: (byte)((0x40 + ((byte)destination * 8)) + (byte)source));
     }
 
     /// <summary>ld dst, n — load an 8-bit immediate into a register (or store it to <c>(hl)</c>).</summary>
@@ -75,7 +75,7 @@ internal sealed class Sm83Emitter {
     public void Decrement(Reg8 register) => m_code.Add(item: (byte)(0x05 + ((byte)register * 8)));
 
     /// <summary>&lt;op&gt; a, src — an accumulator ALU op against an 8-bit register (or <c>(hl)</c>).</summary>
-    public void Arithmetic(AluOp op, Reg8 source) => m_code.Add(item: (byte)(0x80 + ((byte)op * 8) + (byte)source));
+    public void Arithmetic(AluOp op, Reg8 source) => m_code.Add(item: (byte)((0x80 + ((byte)op * 8)) + (byte)source));
     /// <summary>&lt;op&gt; a, n — an accumulator ALU op against an 8-bit immediate.</summary>
     public void ArithmeticImmediate(AluOp op, byte value) {
         m_code.Add(item: (byte)(0xC6 + ((byte)op * 8)));
@@ -267,7 +267,7 @@ internal sealed class Sm83Emitter {
             var address = (baseAddress + target);
 
             m_code[patchOffset] = (byte)(address & 0xFF);
-            m_code[patchOffset + 1] = (byte)((address >> 8) & 0xFF);
+            m_code[(patchOffset + 1)] = (byte)((address >> 8) & 0xFF);
         }
 
         return m_code.ToArray();
@@ -279,22 +279,19 @@ internal sealed class Sm83Emitter {
         }
 
         m_code.Add(item: 0xCB);
-        m_code.Add(item: (byte)(baseOpcode + (bit * 8) + (byte)register));
+        m_code.Add(item: (byte)((baseOpcode + (bit * 8)) + (byte)register));
     }
-
     private void EmitAbsolute(byte opcode, int label) {
         m_code.Add(item: opcode);
         m_absoluteFixups.Add(item: (m_code.Count, label));
         m_code.Add(item: 0x00); // low byte placeholder, patched in ToArray
         m_code.Add(item: 0x00); // high byte placeholder
     }
-
     private void EmitImmediate16(byte opcode, ushort value) {
         m_code.Add(item: opcode);
         m_code.Add(item: (byte)(value & 0xFF));
         m_code.Add(item: (byte)((value >> 8) & 0xFF));
     }
-
     private void EmitRelativeFixup(int label) {
         m_relativeFixups.Add(item: (m_code.Count, label));
         m_code.Add(item: 0x00); // Placeholder; patched in ToArray.

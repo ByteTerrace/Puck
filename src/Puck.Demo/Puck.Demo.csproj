@@ -15,9 +15,16 @@
         <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
         <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
         <ProjectReference Include="..\Puck.Scene\Puck.Scene.csproj" />
+        <!-- The engine benchmark harness (puck.bench): the demo is its FIRST content provider — it registers the
+             standard suite's scenes and the feature-switch roster against the harness's neutral attach surface. -->
+        <ProjectReference Include="..\Puck.Bench\Puck.Bench.csproj" />
+        <!-- The WASM addon host: the sim-tick scripting seam the run document's `addons` section drives (the
+             autopilot ghost lives under Assets/Addons). Wasmtime flows transitively. -->
+        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
         <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
-        <ProjectReference Include="..\..\experimental\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
-        <ProjectReference Include="..\..\experimental\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
+        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
         <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
     </ItemGroup>
@@ -27,7 +34,7 @@
         <!-- Rasterizes the on-screen developer console's monospace glyph atlas via GDI+ (Windows only; the console
              overlay degrades to the terminal console elsewhere). Mirrors the reference terminal's SystemDrawing font
              generator. -->
-        <PackageReference Include="System.Drawing.Common" Version="[9.*, )" />
+        <PackageReference Include="System.Drawing.Common" Version="[10.*, )" />
     </ItemGroup>
 
     <ItemGroup>
@@ -38,6 +45,13 @@
         <!-- Ship the committed creation-review SCENARIOS next to the demo so the scenario flag resolves
              scenarios/name.json from the output directory (see ScenarioCliSeams). -->
         <Content Include="scenarios\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Ship the pre-baked MTSDF font atlas (one combined PNG + a layout/kerning JSON per face) -
+             see tools/font-atlas/README.md for the bake pipeline that produces these. -->
+        <Content Include="Assets\Fonts\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets\Fonts\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Ship the hand-authored WASM addon modules (the autopilot ghost) beside the demo so a run document's
+             relative `modulePath` resolves against the output directory (AppContext.BaseDirectory). -->
+        <Content Include="Assets\Addons\**\*.wat" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
@@ -47,31 +61,15 @@
 
     <!-- Compile each *.frag.hlsl to BOTH SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX), mirroring
          Puck.SdfVm. The vk:: attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. -->
-    <Target
-        BeforeTargets="PrepareForBuild"
-        Inputs="@(FragmentShaderSource);@(ComputeShaderSource);$(MSBuildProjectFullPath)"
-        Name="CompileShaders"
-        Outputs="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')"
-    >
-        <Exec
-            Command="&quot;$(DxcCommand)&quot; --version"
-            ConsoleToMSBuild="true"
-            IgnoreExitCode="true"
-            StandardErrorImportance="High"
-            StandardOutputImportance="Low"
-        >
-            <Output
-                PropertyName="DxcProbeExitCode"
-                TaskParameter="ExitCode"
-            />
+    <Target BeforeTargets="PrepareForBuild" Inputs="@(FragmentShaderSource);@(ComputeShaderSource);$(MSBuildProjectFullPath)" Name="CompileShaders" Outputs="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+        <Exec Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
+            <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
         </Exec>
-        <Error
-            Condition="'$(DxcProbeExitCode)' != '0'"
-            Text="Puck.Demo shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;."
-        />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -T ps_6_0 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
-        <!-- Compute kernels: SPIR-V only for now (the Vulkan compute path); entry CSMain renamed to "main". -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.0 -fspv-entrypoint-name=main -T cs_6_0 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Error Condition="'$(DxcProbeExitCode)' != '0'" Text="Puck.Demo shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <!-- Compute kernels: SPIR-V only for now (the Vulkan compute path); entry CSMain renamed to "main". Same
+             vulkan1.3 / SM 6.6 / -O3 / -enable-16bit-types capability floor as every other DXC invocation. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
     </Target>
 </Project>

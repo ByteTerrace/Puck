@@ -1,164 +1,262 @@
-# SDF perf-bench notes
+# SDF benchmark guide
 
-The `sdf.bench` instrument (an async per-frame runner inside the SDF-debug mode —
-`src/Puck.Demo/SdfDebug/SdfBenchScene.cs`) measures per-pass GPU cost of the world
-render path. It emits a workload, warms W frames, samples M frames of the existing
-`TryReadPassTimings`, and prints a fixed-width table of median + min/max for
-frame/beam/views/composite. Drive it over stdin:
+The `sdf.bench` instrument isolates SDF renderer cost by primitive, operation,
+instance count, carve distribution, and shading feature. Use it for interactive
+diagnosis. Use `puck.bench` for scored engine-wide comparisons.
 
+## Running the instrument
+
+Enter the SDF debug mode, then select a workload through the console:
+
+```text
+sdf.bench shapes
+sdf.bench ops
+sdf.bench instances
+sdf.bench sweep <shape>
+sdf.bench carves
+sdf.bench rigs [count]
+sdf.bench storm
 ```
-PUCK_TIMING=1 dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 200 \
-  < docs/examples/scripts/sdf-bench.console
-```
 
-Verbs: `sdf.bench shapes | ops | instances <shape> <n> | sweep [shape] | warm <n> |
-frames <n> | abort` (the mode must be active — run `sdf` first). Camera is a FIXED
-deterministic pose per configuration (constant yaw/pitch; distance computed to frame
-the whole workload at the 50° render FOV), so numbers are pad-independent.
+`rigs` is the VM-throughput stress posture for future avatars. Each rig has a
+deterministic Puck.Maths-distributed 12–36 independently animated rigid leaves
+and 60–180 authored VM instructions (Reset + dynamic transform + local
+translate + local rotate + shape per leaf), with a heterogeneous mix of boxes,
+capsules, cylinders, and spheres. The default 128-rig catalog contains 15,285
+instructions and 3,057 dynamic transforms updated each frame. Its distribution
+mirrors `Puck.World`'s heterogeneous avatar posture and should be used when
+changing interpreter dispatch, transform lowering, or shape evaluation.
 
----
+Arm per-pass GPU timestamps with the live timing control. The engine reports
+the mask, beam, cull-args, views, and composite passes. The benchmark's beam
+column may combine mask and beam to keep instance ladders comparable; read the
+live command output before comparing columns from different tools.
 
-## 2026-07-08 — first exploration (the beam-slope measurement)
+The benchmark uses a deterministic camera pose for each configuration. Do not
+move the camera or drive it from wall time during a measurement.
 
-Host: **Vulkan, 1280×800, warm=8 samples=32**, machine otherwise idle. All times in
-milliseconds; medians with (min–max). `composite` is negligible throughout (<0.1 ms)
-and is omitted from the discussion.
+## Interpreting pass cost
 
-### Capacity-probe envelope (the cost of always reserving 4096 instance slots)
+- **Mask** builds per-tile instance masks from the host-packed uniform grid.
+  It should scale with the number of candidate instances near each tile, not
+  with every instance in the scene.
+- **Beam** cone-marches the masked field to find conservative start and gap
+  information for the fine pass.
+- **Cull-args** compacts surviving tile bounds and writes indirect dispatch
+  arguments.
+- **Views** performs the per-pixel field walk, normals, lighting, soft shadows,
+  ambient occlusion, and coverage.
+- **Composite** places SDF and child sources into output viewport regions.
 
-Measured at render assembly (`OverworldFrameSource.MeasureWorstCaseEnvelope`), the two
-probes and the frozen envelope = their MAX (the mode's takeover is the room's debug
-subject OR a bench workload, never both):
+Classify a workload before choosing an optimization:
 
-| Probe | words | instances |
+| Regime | Signal | Productive next checks |
 |---|---|---|
-| room + debug subject (all screens, creator pool, companions) | 799,400 | 418 |
-| bench worst case (4096 lifted Stars) | 311,320 | 4096 |
-| **frozen envelope (max)** | **799,400** (~3.05 MB) | **4096** |
+| Instance-cull bound | Mask or beam grows with scene population | grid occupancy, bound radius, always-tested instances, parked flags |
+| Views bound | Views dominates and scales with shaded pixels | render scale, field-evaluation count, shadow set size, AO, register pressure |
+| Presentation bound | GPU passes are below frame time | present mode, pacing, host synchronization, capture or readback |
 
-- **Program-word capacity is UNCHANGED** (~3.05 MB): the room's own worst case already
-  dominated; the 4096-instance bench probe (311,320 words, ~1.19 MB) fits under it.
-- **Instance capacity rose 418 → 4096.** This is the only real cost: it resizes the
-  per-tile instance-mask buffer from ⌈418/32⌉=14 to ⌈4096/32⌉=128 words/tile. At
-  1280×800 the tile grid is 80×50 = 4000 tiles (TileSize 16); the engine reserves
-  `MaxViewports`=5 slots, so the mask buffer grows from **~1.12 MB to ~10.24 MB — a
-  one-time +9.1 MB static allocation**.
-- **Per-frame cost is UNCHANGED by the reservation.** The beam/views push the LIVE
-  program's mask width (`pushWords[7] = m_liveInstanceMaskWordCount`), never the
-  reserved 128, so a normal room frame still iterates ~14 words/tile. The parked-slot
-  contract holds: reserved-but-inactive slots cost nothing per frame. (Confirmed by the
-  sweep below — a 64-instance frame costs 8.9 ms even though 4096 slots are reserved.)
+## Standing conclusions
 
-### (a) Per-primitive cost — one fullscreen shape (`sdf.bench shapes`)
+The mask-first uniform-grid pass is the production instance-scaling path. The
+beam consumes a precomputed tile mask; it must not enumerate the full instance
+set at every march sample. Preserve `SdfInstanceGrid`'s bin-by-center and
+`footprintPad` pairing: the pad must cover the largest binned bound radius or a
+tile can miss geometry whose center lies outside the unpadded query.
 
-```
-  config             | frame med (min-max)        |      beam |     views | composite
-----------------------------------------------------------------------------------
-  Sphere             |   4.024 (  3.472-  5.244)  |     0.283 |     3.685 |     0.055
-  Box                |   5.050 (  4.661-  6.259)  |     0.359 |     4.609 |     0.066
-  Torus              |   6.769 (  4.498-  9.912)  |     0.647 |     6.031 |     0.090
-  Capsule            |   2.392 (  2.348- 10.609)  |     0.231 |     2.095 |     0.067
-  Cylinder           |   2.640 (  2.594-  3.632)  |     0.247 |     2.356 |     0.037
-  Ellipsoid          |   2.925 (  2.500-  5.252)  |     0.302 |     2.585 |     0.038
-  Vesica             |   4.020 (  3.712-  5.528)  |     0.436 |     3.516 |     0.068
-  RoundCone          |   5.360 (  4.830-  7.796)  |     0.435 |     4.846 |     0.081
-  RoundedRect        |   6.927 (  5.345-  7.968)  |     0.710 |     6.068 |     0.081
-  Polygon            |   6.093 (  5.347-  8.543)  |     0.493 |     5.471 |     0.063
-  Star               |   5.913 (  5.256-  8.107)  |     0.525 |     5.322 |     0.065
-  Trapezoid          |   6.302 (  1.020- 11.468)  |     0.495 |     5.497 |     0.081
-  Ellipse            |   0.944 (  0.932-  0.957)  |     0.098 |     0.833 |     0.013
-```
+Dynamic, unmaskable, and deliberately parked instances require separate
+attention:
 
-Single fullscreen shapes are **world-level** (no instances), so `beam` is just the tile
-cone-prepass and stays under ~0.7 ms for every primitive — the cost is entirely in
-`views` (the per-pixel VM interpretation + shading). Note this is **cost as framed** at
-the bench's fixed distance: it conflates per-eval ALU with how much screen the shape
-covers and how many march steps its silhouette costs, so it is not a pure per-instruction
-ALU ranking. Rough `views` grouping (ms):
+- the immutable program grid places dynamic and unmaskable instances in its
+  always-tested list; live rendering rebuilds binding 47's frame grid from the
+  current dynamic transforms, so maskable dynamic instances are binned while
+  unmaskable instances remain always-tested;
+- inactive reserved slots must use `SdfInstanceRange.Active = false`, which
+  packs the negative parked-bound sentinel;
+- hiding a reserved object below the floor is not equivalent to parking it and
+  still adds per-tile work.
 
-- **Cheapest (~0.8–2.6):** Ellipse, Capsule, Cylinder, Ellipsoid — compact silhouettes,
-  short marches.
-- **Mid (~3.5–4.9):** Vesica, Sphere, Box, RoundCone.
-- **Costliest (~5.3–6.1):** Star, Polygon, Trapezoid, RoundedRect, Torus — the torus
-  annulus and the lifted 2D family (revolved profiles with grazing near-silhouette
-  marches) cost the most as framed.
+Dense carve clusters are views-bound because every field evaluation sees the
+same local carve set. Settled hard sphere carves should pass through
+`SdfCarveBakePlanner` and collapse to one `SampledRegion`. Spread or unsettled
+carves remain analytic and benefit from the grid.
 
-(The wide `min–max` on Capsule/Trapezoid are the first post-config-switch frames while
-the camera pose settles — the median is robust to them.)
+The per-pixel shadow gather is scene dependent. It narrows spread scenes well,
+but a dense cluster can leave little to exclude. Compare it against the same
+camera, light, and grid configuration; do not infer a universal win from one
+scene.
 
-### (b) Per-op marginal cost — fixed torus + one op (`sdf.bench ops`)
+## Measurement hygiene
 
-```
-  config             | frame med (min-max)        |      beam |     views | composite
-----------------------------------------------------------------------------------
-  baseline (torus)   |   3.323 (  3.110-  4.065)  |     0.339 |     2.928 |     0.041
-  Twist              |   4.125 (  3.882-  5.172)  |     0.444 |     3.620 |     0.047
-  BendX              |   4.558 (  4.350-  5.439)  |     0.538 |     3.966 |     0.054
-  Elongate           |   6.536 (  4.877-  8.684)  |     0.724 |     5.736 |     0.077
-  Repeat             |   2.654 (  2.628- 13.844)  |     0.097 |     2.544 |     0.015
-  RepeatLimited      |   1.840 (  1.823-  2.299)  |     0.097 |     1.729 |     0.013
-  Polar              |   2.223 (  0.918-  2.899)  |     0.214 |     1.983 |     0.025
-  Symmetry           |   2.515 (  2.144-  3.350)  |     0.228 |     2.246 |     0.032
-  Wallpaper          |   8.515 (  7.585- 11.773)  |     0.309 |     8.172 |     0.029
-  LogSphere          |   8.040 (  7.570-  9.217)  |     0.306 |     7.704 |     0.032
-  CellJitter         |   3.300 (  3.259-  3.962)  |     0.029 |     3.235 |     0.036
-  Displace           |   2.976 (  2.918-  3.898)  |     0.346 |     2.596 |     0.034
-  DomainWarp         |   6.592 (  2.890-  8.707)  |     0.771 |     5.743 |     0.077
-  Onion              |   6.600 (  5.497-  7.738)  |     0.727 |     5.796 |     0.077
-  Dilate             |   5.529 (  5.279-  8.488)  |     0.509 |     4.929 |     0.060
-  Scale              |   4.342 (  4.296-  5.369)  |     0.425 |     3.853 |     0.065
-```
+- Warm pipeline creation and content uploads before sampling.
+- Use an immediate or otherwise unpaced presentation path for performance
+  numbers. A vsync-capped result measures the display tier.
+- Compare variants in the same process when possible. GPU clocks, thermals,
+  background applications, and parallel agents can move short pass timings.
+- Treat sub-millisecond differences as noise until repeated paired runs agree.
+- Keep viewport size, render scale, camera, light, screen count, and debug view
+  identical between variants.
+- Capture the live stdout or JSON report with the change; do not copy one run's
+  stage count or timing into a permanent capability claim.
+- Rebuild both shader targets after changing HLSL, and ensure the core views
+  variant is regenerated when its included full-kernel source changes.
 
-Marginal cost = op `views` − baseline `views` (2.93 ms). Two important caveats:
-**(1)** a domain-fold op changes the SCENE, not just the ALU — a space-filling fold
-makes rays converge faster (or fills the screen with more surface), so the delta is the
-op's total effect on the framed frame, not a pure per-instruction ALU cost. **(2)** the
-torus is the ONE fixed subject; another subject would reweight the coverage terms.
+## Attribution protocol (human-in-the-loop; owner ruling 2026-07-16)
 
-- **Costliest additions:** Wallpaper **+5.2**, LogSphere **+4.8** (both genuinely heavy
-  per-eval — many fold branches / transcendentals — AND they tile the screen with
-  surface), then Onion **+2.9**, Elongate **+2.8** ≈ DomainWarp **+2.8**, Dilate **+2.0**.
-- **Cheap additions:** BendX +1.0 ≈ Scale +0.9, Twist +0.7, CellJitter +0.3, Displace ≈0.
-- **NEGATIVE (make the framed scene cheaper):** RepeatLimited **−1.2**, Polar −0.9,
-  Symmetry −0.7, Repeat −0.4 — the fold is cheap per-eval and tiles space so first-hit
-  rays terminate sooner (and their beam drops to ~0.1 ms as the field fills every tile).
+True timing measurements require a human in the loop. Unattended agent-run
+bench numbers are sanity signals only: they gate nothing, and they are never
+committed as attribution. Historical figures predating this protocol
+(including the 2026-07-11 audit attributions) are directional hypotheses, not
+planning facts. The perf plan of record is
+[docs/reviews/2026-07-16-sdf-renderer-sota-perf-plan.md](reviews/2026-07-16-sdf-renderer-sota-perf-plan.md);
+its Phase 0 completes when the owner has executed this protocol.
 
-### (c) THE BEAM-SLOPE ANSWER — instance sweep (`sdf.bench sweep torus`)
+Machine state before any recorded run:
 
-```
-  config             | frame med (min-max)        |      beam |     views | composite
-----------------------------------------------------------------------------------
-  Torus x64          |   8.866 (  7.479- 10.000)  |     3.282 |     5.516 |     0.015
-  Torus x256         |  19.161 ( 18.031- 20.882)  |    12.502 |     6.650 |     0.011
-  Torus x1024        |  68.316 ( 65.589- 69.332)  |    50.666 |    17.996 |     0.011
-  Torus x4096        | 243.891 (242.798-249.049)  |   187.333 |    56.222 |     0.012
-```
+1. No parallel agents or background GPU/camera work; close capture tools.
+2. Locked GPU clocks where admin allows; otherwise note DVFS risk and treat
+   the beam pass as the clock canary (it drifts most across runs).
+3. Immediate present, fixed bench camera poses, warm pipelines and uploads,
+   validation layers off. All hygiene rules above apply.
 
-**Yes — `sdf-beam` grows essentially LINEARLY with instance count.** Beam factor per 4×
-step: 64→256 **3.81×**, 256→1024 **4.05×**, 1024→4096 **3.70×** (mean ≈3.85× per 4× ⇒
-exponent ≈0.97, i.e. ~O(n)). This is exactly the expected shape of the per-tile cull:
-the beam cone-tests every instance's bound sphere in every tile, so its cost is
-O(tiles × instances).
+The recorded matrix (per workload, all within one session, paired):
 
-**Where does beam dominate frame time?** From **n ≈ 256**. At n=64 views still leads
-(5.5 vs 3.3 ms). At n=256 beam (12.5) overtakes views (6.7) and is 65 % of the frame;
-at n=1024 it is 74 %; at n=4096 it is **77 %** of a 244 ms frame (≈4 fps). Views grows
-sub-linearly at first (fixed per-pixel cost) and trends toward linear at scale
-(1.20× → 2.71× → 3.12× per 4×) as more instances mean more mask-enumerated segments per
-pixel — but beam is the dominant term everywhere past ~256.
+| Workload | Command | What it isolates |
+|---|---|---|
+| The room (ordinary play) | `room.bench` | the product target |
+| Avatar fleet | `sdf.bench rigs 128` | interpreter/transform throughput |
+| Carves clustered + scattered | `sdf.bench carves` | views ceiling vs beam wall |
+| Motion/rebuild ladders | `sdf.bench storm` | dynamic-instance path |
 
-### Implication for D3 / the uniform-grid cull (survey row 15) and the 16384 question
+For each workload record: per-pass GPU ms (mask/beam/cull-args/views/
+composite), then within views a subtraction ladder using the bench feature
+levers — soft shadows off, AO off, screen lights off, fast marchers — each
+toggled alone against the same pose. The deltas are the feature attribution.
 
-The measured **linear beam slope is the measure-gate verdict**: because beam is
-O(tiles × instances), extrapolating the 4096 = 187 ms beam linearly puts **16384 (4×) at
-~750 ms of beam alone (~1.3 fps)** — untenable interactively. So raising the cap to
-16384 is **NOT plausible on the current path**; the O(instances-per-tile) cone test is
-precisely what a deterministic **uniform-grid cull (survey row 15)** replaces with an
-O(instances-in-nearby-cells) test. The grid cull is the gate before 16384.
+Nsight flame graphs (register count, occupancy, stall reasons for views and
+beam) follow [docs/sdf-shader-profiling.md](sdf-shader-profiling.md) — the
+Direct3D 12 overlay is the full-fidelity path. Record the fields in that
+doc's "What to record" table.
 
-**Memory is NOT the blocker.** At 16384 the mask is ⌈16384/32⌉ = 512 words/tile = 2 KB/
-tile — matching the expected figure — for a total of 5 × 4000 × 2 KB ≈ **41 MB**, which
-is affordable. So the honest reading is: the mask memory at 16384 is fine; the linear
-**beam compute** is what makes 16384 implausible without the grid cull. Conversely, 4096
-is comfortably usable for a static hero shot (~4 fps) but wants the grid cull well before
-it becomes a real-time budget — beam already owns 77 % of a 4096 frame.
+Results land here as a dated baseline chapter. Until such a chapter exists,
+no lever in the perf plan's Phases 2+ may be sized, ordered, or built.
+
+## Baseline 2026-07-17 — Puck.World attribution (owner-supervised session)
+
+Conditions: `features/it-starts` tip a6174e6 + the Phase-1 perf wave;
+Puck.World, Direct3D 12, 2560×1440, immediate present, GPU clocks
+owner-locked (`nvidia-smi -lgc`), quiet machine (co-agent paused), one
+process per paired A/B, ~20-sample windows from the armed `[world-timing]`
+hub, drift control bounding noise at ±0.45 ms frame / ±0.4 ms views.
+Owner-supervised, agent-orchestrated; logs archived in the session
+scratchpad.
+
+**The boot floor** (World's shipped default: population 124 idle, shadows
+off, AO off, render-scale half): **frame 10.70 ms (~93 FPS)** = views 7.08 +
+beam 2.76 + mask 0.64 + cull-args 0.08 + composite 0.11. The 120 Hz target
+(8.33 ms) is missed by ~2.4 ms at this resolution/tier. Empty plaza at the
+same tier: 6.35 ms.
+
+**Lever deltas** (median frame vs the paired A window; views is the mover
+unless noted):
+
+| Lever (A → B) | Δ frame ms | Notes |
+|---|---|---|
+| population 124 → 0 | **−4.20** | views −2.2, beam −1.1, mask −0.6 — the crowd's render share |
+| render-scale half → native | **+5.75** | views +4.4, beam +1.5 |
+| shadows off → medium | **+3.62** | views-dominated |
+| shadows off → high | **+4.68** | views-dominated |
+| ao off → on (auto tier) | +0.74 | |
+| ao-quality fast → exact | +1.56 | at ao on, pop 124 |
+| shadow-march fast → exact | +1.54 | at shadows medium, pop 124 |
+| shadow-mask camera-tile → exact | **≈ 0 (noise)** | the tile approximation buys nothing measurable here |
+| shadows crowd-radius 15 → 100 | **≈ 0 (noise)** | at medium, pop 124 idle |
+| quality low → high (pop 124) | +13.82 → 25.2 ms (~40 FPS) | |
+| quality low → high (pop 0) | +24.36 → **31.2 ms** | see anomaly below |
+
+**Findings of record:**
+
+1. Views dominates every posture (60–90 % of GPU frame); mask/cull-args/
+   composite are noise-level everywhere. The classification for the plan's
+   Phase 2/3 gating: views-bound, confirmed.
+2. **The empty-plaza anomaly:** high quality with population 0 (31.2 ms) is
+   ~6 ms SLOWER than with the full 124 crowd (25.2 ms). Consistent with
+   long unoccluded primary/shadow marches (sky/horizon rays) dominating
+   when no crowd geometry terminates them early — a march-length signature,
+   not an instance-count one. Verify under Nsight; feeds the plan's Phase 5
+   (depth intervals) and the marcher's far-field termination policy.
+3. Two levers measured FREE at the product posture (shadow-mask exact,
+   crowd-radius 100): candidate default upgrades at zero cost — owner call.
+4. The exact tiers (ao-quality, shadow-march) cost ~+1.5 ms each at 124
+   population; the auto tier's fast paths earn their keep.
+5. Beam tracks render scale and population but stays 1.6–4.5 ms; the
+   clock-locked drift pair held beam within 0.04 ms — the canary discipline
+   works.
+
+**Nsight GPU Trace addendum (same session, owner-captured, RTX 4070,
+production bytecode, Top-Level Triage metric set):**
+
+| Metric | Boot floor (11.9 ms frame) | Anomaly: pop 0 + high (32.0 ms frame) |
+|---|---|---|
+| views (ExecuteIndirect) | 6.83 ms | 25.95 ms |
+| beam (Dispatch) | 2.74 ms | 3.76 ms |
+| SM throughput | 26.2 % | 49.6 % |
+| L2 / VRAM throughput | 6.0 % / 2.1 % | 4.7 % / 1.1 % |
+| CS warp occupancy | 20.2 % (9.7 warps) | 39.3 % (18.9 warps) |
+| Active threads/warp | 20.5 (64 % coherence) | 26.0 (81 % coherence) |
+| Input dependency: global-memory load | 69.3 % | 86.6 % |
+| Sampled time: int-compare + control-flow + data-movement | ~55 % | ~60 % |
+| Sampled time: FP32 math | ~9 % (37 % of instructions) | ~9 % (37 % of instructions) |
+
+**Phase 0 verdicts of record:**
+
+1. **Phase 2 gate: OPEN, mechanism confirmed.** The views interpreter is
+   latency-bound on the dependent `sdfWords` fetch chain (global-load
+   dependency 69→87 %) at low-to-moderate occupancy, with dispatch machinery
+   (integer compare + control flow) dominating sampled time while FP32
+   shape math — 37 % of instructions — costs ~9 % of time. Not bandwidth
+   (VRAM ≤ 2 %), not divergence (coherence rises to 81 % in the worst
+   posture). The curated variant ladder attacks occupancy; per-program
+   specialization attacks BOTH the dispatch samples and the fetch chain —
+   the measured data ranks it the highest-ceiling lever in the plan.
+2. **Phase 5 F0 gate: PASSED.** The anomaly posture shows the identical
+   instruction mix scaled ~3.4× with no new limiter — march-length
+   amplification of interpreter cost, exactly the far-field-termination
+   design's prediction (design of record in the session scratchpad:
+   phase5-depth-intervals-design.md; F1 = beam-published per-tile far bound
+   with a footprint-strengthened emptiness proof, F2 = shadow light-side
+   early exit, spans gated on instance-dense evidence).
+
+### F1/F2 far-field A/B (owner-run isolators)
+
+The two far-field levers ship ON; each has a live disable so the owner can run
+the paired A/B under this protocol. **Agent-captured deltas here gate nothing —
+they are sanity signals; only an owner-supervised, clock-locked session records
+attribution.**
+
+Anomaly workload (both surfaces): the empty-plaza-high posture the Phase 0
+signature isolated — `world.population 0` then `world.quality high` (World), or
+the idle overworld at high quality (Demo).
+
+Lever verbs / switches:
+
+| Surface | Both lanes | F1 far bound alone | F2 shadow exit alone |
+|---|---|---|---|
+| Puck.World console | `world.far-field on\|off\|status` | `world.far-field bound on\|off` | `world.far-field shadow on\|off` |
+| Puck.Demo bench switches | — (toggle each) | `sdf.far-bound on\|off` (`feature.get sdf.far-bound`) | `sdf.shadow-far-exit on\|off` |
+
+Recipe: A = both ON (shipped), B = the lane(s) OFF; hold the same pose, read
+~20-sample `[world-timing]` windows per side, one process per A/B. Expected
+direction (design prediction, NOT a committed figure): B (far-field off) sits
+near the ~31 ms anomaly class, A closes toward ~25 ms; the win concentrates in
+`views`. Isolate F2 with `world.far-field shadow off` (F1 left on). Guards: a
+crowd-dense posture must show the same lever ≥ 0 (never a regression), and the
+boot floor is noise. F1 is output-identical so its only signal is step count /
+`views` ms; F2 is a march-path change (shadows may differ within the parity
+envelope — that is expected, not a bug).
+
+## Verification boundary
+
+Benchmark results explain cost; they do not prove correctness. Engine changes
+still use the Post battery selected through the `verifying-puck-changes` skill.
+Demo-only benchmark controls are verified by running the demo.

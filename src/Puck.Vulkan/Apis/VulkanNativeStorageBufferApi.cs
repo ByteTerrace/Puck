@@ -299,7 +299,7 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
             // the default host-visible+coherent memory backs buffers the CPU writes.
             requiredProperties: (request.DeviceLocal
                 ? DeviceLocalMemoryPropertyBit
-                : (HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit))
+                : HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit)
         );
         var allocateInfo = new VkMemoryAllocateInfo {
             AllocationSize = memoryRequirements.Size,

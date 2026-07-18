@@ -1,36 +1,45 @@
 using System.Numerics;
+using Puck.Commands;
 using Puck.Input;
 using Puck.Input.Devices;
 
 namespace Puck.Demo.Overworld;
 
 /// <summary>
-/// The local-input <see cref="IPlayerIntentSource"/>: it drains the <see cref="GamepadManager"/> directly each frame and
-/// routes EACH controller's per-device state (its own coalesced stick + button edges) to the slot of the player it is
-/// bound to, building the fixed-width intent row the simulation steps. This is the per-device routing split-screen needs
-/// — every controller drives its own player independently. Network and AI sources implement the same interface, so the
-/// simulation never knows which it is. In <c>--overworld</c> mode this is the SOLE gamepad drainer (the global gamepad
-/// command source is suppressed) so the per-device edges aren't consumed before this runs.
+/// The local-input <see cref="IIntentSource{TIntent}"/> of <see cref="PlayerIntent"/>: each frame it routes EACH
+/// controller's per-device state (its own coalesced stick + button edges) to the slot of the player it is bound to,
+/// building the fixed-width intent row the simulation steps. This is the per-device routing split-screen needs —
+/// every controller drives its own player independently. Network and AI sources implement the same interface, so the
+/// simulation never knows which it is. The frame's actual drain lives one layer up, in a registered
+/// <see cref="IInputArbiter"/> lane (an <see cref="InputLaneMode.Multicast"/>-policy lane: this source routes
+/// per-device itself via <see cref="IInputArbiter.DrainedDevices"/>, so it needs the whole frame's drain, not one
+/// seat's). In <c>--overworld</c> mode this is the SOLE gamepad drainer of the arbiter (the global gamepad command
+/// source is suppressed) so the per-device edges aren't consumed before this runs.
 /// </summary>
-public sealed class LocalIntentSource : IPlayerIntentSource {
-    private readonly GamepadManager m_manager;
+public sealed class LocalIntentSource : IIntentSource<PlayerIntent> {
+    private readonly IInputArbiter m_arbiter;
+    private readonly object m_lane;
     private readonly ControllerPlayerRegistry m_registry;
     private readonly OverworldWorld m_world;
-    private readonly List<GamepadDrain> m_drainBuffer = [];
     private readonly PlayerIntent[] m_frameIntents = new PlayerIntent[OverworldWorld.MaxPlayers];
     private ulong m_firstTick;
 
-    /// <summary>Initializes the source over the gamepad manager, the controller→player bind table, and the world (for
+    /// <summary>Initializes the source over the input arbiter, the controller→player bind table, and the world (for
     /// player→slot resolution).</summary>
-    public LocalIntentSource(GamepadManager manager, ControllerPlayerRegistry registry, OverworldWorld world) {
-        ArgumentNullException.ThrowIfNull(manager);
+    public LocalIntentSource(IInputArbiter arbiter, ControllerPlayerRegistry registry, OverworldWorld world) {
+        ArgumentNullException.ThrowIfNull(arbiter);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(world);
 
-        m_manager = manager;
+        m_arbiter = arbiter;
+        m_lane = arbiter.RegisterLane(policy: InputLanePolicy.Multicast);
         m_registry = registry;
         m_world = world;
     }
+
+    /// <summary>Gets this source's arbiter lane token — exposed so a future registrant can mute gameplay input via
+    /// <see cref="IInputArbiter.SuppressLane"/> without this source needing to know why.</summary>
+    public object LaneToken => m_lane;
 
     /// <inheritdoc/>
     public void BeginFrame(ulong firstTick) {
@@ -38,10 +47,9 @@ public sealed class LocalIntentSource : IPlayerIntentSource {
 
         Array.Fill(array: m_frameIntents, value: PlayerIntent.None);
 
-        m_drainBuffer.Clear();
-        m_manager.Drain(buffer: m_drainBuffer);
+        m_arbiter.DrainFrame(frameKey: firstTick);
 
-        foreach (var drain in m_drainBuffer) {
+        foreach (var drain in m_arbiter.DrainedDevices) {
             if (!m_registry.TryGetPlayer(device: drain.DeviceId, player: out var player)) {
                 continue;
             }
@@ -57,7 +65,7 @@ public sealed class LocalIntentSource : IPlayerIntentSource {
     }
 
     /// <inheritdoc/>
-    public PlayerIntent[] CollectTick(ulong tick, IReadOnlyList<Guid> players) {
+    public PlayerIntent[] CollectTick(ulong tick, IReadOnlyList<Guid> participants) {
         var firstOfFrame = (tick == m_firstTick);
         var row = new PlayerIntent[OverworldWorld.MaxPlayers];
 

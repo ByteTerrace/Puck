@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets;
+using Puck.Demo.World;
 using Puck.SdfVm;
 
 namespace Puck.Demo.Creator;
@@ -23,8 +24,8 @@ public sealed class CompanionState {
     // Wander tuning: a gentle amble, never a chase — the companion ambles toward/orbits the nearest player, it never
     // paces them like an escort. Kept slow so the room reads calm with several companions milling about.
     private const float WanderSpeed = 0.85f;
-    private const float OrbitRadius = 1.6f;
     private const float OrbitRadiansPerSecond = 0.35f;
+    private const float OrbitRadius = 1.6f;
     private const float TurnRadiansPerSecond = 2.4f;
     // Hover-bob tuning (the swimmer heuristic's presentation): a slow vertical sinusoid plus a lazier yaw drift, read
     // as "finning in place" rather than the walker's forward amble.
@@ -53,7 +54,6 @@ public sealed class CompanionState {
         PropertyNameCaseInsensitive = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
-
     private readonly WorkbenchRegion m_bounds;
     private readonly CreationDocument m_document;
     private readonly float m_reach;
@@ -88,7 +88,9 @@ public sealed class CompanionState {
     /// manifest — the console <c>swim</c> token's override. Null (the default) DEFERS to the manifest: a creation whose
     /// <see cref="CreationBehaviorDocument.Locomotion"/> is <c>swim</c> or <c>hover</c> swims, else it walks. See
     /// <see cref="IsSwimmer"/>'s remarks.</param>
-    public CompanionState(CreationDocument document, Vector3 spawnPosition, WorkbenchRegion bounds, bool? isSwimmer = null) {
+    /// <param name="sourcePlacementId">The world document placement id this companion was dispatched from (see
+    /// <see cref="SourcePlacementId"/>), or null for a session-only companion (<c>companion.add</c>).</param>
+    public CompanionState(CreationDocument document, Vector3 spawnPosition, WorkbenchRegion bounds, bool? isSwimmer = null, int? sourcePlacementId = null) {
         ArgumentNullException.ThrowIfNull(document);
 
         m_document = document;
@@ -103,6 +105,7 @@ public sealed class CompanionState {
         m_faceFeeds = BuildFaceFeeds(behavior: document.Behavior);
         m_currentFaceFeed = m_faceFeeds[0];
         m_reach = ComputeReach(document: document);
+        SourcePlacementId = sourcePlacementId;
     }
 
     /// <summary>Resolves a companion's document CAS-first: <paramref name="nameOrHash"/> is tried as a content-
@@ -131,6 +134,11 @@ public sealed class CompanionState {
     /// <summary>The companion's currently loaded document (immutable once loaded; re-loading replaces the whole
     /// state via a fresh <see cref="CompanionState"/> rather than mutating in place).</summary>
     public CreationDocument Document => m_document;
+    /// <summary>The world document placement id (<c>Role == "companion"</c>) this companion was dispatched from, or
+    /// null for a session-only companion added via <c>companion.add</c>. <see cref="CompanionRoster.SpawnFromWorld"/>
+    /// keys its dedupe on this so a re-applied world commit (a save's own hot-reload, or a repeat load) never spawns
+    /// the same resident twice.</summary>
+    public int? SourcePlacementId { get; }
     /// <summary>The creation's reach × scale — the travelling bound the renderer anchors its group instance on (see
     /// <see cref="CompanionRenderer"/>'s remarks: unlike the workbench's STATIC bound, this one travels with the
     /// companion's root).</summary>
@@ -244,7 +252,7 @@ public sealed class CompanionState {
         }
 
         var toTarget = (target - m_position);
-        var planarDistance = new Vector2(toTarget.X, toTarget.Z).Length();
+        var planarDistance = new Vector2(x: toTarget.X, y: toTarget.Z).Length();
         Vector3 step;
 
         if (planarDistance > OrbitRadius) {
@@ -256,18 +264,18 @@ public sealed class CompanionState {
             // Inside the ring: hold station on a slow orbit around the player rather than crowding them.
             m_orbitAngle += (OrbitRadiansPerSecond * deltaSeconds);
 
-            var desired = (target + new Vector3((MathF.Cos(m_orbitAngle) * OrbitRadius), 0f, (MathF.Sin(m_orbitAngle) * OrbitRadius)));
+            var desired = (target + new Vector3(x: (MathF.Cos(x: m_orbitAngle) * OrbitRadius), y: 0f, z: (MathF.Sin(x: m_orbitAngle) * OrbitRadius)));
 
-            step = ((desired - m_position) * MathF.Min(1f, (WanderSpeed * deltaSeconds)));
+            step = ((desired - m_position) * MathF.Min(x: 1f, y: (WanderSpeed * deltaSeconds)));
         }
 
-        var next = m_bounds.Clamp(position: (m_position + new Vector3(step.X, 0f, step.Z)));
+        var next = m_bounds.Clamp(position: (m_position + new Vector3(x: step.X, y: 0f, z: step.Z)));
         var moved = (next - m_position);
 
         m_position = next;
 
-        if (new Vector2(moved.X, moved.Z).LengthSquared() > 0.0000001f) {
-            var facing = MathF.Atan2(moved.X, moved.Z);
+        if (new Vector2(x: moved.X, y: moved.Z).LengthSquared() > 0.0000001f) {
+            var facing = MathF.Atan2(x: moved.Z, y: moved.X);
 
             m_rotation = TurnToward(current: m_rotation, targetYaw: facing, maxRadians: (TurnRadiansPerSecond * deltaSeconds));
         }
@@ -291,7 +299,7 @@ public sealed class CompanionState {
 
         var defaultFeed = m_faceFeeds[0];
         var remoteFeed = m_faceFeeds[^1];
-        var playerPresent = (nearestPlayerDistance is { } distance && (distance <= HailRadius));
+        var playerPresent = ((nearestPlayerDistance is { } distance) && (distance <= HailRadius));
 
         if (playerPresent) {
             m_currentFaceFeed = defaultFeed;
@@ -324,25 +332,24 @@ public sealed class CompanionState {
         // drift moves the UN-BOBBED baseline (m_hoverBaseY / X/Z), never the already-bobbed m_position — otherwise
         // each tick's sinusoid offset would compound onto the last tick's offset and random-walk the height.
         if (nearestPlayer is { } target) {
-            var toTarget = (target - new Vector3(m_position.X, m_hoverBaseY, m_position.Z));
-            var planarDistance = new Vector2(toTarget.X, toTarget.Z).Length();
+            var toTarget = (target - new Vector3(x: m_position.X, y: m_hoverBaseY, z: m_position.Z));
+            var planarDistance = new Vector2(x: toTarget.X, y: toTarget.Z).Length();
 
             if (planarDistance > OrbitRadius) {
                 var direction = ((planarDistance > 0.0001f) ? (toTarget / planarDistance) : Vector3.Zero);
-                var drift = (direction * (WanderSpeed * 0.35f * deltaSeconds));
-                var driftedPlanar = m_bounds.Clamp(position: new Vector3((m_position.X + drift.X), m_hoverBaseY, (m_position.Z + drift.Z)));
+                var drift = (direction * ((WanderSpeed * 0.35f) * deltaSeconds));
+                var driftedPlanar = m_bounds.Clamp(position: new Vector3(x: (m_position.X + drift.X), y: m_hoverBaseY, z: (m_position.Z + drift.Z)));
 
-                m_position = new Vector3(driftedPlanar.X, m_position.Y, driftedPlanar.Z);
+                m_position = new Vector3(x: driftedPlanar.X, y: m_position.Y, z: driftedPlanar.Z);
                 m_hoverBaseY = driftedPlanar.Y;
             }
         }
 
-        var bobbedY = Math.Clamp(value: (m_hoverBaseY + (MathF.Sin(m_hoverPhase) * HoverBobAmplitude)), max: m_bounds.MaxY, min: m_bounds.MinY);
+        var bobbedY = Math.Clamp(value: (m_hoverBaseY + (MathF.Sin(x: m_hoverPhase) * HoverBobAmplitude)), max: m_bounds.MaxY, min: m_bounds.MinY);
 
-        m_position = new Vector3(m_position.X, bobbedY, m_position.Z);
+        m_position = new Vector3(x: m_position.X, y: bobbedY, z: m_position.Z);
         m_rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: m_orbitAngle);
     }
-
     private static Quaternion TurnToward(Quaternion current, float targetYaw, float maxRadians) {
         if (maxRadians <= 0f) {
             return current;
@@ -358,9 +365,9 @@ public sealed class CompanionState {
     // Whether the creation's behavior manifest asks it to swim/hover (hover-bob) rather than walk. A manifest-less
     // creation (or an explicit "walk") ambles.
     private static bool LocomotionSwims(CreationBehaviorDocument? behavior) =>
-        (behavior?.Locomotion is { } locomotion) &&
+        ((behavior?.Locomotion is { } locomotion) &&
         (string.Equals(a: locomotion, b: "swim", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(a: locomotion, b: "hover", comparisonType: StringComparison.OrdinalIgnoreCase));
+         string.Equals(a: locomotion, b: "hover", comparisonType: StringComparison.OrdinalIgnoreCase)));
 
     // Builds the ordered face-feed name list: the default (greeting) feed always leads, then each behavior-manifest
     // face's declared default source resolved to a feed NAME (a "named:X" source contributes X; a "feed:N"/"brick:N"
@@ -397,19 +404,18 @@ public sealed class CompanionState {
 
         const string namedPrefix = "named:";
 
-        return (source.StartsWith(value: namedPrefix, comparisonType: StringComparison.OrdinalIgnoreCase) && (source.Length > namedPrefix.Length))
+        return ((source.StartsWith(value: namedPrefix, comparisonType: StringComparison.OrdinalIgnoreCase) && (source.Length > namedPrefix.Length))
             ? source[namedPrefix.Length..]
-            : null;
+            : null);
     }
-
     private static float ComputeReach(CreationDocument document) {
         var reach = 0.5f;
 
         foreach (var shape in (document.Shapes ?? [])) {
-            var scale = MathF.Max(shape.Scale.X, MathF.Max(shape.Scale.Y, shape.Scale.Z));
+            var scale = MathF.Max(x: shape.Scale.X, y: MathF.Max(x: shape.Scale.Y, y: shape.Scale.Z));
             var localReach = ((shape.Position.Length() + scale) + 0.9f);
 
-            reach = MathF.Max(reach, localReach);
+            reach = MathF.Max(x: reach, y: localReach);
         }
 
         return reach;
@@ -423,7 +429,9 @@ public sealed class CompanionState {
 
         foreach (var shape in (document.Shapes ?? [])) {
             shapes.Add(item: shape with {
+                Bend = Math.Clamp(value: (shape.Bend ?? 0f), max: CreatorScene.MaxBend, min: -CreatorScene.MaxBend),
                 Blend = (shape.Blend ?? SdfBlendOp.Union),
+                Dilate = Math.Clamp(value: (shape.Dilate ?? 0f), max: CreatorScene.MaxDilate, min: 0f),
                 Group = Math.Max(val1: (shape.Group ?? 0), val2: 0),
                 Material = Math.Clamp(value: (shape.Material ?? 0), max: (CreatorScene.PaletteSize - 1), min: 0),
                 Mirror = (shape.Mirror ?? false),
@@ -443,7 +451,6 @@ public sealed class CompanionState {
             Shapes = shapes,
         });
     }
-
     private static bool LooksLikeHash(string candidate) =>
         (candidate.StartsWith(value: "sha256/", comparisonType: StringComparison.Ordinal)
             ? (candidate.Length == ("sha256/".Length + 64))
@@ -500,6 +507,59 @@ public sealed class CompanionRoster {
         m_companions.Clear();
 
         return count;
+    }
+
+    /// <summary>Dispatches <paramref name="document"/>'s <c>companion</c>-role placements into this roster —
+    /// "inhabitants as data": a room declares its residents in the same document that declares its buildings,
+    /// mirroring how <c>OverworldRoom.FromWorld</c> recognizes <c>cabinet:&lt;n&gt;</c> roles (a companion placement
+    /// needs no index — the roster is order-independent, hard-capped at <see cref="CompanionState.MaxCompanions"/>,
+    /// so "first N win" is the whole policy). Idempotent across repeated calls with the SAME or a re-saved document:
+    /// a placement already represented (tracked via <see cref="CompanionState.SourcePlacementId"/>) is skipped, so a
+    /// world.save's own hot-reload (which re-applies the document it just wrote) never duplicates a resident. Kept
+    /// HERE (an instance method on the already-composed roster) rather than a new standalone type, so the frame
+    /// source's world-load path — already at its analyzer coupling ceiling — names no new type to call it; only
+    /// this file gains the <c>Puck.Demo.World</c> document types.</summary>
+    /// <param name="document">The committed world document (null or placement-less = nothing to spawn).</param>
+    /// <param name="store">The content-addressed store companion sources resolve against.</param>
+    /// <param name="bounds">The room region the spawned companions steer inside.</param>
+    public void SpawnFromWorld(WorldDocument? document, ContentAddressedStore store, WorkbenchRegion bounds) {
+        ArgumentNullException.ThrowIfNull(store);
+
+        if (document?.Placements is not { Count: > 0 } placements) {
+            return;
+        }
+
+        foreach (var placement in placements) {
+            if (m_companions.Count >= CompanionState.MaxCompanions) {
+                return;
+            }
+
+            if (!string.Equals(a: placement.Role, b: "companion", comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            if (AlreadySpawnedFrom(placementId: placement.Id)) {
+                continue;
+            }
+
+            if ((placement.Source is not { Length: > 0 } source) || (CompanionState.ResolveDocument(nameOrHash: source, store: store) is not { } creationDocument)) {
+                continue;
+            }
+
+            _ = Add(companion: new CompanionState(bounds: bounds, document: creationDocument, sourcePlacementId: placement.Id, spawnPosition: placement.Position));
+        }
+    }
+
+    // Whether a companion dispatched from this exact placement id is already in the roster — the dedupe a
+    // re-applied world commit (a save's own hot-reload, or a repeat world.load) needs so it never spawns twice.
+    private bool AlreadySpawnedFrom(int placementId) {
+        for (var index = 0; (index < m_companions.Count); index++) {
+            if (m_companions[index].SourcePlacementId == placementId) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Advances every companion's timeline + wander steering on the render clock, then resolves the face

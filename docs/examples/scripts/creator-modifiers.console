@@ -1,0 +1,30 @@
+# Exercises every per-shape modifier verb the editor exposes -- mirror/twist/onion (already landed) plus the
+# two new ones this script proves out, creator.dilate and creator.bend (backlog item 19). Each verb echoes the
+# CLAMPED value it applied, so the bracketed [creator.*: ...] lines on stdout are the pass condition.
+# Run: dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 10 < docs/examples/scripts/creator-modifiers.console
+
+# Enter the in-engine SDF creator, then start from an empty scene.
+creator
+creator.new
+
+# Style the GHOST before placing -- every modifier verb targets the ghost while nothing is selected.
+creator.material 2
+creator.mirror
+creator.twist 0.8
+creator.bend -0.4
+creator.dilate 0.05
+creator.onion 0.03
+creator.place
+
+# The placed shape inherits the ghost's style; select it and re-set its dilate/bend directly to prove the
+# verbs also retarget a SELECTED shape (the TARGET model), then read the scene back.
+creator.select 0
+creator.dilate 0.12
+creator.bend 1.1
+state
+
+# Save + reload proves persistence: Dilate/Bend round-trip through the puck.creation.v1 document exactly like
+# the modifiers that already shipped.
+creator.save modifier-check
+creator.load modifier-check
+state

@@ -5,16 +5,15 @@ using Puck.Input.Devices;
 namespace Puck.Demo.Overworld;
 
 /// <summary>
-/// Console mode's bridge onto the binding-page system. The overworld's pad service stays the run's SOLE gamepad
-/// drainer (its drain is destructive and also feeds the brick panes), so instead of a second capture path this
-/// adapter replays the drained player-0 state into the paged resolver as synthesized signals — the modifiers
-/// (triggers) first, then button edges in a fixed order — which preserves the router path's semantics exactly:
-/// the signal that crosses a threshold selects the page for everything after it, presses latch their resolved
-/// binding list, and hysteresis rides the analog trigger values. The player's held/pressed command sets come
-/// out the other side; movement stays raw (the sticks are always-on; the dpad contributes only when the active
-/// page leaves that direction unbound). Console mode owns ONE INSTANCE PER PLAYER SLOT — each replays its own
-/// player's drained state into that slot of the shared paged resolver, so pages, latches, and chords stay
-/// per-player exactly as they do on the router path.
+/// Console mode's bridge onto the binding-page system. It samples its OWN <see cref="IInputArbiter"/> lane for its
+/// slot (the arbiter is the run's actual drainer, shared with the brick-pad service and every other console-mode
+/// registrant) and replays that state into the paged resolver as synthesized signals — the modifiers (triggers)
+/// first, then button edges in a fixed order — which preserves the router path's semantics exactly: the signal
+/// that crosses a threshold selects the page for everything after it, presses latch their resolved binding list,
+/// and hysteresis rides the analog trigger values. The player's held/pressed command sets come out the other side;
+/// movement stays raw (the sticks are always-on; the dpad contributes only when the active page leaves that
+/// direction unbound). Console mode owns ONE INSTANCE PER PLAYER SLOT — each holds its own lane for its own
+/// player's slot, so pages, latches, and chords stay per-player exactly as they do on the router path.
 /// </summary>
 internal sealed class OverworldPageInput {
     /// <summary>The physical buttons replayed as edges, in the profile's slot order (the deterministic
@@ -33,23 +32,28 @@ internal sealed class OverworldPageInput {
         (GamepadButtons.RightShoulder, InputSources.Gamepad.RightShoulder),
         (GamepadButtons.RightStickPress, InputSources.Gamepad.RightStickPress),
     ];
-
+    private readonly IInputArbiter m_arbiter;
     private readonly PagedInputBindings m_bindings;
     private readonly HashSet<string> m_held = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly object m_lane;
     private readonly HashSet<string> m_pressed = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly int m_slot;
-
     private bool m_brickInputSuppressed;
     private GamepadState m_last = GamepadState.Neutral;
 
     /// <summary>Initializes a new instance of the <see cref="OverworldPageInput"/> class.</summary>
+    /// <param name="arbiter">The input arbiter this adapter's own lane samples through.</param>
     /// <param name="bindings">The paged resolver shared with the binding bar.</param>
     /// <param name="slot">The player slot this adapter replays into (0 = the room player).</param>
-    /// <exception cref="ArgumentNullException"><paramref name="bindings"/> is <see langword="null"/>.</exception>
-    public OverworldPageInput(PagedInputBindings bindings, int slot) {
+    /// <exception cref="ArgumentNullException"><paramref name="arbiter"/> or <paramref name="bindings"/> is
+    /// <see langword="null"/>.</exception>
+    public OverworldPageInput(IInputArbiter arbiter, PagedInputBindings bindings, int slot) {
+        ArgumentNullException.ThrowIfNull(argument: arbiter);
         ArgumentNullException.ThrowIfNull(argument: bindings);
 
+        m_arbiter = arbiter;
         m_bindings = bindings;
+        m_lane = arbiter.RegisterLane(policy: InputLanePolicy.ForPlayer(playerIndex: slot));
         m_slot = slot;
     }
 
@@ -74,10 +78,20 @@ internal sealed class OverworldPageInput {
     /// game by releasing the modifier first.</summary>
     public bool AllowsBrickInput => (IsDefaultPage && !m_brickInputSuppressed);
 
-    /// <summary>Replays this frame's drained state into the resolver: trigger values first (page selection), then
+    /// <summary>Gets this frame's raw drained state for this adapter's slot (the same value <see cref="BeginFrame"/>
+    /// just sampled) — the movement/cycle/authoring logic outside the paged resolver reads this instead of a
+    /// separate sample of its own.</summary>
+    public GamepadState Raw => m_last;
+
+    /// <summary>Drains the arbiter (a no-op if some other registrant already drained this frame key), samples this
+    /// adapter's own lane, and replays the result into the resolver: trigger values first (page selection), then
     /// button edges (command presses/releases). Call once per advanced frame, before reading the command sets.</summary>
-    /// <param name="state">The pad service's drained state for this adapter's player.</param>
-    public void BeginFrame(in GamepadState state) {
+    /// <param name="frameKey">The caller's render-frame key (any value that changes once per pumped frame).</param>
+    public void BeginFrame(ulong frameKey) {
+        m_arbiter.DrainFrame(frameKey: frameKey);
+
+        var state = m_arbiter.Sample(laneToken: m_lane);
+
         m_pressed.Clear();
 
         // Modifiers before buttons — the router applies signals in capture order, and the signal that crosses a
@@ -126,8 +140,7 @@ internal sealed class OverworldPageInput {
 
         if (!IsDefaultPage) {
             m_brickInputSuppressed = true;
-        }
-        else if (!AnyPageButtonHeld(state: in state)) {
+        } else if (!AnyPageButtonHeld(state: in state)) {
             m_brickInputSuppressed = false;
         }
     }

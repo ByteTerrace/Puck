@@ -19,9 +19,9 @@ internal sealed class SaveModule {
     /// <summary>The second magic byte ('F' — "Puck Framework").</summary>
     public const byte MagicHigh = 0x46;
 
+    private const ushort PayloadBase = (ushort)(SramBase + HeaderByteCount);
     private const ushort RamEnableAddress = 0x0000;
     private const byte RamEnableValue = 0x0A;
-    private const ushort PayloadBase = (ushort)(SramBase + HeaderByteCount);
 
     private readonly RomTable m_defaults;
     private readonly Sm83Emitter m_emitter;
@@ -107,7 +107,6 @@ internal sealed class SaveModule {
         EmitRamDisable();
         m_emitter.Return();
     }
-
     private void EmitStoreSubroutine() {
         var payloadCount = (byte)m_defaults.Length;
         var checksumAddress = (ushort)(PayloadBase + payloadCount);
@@ -134,7 +133,6 @@ internal sealed class SaveModule {
         EmitRamDisable();
         m_emitter.Return();
     }
-
     private void EmitChecksumSubroutine() {
         var loop = m_emitter.NewLabel();
 
@@ -156,12 +154,10 @@ internal sealed class SaveModule {
         m_emitter.JumpRelative(condition: Condition.NotZero, label: loop);
         m_emitter.Return();
     }
-
     private void EmitRamEnable() {
         m_emitter.LoadAImmediate(value: RamEnableValue);
         m_emitter.StoreAToAddress(address: RamEnableAddress);
     }
-
     private void EmitRamDisable() {
         m_emitter.XorA();
         m_emitter.StoreAToAddress(address: RamEnableAddress);

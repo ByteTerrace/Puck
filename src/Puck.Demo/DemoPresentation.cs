@@ -25,7 +25,7 @@ internal static class DemoPresentation {
             _ => SurfaceFormat.R8G8B8A8Unorm,
         };
 
-        return services.AddSingleton(new PresentationOptions {
+        return services.AddSingleton(implementationInstance: new PresentationOptions {
             PresentMode = mode,
             SurfaceFormat = format,
         });

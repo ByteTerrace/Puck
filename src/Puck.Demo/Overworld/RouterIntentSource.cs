@@ -4,14 +4,17 @@ using Puck.Input;
 namespace Puck.Demo.Overworld;
 
 /// <summary>
-/// The local-input <see cref="IPlayerIntentSource"/> on the engine's deterministic input path: it captures the
+/// The local-input <see cref="IIntentSource{TIntent}"/> of <see cref="PlayerIntent"/> on the engine's deterministic input path: it captures the
 /// gamepad into an <see cref="InputRouter"/> (the single canonical drain), then reads each tick's
 /// <see cref="CommandSnapshot"/> and projects the per-slot move/jump lane to a <see cref="PlayerIntent"/>. This
-/// replaces the direct <see cref="GamepadManager"/> drain — gameplay input now flows through the same
-/// timestamped, bindable, recordable path as everything else, so a controller drives its bound slot via the
-/// router's device→slot resolution.
+/// replaces a direct <see cref="GamepadManager"/> drain — gameplay input now flows through the same timestamped,
+/// bindable, recordable path as everything else, so a controller drives its bound slot via the router's
+/// device→slot resolution. The frame's actual drain lives one layer up, in the registered <see cref="IInputArbiter"/>
+/// lane (an <see cref="InputLaneMode.Multicast"/>-policy lane: this source routes per-device itself via
+/// <see cref="IInputArbiter.DrainedDevices"/>, so it needs the whole frame's drain, not one seat's).
 /// </summary>
-public sealed class RouterIntentSource : IPlayerIntentSource {
+public sealed class RouterIntentSource : IIntentSource<PlayerIntent> {
+    private readonly IInputArbiter m_arbiter;
     private readonly GamepadCaptureSource m_capture;
     private readonly CommandRegistry m_commandRegistry;
     private readonly bool m_hasInteract;
@@ -19,17 +22,22 @@ public sealed class RouterIntentSource : IPlayerIntentSource {
     private readonly bool m_hasMove;
     private readonly ushort m_interactId;
     private readonly ushort m_jumpId;
+    private readonly object m_lane;
     private readonly ushort m_moveId;
     private readonly InputRouter m_router;
     private CommandSnapshot m_frameSnapshot;
     private ulong m_firstTick;
 
-    /// <summary>Initializes the source over the gamepad manager, the controller→player bind table, the world (for player→slot resolution), and the capture clock.</summary>
+    /// <summary>Initializes the source over the input arbiter, the controller→player bind table, the world (for player→slot resolution), and the capture clock.</summary>
+    /// <param name="arbiter">The source of drained device input.</param>
+    /// <param name="registry">The controller-to-player assignment registry.</param>
+    /// <param name="world">The overworld simulation that resolves player slots.</param>
+    /// <param name="clock">The capture clock used to define snapshot windows.</param>
     /// <param name="bindings">The binding resolver the router folds signals through (a paged profile layered over
     /// the default, when one is loaded); <see langword="null"/> uses <see cref="OverworldInput.DefaultBindings"/>.</param>
-    public RouterIntentSource(GamepadManager manager, ControllerPlayerRegistry registry, OverworldWorld world, IInputClock clock, IInputBindings? bindings = null) {
+    public RouterIntentSource(IInputArbiter arbiter, ControllerPlayerRegistry registry, OverworldWorld world, IInputClock clock, IInputBindings? bindings = null) {
+        ArgumentNullException.ThrowIfNull(arbiter);
         ArgumentNullException.ThrowIfNull(clock);
-        ArgumentNullException.ThrowIfNull(manager);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(world);
 
@@ -44,7 +52,9 @@ public sealed class RouterIntentSource : IPlayerIntentSource {
                 ? world.SlotOf(playerId: player)
                 : -1)
         );
-        m_capture = new GamepadCaptureSource(clock: clock, manager: manager, router: m_router);
+        m_arbiter = arbiter;
+        m_capture = new GamepadCaptureSource(clock: clock, router: m_router);
+        m_lane = arbiter.RegisterLane(policy: InputLanePolicy.Multicast);
         m_hasMove = m_commandRegistry.TryGetId(name: OverworldInput.MoveCommand, id: out m_moveId);
         m_hasJump = m_commandRegistry.TryGetId(name: OverworldInput.JumpCommand, id: out m_jumpId);
         m_hasInteract = m_commandRegistry.TryGetId(name: OverworldInput.InteractCommand, id: out m_interactId);
@@ -53,6 +63,11 @@ public sealed class RouterIntentSource : IPlayerIntentSource {
     /// <summary>Gets the whole-frame snapshot the last <see cref="BeginFrame"/> produced (read by the binding-bar
     /// adapter for pressed-state display; the same data the intents project from).</summary>
     public CommandSnapshot FrameSnapshot => m_frameSnapshot;
+
+    /// <summary>Gets this source's arbiter lane token — exposed so a future registrant (a pause verb, the RTS
+    /// command lane) can mute gameplay input via <see cref="IInputArbiter.SuppressLane"/> without this source
+    /// needing to know why.</summary>
+    public object LaneToken => m_lane;
 
     /// <summary>Resolves a command name to the id interned by this source's registry.</summary>
     /// <param name="name">The command name.</param>
@@ -66,12 +81,13 @@ public sealed class RouterIntentSource : IPlayerIntentSource {
     public void BeginFrame(ulong firstTick) {
         m_firstTick = firstTick;
 
-        // Drain the manager once, capture into the router, then fold the whole frame's input into ONE snapshot
-        // (the MaxValue window consumes everything captured this frame). The held fold persists the stick value
-        // and the jump-held state, so CollectTick reuses this snapshot for every tick of the frame — the move
-        // axis applies on every tick (not just the first), matching the prior direct-drain behavior. Sub-tick
-        // attribution is a later refinement.
-        m_capture.Capture();
+        // Drain the arbiter once (a no-op if some other registrant already drained this frame key), capture into
+        // the router, then fold the whole frame's input into ONE snapshot (the MaxValue window consumes everything
+        // captured this frame). The held fold persists the stick value and the jump-held state, so CollectTick
+        // reuses this snapshot for every tick of the frame — the move axis applies on every tick (not just the
+        // first), matching the prior direct-drain behavior. Sub-tick attribution is a later refinement.
+        m_arbiter.DrainFrame(frameKey: firstTick);
+        m_capture.Capture(drains: m_arbiter.DrainedDevices);
         m_frameSnapshot = m_router.SnapshotForTick(tick: firstTick, windowEndTick: ulong.MaxValue);
         // Dispatch the frame's edges through the snapshot-driven path so the non-gameplay commands a binding
         // page targets (the demo.* placeholders) run their handlers; move/jump/interact are no-ops here and are
@@ -80,7 +96,7 @@ public sealed class RouterIntentSource : IPlayerIntentSource {
     }
 
     /// <inheritdoc/>
-    public PlayerIntent[] CollectTick(ulong tick, IReadOnlyList<Guid> players) {
+    public PlayerIntent[] CollectTick(ulong tick, IReadOnlyList<Guid> participants) {
         var firstOfFrame = (tick == m_firstTick);
         var row = new PlayerIntent[OverworldWorld.MaxPlayers];
 

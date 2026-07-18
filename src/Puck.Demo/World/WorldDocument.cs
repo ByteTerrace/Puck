@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Scene;
 
 namespace Puck.Demo.World;
 
@@ -55,17 +56,21 @@ public sealed record PlacementPatternDocument(
 /// <param name="YawDegrees">The stamp yaw (null = 0).</param>
 /// <param name="Scale">The uniform stamp scale (null = 1).</param>
 /// <param name="Repeat">The repeat block (null = a single copy).</param>
-/// <param name="Role">The anchor role (null = decoration; <c>cabinet:&lt;n&gt;</c> re-homes a console stand).
-/// PERSISTENCE SEAM (unwired — USER DECISION: no persistence for now, cloud saves near-future): a re-forged
-/// win/reveal condition (the live <c>condition.*</c> verbs) WOULD serialize onto THIS <c>cabinet:&lt;n&gt;</c>
-/// placement — its exit + victory conditions carried alongside the role — the same serializable seam a cloud save
-/// syncs. It is deliberately NOT wired this stage: <c>world.save</c> does not yet carry conditions, so a live re-forge
-/// is session-only. The run-document schema is UNCHANGED — conditions already exist on <c>GamingBrickSource</c>; live
-/// editing changes no schema.</param>
+/// <param name="Role">The anchor role (null = decoration; <c>cabinet:&lt;n&gt;</c> re-homes a console stand;
+/// <c>companion</c> dispatches into the live <see cref="Puck.Demo.Creator.CompanionRoster"/> — see
+/// <see cref="Puck.Demo.Creator.CompanionRoster.SpawnFromWorld"/>).</param>
 /// <param name="Mirror">The symmetry fold axis (<c>x</c> or <c>z</c> in the placement's local frame; null = none).
 /// A mirrored/patterned chain forgoes the whole-chain instance skip (the settled cull contract) — the per-shape
 /// skip inside the evaluated segment survives.</param>
 /// <param name="Pattern">The wallpaper pattern block (null = none).</param>
+/// <param name="Exit">PERSISTENCE SEAM: a re-forged fourth-wall EXIT condition (the live <c>condition.*</c> verbs —
+/// "the recursion") on a <c>cabinet:&lt;n&gt;</c> placement, carried alongside the role. Mirrors
+/// <see cref="GamingBrickSource.Exit"/> field-for-field (the SAME type — no schema evolution needed there); null =
+/// no re-forged exit (the cabinet keeps whatever the run document originally authored). Applied onto the running
+/// console at world load — see <c>OverworldFrameSource.ConsumePendingWorldLoad</c>.</param>
+/// <param name="Victory">PERSISTENCE SEAM: a re-forged 128-bit VICTORY condition, mirroring
+/// <see cref="GamingBrickSource.Victory"/> field-for-field; null = no re-forged victory. Only meaningful on a
+/// <c>cabinet:&lt;n&gt;</c> placement (ignored elsewhere, exactly like <see cref="Exit"/>).</param>
 public sealed record PlacementDocument(
     int Id,
     string? Name,
@@ -76,7 +81,9 @@ public sealed record PlacementDocument(
     PlacementRepeatDocument? Repeat,
     string? Role,
     string? Mirror = null,
-    PlacementPatternDocument? Pattern = null
+    PlacementPatternDocument? Pattern = null,
+    BrickExitCondition? Exit = null,
+    BrickVictoryCondition? Victory = null
 );
 
 /// <summary>One authored light emitter (street lamps, windows — presentation-side).</summary>
@@ -114,14 +121,14 @@ public sealed record CameraDocument(
 );
 
 /// <summary>One wiring-table entry: the source a screen surface index displays (mirrors
-/// <see cref="ScreenWire"/>/<see cref="ScreenWireSource"/> as normalized data). Wiring is pure data, edited by
-/// <c>world.wire</c> — never a heuristic. A source is a brick viewport by index, a camera feed by index, a named host
+/// <see cref="ScreenSource"/>/<see cref="ScreenSourceRef"/> as normalized data). Wiring is pure data, edited by
+/// <c>world.wire</c> — never a heuristic. A source is a guest viewport by index, a camera feed by index, a named host
 /// feed by name, or nothing.</summary>
 /// <param name="Screen">The screen-surface slot this entry wires (0..<c>SdfProgramBuilder.MaxScreenSurfaces</c> - 1).</param>
-/// <param name="Kind">The source family (<c>brick</c>, <c>feed</c>, <c>named</c>, or <c>none</c>; null = none).</param>
-/// <param name="Index">The brick console index or camera feed index (null = 0; ignored for <c>named</c>/<c>none</c>).</param>
+/// <param name="Kind">The source family (<c>guest</c>, <c>camera</c>, <c>named</c>, or <c>none</c>; null = none).</param>
+/// <param name="Index">The guest console index or camera feed index (null = 0; ignored for <c>named</c>/<c>none</c>).</param>
 /// <param name="Name">The named host feed's name (only for <c>named</c>; else null).</param>
-public sealed record ScreenWireDocument(
+public sealed record ScreenSourceDocument(
     int Screen,
     string? Kind,
     int? Index,
@@ -203,7 +210,7 @@ public sealed record WorldDocument(
     WalkGridDocument? WalkGrid,
     string? MovementLock = null,
     IReadOnlyList<CameraDocument>? Cameras = null,
-    IReadOnlyList<ScreenWireDocument>? Wiring = null
+    IReadOnlyList<ScreenSourceDocument>? Wiring = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.world.v1";

@@ -18,7 +18,6 @@ public sealed class GenlockPhaseAligner {
     private readonly bool m_enabled;
     private readonly ILogger m_logger;
     private readonly bool m_logPhase;
-
     private bool m_announced;
     private double m_errorAccumulator;
     private double m_integral;
@@ -29,7 +28,7 @@ public sealed class GenlockPhaseAligner {
 
     /// <summary>Initializes a new instance of the <see cref="GenlockPhaseAligner"/> class.</summary>
     /// <param name="clock">The external arrival clock producers publish into.</param>
-    /// <param name="enabled">Whether phase alignment runs at all (formerly the <c>PUCK_GENLOCK=0</c> off-switch).</param>
+    /// <param name="enabled">Whether phase alignment runs at all.</param>
     /// <param name="logger">The pacer's logger (the lock announcement + opt-in phase telemetry).</param>
     /// <param name="logPhase">Whether to periodically log the mean absolute phase error (the diagnostics opt-in).</param>
     public GenlockPhaseAligner(ExternalPresentClock clock, bool enabled, ILogger logger, bool logPhase) {
@@ -72,7 +71,7 @@ public sealed class GenlockPhaseAligner {
         // guard offset after it (enough that a publish just before a deadline is reliably visible to the frame that
         // fires at it). This keeps the FULL render rate — frames between arrivals stay where the grid puts them — and
         // the sustained slew needed to track the camera↔render beat shrinks with render rate (tiny at 120-240 Hz).
-        var desiredPhase = Math.Min(frequency / 500L, renderPeriod / 4L); // 2 ms, capped for very fast cadences
+        var desiredPhase = Math.Min(val1: (frequency / 500L), val2: (renderPeriod / 4L)); // 2 ms, capped for very fast cadences
         var phase = ((((deadline - arrival) % renderPeriod) + renderPeriod) % renderPeriod);
         var phaseError = (double)(phase - desiredPhase);
 
@@ -149,7 +148,7 @@ public sealed class GenlockPhaseAligner {
         ) {
             m_logger.LogInformation(
                 "Genlock phase: mean |error| {Error:0.00} ms over 240 frames (producer ~{Hertz:0.#} Hz).",
-                ((m_errorAccumulator / 240.0) * 1000.0 / frequency),
+                (((m_errorAccumulator / 240.0) * 1000.0) / frequency),
                 ((double)frequency / m_period)
             );
 

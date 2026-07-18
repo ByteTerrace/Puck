@@ -32,7 +32,7 @@ public static class RunDocumentValidator {
 
         var errors = new ValidationErrors();
 
-        if (!string.Equals(document.Version, PuckRunDocument.CurrentVersion, StringComparison.Ordinal)) {
+        if (!string.Equals(a: document.Version, b: PuckRunDocument.CurrentVersion, comparisonType: StringComparison.Ordinal)) {
             errors.Add(path: "version", message: $"expected \"{PuckRunDocument.CurrentVersion}\" but found \"{document.Version}\"");
         }
 
@@ -43,7 +43,7 @@ public static class RunDocumentValidator {
         var effectiveBounds = (document.Fuzzing?.Bounds?.ToShapeBounds() ?? bounds);
 
         // A run declares exactly ONE root intent: a graph (live render), a validation gate, or a fuzzing run.
-        var intents = ((document.Graph is not null) ? 1 : 0) + ((document.Validation is not null) ? 1 : 0) + ((document.Fuzzing is not null) ? 1 : 0);
+        var intents = ((((document.Graph is not null) ? 1 : 0) + ((document.Validation is not null) ? 1 : 0)) + ((document.Fuzzing is not null) ? 1 : 0));
 
         if (intents == 0) {
             errors.Add(path: "graph", message: "a run requires a graph node, a validation section, or a fuzzing section");
@@ -54,12 +54,13 @@ public static class RunDocumentValidator {
         // Only some run shapes CONSUME the scene + viewports: the compute world graph and the data-driven 'world'
         // validation gate. Overworld builds its own dynamic scene, the self-contained gates use none, and a fuzzing
         // run generates its own — so a scene is not required for those (but is still validated if present).
-        var consumesScene = (document.Graph is WorldNode)
-            || ((document.Validation is ValidationDocument sceneGate) && string.Equals(sceneGate.Gate, "world", StringComparison.OrdinalIgnoreCase));
+        var consumesScene = ((document.Graph is WorldNode)
+            || ((document.Validation is ValidationDocument sceneGate) && string.Equals(a: sceneGate.Gate, b: "world", comparisonType: StringComparison.OrdinalIgnoreCase)));
 
         ValidateScene(bounds: effectiveBounds, errors: errors, required: consumesScene, scene: (document.Scene ?? new SceneDocument()));
         ValidateViewports(errors: errors, required: consumesScene, viewports: (document.Viewports ?? []));
         ValidateScreenSources(consumed: (document.Graph is WorldNode), errors: errors, screenSources: document.ScreenSources, viewports: (document.Viewports ?? []));
+        ValidateAddons(addons: document.Addons, consumed: (document.Graph is not null), errors: errors);
 
         if (document.Graph is not null) {
             document.Graph.Validate(errors: errors, path: "graph", viewportCount: (document.Viewports?.Count ?? 0));
@@ -71,11 +72,50 @@ public static class RunDocumentValidator {
 
         // A validation/fuzzing gate renders OFFSCREEN and LUID-matches a Direct3D 12 device from a Vulkan host, so a
         // directx host backend is meaningless here; reject it rather than silently overriding it to Vulkan.
-        if (((document.Validation is not null) || (document.Fuzzing is not null)) && (document.Host?.Backend is string offscreenBackend) && string.Equals(offscreenBackend, "directx", StringComparison.OrdinalIgnoreCase)) {
+        if (((document.Validation is not null) || (document.Fuzzing is not null)) && (document.Host?.Backend is string offscreenBackend) && string.Equals(a: offscreenBackend, b: "directx", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             errors.Add(path: "host.backend", message: "host.backend:\"directx\" is incompatible with a validation/fuzzing run; the gate renders offscreen on a Vulkan host — omit host.backend or set it to \"vulkan\"");
         }
 
         return errors;
+    }
+
+    // Mirrors ValidateScreenSources: a top-level list section, null-tolerant, index-attributed paths, rejected when
+    // the selected root intent would silently ignore it (here, any graph run consumes addons; validation/fuzzing do
+    // not), plus a cross-entry duplicate-identity check (name, and separately the declared exclusive slot — two
+    // addons cannot own one roster slot, the isolation unit the demo's ghost lifecycle depends on). Null slots are
+    // not deduped here: the host seats them at the first free non-human slot, so defaults never collide.
+    private static void ValidateAddons(IReadOnlyList<AddonDocument>? addons, bool consumed, ValidationErrors errors) {
+        if (addons is null) {
+            return;
+        }
+
+        if (!consumed && (addons.Count > 0)) {
+            errors.Add(path: "addons", message: "addons is only consumed by a graph run; this run's root intent would silently ignore it");
+        }
+
+        var seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seenSlots = new HashSet<int>();
+
+        for (var index = 0; (index < addons.Count); index++) {
+            var entry = addons[index];
+            var path = $"addons[{index}]";
+
+            if (entry is null) {
+                errors.Add(path: path, message: "an addon entry cannot be null");
+
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(value: entry.Name) && !seenNames.Add(item: entry.Name)) {
+                errors.Add(path: $"{path}.name", message: $"addon name '{entry.Name}' is declared by more than one entry");
+            }
+
+            if ((entry.Slot is int slot) && !seenSlots.Add(item: slot)) {
+                errors.Add(path: $"{path}.slot", message: $"slot {slot} is declared by more than one addon");
+            }
+
+            entry.Validate(errors: errors, path: path);
+        }
     }
 
     // Unknown top-level members were captured into the root's [JsonExtensionData] rather than rejected (so a strict
@@ -90,7 +130,7 @@ public static class RunDocumentValidator {
 
         foreach (var key in extensions.Keys) {
             if ((key.Length != 0) && (key[0] != '$') && (key[0] != '_')) {
-                errors.Add(path: key, message: $"unknown top-level member '{key}'; top-level keys are case-sensitive camelCase (expected one of: version, host, scene, viewports, screenSources, graph, validation, fuzzing)");
+                errors.Add(path: key, message: $"unknown top-level member '{key}'; top-level keys are case-sensitive camelCase (expected one of: version, host, scene, viewports, screenSources, addons, graph, validation, fuzzing)");
             }
         }
     }
@@ -151,9 +191,7 @@ public static class RunDocumentValidator {
                 continue;
             }
 
-            if (sceneObject is not PlaneObject) {
-                primitiveCount++;
-            }
+            primitiveCount += CountPrimitives(sceneObject: sceneObject);
 
             sceneObject.Validate(bounds: bounds, errors: errors, materialCount: materialCount, path: $"scene.objects[{index}]");
         }
@@ -165,6 +203,18 @@ public static class RunDocumentValidator {
         if (primitiveCount > bounds.MaxPrimitives) {
             errors.Add(path: "scene.objects", message: $"places {primitiveCount} non-plane primitives; the limit is {bounds.MaxPrimitives}");
         }
+    }
+    // How many non-plane primitives one top-level object contributes toward bounds.MaxPrimitives — a GROUP is not
+    // itself a primitive, so it recurses into its members (real GPU/march cost lives there, not on the group
+    // wrapper); a null member (an invalid document the per-member Validate call above already flags) contributes
+    // nothing rather than throwing here. GroupObject nesting is validator-rejected, so this never recurses past one
+    // level in a document that otherwise passes, but the recursion costs nothing to leave general.
+    private static int CountPrimitives(SceneObject sceneObject) {
+        if (sceneObject is GroupObject group) {
+            return (group.Objects ?? []).Sum(selector: static member => ((member is null) ? 0 : CountPrimitives(sceneObject: member)));
+        }
+
+        return ((sceneObject is PlaneObject) ? 0 : 1);
     }
     private static void ValidateScreenSources(IReadOnlyList<ScreenSourceDocument>? screenSources, IReadOnlyList<Viewport> viewports, bool consumed, ValidationErrors errors) {
         if (screenSources is null) {

@@ -11,6 +11,9 @@ namespace Puck.Post;
 /// a single flipped mirror, mis-rotated turn, or trunc-vs-floor modulo mis-coloring changes pixels on one backend
 /// and trips the diff. Motifs are authored well clear of cell boundaries and rotation seams (the same authoring rule
 /// as <c>Repeat</c>), so every fold branch is an exact isometry and the diff stays within the ±1 signature.
+/// <para>This stage gates that the two backends AGREE, NOT that a group is the one named (two equally-wrong renders
+/// agree — the blindness that once hid P4G rendering as p4). The p4g GROUP-IDENTITY correctness tooth is the sibling
+/// <see cref="WorldWallpaperP4gStage"/> (single-cell translation invariance: period-1 p4g, not period-2 p4).</para>
 /// </summary>
 internal sealed class WorldWallpaperStage : IPostStage {
     private const uint WorldHeight = 600;
@@ -36,38 +39,39 @@ internal sealed class WorldWallpaperStage : IPostStage {
     // 2 palette rows; hex: the 3-coloring over 3 rows), so the floor-mod cell keys are also under test.
     internal static SdfProgram BuildWallpaperScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.45f, 0.5f, 0.55f)));
-        var rose = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.35f, 0.45f)));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.45f, y: 0.5f, z: 0.55f)));
+        var rose = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.35f, z: 0.45f)));
         // The sky row is reached ONLY through the square chain's checker stride (rose + key 1) — never named.
-        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.3f, 0.6f, 0.9f)));
-        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.75f, 0.25f)));
+        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.3f, y: 0.6f, z: 0.9f)));
+        var gold = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.75f, z: 0.25f)));
         // The mint/plum rows are reached ONLY through the hex chain's parity stride (gold + key 1/2) — never named.
-        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.4f, 0.85f, 0.6f)));
-        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.65f, 0.35f, 0.8f)));
+        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.4f, y: 0.85f, z: 0.6f)));
+        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.65f, y: 0.35f, z: 0.8f)));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // Square-lattice chain: P4G over a 0.8-unit cell, 2-cell limit, checker stride over rose/sky. The motif
-            // (an off-center leaning cone + a smaller sphere) sits ~0.2 units from every boundary/seam.
-            .Translate(offset: new Vector3(-2.2f, 0f, 0.6f))
-            .WallpaperFold(group: SdfWallpaperGroup.P4G, cell: new Vector2(0.8f, 0.8f), limit: new Vector2(2f, 2f), materialStride: 1)
-            .Translate(offset: new Vector3(0.06f, -0.02f, 0.1f))
-            .RoundCone(lowerRadius: 0.14f, upperRadius: 0.05f, height: 0.3f, material: rose)
+            // (an off-center leaning cone + a smaller sphere) sits inside the p4g fundamental wedge {x>=0, z>=0,
+            // x+z <= cell/2}, clear of the quadrant seams (x=0, z=0) and the offset-diagonal mirror.
+            .Translate(offset: new Vector3(x: -2.2f, y: 0f, z: 0.6f))
+            .WallpaperFold(group: SdfWallpaperGroup.P4G, cell: new Vector2(x: 0.8f, y: 0.8f), limit: new Vector2(x: 2f, y: 2f), materialStride: 1)
+            .Translate(offset: new Vector3(x: 0.13f, y: -0.02f, z: 0.13f))
+            .RoundCone(lowerRadius: 0.1f, upperRadius: 0.03f, height: 0.24f, material: rose)
             .ResetPoint()
-            .Translate(offset: new Vector3(-2.2f, 0f, 0.6f))
-            .WallpaperFold(group: SdfWallpaperGroup.P4G, cell: new Vector2(0.8f, 0.8f), limit: new Vector2(2f, 2f), materialStride: 1)
-            .Translate(offset: new Vector3(-0.1f, 0.08f, -0.06f))
-            .Sphere(radius: 0.08f, material: rose)
+            .Translate(offset: new Vector3(x: -2.2f, y: 0f, z: 0.6f))
+            .WallpaperFold(group: SdfWallpaperGroup.P4G, cell: new Vector2(x: 0.8f, y: 0.8f), limit: new Vector2(x: 2f, y: 2f), materialStride: 1)
+            .Translate(offset: new Vector3(x: 0.07f, y: 0.08f, z: 0.18f))
+            .Sphere(radius: 0.06f, material: rose)
             // Hex-lattice chain: P6M over a 0.9-unit pitch, 2-axial-cell limit, 3-coloring stride over gold/mint/plum.
             .ResetPoint()
-            .Translate(offset: new Vector3(1.9f, 0f, -0.2f))
-            .WallpaperFold(group: SdfWallpaperGroup.P6M, cell: new Vector2(0.9f, 0.9f), limit: new Vector2(2f, 2f), materialStride: 1)
-            .Translate(offset: new Vector3(0.05f, 0f, 0.12f))
+            .Translate(offset: new Vector3(x: 1.9f, y: 0f, z: -0.2f))
+            .WallpaperFold(group: SdfWallpaperGroup.P6M, cell: new Vector2(x: 0.9f, y: 0.9f), limit: new Vector2(x: 2f, y: 2f), materialStride: 1)
+            .Translate(offset: new Vector3(x: 0.05f, y: 0f, z: 0.12f))
             .RoundCone(lowerRadius: 0.12f, upperRadius: 0.04f, height: 0.26f, material: gold)
             .ResetPoint()
-            .Translate(offset: new Vector3(1.9f, 0f, -0.2f))
-            .WallpaperFold(group: SdfWallpaperGroup.P6M, cell: new Vector2(0.9f, 0.9f), limit: new Vector2(2f, 2f), materialStride: 1)
-            .Translate(offset: new Vector3(-0.08f, 0.05f, 0.02f))
+            .Translate(offset: new Vector3(x: 1.9f, y: 0f, z: -0.2f))
+            .WallpaperFold(group: SdfWallpaperGroup.P6M, cell: new Vector2(x: 0.9f, y: 0.9f), limit: new Vector2(x: 2f, y: 2f), materialStride: 1)
+            .Translate(offset: new Vector3(x: -0.08f, y: 0.05f, z: 0.02f))
             .Sphere(radius: 0.07f, material: gold)
             .Build();
     }

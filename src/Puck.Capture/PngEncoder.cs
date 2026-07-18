@@ -21,7 +21,7 @@ public static class PngEncoder {
 
         if (rgba.Length != (rowBytes * height)) {
             throw new ArgumentException(
-                message: $"Expected {rowBytes * height} bytes of RGBA for {width}x{height}, got {rgba.Length}.",
+                message: $"Expected {(rowBytes * height)} bytes of RGBA for {width}x{height}, got {rgba.Length}.",
                 paramName: nameof(rgba)
             );
         }
@@ -39,7 +39,7 @@ public static class PngEncoder {
         WriteChunk(stream: stream, type: "IHDR", data: header);
 
         // Prefix each scanline with a "none" filter byte, then zlib-compress the lot.
-        var filtered = new byte[height * (1 + rowBytes)];
+        var filtered = new byte[(height * (1 + rowBytes))];
 
         for (var y = 0; (y < height); y++) {
             rgba.Slice(start: (y * rowBytes), length: rowBytes).CopyTo(destination: filtered.AsSpan(start: ((y * (1 + rowBytes)) + 1), length: rowBytes));
@@ -89,12 +89,12 @@ public static class PngEncoder {
 
         Span<byte> crcBytes = stackalloc byte[4];
 
-        BinaryPrimitives.WriteUInt32BigEndian(destination: crcBytes, value: (crc ^ 0xFFFFFFFFu));
+        BinaryPrimitives.WriteUInt32BigEndian(destination: crcBytes, value: crc ^ 0xFFFFFFFFu);
         stream.Write(buffer: crcBytes);
     }
     private static uint UpdateCrc(uint crc, ReadOnlySpan<byte> data) {
         foreach (var value in data) {
-            crc = (CrcTable[(crc ^ value) & 0xFF] ^ (crc >> 8));
+            crc = CrcTable[(crc ^ value) & 0xFF] ^ (crc >> 8);
         }
 
         return crc;
@@ -102,15 +102,15 @@ public static class PngEncoder {
     private static uint Adler32(ReadOnlySpan<byte> data) {
         const uint Modulo = 65521;
 
-        uint a = 1;
-        uint b = 0;
+        var a = 1U;
+        var b = 0U;
 
         foreach (var value in data) {
             a = ((a + value) % Modulo);
             b = ((b + a) % Modulo);
         }
 
-        return ((b << 16) | a);
+        return (b << 16) | a;
     }
     private static uint[] BuildCrcTable() {
         var table = new uint[256];
@@ -120,7 +120,7 @@ public static class PngEncoder {
 
             for (var bit = 0; (bit < 8); bit++) {
                 value = ((0 != (value & 1))
-                    ? (0xEDB88320u ^ (value >> 1))
+                    ? 0xEDB88320u ^ (value >> 1)
                     : (value >> 1));
             }
 

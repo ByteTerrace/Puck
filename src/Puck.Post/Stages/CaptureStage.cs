@@ -1,24 +1,12 @@
-using System.Runtime.Versioning;
-using Puck.Abstractions.Capture;
-using Puck.Capture;
-using Puck.Platform;
-using Puck.Platform.Windows;
-
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-B stage B5. Native image capture, environment-lenient: drives the whole backend-neutral capture pipeline end
-/// to end — a GDI screen grab through the neutral <see cref="IFrameCaptureSource"/> seam into a
-/// <see cref="CaptureSink"/> (with a <see cref="FrameHashObserver"/>), writing <c>capture-desktop.png</c> into the
-/// POST's artifacts. It proves the pipeline WIRING; signal is environmental (a headless or secure desktop
-/// legitimately yields nothing), so no-signal outcomes are a <see cref="PostVerdict.Skip"/>, never a
-/// <see cref="PostVerdict.Fail"/> — only an actual error fails (and that surfaces as the battery's
-/// <see cref="PostVerdict.Infra"/> catch).
+/// Tier-B native capture lifetime contract. The hostile target lives in a child process so a regression in the
+/// platform feed cannot wedge the main battery; the child exercises pixels, fixed dimensions, resize/minimize/close,
+/// concurrent consumption, a permanently non-pumping target, repeated resource reclamation, and a lenient
+/// whole-monitor feed.
 /// </summary>
 internal sealed class CaptureStage : IPostStage {
-    private const int TargetHeight = 720;
-    private const int TargetWidth = 1280;
-
     /// <inheritdoc/>
     public string Name => "capture";
 
@@ -27,69 +15,23 @@ internal sealed class CaptureStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        if (!OperatingSystem.IsWindows()) {
-            return PostStageOutcome.Skip(detail: "native image capture requires Windows");
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) {
+            return PostStageOutcome.Skip(detail: "window capture requires Windows 10 2004 (build 19041) or newer");
         }
 
-        return Capture(context: context);
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static PostStageOutcome Capture(PostContext context) {
-        if (!new Win32NativeImageCaptureService().TryCreateScreenCapture(
-            height: TargetHeight,
-            session: out var session,
-            width: TargetWidth
-        )) {
-            return PostStageOutcome.Skip(detail: "no screen-capture session (headless or secure desktop)");
+        var result = PostProbeProcess.RunCaptureLifetime();
+        if (result.TimedOut) {
+            return PostStageOutcome.Fail(detail: $"the hostile-window capture probe hung and was killed after {PostProbeProcess.TimeoutSeconds}s ({result.OutputTail})");
         }
 
-        var artifactPath = Path.Combine(context.ArtifactsDirectory, "capture-desktop.png");
-
-        _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-
-        using var source = new NativeImageCaptureSource(session: session);
-        using var sink = new CaptureSink(
-            observers: [new FrameHashObserver()],
-            options: new CaptureOptions { OutputPath = artifactPath }
-        );
-
-        for (var attempt = 0; (attempt < 8); attempt++) {
-            if (source.TryCapture(out var surface)) {
-                sink.Consume(frame: new CaptureFrame(
-                    FrameIndex: 0,
-                    Surface: surface,
-                    TimestampTicks: 0
-                ));
-
-                // Content check (still environment-lenient): a real desktop grab has spatial variety, so we now assert
-                // the captured pixels are not a flat fill rather than only that the pipeline ran. A uniform frame is a
-                // legitimately blank/secure/locked desktop → Skip, never Fail; only genuine variety is a Pass.
-                var distinct = DistinctPixels(pixels: surface.Pixels.Span, cap: 256);
-
-                if (distinct < 2) {
-                    return PostStageOutcome.Skip(detail: "the captured frame was uniform (blank, locked, or secure desktop)");
-                }
-
-                return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"{TargetWidth}x{TargetHeight} desktop via GDI native image capture ({distinct}{((distinct >= 256) ? "+" : string.Empty)} distinct colors)");
-            }
+        if ((0 == result.ExitCode) && result.Output.Contains(value: "PROBE capture-lifetime ok", comparisonType: StringComparison.Ordinal)) {
+            return PostStageOutcome.Pass(detail: $"compositor capture pixels and bounded lifetime verified in an isolated hostile-window run ({result.OkLine})");
         }
 
-        return PostStageOutcome.Skip(detail: "the screen produced no frame within the retry budget");
-    }
-
-    // Distinct 32-bit (RGBA) pixel values in the readback, counted up to `cap` (early-out — 2 is enough to prove the
-    // frame is not a flat fill; the cap keeps a full-desktop buffer cheap).
-    private static int DistinctPixels(ReadOnlySpan<byte> pixels, int cap) {
-        var seen = new HashSet<uint>();
-        var pixels32 = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(span: pixels);
-
-        for (var index = 0; (index < pixels32.Length); index++) {
-            if ((seen.Add(item: pixels32[index])) && (seen.Count >= cap)) {
-                break;
-            }
+        if ((0 == result.ExitCode) && result.Output.Contains(value: "PROBE capture-lifetime skip", comparisonType: StringComparison.Ordinal)) {
+            return PostStageOutcome.Skip(detail: $"the interactive Windows capture service is unavailable ({result.OutputTail})");
         }
 
-        return seen.Count;
+        return PostStageOutcome.Fail(detail: $"the capture-lifetime probe exited {result.ExitCode} ({result.OutputTail})");
     }
 }

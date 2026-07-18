@@ -12,8 +12,8 @@ namespace Puck.Demo.Forge.Tune;
 /// </summary>
 internal sealed class TuneGame {
     private const byte GameLcdc = Hw.LcdBackgroundAndObjects;
-    private const int TitleRow = 6;
     private const int PromptRow = 10;
+    private const int TitleRow = 6;
 
     private readonly GameFramework m_fw;
     private readonly RomTable m_bgPalettes;
@@ -137,7 +137,7 @@ internal sealed class TuneGame {
         var builder = new System.Text.StringBuilder(capacity: upper.Length);
 
         foreach (var character in upper) {
-            builder.Append(value: ((character is (>= '0') and (<= '9')) || (character is (>= 'A') and (<= 'Z')) || (character is ' ' or '>' or '-')) ? character : ' ');
+            builder.Append(value: (((character is (>= '0') and (<= '9')) || (character is (>= 'A') and (<= 'Z')) || (character is ' ' or '>' or '-')) ? character : ' '));
         }
 
         var sanitized = builder.ToString().Trim();

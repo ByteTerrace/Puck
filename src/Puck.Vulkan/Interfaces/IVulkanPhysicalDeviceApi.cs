@@ -22,6 +22,16 @@ public interface IVulkanPhysicalDeviceApi {
     /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
     /// <returns>The device type.</returns>
     VkPhysicalDeviceType GetPhysicalDeviceType(nint instanceHandle, nint physicalDeviceHandle);
+    /// <summary>Gets the Vulkan API version a physical device supports (the <c>apiVersion</c> field of <c>VkPhysicalDeviceProperties</c>).</summary>
+    /// <param name="instanceHandle">The native <c>VkInstance</c> handle.</param>
+    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
+    /// <returns>The packed <c>VK_MAKE_API_VERSION</c> value the device reports; a shader module built for a higher version than this is rejected at <c>vkCreateShaderModule</c>.</returns>
+    uint GetDeviceApiVersion(nint instanceHandle, nint physicalDeviceHandle);
+    /// <summary>Gets the human-readable name of a physical device (the <c>deviceName</c> field of <c>VkPhysicalDeviceProperties</c>).</summary>
+    /// <param name="instanceHandle">The native <c>VkInstance</c> handle.</param>
+    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
+    /// <returns>The device name, for diagnostics.</returns>
+    string GetDeviceName(nint instanceHandle, nint physicalDeviceHandle);
     /// <summary>Gets a physical device's adapter LUID — the identifier a Direct3D 12 device must be created on to share GPU resources with it.</summary>
     /// <param name="instanceHandle">The native <c>VkInstance</c> handle.</param>
     /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>

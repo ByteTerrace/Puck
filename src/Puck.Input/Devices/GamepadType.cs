@@ -12,4 +12,8 @@ public enum GamepadType {
     PlayStation5 = 3,
     /// <summary>A Nintendo Switch Pro controller.</summary>
     SwitchPro = 4,
+    /// <summary>A Valve Steam Controller (dual-trackpad controller with a single analog stick and grip paddles).</summary>
+    SteamController = 5,
+    /// <summary>A Valve Steam Controller (2026, codename Triton): dual sticks + dual trackpads, four rear paddles, and a 6-axis IMU, over its wireless puck receiver.</summary>
+    SteamControllerTriton = 6,
 }

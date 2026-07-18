@@ -84,6 +84,12 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         // caller's in-flight fence wait guarantees the buffer is not pending.
         m_commandBufferRecordingApi.BeginCommandBuffer(request: request).ThrowIfFailed(operation: "vkBeginCommandBuffer");
         m_commandBufferRecordingApi.StartRenderPass(request: request);
+        // The present-path fullscreen blit — the surface compositor's one draw — as a GPU-capture debug group.
+        m_commandBufferRecordingApi.BeginDebugLabel(
+            commandBufferHandle: request.CommandBufferHandle,
+            deviceHandle: request.DeviceHandle,
+            label: "surface-blit"
+        );
         // Dynamic scissor over the whole framebuffer; the pipeline bakes the matching viewport.
         m_commandBufferRecordingApi.SetScissor(
             commandBufferHandle: request.CommandBufferHandle,
@@ -154,6 +160,10 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
             );
         }
 
+        m_commandBufferRecordingApi.EndDebugLabel(
+            commandBufferHandle: request.CommandBufferHandle,
+            deviceHandle: request.DeviceHandle
+        );
         m_commandBufferRecordingApi.EndRenderPass(
             commandBufferHandle: request.CommandBufferHandle,
             deviceHandle: request.DeviceHandle

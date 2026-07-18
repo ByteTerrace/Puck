@@ -6,7 +6,7 @@ namespace Puck.Post;
 /// <summary>
 /// Tier-D stage D4. The GPU-ms budget. It times the REAL hero world render — the full beam → cull-args → views
 /// (indirect) → composite pipeline through <see cref="Puck.SdfVm.SdfWorldEngine"/> with opt-in GPU timestamp bracketing — on
-/// the offscreen Vulkan host, proving the per-pass timestamp counters (the PUCK_TIMING plumbing:
+/// the offscreen Vulkan host, proving the per-pass timestamp counters (the GPU-timing plumbing:
 /// <see cref="IGpuTimingPoolFactory"/> / <see cref="IGpuTimingPool"/> / <see cref="IGpuTimingRecorder"/>) are LIVE and
 /// resolve to a plausible per-frame GPU time, then applies a LOOSE sanity ceiling. Without a calibrated per-machine
 /// baseline a tight budget is not yet possible (per the plan), so this is a regression TRIPWIRE — the hero frame

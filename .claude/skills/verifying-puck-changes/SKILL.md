@@ -48,8 +48,8 @@ Everything below is for **engine and emulator** work.
 | Suspected backend divergence | the differential fuzzer: `--filter fuzz` (or `--stage fuzz --fuzz-seed N`), or a document with a `fuzzing` section |
 | Camera/webcam paths | the `camera-share` stage covers the seam; live smoke = cycle an overworld cabinet to the camera cart type and watch the pane |
 | Run-document model / schema / a new field | `--stage run-document` (parses + round-trips every example, checks the committed schema) |
-| GB/GBC emulator | `dotnet run --project experimental/Puck.HumbleGamingBrick.Post -c Release` |
-| GBA emulator | `dotnet run --project experimental/Puck.AdvancedGamingBrick.Post -c Release` (diagnostics: `--lockstep`, `--trace-cycles`, `--iodump`) |
+| GB/GBC emulator | `dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release` |
+| GBA emulator | `dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release` (diagnostics: `--lockstep`, `--trace-cycles`, `--iodump`) |
 
 Full battery = `dotnet run --project src/Puck.Post -c Release`. Exit codes
 everywhere: 0 pass, 1 a check failed, 2 infrastructure failure. Reference-ROM
@@ -62,6 +62,14 @@ stages skip cleanly when the corpus is absent.
   no call-sequence assertions, nothing that breaks on a pure rename.
 - **Report gate output faithfully** — a red stage is a finding, not an obstacle;
   name the stage and why.
+- **A changed state hash after a deliberate sim correction is not a
+  determinism failure.** Determinism pins the mapping (same document + same
+  input → bit-identical state at a fixed code version), never output stability
+  across versions. The determinism and replay gates capture and verify within
+  the same build and pin no historical constants — prove the correction by
+  re-running the tier, and re-record any persisted replays or baselines it
+  invalidates in the same change. Never preserve a wrong result to keep a hash
+  stable.
 - Detail (tier contents, env vars, asset locations, hardware gotchas) lives in
   [docs/agent-guide.md](../../../docs/agent-guide.md), the source of truth. If
   this table and the guide disagree, trust the guide and fix this table.

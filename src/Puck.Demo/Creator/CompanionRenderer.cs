@@ -41,6 +41,12 @@ public sealed class CompanionRenderer {
 
     private readonly CompanionRoster m_roster;
     private readonly int m_slotBase;
+    // The last-packed per-shape world transform, indexed (companionIndex * ShapeSlotCapacity) + shapeIndex — a
+    // small side cache alongside the real dynamic-transform buffer so a caller (a companion's diegetic camera-feed
+    // anchor — see CompanionEmitter.TryGetShapeTransform) can read a shape's live pose without holding its
+    // own copy of the shared per-frame transforms buffer. Mirrors what it just wrote into `transforms`, one frame
+    // stale by construction (read before the NEXT PackTransforms call, exactly like every other diegetic-feed anchor).
+    private readonly DynamicTransform[] m_lastShapeTransforms = new DynamicTransform[(CompanionState.MaxCompanions * ShapeSlotCapacity)];
 
     /// <summary>Initializes the renderer over a roster at its dynamic-transform slot base.</summary>
     /// <param name="roster">The live companion roster.</param>
@@ -99,9 +105,7 @@ public sealed class CompanionRenderer {
     /// story.</summary>
     /// <param name="transforms">The unified dynamic-transform buffer (the pool writes its own slot range).</param>
     /// <param name="hiddenPosition">Where hidden slots park (far below the floor).</param>
-    public void PackTransforms(DynamicTransform[] transforms, Vector3 hiddenPosition) {
-        ArgumentNullException.ThrowIfNull(transforms);
-
+    public void PackTransforms(Span<DynamicTransform> transforms, Vector3 hiddenPosition) {
         var companions = m_roster.Companions;
 
         for (var companionIndex = 0; (companionIndex < CompanionState.MaxCompanions); companionIndex++) {
@@ -112,7 +116,10 @@ public sealed class CompanionRenderer {
                 transforms[rootSlot] = new DynamicTransform(Orientation: Quaternion.Identity, Position: hiddenPosition);
 
                 for (var shapeIndex = 0; (shapeIndex < ShapeSlotCapacity); shapeIndex++) {
-                    transforms[rootSlot + 1 + shapeIndex] = new DynamicTransform(Orientation: Quaternion.Identity, Position: hiddenPosition);
+                    var hidden = new DynamicTransform(Orientation: Quaternion.Identity, Position: hiddenPosition);
+
+                    transforms[((rootSlot + 1) + shapeIndex)] = hidden;
+                    m_lastShapeTransforms[((companionIndex * ShapeSlotCapacity) + shapeIndex)] = hidden;
                 }
 
                 continue;
@@ -130,25 +137,47 @@ public sealed class CompanionRenderer {
             var blend = companion.FrameBlend;
 
             for (var shapeIndex = 0; (shapeIndex < ShapeSlotCapacity); shapeIndex++) {
-                var slot = (rootSlot + 1 + shapeIndex);
+                var slot = ((rootSlot + 1) + shapeIndex);
 
                 if (shapeIndex >= shapes.Count) {
-                    transforms[slot] = new DynamicTransform(Orientation: Quaternion.Identity, Position: hiddenPosition);
+                    var hidden = new DynamicTransform(Orientation: Quaternion.Identity, Position: hiddenPosition);
+
+                    transforms[slot] = hidden;
+                    m_lastShapeTransforms[((companionIndex * ShapeSlotCapacity) + shapeIndex)] = hidden;
 
                     continue;
                 }
 
                 var shape = shapes[shapeIndex];
+
                 var (position, rotation) = ResolvePose(currentFramePoses: currentFramePoses, nextFramePoses: nextFramePoses, blend: blend, shape: shape);
                 // Composed companionRoot ∘ per-shape frame transform: the shape's authored/posed position and
                 // orientation are expressed in the companion's OWN local frame, so rotating the root turns the whole
                 // creation together while each shape still replays its individual frame pose within it.
                 var worldPosition = (companion.Position + Vector3.Transform(value: position, rotation: companion.Rotation));
                 var worldRotation = Quaternion.Normalize(value: (companion.Rotation * rotation));
+                var packed = new DynamicTransform(Orientation: worldRotation, Position: worldPosition);
 
-                transforms[slot] = new DynamicTransform(Orientation: worldRotation, Position: worldPosition);
+                transforms[slot] = packed;
+                m_lastShapeTransforms[((companionIndex * ShapeSlotCapacity) + shapeIndex)] = packed;
             }
         }
+    }
+
+    /// <summary>The last <see cref="PackTransforms"/> call's world transform for companion
+    /// <paramref name="companionIndex"/>'s shape <paramref name="shapeIndex"/> (see
+    /// <see cref="CompanionEmitter.TryGetShapeTransform"/>'s remarks on the staleness this carries).
+    /// Returns <see langword="false"/> for an out-of-range index or before the first pack.</summary>
+    public bool TryGetLastShapeTransform(int companionIndex, int shapeIndex, out DynamicTransform transform) {
+        if ((companionIndex < 0) || (companionIndex >= CompanionState.MaxCompanions) || (shapeIndex < 0) || (shapeIndex >= ShapeSlotCapacity)) {
+            transform = default;
+
+            return false;
+        }
+
+        transform = m_lastShapeTransforms[((companionIndex * ShapeSlotCapacity) + shapeIndex)];
+
+        return true;
     }
 
     private void EmitOneCompanion(SdfProgramBuilder builder, CompanionState? companion, int faceSlot, bool probeWorstCase, int rootSlot) {
@@ -173,9 +202,10 @@ public sealed class CompanionRenderer {
                 continue; // pass 2 — the shape emits inside its group's instance.
             }
 
-            var slot = (rootSlot + 1 + index);
-            var type = (placed?.Type ?? AvatarPrimitive.Sphere);
-            var scale = (placed?.Scale ?? Vector3.One);
+            // Resolve the whole per-shape modifier envelope in ONE call (ResolveShape) rather than a `??` per field
+            // inline here — keeps EmitOneCompanion's own decision-point count flat as the envelope grows (CA1502).
+            var resolved = ResolveShape(placed: placed);
+            var slot = ((rootSlot + 1) + index);
             var material = paletteIds[((placed?.Material ?? 0) % paletteIds.Length)];
             // A shape slot past this companion's live shape count — and EVERY slot of an unused companion slot — is a
             // hidden placeholder; PARK it (Active=false) so the beam cull skips it instead of testing MaxCompanions x 64
@@ -183,17 +213,19 @@ public sealed class CompanionRenderer {
             // fully active so it still measures the true worst case.
             var active = (probeWorstCase || (placed is not null));
 
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: scale), active: active);
+            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: resolved.Scale), active: active);
             EmitShape(
+                bend: resolved.Bend,
                 builder: builder,
+                dilate: resolved.Dilate,
                 material: material,
-                mirror: (placed?.Mirror ?? false),
-                onion: (placed?.Onion ?? 0f),
+                mirror: resolved.Mirror,
+                onion: resolved.Onion,
                 probeWorstCase: probeWorstCase,
-                scale: scale,
+                scale: resolved.Scale,
                 slot: slot,
-                twist: (placed?.Twist ?? 0f),
-                type: type
+                twist: resolved.Twist,
+                type: resolved.Type
             );
             _ = builder.EndInstance();
         }
@@ -222,10 +254,10 @@ public sealed class CompanionRenderer {
         // diegetic screen" story cabinets/the preview easel follow; the renderer never draws a flat stand-in shape
         // for a face that has nowhere to shine (the companion's own body shapes already read fine without one).
         if (probeWorstCase || ((companion is not null) && (faceSlot >= 0))) {
-            var faceMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.10f, 0.11f, 0.13f)));
+            var faceMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.10f, y: 0.11f, z: 0.13f)));
             var screenIndex = (probeWorstCase ? 0 : faceSlot);
-            var faceHalfExtents = new Vector3(0.34f, 0.30f, 0.05f);
-            var faceLocalOffset = new Vector3(0f, 0.2f, 0.4f);
+            var faceHalfExtents = new Vector3(x: 0.34f, y: 0.30f, z: 0.05f);
+            var faceLocalOffset = new Vector3(x: 0f, y: 0.2f, z: 0.4f);
 
             _ = builder.BeginInstanceDynamic(slot: rootSlot, boundOffset: faceLocalOffset, boundRadius: (faceHalfExtents.Length() + 0.1f));
             _ = builder.ResetPoint().TransformDynamic(slot: rootSlot).Translate(offset: faceLocalOffset).ScreenSlab(
@@ -268,15 +300,17 @@ public sealed class CompanionRenderer {
             }
 
             EmitShape(
+                bend: (shape.Bend ?? 0f),
                 blend: (shape.Blend ?? SdfBlendOp.Union),
                 builder: builder,
+                dilate: (shape.Dilate ?? 0f),
                 inGroupScope: true,
-                material: paletteIds[(shape.Material ?? 0) % paletteIds.Length],
+                material: paletteIds[((shape.Material ?? 0) % paletteIds.Length)],
                 mirror: (shape.Mirror ?? false),
                 onion: (shape.Onion ?? 0f),
                 probeWorstCase: probeWorstCase,
                 scale: shape.Scale,
-                slot: (rootSlot + 1 + member),
+                slot: ((rootSlot + 1) + member),
                 smooth: (shape.Smooth ?? 0f),
                 twist: (shape.Twist ?? 0f),
                 type: shape.Type
@@ -301,7 +335,7 @@ public sealed class CompanionRenderer {
 
         for (var index = 0; (index < count); index++) {
             var entry = ((index < palette.Count) ? palette[index] : (PaletteEntryDocument?)null);
-            var material = new SdfMaterial(Albedo: (entry?.Albedo ?? new Vector3(0.6f, 0.6f, 0.65f)));
+            var material = new SdfMaterial(Albedo: (entry?.Albedo ?? new Vector3(x: 0.6f, y: 0.6f, z: 0.65f)));
 
             ids[index] = builder.AddMaterial(material: (material with {
                 Emissive = (entry?.Emissive ?? material.Emissive),
@@ -333,7 +367,7 @@ public sealed class CompanionRenderer {
             return cached;
         }
 
-        var frame = frames[frameCursor - 1];
+        var frame = frames[(frameCursor - 1)];
         var poses = new Dictionary<int, FrameTransformDocument>(capacity: frame.Transforms.Count);
 
         foreach (var pose in frame.Transforms) {
@@ -379,18 +413,19 @@ public sealed class CompanionRenderer {
         return (shape.Position, shape.Rotation);
     }
 
-    // One shape's emission: ResetPoint + TransformDynamic + Scale + [mirror/twist: POINT ops, before the shape] +
-    // the primitive (blend/smooth ride the primitive instruction) + [onion: a FIELD op, AFTER the shape] — IDENTICAL
-    // op sequence to CreatorSceneRenderer.EmitShape (the SAME shared canonical dimensions via AvatarDefinition, so a
-    // companion's shape is byte-for-byte the geometry the creator previewed and the forge could bake).
-    // probeWorstCase emits ALL per-shape modifier ops unconditionally, matching CreatorSceneRenderer's binding rule.
+    // One shape's emission: ResetPoint + TransformDynamic + Scale + [mirror/twist/bend: POINT ops, before the shape,
+    // in that order] + the primitive (blend/smooth ride the primitive instruction) + [dilate/onion: FIELD ops, AFTER
+    // the shape, dilate then onion] — IDENTICAL op sequence to CreatorSceneRenderer.EmitShape (the SAME shared
+    // canonical dimensions via AvatarDefinition, so a companion's shape is byte-for-byte the geometry the creator
+    // previewed and the forge could bake). probeWorstCase emits ALL per-shape modifier ops unconditionally, matching
+    // CreatorSceneRenderer's binding rule.
     //
-    // SCOPING mirrors CreatorSceneRenderer.EmitShape exactly (see its remarks + docs/sdf-accumulator-plan.md): a
-    // non-group shape (Pass 1 — always plain Union) wraps its onion field op in a PushField(Union)/PopField scope so
-    // the shell hollows THIS shape, not the whole scene; a no-onion shape stays flat (byte-identical). A group member
-    // passes inGroupScope: true and emits flat — it already sits inside its group's single PushField scope
-    // (EmitOneCompanion Pass 2), which the depth-1 cap forbids nesting.
-    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float onion = 0f, bool inGroupScope = false) {
+    // SCOPING mirrors CreatorSceneRenderer.EmitShape exactly (see its remarks + the accumulator rule on SdfBlendOp
+    // + the sdf-world skill): a non-group shape (Pass 1 — always plain Union) wraps its dilate/onion field ops in a
+    // PushField(Union)/PopField scope so they apply to THIS shape, not the whole scene; a shape with neither field
+    // op stays flat (byte-identical). A group member passes inGroupScope: true and emits flat — it already sits
+    // inside its group's single PushField scope (EmitOneCompanion Pass 2), which the depth-1 cap forbids nesting.
+    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false) {
         var chain = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: scale);
 
         if (probeWorstCase || mirror) {
@@ -401,32 +436,67 @@ public sealed class CompanionRenderer {
             chain = chain.TwistY(rate: (probeWorstCase ? 1f : twist));
         }
 
+        if (probeWorstCase || (bend != 0f)) {
+            chain = chain.BendY(rate: (probeWorstCase ? 1f : bend));
+        }
+
+        var wantsDilate = (probeWorstCase || (dilate != 0f));
         var wantsOnion = (probeWorstCase || (onion != 0f));
 
-        if (wantsOnion && !inGroupScope) {
+        if ((wantsDilate || wantsOnion) && !inGroupScope) {
             var scoped = AvatarDefinition.AppendPrimitive(blend: SdfBlendOp.Union, chain: chain.PushField(compose: blend, smooth: smooth), material: material, smooth: 0f, type: type);
 
-            _ = scoped.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion)).PopField();
+            if (wantsDilate) {
+                scoped = scoped.Dilate(radius: (probeWorstCase ? CreatorScene.MaxDilate : dilate));
+            }
+
+            if (wantsOnion) {
+                scoped = scoped.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion));
+            }
+
+            _ = scoped.PopField();
 
             return;
         }
 
         var afterShape = AvatarDefinition.AppendPrimitive(blend: blend, chain: chain, material: material, smooth: smooth, type: type);
 
+        if (wantsDilate) {
+            afterShape = afterShape.Dilate(radius: (probeWorstCase ? CreatorScene.MaxDilate : dilate));
+        }
+
         if (wantsOnion) {
             _ = afterShape.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion));
         }
     }
 
+    // Resolves an absent/present shape slot's per-modifier envelope in ONE call — factored out (rather than a `??`
+    // per field inline at the Pass 1 call site) so EmitOneCompanion's own decision-point count stays flat as the
+    // envelope grows (CA1502).
+    private static ResolvedShape ResolveShape(ShapeDocument? placed) {
+        return new ResolvedShape(
+            Bend: (placed?.Bend ?? 0f),
+            Dilate: (placed?.Dilate ?? 0f),
+            Mirror: (placed?.Mirror ?? false),
+            Onion: (placed?.Onion ?? 0f),
+            Scale: (placed?.Scale ?? Vector3.One),
+            Twist: (placed?.Twist ?? 0f),
+            Type: (placed?.Type ?? AvatarPrimitive.Sphere)
+        );
+    }
+
+    private readonly record struct ResolvedShape(AvatarPrimitive Type, Vector3 Scale, bool Mirror, float Twist, float Bend, float Dilate, float Onion);
+
     // Whether a companion's composition group must emit inside a PushField/PopField field scope — mirrors
     // CreatorSceneRenderer.GroupNeedsScope: true when any member carries a non-Union blend (the Intersection family
-    // wipes the whole accumulated scene otherwise) or an onion field op. A pure-Union, no-onion group stays flat, so
-    // a union-only creation loads byte-identically. See docs/sdf-accumulator-plan.md.
+    // wipes the whole accumulated scene otherwise) or a dilate/onion field op. A pure-Union, no-field-op group stays
+    // flat, so a union-only creation loads byte-identically. See the accumulator rule on SdfBlendOp + the sdf-world
+    // skill.
     private static bool GroupNeedsScope(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex) {
         for (var member = fromIndex; (member < shapes.Count); member++) {
             var shape = shapes[member];
 
-            if (((shape.Group ?? 0) == groupId) && (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f))) {
+            if (((shape.Group ?? 0) == groupId) && (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f))) {
                 return true;
             }
         }
@@ -437,5 +507,5 @@ public sealed class CompanionRenderer {
     // A scaled shape's dynamic instance bound: the unit-scale bound grown by the largest scale component — mirrors
     // CreatorSceneRenderer.BoundRadius exactly.
     private static float BoundRadius(Vector3 scale) =>
-        (InstanceRadiusUnitScale * MathF.Max(scale.X, MathF.Max(scale.Y, scale.Z)));
+        (InstanceRadiusUnitScale * MathF.Max(x: scale.X, y: MathF.Max(x: scale.Y, y: scale.Z)));
 }

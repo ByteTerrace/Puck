@@ -4,12 +4,11 @@ namespace Puck.Scene;
 
 /// <summary>
 /// One viewport: a content source and the normalized screen region it fills. The region is authored as
-/// <c>[x, y, w, h]</c> in 0..1 screen space. A single full-frame viewport reproduces the hero view; four quadrant
-/// viewports reproduce the 2x2 split-screen. The compositor supports at most four.
+/// <c>[x, y, w, h]</c> in 0..1 screen space. The compositor supports up to five viewports.
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record Viewport {
-    /// <summary>The viewport's content source (a virtual camera today; a live capture source later).</summary>
+    /// <summary>The viewport's camera, machine, or capture content source.</summary>
     public ViewportSource? Source { get; init; }
     /// <summary>The normalized screen region <c>[x, y, w, h]</c> in 0..1.</summary>
     public IReadOnlyList<float> Region { get; init; } = [];

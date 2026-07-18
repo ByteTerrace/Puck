@@ -7,7 +7,7 @@ namespace Puck.Demo.Forge;
 /// <c>Forge/Framework/InputModule.cs</c>, so the direction table lives where the emission it feeds already lives.
 /// </summary>
 /// <remarks>
-/// <para><see cref="MovementMode.FourWay"/> is the untouched historical path: four independent per-axis steps, one
+/// <para><see cref="MovementMode.FourWay"/> uses four independent per-axis steps, one
 /// per held cardinal bit — <see cref="HgbCartridge"/> emits it exactly as before (the byte-identical regression bar),
 /// so this module does not touch that code at all.</para>
 ///
@@ -133,7 +133,7 @@ internal static class MovementModule {
 /// the facing-resolution rule; <c>free</c> in the 3D-side <c>WorldDocument.MovementLock</c> has no brick analogue
 /// (the walker is always direction-locked to one of these three), so <see cref="FourWay"/> is the brick default.</summary>
 internal enum MovementMode {
-    /// <summary>Today's historical behaviour: four independent per-axis steps, facing resolved last-held-wins in
+    /// <summary>Four independent per-axis steps, with facing resolved last-held-wins in
     /// Right/Left/Up/Down order. The BYTE-IDENTICAL default — never changes emitted code from before this mode
     /// existed.</summary>
     FourWay = 0,

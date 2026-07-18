@@ -45,8 +45,9 @@ public sealed class BindingCommandSource : ICommandSource {
 
             foreach (var binding in bindings) {
                 // A binding answers exactly its chord: the input's modifiers must match those the binding
-                // requires (e.g. a Ctrl+C binding ignores a plain C, and vice versa).
-                if (binding.RequiredModifiers != input.Modifiers) {
+                // requires (e.g. a Ctrl+C binding ignores a plain C, and vice versa) — unless it opted into
+                // AnyModifiers (a gameplay key that must keep working with a pinky resting on Shift).
+                if (!binding.AnyModifiers && (binding.RequiredModifiers != input.Modifiers)) {
                     continue;
                 }
 

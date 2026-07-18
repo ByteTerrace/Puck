@@ -32,11 +32,11 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET
         );
 
-        commandList->ResourceBarrier(1, &toRenderTarget);
+        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &toRenderTarget);
 
         var rtv = new D3D12_CPU_DESCRIPTOR_HANDLE { ptr = (nuint)rtvCpuHandle, };
 
-        commandList->OMSetRenderTargets(1, &rtv, false, null);
+        commandList->OMSetRenderTargets(NumRenderTargetDescriptors: 1, RTsSingleHandleToDescriptorRange: false, pDepthStencilDescriptor: null, pRenderTargetDescriptors: &rtv);
 
         var viewport = new D3D12_VIEWPORT {
             Height = viewportHeight,
@@ -53,9 +53,9 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             top = 0,
         };
 
-        commandList->RSSetViewports(1, &viewport);
-        commandList->RSSetScissorRects(1, &scissor);
-        commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        commandList->RSSetViewports(NumViewports: 1, pViewports: &viewport);
+        commandList->RSSetScissorRects(NumRects: 1, pRects: &scissor);
+        commandList->IASetPrimitiveTopology(PrimitiveTopology: D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
         nint currentPso = 0;
         nint currentRootSig = 0;
@@ -67,14 +67,14 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             DirectXPipelineLayout? layout = null;
 
             if (command.PipelineLayoutHandle != 0) {
-                layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(command.PipelineLayoutHandle).Target!;
+                layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: command.PipelineLayoutHandle).Target!;
 
                 if (
                     (layout.PsoHandle != currentPso) ||
                     (layout.RootSignatureHandle != currentRootSig)
                 ) {
-                    commandList->SetGraphicsRootSignature((ID3D12RootSignature*)layout.RootSignatureHandle);
-                    commandList->SetPipelineState((ID3D12PipelineState*)layout.PsoHandle);
+                    commandList->SetGraphicsRootSignature(pRootSignature: (ID3D12RootSignature*)layout.RootSignatureHandle);
+                    commandList->SetPipelineState(pPipelineState: (ID3D12PipelineState*)layout.PsoHandle);
                     currentPso = layout.PsoHandle;
                     currentRootSig = layout.RootSignatureHandle;
                 }
@@ -83,7 +83,7 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             if (command.DescriptorHeapHandle != 0) {
                 var heap = (ID3D12DescriptorHeap*)command.DescriptorHeapHandle;
 
-                commandList->SetDescriptorHeaps(1, &heap);
+                commandList->SetDescriptorHeaps(NumDescriptorHeaps: 1, ppDescriptorHeaps: &heap);
             }
 
             if (
@@ -94,20 +94,20 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
                 var gpuHandle = new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = command.DescriptorTableGpuHandle, };
 
                 commandList->SetGraphicsRootDescriptorTable(
-                    (uint)layout.DescriptorTableParamIndex,
-                    gpuHandle
+                    BaseDescriptor: gpuHandle,
+                    RootParameterIndex: (uint)layout.DescriptorTableParamIndex
                 );
             }
 
             if (command.VertexBufferHandle != 0) {
-                var view = (DirectXVertexBufferView)GCHandle.FromIntPtr(command.VertexBufferHandle).Target!;
+                var view = (DirectXVertexBufferView)GCHandle.FromIntPtr(value: command.VertexBufferHandle).Target!;
                 var vbView = new D3D12_VERTEX_BUFFER_VIEW {
                     BufferLocation = view.BufferLocation,
                     SizeInBytes = view.SizeBytes,
                     StrideInBytes = view.StrideBytes,
                 };
 
-                commandList->IASetVertexBuffers(0, 1, &vbView);
+                commandList->IASetVertexBuffers(NumViews: 1, StartSlot: 0, pViews: &vbView);
             }
 
             var rootConstants = command.RootConstants;
@@ -144,7 +144,7 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT
         );
 
-        commandList->ResourceBarrier(1, &toPresent);
+        commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &toPresent);
     }
 
     private static D3D12_RESOURCE_BARRIER CreateTransition(
@@ -157,10 +157,10 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
         };
 
         barrier.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            pResource = resource,
             StateAfter = after,
             StateBefore = before,
             Subresource = AllSubresources,
+            pResource = resource,
         };
 
         return barrier;

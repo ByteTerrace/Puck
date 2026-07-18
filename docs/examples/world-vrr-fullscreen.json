@@ -1,13 +1,13 @@
 {
     "$schema": "../../schema/run.schema.json",
-    "_comment": "Variable-refresh-rate (VRR) showcase: the canonical world scene presented borderless-FULLSCREEN with the ADAPTIVE present mode and an UNCAPPED render rate (renderRate 0 -> the pacer targets the display's Vmax-headroom and the closed loop phase-locks to the confirmed-present rhythm). Borderless-fullscreen is what lets the swapchain take an independent flip so a VRR display (G-SYNC/FreeSync/HDMI-VRR) actually follows the present cadence; a normal desktop window is DWM-composited at a fixed rate and cannot enter VRR. Run with PUCK_PRESENT_TIMING=1 to log the measured present interval. Verified on a Samsung Frame (Game Mode): NVIDIA G-SYNC indicator active, panel refresh tracking a ~59-101 Hz cadence.",
+    "_comment": "Variable-refresh-rate (VRR) showcase: the canonical world scene presented borderless-FULLSCREEN with ADAPTIVE present mode and automatic presentRate \"display\". The pacer uses explicit DisplayID/HDMI/FreeSync bounds when advertised, clamps Vmax to the active signal, preserves a 3 Hz ceiling guard without going below Vmin, and otherwise reports/follows signal timing honestly. Borderless fullscreen permits independent flip so a VRR display can follow the cadence. Run with PUCK_PRESENT_TIMING=1 to log measured intervals. Hardware-verified on a Samsung Frame in Game Mode.",
     "version": "puck.run.v1",
     "host": {
         "backend": "vulkan",
         "presentMode": "adaptive",
         "surfaceFormat": "r8g8b8a8",
         "exitAfterSeconds": 30,
-        "renderRate": 0,
+        "presentRate": "display",
         "fullscreen": true
     },
     "scene": {

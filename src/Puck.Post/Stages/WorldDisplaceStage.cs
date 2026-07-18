@@ -37,14 +37,14 @@ internal sealed class WorldDisplaceStage : IPostStage {
     // a moderate, clearly-visible bumpy relief with ample step budget under the baked clamp.
     internal static SdfProgram BuildDisplaceScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
-        var coral = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.4f, 0.25f), Emissive: 0.3f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
+        var coral = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.4f, z: 0.25f), Emissive: 0.3f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
-            .Translate(offset: new Vector3(0f, 1.3f, 0f))
+            .Translate(offset: new Vector3(x: 0f, y: 1.3f, z: 0f))
             .Sphere(radius: 1.3f, material: coral)
-            .Displace(frequency: new Vector3(2.5f, 2.5f, 2.5f), amplitude: 0.12f)
+            .Displace(frequency: new Vector3(x: 2.5f, y: 2.5f, z: 2.5f), amplitude: 0.12f)
             .Build();
     }
 

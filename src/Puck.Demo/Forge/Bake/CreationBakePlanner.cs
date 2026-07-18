@@ -107,12 +107,12 @@ internal static class CreationBakePlanner {
 
         foreach (var shape in shapes) {
             centroid += shape.Position;
-            lowestY = MathF.Min(lowestY, (shape.Position.Y - WorldHalfExtents(shape: shape).Y));
+            lowestY = MathF.Min(x: lowestY, y: (shape.Position.Y - WorldHalfExtents(shape: shape).Y));
         }
 
         centroid /= shapes.Count;
 
-        return new Vector3(centroid.X, lowestY, centroid.Z);
+        return new Vector3(x: centroid.X, y: lowestY, z: centroid.Z);
     }
 
     // The camera-framing bound: the farthest recentered reach over EVERY pose, so no walk frame crops.
@@ -121,7 +121,7 @@ internal static class CreationBakePlanner {
 
         foreach (var pose in poses) {
             foreach (var shape in pose) {
-                bound = MathF.Max(bound, ((shape.Position - offset).Length() + WorldHalfExtents(shape: shape).Length()));
+                bound = MathF.Max(x: bound, y: ((shape.Position - offset).Length() + WorldHalfExtents(shape: shape).Length()));
             }
         }
 
@@ -135,9 +135,9 @@ internal static class CreationBakePlanner {
         var rotation = Matrix4x4.CreateFromQuaternion(quaternion: shape.Rotation);
 
         return new Vector3(
-            ((MathF.Abs(rotation.M11) * extents.X) + (MathF.Abs(rotation.M21) * extents.Y) + (MathF.Abs(rotation.M31) * extents.Z)),
-            ((MathF.Abs(rotation.M12) * extents.X) + (MathF.Abs(rotation.M22) * extents.Y) + (MathF.Abs(rotation.M32) * extents.Z)),
-            ((MathF.Abs(rotation.M13) * extents.X) + (MathF.Abs(rotation.M23) * extents.Y) + (MathF.Abs(rotation.M33) * extents.Z))
+            x: (((MathF.Abs(x: rotation.M11) * extents.X) + (MathF.Abs(x: rotation.M21) * extents.Y)) + (MathF.Abs(x: rotation.M31) * extents.Z)),
+            y: (((MathF.Abs(x: rotation.M12) * extents.X) + (MathF.Abs(x: rotation.M22) * extents.Y)) + (MathF.Abs(x: rotation.M32) * extents.Z)),
+            z: (((MathF.Abs(x: rotation.M13) * extents.X) + (MathF.Abs(x: rotation.M23) * extents.Y)) + (MathF.Abs(x: rotation.M33) * extents.Z))
         );
     }
 
@@ -194,7 +194,7 @@ internal static class CreationBakePlanner {
         }
 
         var raster = (uint)(SpriteNativeEdge * style.SupersampleFactor);
-        var target = new Vector3(0f, (bound * 0.5f), 0f);
+        var target = new Vector3(x: 0f, y: (bound * 0.5f), z: 0f);
         var horizontalDistance = (bound * 1.15f);
         var verticalDistance = (bound * 0.5f);
 
@@ -202,7 +202,7 @@ internal static class CreationBakePlanner {
             var azimuth = (facing * (MathF.PI / 2f));
             var camera = CameraSnapshot.LookAt(
                 fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-                position: (target + new Vector3((MathF.Sin(azimuth) * horizontalDistance), verticalDistance, (MathF.Cos(azimuth) * horizontalDistance))),
+                position: (target + new Vector3(x: (MathF.Sin(x: azimuth) * horizontalDistance), y: verticalDistance, z: (MathF.Cos(x: azimuth) * horizontalDistance))),
                 target: target,
                 viewportHeight: raster,
                 viewportWidth: raster
@@ -224,12 +224,13 @@ internal static class CreationBakePlanner {
 
         const float tanHalfFov = 0.41421356f; // tan(45°/2)
         const float fill = 0.92f;
+
         var (centre, halfExtents) = BoundingBox(offset: offset, shapes: restShapes);
         var aspect = (BackgroundNativeWidth / (float)BackgroundNativeHeight);
-        var distance = (MathF.Max(halfExtents.Y, (halfExtents.X / aspect)) / (tanHalfFov * fill));
+        var distance = (MathF.Max(x: halfExtents.Y, y: (halfExtents.X / aspect)) / (tanHalfFov * fill));
         var camera = CameraSnapshot.LookAt(
             fieldOfViewRadians: (45f * (MathF.PI / 180f)),
-            position: (centre + new Vector3(0f, (halfExtents.Y * 0.25f), (distance + halfExtents.Z))),
+            position: (centre + new Vector3(x: 0f, y: (halfExtents.Y * 0.25f), z: (distance + halfExtents.Z))),
             target: centre,
             viewportHeight: (uint)(BackgroundNativeHeight * style.SupersampleFactor),
             viewportWidth: (uint)(BackgroundNativeWidth * style.SupersampleFactor)
@@ -241,18 +242,18 @@ internal static class CreationBakePlanner {
     // The recentered axis-aligned bounding box over the rest shapes (position ± reach per axis).
     private static (Vector3 Centre, Vector3 HalfExtents) BoundingBox(Vector3 offset, IReadOnlyList<ShapeDocument> shapes) {
         if (shapes.Count == 0) {
-            return (new Vector3(0f, 0.5f, 0f), new Vector3(0.5f));
+            return (new Vector3(x: 0f, y: 0.5f, z: 0f), new Vector3(value: 0.5f));
         }
 
-        var min = new Vector3(float.MaxValue);
-        var max = new Vector3(float.MinValue);
+        var min = new Vector3(value: float.MaxValue);
+        var max = new Vector3(value: float.MinValue);
 
         foreach (var shape in shapes) {
             var reach = WorldHalfExtents(shape: shape);
             var local = (shape.Position - offset);
 
-            min = Vector3.Min(min, (local - reach));
-            max = Vector3.Max(max, (local + reach));
+            min = Vector3.Min(value1: min, value2: (local - reach));
+            max = Vector3.Max(value1: max, value2: (local + reach));
         }
 
         return ((0.5f * (min + max)), (0.5f * (max - min)));

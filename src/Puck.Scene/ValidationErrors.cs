@@ -8,8 +8,8 @@ namespace Puck.Scene;
 internal sealed class ValidationErrors {
     private readonly List<string> m_messages = [];
 
-    public IReadOnlyList<string> Messages => m_messages;
     public bool HasErrors => (m_messages.Count > 0);
+    public IReadOnlyList<string> Messages => m_messages;
 
     public void Add(string path, string message) {
         m_messages.Add(item: $"{path}: {message}");

@@ -13,8 +13,8 @@ internal static class OverworldWorldLens {
     // Tile-coordinate window keeping the 8×16 sprite fully on the 20×18-tile screen: column in [1,17], row in [1,15].
     // (The ROM places OAM X = tileX*8 + 8 and Y = tileY*8 + 16, so these bounds hold the whole sprite inside the frame.)
     private const int TileOriginX = 1;
-    private const int TileSpanX = 16;
     private const int TileOriginY = 1;
+    private const int TileSpanX = 16;
     private const int TileSpanY = 14;
 
     /// <summary>Projects a room player's normalized position (X,Z each in [0,1], as

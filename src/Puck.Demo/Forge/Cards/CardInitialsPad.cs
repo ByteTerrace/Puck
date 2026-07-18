@@ -116,7 +116,6 @@ internal sealed class CardInitialsPad {
         e.Load(destination: Reg8.Memory, source: Reg8.A);
         e.MarkLabel(label: noDown);
     }
-
     private void EmitSlotMove(Sm83Emitter e) {
         var noLeft = e.NewLabel();
         var leftDecrement = e.NewLabel();
@@ -149,7 +148,6 @@ internal sealed class CardInitialsPad {
         e.StoreAToAddress(address: m_cursorAddress);
         e.MarkLabel(label: noRight);
     }
-
     private void EmitDraw(Sm83Emitter e) {
         // The three initials as font tiles, then the slot cursor markers, all through the queue (six pushes).
         for (var slot = 0; (slot < SlotCount); slot++) {

@@ -1,0 +1,53 @@
+# Puck.Demo console-driving TOUR — SDF VM Worlds Wave 6 (THE PROOF WAVE): the minimal RTS genre exhibit, hosted on
+# the SAME abstractions the platformer overworld uses (emitters, the fixed-point query API). No consoles, no
+# reveal ladder: the room opens directly onto the RTS arena. Spawns a handful of units, box-selects a few, orders a
+# move, steps the sim, and reads rts.list at each rung to prove the move-to-target integration (ground-snapped
+# through Puck.SdfVm.Queries.IWorldQuery) actually advances positions.
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/world-rts.json --exit-after-seconds 12 < docs/examples/scripts/rts-proof.console
+# Run (PowerShell): Get-Content docs/examples/scripts/rts-proof.console | dotnet run --project src/Puck.Demo -c Release -- --run docs/examples/world-rts.json --exit-after-seconds 12
+#
+# THE CROSS-PROCESS TICK-LANDING CAVEAT (see the deterministic-garden report): `step <n>` holds for n PRODUCED
+# FRAMES, and the fixed sim tick advances in real-Stopwatch-paced catch-up bursts per frame — how many ticks a given
+# `step <n>` covers varies with real present timing/machine load. Running this script TWICE will not land on
+# identical absolute tick counts. What must match between two runs is the STRUCTURE of the echoes (spawn slots,
+# select counts, the eventual settled positions once movement completes) — not the tick number a hash.mark reports.
+
+state
+
+hash.mark start
+
+# Six units, deterministic grid coordinates, clear of the dais (NE) and the boulder (W) — see RtsScenario.
+rts.spawn -3.0 -3.6
+rts.spawn -1.8 -3.6
+rts.spawn -0.6 -3.6
+rts.spawn -3.0 -2.4
+rts.spawn -1.8 -2.4
+rts.spawn -0.6 -2.4
+rts.list
+
+hash.mark spawned
+
+# Box-select the first three (the back row).
+rts.select -3.5 -3.2 -0.1 -1.6
+rts.list
+
+# Order the selection across the arena, onto the raised dais — exercises the ground-snap height jump too.
+rts.move 2.5 2.5
+hash.mark ordered
+
+step 30
+rts.list
+hash.mark mid-move
+
+step 90
+rts.list
+hash.mark settled
+
+# A seventh unit at an explicit spot ON the boulder — proves Overlap actually rejects a blocked spawn.
+rts.spawn -3.9 0.0
+
+capture artifacts/console/rts-proof.png
+step 5
+
+hash.mark end
+hash.marks

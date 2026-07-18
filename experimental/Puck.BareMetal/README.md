@@ -1,214 +1,150 @@
 # Puck.BareMetal
 
-A minimal, no-runtime ("bare metal") C# environment for Puck — the foundation for the
-**"fake Linux host at boot"** target. It is built on **[`Puck.Runtime`](runtime/)**, our own
-freestanding core library that defines `System.Object`, `System.String`, `System.Array`,
-the primitives, spans, and the Windows / UEFI startup — with **no garbage collector and no
-BCL**.
+Puck.BareMetal is a freestanding NativeAOT environment for running Puck without
+the .NET runtime or a host operating system. `Puck.Runtime` replaces CoreLib,
+native glue supplies the ABI expected by the .NET 10 compiler, and mimalloc owns
+managed allocation in hosted images. The UEFI target additionally hosts one
+ring-3 musl process and the device services needed by RADV.
 
-Heap memory is handled entirely by a vendored, statically-linked
-[**mimalloc**](https://github.com/microsoft/mimalloc): every managed allocation (`new`)
-flows through mimalloc rather than the OS allocator, with no `mimalloc.dll` dependency. See
-[Memory: mimalloc](#memory-mimalloc).
+This subtree is intentionally excluded from `Puck.slnx` and has its own
+`Directory.Build.props`. Its compiler and linker settings must not flow into the
+engine projects under `src/`.
 
-## Licensing
+## License and provenance
 
-Puck.BareMetal ships under the **repository's license** (PolyForm Noncommercial 1.0.0,
-dual-licensed with a paid commercial option — see [`LICENSE`](LICENSE) and
-[`/LICENSING.md`](../../LICENSING.md)), the same as the rest of Puck. That dual-license model
-depends on the tree containing **no copyleft code**, so everything here is either ByteTerrace's
-own work or a vendored component under a **permissive** license (MIT / Apache-2.0 / BSD) that
-allows redistribution under our terms. Each vendored component keeps its own license and
-copyright — see [`NOTICE.md`](NOTICE.md).
+Puck-authored code follows the repository license; see [`LICENSE`](LICENSE) and
+[`../../LICENSING.md`](../../LICENSING.md). Vendored components retain their own
+permissive licenses and notices. [`NOTICE.md`](NOTICE.md) is the component and
+source-provenance index.
 
-This subtree still lives outside `/src`, keeps its own [`Directory.Build.props`](Directory.Build.props)
-to break the MSBuild inheritance chain, and is excluded from `Puck.slnx`, so the freestanding
-build context never leaks into the engine.
-
-## Provenance
-
-[`Puck.Runtime`](runtime/) is ByteTerrace's own. The NativeAOT runtime ABI it must match (the
-`MethodTable` layout, the `Rhp*` runtime exports, the startup/static-init contract) and the minimal
-`System.*` type shapes are derived from **dotnet/runtime**'s MIT-licensed `System.Private.CoreLib` /
-`Runtime.Base`. See [`NOTICE.md`](NOTICE.md).
-
-## Why this isn't a normal `ProjectReference`
-
-`Puck.Runtime` *is* the core library — it defines `System.Object` and friends. You cannot reference
-it from a normal `net10.0` project that already has CoreLib; it **replaces** CoreLib. A
-`Puck.BareMetal` program is compiled by pointing the NativeAOT IL compiler (ILC) at `Puck.Runtime`
-as the *system module* (`IlcSystemModule`) and emitting a freestanding native binary.
+`Puck.Runtime` is ByteTerrace code implementing ABI shapes required by NativeAOT.
+Its `MethodTable`, `Rhp*`, static-initialization, and minimal `System.*` contracts
+are informed by the MIT-licensed dotnet/runtime implementation. GPU register and
+packet definitions come from the permissively licensed AMD files stored under
+`amdgpu/`. Do not remove or rewrite the license and provenance files beside
+vendored sources or firmware.
 
 ## Layout
 
-- `runtime/` — `Puck.Runtime`, the freestanding core library (the ILC system module); ours.
-- `mimalloc/` — vendored MIT mimalloc source (verbatim, `v3.3.2`); the heap allocator,
-  compiled from source into the freestanding link.
-- `compat/` — ByteTerrace shims bridging puck + mimalloc to the stock ILC runtime
-  contract (managed shims + `compat/native/puck-rt.c` and `compat/native/mimalloc-glue.c`
-  native glue).
-- `build/` — the reusable bare-metal build recipe (`Puck.BareMetal.props` + `.targets`).
-  Every NativeAOT/link/size decision lives here, so any puck program shares one
-  audited pipeline instead of copy-pasting MSBuild plumbing.
-- `samples/Hello/` — proof-of-compile boot/hello stub. Its `Program.cs`, plus a ~20-line
-  `.csproj` that just imports `build/` and sets an assembly name.
+- `runtime/` — the freestanding system module that defines core `System` types.
+- `compat/` — managed and native ABI shims used by the stock NativeAOT compiler.
+- `build/` — reusable Windows and UEFI MSBuild imports.
+- `mimalloc/` — unmodified allocator source.
+- `lwip/` and `mbedtls/` — network and TLS dependencies for the UEFI host.
+- `amdgpu/` — AMD register/UAPI headers and signed Van Gogh firmware.
+- `radv/` — scripts for producing the machine-local musl RADV closure.
+- `samples/` — focused compiler/runtime probes, the freestanding Vulkan window,
+  and the UEFI Linux-process host.
+- `docs/` — current host, GPU, hardware, and Deck operating references.
 
-## Building & running (Windows)
+## Why projects import the build
 
-The native link needs the **Windows SDK** (a standard
-[NativeAOT prerequisite](https://aka.ms/nativeaot-prerequisites): "Desktop development
-with C++"), and `cl.exe` is used to build the small freestanding C glue. Build from a VS
-Developer shell so `link.exe`, `cl.exe`, and the SDK `LIB` paths are set:
+`Puck.Runtime` defines `System.Object` and therefore cannot be referenced by a
+normal `net10.0` application that already uses `System.Private.CoreLib`. Each
+program imports the BareMetal props and targets, which invoke NativeAOT ILC with
+`Puck.Runtime` as `IlcSystemModule` and link the generated object with the
+appropriate native entry and platform glue.
+
+The shared build files centralize:
+
+- ILC system-module and trimming settings;
+- dehydration policy for frozen objects;
+- native glue and allocator compilation;
+- direct symbol binding and minimal import libraries;
+- UEFI subsystem and entry-point selection;
+- section layout and release-size settings.
+
+Applications should override an MSBuild property only when their output contract
+requires it; do not copy the linker recipe into individual sample projects.
+
+## Runtime model
+
+The runtime provides the subset exercised by the samples and host:
+
+- core object, string, array, span, and primitive types;
+- zero-initialized object and array allocation;
+- reference-static spine creation, preinitialized static data, and lazy class
+  constructors;
+- polymorphic interface dispatch and normal class virtual dispatch;
+- selected collections, `ArrayPool<T>`, disposable patterns, and interop shapes;
+- direct-bound P/Invoke and the NativeAOT allocation/transition symbols.
+
+Managed memory is not collected. Hosted targets use statically linked mimalloc;
+UEFI uses memory obtained before firmware services are released. Managed objects
+live for the image or process lifetime. Native resources still require explicit
+disposal.
+
+The runtime is not a replacement for the full BCL. Exception handling, reflection,
+default interface methods, globalization, and many framework APIs are absent or
+narrowly stubbed. Add a contract only when a real program requires it and verify
+the emitted NativeAOT ABI rather than assuming CoreCLR behavior.
+
+## Static initialization
+
+The normal NativeAOT bootstrapper is not linked. The native entry point walks the
+ReadyToRun `GCStaticRegion`, allocates each reference-static spine, copies a
+preinitialized field image when present, and patches the base cell before managed
+code begins. Lazy class constructors then run through the compatibility helper.
+
+The hosted helper serializes first access so worker threads cannot observe a
+partially initialized static. The UEFI kernel initializes its managed statics
+before guest scheduling begins.
+
+## Hosted Windows sample
+
+Build from a Visual Studio Developer PowerShell so the Windows SDK compiler and
+linker are available:
 
 ```powershell
-& "<VS>\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
 dotnet publish samples/Hello/Hello.csproj -r win-x64 -c Release
-.\samples\Hello\bin\Release\net10.0\win-x64\publish\Puck.BareMetal.Hello.exe
-# -> Puck.BareMetal: hello from puck + mimalloc - NativeAOT, no GC, no .NET runtime.
+samples/Hello/bin/Release/net10.0/win-x64/publish/Puck.BareMetal.Hello.exe
 ```
 
-The result is a **~105 KB self-contained native executable** (107,008 bytes) with no .NET
-runtime, no GC, and no BCL. It imports only OS libraries (`kernel32`, `advapi32`, and the
-Universal CRT) — there is **no `mimalloc.dll`**; the allocator is linked in statically. The
-bulk of the size is mimalloc itself; the puck + glue code is a few KB (see
-[Optimizing for size](#optimizing-for-size)).
+The executable contains no managed runtime or GC. The allocator is linked from
+source; no `mimalloc.dll` is required.
 
-## How the build works
+`samples/VulkanWindow` demonstrates a freestanding Win32 window and Vulkan
+swapchain. It loads `vulkan-1.dll`, uses source-linked blittable bindings, renders
+a clear color, and releases Vulkan and Win32 resources deterministically.
 
-The whole recipe lives in [`build/`](build): [`Puck.BareMetal.props`](build/Puck.BareMetal.props)
-sets the properties and [`Puck.BareMetal.targets`](build/Puck.BareMetal.targets) the custom
-targets. A bare-metal program is just those two imports plus its own name — see
-[`samples/Hello/Hello.csproj`](samples/Hello/Hello.csproj).
+## UEFI host
 
-1. `puck/puck.csproj` compiles the vendored source into `puck.dll` (`NoStdLib`).
-2. The program runs the stock NativeAOT **ILC** with `IlcSystemModule=puck`, so puck
-   *is* the core library. The ILC exports the managed `Main` as `__managed__Main`; the
-   binary's OS entry is the native `PuckStart` (see [Statics & startup](#statics--startup)),
-   which initializes GC statics and then calls `__managed__Main`.
-3. **Dehydration is disabled** (`IlcDehydrate=false`). With it on (the default under
-   `OptimizationPreference=Size`), ILC packs frozen data — including string literals — into
-   a blob that a *startup* routine expands into a zero-init section. We strip the normal
-   startup, so that routine never runs; leaving dehydration on makes every frozen object
-   (every `ldstr`) read as zero. Disabling it emits frozen data in place.
-4. `BuildNativeRuntimeGlue` compiles the freestanding C inputs with `cl.exe`: the runtime
-   glue (`compat/native/puck-rt.c`), the whole vendored allocator as one TU
-   (`mimalloc/src/static.c`), and the mimalloc bridge (`compat/native/mimalloc-glue.c`).
-5. The SDK's default link pulls the **full** NativeAOT runtime (bootstrapper, GC, event
-   pipe, brotli/zlib, a wide OS import-lib set). The `LinkPuckMinimal` target strips it
-   to a minimal link — `app.obj + native glue + mimalloc + kernel32 + advapi32 +
-   ucrt` — by *deriving* the removal set from the SDK's own
-   `@(NativeLibrary)`/`@(SdkNativeLibrary)` lists (keeping only the OS import libs puck +
-   mimalloc need), so it tracks SDK changes instead of a hand-maintained name list.
-6. `compat/` supplies small shims for the stock ILC's runtime contract beyond what
-   `Puck.Runtime` ships: managed (`ThrowHelpers`, `System.Buffer`, `System.Runtime.TypeCast`,
-   `IDynamicInterfaceCastable`) and native (`compat/native/puck-rt.c`: the JIT-transition
-   symbols `RhpReversePInvoke`/`Return`, `RhpGcPoll`, `RhpTrapThreads`, `RhpFallbackFailFast`,
-   `RhpNewArrayFast`, plus the `memset`/`memcpy`/`memmove` block intrinsics).
+`samples/EfiLinux` is the production-oriented proof surface. It exits firmware,
+installs its own CPU and memory environment, initializes the framebuffer and
+devices, loads a musl ELF process, and services its Linux ABI from ring 0.
 
-## Memory: mimalloc
+Run the QEMU smoke:
 
-puck's object allocator (`StartupCodeHelpers.AllocObject`, behind `RhpNewFast` /
-`RhpNewArrayFast`) calls `PuckAllocZeroed`, which is backed by a statically-linked
-[mimalloc](https://github.com/microsoft/mimalloc) — so **every** managed `new` is a mimalloc
-allocation, with no `mimalloc.dll` at runtime.
+```powershell
+samples/EfiLinux/run-qemu.ps1
+```
 
-Making a full C allocator work in a no-CRT freestanding image takes a small bridge,
-[`compat/native/mimalloc-glue.c`](compat/native/mimalloc-glue.c):
+Stage a Steam Deck USB:
 
-- **TLS without the CRT.** mimalloc keeps its per-thread heap in a `__declspec(thread)`
-  variable; the glue defines the magic `_tls_used` TLS directory (normally the CRT's
-  `tlssup.obj`) so the Windows loader sets up static TLS and runs the TLS callbacks.
-- **libc shims.** mimalloc references a few libc functions (`abort`, `atexit`, `getenv`,
-  `strtol`, `fputs`) that, taken from the real CRT, would touch uninitialised CRT state since
-  CRT startup never runs; the glue supplies freestanding versions. (`memset`/`memcpy`/
-  `memmove` come from `puck-rt.c`.)
-- **Explicit init.** mimalloc self-initialises from a `.CRT$XIU` constructor that only the
-  CRT runs, so the glue calls `mi_process_init()` / `mi_thread_init()` once on first use.
+```powershell
+samples/EfiLinux/stage-deck.ps1 -Target E:\
+```
 
-mimalloc is compiled `MI_DEBUG=0 MI_STAT=0 MI_SECURE=0` for a lean release allocator. Since
-puck has no GC, nothing is ever freed; allocation goes through a real, production allocator
-rather than one OS call per object.
+QEMU validates the kernel substrate, guest ABI, network/TLS path, synthetic DRM
+node, RADV initialization, and ACO shader compile. It cannot validate RDNA queue
+execution. Deck procedures are documented separately.
 
-## Statics & startup
+## Operational documents
 
-Reference-typed (**GC**) static fields — `static IFoo s_foo;`, generic `Holder<T>.Instance`,
-etc. — need a per-type "spine" object allocated and registered before first use. Normally
-NativeAOT's native bootstrapper does this (via `InitializeModules`), but this build
-strips the bootstrapper. So a custom entry point, **`PuckStart`** (in
-[`compat/native/puck-rt.c`](compat/native/puck-rt.c), wired via `EntryPointSymbol`),
-runs the GC-static slice of that init before calling `__managed__Main`:
+- [Ring-3 Linux Process Host](docs/ring3-process-host-plan.md) — boot flow,
+  syscall/VFS surface, guest loading, and QEMU verification.
+- [AMD Vulkan Host](docs/amd-vulkan-plan.md) — RADV boundary, kernel services,
+  and implemented GPU path.
+- [gfx1033 Hardware Reference](docs/gfx103-bringup-spec.md) — registers,
+  firmware protocol, VMID0, KIQ, and graphics queue.
+- [Steam Deck GPU Bring-up](docs/deck-bringup-handoff.md) — hardware runbook,
+  current execution boundary, diagnostics, and log retrieval.
 
-1. read the `GCStaticRegion` bounds from `__ReadyToRunHeader` (absolute section rows);
-2. walk the region (relative-pointer entries), and for each uninitialized type allocate its
-   spine via `RhpNewFast` (mimalloc) and patch the base cell.
+## Current constraints
 
-The algorithm mirrors NativeAOT's MIT-licensed `InitializeStatics`; with no GC the
-spines simply live forever (no GC-handle rooting needed). This makes **all GC statics work**
-— which is also the gate behind a generic-static DI container, `Dictionary<,>`,
-`EqualityComparer<T>.Default`, and `Array.Empty<T>`.
-
-> **Limitation:** pre-initialized GC static *data* (statics with compile-time constant initial
-> values) is not yet copied — those spines come back zeroed. Reference-typed service/DI
-> statics are null-initial, so they are correct; constant-initialized static arrays/values are
-> a known TODO.
-
-## Optimizing for size
-
-The binary is a freestanding boot artifact, so the build drops everything a managed host
-would carry but a bare-metal program never queries. mimalloc itself is ~100 KB of allocator
-and dominates the final image; the size work below is about keeping *everything else* — the
-puck + glue code and the PE container — as lean as possible. Without mimalloc the same
-pipeline produces a **5,120-byte** binary (down from the stock NativeAOT default of
-**7,680 bytes**, −33%). The knobs, in `build/Puck.BareMetal.props`/`.targets`:
-
-- **No debug info** — `DebugType=none` (which also stops the SDK from forcing
-  `NativeDebugSymbols` back on), removing ILC `-g`, the linker `/DEBUG` + `/SOURCELINK` +
-  `/NATVIS`, and every `.pdb`. The whole subtree's `Directory.Build.props` likewise emits no
-  managed PDB, so a stray `puck.pdb` no longer rides along into publish.
-- **No Win32 version resource** — `IlcGenerateWin32Resources=false` drops the default
-  ~1.5 KB `VS_VERSION_INFO` section nothing reads at boot.
-- **Fewer PE sections** — the layout is folded to just `.text / .rdata / .data / .reloc`.
-  The near-empty `.modules` (8 bytes) and the `.pdata` unwind table are merged into `.rdata`
-  (the PE exception data-directory entry is preserved, so OS unwinding is unaffected); each
-  section otherwise costs a full 512-byte file block of padding. `.data` (writable) and
-  `.reloc` (ASLR fixups — kept on purpose) stay separate. (The mimalloc build adds a `.CRT`
-  section and a TLS template for mimalloc's init constructor and thread-local heap.)
-- **Invariant globalization, folded method bodies, system resource keys**, and cl.exe `/O1`
-  (size) for the native glue round it out.
-
-Each knob is a default, not a law: a program that wants, say, shippable version metadata can
-set the one property back in its own `.csproj`.
-
-## Status
-
-- ✅ `Puck.Runtime` — our own freestanding core library — under the repository's PolyForm license.
-- ✅ License segregation in place (LICENSE, NOTICE, isolated build props, excluded from `Puck.slnx`).
-- ✅ `Puck.Runtime.dll` compiles with the stock .NET 10 toolchain (UEFI + Windows).
-- ✅ Stock .NET 10 ILC generates native code with `IlcSystemModule=Puck.Runtime`.
-- ✅ Links freestanding and **runs**: a ~105 KB native exe (107,008 bytes), no .NET runtime,
-      no `mimalloc.dll`, exit 0.
-- ✅ String literals, the indexer/`Length`, `stackalloc`, and P/Invoke all work.
-- ✅ **Heap allocation works through statically-linked mimalloc**: the sample allocates a
-      256 KB `byte[]`, verifies it is zero-initialized, and write/read round-trips it before
-      printing — `new` → `RhpNewArrayFast` → `PuckAllocZeroed` → `mi_zalloc`.
-- ✅ **Object model verified**: interface dispatch, class allocation, constructor injection,
-      and (via `PuckStart`'s GC-static init) **GC statics — non-generic *and* generic**.
-- ✅ A **reflection-free DI substrate** runs end-to-end on puck: a generic-static service
-      holder + factory-lambda registration + constructor injection + interface resolution.
-- ✅ **A minimal Vulkan window runs freestanding** (`samples/VulkanWindow`): a Win32 window
-      (hand-written user32 interop + `UnmanagedCallersOnly` WndProc) with Vulkan brought up on
-      it — instance, Win32 surface, device/queue, swapchain, render pass, and an
-      acquire/submit/present loop that **clears the window to a color**. `vulkan-1.dll` is
-      loaded dynamically; `Puck.Vulkan`'s blittable `Vk*` bindings are reused **as source**.
-      ~120 KB, depends only on OS DLLs, exits cleanly.
-- ✅ **Deterministic teardown** (`System.IDisposable` + a `DisposalScope`): resources register
-      and are disposed LIFO; the Vulkan window explicitly `vkDestroy*`s its objects and
-      `DestroyWindow`s, in reverse order, instead of leaning on process exit.
-- ✅ Reusable, warning-clean build (`build/Puck.BareMetal.props` + `.targets`).
-- ⏳ **Polymorphic interface dispatch** (`RhpInitialDynamicInterfaceDispatch`) — interface
-      calls only work devirtualized (single implementer) today; multi-impl dispatch (which a
-      real DI container needs) is the next foundational runtime piece. Abstract-base-class
-      (vtable) polymorphism works now, which is why `DisposalScope` uses a `Disposable` base.
-- ⏳ Pre-initialized GC static *data* copy; a real DI container. (No GC, so `Dispose` frees
-      only *native* resources — managed objects live until process exit, by design.)
-- ⏳ The "fake Linux host at boot" entry point.
+- Managed objects are never reclaimed.
+- The UEFI host runs one process and one address space; it is not general Linux.
+- The syscall and BCL surfaces are demand-driven and intentionally incomplete.
+- QEMU has no target AMD GPU model; hardware command execution requires a Deck.
+- The Deck path executes a basic graphics-ring probe, but indirect-buffer fence
+  completion and RADV command submission remain unresolved.

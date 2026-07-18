@@ -27,13 +27,15 @@ namespace Puck.Post;
 internal sealed class FuzzStage : IPostStage {
     // The camera is the t=0 pose of the demo fuzz gate's single hero orbit (DemoRunDocuments.SingleViewports:
     // azimuth 0, fov 60°, height 1.6, radius 5.2, target (0, 0.1, 0)) → eye (5.2, 1.7, 0) looking at the target.
-    private static readonly Vector3 CameraPosition = new(5.2f, 1.7f, 0f);
-    private static readonly Vector3 CameraTarget = new(0f, 0.1f, 0f);
+    private static readonly Vector3 CameraPosition = new(x: 5.2f, y: 1.7f, z: 0f);
+    private static readonly Vector3 CameraTarget = new(x: 0f, y: 0.1f, z: 0f);
+
     private const float FieldOfViewRadians = (60f * (MathF.PI / 180f));
     // The default fixed seed list: 7 is the demo cross-check seed (`--validate-world --fuzz-seed 7`); the rest
     // spread the deterministic generator across its branch space (shape mix, blend ops, the 30%/20% rotate/scale
     // rolls) — five seeds keep the battery fast while every one stays individually reproducible.
     private static readonly int[] DefaultSeeds = [1, 7, 23, 42, 91];
+
     private const uint WorldHeight = 600;
     private const uint WorldWidth = 960;
 
@@ -80,7 +82,7 @@ internal sealed class FuzzStage : IPostStage {
 
         for (var pixel = 0; (pixel < pixelCount); pixel++) {
             var offset = (pixel * 4);
-            var luma = ((0.299 * rgba[offset]) + (0.587 * rgba[offset + 1]) + (0.114 * rgba[offset + 2]));
+            var luma = (((0.299 * rgba[offset]) + (0.587 * rgba[(offset + 1)])) + (0.114 * rgba[(offset + 2)]));
 
             sum += luma;
             sumOfSquares += (luma * luma);
@@ -88,7 +90,7 @@ internal sealed class FuzzStage : IPostStage {
 
         var mean = (sum / pixelCount);
 
-        return Math.Sqrt(d: Math.Max(0.0, ((sumOfSquares / pixelCount) - (mean * mean))));
+        return Math.Sqrt(d: Math.Max(val1: 0.0, val2: ((sumOfSquares / pixelCount) - (mean * mean))));
     }
 
     // The fixed frame every seed renders: a single full-region viewport over the generated program, time 0, no
@@ -110,7 +112,6 @@ internal sealed class FuzzStage : IPostStage {
             WarpAmount: 0f
         );
     }
-
     [SupportedOSPlatform("windows10.0.10240")]
     private PostStageOutcome RunCore(PostContext context) {
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
@@ -158,8 +159,8 @@ internal sealed class FuzzStage : IPostStage {
 
             // Smoke artifact: the first seed's backend pair is always written, so a green run still leaves evidence.
             if (seed == m_seeds[0]) {
-                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
             }
 
             var metrics = ParityMetrics.Compute(reference: vulkanPixels, comparand: directXPixels, width: (int)WorldWidth, height: (int)WorldHeight);
@@ -168,10 +169,10 @@ internal sealed class FuzzStage : IPostStage {
             if (failures.Count != 0) {
                 // Fail NAMES the seed (reproducible here and via the demo's --validate-world --fuzz-seed) and writes
                 // the full artifact triple for it.
-                var diffPath = Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-diff.png");
+                var diffPath = Path.Combine(path1: context.ArtifactsDirectory, path2: $"fuzz-{seed}-diff.png");
 
-                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
-                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: $"fuzz-{seed}-vulkan.png"), rgba: vulkanPixels, width: (int)WorldWidth);
+                PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: $"fuzz-{seed}-directx.png"), rgba: directXPixels, width: (int)WorldWidth);
                 ParityCheck.WriteDiffImage(comparand: directXPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanPixels, width: (int)WorldWidth);
 
                 return PostStageOutcome.Fail(artifactPath: diffPath, detail: $"seed {seed} diverged | {ParityCheck.Describe(metrics: metrics)} — {string.Join(separator: "; ", values: failures)}");

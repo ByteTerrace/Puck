@@ -31,7 +31,7 @@ internal static class AgbMicroRoms {
         a.LdrConst(rd: 1, value: 0x0403u);              // DISPCNT = mode 3 + BG2 on
         a.Str(rd: 1, rn: 0, imm12: 0);
         a.LdrConst(rd: 1, value: 0x06000000u);          // r1 = VRAM (BG mode 3 framebuffer)
-        a.LdrConst(rd: 3, value: (240u * 160u) / 2u);   // r3 = word count (two 16-bit pixels per word)
+        a.LdrConst(rd: 3, value: ((240u * 160u) / 2u));   // r3 = word count (two 16-bit pixels per word)
         a.Label(name: "fill");
         a.Str(rd: 1, rn: 1, imm12: 0);                  // write the pointer value as the pixel colour
         a.Add(rd: 1, rn: 1, imm8: 4);                   // advance one word
@@ -83,18 +83,13 @@ internal static class AgbMicroRoms {
         private readonly Dictionary<string, int> m_labels = new();
 
         public void Label(string name) => m_labels[name] = m_code.Count;
-
         public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | ((uint)rd << 12) | (imm8 & 0xFFu));
-
         public void Add(int rd, int rn, uint imm8) =>
             m_code.Add(item: 0xE2800000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm8 & 0xFFu));
-
         public void Subs(int rd, int rn, uint imm8) =>
             m_code.Add(item: 0xE2500000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm8 & 0xFFu));
-
         public void Str(int rd, int rn, uint imm12) =>
             m_code.Add(item: 0xE5800000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm12 & 0xFFFu));
-
         public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | (uint)rn);
 
         // Unconditional branch back to the instruction `instructions` slots before this one (1 = the immediately
@@ -106,27 +101,25 @@ internal static class AgbMicroRoms {
 
         private uint BackOffset(int instructions) {
             var idx = m_code.Count;
-            var off = (idx - instructions) - (idx + 2);
+            var off = ((idx - instructions) - (idx + 2));
 
-            return ((uint)off & 0xFFFFFFu);
+            return (uint)off & 0xFFFFFFu;
         }
 
         public void LdrConst(int rd, uint value) {
             m_loads.Add(item: (m_code.Count, rd, value, null));
             m_code.Add(item: 0);
         }
-
         public void LdrLabel(int rd, string label) {
             m_loads.Add(item: (m_code.Count, rd, 0, label));
             m_code.Add(item: 0);
         }
-
         public byte[] Finish() {
             var poolBase = m_code.Count;
             var pool = new List<uint>();
 
             foreach (var (instr, rd, value, label) in m_loads) {
-                var resolved = label is null ? value : RomBase + ((uint)m_labels[label] * 4u);
+                var resolved = ((label is null) ? value : (RomBase + ((uint)m_labels[label] * 4u)));
                 var poolIndex = pool.IndexOf(item: resolved);
 
                 if (poolIndex < 0) {
@@ -134,8 +127,8 @@ internal static class AgbMicroRoms {
                     pool.Add(item: resolved);
                 }
 
-                var literalWord = poolBase + poolIndex;
-                var offsetBytes = (literalWord - (instr + 2)) * 4; // pc = instr*4 + 8
+                var literalWord = (poolBase + poolIndex);
+                var offsetBytes = ((literalWord - (instr + 2)) * 4); // pc = instr*4 + 8
 
                 m_code[instr] = 0xE59F0000u | ((uint)rd << 12) | ((uint)offsetBytes & 0xFFFu);
             }
@@ -146,8 +139,8 @@ internal static class AgbMicroRoms {
 
             var bytes = new byte[RomSizeBytes];
 
-            for (var i = 0; i < words.Count; ++i) {
-                BitConverter.TryWriteBytes(destination: bytes.AsSpan(start: i * 4), value: words[i]);
+            for (var i = 0; (i < words.Count); ++i) {
+                BitConverter.TryWriteBytes(destination: bytes.AsSpan(start: (i * 4)), value: words[i]);
             }
 
             return bytes;

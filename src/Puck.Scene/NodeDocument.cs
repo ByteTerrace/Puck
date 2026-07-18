@@ -7,9 +7,8 @@ namespace Puck.Scene;
 /// run builds (the compute world compositor, or the overworld), and <c>produce</c> selects the backend
 /// it renders on. This is the BACKEND-NEUTRAL description; turning it into a concrete <c>IRenderNode</c> (resolving GPU
 /// services, applying OS/feature gates) is the GraphBuilder's job in Puck.Demo. Adding a node kind is a new derived
-/// record. (The retired <c>showcase</c>/<c>rt</c>/<c>camera</c> kinds were removed with the demo's slim-down to the
-/// four-quad world: a live camera is now a per-viewport <see cref="LiveCameraSource"/>, and the ray-query path's
-/// coverage lives in Puck.Post's RT stage.)
+/// record. Live cameras are per-viewport <see cref="LiveCameraSource"/> values; ray-query validation lives in
+/// <c>Puck.Post</c>.
 /// </summary>
 [JsonDerivedType(typeof(WorldNode), typeDiscriminator: "world")]
 [JsonDerivedType(typeof(OverworldNode), typeDiscriminator: "overworld")]
@@ -28,7 +27,7 @@ public abstract record NodeDocument {
     public bool TryResolveProduce(out string backend) {
         backend = (Produce ?? DefaultBackend).ToLowerInvariant();
 
-        return (string.Equals(backend, "vulkan", StringComparison.Ordinal) || string.Equals(backend, "directx", StringComparison.Ordinal));
+        return (string.Equals(a: backend, b: "vulkan", comparisonType: StringComparison.Ordinal) || string.Equals(a: backend, b: "directx", comparisonType: StringComparison.Ordinal));
     }
 
     /// <summary>The backend this node kind renders on when the document does not say.</summary>
@@ -44,22 +43,7 @@ public abstract record NodeDocument {
 /// <summary>The generic compute SDF world compositor, driven by the document's scene + viewports.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNode : NodeDocument {
-    /// <summary>RETIRED compatibility shim (the pre-purification animated test pane): still parses so old documents
-    /// stay loadable, but the VALIDATOR rejects <see langword="true"/> with a pointer at the replacement — a child
-    /// pane is a per-viewport SOURCE now (<see cref="GamingBrickSource"/>/<see cref="LiveCameraSource"/>), not a node
-    /// boolean. Retired-shape rejection is validation's job (host-independent, never valid); the builder pre-flight
-    /// owns only capability gaps (deferred/host-dependent paths).</summary>
-    public bool Child { get; init; }
-
     private protected override string DefaultBackend => "directx";
-
-    internal override void Validate(string path, int viewportCount, ValidationErrors errors) {
-        base.Validate(errors: errors, path: path, viewportCount: viewportCount);
-
-        if (Child) {
-            errors.Add(path: $"{path}.child", message: "child is a retired affordance (the pre-purification animated test pane); declare the pane as a viewport source instead (e.g. \"source\": { \"$type\": \"gaming-brick\", ... })");
-        }
-    }
 }
 
 /// <summary>The overworld: a controller-driven player avatar that runs around a room, rendered by the compute SDF world
@@ -76,14 +60,13 @@ public sealed record OverworldNode : NodeDocument {
     /// gaming-brick source shape (console costume + fit + an OPTIONAL pre-inserted ROM path); a console with a ROM
     /// path assembles its machine at build time, while a console with a null ROM path starts as an
     /// EMPTY stand — its machine assembles once the player inserts a cartridge from <see cref="Library"/>. Empty (the
-    /// default) is the bare room. A later revision grows an entry with a peripheral field (e.g. the PC camera as a
-    /// GB-camera cartridge feed).</summary>
+    /// default) is the bare room.</summary>
     public IReadOnlyList<GamingBrickSource> Consoles { get; init; } = [];
     // NOTE: nullable-optional-field pattern (see the note in GamingBrickSource) — a polymorphic-derived record
     // deserialized through the run-document parse path skips property initializers, so an omitted member arrives
     // NULL regardless of the initializer below.
     /// <summary>The cartridge shelf: games the player can carry to an empty stand and insert. Null (the default,
-    /// matching every document authored before this field existed) is no shelf at all — every console must then be
+    /// matching the default) is no shelf at all — every console must then be
     /// pre-inserted (<see cref="GamingBrickSource.RomPath"/> set). A document with ANY empty stand must declare a
     /// non-null, non-empty library, or that stand is unreachable dead weight.</summary>
     public IReadOnlyList<CartridgeSource>? Library { get; init; }
@@ -99,11 +82,9 @@ public sealed record OverworldNode : NodeDocument {
     /// <summary>A saved <c>puck.world.v1</c> world handle (resolved under <c>./worlds/</c>, or a direct path, plus the
     /// CAS store) the overworld LOADS and COMMITS at boot, so the room the player stands in — and the room the
     /// immersed fourth-wall reveal eases them out INTO — is that sculpted world (e.g. the town, <c>"puckton"</c>)
-    /// rather than the bare default room. Null (the default, and every document authored before this field existed)
-    /// leaves the plain room, so the default demo is byte-unchanged. Loading is GRACEFUL: an unreadable handle or a
+    /// rather than the bare default room. Null uses the plain room. Loading is graceful: an unreadable handle or a
     /// world whose creations are missing from the store narrates to stderr and leaves the plain room rather than
-    /// crashing the boot (parse validation never checks file existence — the boot-load does). This is the run-document
-    /// home of the former <c>PUCK_OVERWORLD_WORLD</c> env var; the live mid-session path is the <c>world.load</c>
+    /// crashing the boot (parse validation never checks file existence — the boot-load does). The live mid-session path is the <c>world.load</c>
     /// console verb.</summary>
     public string? World { get; init; }
     // NOTE: nullable-optional-field pattern (see the note in GamingBrickSource) — a polymorphic-derived record
@@ -112,10 +93,23 @@ public sealed record OverworldNode : NodeDocument {
     // is nothing to range-check), and normalized at consumption (null → cell 0, the origin).
     /// <summary>The FAR spawn cell (applied to BOTH the X and Z axes) the whole room is placed at — the planet-scale
     /// coordinate-stability demonstration: the simulation is cell-agnostic (identical per-tick local motion at any cell)
-    /// and the floating-origin render seam keeps it crisp arbitrarily far from the origin. Null (the default, and every
-    /// document authored before this field existed) is the origin cell (0), so the default demo is byte-unchanged. This
-    /// is the run-document home of the former <c>PUCK_OVERWORLD_CELL</c> env var.</summary>
+    /// and the floating-origin render seam keeps it crisp arbitrarily far from the origin. Null uses the origin cell
+    /// (0).</summary>
     public long? Cell { get; init; }
+    // NOTE: nullable-optional-field pattern (see the note in GamingBrickSource) — a polymorphic-derived record
+    // deserialized through the run-document parse path skips property initializers, so an omitted member arrives NULL
+    // regardless of any initializer; validated only when present, and normalized to native at consumption (a null / the
+    // "native" tier both leave the bit-exact full-resolution path, so the default demo is byte-unchanged).
+    /// <summary>The world render-scale QUALITY TIER the settled revealed room renders at — a durable graphics option
+    /// picked from a small SAFE set of named tiers (<see cref="WorldRenderScaleTiers.Names"/>: <c>native</c>,
+    /// <c>three-quarter</c>, <c>half</c>, <c>quarter</c>, <c>eighth</c>), never a free numeric knob. The revealed room
+    /// fills the whole screen and is the demo's most expensive view; a lower tier renders it at a reduced internal
+    /// resolution and bilinearly upsamples it (cost falls ~ scale², so <c>half</c> ≈ half the cost, <c>quarter</c> ≈ a
+    /// quarter, <c>eighth</c> ≈ an eighth). Null is <c>native</c>, the full-resolution bit-exact path. The live
+    /// mid-session path is the <c>render-scale</c>
+    /// console verb; the engine's continuous render-scale knob stays reachable programmatically (layout eases, dev
+    /// tooling) — this enumerated policy is only the user surface.</summary>
+    public string? RevealedRenderScale { get; init; }
 
     private protected override string DefaultBackend => "vulkan";
 
@@ -165,6 +159,13 @@ public sealed record OverworldNode : NodeDocument {
         if ((World is not null) && string.IsNullOrWhiteSpace(value: World)) {
             errors.Add(path: $"{path}.world", message: "the world handle is empty; omit the field to load no world, or name a saved world (resolved under ./worlds/ or a direct path)");
         }
+
+        // The render-scale tier is validated only when PRESENT (the nullable-optional-field pattern): it must name one
+        // of the safe tiers — the enumerated policy has NO free numeric values, so an unknown name is a hard reject with
+        // the valid set spelled out (mirroring the model / presentMode "is not one of" messages).
+        if ((RevealedRenderScale is not null) && !WorldRenderScaleTiers.TryParse(name: RevealedRenderScale, tier: out _)) {
+            errors.Add(path: $"{path}.revealedRenderScale", message: $"'{RevealedRenderScale}' is not a valid render-scale tier; expected one of: {WorldRenderScaleTiers.ValidNames}");
+        }
     }
 
     // Cross-cabinet META validation: cabinets sharing a group must (a) agree on the target, (b) number at least two, and
@@ -209,8 +210,7 @@ public sealed record OverworldNode : NodeDocument {
 
                 if (victory.TryParseShare(destination: share)) {
                     VictoryGate.Xor(accumulator: accumulator, operand: share);
-                }
-                else {
+                } else {
                     allSharesParsed = false;
                 }
             }

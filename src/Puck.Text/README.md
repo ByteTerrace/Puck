@@ -166,6 +166,57 @@ inert (`UnitRange == 0`, `ScreenPixelRange == 1`).
 
 ---
 
+## Text enrichment — markup, effects, per-glyph channels
+
+Enrichment is an optional layer that **composes WITH** `TextLayout`, never around it: an
+author marks text up, layout carries each glyph's effect onto its placement, and a consumer
+resolves a per-glyph transform/colour channel at a **deterministic content tick**. One atlas
+and one layout serve every text tier.
+
+```csharp
+using Puck.Text;
+
+// 1. Authors type BBCode; it compiles to the robust control-char stream.
+string markup = "boot [color=#ff6688]PUCK[/color] [wave]online[/wave]";
+
+// 2. Lay out the enriched runes — placements carry their effect.
+TextLayoutResult layout = new TextLayout().Layout(
+    atlas: atlas,
+    runes: BbCodeTextMarkup.EnrichRunes(markup: markup),
+    scale: 32.0f
+);
+
+// 3. Per placement, resolve the per-glyph channel at a content tick (never the wall clock).
+int glyphIndex = 0;
+foreach (TextGlyphPlacement p in layout.Placements) {
+    TextGlyphChannel ch = TextGlyphChannel.Resolve(
+        effect: p.Effect,
+        contentTick: tick,           // a deterministic frame/step count you own
+        ticksPerSecond: 60.0f,
+        glyphPhase: p.BaselineOrigin.X,
+        glyphIndex: glyphIndex++,
+        motionEnabled: motionEnabled // your reduced-motion switch
+    );
+    // ch.Offset / ch.Scale / ch.Coverage / ch.WeightBias / ch.Tint (+ HasTint)
+}
+```
+
+| Type | Role |
+|------|------|
+| `TextEnrichmentTags` | The control-char grammar + single-pass `Stack<TextEffect>` scan (start pushes, end pops, `reset` clears, innermost **shadows**; malformed/unknown → literal). |
+| `BbCodeTextMarkup` | The human front-end: compiles `[wave]…[/wave]` / `[color=#f00]…[/color]` BBCode down to the control-char stream. |
+| `TextEffect` / `TextEffectKind` | An effect kind + its (late-bindable) parameters. Motion: `Shake`/`Wave`/`Pulse`/`Jitter`/`Dissolve`; static delight: `Color`/`Weight`; pacing: `Reveal`. `IsMotion` classifies. |
+| `TextEffectParameter` / `TextEnrichmentVariable` | Numeric params that may late-bind a named **content-time channel** (additive/multiplicative/replacement) — no wall clock, no RNG. |
+| `TextGlyphChannel` | The tier-agnostic per-glyph output (offset/scale/coverage/weight/tint). `Resolve(...)` turns an effect + content tick into one. |
+| `TextEffectRune` | A visible rune paired with the effect in force at it — the enrichment-aware layout input. |
+
+**Determinism.** `TextGlyphChannel.Resolve` is a pure function of the caller's content tick;
+motion kinds are gated by `motionEnabled` (settle to rest when off, reveals complete), while
+`Color`/`Weight` always apply — the reduced-motion contract. **DELIGHT ≠ MOTION:** motion is
+opt-out; the default emphasis is semantic colour/weight/reveal.
+
+---
+
 ## Generation options & glyph selection
 
 `FontAtlasGenerationOptions` controls which glyphs are included and how the atlas is sized.
@@ -198,7 +249,7 @@ up to 256 of the most recently used atlases.
 ## Plugging in a generator
 
 Puck.Text deliberately ships **no rasterizer**. Implement `IFontAtlasGenerator` to wrap your
-backend (e.g. an `msdfgen` / `msdf-atlas-gen` toolchain — the naming here follows their
+backend (e.g. the font-atlas bake pipeline, `tools/font-atlas` — the naming here follows its
 conventions):
 
 ```csharp

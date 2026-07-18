@@ -173,14 +173,13 @@ internal static class BakePipeline {
             WirePalettes: BakeColor.EncodePalettes(palettes: palettes, reserveTransparentSlot: sprite)
         );
     }
-
     private static QuantizedView QuantizeCgbView(int[] assignments, ErrorAccumulator errors, NativeView native, IReadOnlyList<ushort[]> palettes, BakePlan plan, bool sprite) {
-        var indices = new byte[plan.NativeWidth * plan.NativeHeight];
+        var indices = new byte[(plan.NativeWidth * plan.NativeHeight)];
         var tilesWide = (plan.NativeWidth / 8);
 
         for (var tileY = 0; (tileY < (plan.NativeHeight / 8)); tileY++) {
             for (var tileX = 0; (tileX < tilesWide); tileX++) {
-                var palette = palettes[assignments[(tileY * tilesWide) + tileX]];
+                var palette = palettes[assignments[((tileY * tilesWide) + tileX)]];
 
                 errors.BeginTile();
 
@@ -204,14 +203,13 @@ internal static class BakePipeline {
 
         return new QuantizedView(Height: plan.NativeHeight, Indices: indices, Mask: native.Mask, Name: native.Name, TilePalettes: assignments, Width: plan.NativeWidth);
     }
-
     private static byte QuantizeCgbPixel(ErrorAccumulator errors, NativeView native, ushort[] palette, int pixel, BakePlan plan, bool sprite, int x, int y) {
         var offset = (pixel * 4);
         var dither = StyleGrade.DitherOffset(style: plan.Style, x: x, y: y);
         var dithered = BakeColor.PackFrom8(
-            b: (int)MathF.Round(native.Rgba[offset + 2] + dither),
-            g: (int)MathF.Round(native.Rgba[offset + 1] + dither),
-            r: (int)MathF.Round(native.Rgba[offset] + dither)
+            b: (int)MathF.Round(x: (native.Rgba[(offset + 2)] + dither)),
+            g: (int)MathF.Round(x: (native.Rgba[(offset + 1)] + dither)),
+            r: (int)MathF.Round(x: (native.Rgba[offset] + dither))
         );
         var best = 0;
         var bestDistance = int.MaxValue;
@@ -225,13 +223,12 @@ internal static class BakePipeline {
             }
         }
 
-        var source = BakeColor.PackFrom8(b: native.Rgba[offset + 2], g: native.Rgba[offset + 1], r: native.Rgba[offset]);
+        var source = BakeColor.PackFrom8(b: native.Rgba[(offset + 2)], g: native.Rgba[(offset + 1)], r: native.Rgba[offset]);
 
-        errors.Add(distance: MathF.Sqrt(BakeColor.DistanceSquared(a: source, b: palette[best])));
+        errors.Add(distance: MathF.Sqrt(x: BakeColor.DistanceSquared(a: source, b: palette[best])));
 
         return (byte)(sprite ? (best + 1) : best);
     }
-
     private static List<List<HistogramEntry>> BuildHistograms(List<NativeView> natives, BakePlan plan, out int sourceColours) {
         var histograms = new List<List<HistogramEntry>>();
         var distinct = new HashSet<ushort>();
@@ -248,7 +245,6 @@ internal static class BakePipeline {
 
         return histograms;
     }
-
     private static List<HistogramEntry> TileHistogram(HashSet<ushort> distinct, NativeView native, BakePlan plan, int tileX, int tileY) {
         // Counted through a local dictionary but EMITTED sorted by colour — no dictionary order ever escapes.
         var counts = new Dictionary<ushort, int>();
@@ -257,12 +253,12 @@ internal static class BakePipeline {
             for (var column = 0; (column < 8); column++) {
                 var pixel = ((((tileY * 8) + row) * plan.NativeWidth) + ((tileX * 8) + column));
 
-                if (native.Mask is { } mask && !mask[pixel]) {
+                if ((native.Mask is { } mask) && !mask[pixel]) {
                     continue;
                 }
 
                 var offset = (pixel * 4);
-                var colour = BakeColor.PackFrom8(b: native.Rgba[offset + 2], g: native.Rgba[offset + 1], r: native.Rgba[offset]);
+                var colour = BakeColor.PackFrom8(b: native.Rgba[(offset + 2)], g: native.Rgba[(offset + 1)], r: native.Rgba[offset]);
 
                 counts[colour] = (counts.GetValueOrDefault(key: colour) + 1);
                 _ = distinct.Add(item: colour);
@@ -314,9 +310,8 @@ internal static class BakePipeline {
             WirePalettes: BakeColor.EncodePalettes(palettes: previewPalettes, reserveTransparentSlot: sprite)
         );
     }
-
     private static QuantizedView QuantizeDmgView(HashSet<ushort> distinct, ErrorAccumulator errors, NativeView native, BakePlan plan, bool sprite, int tilesPerView) {
-        var indices = new byte[plan.NativeWidth * plan.NativeHeight];
+        var indices = new byte[(plan.NativeWidth * plan.NativeHeight)];
 
         for (var tile = 0; (tile < tilesPerView); tile++) {
             errors.BeginTile();
@@ -326,7 +321,6 @@ internal static class BakePipeline {
 
         return new QuantizedView(Height: plan.NativeHeight, Indices: indices, Mask: native.Mask, Name: native.Name, TilePalettes: new int[tilesPerView], Width: plan.NativeWidth);
     }
-
     private static void QuantizeDmgTile(HashSet<ushort> distinct, ErrorAccumulator errors, byte[] indices, NativeView native, BakePlan plan, bool sprite, int tile) {
         var tilesWide = (plan.NativeWidth / 8);
         var tileX = (tile % tilesWide);
@@ -344,23 +338,23 @@ internal static class BakePipeline {
 
                 var offset = (pixel * 4);
 
-                _ = distinct.Add(item: BakeColor.PackFrom8(b: native.Rgba[offset + 2], g: native.Rgba[offset + 1], r: native.Rgba[offset]));
+                _ = distinct.Add(item: BakeColor.PackFrom8(b: native.Rgba[(offset + 2)], g: native.Rgba[(offset + 1)], r: native.Rgba[offset]));
 
                 var dither = (StyleGrade.DitherOffset(style: plan.Style, x: x, y: y) / 255f);
                 var luma = Math.Clamp(
                     max: 1f,
                     min: 0f,
-                    value: (StyleGrade.Luma(b: (native.Rgba[offset + 2] / 255f), g: (native.Rgba[offset + 1] / 255f), r: (native.Rgba[offset] / 255f)) + dither)
+                    value: (StyleGrade.Luma(b: (native.Rgba[(offset + 2)] / 255f), g: (native.Rgba[(offset + 1)] / 255f), r: (native.Rgba[offset] / 255f)) + dither)
                 );
 
                 // A background uses all four shades; a sprite folds into the 3 usable ones (colour 0 = transparent).
                 var shade = (sprite
-                    ? (1 + Math.Min(val1: 2, val2: (int)MathF.Floor((1f - luma) * 3f)))
+                    ? (1 + Math.Min(val1: 2, val2: (int)MathF.Floor(x: ((1f - luma) * 3f))))
                     : StyleGrade.DmgShade(luma: luma));
 
                 indices[pixel] = (byte)shade;
                 // The honest DMG error: how far the pixel's grey level sits from its shade's nominal grey.
-                errors.Add(distance: MathF.Abs((luma * 31f) - (((3 - shade) / 3f) * 31f)));
+                errors.Add(distance: MathF.Abs(x: ((luma * 31f) - (((3 - shade) / 3f) * 31f))));
             }
         }
     }
@@ -425,7 +419,6 @@ internal static class BakePipeline {
             PreviewWidth: previewWidth
         );
     }
-
     private static List<string> CollectWarnings(IReadOnlyList<string>? extraWarnings, int maxEntries, QuantizeOutcome outcome, BakePlan plan, int tileCount, int worstLine) {
         var warnings = new List<string>(collection: (extraWarnings ?? []));
 
@@ -461,21 +454,19 @@ internal static class BakePipeline {
         private double m_tileTotal;
         private long m_tileCount;
 
-        public float Mean => ((m_count > 0) ? (float)(m_total / m_count) : 0f);
         public float MaxTileMean { get; private set; }
+        public float Mean => ((m_count > 0) ? (float)(m_total / m_count) : 0f);
 
         public void BeginTile() {
             m_tileTotal = 0.0;
             m_tileCount = 0L;
         }
-
         public void Add(float distance) {
             m_total += distance;
             m_count++;
             m_tileTotal += distance;
             m_tileCount++;
         }
-
         public void EndTile() {
             if (m_tileCount > 0) {
                 MaxTileMean = Math.Max(val1: MaxTileMean, val2: (float)(m_tileTotal / m_tileCount));

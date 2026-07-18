@@ -2,7 +2,7 @@ using System.CommandLine;
 using Puck.Commands;
 using Puck.Demo.Overworld;
 using Puck.Hosting;
-using static Puck.Demo.CommandArgs;
+using static Puck.Commands.CommandArgs;
 
 namespace Puck.Demo;
 
@@ -25,11 +25,14 @@ namespace Puck.Demo;
 /// FOURTH-WALL / reveal instrumentation the host polls, not sim state). When the root is not the overworld every verb
 /// returns "[condition.*: unavailable — the overworld is not the active root]".
 ///
-/// PERSISTENCE SEAM (unwired this stage — USER DECISION: no persistence for now, cloud saves near-future): a re-forged
-/// condition WOULD persist on the world document's <c>cabinet:&lt;n&gt;</c> placement (see
-/// <c>src/Puck.Demo/World/WorldDocument.cs</c>) — the same serializable seam a cloud save syncs — but <c>world.save</c>
-/// does NOT yet carry conditions, so a re-forge is session-only for now. The run-document schema is UNCHANGED: conditions
-/// already exist there (<c>GamingBrickSource.Exit</c>/<c>.Victory</c>); live editing changes no schema.
+/// PERSISTENCE: a re-forged condition now persists on the world document's <c>cabinet:&lt;n&gt;</c> placement (see
+/// <c>PlacementDocument.Exit</c>/<c>.Victory</c> in <c>src/Puck.Demo/World/WorldDocument.cs</c>) — the same
+/// serializable seam a cloud save would sync. <c>OverworldFrameSource.SetExitConditionSpec</c>/
+/// <c>SetVictoryConditionSpec</c>/<c>ClearCondition</c> mirror the edit onto the matching placement via
+/// <c>WorldScene.SetCabinetExitCondition</c>/<c>SetCabinetVictoryCondition</c>, so <c>world.save</c> carries it and
+/// <c>OverworldFrameSource.ConsumePendingWorldLoad</c> re-applies it (through the SAME queued condition-edit path
+/// this module drives) the next time that world loads. The run-document schema is UNCHANGED: conditions already
+/// exist there (<c>GamingBrickSource.Exit</c>/<c>.Victory</c>); this only wires the WORLD document's own mirror.
 /// </summary>
 internal sealed class ConditionCommandModule : ICommandModule {
     // The overworld root, captured at construction (its frame source — the actual control host — is built lazily on the
@@ -49,11 +52,11 @@ internal sealed class ConditionCommandModule : ICommandModule {
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return WithArgs(
             description: "Echoes a cabinet's current exit + victory condition for assertions: condition.show <cabinet>.",
-            handler: (_, args) => new CommandResult((Host is not { } host)
+            handler: (_, args) => new CommandResult(((Host is not { } host)
                 ? Unavailable(verb: "condition.show")
                 : (TryParseIndex(args: args, at: 0, value: out var index)
                     ? host.ShowCondition(index: index)
-                    : "[condition.show: usage — condition.show <cabinet>]")),
+                    : "[condition.show: usage — condition.show <cabinet>]"))),
             name: "condition.show"
         );
         yield return WithArgs(
@@ -63,11 +66,11 @@ internal sealed class ConditionCommandModule : ICommandModule {
         );
         yield return WithArgs(
             description: "Removes a cabinet's condition: condition.clear <cabinet> exit|victory.",
-            handler: (_, args) => new CommandResult((Host is not { } host)
+            handler: (_, args) => new CommandResult(((Host is not { } host)
                 ? Unavailable(verb: "condition.clear")
                 : ((TryParseIndex(args: args, at: 0, value: out var index) && (args.Length > 1))
                     ? host.ClearCondition(index: index, which: args[1])
-                    : "[condition.clear: usage — condition.clear <cabinet> exit|victory]")),
+                    : "[condition.clear: usage — condition.clear <cabinet> exit|victory]"))),
             name: "condition.clear"
         );
     }
@@ -106,7 +109,6 @@ internal sealed class ConditionCommandModule : ICommandModule {
 
         return "[condition.set: usage — the channel must be 'exit' or 'victory']";
     }
-
     private static string Unavailable(string verb) =>
         $"[{verb}: unavailable — the overworld is not the active root]";
 

@@ -15,6 +15,9 @@ public sealed class VulkanLogicalDevice : IDisposable {
     public VkQueue GraphicsQueue { get; }
     /// <summary>Gets the native <c>VkDevice</c> handle.</summary>
     public nint Handle { get; }
+    /// <summary>Gets whether the device has been disposed — a native call against <see cref="Handle"/> after that is
+    /// a use-after-free, so late teardown paths (an upload/readback outliving the renderer's device) check this first.</summary>
+    public bool IsDisposed => m_disposed;
     /// <summary>Gets the physical device this logical device was created from.</summary>
     public VkPhysicalDevice PhysicalDevice { get; }
     /// <summary>Gets the present queue of the device. May be the same queue as <see cref="GraphicsQueue"/>.</summary>

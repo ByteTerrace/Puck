@@ -23,6 +23,10 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
 
     private const int PhysicalDevicePropertiesBufferSize = 2048;
+    // VkPhysicalDeviceProperties field offsets: apiVersion(0), driverVersion(4), vendorID(8), deviceID(12),
+    // deviceType(16), deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE=256](20).
+    private const int PhysicalDeviceApiVersionOffset = 0;
+    private const int PhysicalDeviceNameOffset = (sizeof(uint) * 5);
     private const int PhysicalDeviceTypeOffset = (sizeof(uint) * 4);
     // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
     private const int PhysicalDeviceFeatureCount = 55;
@@ -108,6 +112,57 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             )
                 ? (VkPhysicalDeviceType)deviceType
                 : VkPhysicalDeviceType.Other);
+        } finally {
+            m_allocator.Free(ptr: propertiesBuffer);
+        }
+    }
+    /// <inheritdoc/>
+    public uint GetDeviceApiVersion(nint instanceHandle, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
+
+        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
+
+        try {
+            getPhysicalDeviceProperties(
+                physicalDeviceHandle,
+                propertiesBuffer
+            );
+
+            return unchecked((uint)Marshal.ReadInt32(
+                ofs: PhysicalDeviceApiVersionOffset,
+                ptr: propertiesBuffer
+            ));
+        } finally {
+            m_allocator.Free(ptr: propertiesBuffer);
+        }
+    }
+    /// <inheritdoc/>
+    public string GetDeviceName(nint instanceHandle, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
+
+        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
+
+        try {
+            getPhysicalDeviceProperties(
+                physicalDeviceHandle,
+                propertiesBuffer
+            );
+
+            // deviceName is a NUL-terminated UTF-8 char[256]; PtrToStringUTF8 stops at the terminator.
+            return (Marshal.PtrToStringUTF8(ptr: IntPtr.Add(
+                offset: PhysicalDeviceNameOffset,
+                pointer: propertiesBuffer
+            )) ?? "(unknown device)");
         } finally {
             m_allocator.Free(ptr: propertiesBuffer);
         }

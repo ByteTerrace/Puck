@@ -25,16 +25,14 @@ public sealed record ValidationDocument {
     /// gate only; requires a four-viewport split layout). Diffs the per-viewport child-surface seam across backends.</summary>
     public bool Child { get; init; }
 
-    /// <summary>The recognized validation gate names — exactly the set the demo's gate map can build. (The retired
-    /// engine gates whose coverage moved to Puck.Post — export/compute/reverse/indirect/resample/viewports/pixelate/
-    /// capture — were removed from this list when their nodes were.)</summary>
+    /// <summary>The validation gate names supported by the demo's gate map.</summary>
     public static IReadOnlyList<string> Gates { get; } = ["parity", "world", "overworld", "determinism"];
 
     internal void Validate(string path, int viewportCount, ValidationErrors errors) {
-        var isWorld = string.Equals(Gate, "world", StringComparison.OrdinalIgnoreCase);
+        var isWorld = string.Equals(a: Gate, b: "world", comparisonType: StringComparison.OrdinalIgnoreCase);
 
-        if (string.IsNullOrEmpty(Gate) || !Gates.Contains(Gate.ToLowerInvariant())) {
-            errors.Add(path: $"{path}.gate", message: $"'{Gate}' is not a valid validation gate; expected one of: {string.Join(", ", Gates)}");
+        if (string.IsNullOrEmpty(value: Gate) || !Gates.Contains(value: Gate.ToLowerInvariant())) {
+            errors.Add(path: $"{path}.gate", message: $"'{Gate}' is not a valid validation gate; expected one of: {string.Join(separator: ", ", values: Gates)}");
         }
 
         Thresholds?.Validate(errors: errors, path: $"{path}.thresholds");
@@ -47,7 +45,7 @@ public sealed record ValidationDocument {
 
         // artifactDir, when present, must be a usable path — a blank or illegal value would otherwise crash the gate's
         // directory creation at host-start instead of failing cleanly here.
-        if ((ArtifactDir is not null) && (string.IsNullOrWhiteSpace(ArtifactDir) || (ArtifactDir.IndexOfAny(anyOf: Path.GetInvalidPathChars()) >= 0))) {
+        if ((ArtifactDir is not null) && (string.IsNullOrWhiteSpace(value: ArtifactDir) || (ArtifactDir.IndexOfAny(anyOf: Path.GetInvalidPathChars()) >= 0))) {
             errors.Add(path: $"{path}.artifactDir", message: "artifactDir must be a non-empty path with no invalid path characters");
         }
 

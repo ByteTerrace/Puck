@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 
 namespace Puck.Post;
@@ -46,6 +47,14 @@ internal static class PostProbeProcess {
     /// <returns>The finished run.</returns>
     /// <exception cref="InvalidOperationException">The current executable path could not be determined.</exception>
     public static ProbeResult Run(string probe, IReadOnlyDictionary<string, string>? environment) {
+        return Run(arguments: ["--probe", probe], environment: environment);
+    }
+
+    /// <summary>Launches the standalone hostile-window capture probe.</summary>
+    public static ProbeResult RunCaptureLifetime() =>
+        Run(arguments: ["--capture-probe"], environment: null);
+
+    private static ProbeResult Run(IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? environment) {
         var executable = (Environment.ProcessPath ?? throw new InvalidOperationException(message: "Environment.ProcessPath is unavailable; the Tier-D probes cannot relaunch the POST."));
         var startInfo = new ProcessStartInfo {
             CreateNoWindow = true,
@@ -55,8 +64,25 @@ internal static class PostProbeProcess {
             UseShellExecute = false,
         };
 
-        startInfo.ArgumentList.Add(item: "--probe");
-        startInfo.ArgumentList.Add(item: probe);
+        // `dotnet run` normally starts the generated apphost, but framework-dependent invocations use dotnet itself as
+        // ProcessPath. In that posture the entry assembly must remain the first argument or the probe switch is
+        // misinterpreted as a dotnet command.
+        if (string.Equals(
+            a: Path.GetFileNameWithoutExtension(path: executable),
+            b: "dotnet",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            var entryAssembly = Assembly.GetEntryAssembly()?.Location;
+            if (string.IsNullOrWhiteSpace(value: entryAssembly)) {
+                throw new InvalidOperationException(message: "The POST entry assembly path is unavailable; a framework-dependent probe child cannot be relaunched.");
+            }
+
+            startInfo.ArgumentList.Add(item: entryAssembly);
+        }
+
+        foreach (var argument in arguments) {
+            startInfo.ArgumentList.Add(item: argument);
+        }
 
         if (environment is not null) {
             foreach (var (name, value) in environment) {
@@ -64,7 +90,7 @@ internal static class PostProbeProcess {
             }
         }
 
-        using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: $"The probe child '{probe}' failed to start."));
+        using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: $"The probe child '{string.Join(separator: ' ', values: arguments)}' failed to start."));
 
         var output = new StringBuilder();
 

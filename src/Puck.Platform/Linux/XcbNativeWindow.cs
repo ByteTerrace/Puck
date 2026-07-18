@@ -2,26 +2,33 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Puck.Commands;
 using Puck.Input;
 using Puck.Platform.Linux.Interop;
 
 namespace Puck.Platform.Linux;
 
 /// <summary>An X11 (XCB) native window backed by libxcb. Drives the window lifecycle and
-/// the events the engine loop needs (resize, close, first paint, pointer motion, and a
+/// the events the engine loop needs (resize, close, first paint, pointer motion and buttons, and a
 /// fixed set of navigation/function keys on the standard Linux evdev keymap). Full keysym
 /// text input and clipboard integration are out of scope; on the Steam Deck this path runs
-/// under XWayland, while the native Gamescope path is <see cref="WaylandNativeWindow"/>.</summary>
+/// under XWayland, while the native Gamescope path is <see cref="WaylandNativeWindow"/>. No pointer
+/// capture equivalent to Win32's <c>SetCapture</c> is implemented (XCB's is <c>xcb_grab_pointer</c>): a drag
+/// that leaves the client area on this path stops receiving motion until the pointer re-enters.</summary>
 internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     private const uint XcbAtomAtom = 4;
     private const uint XcbAtomString = 31;
     private const uint XcbAtomWmName = 39;
+    private const byte XcbButtonPress = 4;
+    private const byte XcbButtonRelease = 5;
     private const byte XcbClientMessage = 33;
     private const byte XcbConfigureNotify = 22;
     private const byte XcbCopyFromParent = 0;
     private const uint XcbCwBackPixel = 2;
     private const uint XcbCwEventMask = 2048;
     private const byte XcbDestroyNotify = 17;
+    private const uint XcbEventMaskButtonPress = 4;
+    private const uint XcbEventMaskButtonRelease = 8;
     private const uint XcbEventMaskExposure = 32768;
     private const uint XcbEventMaskKeyPress = 1;
     private const uint XcbEventMaskKeyRelease = 2;
@@ -106,7 +113,7 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             depth: XcbCopyFromParent,
             height: (ushort)m_options.Height,
             parent: rootWindow,
-            valueList: [0u, (XcbEventMaskExposure | XcbEventMaskKeyPress | XcbEventMaskKeyRelease | XcbEventMaskPointerMotion | XcbEventMaskStructureNotify)],
+            valueList: [0u, (XcbEventMaskExposure | XcbEventMaskKeyPress | XcbEventMaskKeyRelease | XcbEventMaskButtonPress | XcbEventMaskButtonRelease | XcbEventMaskPointerMotion | XcbEventMaskStructureNotify)],
             valueMask: XcbCwBackPixel | XcbCwEventMask,
             visual: rootVisual,
             width: (ushort)m_options.Width,
@@ -323,6 +330,12 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             case XcbMotionNotify:
                 HandleMotionNotify(eventPointer: eventPointer);
                 return;
+            case XcbButtonPress:
+                HandleButtonPress(eventPointer: eventPointer);
+                return;
+            case XcbButtonRelease:
+                HandleButtonRelease(eventPointer: eventPointer);
+                return;
             case XcbKeyPress:
                 HandleKeyPress(eventPointer: eventPointer);
                 return;
@@ -410,6 +423,28 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
 
         m_lastPointerX = pointerX;
         m_lastPointerY = pointerY;
+    }
+    private void HandleButtonPress(nint eventPointer) {
+        if (TryMapButton(detail: Marshal.ReadByte(ofs: 1, ptr: eventPointer), button: out var button)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Started));
+        }
+    }
+    private void HandleButtonRelease(nint eventPointer) {
+        if (TryMapButton(detail: Marshal.ReadByte(ofs: 1, ptr: eventPointer), button: out var button)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Completed));
+        }
+    }
+    // X11 button numbering (1=left, 2=middle, 3=right; 4/5 are the scroll wheel, ignored here) mapped to the
+    // engine's neutral 0=left/1=right/2=middle convention (WindowInputEvent.PointerButton).
+    private static bool TryMapButton(byte detail, out int button) {
+        button = detail switch {
+            1 => 0,
+            2 => 2,
+            3 => 1,
+            _ => -1,
+        };
+
+        return (button >= 0);
     }
     private void ReconcilePendingRelease(nint eventPointer, byte responseType) {
         if (m_pendingReleaseKeycode is not { } pendingKeycode) {

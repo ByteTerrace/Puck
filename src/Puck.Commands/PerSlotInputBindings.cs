@@ -19,13 +19,13 @@ public sealed class PerSlotInputBindings : IInputBindings {
 
     /// <inheritdoc/>
     public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) {
-        return (m_bySlot.TryGetValue(
+        return ((m_bySlot.TryGetValue(
             key: slot,
             value: out var table
         ) && table.TryGetValue(
             key: source,
             value: out var bindings
-        )
+        ))
             ? bindings
             : null);
     }

@@ -1,0 +1,113 @@
+namespace Puck.World.Protocol;
+
+/// <summary>
+/// The kind-tagged vocabulary of live world edits carried over <see cref="IServerLink.SubmitWorldMutation"/> — the
+/// closed set of in-flight mutations that <em>is</em> the editor substrate. One coarse record per
+/// <see cref="WorldDefinition"/> section, addressed by stable id, whole-row upsert (never a field poke): a genre world
+/// arrives as different DATA through these same messages, never a new message shape (the §2.6 audit). Mutations buffer
+/// on the server and drain at the tick boundary before intents (settled question 9); each composes a candidate
+/// definition, revalidates the whole document, and — on success — swaps the server's live definition, appends to the
+/// journal (the undo engine), and rebuilds the changed section's derived state.
+/// </summary>
+/// <remarks>Every mutation carries its acting <see cref="Principal"/> on the base; the server checks
+/// <see cref="WorldCapability.Mutate"/> over the mutation's <see cref="WorldSection"/> before it applies. The base is
+/// positional (uniform with <see cref="WorldCommand"/> and <see cref="SessionRequest"/>); the hierarchy stays closed by
+/// convention (every kind is a nested sealed record).</remarks>
+/// <param name="Principal">The acting identity the mutation is checked against.</param>
+internal abstract record WorldMutation(WorldPrincipal Principal) {
+    /// <summary>Upserts a locomotion kit row addressed by <see cref="WorldKit.Name"/> — replaces the matching row or
+    /// appends a new one.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Kit">The whole kit row.</param>
+    internal sealed record UpsertKit(WorldPrincipal Principal, WorldKit Kit) : WorldMutation(Principal);
+
+    /// <summary>Removes the kit row named <paramref name="Name"/>. Rejected loudly if the composed document then names
+    /// no seat kit or leaves an assignment table dangling (full-document revalidation).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The kit row name to remove.</param>
+    internal sealed record RemoveKit(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Sets the default seat kit (by name). Rejected if the name matches no kit row.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The kit row name every seat body constructs from.</param>
+    internal sealed record SetDefaultSeatKit(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Replaces the kit→entity assignment policy (the whole <see cref="WorldKitAssignment"/> row).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Assignment">The assignment policy.</param>
+    internal sealed record SetKitAssignment(WorldPrincipal Principal, WorldKitAssignment Assignment) : WorldMutation(Principal);
+
+    /// <summary>Upserts a diegetic screen addressed by <see cref="WorldScreen.Index"/>.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Screen">The whole screen row.</param>
+    internal sealed record UpsertScreen(WorldPrincipal Principal, WorldScreen Screen) : WorldMutation(Principal);
+
+    /// <summary>Removes the screen at <paramref name="Index"/>. Rejected if no screen declares that index.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Index">The engine screen-surface index to remove.</param>
+    internal sealed record RemoveScreen(WorldPrincipal Principal, int Index) : WorldMutation(Principal);
+
+    /// <summary>Upserts a placeable camera addressed by <see cref="WorldCamera.Name"/>.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Camera">The whole camera row.</param>
+    internal sealed record UpsertCamera(WorldPrincipal Principal, WorldCamera Camera) : WorldMutation(Principal);
+
+    /// <summary>Removes the camera named <paramref name="Name"/>. Rejected if a View screen still references it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The camera name to remove.</param>
+    internal sealed record RemoveCamera(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole static scene (ground albedos + boulders).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Scene">The scene.</param>
+    internal sealed record SetScene(WorldPrincipal Principal, WorldScene Scene) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole seat spawn-point list (order maps slots; takes effect at the next seat activation).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Spawns">The spawn points.</param>
+    internal sealed record SetSpawns(WorldPrincipal Principal, IReadOnlyList<WorldSpawnPoint> Spawns) : WorldMutation(Principal);
+
+    /// <summary>Replaces the profileless locomotion/jump tuning.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Motion">The motion tuning.</param>
+    internal sealed record SetMotion(WorldPrincipal Principal, MotionTuning Motion) : WorldMutation(Principal);
+
+    /// <summary>Replaces the wander tuning.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Wander">The wander tuning.</param>
+    internal sealed record SetWander(WorldPrincipal Principal, WanderTuning Wander) : WorldMutation(Principal);
+
+    /// <summary>Replaces the census defaults (document-only; the live census stays the <c>world.population</c> verb's
+    /// session state).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Population">The census defaults.</param>
+    internal sealed record SetPopulationDefaults(WorldPrincipal Principal, WorldPopulationDefaults Population) : WorldMutation(Principal);
+
+    /// <summary>Replaces the render-lever defaults and quality-preset table (document-only; live render levers stay
+    /// <c>WorldRenderSettings</c>).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Render">The render defaults.</param>
+    internal sealed record SetRenderDefaults(WorldPrincipal Principal, WorldRenderDefaults Render) : WorldMutation(Principal);
+
+    /// <summary>Upserts a data-side addon descriptor addressed by <see cref="WorldAddonRow.Name"/>.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Addon">The addon row.</param>
+    internal sealed record UpsertAddon(WorldPrincipal Principal, WorldAddonRow Addon) : WorldMutation(Principal);
+
+    /// <summary>Removes the addon named <paramref name="Name"/>.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The addon name to remove.</param>
+    internal sealed record RemoveAddon(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+
+    /// <summary>Upserts a per-world binding overlay addressed by <see cref="WorldBindingOverlay.Id"/> — replaces the
+    /// matching row or appends a new one. Rejected loudly if the composed mapping (default ⊕ every overlay) then fails to
+    /// compile.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Overlay">The whole overlay row.</param>
+    internal sealed record UpsertBindingOverlay(WorldPrincipal Principal, WorldBindingOverlay Overlay) : WorldMutation(Principal);
+
+    /// <summary>Removes the binding overlay with id <paramref name="Id"/>. Rejected if no overlay declares that id.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The overlay id to remove.</param>
+    internal sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+}

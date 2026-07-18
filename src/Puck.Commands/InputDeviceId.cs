@@ -29,7 +29,7 @@ public readonly record struct InputDeviceId(Guid Value) {
             source: content
         );
 
-        return new InputDeviceId(Value: new Guid(digest[..16]));
+        return new InputDeviceId(Value: new Guid(b: digest[..16]));
     }
 
     /// <summary>Derives a content-addressed id from a textual device key (UTF-8 encoded), such as a device path.</summary>

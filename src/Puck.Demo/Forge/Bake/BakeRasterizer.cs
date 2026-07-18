@@ -22,7 +22,6 @@ internal sealed class BakeRasterizer : IDisposable {
     // The worst-case capacity envelope: a synthetic full-capacity creation run through the SAME planner emission
     // the live bakes use, so the floor tracks the emission by construction.
     private static readonly Lazy<(int Words, int Instances)> WorstCase = new(valueFactory: MeasureWorstCase);
-
     private SdfWorldEngine? m_engine;
     private bool m_pending;
     private uint m_width;
@@ -125,7 +124,7 @@ internal sealed class BakeRasterizer : IDisposable {
             device: device,
             gpu: gpu,
             height: height,
-            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv", directory: DemoShaders.SdfDirectory),
+            kernels: SdfWorldKernels.Load(bytecodeExtension: ".spv"),
             options: new SdfWorldEngineOptions(
                 InstanceCapacity: WorstCase.Value.Instances,
                 Program: program,
@@ -151,9 +150,9 @@ internal sealed class BakeRasterizer : IDisposable {
                 Id: index,
                 Material: (index % CreatorScene.PaletteSize),
                 Name: null,
-                Position: new Vector3((index * 0.05f), 1f, 0f),
+                Position: new Vector3(x: (index * 0.05f), y: 1f, z: 0f),
                 Rotation: rotation,
-                Scale: new Vector3(CreatorScene.MaxScale),
+                Scale: new Vector3(value: CreatorScene.MaxScale),
                 Smooth: CreatorScene.MaxSmooth,
                 Type: AvatarPrimitive.Capsule
             ));

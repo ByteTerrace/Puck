@@ -26,6 +26,11 @@ public sealed class PuckRunDocument {
     /// scene's screen slabs declare (see <see cref="ScreenSlabObject.ScreenIndex"/>). Consumed by the world graph;
     /// a declared surface with no entry falls back to the flat/procedural screen material.</summary>
     public IReadOnlyList<ScreenSourceDocument>? ScreenSources { get; init; }
+    /// <summary>The optional WASM addon table: content-addressed modules the sim-tick host instantiates and drives
+    /// with a fixed-point snapshot each tick, folding their returned virtual-pad commands into a roster slot's
+    /// input. Consumed only by a <see cref="Graph"/> run; meaningless (and rejected) under <see cref="Validation"/>
+    /// or <see cref="Fuzzing"/>.</summary>
+    public IReadOnlyList<AddonDocument>? Addons { get; init; }
     /// <summary>The composition graph's root node. Ignored (and optional) when <see cref="Validation"/> is present.</summary>
     public NodeDocument? Graph { get; init; }
     /// <summary>The optional input section: controller→consumer routing policy.</summary>

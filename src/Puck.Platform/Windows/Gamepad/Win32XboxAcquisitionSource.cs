@@ -12,8 +12,8 @@ namespace Puck.Platform.Windows.Gamepad;
 /// <c>XInputSetState</c> fallback. The poll thread is the sole owner of the <see cref="GameInputHaptics"/> service.
 /// </summary>
 public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
-    private const int XInputSlotCount = 4;
     private const int XInputPollHz = 250;
+    private const int XInputSlotCount = 4;
 
     private readonly CancellationTokenSource m_cancellation = new();
     private readonly Action<string>? m_diagnostics;
@@ -86,7 +86,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
             while (!cancellationToken.IsCancellationRequested) {
                 var cycleStart = Stopwatch.GetTimestamp();
 
-                for (var slot = 0; slot < XInputSlotCount; ++slot) {
+                for (var slot = 0; (slot < XInputSlotCount); ++slot) {
                     var connection = connections[slot];
 
                     if ((connection is null) && (cycleStart < emptySlotRecheck[slot])) {

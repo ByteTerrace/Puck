@@ -11,6 +11,13 @@ public interface IGpuComputeRecorder {
     void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle);
     /// <summary>Ends recording of the command buffer.</summary>
     void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle);
+    /// <summary>Opens a named debug-marker group scoping the commands recorded until the matching
+    /// <see cref="EndDebugGroup"/> — surfaced by GPU capture tools (RenderDoc / PIX / Nsight) as a labeled scope. Maps
+    /// to <c>vkCmdBeginDebugUtilsLabelEXT</c> / a Direct3D 12 PIX event; a no-op when the backend's debug-label
+    /// facility is unavailable. Records no GPU work and never affects rendered output, so it is safe on every path.</summary>
+    void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label);
+    /// <summary>Closes the most recently opened <see cref="BeginDebugGroup"/> on the command buffer.</summary>
+    void EndDebugGroup(nint deviceHandle, nint commandBufferHandle);
     /// <summary>Binds a pipeline to the compute bind point.</summary>
     void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle);
     /// <summary>Binds the descriptor set at set 0 for the compute bind point.</summary>

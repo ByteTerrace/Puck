@@ -15,7 +15,7 @@ using Puck.Vulkan.Presentation;
 // pulling in a command-line library: where artifacts land, an optional tier/name/stage subset for iterating, an
 // override for the fuzz stage's fixed deterministic seed, and the internal --probe mode the Tier-D stages relaunch
 // this executable in (a live multi-frame run instead of the battery).
-var artifactsDirectory = ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "post");
+var artifactsDirectory = (ArgValue(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "post"));
 var tierFilter = ArgValue(args: args, name: "--tier");
 var nameFilter = ArgValue(args: args, name: "--filter");
 var stageFilter = ArgValue(args: args, name: "--stage");
@@ -23,6 +23,19 @@ var fuzzSeedValue = ArgValue(args: args, name: "--fuzz-seed");
 var fuzzSeed = ((fuzzSeedValue is null) ? ((int?)null) : int.Parse(s: fuzzSeedValue));
 var probeMode = ArgValue(args: args, name: "--probe");
 
+// The native-capture hostile-window child is a standalone process probe: it must run before the Vulkan host is built
+// so the target window, compositor session, and teardown measurements are the only live graphics resources.
+if (CaptureLifetimeProbe.TryRun(args: args, exitCode: out var captureProbeExitCode)) {
+    return captureProbeExitCode;
+}
+
+// The drift-HUNT surface (the differential fuzzer flipped from gate to MAXIMIZER — see DriftHuntCli/DriftHunt). The
+// PARENT `--hunt-drift` orchestrator spawns one isolated child per candidate and needs no GPU host, so it runs and
+// returns BEFORE the battery's composition root is built. The CHILD `--hunt-render` mode is handled at node selection
+// below. Both funnel through DriftHuntCli so the composition root's class-coupling stays under its ceiling.
+if (DriftHuntCli.TryRunOrchestrator(args: args, exitCode: out var huntExitCode)) {
+    return huntExitCode;
+}
 var stages = PostStages.Create(fuzzSeed: fuzzSeed)
     .Where(predicate: stage => TierMatches(stage: stage, tierFilter: tierFilter))
     .Where(predicate: stage => NameMatches(stage: stage, nameFilter: nameFilter))
@@ -33,7 +46,6 @@ var stages = PostStages.Create(fuzzSeed: fuzzSeed)
 // launcher opens just flashes. Mirror the demo's composition root, minus the live producers and the game.
 var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
-
 services.Configure<NativeWindowOptions>(configureOptions: static options => {
     options.Height = 600;
     options.Mode = NativeWindowMode.PlatformWindow;
@@ -78,9 +90,7 @@ if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
             : throw new PlatformNotSupportedException())));
 }
 services.AddBackendSwitcher(preferredBackend: "vulkan");
-
 var runResult = new PostRunResult();
-
 if (probeMode is not null) {
     // A Tier-D probe child: host the live probe node instead of the battery.
     services.AddSingleton<IRenderNode>(implementationFactory: sp => new PostProbeNode(
@@ -88,6 +98,10 @@ if (probeMode is not null) {
         runResult: runResult,
         services: sp
     ));
+} else if (DriftHuntCli.IsRenderMode(args: args)) {
+    // A drift-hunt child (--hunt-render --hunt-seed N [--hunt-artifacts DIR --hunt-rank R]): host the one-shot render
+    // node that scores this ONE candidate on both backends and prints its structured HUNT line (see DriftHunt).
+    services.AddSingleton<IRenderNode>(implementationFactory: sp => DriftHuntCli.CreateRenderNode(services: sp, args: args, runResult: runResult));
 } else {
     var battery = new PostBattery(stages: stages);
 
@@ -98,31 +112,26 @@ if (probeMode is not null) {
         services: sp
     ));
 }
-
 await builder.Build().RunAsync();
 
 // The node fills runResult before requesting exit; propagate it. It defaults to 2, so a run that never reached the
 // battery (the node never produced a frame) fails loudly.
 return runResult.ExitCode;
-
 static string? ArgValue(string[] args, string name) {
     for (var index = 0; (index < (args.Length - 1)); index++) {
         if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            return args[index + 1];
+            return args[(index + 1)];
         }
     }
 
     return null;
 }
-
 static bool TierMatches(IPostStage stage, string? tierFilter) {
     return (string.IsNullOrEmpty(value: tierFilter) || string.Equals(a: stage.Tier.ToString(), b: tierFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
 }
-
 static bool NameMatches(IPostStage stage, string? nameFilter) {
     return (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(value: nameFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
 }
-
 static bool StageMatches(IPostStage stage, string? stageFilter) {
     return (string.IsNullOrEmpty(value: stageFilter) || string.Equals(a: stage.Name, b: stageFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
 }

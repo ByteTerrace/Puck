@@ -1,14 +1,15 @@
 # Puck.Maths
 
-Low-level numeric primitives for the Puck engine: unsigned binary **fixed-point**
-types and a kit of **branchless, width-agnostic integer routines** (bit twiddling,
-prime work, pairing functions, square roots, and cryptographically secure random
-draws).
+Low-level deterministic numeric primitives for the Puck engine: signed and
+unsigned binary **fixed-point** types, vectors, rotations, rigid transforms,
+spatial coordinates, reproducible random distributions, and a kit of
+**width-agnostic integer routines**.
 
-Everything here is allocation-free, deterministic, and written against
-`System.Numerics.IBinaryInteger<T>` so a single implementation serves every integer
-width from `byte` to `Int128`. There are no external dependencies — `Puck.Maths` is a
-leaf library.
+The simulation primitives are deterministic and the hot scalar/vector paths are
+allocation-free. Generic integer algorithms use `System.Numerics` interfaces so
+one implementation serves multiple integer widths. Table construction and large
+prime-counting operations may allocate or rent working storage. `Puck.Maths` has
+no external package dependencies and remains a leaf library.
 
 ```text
 namespace Puck.Maths
@@ -16,36 +17,64 @@ target     net10.0
 deps       none
 ```
 
+The [category-theory decision index](CATEGORY-THEORY.md) records which generic
+math, algebra, action, and optic ideas fit this deterministic fixed-point model,
+including the exact-law boundary imposed by per-operation rounding.
+
 ---
 
 ## At a glance
 
 | Type | Kind | What it's for |
 |------|------|---------------|
-| `UFixedQ4816` | `readonly record struct` | UQ48.16 fixed-point — 48 integer bits, 16 fraction bits (range `[0, 2⁴⁸)`). |
+| `UFixedQ4816` | `readonly record struct` | UQ48.16 fixed-point — 48 integer bits, 16 fraction bits (range `[0, 2⁴⁸)`). Implements the complete .NET `INumber<T>` + `IUnsignedNumber<T>` surface. |
 | `UFixedQ0016` | `readonly record struct` | UQ0.16 fraction — a real number in `[0, 1)` stored in 16 bits. |
 | `UFixedQ0032` | `readonly record struct` | UQ0.32 fraction — a real number in `[0, 1)` stored in 32 bits. |
+| `FixedQ4816` | `readonly record struct` | SIGNED Q48.16 fixed-point (two's-complement) — the signed companion to `UFixedQ4816`, implementing the complete .NET `INumber<T>` + `ISignedNumber<T>` surface, with deterministic `Sqrt`/`Atan2`/`Sin`/`Cos`/`SinCos`/`Log2`/`Exp2`/`Pow` (pure-integer table/polynomial kernels, each within ~0.65 ULP where absolute ULPs are representable; the square root's hardware seed is settled to the exact integer floor); the raw-bits carrier for every fixed-point value crossing a deterministic-simulation boundary (e.g. the `Puck.Scripting` WASM addon ABI). `SinCos` inverts `Atan2`; `Exp2` inverts `Log2`; `Pow` computes whole-number exponents by exact squaring. The everyday helpers round it out: `Abs`/`Sign`/`CopySign`, `Min`/`Max`/`Clamp`, `Floor`/`Ceiling`/`Round`/`Truncate`/`Fractional`, and `Lerp` (endpoint-exact linear interpolation). |
+| `FixedRateAccumulator` / `FixedVector3RateAccumulator` | `struct` | Exact-tick integration of Q48.16 per-second rates. Division remainders carry across fixed updates, so 120 integrations of one unit/second over 1/120 second total exactly one represented unit instead of repeating a rounded step. Use the same primitive for acceleration → velocity and velocity → position; its remainder fields are authoritative snapshot/hash state. |
+| `FixedVector2` / `FixedVector3` | `readonly record struct` | 2D/3D vectors of `FixedQ4816` components — deterministic, bit-identical world-space math; `Dot`, `Wedge`/`Cross`, complex/quaternion products, and rotations widen every product and round once per result component. `FixedVector3.Normalize` is scale-free; `Length`/`LengthSquared` saturate only when the nonnegative result cannot fit, while `TryLength`/`TryLengthSquared` expose that boundary. |
+| `FixedQuaternion` | `readonly record struct` | Deterministic 3D rotation: `FromAxisAngle` (fixed-point SinCos), full-width fused Hamilton `*` and `Rotate`, `Slerp` (shortest-arc, nlerp guard), exact-denominator `Inverse`, and scale-free `FromTo`/`Normalize`. Norm properties saturate with `TryLength` variants for explicit overflow. Implements the applicable generic-math operator interfaces, so it composes with `FixedDual<T>`. |
+| `FixedComplex` | `readonly record struct` | Deterministic 2D rotation (the yaw-plane analog of the quaternion): `FromAngle`, full-width fused `*`/`Rotate`, full-range exact-rounding division, scale-free `FromTo`/`Normalize`, and full-width saturating `Magnitude`/`MagnitudeSquared` with explicit `TryMagnitude` variants. |
+| `FixedDual<TValue>` | `readonly record struct` | The dual construction `a + b·ε` (`ε² = 0`) over any carrier with the required generic-math operators and identities: over `FixedQ4816` it carries a quantized formal forward-mode sensitivity (`FixedDual.Variable` seeds and `Dual` follows the ideal expression's chain rule; the discrete raw-bit program has no classical derivative); over `FixedQuaternion` it is the dual quaternion behind `FixedRigidTransform`. |
+| `FixedRigidTransform` | `readonly record struct` | Rotation + translation as one unit dual quaternion: normalized `FromRotationTranslation`/`FromDualQuaternion` boundaries, fast raw composition by `*`, explicit `ComposeNormalized` for long chains, matching generic-math multiplication/identity interfaces, `TransformPoint`, `Inverse`, `Normalize`, and screw interpolation by `ScLerp`. Positional construction is the documented unchecked representation seam. Precision ≈ 2⁻¹⁵ relative to translation magnitude. |
+| `WorldCoord3` | `readonly record struct` | Canonical hierarchical world position: signed 64-bit cell indices plus a centred `FixedVector3` local offset — the floating-origin coordinate for planet-scale scenes. Construction and `WithLocal` canonicalize; `TryCreate`, `TryTranslate`, and `TryDelta` expose range failure without exceptions; throwing operators fail rather than silently wrap. Its heterogeneous generic-math interfaces expose position + displacement → position and position − position → displacement without pretending that positions form a vector space. |
 | `BinaryIntegerFunctions` | `static` ext. methods | Bit manipulation & base-10 digit ops over `IBinaryInteger<T>`. |
 | `UnsignedNumberFunctions` | `static` ext. methods | Pairing functions, prime factorization, modular inverse, integer roots. |
 | `PrimeExtensions` | `static` ext. methods | Deterministic primality, n-th prime, prime counting (`uint`). |
-| `SecureRandom` | `static` | Uniform, unbiased, cryptographically secure unsigned draws. |
+| `MonotonicPartitioner` | `static` | Jump-consistent routing of 65536 values (or a `Guid`, via its trailing entropy) onto 1–1024 buckets: deterministic (a client/server agreement — both ends of a wire compute the same route), monotonic (growth only moves values into the new bucket), uniform (⌊65536/N⌋ or ⌈65536/N⌉ per bucket, quantization skew ≤ ~2 % at every count). Ownership chains compressed into checkpoint + varint tail-stream tables; `GetMetrics` reports a value's rank, migration count, and distance to its next migration (`MonotonicPartitionerMetrics`). |
+| `Pcg32XshRr` | `struct` | Deterministic seedable PCG32 (XSH-RR) for simulation: reference-vector-exact, per-entity streams, O(log n) `Advance`, `NextUFixedQ0016`/`NextUFixedQ0032` fraction draws, `NextGaussianPair` standard normals (Box–Muller; exactly two advances per pair), and an in-place `Shuffle` (Fisher–Yates). Generator state is simulation state — fully readable and restored exactly by `FromRawBits`; persist it in snapshots. |
+| `AliasTable<TElement>` | `sealed class` | Immutable weighted-choice table (Walker/Vose): exact-integer construction from ORDERED entries (order is part of the contract), O(1) sampling at exactly two generator advances per draw. Weights come as `ulong` (exact), `double` (deterministically quantized at 2⁵³ resolution — the run-document seam), or `FixedQ4816`/`UFixedQ4816` (exact). Bake a `puck.run.v1` distribution once at load, then sample deterministically. |
+| `FieldNoise` | `static` | Deterministic spatial randomness: a stateless pure function from (seed, position) to smooth noise in `[−1, 1]` (value noise, quintic fade, octave fBm; the `WorldCoord3` overload is exact at planet scale). Nothing to snapshot. `Hash` exposes the raw lattice hash for per-cell decisions. |
+| `LowDiscrepancy` | `static` | Deterministic even-coverage sequences: `R1` (golden ratio) and `R2` (plastic number) map an index to `[0, 1)` points that cover without clumping — placement, spawn scatter, stratified sampling. One multiply per component; the 64-bit wrap performs the mod-1. |
+| `LayerSequence` | `readonly record struct` | Layered index spaces (the generalized figurate numbers): a `Seed`-sized core wrapped by layers that start at `Start` and grow by `Step`, with **constant-time** index→layer lookup by inverting the quadratic prefix sum in pure integer arithmetic — no walking, no floating point. A negative `Step` bounds the space; `Project` saturates against that horizon with linear-overflow and square-root-depth excess channels. |
+| `SecureRandom` | `static` | Uniform, unbiased, cryptographically secure unsigned draws — NOT for simulation (deliberately non-reproducible); use `Pcg32XshRr` there. |
 
 > `BinaryIntegerConstants<T>` is an internal helper (width, log2-width, the constants
 > 9 and 10 for an arbitrary `T`) and is not part of the public surface.
+
+**Verifying changes**: the fast contract gate is Post A1
+(`dotnet run --project src/Puck.Post -c Release -- --stage fixed-point`); the deep
+oracle battery — ULP sweeps, independent wide-integer specifications, distribution tests,
+benchmarks — is `dotnet run -c Release tools/maths-battery.cs` (~2–3 minutes). Run the
+battery before completing any change to this project.
 
 ---
 
 ## Fixed-point types
 
-All three fixed-point structs wrap a single unsigned integer (`ulong`/`ushort`/`uint`)
-whose value is the represented real number **scaled by `2^FractionBitCount`**. They
-implement the full generic-math operator interface set (`IAdditionOperators`,
-`IComparisonOperators`, `IShiftOperators`, `IMinMaxValue`, `ISpanFormattable`,
-`ISpanParsable<T>`, …), so they drop into generic numeric code.
+The fixed-point structs store an integer whose value is the represented real
+number **scaled by `2^FractionBitCount`**. `FixedQ4816` uses signed `long`;
+`UFixedQ4816`, `UFixedQ0016`, and `UFixedQ0032` use `ulong`, `ushort`, and
+`uint`. `FixedQ4816` and `UFixedQ4816` implement the full .NET generic-number
+contract (`INumber<T>` plus signed/unsigned classification); the Q0 fraction
+types expose only the truthful fine-grained operator interfaces. All four
+therefore drop into generic code at the strongest constraint their
+representable identities support.
 
-**Key idea:** the most-significant bit is always an ordinary magnitude bit — these
-types are *unsigned*. `Abs` is the identity, and negation/`--`/subtraction *wrap*
-through the unsigned range unless you use the saturating helpers.
+The unsigned types use the most-significant bit as an ordinary magnitude bit.
+Their subtraction and overflow behavior wrap unless a saturating helper is
+selected. `FixedQ4816` uses ordinary two's-complement signed semantics and is the
+authoritative simulation scalar for positions, vectors, rotations, and fields.
 
 ### Choosing a type
 
@@ -58,8 +87,9 @@ through the unsigned range unless you use the saturating helpers.
 
 ### Wrap vs. saturate
 
-Operators wrap (modular arithmetic, matching `unchecked` integer semantics). When you
-want clamping instead, call the explicit helpers:
+Ordinary operators wrap (modular arithmetic, matching `unchecked` integer semantics).
+Their `checked` forms throw when the final rounded result is outside the carrier. When
+you want clamping instead, call the explicit helpers:
 
 ```csharp
 using Puck.Maths;
@@ -81,14 +111,126 @@ string s = product.ToString();     // "0.75"  — exact decimal expansion, invar
   and hand back the remainder so you can build your own rounding.
 - `FromDouble` rounds to nearest (ties to even) and **clamps** out-of-range / negative /
   NaN inputs into range.
+- Generic `T.CreateChecked`, `T.CreateSaturating`, and `T.CreateTruncating` convert
+  numeric values, never raw storage. Checked conversion throws on range/NaN/infinity; saturating clamps
+  (NaN becomes zero); truncating uses the same decimal-like range clamp. Fractional
+  input is quantized to nearest, ties to even, in all three modes.
+- Ordinary arithmetic operators wrap; explicit `checked` operators and checked generic
+  arithmetic throw on overflow after the operation's ties-to-even rounding.
 - `ToString` / `TryFormat` emit the **exact** decimal expansion (a `/2ⁿ` fraction always
-  terminates) using the invariant culture; the `format`/`provider` arguments are ignored.
-- `Parse` / `TryParse` use `decimal` internally and reject out-of-range text, so
-  `Parse(x.ToString())` round-trips.
+  terminates). Parameterless formatting is invariant; the `G` overload honors an explicit
+  provider's decimal separator and rejects unsupported formats.
+- `Parse` / `TryParse` use `decimal` only to validate syntax, then quantize the original
+  digits directly with round-to-nearest, ties-to-even; arbitrarily long midpoint tails
+  cannot double-round. Parameterless overloads are invariant, while provider/style
+  overloads honor their enabled culture tokens. Custom digit-bearing sign or currency
+  tokens are rejected because they are ambiguous with significand digits.
+- In-range exact formatting round-trips: `Parse(x.ToString()) == x`.
 - `FromRawBits` / the `Value` member let you reinterpret the raw storage directly.
 
-`UFixedQ4816.DivideUnchecked` uses a hardware 128÷64 divide on x64 and falls back to
-`UInt128` arithmetic elsewhere.
+`UFixedQ4816.DivideUnchecked` and the `FixedQ4816` division operator use a hardware
+128÷64 divide on x64 when the quotient provably fits 64 bits (the dividend's high word
+is below the divisor), and fall back to `UInt128` arithmetic elsewhere — so every
+platform wraps identically instead of the hardware instruction faulting on overflow.
+
+Generic algorithms can now use the ordinary .NET numeric contract without a
+Puck-specific algebra hierarchy:
+
+```csharp
+static T Sum<T>(ReadOnlySpan<T> values) where T : System.Numerics.INumber<T>
+{
+    var sum = T.Zero;
+    foreach (var value in values) sum += value;
+    return sum;
+}
+
+FixedQ4816 total = Sum<FixedQ4816>([FixedQ4816.One, FixedQ4816.FromDouble(0.5)]);
+```
+
+The loop fixes evaluation order deliberately. Do not parallelize or reassociate a
+rounded product merely because its carrier satisfies `INumber<T>`.
+
+### Integrating rates without per-step drift
+
+Do not pre-round a per-second velocity or acceleration into one fixed-update delta and
+then repeat that rounded value. Carry the integer-division remainder across updates:
+
+```csharp
+const long ticksPerSecond = 50_400;
+const ulong stepTicks = 420; // 120 Hz
+
+// The time base is bound once at construction, so Integrate cannot silently reinterpret the
+// carried remainder under a different denominator.
+var velocityCarry = new FixedRateAccumulator(ticksPerSecond);
+var positionCarry = new FixedRateAccumulator(ticksPerSecond);
+var velocity = FixedQ4816.Zero;
+var position = FixedQ4816.Zero;
+
+// Semi-implicit Euler: acceleration updates velocity, then velocity updates position.
+velocity += velocityCarry.Integrate(accelerationPerSecond, stepTicks);
+position += positionCarry.Integrate(velocity, stepTicks);
+```
+
+The accumulator remainder belongs to the integrated quantity. Include both the remainder and
+its `TicksPerSecond` in deterministic snapshots and state hashes, restore them together with
+`FromRemainder` / `FromRemainders`, and call `Reset` (or the appropriate vector-axis reset)
+when that quantity is teleported, assigned, or clamped. Keep one accumulator per independently
+integrated scalar or vector; its denominator is fixed at construction. A default-initialized
+accumulator (denominator zero) throws from `Integrate`.
+
+---
+
+## Randomness
+
+Four primitives, one per shape of randomness. All are deterministic: identical inputs
+produce identical bits on every machine.
+
+### Choosing a primitive
+
+- **`Pcg32XshRr`** — *sequential* randomness: a seeded stream with history (combat
+  rolls, wander decisions, anything drawn over time). State is simulation state.
+- **`AliasTable<T>`** — *weighted choice*: an O(1) pick from a baked discrete
+  distribution (loot, spawn kinds, production rules). Build once at load, sample with a
+  `Pcg32XshRr`.
+- **`FieldNoise`** — *spatial* randomness: a stateless pure function of (seed,
+  position) for smooth variation over space (terrain, wind, per-cell decisions via
+  `Hash`). Nothing to persist.
+- **`LowDiscrepancy`** — *coverage*: `R1`/`R2` map an index to points that fill the
+  interval/square evenly (spawn scatter, placement, stratified sampling). Stateless.
+
+### Rules that keep it deterministic
+
+- **One stream per system.** Derive each consumer's `Pcg32XshRr` from a master seed
+  with small, consecutive stream ids (`Create(masterSeed, streamId)`). Sharing one
+  generator across systems couples them through draw order; two systems that drew in a
+  different order would diverge.
+- **Generator state rides snapshots.** Persist `State`/`Increment`/`Multiplier` and
+  restore with `FromRawBits` — a replayed world must resume the exact sequence.
+  `FieldNoise` and `LowDiscrepancy` carry no state and need nothing persisted.
+- **Advance counting.** `NextUInt32()`, fraction draws, `NextGaussianPair` (2), and
+  `AliasTable` samples (2) consume a fixed number of state advances, so
+  `Advance`-based seek arithmetic is exact. Bounded `NextUInt32(min, max)` may consume
+  extra advances on rejection — as do `Shuffle` (one bounded draw per element from the
+  high end down, `n − 1` for a span of length `n`) and any other bounded-draw consumer.
+- **Alias tables are order-sensitive.** Entry order is part of the table's identity;
+  build from deterministically ordered data. Weights may be `ulong` (exact),
+  `double` (quantized deterministically at 2⁵³ resolution), or
+  `FixedQ4816`/`UFixedQ4816` (exact).
+
+```csharp
+using Puck.Maths;
+
+var masterSeed = 0xC0FFEEUL;                                  // from the run document
+var combat = Pcg32XshRr.Create(state: masterSeed, stream: 0UL);
+var spawns = Pcg32XshRr.Create(state: masterSeed, stream: 1UL);
+
+var loot = AliasTable.Create<string>(entries: [("common", 0.7d), ("rare", 0.25d), ("epic", 0.05d),]);
+var drop = loot.Sample(generator: ref spawns);                // exactly 2 advances
+
+var (sin, cos) = combat.NextGaussianPair();                   // exactly 2 advances, N(0, 1) pair
+var sway = FieldNoise.Sample(seed: masterSeed, position: worldPosition, octaves: 4);
+var (x, y) = LowDiscrepancy.R2(index: spawnIndex);            // even scatter in [0, 1)²
+```
 
 ---
 
@@ -133,14 +275,17 @@ int  reversed = 1230.ReverseDigits();                    // 321
 | `ElegantPair` / `ElegantUnpair` | Szudzik pairing of two non-negatives ↔ one value. |
 | `EnumeratePrimeFactors` | Lazy prime factors with multiplicity (mod-30 wheel). |
 | `ModularInverse` | Multiplicative inverse of an odd value mod `2^width` (Newton–Hensel). |
-| `SquareRoot` | Floor integer square root (hardware-seeded for ≤64-bit). |
+| `SquareRoot` | Floor integer square root (hardware-seeded through 128-bit). |
 | `NextPowerOfTwo` / `NextSquare` | Round up to the next power of two / perfect square. |
 
 ### `PrimeExtensions` (on `uint`)
 
-Exact over the **entire** 32-bit range — never probabilistic. Trial division by small
-primes, then a deterministic Miller–Rabin with bases `{2, 7, 61}`; the hot loop reduces
-through a precomputed reciprocal and does no hardware division.
+Exact over the **entire** 32-bit range — never probabilistic. Vectorized trial division
+by the odd primes through 59 (a scalar ladder through 37 on narrower hardware), then a
+single base-2 strong-probable-prime round in Montgomery form, corrected by the complete
+list of the 2,256 base-2 strong pseudoprimes that survive the ladder — fingerprint-
+filtered, enumerated in-house, and the whole method verified by an exhaustive sweep of
+every 32-bit value; the hot loop performs no hardware division.
 
 ```csharp
 using Puck.Maths;
@@ -148,10 +293,97 @@ using Puck.Maths;
 bool isPrime = 1_000_003u.IsPrime();              // true
 uint p       = 100u.NthPrime();                   // 547   (0-based index)
 uint pi      = 1_000_000u.PrimeCountingFunction();// 78498 (primes ≤ 1,000,000)
+
+Span<uint> factors = stackalloc uint[32];
+int count = 4_294_967_295u.Factorize(factors);    // 3, 5, 17, 257, 65537
 ```
 
-`PrimeCountingFunction` uses a sublinear combinatorial method and rents its working
-buffers from `ArrayPool<T>` (peak ≈ 512 KiB).
+`Factorize` fills a span with the prime factors, ascending and with multiplicity
+(empty for primes, matching `EnumeratePrimeFactors`): factors through 59 strip by
+reciprocal multiplication, and the remaining cofactor splits by deterministic Brent
+cycle walks on the same Montgomery kernel — microseconds even for the hardest
+semiprimes of two ~2¹⁶ primes.
+
+`PrimeCountingFunction` uses a sublinear combinatorial method — bulk range updates are
+vectorized and the summation-phase divisions reduce through precomputed reciprocals —
+renting its working buffers from `ArrayPool<T>` (peak ≈ 768 KiB). `NthPrime` seeds with
+Cipolla's asymptotic expansion, aligns the seed exactly via `PrimeCountingFunction`,
+and walks off the residual with a windowed segmented sieve in whichever direction the
+target lies.
+
+### `MonotonicPartitioner`
+
+A static router that maps 65536 values — or a `Guid` through its trailing entropy
+(matching `ObjectBlobAddress.ObjectId` routing) — onto between 1 and 1024 buckets:
+jump-consistent routing with the ownership chains precomputed at static init. Three
+invariants hold over the whole domain, proven exhaustively by the POST battery's
+`monotonic-partitioner` stage against an independent table-free reference walk:
+**deterministic** (the same `(value, bucketCount)` pair yields the same bucket on every
+machine — the routing map is a client/server agreement, so both ends of a wire compute
+identical routes; a mapping change is a protocol break), **monotonic** (raising the bucket
+count from N to N + 1 only moves values *into* bucket N, so scaling out migrates the
+minimal set), and **uniform** (each bucket owns ⌊65536/N⌋ or ⌈65536/N⌉ values —
+quantization skew stays ≤ ~2 % at every count).
+
+Bucket counts ≤ 64 resolve from a checkpoint bitmask; larger counts decode a varint
+tail stream or re-walk the jump chain from the checkpoint. `GetMetrics` returns
+`MonotonicPartitionerMetrics` — the value's normalized rank, its migration count across
+the whole range, and the bucket-count distance to its next migration (`Velocity` is the
+reciprocal pressure form) — the shard-ops telemetry view.
+
+```csharp
+using Puck.Maths;
+
+int home = MonotonicPartitioner.GetBucketId(value: playerId, bucketCount: 96);
+// growing to 97 shards only moves values whose new owner IS shard 96
+
+var metrics = MonotonicPartitioner.GetMetrics(value: playerId, bucketCount: 96);
+// metrics.MigrationDistance == 1 → the next scale-out moves this player's data
+```
+
+`GetBucketIdDangerous` skips the bucket-count range check for hot routing loops.
+
+### `LayerSequence`
+
+A layered index space in three constants — `Seed` indices at the core (layer 0),
+`Start` indices in layer 1, each later layer changing by `Step` — with every query
+answered in **constant time** by inverting the quadratic prefix sum
+`Count(n) = Seed + Start·n + Step·n·(n − 1)/2` instead of walking it. The inverse is
+pure integer arithmetic (an `Int128` discriminant, the exact floor square root, a
+floor division), so results are bit-identical on every platform and exact over the
+whole `long` index range — verified by exhaustive sweeps against an incremental
+reference.
+
+| Sequence | `Start` | `Step` | `Seed` | Geometry |
+|----------|---------|--------|--------|----------|
+| `Triangular` | 1 | 1 | 0 | Cantor-style diagonal layers. |
+| `Pronic` | 2 | 2 | 0 | `n·(n + 1)` rectangles; asymmetric sharding. |
+| `Square` | 1 | 2 | 0 | Corner-expanding grid (the square numbers). |
+| `CenteredSquare` | 4 | 4 | 1 | Taxicab rings around a center cell. |
+| `CenteredHexagonal` | 6 | 6 | 1 | Honeycomb rings around a center cell. |
+| `Centered(k)` | k | k | 1 | Centered k-gonal rings. |
+| `Polygonal(k)` | 1 | k − 2 | 0 | Corner-expanding k-gonal numbers. |
+| `Linear(size, seed)` | size | 0 | seed | Flat layers — ordinary linear indexing. |
+| `Create(a, d, c)` | a | d | c | Anything the three constants can say. |
+
+A **negative `Step`** bounds the space: layer sizes shrink to zero and the total
+tops out at `Capacity`. `LayerOf`/`Locate` treat indices beyond capacity as errors;
+`Project` is the saturating query — the layer locks at `MaxLayer` while two excess
+channels report how far past the boundary the index lies (`Overflow` grows linearly,
+`Depth` — the imaginary component of the layer equation's complex root — grows with
+the square root of the excess once the index passes the continuous vertex). Overflow
+routing and backpressure fall out as data instead of exceptions.
+
+```csharp
+using Puck.Maths;
+
+var rings = LayerSequence.CenteredHexagonal;      // 1 core cell, rings of 6, 12, 18, …
+var ring = rings.LayerOf(index: 100L);            // 6 — constant time, pure integer
+var (layer, offset) = rings.Locate(index: 100L);  // (6, 9) — ring plus position within it
+
+var arena = LayerSequence.Create(start: 6L, step: -2L, seed: 1L); // bounded: 13 indices, 3 shrinking layers
+var probe = arena.Project(index: 20L);            // (Layer 3, Overflow 8, Depth 2) — saturates, never throws
+```
 
 ### `SecureRandom`
 
@@ -169,15 +401,19 @@ uint bounded = SecureRandom.NextUInt<uint>(maximum: 99, minimum: 1); // inclusiv
 
 ## Notes for agents
 
-- **Unsigned only.** None of these types or routines model negative numbers; `Abs` is the
-  identity on the fixed-point types and the unsigned helpers assume non-negative inputs.
-- **Wrap is the default.** Bare operators wrap on overflow/underflow. Reach for
-  `AddSaturating` / `SubtractSaturating` (and the `[0,1)` types' built-in saturation on `*`
-  and `/`) when you need clamping.
+- **Choose signedness deliberately.** Use `FixedQ4816` for signed simulation
+  values and the `UFixed*` types for magnitudes and fractions. Helpers constrained
+  to `IUnsignedNumber<T>` accept only non-negative numeric types.
+- **Wrap is the default.** Bare operators follow unchecked integer overflow
+  semantics. Reach for `AddSaturating` / `SubtractSaturating` when you need
+  clamping.
 - **No `1.0` in the Q0.x types.** Don't look for `One` / `MultiplicativeIdentity` / `++`
   on `UFixedQ0016` or `UFixedQ0032` — they don't exist by design.
-- **Determinism.** Results do not depend on culture, locale, or CPU feature availability
-  (hardware paths are bit-identical to the fallbacks). Formatting/parsing is invariant.
+- **Determinism.** Results do not depend on ambient culture, locale, or CPU feature
+  availability (hardware paths are bit-identical to the fallbacks). Parameterless
+  formatting/parsing is invariant; explicit providers are honored deterministically.
 - **Generic-math friendly.** Pass these as `T` into code constrained on the
-  `System.Numerics` operator interfaces.
+  `System.Numerics` operator interfaces; use `INumber<T>` when an algorithm genuinely
+  needs the complete scalar contract. That constraint provides capabilities, not a
+  proof that rounded multiplication is associative.
 - See the [generated API reference](../../docs/api) for the full member-by-member docs.

@@ -10,8 +10,7 @@ namespace Puck.Demo.Creator;
 /// slot count (1 ghost + <see cref="CreatorScene.Capacity"/> placed slots; an unused slot draws a default sphere
 /// hidden below the floor), and the frame source sizes the engine's program/instance buffers against
 /// <see cref="EmitPool"/>'s WORST-CASE form (the probe) — so any authored rebuild fits the once-sized buffers by
-/// construction. The old byte-length-constant discipline (every rebuild identical size) is retired in favor of that
-/// envelope: rebuilds may vary in size freely below the probed ceiling, and <c>UploadProgram</c> throws loudly if a
+/// construction. Rebuilds may vary in size freely below the probed ceiling, and <c>UploadProgram</c> throws loudly if a
 /// future emission change forgets to grow the probe with it.
 /// </summary>
 public sealed class CreatorSceneRenderer {
@@ -30,13 +29,27 @@ public sealed class CreatorSceneRenderer {
     // The preview easel's screen keeps the brick panel's native 10:9 aspect so baked pixels sample unstretched.
     private const float PreviewAspect = (160f / 144f);
     // The ghost's preview accent — a bright cyan so the not-yet-placed shape reads as a hologram, never authored art.
-    private static readonly Vector3 GhostAlbedo = new(0.35f, 0.92f, 1.0f);
+    private static readonly Vector3 GhostAlbedo = new(x: 0.35f, y: 0.92f, z: 1.0f);
     // The chain-goal marker's accent — a warm amber, distinct from the ghost's cyan, so a goal never reads as an
     // about-to-be-placed shape.
-    private static readonly Vector3 GoalAlbedo = new(1.0f, 0.65f, 0.15f);
+    private static readonly Vector3 GoalAlbedo = new(x: 1.0f, y: 0.65f, z: 0.15f);
     // The goal marker's fixed radius (a small sphere — a HUD-like handle, not authored geometry).
     private const float GoalMarkerRadius = 0.12f;
-
+    // The canonical "nothing placed here" shape — Pass 1 resolves an absent slot against this ONE default (every
+    // per-shape modifier at its off value) instead of a `??` per field, so EmitPool's own decision-point count
+    // stays flat as the modifier envelope grows (see EmitPool's CA1502 ceiling).
+    private static readonly CreatorShapeState s_emptySlot = new(
+        Blend: SdfBlendOp.Union,
+        GroupId: 0,
+        Id: -1,
+        MaterialIndex: 0,
+        Name: null,
+        Position: Vector3.Zero,
+        Rotation: Quaternion.Identity,
+        Scale: Vector3.One,
+        Smooth: 0f,
+        Type: AvatarPrimitive.Sphere
+    );
     private readonly CreatorScene m_scene;
     private readonly int m_slotBase;
     private readonly int m_goalSlotBase;
@@ -51,7 +64,7 @@ public sealed class CreatorSceneRenderer {
 
         m_scene = scene;
         m_slotBase = slotBase;
-        m_goalSlotBase = (slotBase + 1 + CreatorScene.Capacity);
+        m_goalSlotBase = ((slotBase + 1) + CreatorScene.Capacity);
     }
 
     /// <summary>How many reserved dynamic-transform slots the rig's goal markers occupy (a fixed budget —
@@ -61,7 +74,7 @@ public sealed class CreatorSceneRenderer {
 
     /// <summary>How many dynamic-transform slots the pool occupies (the ghost + every placed slot + the reserved
     /// goal-marker slots).</summary>
-    public static int DynamicSlotCount => (1 + CreatorScene.Capacity + GoalSlotCount);
+    public static int DynamicSlotCount => ((1 + CreatorScene.Capacity) + GoalSlotCount);
 
     /// <summary>The worst-case reach of a maximally-grown shape from its center — the margin a composition group's
     /// workbench bound adds past the region's own extent.</summary>
@@ -70,9 +83,10 @@ public sealed class CreatorSceneRenderer {
     /// <summary>Emits the creator pool into the program under construction: the palette + ghost materials (constant
     /// count), the ghost's instance, and one instance per placed-shape slot. With <paramref name="probeWorstCase"/>
     /// the emission takes its LARGEST possible form — every slot carries the reserved per-shape modifier envelope
-    /// (mirror + twist point ops AND the onion field op WRAPPED IN ITS PushField/PopField scope — five extra words)
-    /// — which is what the frame source measures at construction to size the engine's program-word and instance-count
-    /// floors. Growing this emission (a new per-shape op) MUST grow the probe in the same change.</summary>
+    /// (mirror + twist + bend point ops AND the dilate + onion field ops WRAPPED IN ONE PushField/PopField scope —
+    /// seven extra words) — which is what the frame source measures at construction to size the engine's
+    /// program-word and instance-count floors. Growing this emission (a new per-shape op) MUST grow the probe in the
+    /// same change.</summary>
     /// <param name="builder">The program builder (the room content is already emitted).</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
     /// <param name="suppressEasel">Drop the preview easel (the post + bake-preview screen slab) — the studio review
@@ -103,7 +117,7 @@ public sealed class CreatorSceneRenderer {
         var selectedIndex = ((!suppressAdornments && (m_scene.SelectedShape is { } selectedShape)) ? m_scene.SelectionIndex : -1);
         var highlightSource = m_scene.Palette[((selectedIndex >= 0) ? m_scene.Shapes[selectedIndex].MaterialIndex : 0)];
         var highlightMaterial = builder.AddMaterial(material: (highlightSource with { Emissive = (highlightSource.Emissive + 0.6f) }));
-        var backdropMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.24f, 0.25f, 0.28f)));
+        var backdropMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.24f, y: 0.25f, z: 0.28f)));
 
         // The PREVIEW EASEL: a post + diegetic screen slab at the workbench's +X edge, facing the default authoring
         // camera — the live bake preview renders on it (the sculpt-with-the-quantized-result-in-view loop). Emitted
@@ -115,19 +129,19 @@ public sealed class CreatorSceneRenderer {
             // Just INSIDE the +X edge: the default authoring orbit (head-on from +Z at ~6.5 units) spans roughly a
             // ±33° horizontal half-angle, so an easel past the edge sits out of frame — tucked in at edge − 0.7 it
             // reads at ~26° off-axis, screen face toward the camera.
-            var easelX = (region.Center.X + region.HalfExtent - 0.7f);
-            var postCenter = new Vector3(easelX, (region.Center.Y + 0.75f), region.Center.Z);
-            var slabHalfExtents = new Vector3(0.9f, (0.9f / PreviewAspect), 0.06f);
-            var slabCenter = new Vector3(easelX, (region.Center.Y + 1.5f + slabHalfExtents.Y), region.Center.Z);
-            var easelMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.18f, 0.19f, 0.22f)));
+            var easelX = ((region.Center.X + region.HalfExtent) - 0.7f);
+            var postCenter = new Vector3(x: easelX, y: (region.Center.Y + 0.75f), z: region.Center.Z);
+            var slabHalfExtents = new Vector3(x: 0.9f, y: (0.9f / PreviewAspect), z: 0.06f);
+            var slabCenter = new Vector3(x: easelX, y: ((region.Center.Y + 1.5f) + slabHalfExtents.Y), z: region.Center.Z);
+            var easelMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.18f, y: 0.19f, z: 0.22f)));
 
             _ = builder.BeginInstance(boundCenter: slabCenter, boundRadius: 3.2f);
-            _ = builder.ResetPoint().Translate(offset: postCenter).Box(halfExtents: new Vector3(0.16f, 0.75f, 0.16f), round: 0.03f, material: easelMaterial);
+            _ = builder.ResetPoint().Translate(offset: postCenter).Box(halfExtents: new Vector3(x: 0.16f, y: 0.75f, z: 0.16f), round: 0.03f, material: easelMaterial);
             _ = builder.ResetPoint().Translate(offset: slabCenter).ScreenSlab(
                 halfExtents: slabHalfExtents,
                 round: 0.03f,
                 screenIndex: PreviewScreenIndex,
-                worldOrigin: (slabCenter + new Vector3(0f, 0f, slabHalfExtents.Z)),
+                worldOrigin: (slabCenter + new Vector3(x: 0f, y: 0f, z: slabHalfExtents.Z)),
                 worldRight: Vector3.UnitX,
                 worldUp: Vector3.UnitY
             );
@@ -140,11 +154,11 @@ public sealed class CreatorSceneRenderer {
         if (probeWorstCase || (m_scene.Active && (m_scene.Intent == CreatorIntent.Sprite))) {
             var workbenchRegion = m_scene.Workbench;
             var backdropCenter = new Vector3(
-                workbenchRegion.Center.X,
-                (0.5f * (workbenchRegion.MinY + workbenchRegion.MaxY)),
-                (workbenchRegion.Center.Z - workbenchRegion.HalfExtent - 0.4f)
+                x: workbenchRegion.Center.X,
+                y: (0.5f * (workbenchRegion.MinY + workbenchRegion.MaxY)),
+                z: ((workbenchRegion.Center.Z - workbenchRegion.HalfExtent) - 0.4f)
             );
-            var backdropHalfExtents = new Vector3((workbenchRegion.HalfExtent + 1f), ((0.5f * (workbenchRegion.MaxY - workbenchRegion.MinY)) + 1f), 0.06f);
+            var backdropHalfExtents = new Vector3(x: (workbenchRegion.HalfExtent + 1f), y: ((0.5f * (workbenchRegion.MaxY - workbenchRegion.MinY)) + 1f), z: 0.06f);
 
             _ = builder.BeginInstance(boundCenter: backdropCenter, boundRadius: (backdropHalfExtents.Length() + 0.5f));
             _ = builder.ResetPoint().Translate(offset: backdropCenter).Box(halfExtents: backdropHalfExtents, round: 0.04f, material: backdropMaterial);
@@ -162,7 +176,9 @@ public sealed class CreatorSceneRenderer {
         if (probeWorstCase || !suppressAdornments) {
             _ = builder.BeginInstanceDynamic(slot: m_slotBase, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: m_scene.GhostScale), active: adornmentsActive);
             EmitShape(
+                bend: m_scene.GhostBend,
                 builder: builder,
+                dilate: m_scene.GhostDilate,
                 material: ghostMaterial,
                 mirror: m_scene.GhostMirror,
                 onion: m_scene.GhostOnion,
@@ -205,26 +221,30 @@ public sealed class CreatorSceneRenderer {
                 continue; // pass 2 — the shape emits inside its group's instance.
             }
 
-            var slot = (m_slotBase + 1 + index);
-            var type = (placed?.Type ?? AvatarPrimitive.Sphere);
-            var scale = (placed?.Scale ?? Vector3.One);
+            // Resolve the slot's state ONCE against the shared "nothing placed here" default (s_emptySlot already
+            // carries every per-shape modifier at its off value) rather than a `?? default` per field — keeps this
+            // loop's own decision-point count flat as the modifier envelope grows (CA1502 on EmitPool).
+            var resolved = (placed ?? s_emptySlot);
+            var slot = ((m_slotBase + 1) + index);
             var material = ((index == selectedIndex) ? highlightMaterial : paletteIds[(placed?.MaterialIndex ?? (index % CreatorScene.PaletteSize))]);
             // An unused slot's hidden placeholder is PARKED (Active=false) so the beam cull skips it with one branch
             // instead of testing 64 hidden spheres per tile every frame — the reserved slot still exists (buffers
             // unchanged), it just costs nothing. The probe stays fully active so it still measures the true worst case.
             var active = (probeWorstCase || (placed is not null));
 
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: scale), active: active);
+            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: BoundRadius(scale: resolved.Scale), active: active);
             EmitShape(
+                bend: resolved.Bend,
                 builder: builder,
+                dilate: resolved.Dilate,
                 material: material,
-                mirror: (placed?.Mirror ?? false),
-                onion: (placed?.Onion ?? 0f),
+                mirror: resolved.Mirror,
+                onion: resolved.Onion,
                 probeWorstCase: probeWorstCase,
-                scale: scale,
+                scale: resolved.Scale,
                 slot: slot,
-                twist: (placed?.Twist ?? 0f),
-                type: type
+                twist: resolved.Twist,
+                type: resolved.Type
             );
             _ = builder.EndInstance();
         }
@@ -274,15 +294,17 @@ public sealed class CreatorSceneRenderer {
             }
 
             EmitShape(
+                bend: shape.Bend,
                 blend: shape.Blend,
                 builder: builder,
+                dilate: shape.Dilate,
                 inGroupScope: true,
                 material: ((member == selectedIndex) ? highlightMaterial : paletteIds[shape.MaterialIndex]),
                 mirror: shape.Mirror,
                 onion: shape.Onion,
                 probeWorstCase: probeWorstCase,
                 scale: shape.Scale,
-                slot: (m_slotBase + 1 + member),
+                slot: ((m_slotBase + 1) + member),
                 smooth: shape.Smooth,
                 twist: shape.Twist,
                 type: shape.Type
@@ -301,9 +323,7 @@ public sealed class CreatorSceneRenderer {
     /// slots hide. The GEOMETRY each slot draws is baked into the program — here only the positions move.</summary>
     /// <param name="transforms">The unified dynamic-transform buffer (the pool writes its own slot range).</param>
     /// <param name="hiddenPosition">Where hidden slots park (far below the floor).</param>
-    public void PackTransforms(DynamicTransform[] transforms, Vector3 hiddenPosition) {
-        ArgumentNullException.ThrowIfNull(transforms);
-
+    public void PackTransforms(Span<DynamicTransform> transforms, Vector3 hiddenPosition) {
         var active = m_scene.Active;
 
         transforms[m_slotBase] = new DynamicTransform(
@@ -316,7 +336,7 @@ public sealed class CreatorSceneRenderer {
         for (var index = 0; (index < CreatorScene.Capacity); index++) {
             var placed = ((index < shapes.Count) ? shapes[index] : (CreatorShapeState?)null);
 
-            transforms[m_slotBase + 1 + index] = new DynamicTransform(
+            transforms[((m_slotBase + 1) + index)] = new DynamicTransform(
                 Orientation: (placed?.Rotation ?? Quaternion.Identity),
                 Position: (placed?.Position ?? hiddenPosition)
             );
@@ -330,35 +350,36 @@ public sealed class CreatorSceneRenderer {
         for (var index = 0; (index < GoalSlotCount); index++) {
             var chain = ((active && (index < chains.Count)) ? chains[index] : (CreatorChainState?)null);
 
-            transforms[m_goalSlotBase + index] = new DynamicTransform(
+            transforms[(m_goalSlotBase + index)] = new DynamicTransform(
                 Orientation: Quaternion.Identity,
                 Position: (chain?.Goal ?? hiddenPosition)
             );
         }
     }
 
-    // One shape's emission: ResetPoint + TransformDynamic + Scale + [mirror/twist: POINT ops, before the shape] +
-    // the primitive (blend/smooth ride the primitive instruction — zero extra words) + [onion: a FIELD op, AFTER
-    // the shape — see SdfOp.Onion's remarks: it shells the accumulated field, not the point]. Position/orientation
-    // come from the slot's per-frame dynamic transform; scale is baked; the primitive dimensions come from the
-    // SHARED canonical source (AvatarDefinition), so the shape the player previews is byte-for-byte the geometry
-    // the forge later bakes.
+    // One shape's emission: ResetPoint + TransformDynamic + Scale + [mirror/twist/bend: POINT ops, before the shape,
+    // in that order] + the primitive (blend/smooth ride the primitive instruction — zero extra words) +
+    // [dilate/onion: FIELD ops, AFTER the shape, dilate then onion — see SdfOp.Dilate/SdfOp.Onion's remarks: they
+    // grow/shell the ACCUMULATED FIELD, not the point]. Position/orientation come from the slot's per-frame dynamic
+    // transform; scale is baked; the primitive dimensions come from the SHARED canonical source (AvatarDefinition),
+    // so the shape the player previews is byte-for-byte the geometry the forge later bakes.
     //
-    // SCOPING (the accumulator fix — see docs/sdf-accumulator-plan.md + the accumulator rule on SdfBlendOp): a
-    // shape's onion is a FIELD op, so in the flat accumulator it shells EVERY shape emitted before it (the floor and
-    // every earlier shape), not this shape. A NON-GROUP shape (Pass 1 + the ghost — always plain Union) therefore
-    // wraps its shape + onion in a one-deep PushField(Union)/PopField scope, so the shell hollows THIS shape alone
-    // and then unions into the workbench — the SceneObject.Emit precedent (commit 5ca8dfa) applied to the live
-    // editor. A shape with NO onion takes the flat path and emits BYTE-IDENTICALLY to before this change (the
-    // union-only, no-field-op creations stay bit-for-bit). A GROUP member passes inGroupScope: true and does NOT
-    // open its own scope — it already sits inside its group's single PushField scope (EmitPool Pass 2), and the
-    // depth-1 field-scope cap (SdfProgramBuilder.MaxFieldScopeDepth) forbids nesting; a grouped member's onion
-    // shells the group-so-far, the best depth 1 allows.
+    // SCOPING (the accumulator fix — see the accumulator rule on SdfBlendOp + the sdf-world skill): dilate/onion are
+    // FIELD ops, so in the flat accumulator they'd grow/shell EVERY shape emitted before this one (the floor and
+    // every earlier shape), not this shape alone. A NON-GROUP shape (Pass 1 + the ghost — always plain Union)
+    // therefore wraps its shape + dilate/onion in a one-deep PushField(Union)/PopField scope, so the field op(s)
+    // apply to THIS shape alone and then union into the workbench, matching SceneObject.Emit's scoped field-operation
+    // behavior. A shape with NEITHER field op takes the flat path. A GROUP member passes
+    // inGroupScope: true and does NOT open its own scope — it already sits inside its group's single PushField scope
+    // (EmitPool Pass 2), and the depth-1 field-scope cap (SdfProgramBuilder.MaxFieldScopeDepth) forbids nesting; a
+    // grouped member's dilate/onion apply to the group-so-far, the best depth 1 allows. Mirror/twist/bend are POINT
+    // ops, so they never need scoping (a group member's own point transform is always local to itself regardless of
+    // the shared field accumulator).
     //
-    // THE BINDING RULE: probeWorstCase emits EVERY op unconditionally (mirror on, twist/onion nonzero, AND the
-    // onion scope's Push/Pop) so the probe measures the true worst case — any FUTURE per-shape modifier must join
-    // this same probe path (the capacity envelope is derived from it; see EmitPool's remarks).
-    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float onion = 0f, bool inGroupScope = false) {
+    // THE BINDING RULE: probeWorstCase emits EVERY op unconditionally (mirror on, twist/bend/dilate/onion nonzero,
+    // AND the field scope's Push/Pop) so the probe measures the true worst case — any FUTURE per-shape modifier must
+    // join this same probe path (the capacity envelope is derived from it; see EmitPool's remarks).
+    private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false) {
         var chain = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: scale);
 
         if (probeWorstCase || mirror) {
@@ -369,20 +390,38 @@ public sealed class CreatorSceneRenderer {
             chain = chain.TwistY(rate: (probeWorstCase ? 1f : twist));
         }
 
+        if (probeWorstCase || (bend != 0f)) {
+            chain = chain.BendY(rate: (probeWorstCase ? 1f : bend));
+        }
+
+        var wantsDilate = (probeWorstCase || (dilate != 0f));
         var wantsOnion = (probeWorstCase || (onion != 0f));
 
-        // A non-group shape scopes its own onion: Push its Union compose, emit the shape as Union INSIDE the fresh
-        // FAR-seeded accumulator (against which it IS the shape), shell it, then Pop it into the workbench. A group
-        // member never nests (the enclosing group already opened the one allowed scope) and emits flat.
-        if (wantsOnion && !inGroupScope) {
+        // A non-group shape scopes its own dilate/onion: Push its Union compose, emit the shape as Union INSIDE the
+        // fresh FAR-seeded accumulator (against which it IS the shape), inflate/shell it, then Pop it into the
+        // workbench. A group member never nests (the enclosing group already opened the one allowed scope) and
+        // emits flat.
+        if ((wantsDilate || wantsOnion) && !inGroupScope) {
             var scoped = AvatarDefinition.AppendPrimitive(blend: SdfBlendOp.Union, chain: chain.PushField(compose: blend, smooth: smooth), material: material, smooth: 0f, type: type);
 
-            _ = scoped.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion)).PopField();
+            if (wantsDilate) {
+                scoped = scoped.Dilate(radius: (probeWorstCase ? CreatorScene.MaxDilate : dilate));
+            }
+
+            if (wantsOnion) {
+                scoped = scoped.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion));
+            }
+
+            _ = scoped.PopField();
 
             return;
         }
 
         var afterShape = AvatarDefinition.AppendPrimitive(blend: blend, chain: chain, material: material, smooth: smooth, type: type);
+
+        if (wantsDilate) {
+            afterShape = afterShape.Dilate(radius: (probeWorstCase ? CreatorScene.MaxDilate : dilate));
+        }
 
         if (wantsOnion) {
             _ = afterShape.Onion(thickness: (probeWorstCase ? CreatorScene.MaxOnion : onion));
@@ -391,13 +430,14 @@ public sealed class CreatorSceneRenderer {
 
     // Whether a composition group must be emitted inside a PushField/PopField field scope: true when any member
     // carries a non-Union blend (the Intersection family wipes the whole accumulated workbench otherwise — the
-    // documented creator defect) or an onion field op. A pure-Union, no-onion group stays flat (byte-identical), so
-    // a union-only creation loads bit-for-bit. See the accumulator rule on SdfBlendOp / docs/sdf-accumulator-plan.md.
+    // documented creator defect) or a dilate/onion field op. A pure-Union, no-field-op group stays flat
+    // (byte-identical), so a union-only creation loads bit-for-bit. See the accumulator rule on SdfBlendOp / the
+    // sdf-world skill. Bend/mirror/twist are POINT ops and never factor in — they never need scoping.
     private static bool GroupNeedsScope(IReadOnlyList<CreatorShapeState> shapes, int groupId, int fromIndex) {
         for (var member = fromIndex; (member < shapes.Count); member++) {
             var shape = shapes[member];
 
-            if ((shape.GroupId == groupId) && ((shape.Blend != SdfBlendOp.Union) || (shape.Onion != 0f))) {
+            if ((shape.GroupId == groupId) && ((shape.Blend != SdfBlendOp.Union) || (shape.Onion != 0f) || (shape.Dilate != 0f))) {
                 return true;
             }
         }
@@ -408,5 +448,5 @@ public sealed class CreatorSceneRenderer {
     // A scaled shape's dynamic instance bound: the unit-scale bound grown by the largest scale component, so the beam
     // prepass's tile cull never clips a shape the player enlarged.
     private static float BoundRadius(Vector3 scale) =>
-        (InstanceRadiusUnitScale * MathF.Max(scale.X, MathF.Max(scale.Y, scale.Z)));
+        (InstanceRadiusUnitScale * MathF.Max(x: scale.X, y: MathF.Max(x: scale.Y, y: scale.Z)));
 }

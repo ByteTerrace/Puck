@@ -4,19 +4,14 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace Internal.Runtime.CompilerHelpers
-{
-    internal static unsafe class InteropHelpers
-    {
+namespace Internal.Runtime.CompilerHelpers {
+    internal static unsafe class InteropHelpers {
         private static IntPtr ResolvePInvoke(MethodFixupCell* pCell)
-            => pCell->Target != default ? pCell->Target : ResolvePInvokeSlow(pCell);
-
-        private static IntPtr ResolvePInvokeSlow(MethodFixupCell* pCell)
-        {
+            => ((pCell->Target != default) ? pCell->Target : ResolvePInvokeSlow(pCell: pCell));
+        private static IntPtr ResolvePInvokeSlow(MethodFixupCell* pCell) {
 #if WINDOWS
             ModuleFixupCell* pModuleCell = pCell->Module;
-            if (pModuleCell->Handle == default)
-            {
+            if (pModuleCell->Handle == default) {
                 pModuleCell->Handle = LoadLibraryA(pModuleCell->ModuleName);
                 if (pModuleCell->Handle == default)
                     Environment.FailFast(null);
@@ -34,26 +29,24 @@ namespace Internal.Runtime.CompilerHelpers
             static extern IntPtr GetProcAddress(IntPtr hModule, IntPtr name);
 #else
             // No dynamic loader on bare metal; all P/Invokes are direct-bound at link time.
-            Environment.FailFast(null);
+            Environment.FailFast(message: null);
             return default;
 #endif
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        internal struct ModuleFixupCell
-        {
+        internal struct ModuleFixupCell {
             public IntPtr Handle;
             public IntPtr ModuleName;
             public IntPtr CallingAssemblyType;
             public uint DllImportSearchPathAndCookie;
         }
-
         [StructLayout(LayoutKind.Sequential)]
-        internal struct MethodFixupCell
-        {
+        internal struct MethodFixupCell {
             public IntPtr Target;
             public IntPtr MethodName;
             public ModuleFixupCell* Module;
+
             private int Flags;
         }
     }

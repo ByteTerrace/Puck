@@ -44,6 +44,6 @@ public sealed class NativeWindowOptionsValidator : IValidateOptions<NativeWindow
 
         return ((failures.Count == 0)
             ? ValidateOptionsResult.Success
-            : ValidateOptionsResult.Fail(failures));
+            : ValidateOptionsResult.Fail(failures: failures));
     }
 }

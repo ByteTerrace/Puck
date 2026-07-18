@@ -38,49 +38,51 @@ internal sealed class WorldChamferStage : IPostStage {
     // Three clusters, each isolating one chamfer blend so its flat bevel plane is unambiguous against the round fillet
     // a SmoothUnion/-Intersection/-Subtraction would produce at the same radius.
     //
-    // EMISSION ORDER IS LOAD-BEARING. mapCore carries ONE running accumulator for the whole program — ResetPoint resets
-    // the evaluation POINT, never result.distance — so every blend composes against everything emitted before it. Union
-    // (a min) and subtraction (a max against the NEGATED candidate, which only bites inside the subtrahend) are LOCAL and
-    // may appear anywhere. An INTERSECTION is not: max(accumulator, candidate) returns the candidate wherever the
-    // candidate is farther, i.e. everywhere outside its own shape, so it annihilates every earlier shape it does not
-    // overlap. Emitted LAST — as this scene originally was — the violet ChamferIntersection deleted the ground plane, the
-    // copper weld and the jade trench, and the stage rendered a lone wedge on an empty background while its own summary
-    // claimed three clusters (the giveaway was a 2-pixel cross-backend diff, an order of magnitude below every other
-    // world stage). The intersection cluster therefore goes FIRST, against the empty SDF_FAR_DISTANCE accumulator, so it
-    // intersects exactly its own two boxes; the plane and the remaining clusters then union on top of the finished wedge.
+    // mapCore carries ONE running accumulator for the whole program — ResetPoint resets the evaluation POINT, never
+    // result.distance — so every blend composes against everything emitted before it. Union (a min) and subtraction
+    // (a max against the NEGATED candidate, which only bites inside the subtrahend) are LOCAL and may appear anywhere.
+    // An INTERSECTION is not: max(accumulator, candidate) returns the candidate wherever the candidate is farther,
+    // i.e. everywhere outside its own shape, so it annihilates unrelated accumulated geometry. A
+    // PushField(compose: Union)/PopField scope gives the wedge's two boxes a fresh accumulator regardless of where the
+    // scope sits in the program, and PopField's Union compose is order-
+    // independent (a min), so the wedge cluster is emitted LAST below — proof the scope, not emission order, is what
+    // keeps the intersection local. The plane and the two other clusters render byte-identically either way.
     internal static SdfProgram BuildChamferScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
-        var copper = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.85f, 0.45f, 0.15f), Emissive: 0.3f));
-        var jade = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.2f, 0.8f, 0.5f), Emissive: 0.3f));
-        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.6f, 0.35f, 0.9f), Emissive: 0.3f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
+        var copper = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.85f, y: 0.45f, z: 0.15f), Emissive: 0.3f));
+        var jade = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.2f, y: 0.8f, z: 0.5f), Emissive: 0.3f));
+        var violet = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.6f, y: 0.35f, z: 0.9f), Emissive: 0.3f));
 
         return builder
-            // The beveled wedge FIRST: two boxes (the second rotated 45° about Y) ChamferIntersection'd. Against the
-            // empty accumulator the intersection sees only its own pair.
-            .Translate(offset: new Vector3(1.7f, 0.5f, 0f))
-            .Box(halfExtents: new Vector3(0.42f, 0.42f, 0.42f), round: 0f, material: violet)
-            .ResetPoint()
-            .Translate(offset: new Vector3(1.7f, 0.5f, 0f))
-            .Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (MathF.PI / 4f)))
-            .Box(halfExtents: new Vector3(0.42f, 0.42f, 0.42f), round: 0f, material: violet, blend: SdfBlendOp.ChamferIntersection, smooth: 0.16f)
-            .ResetPoint()
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
             // The beveled weld: a box ChamferUnion a sphere — a flat 45° collar where the round meets the cube.
             .ResetPoint()
-            .Translate(offset: new Vector3(-1.5f, 0.5f, 0f))
-            .Box(halfExtents: new Vector3(0.4f, 0.4f, 0.4f), round: 0f, material: copper)
+            .Translate(offset: new Vector3(x: -1.5f, y: 0.5f, z: 0f))
+            .Box(halfExtents: new Vector3(x: 0.4f, y: 0.4f, z: 0.4f), round: 0f, material: copper)
             .Sphere(radius: 0.38f, material: copper, blend: SdfBlendOp.ChamferUnion, smooth: 0.2f)
             // The beveled trench: a cylinder ChamferSubtraction-carved through a box. Its axis is rotated onto world Z
             // (front-to-back) rather than X, so the bevelled rim of the bore FACES the camera — a gate must be able to
             // see the feature it names.
             .ResetPoint()
-            .Translate(offset: new Vector3(0.1f, 0.5f, 0f))
-            .Box(halfExtents: new Vector3(0.45f, 0.35f, 0.45f), round: 0f, material: jade)
+            .Translate(offset: new Vector3(x: 0.1f, y: 0.5f, z: 0f))
+            .Box(halfExtents: new Vector3(x: 0.45f, y: 0.35f, z: 0.45f), round: 0f, material: jade)
             .ResetPoint()
-            .Translate(offset: new Vector3(0.1f, 0.5f, 0f))
+            .Translate(offset: new Vector3(x: 0.1f, y: 0.5f, z: 0f))
             .Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 2f)))
             .Cylinder(radius: 0.18f, halfHeight: 0.6f, material: jade, blend: SdfBlendOp.ChamferSubtraction, smooth: 0.14f)
+            // The beveled wedge LAST, and SCOPED: two boxes (the second rotated 45° about Y) ChamferIntersection'd
+            // inside a PushField(Union)/PopField scope, so the intersection sees only its own pair — regardless of
+            // emission order — and the finished wedge unions into the scene like any other cluster.
+            .ResetPoint()
+            .PushField(compose: SdfBlendOp.Union)
+            .Translate(offset: new Vector3(x: 1.7f, y: 0.5f, z: 0f))
+            .Box(halfExtents: new Vector3(x: 0.42f, y: 0.42f, z: 0.42f), round: 0f, material: violet)
+            .ResetPoint()
+            .Translate(offset: new Vector3(x: 1.7f, y: 0.5f, z: 0f))
+            .Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (MathF.PI / 4f)))
+            .Box(halfExtents: new Vector3(x: 0.42f, y: 0.42f, z: 0.42f), round: 0f, material: violet, blend: SdfBlendOp.ChamferIntersection, smooth: 0.16f)
+            .PopField()
             .Build();
     }
 

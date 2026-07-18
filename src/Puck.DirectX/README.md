@@ -14,13 +14,12 @@ target      net10.0  (Windows-only at runtime; surface annotated [SupportedOSPla
 deps        Microsoft.Windows.CsWin32 (build-only, PrivateAssets=all — no runtime dependency)
 ```
 
-> What began as a binding-strategy proof (enumerate GPUs, probe Direct3D 12 capability,
-> create a device) has since grown into the full low-level D3D12 backend: the `DirectXGpu*`
-> types implement the neutral GPU seams from `Puck.Abstractions` (compute pipelines,
-> descriptor allocation, storage buffers/images, shared-surface export, acceleration
-> structures for DXR, queue submission, timestamp pools). Swap chains and the frame loop
-> live one level up, in `Puck.DirectX.Presentation` — mirroring how `Puck.Vulkan` /
-> `Puck.Vulkan.Presentation` split.
+The `DirectXGpu*` types implement the neutral GPU contracts from
+`Puck.Abstractions`: compute pipelines, descriptor allocation, storage
+buffers and images, shared-surface export, DXR acceleration structures, queue
+submission, and timestamp pools. Swapchains and the frame loop live in
+`Puck.DirectX.Presentation`, mirroring the split between `Puck.Vulkan` and
+`Puck.Vulkan.Presentation`.
 
 ---
 

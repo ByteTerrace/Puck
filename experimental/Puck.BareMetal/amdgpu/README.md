@@ -1,7 +1,9 @@
-# amdgpu/ — vendored Van Gogh GPU bring-up assets
+# amdgpu/ — vendored gfx1033 GPU assets
 
 Assets for the bare-metal amdgpu + RADV port ([docs/amd-vulkan-plan.md](../docs/amd-vulkan-plan.md)):
-the Steam Deck LCD APU (**Van Gogh**, PCI `1002:163F`, `gfx1033` / GFX10.3.1 / RDNA2, PSP v11.5).
+the Steam Deck gfx1033 family (**Van Gogh**, PCI `1002:163F`, GFX10.3.1 / RDNA2, PSP v11.5).
+The implementation is hardware-verified on Steam Deck OLED; the GPU's upstream firmware and
+register resources retain their Van Gogh names.
 Two kinds of content, both vendored **verbatim**:
 
 - [`firmware/`](firmware/) — AMD signed microcode from **linux-firmware** tag **20251125**

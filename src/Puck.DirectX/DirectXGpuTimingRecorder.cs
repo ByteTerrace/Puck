@@ -66,7 +66,7 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
             var ticks = (ulong*)mapped;
 
             for (var index = 0u; (index < queryCount); index++) {
-                rawTicks[(int)index] = ticks[firstQuery + index];
+                rawTicks[(int)index] = ticks[(firstQuery + index)];
             }
         } finally {
             // We wrote nothing back; an empty written range tells the runtime so.
@@ -79,7 +79,7 @@ public sealed unsafe class DirectXGpuTimingRecorder : IGpuTimingRecorder {
     }
 
     private static DirectXCommandBufferState DecodeCommand(nint commandBufferHandle) =>
-        (DirectXCommandBufferState)GCHandle.FromIntPtr(commandBufferHandle).Target!;
+        (DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!;
     private static DirectXTimingPoolState DecodePool(nint poolHandle) =>
-        (DirectXTimingPoolState)GCHandle.FromIntPtr(poolHandle).Target!;
+        (DirectXTimingPoolState)GCHandle.FromIntPtr(value: poolHandle).Target!;
 }

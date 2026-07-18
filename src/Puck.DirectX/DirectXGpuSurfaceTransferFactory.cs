@@ -169,9 +169,9 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         ReleaseBuffer();
 
-        var packedRowBytes = width * bytesPerPixel;
+        var packedRowBytes = (width * bytesPerPixel);
         var paddedRowPitch = ((packedRowBytes + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
-        var readbackByteLength = (ulong)paddedRowPitch * height;
+        var readbackByteLength = ((ulong)paddedRowPitch * height);
         var heapProperties = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK };
         var bufferDesc = new D3D12_RESOURCE_DESC {
             DepthOrArraySize = 1,
@@ -203,7 +203,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_currentWidth = width;
         m_currentHeight = height;
         m_currentBytesPerPixel = bytesPerPixel;
-        m_outputBuffer = new byte[packedRowBytes * height];
+        m_outputBuffer = new byte[(packedRowBytes * height)];
     }
 
     // Creates a per-copy allocator + list and records barrier → CopyTextureRegion → barrier → Close: the source image
@@ -236,10 +236,10 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         };
 
         toCopySource.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            pResource = sourceResource,
-            Subresource = 0xFFFFFFFF,
-            StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
             StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
+            StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            Subresource = 0xFFFFFFFF,
+            pResource = sourceResource,
         };
 
         cmdList->ResourceBarrier(1, &toCopySource);
@@ -273,10 +273,10 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         };
 
         toShaderResource.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            pResource = sourceResource,
-            Subresource = 0xFFFFFFFF,
-            StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
             StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
+            Subresource = 0xFFFFFFFF,
+            pResource = sourceResource,
         };
 
         cmdList->ResourceBarrier(1, &toShaderResource);
@@ -287,7 +287,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     // blocking Read (immediately after the wait) and the pipelined MapPixels (after the fence poll reports complete).
     private ReadOnlyMemory<byte> MapAndUnpackRows() {
         var height = m_currentHeight;
-        var packedRowBytes = m_currentWidth * m_currentBytesPerPixel;
+        var packedRowBytes = (m_currentWidth * m_currentBytesPerPixel);
 
         void* mapped;
 
@@ -330,7 +330,6 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_fence = (nint)fence;
         m_fenceValue = 0;
     }
-
     private void ReleaseBuffer() {
         if (0 != m_readbackBuffer) {
             _ = ((IUnknown*)m_readbackBuffer)->Release();
@@ -388,9 +387,9 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
             ResourceHandle = upload.TextureHandle,
         };
 
-        m_currentToken = GCHandle.Alloc(imageView);
+        m_currentToken = GCHandle.Alloc(value: imageView);
 
-        return GCHandle.ToIntPtr(m_currentToken);
+        return GCHandle.ToIntPtr(value: m_currentToken);
     }
     public void Dispose() {
         if (m_currentToken.IsAllocated) {
@@ -418,7 +417,7 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
         if (m_imports.TryGetValue(key: sharedHandle, value: out var cached)) {
-            return GCHandle.ToIntPtr(cached.Token);
+            return GCHandle.ToIntPtr(value: cached.Token);
         }
 
         var device = (ID3D12Device*)deviceContext.Device.Handle;
@@ -437,11 +436,11 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
             ResourceHandle = (nint)resource,
         };
 
-        var token = GCHandle.Alloc(imageView);
+        var token = GCHandle.Alloc(value: imageView);
 
         m_imports[sharedHandle] = ((nint)resource, token);
 
-        return GCHandle.ToIntPtr(token);
+        return GCHandle.ToIntPtr(value: token);
     }
     public void Dispose() {
         if (m_disposed) {

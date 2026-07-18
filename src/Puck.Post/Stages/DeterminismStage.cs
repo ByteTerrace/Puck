@@ -13,8 +13,8 @@ namespace Puck.Post;
 /// — including a fused <see cref="CommandValueKind.Orientation"/> quaternion — survives the binary round-trip.
 /// </summary>
 internal sealed class DeterminismStage : IPostStage {
-    private const int Ticks = 600;
     private const uint Seed = 0x00C0FFEEu;
+    private const int Ticks = 600;
 
     private static readonly FixedQ4816 TickSeconds = FixedQ4816.FromDouble(value: (1d / 240d));
 
@@ -37,36 +37,26 @@ internal sealed class DeterminismStage : IPostStage {
         // captures exactly what the sim consumed.
         ISnapshotSource Script() => new ScriptedSnapshotSource(script: tick => BuildSnapshot(tick: tick, moveId: moveId, jumpId: jumpId));
 
-        var recorder = new InputRecorder(seed: Seed);
-        var live = Simulate(source: new RecordingSnapshotSource(inner: Script(), recorder: recorder), moveId: moveId, jumpId: jumpId);
-        var repeat = Simulate(source: Script(), moveId: moveId, jumpId: jumpId);
-        var sameDivergence = HashTrace.FirstDivergence(left: live, right: repeat);
+        var report = DeterminismHarness.Verify(
+            seed: Seed,
+            registry: registry,
+            runScripted: decorate => Simulate(source: decorate(Script()), moveId: moveId, jumpId: jumpId),
+            runReplay: recording => Simulate(source: new ReplaySnapshotSource(recording: recording), moveId: moveId, jumpId: jumpId)
+        );
 
-        if (sameDivergence >= 0) {
-            return PostStageOutcome.Fail(detail: $"non-deterministic: the same snapshot stream produced different state at tick {sameDivergence}");
+        if (report.Verdict == DeterminismVerdict.NonDeterministic) {
+            return PostStageOutcome.Fail(detail: $"non-deterministic: the same snapshot stream produced different state at tick {report.DivergenceTick}");
         }
 
-        // Binary round-trip the captured recording, then replay it: the snapshot format must reproduce the run exactly.
-        var recording = recorder.ToRecording();
-
-        using var stream = new MemoryStream();
-
-        SnapshotRecording.Write(stream: stream, recording: recording, registry: registry);
-        stream.Position = 0L;
-
-        var roundTripped = SnapshotRecording.Read(stream: stream, registry: registry);
-        var replayed = Simulate(source: new ReplaySnapshotSource(recording: roundTripped), moveId: moveId, jumpId: jumpId);
-        var replayDivergence = HashTrace.FirstDivergence(left: live, right: replayed);
-
-        if (replayDivergence >= 0) {
-            return PostStageOutcome.Fail(detail: $"replay diverged from the recorded run after a binary round-trip at tick {replayDivergence}");
+        if (report.Verdict == DeterminismVerdict.ReplayDiverged) {
+            return PostStageOutcome.Fail(detail: $"replay diverged from the recorded run after a binary round-trip at tick {report.DivergenceTick}");
         }
 
         if (!ValueKindsRoundTrip(registry: registry, commandId: moveId, detail: out var valueDetail)) {
             return PostStageOutcome.Fail(detail: $"value round-trip failed: {valueDetail}");
         }
 
-        return PostStageOutcome.Pass(detail: $"determinism + snapshot record/replay verified over {Ticks} ticks (final hash 0x{live[^1]:X16}); all command value kinds round-trip");
+        return PostStageOutcome.Pass(detail: $"determinism + snapshot record/replay verified over {Ticks} ticks (final hash 0x{report.LiveHashes[^1]:X16}); all command value kinds round-trip");
     }
 
     // One tick's scripted snapshot: slot 0 circles its stick and jumps for 8 ticks every 90, expressed as the engine's
@@ -91,7 +81,6 @@ internal sealed class DeterminismStage : IPostStage {
 
         return new CommandSnapshot(Lanes: [new CommandLane(Entries: entries.DrainToImmutable(), Slot: 0)], Tick: tick);
     }
-
     private static ulong[] Simulate(ISnapshotSource source, ushort moveId, ushort jumpId) {
         var sim = new NeutralSim(seed: Seed, tickSeconds: TickSeconds);
         var hashes = new ulong[Ticks];

@@ -1,0 +1,13 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "SDF VM Worlds Wave 6 — THE PROOF WAVE: a minimal RTS genre exhibit hosted on the SAME overworld abstractions (emitters, the view stack, the fixed-point query API) the platformer overworld uses. No consoles, no immersion — the room opens directly onto the RTS arena (Puck.Demo.Rts.RtsScenario's terrain/blockers), and the rts.* console verbs (rts.spawn/rts.select/rts.move/rts.list/rts.clear) drive a ~12-unit straight-line move-to-target sim, ground-snapped through Puck.SdfVm.Queries.IWorldQuery. See docs/examples/scripts/rts-proof.console.",
+    "host": {
+        "presentMode": "vsync"
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld",
+        "consoles": []
+    }
+}

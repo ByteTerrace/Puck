@@ -16,7 +16,7 @@ public interface IGpuStorageBufferFactory {
     /// <param name="sizeBytes">The size, in bytes, of the buffer.</param>
     /// <returns>A new, owning <see cref="IGpuStorageBuffer"/>.</returns>
     IGpuStorageBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes);
-    /// <summary>Creates a host-writable buffer (fill it with group counts via <see cref="IGpuStorageBuffer.Write{T}"/>)
+    /// <summary>Creates a host-writable buffer (fill it with group counts through <see cref="IGpuStorageBuffer"/>)
     /// that is ALSO a legal indirect-dispatch argument source for
     /// <see cref="IGpuComputeRecorder.DispatchIndirect"/>. On Vulkan it is a host-visible storage buffer carrying
     /// <c>VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT</c>; on Direct3D 12 it is an upload-heap buffer (its <c>GENERIC_READ</c>
@@ -26,7 +26,7 @@ public interface IGpuStorageBufferFactory {
     /// <param name="deviceLocal">When <see langword="true"/>, allocate a DEVICE-LOCAL buffer a compute shader WRITES as a
     /// UAV (then dispatches from) — for GPU-computed dispatch args; it is not host-mapped, so the GPU producer fills it
     /// and a barrier orders the indirect read. When <see langword="false"/> (default) it is host-writable (fill via
-    /// <see cref="IGpuStorageBuffer.Write{T}"/>).</param>
+    /// through <see cref="IGpuStorageBuffer"/>).</param>
     /// <returns>A new, owning <see cref="IGpuStorageBuffer"/>.</returns>
     IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes, bool deviceLocal = false);
 }

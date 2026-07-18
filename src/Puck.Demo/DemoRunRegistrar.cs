@@ -8,12 +8,12 @@ namespace Puck.Demo;
 
 /// <summary>
 /// The demo's data-driven root-node registrar + headless utilities. Every run — whether from <c>--run</c> or
-/// synthesized from the legacy CLI flags (<see cref="DemoRunDocuments.Synthesize"/>) — arrives here as a
+/// synthesized from CLI options (<see cref="DemoRunDocuments.Synthesize"/>) — arrives here as a
 /// <see cref="PuckRunDocument"/>: <see cref="RegisterRunDocument"/> installs its validation gate or its
 /// composition-graph producer. Kept out of <c>Program</c> so the entry point stays loosely coupled.
 /// </summary>
 internal static class DemoRunRegistrar {
-    /// <summary>Writes any CLI parse errors (an unrecognized/retired flag, a typo, or a bad option value) to stderr.
+    /// <summary>Writes CLI parse errors, such as an unrecognized option or invalid value, to stderr.
     /// Kept out of the top-level <c>Program</c> so the entry point does not couple to the parser's error types.</summary>
     /// <param name="parseResult">The command-line parse result.</param>
     /// <returns><see langword="true"/> when the parse was clean; <see langword="false"/> when errors were reported (the
@@ -60,7 +60,7 @@ internal static class DemoRunRegistrar {
             Console.Error.WriteLine(value: $"[run] '{runPath}': {summary}, {(document.Scene?.Objects?.Count ?? 0)} object(s), {(document.Viewports?.Count ?? 0)} viewport(s)");
 
             return document;
-        } catch (Exception exception) when ((exception is RunDocumentValidationException) || (exception is JsonException) || (exception is IOException) || (exception is NotSupportedException) || (exception is UnauthorizedAccessException) || (exception is ArgumentException)) {
+        } catch (Exception exception) when (((exception is RunDocumentValidationException) || (exception is JsonException) || (exception is IOException) || (exception is NotSupportedException) || (exception is UnauthorizedAccessException) || (exception is ArgumentException))) {
             Console.Error.WriteLine(value: $"[run] failed to load '{runPath}':{Environment.NewLine}{exception.Message}");
 
             return null;
@@ -153,7 +153,7 @@ internal static class DemoRunRegistrar {
         var schema = RunDocumentSchema.Export();
         var directory = Path.GetDirectoryName(path: path);
 
-        if (!string.IsNullOrEmpty(directory)) {
+        if (!string.IsNullOrEmpty(value: directory)) {
             _ = Directory.CreateDirectory(path: directory);
         }
 
@@ -169,7 +169,7 @@ internal static class DemoRunRegistrar {
     // (OverworldNode.Immersed, the --rom path) opens INSIDE the machines instead — the fourth-wall boot. The overworld
     // document resolves to a Vulkan host today; the backend still flows through so the shared render builder owns
     // the choice.
-    internal static IRenderNode CreateOverworldRootNode(IServiceProvider serviceProvider, IReadOnlyList<GamingBrickSource> consoles, IReadOnlyList<CartridgeSource> library, string? capturePath, bool hostsOnDirectX = false, bool immersed = false, string? world = null, long? cell = null, uint width = HostSettings.DefaultWidth, uint height = HostSettings.DefaultHeight) {
-        return new Overworld.OverworldRenderNode(bootWorld: world, capturePath: capturePath, consoles: consoles, height: height, hostsOnDirectX: hostsOnDirectX, immersed: immersed, library: library, serviceProvider: serviceProvider, spawnCell: cell, width: width);
+    internal static IRenderNode CreateOverworldRootNode(IServiceProvider serviceProvider, IReadOnlyList<GamingBrickSource> consoles, IReadOnlyList<CartridgeSource> library, string? capturePath, Overworld.IAddonControlHost? addons = null, bool hostsOnDirectX = false, bool immersed = false, string? world = null, long? cell = null, string? revealedRenderScale = null, uint width = HostSettings.DefaultWidth, uint height = HostSettings.DefaultHeight) {
+        return new Overworld.OverworldRenderNode(addons: addons, bootWorld: world, capturePath: capturePath, consoles: consoles, height: height, hostsOnDirectX: hostsOnDirectX, immersed: immersed, library: library, revealedRenderScale: revealedRenderScale, serviceProvider: serviceProvider, spawnCell: cell, width: width);
     }
 }

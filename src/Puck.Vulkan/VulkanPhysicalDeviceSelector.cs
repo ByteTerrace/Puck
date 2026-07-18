@@ -11,6 +11,14 @@ namespace Puck.Vulkan;
 /// highest-scoring device wins.
 /// </summary>
 public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector {
+    // The device-side capability floor: Vulkan 1.3 (SPIR-V 1.6). A device reporting less would be selected and then
+    // reject every 1.6 shader module at vkCreateShaderModule, so the floor is enforced here at selection with a loud,
+    // named failure rather than a cryptic crash later. All four GPUs Puck supports clear it on current drivers.
+    private const uint RequiredApiVersion = (1u << 22) | (3u << 12);
+
+    private static string FormatApiVersion(uint version) {
+        return $"{(version >> 22)}.{(version >> 12) & 0x3FFu}.{version & 0xFFFu}";
+    }
     private static int Score(
         VkPhysicalDeviceType deviceType,
         VulkanQueueFamilySelection queueFamilySelection
@@ -162,6 +170,27 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
 
         if (bestCandidate is null) {
             throw new InvalidOperationException(message: "No Vulkan physical device supports both graphics and present operations for the active surface.");
+        }
+
+        // Enforce the SPIR-V 1.6 device floor on the winner (the loader instance version can outrank the device's own
+        // reported ApiVersion). Fail loud and named — Puck's kernels are compiled at vulkan1.3 and will not load below it.
+        var selectedApiVersion = m_physicalDeviceApi.GetDeviceApiVersion(
+            instanceHandle: instance.Handle,
+            physicalDeviceHandle: bestCandidate.Value.Device.Handle
+        );
+
+        if (selectedApiVersion < RequiredApiVersion) {
+            var deviceName = m_physicalDeviceApi.GetDeviceName(
+                instanceHandle: instance.Handle,
+                physicalDeviceHandle: bestCandidate.Value.Device.Handle
+            );
+
+            throw new InvalidOperationException(message:
+                (((($"Vulkan device '{deviceName}' reports API version {FormatApiVersion(version: selectedApiVersion)}, below the required " +
+                $"{FormatApiVersion(version: RequiredApiVersion)} (SPIR-V 1.6) floor. Puck's shader kernels are compiled for Vulkan 1.3 ") +
+                "and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 (Turing), RTX 4070 (Ada), ") +
+                "Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which expose Vulkan 1.3 on current ") +
+                "drivers; update your GPU driver or run on supported hardware."));
         }
 
         return bestCandidate.Value.Device;

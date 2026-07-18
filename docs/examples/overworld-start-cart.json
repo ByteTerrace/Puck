@@ -1,0 +1,16 @@
+{
+    "$schema": "../../schema/run.schema.json",
+    "version": "puck.run.v1",
+    "_comment": "Per-console startCart (rank 32): each EMPTY cabinet's SELECTED cart type (0..CartTypeCount-1 at consumption; an out-of-range value here is range-clamped away rather than refused, since Puck.Scene cannot see the overworld's cart-type count) overrides the overworld's own default staggering, so console 0 offers BRICKFALL (cart type 5) and console 1 offers SOLITAIRE (cart type 7) the moment the run boots, instead of the built-in world-lens/camera/showcase stagger. `Puck.Demo --run docs/examples/overworld-start-cart.json`, then Interact (North) at either cabinet to insert its overridden cart.",
+    "host": {
+        "presentMode": "vsync"
+    },
+    "input": { "gamepadRouting": "auto" },
+    "graph": {
+        "$type": "overworld",
+        "consoles": [
+            { "model": "cgb", "startCart": 5 },
+            { "model": "cgb", "startCart": 7 }
+        ]
+    }
+}

@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Input;
+using Puck.SdfVm;
 
 namespace Puck.Demo;
 
@@ -58,6 +59,10 @@ internal static class BindingProfileDocuments {
                         // again. A bumper is not a GB joypad line, so it can neither be swallowed by nor leak into the
                         // machine the player is driving — the dedicated way out that never collides with brick input.
                         new BindingPageEntryDefinition(Command: "overworld.leave", Icon: "action.leave", Label: "Leave", Source: InputSources.Gamepad.LeftShoulder),
+                        // Right bumper = Cycle: rotate the nearest cabinet's selected cart. Presentation-only here —
+                        // the gameplay read stays on the raw pad edge (AdvancePagedSlots) so it fires without a profile
+                        // entry; this entry just labels the plate and lights it while the bumper is held.
+                        new BindingPageEntryDefinition(Command: "overworld.cycle", Icon: "action.cycle", Label: "Cycle", Source: InputSources.Gamepad.RightShoulder),
                     ],
                     Id: "movement",
                     Label: "Movement"

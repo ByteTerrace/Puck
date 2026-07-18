@@ -25,7 +25,6 @@ internal sealed class BrickfallGame {
     private readonly GameFramework m_fw;
     private readonly int m_pieceSlot;
     private readonly int m_previewSlot;
-
     private readonly RomTable m_bgPalettes;
     private readonly RomTable m_objPalettes;
     private readonly RomTable m_tiles;
@@ -55,8 +54,7 @@ internal sealed class BrickfallGame {
 
         if (titleArt is not null) {
             manifest.DefineArtScreen(name: "title", art: titleArt, overlays: BrickfallTables.TitleMenuOverlays);
-        }
-        else {
+        } else {
             manifest.DefineScreen(name: "title", cells: BrickfallTables.BuildTitleBannerCells(), overlays: BrickfallTables.TitleMenuOverlays);
         }
 
@@ -625,7 +623,6 @@ internal sealed class BrickfallGame {
         m_fw.Text.EmitPrintBcdQueued(bcdAddress: BrickfallProtocol.LevelBcd, byteCount: 1, row: 8, column: 13);
         e.Return();
     }
-
     private void EmitHideSprites(Sm83Emitter e) {
         e.MarkLabel(label: m_subHideSprites);
         m_fw.Oam.EmitHideRange(baseSlot: m_pieceSlot, count: 8);
@@ -722,7 +719,7 @@ internal sealed class BrickfallGame {
         for (var slot = 0; (slot < (BrickfallProtocol.HiScoreEntryCount - 1)); slot++) {
             var take = e.NewLabel();
             var skip = e.NewLabel();
-            var entryScore = (ushort)(BrickfallProtocol.HiScoreMirror + (slot * BrickfallProtocol.HiScoreEntryByteCount) + 3);
+            var entryScore = (ushort)((BrickfallProtocol.HiScoreMirror + (slot * BrickfallProtocol.HiScoreEntryByteCount)) + 3);
 
             for (var index = 0; (index < 3); index++) {
                 e.LoadAFromAddress(address: (ushort)(BrickfallProtocol.Score + index));
@@ -733,8 +730,7 @@ internal sealed class BrickfallGame {
 
                 if (index < 2) {
                     e.JumpRelative(condition: Condition.NotZero, label: skip); // entry > score → try the next slot.
-                }
-                else {
+                } else {
                     e.JumpRelative(label: skip); // equal or greater on the last byte → not strictly greater.
                 }
             }
@@ -755,8 +751,8 @@ internal sealed class BrickfallGame {
         e.Arithmetic(op: AluOp.Subtract, source: Reg8.C);
         e.JumpRelative(condition: Condition.Zero, label: noShift);
         e.Load(destination: Reg8.B, source: Reg8.A);
-        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)(BrickfallProtocol.HiScoreMirror + (4 * BrickfallProtocol.HiScoreEntryByteCount) - 1));
-        e.LoadImmediate(pair: Reg16.De, value: (ushort)(BrickfallProtocol.HiScoreMirror + (5 * BrickfallProtocol.HiScoreEntryByteCount) - 1));
+        e.LoadImmediate(pair: Reg16.Hl, value: (ushort)((BrickfallProtocol.HiScoreMirror + (4 * BrickfallProtocol.HiScoreEntryByteCount)) - 1));
+        e.LoadImmediate(pair: Reg16.De, value: (ushort)((BrickfallProtocol.HiScoreMirror + (5 * BrickfallProtocol.HiScoreEntryByteCount)) - 1));
         e.MarkLabel(label: shiftLoop);
         e.LoadAFromHlDecrement();
         e.StoreAToDe();
@@ -970,7 +966,6 @@ internal sealed class BrickfallGame {
         e.StoreAToAddress(address: BrickfallProtocol.IdleTimer);
         e.StoreAToAddress(address: BrickfallProtocol.IdleTimerHigh);
     }
-
     private void EmitTitleTick(Sm83Emitter e) {
         var noStart = e.NewLabel();
         var noSelect = e.NewLabel();
@@ -1001,7 +996,6 @@ internal sealed class BrickfallGame {
         m_fw.States.EmitRequestState(id: BrickfallProtocol.StateAttract);
         e.MarkLabel(label: stay);
     }
-
     private void EmitAttractEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Input.EmitScriptStart(script: m_attractScript);
@@ -1012,7 +1006,6 @@ internal sealed class BrickfallGame {
         EmitTitleAttributesReset(e: e);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitAttractTick(Sm83Emitter e) {
         var noReal = e.NewLabel();
         var running = e.NewLabel();
@@ -1036,7 +1029,6 @@ internal sealed class BrickfallGame {
         e.MarkLabel(label: running);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitHighScoresEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Bg.EmitLcdOff();
@@ -1062,7 +1054,6 @@ internal sealed class BrickfallGame {
         e.StoreAToAddress(address: BrickfallProtocol.IdleTimer);
         e.StoreAToAddress(address: BrickfallProtocol.IdleTimerHigh);
     }
-
     private void EmitHighScoresTick(Sm83Emitter e) {
         var back = e.NewLabel();
         var stay = e.NewLabel();
@@ -1078,7 +1069,6 @@ internal sealed class BrickfallGame {
         m_fw.States.EmitRequestState(id: BrickfallProtocol.StateTitle);
         e.MarkLabel(label: stay);
     }
-
     private void EmitPlayEnter(Sm83Emitter e) {
         // Repaint the play screen FROM STATE (never resetting it) so resuming from pause redraws cleanly; the game
         // reset itself happens on the title's START edge / the attract enter.
@@ -1098,7 +1088,6 @@ internal sealed class BrickfallGame {
 
         e.Call(label: m_subPreviewDraw);
     }
-
     private void EmitPlayTick(Sm83Emitter e) {
         var pause = e.NewLabel();
         var noPause = e.NewLabel();
@@ -1115,12 +1104,10 @@ internal sealed class BrickfallGame {
         e.MarkLabel(label: noPause);
         e.Call(label: m_subPlayCore);
     }
-
     private void EmitPauseEnter(Sm83Emitter e) {
         m_fw.Oam.EmitHideRange(baseSlot: m_pieceSlot, count: 4);
         m_fw.Text.EmitPrintQueued(text: m_strPause, row: 8, column: 3);
     }
-
     private void EmitPauseTick(Sm83Emitter e) {
         var resume = e.NewLabel();
         var stay = e.NewLabel();
@@ -1136,7 +1123,6 @@ internal sealed class BrickfallGame {
         m_fw.States.EmitRequestState(id: BrickfallProtocol.StatePlay);
         e.MarkLabel(label: stay);
     }
-
     private void EmitGameOverEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         m_fw.Text.EmitPrintQueued(text: m_strGameOver, row: 8, column: 1);
@@ -1148,12 +1134,11 @@ internal sealed class BrickfallGame {
         // SRAM win region (the room XORs it across cabinets to drive the editor reveal).
         m_fw.Victory.EmitStoreShare();
     }
-
     private void EmitGameOverTick(Sm83Emitter e) {
         var resolve = e.NewLabel();
         var qualify = e.NewLabel();
         var noQualify = e.NewLabel();
-        var entry4Score = (ushort)(BrickfallProtocol.HiScoreMirror + ((BrickfallProtocol.HiScoreEntryCount - 1) * BrickfallProtocol.HiScoreEntryByteCount) + 3);
+        var entry4Score = (ushort)((BrickfallProtocol.HiScoreMirror + ((BrickfallProtocol.HiScoreEntryCount - 1) * BrickfallProtocol.HiScoreEntryByteCount)) + 3);
 
         e.LoadAFromAddress(address: FrameworkMemoryMap.InputPressed);
         e.Load(destination: Reg8.B, source: Reg8.A);
@@ -1191,7 +1176,6 @@ internal sealed class BrickfallGame {
         e.MarkLabel(label: qualify);
         m_fw.States.EmitRequestState(id: BrickfallProtocol.StateScoreEntry);
     }
-
     private void EmitScoreEntryEnter(Sm83Emitter e) {
         e.Call(label: m_subHideSprites);
         e.XorA();
@@ -1207,7 +1191,6 @@ internal sealed class BrickfallGame {
         m_fw.Text.EmitPrintBcdDirect(bcdAddress: BrickfallProtocol.Score, byteCount: 3, row: 6, column: 7);
         m_fw.Bg.EmitLcdOn(lcdc: GameLcdc);
     }
-
     private void EmitScoreEntryTick(Sm83Emitter e) {
         var confirm = e.NewLabel();
         var noUp = e.NewLabel();

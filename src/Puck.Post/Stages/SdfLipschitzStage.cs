@@ -4,7 +4,7 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-A stage. The fast CPU proof that the D1 Lipschitz keystone is COMPUTED and BAKED: SdfProgram.AnalyzeLipschitz
+/// Tier-A stage. The fast CPU proof that the Lipschitz step scale is computed and baked: SdfProgram.AnalyzeLipschitz
 /// derives a per-program step scale (1/L) and packs it into the segment-directory header's free .y lane, and
 /// SdfProgram.StepScale reads it back from the packed words (the same lane mapCore consumes in sdf-vm.hlsli). It builds
 /// a battery of programs and asserts the baked step scale is:
@@ -50,12 +50,12 @@ internal sealed class SdfLipschitzStage : IPostStage {
             return PostStageOutcome.Fail(detail: $"the 4:1 eccentric ellipsoid baked stepScale {ellipsoidStepScale:R}, expected 0 < stepScale < 1");
         }
 
-        if (MathF.Abs(ellipsoidStepScale - 0.25f) > 0.01f) {
+        if (MathF.Abs(x: (ellipsoidStepScale - 0.25f)) > 0.01f) {
             return PostStageOutcome.Fail(detail: $"the 4:1 eccentric ellipsoid baked stepScale {ellipsoidStepScale:R}, expected ≈ 0.25 (1 / eccentricity 4)");
         }
 
         // 4. A log-spherical fold (shellRatio 2.0) must clamp to ≈ 1/exp(w/2) = 1/exp(ln(2)/2) = 1/√2 ≈ 0.707 — the
-        // shell-boundary metric-distortion factor in isolation (the D2 twin of the twist assertion, under the GPU
+        // shell-boundary metric-distortion factor in isolation (the log-spherical counterpart to the twist assertion, under the GPU
         // world-log-sphere-solidity consequence).
         var logSphereStepScale = WorldLogSphereSolidityStage.BuildDrosteTunnelScene().StepScale;
 
@@ -63,14 +63,14 @@ internal sealed class SdfLipschitzStage : IPostStage {
             return PostStageOutcome.Fail(detail: $"the shellRatio-2.0 log-spherical fold baked stepScale {logSphereStepScale:R}, expected 0 < stepScale < 1 (a non-1-Lipschitz domain warp must be clamped)");
         }
 
-        var expectedLogSphereStepScale = (1f / MathF.Exp(0.5f * MathF.Log(2.0f)));
+        var expectedLogSphereStepScale = (1f / MathF.Exp(x: (0.5f * MathF.Log(x: 2.0f))));
 
-        if (MathF.Abs(logSphereStepScale - expectedLogSphereStepScale) > 0.01f) {
+        if (MathF.Abs(x: (logSphereStepScale - expectedLogSphereStepScale)) > 0.01f) {
             return PostStageOutcome.Fail(detail: $"the shellRatio-2.0 log-spherical fold baked stepScale {logSphereStepScale:R}, expected ≈ {expectedLogSphereStepScale:0.###} (1 / exp(w/2), w = ln 2)");
         }
 
         // 5. A CellJitter fold (the solidity gate's own blade scene) must clamp: 0 < stepScale < 1 — the boundary
-        // step factor L_cj = sqrt((min(spacing)/2 + jitter/2)^2 + 2*jitter^2) / m in isolation (the D1 twin of the twist
+        // step factor L_cj = sqrt((min(spacing)/2 + jitter/2)^2 + 2*jitter^2) / m in isolation (the boundary-fold counterpart to the twist
         // and log-spherical asserts, under the GPU world-cell-jitter-solidity consequence). The exact value tracks the
         // gate scene's spacing/jitter/blade reach, so this asserts the clamp is present and in a sane band, not a pinned
         // constant that would fight the gate's scene tuning.
@@ -83,9 +83,9 @@ internal sealed class SdfLipschitzStage : IPostStage {
         // 6. A chamfer blend must clamp to ≈ 1/√2 ≈ 0.707 — the bevel plane's acute-corner √2 gradient in isolation
         // (chamfer is the one blend op that is NOT 1-Lipschitz; smooth-min stays 1). The GPU consequence is world-chamfer.
         var chamferStepScale = BuildChamferScene().StepScale;
-        var expectedChamferStepScale = (1f / MathF.Sqrt(2.0f));
+        var expectedChamferStepScale = (1f / MathF.Sqrt(x: 2.0f));
 
-        if (MathF.Abs(chamferStepScale - expectedChamferStepScale) > 0.01f) {
+        if (MathF.Abs(x: (chamferStepScale - expectedChamferStepScale)) > 0.01f) {
             return PostStageOutcome.Fail(detail: $"the chamfer-union scene baked stepScale {chamferStepScale:R}, expected ≈ {expectedChamferStepScale:0.###} (1 / √2 — the bevel's acute-corner gradient)");
         }
 
@@ -93,7 +93,7 @@ internal sealed class SdfLipschitzStage : IPostStage {
         // sinusoidal relief's metric-stretch factor in isolation. The GPU consequence is world-displace-solidity.
         var displaceStepScale = BuildDisplaceScene().StepScale;
 
-        if (MathF.Abs(displaceStepScale - 0.5f) > 0.01f) {
+        if (MathF.Abs(x: (displaceStepScale - 0.5f)) > 0.01f) {
             return PostStageOutcome.Fail(detail: $"the Displace scene baked stepScale {displaceStepScale:R}, expected ≈ 0.5 (1 / (1 + amp·‖freq‖ = 1))");
         }
 
@@ -101,12 +101,12 @@ internal sealed class SdfLipschitzStage : IPostStage {
         // isolation (with no downstream twist/bend, its reach fold is inert). The GPU consequence is world-domain-warp-solidity.
         var domainWarpStepScale = BuildDomainWarpScene().StepScale;
 
-        if (MathF.Abs(domainWarpStepScale - 0.5f) > 0.01f) {
+        if (MathF.Abs(x: (domainWarpStepScale - 0.5f)) > 0.01f) {
             return PostStageOutcome.Fail(detail: $"the DomainWarp scene baked stepScale {domainWarpStepScale:R}, expected ≈ 0.5 (1 / (1 + amp·‖freq‖ = 1))");
         }
 
         // 9. A CHAMFER POP compose (a scoped-accumulator scope closed with a chamfer blend) must fold the SAME √2 the
-        // chamfer ShapeBlend does — AnalyzeLipschitz's tree-fold correction (the plan's "expect the next bug here"). A
+        // chamfer ShapeBlend does. A
         // scope closed with a plain Union compose stays EXACTLY 1.0f (the compose is 1-Lipschitz and the scope's shapes
         // are warp-free), so a scope-free/union-compose program is unaffected; only the chamfer compose clamps.
         var unionPopStepScale = BuildUnionPopScene().StepScale;
@@ -117,7 +117,7 @@ internal sealed class SdfLipschitzStage : IPostStage {
 
         var chamferPopStepScale = BuildChamferPopScene().StepScale;
 
-        if (MathF.Abs(chamferPopStepScale - expectedChamferStepScale) > 0.01f) {
+        if (MathF.Abs(x: (chamferPopStepScale - expectedChamferStepScale)) > 0.01f) {
             return PostStageOutcome.Fail(detail: $"a chamfer-compose field scope baked stepScale {chamferPopStepScale:R}, expected ≈ {expectedChamferStepScale:0.###} (1 / √2 — the chamfer POP's bevel gradient, folded by AnalyzeLipschitz exactly like a chamfer ShapeBlend)");
         }
 
@@ -128,12 +128,12 @@ internal sealed class SdfLipschitzStage : IPostStage {
     // is far-neutral, so stepScale must be EXACTLY 1.0f — a scope, by itself, must never clamp the march.
     private static SdfProgram BuildUnionPopScene() {
         var builder = new SdfProgramBuilder();
-        var slate = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.5f, 0.55f, 0.6f)));
+        var slate = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.5f, y: 0.55f, z: 0.6f)));
 
         return builder
-            .Box(halfExtents: new Vector3(0.6f, 0.6f, 0.6f), round: 0f, material: slate)
+            .Box(halfExtents: new Vector3(x: 0.6f, y: 0.6f, z: 0.6f), round: 0f, material: slate)
             .PushField(compose: SdfBlendOp.Union)
-            .Translate(offset: new Vector3(0.7f, 0f, 0f))
+            .Translate(offset: new Vector3(x: 0.7f, y: 0f, z: 0f))
             .Sphere(radius: 0.5f, material: slate)
             .Onion(thickness: 0.05f)
             .PopField()
@@ -145,12 +145,12 @@ internal sealed class SdfLipschitzStage : IPostStage {
     // chamfer ShapeBlend isolation (BuildChamferScene), asserting AnalyzeLipschitz folds the chamfer factor for a POP.
     private static SdfProgram BuildChamferPopScene() {
         var builder = new SdfProgramBuilder();
-        var steel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.6f, 0.62f, 0.68f)));
+        var steel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.6f, y: 0.62f, z: 0.68f)));
 
         return builder
-            .Box(halfExtents: new Vector3(0.6f, 0.6f, 0.6f), round: 0f, material: steel)
+            .Box(halfExtents: new Vector3(x: 0.6f, y: 0.6f, z: 0.6f), round: 0f, material: steel)
             .PushField(compose: SdfBlendOp.ChamferUnion, smooth: 0.3f)
-            .Translate(offset: new Vector3(0.7f, 0f, 0f))
+            .Translate(offset: new Vector3(x: 0.7f, y: 0f, z: 0f))
             .Sphere(radius: 0.6f, material: steel)
             .PopField()
             .Build();
@@ -160,11 +160,11 @@ internal sealed class SdfLipschitzStage : IPostStage {
     // contributor (no warp, no eccentric shape), so stepScale = 1/√2 — the cleanest isolation of the chamfer path.
     private static SdfProgram BuildChamferScene() {
         var builder = new SdfProgramBuilder();
-        var steel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.6f, 0.62f, 0.68f)));
+        var steel = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.6f, y: 0.62f, z: 0.68f)));
 
         return builder
-            .Box(halfExtents: new Vector3(0.6f, 0.6f, 0.6f), round: 0f, material: steel)
-            .Translate(offset: new Vector3(0.7f, 0f, 0f))
+            .Box(halfExtents: new Vector3(x: 0.6f, y: 0.6f, z: 0.6f), round: 0f, material: steel)
+            .Translate(offset: new Vector3(x: 0.7f, y: 0f, z: 0f))
             .Sphere(radius: 0.6f, material: steel, blend: SdfBlendOp.ChamferUnion, smooth: 0.3f)
             .Build();
     }
@@ -173,11 +173,11 @@ internal sealed class SdfLipschitzStage : IPostStage {
     // relief's metric-stretch (1 + 1) is the only contributor, so stepScale = 0.5.
     private static SdfProgram BuildDisplaceScene() {
         var builder = new SdfProgramBuilder();
-        var clay = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.8f, 0.5f, 0.3f)));
+        var clay = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.8f, y: 0.5f, z: 0.3f)));
 
         return builder
             .Sphere(radius: 1.0f, material: clay)
-            .Displace(frequency: new Vector3(4.0f, 0f, 0f), amplitude: 0.25f)
+            .Displace(frequency: new Vector3(x: 4.0f, y: 0f, z: 0f), amplitude: 0.25f)
             .Build();
     }
 
@@ -185,10 +185,10 @@ internal sealed class SdfLipschitzStage : IPostStage {
     // contributor (no downstream twist/bend, so the reach fold is inert), so stepScale = 0.5.
     private static SdfProgram BuildDomainWarpScene() {
         var builder = new SdfProgramBuilder();
-        var clay = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.4f, 0.5f, 0.8f)));
+        var clay = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.4f, y: 0.5f, z: 0.8f)));
 
         return builder
-            .DomainWarp(frequency: new Vector3(4.0f, 0f, 0f), amplitude: 0.25f)
+            .DomainWarp(frequency: new Vector3(x: 4.0f, y: 0f, z: 0f), amplitude: 0.25f)
             .Sphere(radius: 1.0f, material: clay)
             .Build();
     }
@@ -197,10 +197,10 @@ internal sealed class SdfLipschitzStage : IPostStage {
     // factor is the ONLY contributor — the cleanest isolation of the shape-approx path.
     private static SdfProgram BuildEccentricEllipsoidScene() {
         var builder = new SdfProgramBuilder();
-        var jade = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.3f, 0.7f, 0.4f)));
+        var jade = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.3f, y: 0.7f, z: 0.4f)));
 
         return builder
-            .Ellipsoid(radii: new Vector3(4.0f, 1.0f, 1.0f), material: jade)
+            .Ellipsoid(radii: new Vector3(x: 4.0f, y: 1.0f, z: 1.0f), material: jade)
             .Build();
     }
 }

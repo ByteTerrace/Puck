@@ -19,7 +19,6 @@ internal sealed class NeutralSim {
     private static readonly FixedQ4816 Friction = FixedQ4816.FromDouble(value: 0.88d);
     private static readonly FixedQ4816 JumpImpulse = FixedQ4816.FromDouble(value: 6d);
     private static readonly FixedQ4816 MoveAcceleration = FixedQ4816.FromDouble(value: 24d);
-
     private readonly FixedQ4816 m_tickSeconds;
     private FixedVector2 m_position;
     private uint m_rng;
@@ -46,7 +45,7 @@ internal sealed class NeutralSim {
 
         m_velocity *= Friction;
         m_position += (m_velocity * m_tickSeconds);
-        m_rng = unchecked((m_rng * 1664525u) + 1013904223u);
+        m_rng = unchecked(((m_rng * 1664525u) + 1013904223u));
         ++m_tick;
     }
 

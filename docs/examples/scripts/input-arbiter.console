@@ -1,0 +1,49 @@
+# Puck.Demo console-driving SMOKE — the SDF VM Worlds Wave 5 canary: every gamepad consumer in the run (the
+# brick-pad service, the per-slot binding-page adapters, the router/local intent sources) now samples through one
+# IInputArbiter lane instead of hand-rolling the single-drainer discipline. This script exercises the OBSERVABLE
+# surface a script can reach over stdin: a `press` tape driving an unowned console's joypad through the
+# arbiter-backed page-input -> pad-service path exactly as before, and a scripted player joining with NO physical
+# pad behind it (its PerPlayer lane resolves no device — neutral, not a crash). Proximity takeover itself needs a
+# PHYSICAL pad and cannot be scripted — see the run's own "[overworld] takeover: console N OWNED by player 0"
+# stderr narration for that half (this demo boots with a real Switch Pro connected on the verification machine).
+#
+# Run (bash):       dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 20 < docs/examples/scripts/input-arbiter.console
+# Run (PowerShell): Get-Content docs/examples/scripts/input-arbiter.console | dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 20
+# No captures — this asserts what the engine SAYS (the bracketed [verb: …] echoes), not what it renders.
+
+# Baseline read. NOTE: with a real pad connected, spawn proximity auto-takes-over console 0 on the very first frame
+# ("[overworld] takeover: console 0 OWNED by player 0", to stderr) before this script's first line runs — that
+# takeover rides the SAME arbiter-backed PerPlayer lane (slot 0) this script exercises below, just resolved from a
+# physical device instead of a scripted one. press refuses an owned cabinet by design, so console 1 is the one this
+# script drives, and player.add is held until AFTER that exercise — this run's document is immersed (every ACTIVE
+# player auto-seats at the next console that boots), so adding player 1 before console 1 boots would auto-claim it
+# the instant it powers on, leaving nothing for `press` to drive.
+state
+
+# Pick console 1's cart type before it's booted (a pure selection write; SetCartType live-swaps once booted).
+cart 1 1
+
+# Boot it, let the layout settle, then read state again — the frame count and booted mask both advance. Console 1
+# stays UNOWNED here: player 1 does not exist yet, so immersed seating has nobody to auto-claim it with.
+boot 1
+step 30
+settle
+state
+
+# Drive a short scripted joypad tape on the unowned console: press replays synthesized edges through the same
+# page-input -> pad-service -> arbiter lane path the room player's real pad would, proving the arbiter's
+# idempotent per-frame drain (many samplers, one frame key) never double-counts or drops the tape's edges.
+press 1 up a*4
+step 10
+settle
+state
+
+# NOW add a scripted player with no physical pad behind it. The pad service lazily registers slot 1's PerPlayer
+# arbiter lane on first sample (AdvancePagedSlots); with no device resolving to player index 1 the lane reads
+# neutral. This run's immersed seating auto-claims the next available console for the newly active player — that
+# is expected (and itself proof the arbiter lane resolves cleanly with no device bound: the seated player drives
+# nothing, since their lane has nothing to sample), not a script failure.
+player.add
+step 10
+settle
+state

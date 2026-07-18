@@ -57,10 +57,10 @@ internal sealed record PbakSpriteSet(byte[] Tiles2bpp, byte[] PaletteData, PbakD
 /// <param name="Background">The background section, or <see langword="null"/>.</param>
 /// <param name="Sprites">The sprite sections, in wire order.</param>
 internal sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<PbakSpriteSet> Sprites) {
-    private const ushort SupportedVersion = 1;
     private const int HeaderByteCount = 8;
-    private const int MapSide = 32;
     private const int MapByteCount = (MapSide * MapSide);
+    private const int MapSide = 32;
+    private const ushort SupportedVersion = 1;
 
     /// <summary>Parses a <c>PBAK</c> blob. Throws <see cref="InvalidDataException"/> on any malformed byte — a bundle
     /// is either consumed whole or rejected, never half-trusted.</summary>
@@ -104,7 +104,7 @@ internal sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<Pbak
 
             var fourCc = string.Create(length: 4, state: (blob, offset), action: static (span, state) => {
                 for (var character = 0; (character < 4); character++) {
-                    span[character] = (char)state.blob[state.offset + character];
+                    span[character] = (char)state.blob[(state.offset + character)];
                 }
             });
             var byteLength = ReadU32(blob: blob, offset: (offset + 4));
@@ -127,7 +127,7 @@ internal sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<Pbak
 
     // A background section is a TILE chunk immediately followed by MAPX (a sprite section's TILE is followed by PALO).
     private static bool IsBackgroundStart(List<(string FourCc, byte[] Payload)> chunks, int index) =>
-        ((index < (chunks.Count - 1)) && (chunks[index].FourCc == "TILE") && (chunks[index + 1].FourCc == "MAPX"));
+        ((index < (chunks.Count - 1)) && (chunks[index].FourCc == "TILE") && (chunks[(index + 1)].FourCc == "MAPX"));
 
     // TILE, MAPX, [ATTR], PALB, [DMGP].
     private static PbakBackground ParseBackground(List<(string FourCc, byte[] Payload)> chunks, ref int index) {
@@ -165,7 +165,7 @@ internal sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<Pbak
         var count = ReadU16(blob: payload, offset: 0);
 
         if (payload.Length != (2 + (count * 16))) {
-            throw new InvalidDataException(message: $"A TILE payload of {count} tiles is {2 + (count * 16)} bytes (got {payload.Length}).");
+            throw new InvalidDataException(message: $"A TILE payload of {count} tiles is {(2 + (count * 16))} bytes (got {payload.Length}).");
         }
 
         return payload[2..];
@@ -174,7 +174,7 @@ internal sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<Pbak
     // MAPX: u16 width (32), u16 height (32), then the cell bytes row-major.
     private static byte[] ParseMap(byte[] payload) {
         if ((payload.Length != (4 + MapByteCount)) || (ReadU16(blob: payload, offset: 0) != MapSide) || (ReadU16(blob: payload, offset: 2) != MapSide)) {
-            throw new InvalidDataException(message: $"A MAPX payload is a {MapSide}×{MapSide} map ({4 + MapByteCount} bytes).");
+            throw new InvalidDataException(message: $"A MAPX payload is a {MapSide}×{MapSide} map ({(4 + MapByteCount)} bytes).");
         }
 
         return payload[4..];
@@ -229,12 +229,11 @@ internal sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<Pbak
         }
 
         if (offset != payload.Length) {
-            throw new InvalidDataException(message: $"A META payload has {payload.Length - offset} trailing bytes.");
+            throw new InvalidDataException(message: $"A META payload has {(payload.Length - offset)} trailing bytes.");
         }
 
         return frames;
     }
-
     private static byte[] Expect(List<(string FourCc, byte[] Payload)> chunks, ref int index, string fourCc) {
         if ((index >= chunks.Count) || (chunks[index].FourCc != fourCc)) {
             var found = ((index < chunks.Count) ? $"'{chunks[index].FourCc}'" : "the end of the blob");
@@ -244,12 +243,9 @@ internal sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<Pbak
 
         return chunks[index++].Payload;
     }
-
     private static byte[]? TryTake(List<(string FourCc, byte[] Payload)> chunks, ref int index, string fourCc) =>
         (((index < chunks.Count) && (chunks[index].FourCc == fourCc)) ? chunks[index++].Payload : null);
-
-    private static ushort ReadU16(byte[] blob, int offset) => (ushort)(blob[offset] | (blob[offset + 1] << 8));
-
+    private static ushort ReadU16(byte[] blob, int offset) => (ushort)(blob[offset] | (blob[(offset + 1)] << 8));
     private static uint ReadU32(byte[] blob, int offset) =>
-        (uint)(blob[offset] | (blob[offset + 1] << 8) | (blob[offset + 2] << 16) | (blob[offset + 3] << 24));
+        (uint)(blob[offset] | (blob[(offset + 1)] << 8) | (blob[(offset + 2)] << 16) | (blob[(offset + 3)] << 24));
 }

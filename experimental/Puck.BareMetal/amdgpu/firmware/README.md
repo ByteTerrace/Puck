@@ -1,9 +1,10 @@
 # Van Gogh firmware (vendored, verbatim)
 
-AMD signed microcode for the Steam Deck LCD APU (**Van Gogh**, PCI `1002:163F`), copied
+AMD signed microcode for the Steam Deck gfx1033 GPU family (**Van Gogh**, PCI `1002:163F`), copied
 **unmodified** from upstream **linux-firmware**, pinned at release tag **20251125**
 (commit `4ee5122b3f58e4c07951746c4425e2f4f42e860f`, 2025-11-25). These blobs are loaded
-through the PSP (MP0) during GPU bring-up — see `../../docs/amd-vulkan-plan.md` milestone (d).
+through the PSP (MP0) during GPU bring-up; the current loading contract is documented in
+[`gfx103-bringup-spec.md`](../../docs/gfx103-bringup-spec.md#psp-firmware-loading).
 
 - **License:** [`LICENSE.amdgpu`](LICENSE.amdgpu) (in this directory, also verbatim from the
   linux-firmware repo root). Binary redistribution permitted, unmodified, notice carried —
@@ -31,13 +32,12 @@ through the PSP (MP0) during GPU bring-up — see `../../docs/amd-vulkan-plan.md
 
 Total firmware payload: **1,714,360 bytes (~1.64 MiB)**.
 
-## Notes / expected-vs-actual
+## Operational notes
 
-- **No `vangogh_sos.bin` exists upstream** (the plan doc's firmware list includes `sos`). The
+- **No `vangogh_sos.bin` exists upstream.** The
   complete upstream `vangogh_*` set at tag 20251125 is: `asd, ce, dmcub, me, mec, mec2, pfp,
   rlc, sdma, toc, vcn`. On this APU the PSP SOS/bootloader ships in the system BIOS (the PSP is
-  already posted when we take over), so there is no separate SOS blob to load — consistent with
-  the plan's warm-PSP strategy. The plan doc's list should drop `sos`.
+  already posted when we take over), so there is no separate SOS blob to load.
 - **`vangogh_vcn.bin` and `vangogh_dmcub.bin` are deliberately not vendored** — we skip video
   decode (VCN) and display microcontroller (DMCUB/DCN); the port is render/compute only.
 - `vangogh_mec.bin` and `vangogh_mec2.bin` are **byte-identical** upstream (same SHA256); both

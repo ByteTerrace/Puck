@@ -39,16 +39,17 @@ internal sealed class WorldCellJitterFlavorsStage : IPostStage {
     // identical to world-cell-jitter (jitter/2 0.15 + box radius ~0.214 = ~0.36 < min(spacing)/2 0.5).
     internal static SdfProgram BuildBlueFlavorScene() {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
-        var rose = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.3f, 0.4f), Emissive: 0.25f));
-        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.35f, 0.9f, 0.35f), Emissive: 0.25f));
-        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.3f, 0.55f, 0.95f), Emissive: 0.25f));
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
+        var rose = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.3f, z: 0.4f), Emissive: 0.25f));
+
+        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.35f, y: 0.9f, z: 0.35f), Emissive: 0.25f));
+        _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.3f, y: 0.55f, z: 0.95f), Emissive: 0.25f));
 
         return builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
-            .Translate(offset: new Vector3(0f, 1.0f, 0f))
-            .CellJitter(spacing: new Vector3(1.0f, 6.0f, 1.0f), jitter: 0.3f, seed: 1337u, tumble: 0.4f, materialVariants: 3, flavor: SdfNoiseFlavor.Blue)
-            .Box(halfExtents: new Vector3(0.16f, 0.1f, 0.1f), round: 0.02f, material: rose)
+            .Translate(offset: new Vector3(x: 0f, y: 1.0f, z: 0f))
+            .CellJitter(spacing: new Vector3(x: 1.0f, y: 6.0f, z: 1.0f), jitter: 0.3f, seed: 1337u, tumble: 0.4f, materialVariants: 3, flavor: SdfNoiseFlavor.Blue)
+            .Box(halfExtents: new Vector3(x: 0.16f, y: 0.1f, z: 0.1f), round: 0.02f, material: rose)
             .Build();
     }
 

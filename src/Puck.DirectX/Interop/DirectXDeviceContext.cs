@@ -71,6 +71,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     }
 
     /// <inheritdoc />
+    public long AdapterLuid {
+        get {
+            EnsureCreated();
+
+            return m_deviceApi.GetAdapterLuid(deviceHandle: m_device!.Handle);
+        }
+    }
+    /// <inheritdoc />
     public nint DeviceHandle {
         get {
             EnsureCreated();
@@ -116,7 +124,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         // cannot be turned off once enabled in a process, so there is no in-process recovery. Defaulting off
         // keeps device creation working everywhere; set PUCK_D3D12_DEBUG=1 to get the validation drain on
         // machines where the layer is healthy.
-        if (Environment.GetEnvironmentVariable("PUCK_D3D12_DEBUG") is not null) {
+        if (Environment.GetEnvironmentVariable(variable: "PUCK_D3D12_DEBUG") is not null) {
             void* debugInterface;
             var debugIid = ID3D12Debug.IID_Guid;
 
@@ -134,6 +142,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                 minimumFeatureLevel: FeatureLevel
             )
             : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel));
+
+        EnsureShaderModelFloor(deviceHandle: m_device.Handle);
 
         // The info queue (present only when the debug layer loaded) lets DrainDebugMessages surface validation
         // messages to the console instead of only OutputDebugString.
@@ -176,6 +186,50 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                 result: Marshal.GetHRForLastWin32Error()
             );
         }
+    }
+    // The Shader Model 6.6 device floor — the DXIL peer of the Vulkan SPIR-V 1.6 floor enforced in
+    // VulkanPhysicalDeviceSelector. Puck's DXIL kernels are compiled at -T *_6_6, so a device below SM 6.6 would reject
+    // them at pipeline creation; catch it here with a loud, named failure. CheckFeatureSupport clamps HighestShaderModel
+    // to the driver's actual support, and a runtime too old to recognize 6.6 fails the query outright — both are below
+    // the floor. All four supported GPUs clear SM 6.6 on current drivers (the RTX 4070 reaches 6.7/6.8).
+    private static void EnsureShaderModelFloor(nint deviceHandle) {
+        const D3D_SHADER_MODEL RequiredShaderModel = D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_6;
+
+        var device = (ID3D12Device*)deviceHandle;
+        var shaderModel = new D3D12_FEATURE_DATA_SHADER_MODEL {
+            HighestShaderModel = RequiredShaderModel,
+        };
+        var queried = false;
+
+        // CsWin32's friendly CheckFeatureSupport overload throws on a failing HRESULT (E_INVALIDARG on a runtime that
+        // does not recognize the requested model); treat any failure as "below the floor" and fall through to the throw.
+        try {
+            device->CheckFeatureSupport(
+                Feature: D3D12_FEATURE.D3D12_FEATURE_SHADER_MODEL,
+                pFeatureSupportData: &shaderModel,
+                FeatureSupportDataSize: (uint)sizeof(D3D12_FEATURE_DATA_SHADER_MODEL)
+            );
+            queried = true;
+        } catch {
+            // Swallow — handled by the floor check below.
+        }
+
+        if (
+            queried &&
+            (shaderModel.HighestShaderModel >= RequiredShaderModel)
+        ) {
+            return;
+        }
+
+        var reported = (queried
+            ? $"{((int)shaderModel.HighestShaderModel >> 4)}.{(int)shaderModel.HighestShaderModel & 0xF}"
+            : "unknown (feature query failed)");
+
+        throw new InvalidOperationException(message:
+            ((($"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are " +
+            "compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 ") +
+            "(Turing), RTX 4070 (Ada), Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which ") +
+            "clear Shader Model 6.6 on current drivers; update your GPU driver or run on supported hardware."));
     }
     private static DirectXDevice CreateDefaultDevice(DirectXFeatureLevel minimumFeatureLevel) {
         void* device;

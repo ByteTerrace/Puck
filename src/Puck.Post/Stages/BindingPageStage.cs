@@ -161,7 +161,6 @@ internal sealed class BindingPageStage : IPostStage {
         yield return InputSignal.Press(source: InputSources.Gamepad.ButtonSouth, captureTick: 29UL);
         yield return InputSignal.Release(source: InputSources.Gamepad.ButtonSouth, captureTick: 30UL);
     }
-
     private static IEnumerable<(int Tick, string Command, CommandPhase Phase)> ExpectedEntries() {
         yield return (0, BaseCommand, CommandPhase.Started);
         yield return (1, BaseCommand, CommandPhase.Completed);
@@ -176,7 +175,6 @@ internal sealed class BindingPageStage : IPostStage {
         yield return (25, BaseCommand, CommandPhase.Started);
         yield return (29, BaseCommand, CommandPhase.Started);        // the release edge alone unlatched the modifier
     }
-
     private static InputSignal Trigger(string source, float value, ulong captureTick) {
         return new InputSignal(
             CaptureTick: captureTick,
@@ -217,11 +215,9 @@ internal sealed class BindingPageStage : IPostStage {
         public bool Contains(int tick, ushort commandId, CommandPhase phase) {
             return m_entries[tick].Contains(item: (commandId, phase));
         }
-
         public bool HeldAt(int tick) {
             return (m_entries[tick].Count != 0);
         }
-
         public void Fold(int tick, CommandSnapshot snapshot) {
             const ulong offsetBasis = 14695981039346656037UL;
             const ulong prime = 1099511628211UL;
@@ -240,9 +236,9 @@ internal sealed class BindingPageStage : IPostStage {
                 FoldValue(value: ((ulong)((uint)lane.Slot)));
 
                 foreach (var entry in lane.Entries) {
-                    FoldValue(value: (((ulong)entry.CommandId) | (((ulong)entry.Phase) << 16)));
-                    FoldValue(value: ((((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.X))) | (((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.Y)) << 32)));
-                    FoldValue(value: ((((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.Z))) | (((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.W)) << 32)));
+                    FoldValue(value: ((ulong)entry.CommandId) | (((ulong)entry.Phase) << 16));
+                    FoldValue(value: (((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.X))) | (((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.Y)) << 32));
+                    FoldValue(value: (((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.Z))) | (((ulong)BitConverter.SingleToUInt32Bits(value: entry.Value.Raw.W)) << 32));
                     m_entries[tick].Add(item: (entry.CommandId, entry.Phase));
                 }
             }

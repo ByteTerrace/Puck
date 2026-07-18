@@ -18,4 +18,8 @@ namespace Puck.Commands;
 /// (the default) fires on a press or a continuous update (<see cref="CommandPhase.Started"/> or
 /// <see cref="CommandPhase.Active"/>) and ignores releases, so a key-release never re-fires a press-bound
 /// command; set it to a specific phase (such as <see cref="CommandPhase.Completed"/>) to bind that edge only.</param>
-public readonly record struct CommandBinding(string Command, CommandValue? Value = null, InputModifiers RequiredModifiers = InputModifiers.None, CommandPhase? ActivateOn = null);
+/// <param name="AnyModifiers">Whether the binding fires REGARDLESS of the modifiers held (in which case
+/// <paramref name="RequiredModifiers"/> is ignored). The default (<see langword="false"/>) keeps the exact-chord
+/// match, so a <c>Ctrl+C</c> binding never answers a plain <c>C</c>. Opt in for a GAMEPLAY key that must keep
+/// working while an incidental modifier is down — a movement key pressed with a pinky resting on Shift.</param>
+public readonly record struct CommandBinding(string Command, CommandValue? Value = null, InputModifiers RequiredModifiers = InputModifiers.None, CommandPhase? ActivateOn = null, bool AnyModifiers = false);

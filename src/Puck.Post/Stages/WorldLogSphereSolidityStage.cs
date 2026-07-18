@@ -8,14 +8,14 @@ using Puck.SdfVm;
 namespace Puck.Post;
 
 /// <summary>
-/// Tier-C stage — the D2 log-spherical CORRECTNESS proof, and the gate cross-backend PARITY cannot provide: a
+/// Tier-C stage — the log-spherical correctness proof that cross-backend parity cannot provide: a
 /// non-1-Lipschitz field oversteps IDENTICALLY on both backends, so a parity diff of two equally-holed renders passes
 /// while both are wrong. This stage instead renders a log-spherical scene KNOWN to be solid on ONE backend (the Vulkan
 /// host) and asserts its shells have no tunnelled-through holes.
 /// <para>The test shape is a Droste tunnel of nested rings: a THIN emissive torus tiled by <see cref="SdfOp.LogSphere"/>
 /// (shellRatio 2.0) into self-similar coaxial rings with sky between them. The log-spherical fold's SHELL-BOUNDARY
 /// discontinuities (the nearest-shell <c>round</c> jump) make its field OVERESTIMATE true distance across a boundary;
-/// sphere-traced OVER-RELAXED (omega 1.2) WITHOUT the D1 Lipschitz step clamp, an inward ray oversteps the thin ring
+/// sphere-traced OVER-RELAXED (omega 1.2) WITHOUT the Lipschitz step clamp, an inward ray oversteps the thin ring
 /// wall at a boundary and tunnels into the sky behind it — eroding coverage and punching interior holes. WITH the clamp
 /// (SdfProgram.AnalyzeLipschitz bakes <c>1/exp(w/2)</c> into the segment-header step scale; mapCore
 /// multiplies its final distance by it), the over-relaxed steps stay conservative across every shell boundary and the
@@ -63,11 +63,11 @@ internal sealed class WorldLogSphereSolidityStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildDrosteTunnelScene() {
         var builder = new SdfProgramBuilder();
-        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.95f, 0.55f, 0.1f), Emissive: 0.7f));
+        var brass = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.95f, y: 0.55f, z: 0.1f), Emissive: 0.7f));
 
         return builder
             .LogSphere(shellRatio: 2.0f, twist: 0.9f)
-            .Translate(offset: new Vector3(1.0f, 0f, 0f))
+            .Translate(offset: new Vector3(x: 1.0f, y: 0f, z: 0f))
             .Sphere(radius: 0.5f, material: brass)
             .Build();
     }
@@ -81,7 +81,7 @@ internal sealed class WorldLogSphereSolidityStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var artifactPath = Path.Combine(context.ArtifactsDirectory, "world-log-sphere-solidity.png");
+        var artifactPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-log-sphere-solidity.png");
 
         PngEncoder.Write(height: (int)Height, path: artifactPath, rgba: pixels, width: (int)Width);
 
@@ -105,9 +105,8 @@ internal sealed class WorldLogSphereSolidityStage : IPostStage {
             return PostStageOutcome.Fail(artifactPath: artifactPath, detail: $"the Droste tunnel holed: {enclosedHoles} interior sky pixels enclosed by ring ({(enclosedFraction * 100.0):0.##}% of {solidPixels} ring pixels) — the log-spherical fold oversteps at its shell boundaries WITHOUT the Lipschitz step clamp (> {(MaxEnclosedHoleFraction * 100.0):0.##}% allowed)");
         }
 
-        return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"the log-spherical Droste tunnel (shellRatio 2.0) renders SOLID on the Vulkan host: {solidPixels} ring pixels, {enclosedHoles} enclosed ({(enclosedFraction * 100.0):0.###}%) — the D1 Lipschitz step clamp (1/exp(w/2)) holds the over-relaxed march conservative across every shell boundary");
+        return PostStageOutcome.Pass(artifactPath: artifactPath, detail: $"the log-spherical Droste tunnel (shellRatio 2.0) renders SOLID on the Vulkan host: {solidPixels} ring pixels, {enclosedHoles} enclosed ({(enclosedFraction * 100.0):0.###}%) — the Lipschitz step clamp (1/exp(w/2)) holds the over-relaxed march conservative across every shell boundary");
     }
-
     private static int CountSolid(byte[] pixels) {
         var count = 0;
 
@@ -171,14 +170,13 @@ internal sealed class WorldLogSphereSolidityStage : IPostStage {
 
         return enclosed;
     }
-
     private static SdfFrame BuildFrame(SdfProgram program) {
         // An ELEVATED, offset camera looking down at the coaxial rings' plane: its rays descend and cross several shell
         // boundaries at grazing angles — exactly the condition that makes the non-1-Lipschitz fold overstep. A face-on
         // camera (a ray staying within one shell) would never cross a boundary and never hole, hiding the defect.
         var camera = CameraSnapshot.LookAt(
-            position: new Vector3(0.5f, 1.2f, 9.0f),
-            target: new Vector3(0.5f, 0.4f, 0f),
+            position: new Vector3(x: 0.5f, y: 1.2f, z: 9.0f),
+            target: new Vector3(x: 0.5f, y: 0.4f, z: 0f),
             fieldOfViewRadians: FieldOfViewRadians,
             viewportWidth: Width,
             viewportHeight: Height

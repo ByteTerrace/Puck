@@ -6,7 +6,7 @@ namespace Puck.Demo.Camera;
 
 /// <summary>
 /// The host side of the camera peripheral: an <see cref="ICameraSensor"/> backed by the PC's physical webcam. It opens
-/// the platform camera service's CPU-pixel tier lazily, and on each capture the emulated Pocket Camera triggers, it box-
+/// the platform camera service's CPU-pixel tier lazily, and on each capture the emulated camera cartridge triggers, it box-
 /// downscales the newest B8G8R8A8 webcam frame to the M64282FP's <c>128</c>×<c>112</c> grayscale plane. The webcam frame
 /// is the ONE non-deterministic input in the whole chain — latched here at the capture instant, exactly like a joypad
 /// read — so nothing downstream (the sensor processing, the deposited tiles) is anything but pure integer arithmetic.
@@ -20,9 +20,9 @@ namespace Puck.Demo.Camera;
 /// </para>
 /// </summary>
 internal sealed class WebcamCameraSensor : ICameraSensor, IDisposable {
-    private const int RequestedWidth = 320;
-    private const int RequestedHeight = 240;
     private const byte FallbackLevel = 0x80;
+    private const int RequestedHeight = 240;
+    private const int RequestedWidth = 320;
 
     // Rec. 601 luma weights (×256) for the B, G, R channels of a B8G8R8A8 pixel.
     private const int BlueWeight = 29;
@@ -36,7 +36,6 @@ internal sealed class WebcamCameraSensor : ICameraSensor, IDisposable {
     private static bool s_opened;
     private static bool s_unavailable;
     private static int s_refCount;
-
     private bool m_disposed;
 
     /// <summary>Creates a sensor over the shared webcam session (the device is opened lazily on the first capture).</summary>
@@ -115,8 +114,7 @@ internal sealed class WebcamCameraSensor : ICameraSensor, IDisposable {
 
         if (s_service.TryOpenDefault(requestedWidth: RequestedWidth, requestedHeight: RequestedHeight, session: out var session)) {
             s_session = session;
-        }
-        else {
+        } else {
             s_unavailable = true;
         }
     }
@@ -128,7 +126,7 @@ internal sealed class WebcamCameraSensor : ICameraSensor, IDisposable {
         var sourceHeight = (int)surface.Height;
         var pixels = surface.Pixels.Span;
 
-        if ((sourceWidth <= 0) || (sourceHeight <= 0) || (pixels.Length < (sourceWidth * sourceHeight * 4))) {
+        if ((sourceWidth <= 0) || (sourceHeight <= 0) || (pixels.Length < ((sourceWidth * sourceHeight) * 4))) {
             destination.Fill(value: FallbackLevel);
 
             return;
@@ -150,21 +148,21 @@ internal sealed class WebcamCameraSensor : ICameraSensor, IDisposable {
                     sourceX1 = (sourceX0 + 1);
                 }
 
-                long sum = 0;
+                var sum = 0L;
                 var samples = 0;
 
                 for (var sourceY = sourceY0; (sourceY < sourceY1); ++sourceY) {
-                    var rowBase = (sourceY * sourceWidth * 4);
+                    var rowBase = ((sourceY * sourceWidth) * 4);
 
                     for (var sourceX = sourceX0; (sourceX < sourceX1); ++sourceX) {
                         var offset = (rowBase + (sourceX * 4));
 
-                        sum += (((pixels[offset] * BlueWeight) + (pixels[offset + 1] * GreenWeight) + (pixels[offset + 2] * RedWeight)) >> 8);
+                        sum += ((((pixels[offset] * BlueWeight) + (pixels[(offset + 1)] * GreenWeight)) + (pixels[(offset + 2)] * RedWeight)) >> 8);
                         ++samples;
                     }
                 }
 
-                destination[(destinationY * SensorImage.Width) + destinationX] = (byte)(sum / samples);
+                destination[((destinationY * SensorImage.Width) + destinationX)] = (byte)(sum / samples);
             }
         }
     }

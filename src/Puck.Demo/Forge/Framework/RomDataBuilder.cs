@@ -14,6 +14,7 @@ internal readonly record struct RomTable(ushort Address, int Length);
 internal sealed class RomDataBuilder {
     /// <summary>The first data address (the start of ROM bank 1).</summary>
     public const ushort BaseAddress = 0x4000;
+
     private const int Capacity = 0x4000;
 
     private readonly List<byte> m_bytes = [];

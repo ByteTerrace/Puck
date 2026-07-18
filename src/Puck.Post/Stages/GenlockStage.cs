@@ -90,15 +90,14 @@ internal sealed class GenlockStage : IPostStage {
             throw new InvalidOperationException(message: "a publish reached the pacer under genlock \"off\"");
         }
 
-        if (!ReferenceEquals(muted, off.RegisterSource(sourceId: "camera:0"))) {
+        if (!ReferenceEquals(objA: muted, objB: off.RegisterSource(sourceId: "camera:0"))) {
             throw new InvalidOperationException(message: "re-registering a source id must return the same channel");
         }
     }
-
     private static string ValidateConvergence() {
         var renderPeriod = (Frequency / 240L);           // the design-target high render rate
         var cameraPeriod = ((Frequency * 100L) / 2990L); // ~29.9 Hz — deliberately off-beat from the grid
-        var guard = Math.Min(Frequency / 500L, renderPeriod / 4L); // the aligner's own desired phase
+        var guard = Math.Min(val1: (Frequency / 500L), val2: (renderPeriod / 4L)); // the aligner's own desired phase
 
         var (lockedMean, lockedSpread, maxNudgeSeen) = Simulate(aligned: true, cameraPeriod: cameraPeriod, renderPeriod: renderPeriod);
         var (freeMean, freeSpread, _) = Simulate(aligned: false, cameraPeriod: cameraPeriod, renderPeriod: renderPeriod);
@@ -114,23 +113,23 @@ internal sealed class GenlockStage : IPostStage {
         var jitterFloor = ((Frequency / 2000.0) / Math.Sqrt(d: 3.0));
 
         if (lockedSpread >= (jitterFloor * 2.0)) {
-            throw new InvalidOperationException(message: $"no lock: aligned arrival→deadline spread {Milliseconds(lockedSpread):0.000} ms exceeds twice the jitter floor {Milliseconds(jitterFloor):0.000} ms (free-running {Milliseconds(freeSpread):0.000} ms)");
+            throw new InvalidOperationException(message: $"no lock: aligned arrival→deadline spread {Milliseconds(ticks: lockedSpread):0.000} ms exceeds twice the jitter floor {Milliseconds(ticks: jitterFloor):0.000} ms (free-running {Milliseconds(ticks: freeSpread):0.000} ms)");
         }
 
         if (freeSpread < (jitterFloor * 3.0)) {
-            throw new InvalidOperationException(message: $"weak control case: the free-running spread {Milliseconds(freeSpread):0.000} ms is not meaningfully above the jitter floor {Milliseconds(jitterFloor):0.000} ms — the beat did not sweep");
+            throw new InvalidOperationException(message: $"weak control case: the free-running spread {Milliseconds(ticks: freeSpread):0.000} ms is not meaningfully above the jitter floor {Milliseconds(ticks: jitterFloor):0.000} ms — the beat did not sweep");
         }
 
         if (Math.Abs(value: (lockedMean - guard)) > (renderPeriod / 8.0)) {
-            throw new InvalidOperationException(message: $"wrong phase: aligned arrival→deadline mean {Milliseconds(lockedMean):0.000} ms is not at the guard offset {Milliseconds(guard):0.000} ms");
+            throw new InvalidOperationException(message: $"wrong phase: aligned arrival→deadline mean {Milliseconds(ticks: lockedMean):0.000} ms is not at the guard offset {Milliseconds(ticks: guard):0.000} ms");
         }
 
         // (b) Every per-frame nudge stayed inside the declared VRR-safe bound.
         if (maxNudgeSeen > (renderPeriod / 16L)) {
-            throw new InvalidOperationException(message: $"nudge bound exceeded: {Milliseconds(maxNudgeSeen):0.000} ms > renderPeriod/16 {Milliseconds(renderPeriod / 16.0):0.000} ms");
+            throw new InvalidOperationException(message: $"nudge bound exceeded: {Milliseconds(ticks: maxNudgeSeen):0.000} ms > renderPeriod/16 {Milliseconds(ticks: (renderPeriod / 16.0)):0.000} ms");
         }
 
-        return $"election rules hold | 240 Hz grid vs ~29.9 Hz jittered arrivals: aligned mean {Milliseconds(lockedMean):0.00} ms (guard {Milliseconds(guard):0.00} ms) spread {Milliseconds(lockedSpread):0.000} ms vs free-running {Milliseconds(freeSpread):0.000} ms | max nudge {Milliseconds(maxNudgeSeen):0.000} ms within renderPeriod/16";
+        return $"election rules hold | 240 Hz grid vs ~29.9 Hz jittered arrivals: aligned mean {Milliseconds(ticks: lockedMean):0.00} ms (guard {Milliseconds(ticks: guard):0.00} ms) spread {Milliseconds(ticks: lockedSpread):0.000} ms vs free-running {Milliseconds(ticks: freeSpread):0.000} ms | max nudge {Milliseconds(ticks: maxNudgeSeen):0.000} ms within renderPeriod/16";
     }
 
     // Simulates the pacer loop in the VRR (present-follows-deadline) regime: the deadline grid accumulates by
@@ -158,7 +157,7 @@ internal sealed class GenlockStage : IPostStage {
             var accumulated = (deadline + renderPeriod);
 
             deadline = (aligned ? aligner.Apply(deadline: accumulated, frequency: Frequency, renderPeriod: renderPeriod) : accumulated);
-            maxNudge = Math.Max(maxNudge, Math.Abs(value: (deadline - accumulated)));
+            maxNudge = Math.Max(val1: maxNudge, val2: Math.Abs(value: (deadline - accumulated)));
 
             // Deliver every arrival that lands in (previousDeadline, deadline]: publish it (timestamp + version, as
             // the camera pane forwards) and record its latency to this deadline — the first grid line at-or-after it.

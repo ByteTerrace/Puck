@@ -12,6 +12,11 @@ public sealed class GamepadOutput : IGamepadOutput {
     private readonly ConcurrentQueue<GamepadOutputCommand> m_queue;
     private volatile bool m_alive = true;
 
+    /// <summary>Initializes output control for one connected gamepad.</summary>
+    /// <param name="deviceId">The device that receives output commands.</param>
+    /// <param name="capabilities">The output effects supported by the device.</param>
+    /// <param name="queue">The device I/O loop's command queue.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="queue"/> is <see langword="null"/>.</exception>
     public GamepadOutput(
         InputDeviceId deviceId,
         GamepadOutputCapabilities capabilities,

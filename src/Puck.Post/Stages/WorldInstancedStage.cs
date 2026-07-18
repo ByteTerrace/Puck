@@ -70,7 +70,7 @@ internal sealed class WorldInstancedStage : IPostStage {
     /// THE BIT rather than <c>candidate + (current - candidate)</c> — and <see cref="SdfProgram"/> inflates a smooth
     /// instance's cull bound by k so every tile that masks it out sits in that saturated region. Hence the crimson
     /// SmoothUnion sphere carries a FINITE bound (5, the union influence margin; the packer adds the k = 0.4 halo) and
-    /// still renders bit-identical to flat — what used to force an unmaskable bound.</para></summary>
+    /// still renders bit-identical to flat with a finite bound.</para></summary>
     internal static SdfProgram BuildInstancedScene() {
         return BuildScene(instanced: true);
     }
@@ -81,6 +81,7 @@ internal sealed class WorldInstancedStage : IPostStage {
     // pure proof of the mask/merge machinery.
     private static SdfProgram BuildScene(bool instanced) {
         var builder = new SdfProgramBuilder();
+
         var (ground, crimson, azure, amber, jade) = WorldStage.AddHeroPalette(builder: builder);
         Span<int> fieldMaterials = [crimson, azure, amber, jade];
 
@@ -106,30 +107,30 @@ internal sealed class WorldInstancedStage : IPostStage {
         // smooth instance's bound by k (0.4 here), so a masked-out tile skips it EXACTLY — the same bit-identical
         // instanced == flat contract a plain-union member gets. Bound 5 = the union influence margin (as the box/torus);
         // the packer adds the k halo on top.
-        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(-1.9f, 0.9f, -0.6f), boundRadius: 5f, emit: b => _ = b
+        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(x: -1.9f, y: 0.9f, z: -0.6f), boundRadius: 5f, emit: b => _ = b
             .ResetPoint()
-            .Translate(offset: new Vector3(-1.9f, 0.9f, -0.6f))
+            .Translate(offset: new Vector3(x: -1.9f, y: 0.9f, z: -0.6f))
             .Sphere(radius: 0.9f, material: crimson, blend: SdfBlendOp.SmoothUnion, smooth: 0.4f));
 
         // The rounded box: containment sphere + the union influence margin.
-        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(1.6f, 0.7f, 0.4f), boundRadius: 5f, emit: b => _ = b
+        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(x: 1.6f, y: 0.7f, z: 0.4f), boundRadius: 5f, emit: b => _ = b
             .ResetPoint()
-            .Translate(offset: new Vector3(1.6f, 0.7f, 0.4f))
-            .Box(halfExtents: new Vector3(0.7f, 0.7f, 0.7f), round: 0.08f, material: azure));
+            .Translate(offset: new Vector3(x: 1.6f, y: 0.7f, z: 0.4f))
+            .Box(halfExtents: new Vector3(x: 0.7f, y: 0.7f, z: 0.7f), round: 0.08f, material: azure));
 
         // The subtraction sphere carved through the box's top — its own instance (a SEPARATE object in this port;
         // Subtraction never qualified for the intra-instance bound skip anyway). Deliberately TIGHT: a subtraction
         // only influences points inside itself, so this is the instance whose mask bit genuinely varies across the
         // evaluated content tiles.
-        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(1.6f, 1.5f, 0.4f), boundRadius: 0.6f, emit: b => _ = b
+        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(x: 1.6f, y: 1.5f, z: 0.4f), boundRadius: 0.6f, emit: b => _ = b
             .ResetPoint()
-            .Translate(offset: new Vector3(1.6f, 1.5f, 0.4f))
+            .Translate(offset: new Vector3(x: 1.6f, y: 1.5f, z: 0.4f))
             .Sphere(radius: 0.55f, material: amber, blend: SdfBlendOp.Subtraction));
 
         // The torus: containment sphere + the union influence margin.
-        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(-0.2f, 0.35f, 1.7f), boundRadius: 5f, emit: b => _ = b
+        AddObject(builder: builder, instanced: instanced, boundCenter: new Vector3(x: -0.2f, y: 0.35f, z: 1.7f), boundRadius: 5f, emit: b => _ = b
             .ResetPoint()
-            .Translate(offset: new Vector3(-0.2f, 0.35f, 1.7f))
+            .Translate(offset: new Vector3(x: -0.2f, y: 0.35f, z: 1.7f))
             .Torus(majorRadius: 0.8f, minorRadius: 0.22f, material: jade));
 
         // The sphere field: 12×6 small spheres behind the hero objects, one instance each — instances 4..75, so the
@@ -140,7 +141,7 @@ internal sealed class WorldInstancedStage : IPostStage {
         // silhouette flips on Vulkan from bit-different march steps).
         for (var row = 0; (row < FieldRows); row++) {
             for (var column = 0; (column < FieldColumns); column++) {
-                var position = new Vector3((-4.4f + (0.8f * column)), 0.18f, (-2.5f - (0.8f * row)));
+                var position = new Vector3(x: (-4.4f + (0.8f * column)), y: 0.18f, z: (-2.5f - (0.8f * row)));
                 var material = fieldMaterials[(((row * FieldColumns) + column) % fieldMaterials.Length)];
 
                 AddObject(builder: builder, instanced: instanced, boundCenter: position, boundRadius: 4f, emit: b => _ = b
@@ -184,14 +185,14 @@ internal sealed class WorldInstancedStage : IPostStage {
     /// <returns>The scene program.</returns>
     internal static SdfProgram BuildUnmaskableGuardScene(bool instanced, bool fieldOp) {
         var builder = new SdfProgramBuilder();
-        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.42f, 0.46f, 0.52f)));
-        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(0.9f, 0.6f, 0.2f), Emissive: 0.25f));
-        var sphereCenter = new Vector3(0.35f, 0.5f, 0f);
+        var ground = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.42f, y: 0.46f, z: 0.52f)));
+        var amber = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(x: 0.9f, y: 0.6f, z: 0.2f), Emissive: 0.25f));
+        var sphereCenter = new Vector3(x: 0.35f, y: 0.5f, z: 0f);
 
         _ = builder
             .Plane(normal: Vector3.UnitY, offset: 0f, material: ground)
-            .Translate(offset: new Vector3(0f, 0.5f, 0f))
-            .Box(halfExtents: new Vector3(0.5f, 0.5f, 0.5f), round: 0f, material: amber);
+            .Translate(offset: new Vector3(x: 0f, y: 0.5f, z: 0f))
+            .Box(halfExtents: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f), round: 0f, material: amber);
 
         // The intersection variant authors a bound deliberately SMALLER than the sphere it declares, so the mask would
         // clear across most of the frame (a covering bound hides the intersection bug behind the cone march — see the
@@ -201,9 +202,9 @@ internal sealed class WorldInstancedStage : IPostStage {
         }
 
         _ = builder.ResetPoint().Translate(offset: sphereCenter);
-        _ = fieldOp
+        _ = (fieldOp
             ? builder.Sphere(radius: 0.6f, material: amber).Onion(thickness: 0.05f)
-            : builder.Sphere(radius: 0.6f, material: amber, blend: SdfBlendOp.Intersection);
+            : builder.Sphere(radius: 0.6f, material: amber, blend: SdfBlendOp.Intersection));
 
         if (instanced) {
             _ = builder.EndInstance();
@@ -233,10 +234,10 @@ internal sealed class WorldInstancedStage : IPostStage {
 
         _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
 
-        var diffPath = Path.Combine(context.ArtifactsDirectory, "world-instanced-diff.png");
+        var diffPath = Path.Combine(path1: context.ArtifactsDirectory, path2: "world-instanced-diff.png");
 
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-instanced-vulkan.png"), rgba: vulkanInstancedPixels, width: (int)WorldWidth);
-        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(context.ArtifactsDirectory, "world-instanced-directx.png"), rgba: directXInstancedPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-instanced-vulkan.png"), rgba: vulkanInstancedPixels, width: (int)WorldWidth);
+        PngEncoder.Write(height: (int)WorldHeight, path: Path.Combine(path1: context.ArtifactsDirectory, path2: "world-instanced-directx.png"), rgba: directXInstancedPixels, width: (int)WorldWidth);
         ParityCheck.WriteDiffImage(comparand: directXInstancedPixels, height: (int)WorldHeight, path: diffPath, reference: vulkanInstancedPixels, width: (int)WorldWidth);
 
         // (a) Instanced == flat, PER BACKEND (the shared ParityCheck contract). The measured benign Direct3D 12
@@ -287,7 +288,7 @@ internal sealed class WorldInstancedStage : IPostStage {
             if (guardDiffering != 0) {
                 var kind = (fieldOp ? "an Onion field op" : "an Intersection blend");
                 var guardName = (fieldOp ? "onion" : "intersection");
-                var guardPath = Path.Combine(context.ArtifactsDirectory, $"world-instanced-unmaskable-{guardName}-guard.png");
+                var guardPath = Path.Combine(path1: context.ArtifactsDirectory, path2: $"world-instanced-unmaskable-{guardName}-guard.png");
 
                 PngEncoder.Write(height: (int)WorldHeight, path: guardPath, rgba: guardInstancedPixels, width: (int)WorldWidth);
 
@@ -295,9 +296,8 @@ internal sealed class WorldInstancedStage : IPostStage {
             }
         }
 
-        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} {4 + (FieldColumns * FieldRows)}-instance scene (3 mask words) | instanced == flat bit-identical on Vulkan, within WorldLsbExact on Direct3D 12 | instanced cross-backend within WorldComposite thresholds | Intersection- and Onion-carrying instances are unmaskable and render flat-identical | {ParityCheck.Describe(metrics: metrics)}");
+        return PostStageOutcome.Pass(artifactPath: diffPath, detail: $"{WorldWidth}x{WorldHeight} {(4 + (FieldColumns * FieldRows))}-instance scene (3 mask words) | instanced == flat bit-identical on Vulkan, within WorldLsbExact on Direct3D 12 | instanced cross-backend within WorldComposite thresholds | Intersection- and Onion-carrying instances are unmaskable and render flat-identical | {ParityCheck.Describe(metrics: metrics)}");
     }
-
     private static byte[] RenderOnce(SdfProgram program, SdfFrame frame, IGpuDeviceContext device, IGpuComputeServices gpu, string bytecodeExtension) {
         using var renderer = new SdfWorldEngine(
             device: device,

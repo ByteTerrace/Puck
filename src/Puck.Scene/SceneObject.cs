@@ -19,6 +19,13 @@ namespace Puck.Scene;
 [JsonDerivedType(typeof(CylinderObject), typeDiscriminator: "cylinder")]
 [JsonDerivedType(typeof(EllipsoidObject), typeDiscriminator: "ellipsoid")]
 [JsonDerivedType(typeof(ScreenSlabObject), typeDiscriminator: "screenSlab")]
+[JsonDerivedType(typeof(VesicaObject), typeDiscriminator: "vesica")]
+[JsonDerivedType(typeof(RoundedRectangleObject), typeDiscriminator: "roundedRectangle")]
+[JsonDerivedType(typeof(RegularPolygonObject), typeDiscriminator: "regularPolygon")]
+[JsonDerivedType(typeof(StarObject), typeDiscriminator: "star")]
+[JsonDerivedType(typeof(TrapezoidObject), typeDiscriminator: "trapezoid")]
+[JsonDerivedType(typeof(EllipseObject), typeDiscriminator: "ellipse")]
+[JsonDerivedType(typeof(GroupObject), typeDiscriminator: "group")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "shape")]
 public abstract record SceneObject {
     /// <summary>The transform chain applied to the point before the shape is evaluated, in order.</summary>
@@ -36,23 +43,32 @@ public abstract record SceneObject {
     /// (<see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.SmoothIntersection"/>/<see cref="SdfBlendOp.SmoothSubtraction"/>).</summary>
     public float Smooth { get; init; }
     /// <summary>An inflation radius applied AFTER this object melds in — a FIELD op. 0 (the default) = off.
-    /// <para>SCOPED to this object alone (2026-07-08, commit 5ca8dfa): <see cref="Emit"/> wraps the shape plus its
-    /// dilate/onion in a <c>PushField</c>/<c>PopField</c> scope, so it inflates only this object, never the field
-    /// accumulated by earlier objects. Every object may carry one, in any order — the old "only the first object
-    /// works" restriction, from before the VM had a scoped accumulator, no longer applies.</para></summary>
+    /// <para><see cref="Emit"/> wraps the shape and its field operations in a
+    /// <c>PushField</c>/<c>PopField</c> scope, so dilation affects only this object and never the field accumulated by
+    /// earlier objects. Every object may carry one, in any order.</para></summary>
     public float Dilate { get; init; }
     /// <summary>A shell half-thickness applied AFTER this object melds in (after <see cref="Dilate"/>) — a FIELD op.
     /// 0 (the default) = off.
-    /// <para>SCOPED to this object alone, same as <see cref="Dilate"/> (2026-07-08, commit 5ca8dfa) — it hollows only
-    /// this object's own field, never earlier objects. Before scoping, the failure mode was INFLATION, not deletion:
-    /// <c>abs(d) - t = 0</c> puts the outer surface at <c>d = +t</c>, so an unscoped onion grew every earlier object by
-    /// <c>t</c> and hollowed it — a shape wrapped in its own scope never exhibits that.</para></summary>
+    /// <para>Scoped to this object in the same way as <see cref="Dilate"/>, so it hollows only this object's field and
+    /// never affects earlier objects.</para></summary>
     public float Onion { get; init; }
+    /// <summary>A bounded sinusoidal FIELD relief — surface bumps/corrugation — applied AFTER this object melds in
+    /// (after <see cref="Dilate"/>/<see cref="Onion"/>). Null (the default) = off.
+    /// <para>Mirrors <see cref="SdfProgramBuilder.Displace"/>, which is itself documented as a FIELD op ("order it
+    /// after the shapes it should displace") — exactly like <see cref="Dilate"/>/<see cref="Onion"/>, NOT a point op
+    /// in the <see cref="Ops"/> chain (a point op there runs BEFORE this object's own shape even exists, so a
+    /// same-named entry in <c>TransformOp</c> would silently corrugate whatever earlier objects already accumulated,
+    /// or nothing at all on the first object — the exact unscoped-field-op failure mode <see cref="Dilate"/>'s doc
+    /// describes). It therefore joins the SAME scope <see cref="Dilate"/>/<see cref="Onion"/> already open — SCOPED to
+    /// this object alone, same rationale as those two.</para></summary>
+    public DisplaceField? Displace { get; init; }
 
     // Resets the point, applies every op in order, then emits the terminal shape — the exact sequence the demo's
     // hand-authored BuildScene uses per object, reproduced from data. The optional FIELD ops follow the shape in
-    // fixed dilate-then-onion order (inflate, then shell), SCOPED to this object (see below).
-    internal void Emit(SdfProgramBuilder builder) {
+    // fixed dilate-then-onion-then-displace order, SCOPED to this object (see below). Virtual so GroupObject — whose
+    // "shape" is a collection composed through its OWN PushField/PopField scope, not a single terminal primitive —
+    // can replace this whole sequence rather than implementing EmitShape.
+    internal virtual void Emit(SdfProgramBuilder builder) {
         _ = builder.ResetPoint();
 
         // Ops is optional; an omitted array deserializes to null under source-gen, so coalesce. A null element can
@@ -61,13 +77,13 @@ public abstract record SceneObject {
             op?.Apply(builder: builder);
         }
 
-        // The field ops (dilate/onion) are FIELD ops — in the FLAT accumulator they inflate/hollow the ENTIRE scene
-        // emitted so far, which is why the Dilate/Onion docs above said only the FIRST object could carry one. Scope
-        // them: PushField reseeds a fresh accumulator, so the shape (emitted as a plain Union — against the fresh
-        // SDF_FAR_DISTANCE seed it IS the shape) plus its dilate/onion form THIS object's field ALONE, then PopField
-        // melds that finished object into the scene through the object's own Blend/Smooth. An object with no field op
-        // takes the flat path and emits byte-identically to before this change.
-        if ((Dilate > 0f) || (Onion > 0f)) {
+        // The field ops (dilate/onion/displace) are FIELD ops — in the FLAT accumulator they'd inflate/hollow/corrugate
+        // the ENTIRE scene emitted so far, which is why the Dilate/Onion docs above said only the FIRST object could
+        // carry one. Scope them: PushField reseeds a fresh accumulator, so the shape (emitted as a plain Union —
+        // against the fresh SDF_FAR_DISTANCE seed it IS the shape) plus its dilate/onion/displace form THIS object's
+        // field ALONE, then PopField melds that finished object into the scene through the object's own Blend/Smooth.
+        // An object with no field op takes the flat path and emits byte-identically to before this change.
+        if ((Dilate > 0f) || (Onion > 0f) || (Displace is not null)) {
             _ = builder.PushField(compose: Blend, smooth: Smooth);
 
             EmitShape(builder: builder, blend: SdfBlendOp.Union, smooth: 0f);
@@ -80,12 +96,18 @@ public abstract record SceneObject {
                 _ = builder.Onion(thickness: Onion);
             }
 
+            if (Displace is DisplaceField displace) {
+                _ = builder.Displace(amplitude: displace.Amplitude, frequency: JsonVector.ToVector3(components: displace.Frequency));
+            }
+
             _ = builder.PopField();
         } else {
             EmitShape(builder: builder, blend: Blend, smooth: Smooth);
         }
     }
-    internal void Validate(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+    // Virtual for the same reason as Emit — GroupObject validates a member LIST, not one shape's parameters, and
+    // recurses into each member's own Validate rather than calling ValidateShape.
+    internal virtual void Validate(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
         if (!Enum.IsDefined(value: Blend)) {
             errors.Add(path: $"{path}.blend", message: $"'{Blend}' is not a defined SdfBlendOp");
         }
@@ -98,6 +120,10 @@ public abstract record SceneObject {
 
         errors.RequireRange(path: $"{path}.dilate", name: "dilate", range: bounds.FieldInflate, value: Dilate);
         errors.RequireRange(path: $"{path}.onion", name: "onion", range: bounds.FieldInflate, value: Onion);
+
+        if (Displace is DisplaceField displace) {
+            TransformOp.RequireWarpBudget(amplitude: displace.Amplitude, errors: errors, frequency: displace.Frequency, maximum: 3f, path: $"{path}.displace");
+        }
 
         var ops = (Ops ?? []);
 
@@ -127,6 +153,21 @@ public abstract record SceneObject {
                     errors.Add(path: $"{path}.ops[{index}].materialStride", message: $"the {wallpaper.Group} fold strides material {Material} up to id {highestStridedId} (stride {wallpaper.MaterialStride} × max cell key {wallpaper.MaxCellKey}), past the palette of {materialCount} material(s)");
                 }
             }
+
+            // The angular sibling of the wallpaper-fold check above: a RepeatPolar materialStride recolors THIS
+            // object's material by the sector index, so every strided id must stay inside the palette too.
+            if (
+                (op is RepeatPolarOp repeatPolar) &&
+                (repeatPolar.MaterialStride > 0) &&
+                ReferencesMaterialPalette &&
+                (materialCount > 0)
+            ) {
+                var highestStridedId = (Material + (repeatPolar.MaterialStride * repeatPolar.MaxSectorIndex));
+
+                if (highestStridedId >= materialCount) {
+                    errors.Add(path: $"{path}.ops[{index}].materialStride", message: $"repeatPolar strides material {Material} up to id {highestStridedId} (stride {repeatPolar.MaterialStride} × max sector index {repeatPolar.MaxSectorIndex}), past the palette of {materialCount} material(s)");
+                }
+            }
         }
 
         ValidateShape(bounds: bounds, errors: errors, materialCount: materialCount, path: path);
@@ -142,14 +183,34 @@ public abstract record SceneObject {
     // already reported by the dedicated "at least one material is required" error.
     private protected void ValidateMaterial(string path, int materialCount, ValidationErrors errors) {
         if ((materialCount > 0) && ((Material < 0) || (Material >= materialCount))) {
-            errors.Add(path: $"{path}.material", message: $"material {Material} is out of range; the scene declares {materialCount} material(s) (valid ids 0..{materialCount - 1})");
+            errors.Add(path: $"{path}.material", message: $"material {Material} is out of range; the scene declares {materialCount} material(s) (valid ids 0..{(materialCount - 1)})");
         }
+    }
+    // Shared by the whole 2D-lifted family (RoundedRectangle/RegularPolygon/Star/Trapezoid/Ellipse): the lift mode
+    // must be a defined SdfLift and the lift amount (the revolve radial offset or the extrude half-height) in bounds.
+    private protected static void ValidateLift(string path, SdfLift lift, float liftAmount, ShapeBounds bounds, ValidationErrors errors) {
+        if (!Enum.IsDefined(value: lift)) {
+            errors.Add(path: $"{path}.lift", message: $"'{lift}' is not a defined SdfLift");
+        }
+
+        errors.RequireRange(path: $"{path}.liftAmount", name: "liftAmount", range: bounds.LiftAmount, value: liftAmount);
     }
     // Emits the terminal shape with the given <paramref name="blend"/>/<paramref name="smooth"/> — the object's own
     // Blend/Smooth on the flat path, or Union/0 inside a field-op scope (Emit hands the object's Blend/Smooth to the
     // closing PopField instead).
     private protected abstract void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth);
     private protected abstract void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors);
+}
+
+/// <summary>The parameters of <see cref="SceneObject.Displace"/> — a bounded sinusoidal FIELD relief (mirrors
+/// <see cref="SdfProgramBuilder.Displace"/>). Not a <see cref="TransformOp"/>: see the note on
+/// <see cref="SceneObject.Displace"/> for why it lives here instead of the <see cref="SceneObject.Ops"/> chain.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record DisplaceField {
+    /// <summary>Per-axis angular frequency of the sinusoid (radians per world unit), as a 3-element <c>[x, y, z]</c> array.</summary>
+    public IReadOnlyList<float> Frequency { get; init; } = [];
+    /// <summary>Peak displacement added to the field (world units; 0 = an exact identity).</summary>
+    public float Amplitude { get; init; }
 }
 
 /// <summary>A sphere of the given radius (mirrors <see cref="SdfProgramBuilder.Sphere"/>).</summary>
@@ -285,7 +346,7 @@ public sealed record CapsuleObject : SceneObject {
 
             // A near-zero endpoint degenerates the segment to a point: the shader's denominator clamp silently renders
             // a sphere, so reject the ambiguity — the author meant a sphere.
-            var lengthSquared = ((Endpoint[0] * Endpoint[0]) + (Endpoint[1] * Endpoint[1]) + (Endpoint[2] * Endpoint[2]));
+            var lengthSquared = (((Endpoint[0] * Endpoint[0]) + (Endpoint[1] * Endpoint[1])) + (Endpoint[2] * Endpoint[2]));
 
             if (float.IsFinite(f: lengthSquared) && (lengthSquared < (0.05f * 0.05f))) {
                 errors.Add(path: $"{path}.endpoint", message: "the capsule endpoint must be at least 0.05 units from the origin (a shorter segment degenerates to a sphere — author a sphere instead)");
@@ -338,13 +399,12 @@ public sealed record EllipsoidObject : SceneObject {
     }
 }
 
-/// <summary>A screen-space slab (mirrors <see cref="SdfProgramBuilder.ScreenSlab"/>). It carries no material — the
+/// <summary>A screen-space slab that mirrors the <see cref="SdfProgramBuilder"/> screen-slab operation. It carries no material — the
 /// builder always assigns the screen-material sentinel — so any <see cref="SceneObject.Material"/> is ignored. With
 /// <see cref="ScreenIndex"/> (and the explicit world-space frame that must accompany it) the slab's lit face becomes
 /// a SAMPLED screen surface: the document's <c>screenSources</c> table says which provider feeds it, and an unfed
 /// surface falls back to the flat/procedural screen material. The frame is EXPLICIT data by design (worldOrigin/
-/// worldRight/worldUp must match the ops already applied to the slab) — a transform-derived convenience can layer on
-/// later without changing this contract.</summary>
+/// worldRight/worldUp must match the operations already applied to the slab).</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ScreenSlabObject : SceneObject {
     /// <summary>The half-extents, as a 3-element <c>[x, y, z]</c> array.</summary>
@@ -397,7 +457,7 @@ public sealed record ScreenSlabObject : SceneObject {
 
         if (ScreenIndex is int index) {
             if ((index < 0) || (index >= SdfProgramBuilder.MaxScreenSurfaces)) {
-                errors.Add(path: $"{path}.screenIndex", message: $"a screen index must be 0..{SdfProgramBuilder.MaxScreenSurfaces - 1}; found {index}");
+                errors.Add(path: $"{path}.screenIndex", message: $"a screen index must be 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}; found {index}");
             }
 
             errors.RequireVector(path: $"{path}.worldOrigin", components: WorldOrigin, length: 3);
@@ -407,4 +467,265 @@ public sealed record ScreenSlabObject : SceneObject {
             errors.Add(path: $"{path}.screenIndex", message: "worldOrigin/worldRight/worldUp declare a sampled screen surface and require a screenIndex");
         }
     }
+}
+
+/// <summary>A vesica (lens): the intersection of two spheres of <see cref="Radius"/> whose centers are
+/// 2·<see cref="HalfSeparation"/> apart, revolved into a 3D lens pointed along ±Y (mirrors
+/// <see cref="SdfProgramBuilder.Vesica"/>).</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record VesicaObject : SceneObject {
+    /// <summary>The radius of the two intersecting spheres.</summary>
+    public float Radius { get; init; }
+    /// <summary>Half the distance between the two sphere centers; must be less than <see cref="Radius"/> (the tip
+    /// half-height is <c>sqrt(radius² - halfSeparation²)</c>, real only below it).</summary>
+    public float HalfSeparation { get; init; }
+
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Vesica(blend: blend, halfSeparation: HalfSeparation, material: Material, radius: Radius, smooth: smooth);
+    }
+    private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+        ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
+        errors.RequireRange(path: $"{path}.radius", name: "radius", range: bounds.VesicaRadius, value: Radius);
+        errors.RequireRange(path: $"{path}.halfSeparation", name: "halfSeparation", range: bounds.VesicaHalfSeparation, value: HalfSeparation);
+
+        if (float.IsFinite(f: Radius) && float.IsFinite(f: HalfSeparation) && (MathF.Abs(x: HalfSeparation) >= MathF.Abs(x: Radius))) {
+            errors.Add(path: path, message: $"vesica precondition violated: |halfSeparation| ({MathF.Abs(x: HalfSeparation)}) must be < radius ({MathF.Abs(x: Radius)}), or the lens degenerates (the builder would silently clamp it)");
+        }
+    }
+}
+
+/// <summary>A rounded rectangle lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a rounded slab/plaque,
+/// <see cref="SdfLift.Revolve"/> a rounded disc/puck (mirrors <see cref="SdfProgramBuilder.RoundedRectangle"/>).</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record RoundedRectangleObject : SceneObject {
+    /// <summary>Half-width of the rectangle (its local X half-extent).</summary>
+    public float HalfWidth { get; init; }
+    /// <summary>Half-height of the rectangle (its local Y half-extent).</summary>
+    public float HalfHeight { get; init; }
+    /// <summary>Corner-rounding radius; clamped by the builder to the smaller half-extent (corners round inward).</summary>
+    public float CornerRadius { get; init; }
+    /// <summary>Whether to revolve the profile around Y or extrude it along Z.</summary>
+    public SdfLift Lift { get; init; }
+    /// <summary>The revolve offset (<see cref="SdfLift.Revolve"/>) or extrude half-height (<see cref="SdfLift.Extrude"/>).</summary>
+    public float LiftAmount { get; init; }
+
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.RoundedRectangle(blend: blend, cornerRadius: CornerRadius, halfHeight: HalfHeight, halfWidth: HalfWidth, lift: Lift, liftAmount: LiftAmount, material: Material, smooth: smooth);
+    }
+    private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+        ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
+        ValidateLift(bounds: bounds, errors: errors, lift: Lift, liftAmount: LiftAmount, path: path);
+        errors.RequireRange(path: $"{path}.halfWidth", name: "halfWidth", range: bounds.Lifted2DHalfExtent, value: HalfWidth);
+        errors.RequireRange(path: $"{path}.halfHeight", name: "halfHeight", range: bounds.Lifted2DHalfExtent, value: HalfHeight);
+        errors.RequireRange(path: $"{path}.cornerRadius", name: "cornerRadius", range: bounds.RoundedRectangleCornerRadius, value: CornerRadius);
+    }
+}
+
+/// <summary>A regular convex <see cref="Sides"/>-gon lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
+/// prism, <see cref="SdfLift.Revolve"/> a lathe of the polygon's profile (mirrors
+/// <see cref="SdfProgramBuilder.RegularPolygon"/>).</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record RegularPolygonObject : SceneObject {
+    /// <summary>The side count; must be at least 3 (the builder would otherwise silently clamp it).</summary>
+    public int Sides { get; init; }
+    /// <summary>The circumradius (centre to a vertex).</summary>
+    public float Radius { get; init; }
+    /// <summary>Whether to revolve the profile around Y or extrude it along Z.</summary>
+    public SdfLift Lift { get; init; }
+    /// <summary>The revolve offset (<see cref="SdfLift.Revolve"/>) or extrude half-height (<see cref="SdfLift.Extrude"/>).</summary>
+    public float LiftAmount { get; init; }
+
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.RegularPolygon(blend: blend, lift: Lift, liftAmount: LiftAmount, material: Material, radius: Radius, sides: Sides, smooth: smooth);
+    }
+    private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+        ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
+        ValidateLift(bounds: bounds, errors: errors, lift: Lift, liftAmount: LiftAmount, path: path);
+        errors.RequireRange(path: $"{path}.radius", name: "radius", range: bounds.PolygonRadius, value: Radius);
+
+        if (Sides < 3) {
+            errors.Add(path: $"{path}.sides", message: $"sides {Sides} must be at least 3 (the builder would silently clamp it)");
+        }
+    }
+}
+
+/// <summary>An <see cref="Points"/>-pointed star lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a star
+/// prism, <see cref="SdfLift.Revolve"/> a spiked lathe (mirrors <see cref="SdfProgramBuilder.Star"/>).</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record StarObject : SceneObject {
+    /// <summary>The point count; must be at least 2 (the builder would otherwise silently clamp it).</summary>
+    public int Points { get; init; }
+    /// <summary>The outer radius (centre to a point tip).</summary>
+    public float Radius { get; init; }
+    /// <summary>The inner-radius control; must be in <c>[2, points]</c> (the builder would otherwise silently clamp
+    /// it): 2 is a convex n-gon, larger is sharper (deeper notches between points).</summary>
+    public float Sharpness { get; init; }
+    /// <summary>Whether to revolve the profile around Y or extrude it along Z.</summary>
+    public SdfLift Lift { get; init; }
+    /// <summary>The revolve offset (<see cref="SdfLift.Revolve"/>) or extrude half-height (<see cref="SdfLift.Extrude"/>).</summary>
+    public float LiftAmount { get; init; }
+
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Star(blend: blend, lift: Lift, liftAmount: LiftAmount, material: Material, points: Points, radius: Radius, sharpness: Sharpness, smooth: smooth);
+    }
+    private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+        ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
+        ValidateLift(bounds: bounds, errors: errors, lift: Lift, liftAmount: LiftAmount, path: path);
+        errors.RequireRange(path: $"{path}.radius", name: "radius", range: bounds.PolygonRadius, value: Radius);
+
+        if (Points < 2) {
+            errors.Add(path: $"{path}.points", message: $"points {Points} must be at least 2 (the builder would silently clamp it)");
+        }
+
+        errors.RequireFinite(path: $"{path}.sharpness", name: "sharpness", value: Sharpness);
+
+        if (float.IsFinite(f: Sharpness) && (Points >= 2) && ((Sharpness < 2f) || (Sharpness > Points))) {
+            errors.Add(path: $"{path}.sharpness", message: $"sharpness {Sharpness} must be in [2, {Points}] (the builder would silently clamp it)");
+        }
+    }
+}
+
+/// <summary>An isosceles trapezoid lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a keystone/wedge prism,
+/// <see cref="SdfLift.Revolve"/> a frustum/lampshade/cup (mirrors <see cref="SdfProgramBuilder.Trapezoid"/>).</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record TrapezoidObject : SceneObject {
+    /// <summary>Half-width of the bottom edge (at local −Y).</summary>
+    public float BottomHalfWidth { get; init; }
+    /// <summary>Half-width of the top edge (at local +Y).</summary>
+    public float TopHalfWidth { get; init; }
+    /// <summary>Half-height of the trapezoid.</summary>
+    public float HalfHeight { get; init; }
+    /// <summary>Whether to revolve the profile around Y or extrude it along Z.</summary>
+    public SdfLift Lift { get; init; }
+    /// <summary>The revolve offset (<see cref="SdfLift.Revolve"/>) or extrude half-height (<see cref="SdfLift.Extrude"/>).</summary>
+    public float LiftAmount { get; init; }
+
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Trapezoid(blend: blend, bottomHalfWidth: BottomHalfWidth, halfHeight: HalfHeight, lift: Lift, liftAmount: LiftAmount, material: Material, smooth: smooth, topHalfWidth: TopHalfWidth);
+    }
+    private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+        ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
+        ValidateLift(bounds: bounds, errors: errors, lift: Lift, liftAmount: LiftAmount, path: path);
+        errors.RequireRange(path: $"{path}.bottomHalfWidth", name: "bottomHalfWidth", range: bounds.Lifted2DHalfExtent, value: BottomHalfWidth);
+        errors.RequireRange(path: $"{path}.topHalfWidth", name: "topHalfWidth", range: bounds.Lifted2DHalfExtent, value: TopHalfWidth);
+        errors.RequireRange(path: $"{path}.halfHeight", name: "halfHeight", range: bounds.Lifted2DHalfExtent, value: HalfHeight);
+    }
+}
+
+/// <summary>An ellipse lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives an EXACT spheroid, which
+/// (unlike the approximate <see cref="EllipsoidObject"/>) earns a real cull bound: prefer this shape over
+/// <see cref="EllipsoidObject"/> whenever a spheroid is actually meant. <see cref="SdfLift.Extrude"/> gives an
+/// elliptic-cylinder prism (mirrors <see cref="SdfProgramBuilder.Ellipse"/>).</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record EllipseObject : SceneObject {
+    /// <summary>The semi-axis along local X.</summary>
+    public float SemiX { get; init; }
+    /// <summary>The semi-axis along local Y.</summary>
+    public float SemiY { get; init; }
+    /// <summary>Whether to revolve the profile around Y (offset 0 ⇒ a spheroid) or extrude it along Z.</summary>
+    public SdfLift Lift { get; init; }
+    /// <summary>The revolve offset (<see cref="SdfLift.Revolve"/>) or extrude half-height (<see cref="SdfLift.Extrude"/>).</summary>
+    public float LiftAmount { get; init; }
+
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) {
+        _ = builder.Ellipse(blend: blend, lift: Lift, liftAmount: LiftAmount, material: Material, semiX: SemiX, semiY: SemiY, smooth: smooth);
+    }
+    private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+        ValidateMaterial(errors: errors, materialCount: materialCount, path: path);
+        ValidateLift(bounds: bounds, errors: errors, lift: Lift, liftAmount: LiftAmount, path: path);
+        errors.RequireRange(path: $"{path}.semiX", name: "semiX", range: bounds.EllipseSemiAxis, value: SemiX);
+        errors.RequireRange(path: $"{path}.semiY", name: "semiY", range: bounds.EllipseSemiAxis, value: SemiY);
+    }
+}
+
+/// <summary>
+/// A GROUP of objects whose accumulated field composes through ONE <see cref="SdfProgramBuilder.PushField"/>/
+/// <see cref="SdfProgramBuilder.PopField"/> scope — the JSON surface for the VM's depth-1 field-scope primitive
+/// Per-object field-operation scoping already places each <see cref="SceneObject.Dilate"/>/
+/// <see cref="SceneObject.Onion"/>/<see cref="SceneObject.Displace"/> in its own one-object scope; this is the
+/// multi-object scope. <see cref="Objects"/> blend against each other inside the group's own fresh
+/// accumulator, in document order, using each MEMBER's own <see cref="SceneObject.Blend"/>/<see cref="SceneObject.Smooth"/>
+/// — so a member's Intersection (or the subtraction family) composes safely against its group-mates instead of
+/// annihilating the whole scene (the accumulator rule on <see cref="SdfBlendOp"/>; the creator's identical fix is
+/// <c>CreatorSceneRenderer.EmitGroup</c>'s "Intersection-wipes-workbench" precedent). The FINISHED group then
+/// composes into the PARENT scene via the GROUP's OWN <see cref="SceneObject.Blend"/>/<see cref="SceneObject.Smooth"/>
+/// — exactly like a single field-op-scoped object already does — so scoping lands at GROUP granularity, not
+/// per-member.
+/// <para>Depth-1 ONLY (<see cref="SdfProgramBuilder.MaxFieldScopeDepth"/>): a member may not itself be a group, and
+/// may not carry its own <see cref="SceneObject.Dilate"/>/<see cref="SceneObject.Onion"/>/<see cref="SceneObject.Displace"/>
+/// — each of those wants ITS OWN PushField/PopField scope, and nesting a second one inside the group's would exceed
+/// the depth-1 cap. The validator rejects both.</para>
+/// <para><see cref="SceneObject.Ops"/>/<see cref="SceneObject.Material"/>/<see cref="SceneObject.Dilate"/>/
+/// <see cref="SceneObject.Onion"/>/<see cref="SceneObject.Displace"/> on the GROUP itself are meaningless (the group
+/// has no point-transform chain or terminal shape of its own — <see cref="Emit"/> never calls <c>ResetPoint</c>) and
+/// are REJECTED by the validator rather
+/// than silently ignored, so an author who reaches for them gets pointed at the member level instead.</para>
+/// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record GroupObject : SceneObject {
+    /// <summary>The member objects, blended together in document order INSIDE the group's own scope (their own
+    /// Blend/Smooth compose against each other, never against the parent scene directly).</summary>
+    public IReadOnlyList<SceneObject> Objects { get; init; } = [];
+
+    internal override bool ReferencesMaterialPalette =>
+        (Objects ?? []).Any(predicate: static member => ((member is not null) && member.ReferencesMaterialPalette));
+
+    internal override void Emit(SdfProgramBuilder builder) {
+        _ = builder.PushField(compose: Blend, smooth: Smooth);
+
+        foreach (var member in (Objects ?? [])) {
+            member?.Emit(builder: builder);
+        }
+
+        _ = builder.PopField();
+    }
+    internal override void Validate(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) {
+        if (!Enum.IsDefined(value: Blend)) {
+            errors.Add(path: $"{path}.blend", message: $"'{Blend}' is not a defined SdfBlendOp");
+        }
+
+        if ((Blend == SdfBlendOp.SmoothUnion) || (Blend == SdfBlendOp.SmoothIntersection) || (Blend == SdfBlendOp.SmoothSubtraction)) {
+            errors.RequireRange(path: $"{path}.smooth", name: "smooth", range: bounds.Smooth, value: Smooth);
+        } else {
+            errors.RequireFinite(path: $"{path}.smooth", name: "smooth", value: Smooth);
+        }
+
+        if ((Ops ?? []).Count > 0) {
+            errors.Add(path: $"{path}.ops", message: "a group carries no transform chain of its own (Emit never resets the point for it) — move ops onto the member objects instead");
+        }
+
+        if ((Dilate > 0f) || (Onion > 0f) || (Displace is not null)) {
+            errors.Add(path: path, message: "a group's own dilate/onion/displace are ignored (the group has no terminal shape to apply them to) — move them onto a member, or wrap that member alone");
+        }
+
+        var members = (Objects ?? []);
+
+        if (members.Count == 0) {
+            errors.Add(path: $"{path}.objects", message: "a group must contain at least one object — an empty scope composes SDF_FAR_DISTANCE and would carve nothing");
+        }
+
+        for (var index = 0; (index < members.Count); index++) {
+            var member = members[index];
+            var memberPath = $"{path}.objects[{index}]";
+
+            if (member is null) {
+                errors.Add(path: memberPath, message: "an object entry cannot be null");
+
+                continue;
+            }
+
+            if (member is GroupObject) {
+                errors.Add(path: memberPath, message: $"a group cannot contain another group — field scopes nest only {SdfProgramBuilder.MaxFieldScopeDepth} deep and the enclosing group already opened the one allowed scope");
+            } else if ((member.Dilate > 0f) || (member.Onion > 0f) || (member.Displace is not null)) {
+                errors.Add(path: memberPath, message: "a group member cannot carry its own dilate/onion/displace — each requires its own PushField/PopField scope, and nesting inside the group's scope would exceed the depth-1 cap");
+            }
+
+            member.Validate(bounds: bounds, errors: errors, materialCount: materialCount, path: memberPath);
+        }
+    }
+
+    private protected override void EmitShape(SdfProgramBuilder builder, SdfBlendOp blend, float smooth) =>
+        throw new InvalidOperationException(message: "GroupObject overrides Emit directly (its 'shape' is a member list, not a terminal primitive) and never calls EmitShape.");
+    private protected override void ValidateShape(string path, int materialCount, ShapeBounds bounds, ValidationErrors errors) =>
+        throw new InvalidOperationException(message: "GroupObject overrides Validate directly and never calls ValidateShape.");
 }

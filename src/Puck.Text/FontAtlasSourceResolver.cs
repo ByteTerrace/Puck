@@ -28,6 +28,7 @@ public sealed class FontAtlasSourceResolver(
     private readonly IAssetSource m_assetSource = (assetSource ?? throw new ArgumentNullException(paramName: nameof(assetSource)));
     private readonly IFontAtlasGenerator m_fontAtlasGenerator = (fontAtlasGenerator ?? throw new ArgumentNullException(paramName: nameof(fontAtlasGenerator)));
     private readonly ContentAddressedLruCache<FontAtlas> m_fontAtlasCache = new(MaxCachedFonts);
+    private readonly FontAtlasLoader m_fontAtlasLoader = new();
 
     /// <inheritdoc/>
     /// <remarks>
@@ -55,6 +56,48 @@ public sealed class FontAtlasSourceResolver(
         return LoadFromFont(
             fontBytes: m_assetSource.Read(path: resolvedPath),
             generationOptions: generationOptions
+        );
+    }
+
+    /// <summary>Resolves the atlas for a pre-baked font-atlas bake pipeline (<c>tools/font-atlas</c>) metadata file, loading it through <see cref="FontAtlasLoader"/> instead of generating one.</summary>
+    /// <remarks>
+    /// The atlas image is expected alongside <paramref name="atlasPath"/>, sharing its base name with a
+    /// <c>.png</c> extension. Like <see cref="Resolve(string, FontAtlasGenerationOptions, string)"/>, the
+    /// result is cached under a hash of the metadata and image contents, so repeated resolution of the
+    /// same pre-baked files is free after the first call. Only the metadata's declared image path is
+    /// recorded on the returned <see cref="FontAtlas"/> — no image pixels are decoded; use an
+    /// <see cref="IFontAtlasImageDataLoader"/> when the pixels are actually needed.
+    /// </remarks>
+    /// <param name="atlasPath">The path to the font-atlas bake pipeline's JSON metadata file. May be absolute or relative to <paramref name="basePath"/>.</param>
+    /// <param name="basePath">The base directory used to resolve a relative <paramref name="atlasPath"/>.</param>
+    /// <returns>The resolved <see cref="FontAtlas"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="atlasPath"/> is <see langword="null"/>, empty, or whitespace.</exception>
+    /// <exception cref="FileNotFoundException">The metadata file or its atlas image was not found.</exception>
+    public FontAtlas ResolvePrebaked(
+        string atlasPath,
+        string basePath
+    ) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: atlasPath);
+
+        var resolvedAtlasPath = (Path.IsPathRooted(path: atlasPath)
+            ? atlasPath
+            : Path.Combine(
+                path1: basePath,
+                path2: atlasPath
+            ));
+        var resolvedImagePath = Path.ChangeExtension(path: resolvedAtlasPath, extension: ".png");
+        var atlasBytes = m_assetSource.Read(path: resolvedAtlasPath);
+        var imageBytes = (m_assetSource.Exists(path: resolvedImagePath)
+            ? m_assetSource.Read(path: resolvedImagePath)
+            : ReadOnlyMemory<byte>.Empty);
+        var cacheHash = CombineHashes(
+            first: AssetContentHash.Compute(content: atlasBytes.Span),
+            second: AssetContentHash.Compute(content: imageBytes.Span)
+        );
+
+        return m_fontAtlasCache.GetOrAdd(
+            hash: cacheHash,
+            valueFactory: () => m_fontAtlasLoader.Load(jsonPath: resolvedAtlasPath)
         );
     }
 

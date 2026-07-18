@@ -93,7 +93,7 @@ internal static class BakedAssetBlob {
 
     // TILE: u16 tile count, then the tiles' 2bpp bytes (16 per tile, bank order).
     private static byte[] TilePayload(BakedTileSet tiles) {
-        var payload = new byte[2 + tiles.TileData.Length];
+        var payload = new byte[(2 + tiles.TileData.Length)];
 
         payload[0] = (byte)(tiles.Count & 0xFF);
         payload[1] = (byte)((tiles.Count >> 8) & 0xFF);
@@ -105,7 +105,7 @@ internal static class BakedAssetBlob {
     // MAPX: u16 width, u16 height (the hardware's 32×32 cells), then the cell bytes row-major.
     private static byte[] MapPayload(byte[] tileMap) {
         const int side = 32;
-        var payload = new byte[4 + tileMap.Length];
+        var payload = new byte[(4 + tileMap.Length)];
 
         payload[0] = side;
         payload[2] = side;
@@ -116,7 +116,7 @@ internal static class BakedAssetBlob {
 
     // PALB/PALO: u8 palette count, then count × 8 bytes of little-endian RGB555 (already the palette-RAM wire form).
     private static byte[] PalettePayload(BakedPaletteSet palettes) {
-        var payload = new byte[1 + palettes.Rgb555Data.Length];
+        var payload = new byte[(1 + palettes.Rgb555Data.Length)];
 
         payload[0] = (byte)palettes.Count;
         palettes.Rgb555Data.CopyTo(array: payload, index: 1);
@@ -156,7 +156,7 @@ internal static class BakedAssetBlob {
     // frame, then the frame ids in play order (every metasprite frame, once).
     private static byte[] AnimationPayload(int frameCount) {
         const string name = "default";
-        var payload = new byte[1 + 1 + name.Length + 2 + frameCount];
+        var payload = new byte[((((1 + 1) + name.Length) + 2) + frameCount)];
         var offset = 0;
 
         payload[offset++] = 1;

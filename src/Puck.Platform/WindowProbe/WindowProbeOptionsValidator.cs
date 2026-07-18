@@ -34,6 +34,6 @@ public sealed class WindowProbeOptionsValidator : IValidateOptions<WindowProbeOp
 
         return ((failures.Count == 0)
             ? ValidateOptionsResult.Success
-            : ValidateOptionsResult.Fail(failures));
+            : ValidateOptionsResult.Fail(failures: failures));
     }
 }

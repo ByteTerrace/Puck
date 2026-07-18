@@ -1,13 +1,21 @@
+using System.Numerics;
+using Puck.Hosting;
+
 namespace Puck.Demo.DevConsole;
 
 /// <summary>The per-frame developer-console snapshot the overlay renders.</summary>
 /// <param name="Visible">Whether the console panel is open (hidden = the overlay passes the frame through untouched).</param>
 /// <param name="Lines">The output history, oldest first; the overlay shows the trailing lines that fit.</param>
 /// <param name="Input">The in-progress input line (rendered on the bottom row after the prompt).</param>
+/// <param name="PanelPosition">A client-space, top-left override for the panel's position, or <see langword="null"/>
+/// for the default token-derived rect (<see cref="ConsoleOverlayNode"/>'s StageMargin-inset corner). Set by a
+/// title-band drag or the <c>console.move</c> verb, cleared by <c>console.reset</c>; <see cref="DemoConsole"/> is
+/// the writer. Session/presentation-only — never coupled to a <c>CommandSnapshot</c>, never replayed.</param>
 internal readonly record struct ConsoleTextFrame(
     bool Visible,
     IReadOnlyList<string> Lines,
-    string Input
+    string Input,
+    Vector2? PanelPosition = default
 );
 
 /// <summary>The read seam the console overlay consumes; <see cref="DemoConsole"/> is the writer.</summary>

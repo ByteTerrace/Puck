@@ -1,0 +1,754 @@
+using Puck.Hosting;
+using Puck.World.Protocol;
+
+namespace Puck.World.Server;
+
+/// <summary>
+/// The authoritative world server — one logical instance owning the LIVE <see cref="WorldDefinition"/>, the entity
+/// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Commands, session requests,
+/// and queries apply synchronously at submit (the host guarantees submissions arrive inside the command-apply window
+/// immediately preceding the tick's <see cref="Step"/>, so every mutation lands before that tick's advance in stdin
+/// FIFO order). Live world EDITS — mutations, definition swaps, and journal undo — instead BUFFER and drain at
+/// <see cref="Step"/>, before the intent drain, so they are tick-aligned (settled question 9: they buffer like intents,
+/// they are not synchronous like commands). Per-tick intents also buffer and drain at <see cref="Step"/>, which then
+/// advances every body and pushes the tick's <see cref="WorldSnapshot"/> — plus, in any step that applied at least one
+/// edit, the new definition — to the attached <see cref="IClientSink"/>.
+/// </summary>
+/// <remarks>Single-threaded on the host tick, like every simulation type here: submissions arrive during the command
+/// pump's apply window and <see cref="Step"/> runs immediately after, both on the launcher's window-pump thread. The
+/// journal is the undo engine: the loaded base definition plus an append-only list of applied <see cref="WorldMutation"/>s;
+/// undo restores the base and deterministically replays the journal minus its tail through the same apply path — no
+/// per-mutation inverse logic is ever written.</remarks>
+internal sealed class WorldServer {
+    private readonly WorldPopulation m_population;
+    private readonly WorldProfiles m_profiles;
+    private readonly WorldRenderEnvelope m_envelope;
+    private readonly Queue<IntentSubmission> m_intents = new();
+    // The buffered live-edit ops (mutations, whole-document swaps, journal undo), drained FIFO at the step boundary
+    // BEFORE intents. New allocation lives here, at the mutation boundary; an idle tick pays one empty-queue check.
+    private readonly Queue<PendingOp> m_pending = new();
+    // The mutation journal — the undo engine. m_base is the loaded base definition (reset by a swap or world.save
+    // compaction); m_journal is the append-only edit history over it. dirty == m_journal.Count.
+    private readonly List<JournalEntry> m_journal = new();
+    // The ONE capability table — every write boundary checks it. Seeded permissive for local play (see WorldGrants).
+    private readonly WorldGrants m_grants = new(seatCount: WorldPopulation.LocalSeatCount, population: WorldPopulation.MaxPopulation);
+    // Per-body "an intent was denied last drain" latch, so a revoked driver that keeps submitting logs its loud drop
+    // ONCE per denial episode (reset when an allowed intent for that body arrives) rather than once per tick.
+    private readonly bool[] m_driveDenied = new bool[WorldPopulation.MaxPopulation];
+    private readonly EntitySnapshot[] m_snapshotEntries = new EntitySnapshot[WorldPopulation.MaxPopulation];
+    private WorldDefinition m_definition;
+    private WorldDefinition m_base;
+    private IClientSink? m_sink;
+
+    /// <summary>Initializes a new instance of the <see cref="WorldServer"/> class over the world it authoritatively owns.</summary>
+    /// <param name="definition">The loaded world definition (the initial live definition and journal base).</param>
+    /// <param name="population">The entity table (all bodies, seats included).</param>
+    /// <param name="profiles">The profile catalog.</param>
+    /// <param name="envelope">The render-capacity oracle a scene/screen mutation is checked against at apply time.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldProfiles profiles, WorldRenderEnvelope envelope) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: population);
+        ArgumentNullException.ThrowIfNull(argument: profiles);
+        ArgumentNullException.ThrowIfNull(argument: envelope);
+
+        m_definition = definition;
+        m_base = definition;
+        m_population = population;
+        m_profiles = profiles;
+        m_envelope = envelope;
+    }
+
+    /// <summary>The live world definition this server runs — swapped in place as buffered edits apply.</summary>
+    public WorldDefinition Definition => m_definition;
+
+    /// <summary>The entity table this server advances.</summary>
+    public WorldPopulation Population => m_population;
+
+    /// <summary>The profile catalog (the routed store persists through it).</summary>
+    public WorldProfiles Profiles => m_profiles;
+
+    /// <summary>The capability table — the ONE grant primitive the engagement view, the addon driver, and the grant
+    /// verbs read/write. Reads are loopback-local this arc; a socket transport moves grant changes onto the wire.</summary>
+    public WorldGrants Grants => m_grants;
+
+    /// <summary>The journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
+    /// count, and the <c>world.undo</c> budget).</summary>
+    public int JournalLength => m_journal.Count;
+
+    /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
+    /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
+    /// console path behind the stdin barrier.</summary>
+    public void Compact() {
+        m_base = m_definition;
+        m_journal.Clear();
+    }
+
+    /// <summary>Attaches the client sink the per-tick snapshot is delivered to, immediately delivering a primer
+    /// snapshot of the current table so the client renders the boot state before the first tick. Loopback wiring; one
+    /// sink.</summary>
+    /// <param name="sink">The sink to deliver snapshots to.</param>
+    public void AttachSink(IClientSink sink) {
+        ArgumentNullException.ThrowIfNull(argument: sink);
+
+        m_sink = sink;
+        EmitSnapshot(tick: 0UL, stepTicks: 0UL);
+    }
+
+    /// <summary>The body at a 0-based entity index, or <see langword="null"/> when the index holds no live body.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public WorldBody? Body(int index) => (((uint)index < WorldPopulation.MaxPopulation) ? m_population.EntryBody(index: index) : null);
+
+    /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>
+    /// <param name="submission">The tick, entity index, and merged intent.</param>
+    public void EnqueueIntent(in IntentSubmission submission) {
+        m_intents.Enqueue(item: submission);
+    }
+
+    /// <summary>Buffers one live world mutation for the next <see cref="Step"/> (drained before intents).</summary>
+    /// <param name="mutation">The mutation to apply.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
+    public void EnqueueMutation(WorldMutation mutation) {
+        ArgumentNullException.ThrowIfNull(argument: mutation);
+
+        m_pending.Enqueue(item: new PendingOp.Mutate(Mutation: mutation));
+    }
+
+    /// <summary>Buffers a whole-document swap for the next <see cref="Step"/> (drained before intents).</summary>
+    /// <param name="definition">The definition to install.</param>
+    /// <param name="principal">The acting identity the swap is checked against.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public void EnqueueDefinition(WorldDefinition definition, WorldPrincipal principal) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        m_pending.Enqueue(item: new PendingOp.Swap(Definition: definition, Principal: principal));
+    }
+
+    /// <summary>Buffers a journal undo of the last <paramref name="count"/> mutations for the next <see cref="Step"/>.</summary>
+    /// <param name="count">How many trailing mutations to undo (clamped to at least 1 and at most the journal length).</param>
+    /// <param name="principal">The acting identity the undo is checked against.</param>
+    public void EnqueueUndo(int count, WorldPrincipal principal) {
+        m_pending.Enqueue(item: new PendingOp.Undo(Count: count, Principal: principal));
+    }
+
+    /// <summary>Adds a grant to the table SYNCHRONOUSLY (the <c>world.grant</c> half; like a command, so the next tick's
+    /// checks observe it). A rejected exclusive acquisition prints a loud line and changes nothing.</summary>
+    /// <param name="grant">The grant to add.</param>
+    public void Grant(WorldGrant grant) {
+        if (m_grants.TryGrant(grant: grant, reason: out var reason)) {
+            Console.Error.WriteLine(value: $"[world.grant: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}{(grant.Exclusive ? " exclusive" : string.Empty)}]");
+        } else {
+            Console.Error.WriteLine(value: $"[world.grant rejected: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()} — {reason}]");
+        }
+    }
+
+    /// <summary>Removes a grant from the table SYNCHRONOUSLY (the <c>world.revoke</c> half).</summary>
+    /// <param name="grant">The grant (capability + subject) to revoke.</param>
+    public void Revoke(WorldGrant grant) {
+        var removed = m_grants.Revoke(principal: grant.Principal, capability: grant.Capability, subject: grant.Subject);
+
+        Console.Error.WriteLine(value: removed
+            ? $"[world.revoke: {grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}]"
+            : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]");
+    }
+
+    /// <summary>Applies an authority command to its target body. Synchronous at submit (see the class summary), so a
+    /// policy read following the command in the same batch observes its effect. A command whose entity is not live
+    /// no-ops (validation happened at submit; the miss is benign).</summary>
+    /// <param name="command">The command to apply.</param>
+    public void ApplyCommand(WorldCommand command) {
+        ArgumentNullException.ThrowIfNull(argument: command);
+
+        if (!m_grants.Allows(principal: command.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: command.EntityIndex))) {
+            Console.Error.WriteLine(value: $"[world.grant denied: {command.Principal.Describe()} cannot drive body:{command.EntityIndex} — {command.GetType().Name} dropped]");
+
+            return;
+        }
+
+        if (Body(index: command.EntityIndex) is not { } body) {
+            return;
+        }
+
+        switch (command) {
+            case WorldCommand.Teleport { Kind: TeleportKind.Warp } warp:
+                body.Warp(x: warp.Position.X, z: warp.Position.Z);
+
+                break;
+            case WorldCommand.Teleport pose:
+                body.Pose(x: pose.Position.X, y: pose.Position.Y, z: pose.Position.Z, yawRadians: pose.YawRadians, pitchRadians: pose.PitchRadians, rollRadians: pose.RollRadians);
+
+                break;
+            case WorldCommand.Face face:
+                body.Face(yawRadians: face.YawRadians);
+
+                break;
+            case WorldCommand.EnqueueSegment segment:
+                body.EnqueueRun(intent: segment.Intent, seconds: segment.Seconds);
+
+                break;
+            case WorldCommand.PressLane press:
+                if (press.HoldSeconds is { } holdSeconds) {
+                    body.PressLane(lane: press.Lane, holdSeconds: holdSeconds);
+                } else {
+                    body.PressLane(lane: press.Lane);
+                }
+
+                break;
+            case WorldCommand.SetMotion motion:
+                body.SetModel(model: motion.Model);
+
+                break;
+            case WorldCommand.SetControl control:
+                body.SetIntentSource(source: control.Source);
+
+                break;
+            case WorldCommand.Reconcile reconcile:
+                body.Reconcile(x: reconcile.X, z: reconcile.Z, yawRadians: reconcile.YawRadians, seconds: reconcile.Seconds);
+
+                break;
+            case WorldCommand.Stop:
+                body.Stop();
+
+                break;
+        }
+    }
+
+    /// <summary>Applies a session request synchronously and returns the reply. The protocol handshake is checked here: a
+    /// <see cref="SessionRequest.Join"/> whose <see cref="SessionRequest.Join.ProtocolVersion"/> mismatches
+    /// <see cref="WorldProtocol.Version"/> is rejected with a distinct reason. Seat allocation is likewise validated: an
+    /// out-of-range slot or an unknown profile name is rejected.</summary>
+    /// <param name="request">The session request.</param>
+    public SessionReply ApplySession(SessionRequest request) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+
+        switch (request) {
+            case SessionRequest.Join join: {
+                if (join.ProtocolVersion != WorldProtocol.Version) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"protocol version {join.ProtocolVersion} != server {WorldProtocol.Version}");
+                }
+
+                if ((uint)join.Slot >= WorldPopulation.LocalSeatCount) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"slot {join.Slot} out of range");
+                }
+
+                var profile = ((join.ProfileName is { } name) ? m_profiles.Find(name: name) : null);
+
+                m_population.ActivateSeat(slot: join.Slot, profile: profile);
+
+                return new SessionReply(Accepted: true, AssignedIndex: (join.Slot + 1), RosterEcho: string.Empty, Reason: string.Empty);
+            }
+            case SessionRequest.Leave leave:
+                if ((uint)leave.Slot >= WorldPopulation.LocalSeatCount) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"slot {leave.Slot} out of range");
+                }
+
+                m_population.DeactivateSeat(slot: leave.Slot);
+
+                return new SessionReply(Accepted: true, AssignedIndex: (leave.Slot + 1), RosterEcho: string.Empty, Reason: string.Empty);
+            case SessionRequest.SetProfile setProfile: {
+                if (((uint)setProfile.Slot >= WorldPopulation.LocalSeatCount) || (m_profiles.Find(name: setProfile.ProfileName) is not { } profile)) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: "slot or profile not found");
+                }
+
+                m_population.SetSeatProfile(slot: setProfile.Slot, profile: profile);
+
+                return new SessionReply(Accepted: true, AssignedIndex: (setProfile.Slot + 1), RosterEcho: string.Empty, Reason: string.Empty);
+            }
+            case SessionRequest.SetPopulation setPopulation: {
+                var applied = m_population.SetSimulatedCount(count: setPopulation.Count);
+
+                return new SessionReply(Accepted: true, AssignedIndex: applied, RosterEcho: string.Empty, Reason: string.Empty);
+            }
+            case SessionRequest.SetPeerSource setPeerSource:
+                m_population.SetPeerSource(source: setPeerSource.Source);
+
+                return new SessionReply(Accepted: true, AssignedIndex: -1, RosterEcho: string.Empty, Reason: string.Empty);
+            case SessionRequest.SetPlayerSection setSection: {
+                // The server owns the durable player document: gate on Edit (permissive local default — every seat and
+                // the console hold Edit/all until revoked), apply/validate the section, bump the revision, and persist.
+                if (!m_grants.Allows(principal: setSection.Principal, capability: WorldCapability.Edit, subject: GrantSubject.All)) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"{setSection.Principal.Describe()} cannot edit player profiles");
+                }
+
+                if (!m_profiles.ApplySection(id: setSection.ProfileId, section: setSection.Section, payload: setSection.Payload, reason: out var sectionReason)) {
+                    return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: sectionReason);
+                }
+
+                // An identity edit changed the shared handle's color; refresh the population's CACHED seat body color so
+                // the snapshot carries the new color (a seat renders its live handle color client-side, but the server's
+                // per-entry cache — the snapshot source — must not lie). Name/motion/bindings/preferences need no cache
+                // refresh (read live off the handle).
+                if ((setSection.Section == WorldPlayerSection.Identity) && (m_profiles.FindById(id: setSection.ProfileId) is { } edited)) {
+                    m_population.RefreshSeatColor(profile: edited);
+                }
+
+                return new SessionReply(Accepted: true, AssignedIndex: -1, RosterEcho: string.Empty, Reason: string.Empty);
+            }
+            default:
+                return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: "unknown session request");
+        }
+    }
+
+    /// <summary>Composes the authoritative answer to a read-back query.</summary>
+    /// <param name="query">The read-back query.</param>
+    public QueryAnswer Answer(WorldQuery query) {
+        ArgumentNullException.ThrowIfNull(argument: query);
+
+        return query switch {
+            WorldQuery.PlayerWhere where when (Body(index: (where.Index - 1)) is { } body) => new QueryAnswer(Text: body.DescribeWhere(index: where.Index)),
+            WorldQuery.PlayerWhere where => new QueryAnswer(Text: $"[player.where: player {where.Index} is not an active population entry — see world.population]"),
+            WorldQuery.PlayerDocument => new QueryAnswer(Text: WorldPlayerJson.Serialize(document: m_profiles.ToDocument())),
+            _ => new QueryAnswer(Text: string.Empty),
+        };
+    }
+
+    /// <summary>Advances the authoritative world by one exact host tick: drain the buffered live edits (mutations,
+    /// swaps, undo) FIRST — applying each at the tick boundary and delivering the new definition once if any applied →
+    /// drain the tick's submitted intents → advance every body (peers, then seats) → deliver the tick's
+    /// <see cref="WorldSnapshot"/>.</summary>
+    /// <param name="context">The launcher's fixed-step context for this tick.</param>
+    public void Step(in FixedStepContext context) {
+        _ = DrainPendingOps(tick: context.Tick);
+
+        while (m_intents.TryDequeue(result: out var submission)) {
+            if (Body(index: submission.EntityIndex) is not { } body) {
+                continue;
+            }
+
+            // Server-side Drive enforcement on the per-tick path (the §2.7 keystone): a submission whose principal does
+            // not hold Drive over the target body is dropped, loud ONCE per denial episode (a revoked driver keeps
+            // submitting; we log its first refused tick, then the body idles until re-granted). Allocation-free O(1).
+            if (!m_grants.Allows(principal: submission.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: submission.EntityIndex))) {
+                if (!m_driveDenied[submission.EntityIndex]) {
+                    Console.Error.WriteLine(value: $"[world.grant denied: {submission.Principal.Describe()} cannot drive body:{submission.EntityIndex} — intent dropped, body idle]");
+                    m_driveDenied[submission.EntityIndex] = true;
+                }
+
+                continue;
+            }
+
+            m_driveDenied[submission.EntityIndex] = false;
+            body.SubmitIntent(intent: submission.Intent);
+            body.SetHeldLanes(lanes: submission.HeldLanes);
+        }
+
+        m_population.AdvanceSimulated(stepTicks: context.StepTicks);
+        m_population.AdvanceSeats(stepTicks: context.StepTicks);
+        EmitSnapshot(tick: (context.Tick + 1UL), stepTicks: context.StepTicks);
+    }
+
+    // Drain every buffered live edit in FIFO order, applying it at this tick boundary. Delivers the new definition to
+    // the client sink ONCE if at least one edit applied (once per step with >=1 applied edit, not once per edit).
+    private bool DrainPendingOps(ulong tick) {
+        var applied = false;
+
+        while (m_pending.TryDequeue(result: out var op)) {
+            var ok = op switch {
+                PendingOp.Mutate mutate => TryApplyMutation(mutation: mutate.Mutation, tick: tick),
+                PendingOp.Swap swap => ApplyDefinition(definition: swap.Definition, principal: swap.Principal),
+                PendingOp.Undo undo => ApplyUndo(count: undo.Count, principal: undo.Principal),
+                _ => false,
+            };
+
+            applied |= ok;
+        }
+
+        if (applied) {
+            m_sink?.DeliverDefinition(definition: m_definition);
+        }
+
+        return applied;
+    }
+
+    // Apply one mutation at the tick boundary: compose a candidate (with-expression) → revalidate the WHOLE document →
+    // capacity-check scene/screen edits against the probed render envelope → on any failure reject loudly (definition
+    // unchanged) → on success swap the live definition, rebuild the changed section's derived state, and journal it.
+    private bool TryApplyMutation(WorldMutation mutation, ulong tick) {
+        // Server-side Mutate enforcement: the principal must hold Mutate over the mutation's section. A denial is
+        // data-shaped (a missing grant row), never a new message kind — and it is loud and dropped (§2.6 audit).
+        var section = SectionOf(mutation: mutation);
+
+        if (!m_grants.Allows(principal: mutation.Principal, capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: section))) {
+            Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} cannot mutate section:{section.ToString().ToLowerInvariant()} — {Describe(mutation: mutation)} dropped]");
+
+            return false;
+        }
+
+        if (!TryCompose(current: m_definition, mutation: mutation, candidate: out var candidate, reason: out var composeReason)) {
+            Reject(mutation: mutation, reason: composeReason);
+
+            return false;
+        }
+
+        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var validationReason)) {
+            Reject(mutation: mutation, reason: validationReason);
+
+            return false;
+        }
+
+        if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(scene: candidate.Scene, screens: candidate.Screens, reason: out var capacityReason)) {
+            Reject(mutation: mutation, reason: capacityReason);
+
+            return false;
+        }
+
+        Install(definition: candidate, rebuildPopulation: AffectsPopulation(mutation: mutation));
+        m_journal.Add(item: new JournalEntry(Tick: tick, Mutation: mutation));
+        Console.Error.WriteLine(value: $"[world.mutation: {Describe(mutation: mutation)} applied]");
+
+        if (mutation is WorldMutation.UpsertCamera or WorldMutation.RemoveCamera) {
+            // The offscreen view pool is sized/registered at boot from the probed render envelope; a live camera pool
+            // rebuild is out of scope this phase, so a camera edit is document-only and takes effect at the next boot.
+            Console.Error.WriteLine(value: "[world.camera: applies at next boot]");
+        }
+
+        return true;
+    }
+
+    // The whole-document swap (SubmitDefinition / world.load): validate → capacity-check → swap → full derived rebuild →
+    // journal RESET (the loaded definition becomes the new base). The loader already validated a world.load file; this
+    // re-check is the defensive apply-time gate every install passes through.
+    private bool ApplyDefinition(WorldDefinition definition, WorldPrincipal principal) {
+        // A whole-document swap can touch any section: the principal must hold Mutate over EVERY section.
+        if (!m_grants.AllowsAllSections(principal: principal, capability: WorldCapability.Mutate)) {
+            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot mutate every section — world.load dropped]");
+
+            return false;
+        }
+
+        if (!WorldDefinitionValidator.TryValidate(definition: definition, reason: out var validationReason)) {
+            Console.Error.WriteLine(value: $"[world.definition rejected: {validationReason}]");
+
+            return false;
+        }
+
+        if (!m_envelope.TryFit(scene: definition.Scene, screens: definition.Screens, reason: out var capacityReason)) {
+            Console.Error.WriteLine(value: $"[world.definition rejected: {capacityReason}]");
+
+            return false;
+        }
+
+        Install(definition: definition, rebuildPopulation: true);
+        m_base = definition;
+        m_journal.Clear();
+        Console.Error.WriteLine(value: "[world.definition: loaded]");
+
+        return true;
+    }
+
+    // Undo the last `count` applied mutations (default clamps to 1): restore the base and deterministically replay the
+    // journal minus its tail through the SAME apply path. Replaying previously-valid ops over the same base reproduces
+    // the earlier state; a replay that somehow fails stops loudly rather than installing a half-built document.
+    private bool ApplyUndo(int count, WorldPrincipal principal) {
+        // Journal control is Mutate territory over every section (a replay can rebuild any).
+        if (!m_grants.AllowsAllSections(principal: principal, capability: WorldCapability.Mutate)) {
+            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot mutate every section — world.undo dropped]");
+
+            return false;
+        }
+
+        if (m_journal.Count == 0) {
+            Console.Error.WriteLine(value: "[world.undo: nothing to undo]");
+
+            return false;
+        }
+
+        var drop = Math.Clamp(value: count, min: 1, max: m_journal.Count);
+        var keep = (m_journal.Count - drop);
+        var candidate = m_base;
+        var kept = new List<JournalEntry>(capacity: keep);
+
+        for (var index = 0; (index < keep); index++) {
+            var entry = m_journal[index];
+
+            if (!TryCompose(current: candidate, mutation: entry.Mutation, candidate: out var next, reason: out var reason) ||
+                !WorldDefinitionValidator.TryValidate(definition: next, reason: out reason)) {
+                Console.Error.WriteLine(value: $"[world.undo: replay failed at journal entry {index} — {reason}]");
+
+                break;
+            }
+
+            candidate = next;
+            kept.Add(item: entry);
+        }
+
+        Install(definition: candidate, rebuildPopulation: true);
+        m_journal.Clear();
+        m_journal.AddRange(collection: kept);
+        Console.Error.WriteLine(value: $"[world.undo: dropped {drop}, {m_journal.Count} remaining]");
+
+        return true;
+    }
+
+    // Swap the live definition and rebuild the derived state that compiled from it. Sim-affecting sections (kits,
+    // assignment, motion, wander, seat kit, spawns) recompile the population's fixed tables and live bodies; the
+    // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
+    // document-only.
+    private void Install(WorldDefinition definition, bool rebuildPopulation) {
+        m_definition = definition;
+
+        if (rebuildPopulation) {
+            m_population.Rebuild(definition: definition);
+        }
+    }
+
+    private void Reject(WorldMutation mutation, string reason) {
+        Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
+    }
+
+    // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
+    // compiled tuning/actions). Scene/screen/camera/render/population-default/addon edits do not.
+    private static bool AffectsPopulation(WorldMutation mutation) => mutation is
+        WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
+        WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns;
+
+    // Whether a mutation can grow the SDF program past the probed render envelope (scene boulders / screen slabs).
+    private static bool AffectsRenderEnvelope(WorldMutation mutation) => mutation is
+        WorldMutation.SetScene or WorldMutation.UpsertScreen or WorldMutation.RemoveScreen;
+
+    // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
+    // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
+    private static WorldSection SectionOf(WorldMutation mutation) => mutation switch {
+        WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or WorldMutation.SetKitAssignment => WorldSection.Kits,
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen => WorldSection.Screens,
+        WorldMutation.UpsertCamera or WorldMutation.RemoveCamera => WorldSection.Cameras,
+        WorldMutation.SetScene => WorldSection.Scene,
+        WorldMutation.SetSpawns => WorldSection.Spawns,
+        WorldMutation.SetMotion => WorldSection.Motion,
+        WorldMutation.SetWander => WorldSection.Wander,
+        WorldMutation.SetPopulationDefaults => WorldSection.Population,
+        WorldMutation.SetRenderDefaults => WorldSection.Render,
+        WorldMutation.UpsertAddon or WorldMutation.RemoveAddon => WorldSection.Addons,
+        WorldMutation.UpsertBindingOverlay or WorldMutation.RemoveBindingOverlay => WorldSection.Bindings,
+        _ => WorldSection.Kits,
+    };
+
+    // A short mutation label for the accept/reject console line — the kind plus its stable-id subject.
+    private static string Describe(WorldMutation mutation) => mutation switch {
+        WorldMutation.UpsertKit m => $"UpsertKit '{m.Kit.Name}'",
+        WorldMutation.RemoveKit m => $"RemoveKit '{m.Name}'",
+        WorldMutation.SetDefaultSeatKit m => $"SetDefaultSeatKit '{m.Name}'",
+        WorldMutation.SetKitAssignment m => $"SetKitAssignment '{m.Assignment.Policy}'",
+        WorldMutation.UpsertScreen m => $"UpsertScreen {m.Screen.Index}",
+        WorldMutation.RemoveScreen m => $"RemoveScreen {m.Index}",
+        WorldMutation.UpsertCamera m => $"UpsertCamera '{m.Camera.Name}'",
+        WorldMutation.RemoveCamera m => $"RemoveCamera '{m.Name}'",
+        WorldMutation.SetScene => "SetScene",
+        WorldMutation.SetSpawns => "SetSpawns",
+        WorldMutation.SetMotion => "SetMotion",
+        WorldMutation.SetWander => "SetWander",
+        WorldMutation.SetPopulationDefaults => "SetPopulationDefaults",
+        WorldMutation.SetRenderDefaults => "SetRenderDefaults",
+        WorldMutation.UpsertAddon m => $"UpsertAddon '{m.Addon.Name}'",
+        WorldMutation.RemoveAddon m => $"RemoveAddon '{m.Name}'",
+        WorldMutation.UpsertBindingOverlay m => $"UpsertBindingOverlay '{m.Overlay.Id}'",
+        WorldMutation.RemoveBindingOverlay m => $"RemoveBindingOverlay '{m.Id}'",
+        _ => "unknown",
+    };
+
+    // Compose a candidate definition from the current one and a mutation — a with-expression over the coarse section,
+    // whole-row upsert addressed by stable id. A remove of a missing id fails here (before validation) with a reason.
+    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, out WorldDefinition candidate, out string reason) {
+        reason = string.Empty;
+
+        switch (mutation) {
+            case WorldMutation.UpsertKit m:
+                candidate = (current with { Kits = Upsert(list: current.Kits, item: m.Kit, keyOf: static kit => kit.Name) });
+
+                return true;
+            case WorldMutation.RemoveKit m:
+                if (!Remove(list: current.Kits, key: m.Name, keyOf: static kit => kit.Name, result: out var kits)) {
+                    candidate = current;
+                    reason = $"no kit row named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Kits = kits });
+
+                return true;
+            case WorldMutation.SetDefaultSeatKit m:
+                candidate = (current with { DefaultSeatKit = m.Name });
+
+                return true;
+            case WorldMutation.SetKitAssignment m:
+                candidate = (current with { Assignment = m.Assignment });
+
+                return true;
+            case WorldMutation.UpsertScreen m:
+                candidate = (current with { Screens = Upsert(list: current.Screens, item: m.Screen, keyOf: static screen => screen.Index) });
+
+                return true;
+            case WorldMutation.RemoveScreen m:
+                if (!Remove(list: current.Screens, key: m.Index, keyOf: static screen => screen.Index, result: out var screens)) {
+                    candidate = current;
+                    reason = $"no screen at index {m.Index}";
+
+                    return false;
+                }
+
+                candidate = (current with { Screens = screens });
+
+                return true;
+            case WorldMutation.UpsertCamera m:
+                candidate = (current with { Cameras = Upsert(list: current.Cameras, item: m.Camera, keyOf: static camera => camera.Name) });
+
+                return true;
+            case WorldMutation.RemoveCamera m:
+                if (!Remove(list: current.Cameras, key: m.Name, keyOf: static camera => camera.Name, result: out var cameras)) {
+                    candidate = current;
+                    reason = $"no camera named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Cameras = cameras });
+
+                return true;
+            case WorldMutation.SetScene m:
+                candidate = (current with { Scene = m.Scene });
+
+                return true;
+            case WorldMutation.SetSpawns m:
+                candidate = (current with { SpawnPoints = m.Spawns });
+
+                return true;
+            case WorldMutation.SetMotion m:
+                candidate = (current with { Motion = m.Motion });
+
+                return true;
+            case WorldMutation.SetWander m:
+                candidate = (current with { Wander = m.Wander });
+
+                return true;
+            case WorldMutation.SetPopulationDefaults m:
+                candidate = (current with { Population = m.Population });
+
+                return true;
+            case WorldMutation.SetRenderDefaults m:
+                candidate = (current with { Render = m.Render });
+
+                return true;
+            case WorldMutation.UpsertAddon m:
+                candidate = (current with { Addons = Upsert(list: current.Addons, item: m.Addon, keyOf: static addon => addon.Name) });
+
+                return true;
+            case WorldMutation.RemoveAddon m:
+                if (!Remove(list: current.Addons, key: m.Name, keyOf: static addon => addon.Name, result: out var addons)) {
+                    candidate = current;
+                    reason = $"no addon named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Addons = addons });
+
+                return true;
+            case WorldMutation.UpsertBindingOverlay m:
+                candidate = (current with { BindingOverlays = Upsert(list: current.BindingOverlays, item: m.Overlay, keyOf: static overlay => overlay.Id) });
+
+                return true;
+            case WorldMutation.RemoveBindingOverlay m:
+                if (!Remove(list: current.BindingOverlays, key: m.Id, keyOf: static overlay => overlay.Id, result: out var overlays)) {
+                    candidate = current;
+                    reason = $"no binding overlay with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { BindingOverlays = overlays });
+
+                return true;
+            default:
+                candidate = current;
+                reason = "unknown mutation kind";
+
+                return false;
+        }
+    }
+
+    // Replace the row whose key matches the item's, or append it — the coarse whole-row upsert.
+    private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, Func<T, TKey> keyOf) {
+        var key = keyOf(arg: item);
+        var result = new List<T>(capacity: (list.Count + 1));
+        var replaced = false;
+
+        foreach (var existing in list) {
+            if (!replaced && EqualityComparer<TKey>.Default.Equals(x: keyOf(arg: existing), y: key)) {
+                result.Add(item: item);
+                replaced = true;
+            } else {
+                result.Add(item: existing);
+            }
+        }
+
+        if (!replaced) {
+            result.Add(item: item);
+        }
+
+        return result;
+    }
+
+    // Drop the first row whose key matches — reports whether a row was actually removed.
+    private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, Func<T, TKey> keyOf, out IReadOnlyList<T> result) {
+        var kept = new List<T>(capacity: list.Count);
+        var removed = false;
+
+        foreach (var existing in list) {
+            if (!removed && EqualityComparer<TKey>.Default.Equals(x: keyOf(arg: existing), y: key)) {
+                removed = true;
+
+                continue;
+            }
+
+            kept.Add(item: existing);
+        }
+
+        result = kept;
+
+        return removed;
+    }
+
+    // Build and deliver the tick's snapshot: every live body's authoritative sim pose, color, archetype, and this
+    // tick's continuity hint. Skipped with no sink attached.
+    private void EmitSnapshot(ulong tick, ulong stepTicks) {
+        if (m_sink is null) {
+            return;
+        }
+
+        var count = 0;
+
+        for (var index = 0; (index < WorldPopulation.MaxPopulation); index++) {
+            if (!m_population.IsActive(index: index) || (m_population.EntryBody(index: index) is not { } body)) {
+                continue;
+            }
+
+            m_snapshotEntries[count++] = new EntitySnapshot(
+                Index: index,
+                Position: body.Position,
+                Orientation: body.Orientation,
+                BodyColor: m_population.BodyColor(index: index),
+                Active: true,
+                Kit: m_population.KitIndex(index: index),
+                Continuity: body.TakeContinuity()
+            );
+        }
+
+        m_sink.DeliverSnapshot(snapshot: new WorldSnapshot(
+            Tick: tick,
+            Revision: m_population.Revision,
+            StepTicks: stepTicks,
+            Entries: m_snapshotEntries.AsMemory(start: 0, length: count)
+        ));
+    }
+
+    // One journal entry — the tick a mutation applied and the mutation itself (the edit history replay reproduces).
+    private readonly record struct JournalEntry(ulong Tick, WorldMutation Mutation);
+
+    // One buffered live-edit op, drained FIFO at the step boundary before intents.
+    private abstract record PendingOp {
+        public sealed record Mutate(WorldMutation Mutation) : PendingOp;
+        public sealed record Swap(WorldDefinition Definition, WorldPrincipal Principal) : PendingOp;
+        public sealed record Undo(int Count, WorldPrincipal Principal) : PendingOp;
+    }
+}

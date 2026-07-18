@@ -9,8 +9,10 @@ namespace Puck.Vulkan.Factories;
 /// enables the validation layer when requested, and creates an owning <see cref="VulkanInstance"/>.
 /// </summary>
 public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
-    // VK_EXT_debug_utils is provided by the validation layer, so it is enabled alongside it; it carries the messenger
-    // that surfaces validation messages to the console.
+    // VK_EXT_debug_utils serves TWO independent purposes: the validation messenger (surfaced only when validation is
+    // on) AND the vkCmdBeginDebugUtilsLabelEXT command-buffer labels the debug-group seam records. The extension is
+    // free without a messenger, so it is enabled whenever the loader supports it — decoupled from validation — so
+    // debug groups reach a GPU capture even in a default (validation-off) run. The messenger stays validation-only.
     private const string DebugUtilsExtension = "VK_EXT_debug_utils";
 
     private static readonly string[] CommonExtensions = [
@@ -20,7 +22,7 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
         "VK_LAYER_KHRONOS_validation",
     ];
 
-    private static IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind, bool enableValidation) {
+    private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind) {
         string[] surfaceExtensions = displayKind switch {
             NativeDisplayKind.Vi => [.. CommonExtensions, "VK_NN_vi_surface",],
             NativeDisplayKind.Wayland => [.. CommonExtensions, "VK_KHR_wayland_surface",],
@@ -29,9 +31,9 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             _ => throw new PlatformNotSupportedException(message: $"Vulkan instance creation is not implemented for display kind '{displayKind}'.")
         };
 
-        return enableValidation
+        return (m_instanceApi.HasInstanceExtension(extensionName: DebugUtilsExtension)
             ? [.. surfaceExtensions, DebugUtilsExtension]
-            : surfaceExtensions;
+            : surfaceExtensions);
     }
 
     private readonly IVulkanInstanceApi m_instanceApi;
@@ -57,7 +59,7 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             ApplicationName: applicationName,
             DisplayKind: displayKind,
             EnableValidation: enableValidation,
-            ExtensionNames: BuildExtensionNames(displayKind: displayKind, enableValidation: enableValidation),
+            ExtensionNames: BuildExtensionNames(displayKind: displayKind),
             LayerNames: (enableValidation
                 ? ValidationLayers
                 : [])

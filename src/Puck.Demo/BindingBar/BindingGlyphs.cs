@@ -136,10 +136,10 @@ internal static class BindingGlyphResolver {
             "action.jump" => BindingIconId.Jump,
             "action.interact" => BindingIconId.Interact,
             "action.target" => BindingIconId.Target,
-            _ => ((icon is not null) &&
+            _ => (((icon is not null) &&
                 icon.StartsWith(value: "action.", comparisonType: StringComparison.Ordinal) &&
                 int.TryParse(s: icon.AsSpan(start: "action.".Length), result: out var number) &&
-                (number is >= 1 and <= 12)
+                (number is >= 1 and <= 12))
                 ? (BindingIconId)(((int)BindingIconId.Number1) + (number - 1))
                 : BindingIconId.Generic),
         };

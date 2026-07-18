@@ -21,10 +21,10 @@ internal sealed class MetaVictoryWatch {
         }
 
         public int[] BrickIndices { get; }
+        public bool Fired { get; set; }
         public string Label { get; }
         public byte[] TargetBytes { get; }
         public string TargetText { get; }
-        public bool Fired { get; set; }
     }
 
     private readonly List<Group> m_groups;
@@ -221,8 +221,7 @@ internal sealed class MetaVictoryWatch {
 
                 if (consoles[index].Victory!.TryParseShare(destination: share)) {
                     VictoryGate.Xor(accumulator: accumulator, operand: share);
-                }
-                else {
+                } else {
                     allParsed = false;
                 }
             }

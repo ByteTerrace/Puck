@@ -3,8 +3,8 @@ using System.Text;
 namespace Puck.Demo.Forge;
 
 /// <summary>
-/// Forges a genuine <b>Pocket Camera</b> cartridge (header type <c>0xFC</c>, 128&#160;KiB save RAM) whose hand-authored
-/// ROM drives the real Mitsubishi M64282FP protocol: it programs the sensor's gain, exposure, and 4×4 dither matrix,
+/// Forges a genuine <b>camera</b> cartridge (header type <c>0xFC</c>, 128&#160;KiB save RAM) whose hand-authored
+/// ROM drives the real M64282FP protocol: it programs the sensor's gain, exposure, and 4×4 dither matrix,
 /// then each frame triggers a capture, <b>polls register&#160;0's busy bit until the shoot completes</b>, and blits the
 /// processed <c>128</c>×<c>112</c> image from save-RAM (<c>0xA100</c>) into VRAM with two CGB general-purpose DMAs — a
 /// live viewfinder. This is the "our ROM" half of the camera feature: it talks to the authentic mapper, so whatever
@@ -12,9 +12,9 @@ namespace Puck.Demo.Forge;
 /// valid logo and checksums so it is a real <c>.gbc</c> a stranger (or a flashcart) could boot.
 /// </summary>
 internal static class CameraRom {
-    private const int RomSize = 0x8000;
     private const ushort EntryPoint = 0x0100;
     private const ushort MainRoutine = 0x0150;
+    private const int RomSize = 0x8000;
 
     // In-ROM data tables the routine reads (all in bank 0, clear of the routine and each other).
     private const ushort PaletteAddress = 0x0300;   // 8 bytes: CGB BG palette 0 (four greys)
@@ -23,37 +23,36 @@ internal static class CameraRom {
 
     // High-page (0xFF00+) ports.
     private const byte PortLcdControl = 0x40;
-    private const byte PortScrollY = 0x42;
-    private const byte PortScrollX = 0x43;
-    private const byte PortVramBank = 0x4F;
-    private const byte PortHdmaSourceHigh = 0x51;
-    private const byte PortHdmaSourceLow = 0x52;
+    private const byte PortBgPaletteData = 0x69;
+    private const byte PortBgPaletteIndex = 0x68;
+    private const byte PortHdmaControl = 0x55;
     private const byte PortHdmaDestHigh = 0x53;
     private const byte PortHdmaDestLow = 0x54;
-    private const byte PortHdmaControl = 0x55;
-    private const byte PortBgPaletteIndex = 0x68;
-    private const byte PortBgPaletteData = 0x69;
+    private const byte PortHdmaSourceHigh = 0x51;
+    private const byte PortHdmaSourceLow = 0x52;
+    private const byte PortScrollX = 0x43;
+    private const byte PortScrollY = 0x42;
+    private const byte PortVramBank = 0x4F;
 
     // Cartridge control/registers (absolute stores through the bus).
     private const ushort RamEnableRegister = 0x0000;    // 0x0A enables the save-RAM window
     private const ushort BankSelectRegister = 0x4000;   // bit 4 maps the camera registers; bits 3-0 = RAM bank
     private const ushort CameraShootRegister = 0xA000;  // register 0: bit 0 triggers / reads busy
-    private const ushort CameraGainRegister = 0xA001;
+    private const ushort CameraDitherStart = 0xA006;
+    private const ushort CameraEdgeRegister = 0xA004;
     private const ushort CameraExposureHigh = 0xA002;
     private const ushort CameraExposureLow = 0xA003;
-    private const ushort CameraEdgeRegister = 0xA004;
-    private const ushort CameraDitherStart = 0xA006;
-
-    private const ushort VramTiles = 0x8000;
+    private const ushort CameraGainRegister = 0xA001;
     private const ushort VramBackgroundMap = 0x9800;
+    private const ushort VramTiles = 0x8000;
     private const int BlankTile = (SensorImageGeometry.TilesWide * SensorImageGeometry.TilesTall); // 224: a zeroed margin tile
 
     // The sensor config: gain index 4 is exactly ×1.0 and exposure 0x1000 divides out, so the processed colour equals the
     // raw sensor value — the dither matrix then spreads 0..255 across four shades. Edge enhancement off (bit 7 clear).
     private const byte GainAndEdge = 0x04;
+    private const byte EdgeRatio = 0x00;
     private const byte ExposureHigh = 0x10;
     private const byte ExposureLow = 0x00;
-    private const byte EdgeRatio = 0x00;
 
     // LCDC: LCD on (0x80) | BG tiles at 0x8000 (0x10) | BG on (0x01). No sprites; the whole screen is the viewfinder.
     private const byte LcdOn = 0x91;
@@ -64,7 +63,7 @@ internal static class CameraRom {
         0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
     ];
 
-    /// <summary>Builds the Pocket Camera viewfinder cartridge image.</summary>
+    /// <summary>Builds the camera viewfinder cartridge image.</summary>
     /// <param name="title">The cartridge title (uppercased into the header).</param>
     /// <returns>A 32&#160;KiB <c>.gbc</c> image with header type <c>0xFC</c>.</returns>
     public static byte[] Build(string title) {
@@ -74,20 +73,20 @@ internal static class CameraRom {
 
         // Entry (0x0100): nop; jp MainRoutine.
         rom[EntryPoint] = 0x00;
-        rom[EntryPoint + 1] = 0xC3;
-        rom[EntryPoint + 2] = (byte)(MainRoutine & 0xFF);
-        rom[EntryPoint + 3] = (byte)((MainRoutine >> 8) & 0xFF);
+        rom[(EntryPoint + 1)] = 0xC3;
+        rom[(EntryPoint + 2)] = (byte)(MainRoutine & 0xFF);
+        rom[(EntryPoint + 3)] = (byte)((MainRoutine >> 8) & 0xFF);
 
         BootLogo.CopyTo(array: rom, index: 0x0104);
 
         var titleBytes = Encoding.ASCII.GetBytes(s: title.ToUpperInvariant());
 
         for (var index = 0; ((index < titleBytes.Length) && (index < 15)); ++index) {
-            rom[0x0134 + index] = titleBytes[index];
+            rom[(0x0134 + index)] = titleBytes[index];
         }
 
         rom[0x0143] = 0xC0; // CGB flag: Color required (the four-grey palette lives in CGB palette RAM).
-        rom[0x0147] = 0xFC; // Cartridge type: POCKET CAMERA — this is what makes the mapper an M64282FP sensor.
+        rom[0x0147] = 0xFC; // Cartridge type 0xFC (camera) — this is what makes the mapper an M64282FP sensor.
         rom[0x0148] = 0x00; // ROM size: 32 KiB.
         rom[0x0149] = 0x04; // RAM size: 128 KiB (the camera's banked image RAM).
         rom[0x014A] = 0x01; // Destination: non-Japanese.
@@ -205,7 +204,6 @@ internal static class CameraRom {
         emitter.LoadAImmediate(value: (byte)((chunks - 1) & 0x7F)); // bit 7 clear = GDMA
         emitter.StoreAToHighPage(port: PortHdmaControl);
     }
-
     private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort) {
         var loop = emitter.NewLabel();
 
@@ -217,7 +215,6 @@ internal static class CameraRom {
         emitter.Decrement(register: Reg8.B);
         emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
-
     private static void EmitBlockCopy(Sm83Emitter emitter, ushort source, ushort destination, ushort count) {
         var loop = emitter.NewLabel();
 
@@ -233,7 +230,6 @@ internal static class CameraRom {
         emitter.Arithmetic(op: AluOp.Or, source: Reg8.C);
         emitter.JumpRelative(condition: Condition.NotZero, label: loop);
     }
-
     private static void EmitBlockFill(Sm83Emitter emitter, ushort destination, ushort count) {
         var loop = emitter.NewLabel();
 
@@ -256,7 +252,7 @@ internal static class CameraRom {
 
         for (var index = 0; (index < 4); ++index) {
             palette[(index * 2)] = (byte)(colours[index] & 0xFF);
-            palette[(index * 2) + 1] = (byte)((colours[index] >> 8) & 0xFF);
+            palette[((index * 2) + 1)] = (byte)((colours[index] >> 8) & 0xFF);
         }
 
         return palette;
@@ -282,7 +278,7 @@ internal static class CameraRom {
                 for (var level = 0; (level < 3); ++level) {
                     var threshold = (baseThresholds[level] + offset);
 
-                    dither[cellBase + level] = (byte)((threshold < 0) ? 0 : ((threshold > 255) ? 255 : threshold));
+                    dither[(cellBase + level)] = (byte)((threshold < 0) ? 0 : ((threshold > 255) ? 255 : threshold));
                 }
             }
         }
@@ -314,12 +310,11 @@ internal static class CameraRom {
 
         return map;
     }
-
     private static void Finalize(byte[] rom) {
         byte headerChecksum = 0;
 
         for (var address = 0x0134; (address <= 0x014C); ++address) {
-            headerChecksum = (byte)(headerChecksum - rom[address] - 1);
+            headerChecksum = (byte)((headerChecksum - rom[address]) - 1);
         }
 
         rom[0x014D] = headerChecksum;
@@ -339,7 +334,7 @@ internal static class CameraRom {
     }
 }
 
-/// <summary>The Pocket Camera image geometry, mirrored from the emulator's <c>SensorImage</c> so the forged ROM's tilemap
+/// <summary>The camera image geometry, mirrored from the emulator's <c>SensorImage</c> so the forged ROM's tilemap
 /// and the mapper's deposited tiles agree without the demo taking a hard dependency on an emulator-internal constant.</summary>
 internal static class SensorImageGeometry {
     /// <summary>Tiles across the captured image (128 px ÷ 8).</summary>

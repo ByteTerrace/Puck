@@ -1,6 +1,9 @@
 # Line endings: normalize to LF in the repo, check out native per OS.
 * text=auto
 *.sh   text eol=lf
+# World documents are canonical-byte artifacts (the ouroboros gate: load→save reproduces the file
+# byte-for-byte, and the writer emits LF) — never CRLF-rewritten at checkout.
+*.world.json text eol=lf
 *.ps1  text eol=crlf
 *.cmd  text eol=crlf
 *.slnx text eol=crlf

@@ -1,0 +1,21 @@
+<Project>
+    <!-- A raw reference in Puck.Platform is copied through ProjectReference, but the executable's .deps.json does not
+         record it. Re-declare the same two runtime assemblies at each Windows entry point so the .NET host can resolve
+         the official Windows SDK projection before the first WGC type is loaded.
+
+         This file is imported by the repository-root Directory.Build.targets for EVERY project, so no consumer csproj
+         hand-copies the import; the ItemGroup self-selects to any project that ProjectReferences Puck.Platform on
+         Windows. The import lands after each project's body, so @(ProjectReference) is populated when the condition is
+         evaluated. Version and pack path come from $(WindowsSdkNetRefVersion)/$(WindowsSdkNetRefRoot) in
+         Directory.Build.props (PackageDownload requires an exact pin, so that single property is the whole guard). -->
+    <ItemGroup Condition="'$(OS)' == 'Windows_NT' AND '@(ProjectReference->AnyHaveMetadataValue('Filename', 'Puck.Platform'))' == 'true'">
+        <Reference Include="Microsoft.Windows.SDK.NET">
+            <HintPath>$(WindowsSdkNetRefRoot)\Microsoft.Windows.SDK.NET.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+        <Reference Include="WinRT.Runtime">
+            <HintPath>$(WindowsSdkNetRefRoot)\WinRT.Runtime.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+    </ItemGroup>
+</Project>
