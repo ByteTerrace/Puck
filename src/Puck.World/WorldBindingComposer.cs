@@ -32,6 +32,13 @@ internal static class WorldBindingComposer {
             }
 
             version ??= layer.Version;
+
+            // A layer from another schema version must reject LOUDLY here: a stale document deserializes with a
+            // null row list, so without this check it would compose as silent nothing instead of failing.
+            if (!string.Equals(a: layer.Version, b: version, comparisonType: StringComparison.Ordinal)) {
+                throw new ArgumentException(message: $"Layer version \"{layer.Version}\" does not match the base layer's \"{version}\" — re-author the document.", paramName: nameof(layers));
+            }
+
             MergeModifiers(into: modifiers, index: modifierIndexById, layer: layer);
             MergeRows(into: rows, index: rowIndexByKey, layer: layer);
         }

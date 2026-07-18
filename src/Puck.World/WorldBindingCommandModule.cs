@@ -19,11 +19,13 @@ namespace Puck.World;
 /// streams (Puck.World is not determinism-gated, §2.4). <c>player.bind</c>/<c>player.signal</c>/<c>profile.save</c>
 /// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
-internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, InputRouter router, IInputClock? clock = null) : ICommandModule {
+internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, IInputClock? clock = null) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly IServerLink m_link = link;
-    private readonly InputRouter m_router = router;
+    // LAZY by necessity: the router's construction consumes the CommandRegistry, which aggregates this module — a
+    // direct constructor dependency would cycle the container. Resolved on the first player.signal.
+    private readonly Func<InputRouter> m_router = router;
     private readonly IInputClock? m_clock = clock;
 
     // The player.bind chord grammar: chord:<m1>+<m2>[+...] declares a command chord row in the DEFAULT group;
@@ -141,7 +143,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return Error(output: "[player.signal: the second value must be press, release, or a number]");
         }
 
-        m_router.Capture(signal: new InputSignal(
+        m_router().Capture(signal: new InputSignal(
             CaptureTick: (m_clock?.NowTicks ?? 0UL),
             DeviceId: default,
             Phase: phase,

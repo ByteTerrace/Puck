@@ -764,32 +764,36 @@
     {
       "id": "kart-remap",
       "document": {
-        "version": "puck.bindings.v7",
+        "version": "puck.bindings.v8",
         "modifiers": [],
-        "pages": [
+        "chords": [
           {
-            "id": "base",
+            "group": "play",
             "chord": [],
-            "entries": [
-              {
-                "source": "gamepad.buttonEast",
-                "command": "player.primary",
-                "activateOn": null,
-                "label": null,
-                "icon": null,
-                "anyModifiers": true
-              },
-              {
-                "source": "gamepad.buttonEast",
-                "command": "player.primary",
-                "activateOn": "Completed",
-                "label": null,
-                "icon": null,
-                "anyModifiers": true
-              }
-            ],
-            "label": null,
-            "icon": null
+            "page": {
+              "id": "base",
+              "entries": [
+                {
+                  "source": "gamepad.buttonEast",
+                  "command": "player.primary",
+                  "activateOn": null,
+                  "label": null,
+                  "icon": null,
+                  "anyModifiers": true
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "command": "player.primary",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null,
+                  "anyModifiers": true
+                }
+              ],
+              "label": null,
+              "icon": null
+            },
+            "command": null
           }
         ]
       }

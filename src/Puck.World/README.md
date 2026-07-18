@@ -449,41 +449,66 @@ default instead. Machine-local boot seating and the sync cursor (which
 profile player 1 wakes on, `LastSyncedRevision`) live ONLY in `world/local.json`
 — they must never roam to the cloud.
 
-**Bindings: layered resolution, per player AND per world.** `WorldSeatBindings`
-(one `PagedInputBindings` per local seat, replacing the former single shared
-`inputBindingTable`/`SharedInputBindings`) resolves every seat's input from a
-document PRE-MERGE, compiled once per seat on any change (never per frame):
+**Bindings: layered authoring, grouped resolution.** The binding document
+(`puck.bindings.v8`) is a list of CHORD ROWS — `(group, ordered chord) →
+meaning`, where the meaning is a discriminated union: a **page** (an entry
+table, `BindingPageDefinition`) or a **command** (a direct chord-to-command
+binding with full entry semantics — HoldRelease shape, constant value,
+label/icon; `BindingCommandDefinition`). Page switching is not privileged: it
+is one meaning a chord can carry. Two questions, two mechanisms:
 
-```
-effective document = engine default BindingProfileDocument   (WorldDefaultBindings — the player.* vocabulary)
-                   ⊕ world overlay(s)                        (puck.world.def.v1 bindingOverlays — a contextual page, e.g. a kart world's remap)
-                   ⊕ player profile bindings                 (the seat's selected profile, from puck.world.player.v1)
-                   ⊕ live rebinds                            (session layer; folded into the profile on profile.save)
-                   ⊕ mode layer                              (a runtime per-seat page set — the editor's WorldEditorBindings
-                                                             via WorldSeatBindings.SetModeLayer; outranks even live rebinds
-                                                             while active, and is never a world bindingOverlays mutation,
-                                                             which would re-bind every seat)
-```
+- **Authoring is layers.** `WorldSeatBindings` (one `PagedInputBindings` per
+  local seat) resolves every seat's input from a document PRE-MERGE, compiled
+  once per seat on any change (never per frame):
 
-`WorldBindingComposer.Compose` merges layers with an explicit key —
-**`(page id + ordered chord, source)`** — where a later layer's entries for a
-source REPLACE the earlier layer's entries for that source within a matching
-page; new sources append; whole pages unknown to earlier layers append. This
-is the level the compiled `LayeredInputBindings` primitive cannot express (it
-composes wholesale per `(slot, source)`); document pre-merge can override ONE
-entry inside a shared page, which a per-world overlay needs. The merged
-document then goes through the existing `BindingProfile.Compile` once, and the
-compiled result hot-swaps in via `PagedInputBindings.Reload`. The console
-dispatch path (`BindingCommandSource`, dormant in World since the router owns
-all physical input) derives from the SAME composed base layers
-(`WorldSeatBindings.ConsoleBaseTable`) — no second authoring grammar.
+  ```
+  effective document = engine default BindingProfileDocument   (WorldDefaultBindings — the play group AND the editor group)
+                     ⊕ world overlay(s)                        (puck.world.def.v1 bindingOverlays — a contextual row, e.g. a kart world's remap)
+                     ⊕ player profile bindings                 (the seat's selected profile, from puck.world.player.v1)
+                     ⊕ live rebinds                            (session layer; folded into the profile on profile.save)
+  ```
+
+- **Runtime mode is the ACTIVE GROUP.** Every group is always compiled in; a
+  seat holds one active group (`play` by default) and
+  `WorldSeatBindings.SetActiveGroup` flips it as a POINTER-LEVEL switch on the
+  compiled profile — no recompose, no document churn, and the seat's press
+  latches, held chord, and armed command chords survive the flip. A mode is
+  one seat's state, never a world `bindingOverlays` mutation (which would
+  re-bind every seat).
+
+Resolution is group-scoped and prefix-deep: within the active group, the page
+row with the LONGEST chord that is a press-order prefix of the held modifiers
+answers the seat's sources (the empty-chord RESTING page is the fallback), and
+a command row fires its press edge on the very signal that completes its chord
+— release when any member releases — synthesized as chord edges the
+`InputRouter` folds with their own phase/value (`IChordEdgeSource`), so
+chord-fired commands are snapshot-visible and held-tracked like any bound
+press. Exactly one meaning per `(group, chord)` and exactly one resting page
+per group, rejected loudly at `BindingProfile.Compile` (engine-gated by
+Puck.Post's `binding-page` stage, group flips and the cross-flip latch
+included).
+
+`WorldBindingComposer.Compose` merges layers with explicit keys — chord rows
+on **`(group, ordered chord)`** (a later layer's row for the same key
+overrides: wholesale when the meaning kind or page id differs, entry-by-source
+when both are the SAME page — the single-lane remap a per-world overlay
+needs); modifiers union by id. This is the level the compiled
+`LayeredInputBindings` primitive cannot express (it composes wholesale per
+`(slot, source)`). The merged document then goes through
+`BindingProfile.Compile` once, and the compiled result hot-swaps in via
+`PagedInputBindings.Reload` (the seat's requested group carries over). The
+console dispatch path (`BindingCommandSource`, dormant in World since the
+router owns all physical input) derives from the SAME composed default-group
+resting page (`WorldSeatBindings.ConsoleBaseTable`) — no second authoring
+grammar.
 
 **Verbs** (`WorldBindingCommandModule`):
 
 | Verb | Effect |
 |---|---|
-| `player.bind <seat> <source> <command>` | live-remaps one input source into the seat's SESSION layer (unsaved until `profile.save`); recomposes and hot-reloads that seat at once (Simulation-routed) |
-| `player.bindings [seat]` | echoes the seat's composed ACTIVE mapping — the no-modifier base page's `source→command` entries after the full merge (Immediate) |
+| `player.bind <seat> <source> <command>` | live-remaps one binding into the seat's SESSION layer (unsaved until `profile.save`); `<source>` is an input source id for a resting-page entry, or a chord-row declaration: `chord:lt+rt` (the ordered chord, play group) / `chord:<group>:m1+m2` (an explicit group). Recomposes and hot-reloads that seat at once (Simulation-routed) |
+| `player.bindings [seat]` | echoes the seat's composed ACTIVE mapping — the play resting page's `source→command` entries, then every chord row with its meaning (`chord play:[lt+rt]→editor.enter`, `chord editor:[lt]→page editor-camera`) (Immediate) |
+| `player.signal <source> <press\|release\|value>` | synthesizes one raw input signal into the router on seat 1's device-neutral lane — the scripted twin of a physical pad, so chords are drivable over the pipe (a number is an analog Active sample; a trigger sweep `0.9`/`0` latches/releases a modifier through hysteresis; the signal folds into the NEXT tick's snapshot) (Simulation-routed) |
 | `profile.save [seat]` | folds the seat's session rebinds into its selected profile's durable `bindings` section and persists through `SetPlayerSection` (gated on the `Edit` capability), then empties the session layer (Simulation-routed) |
 | `profile.doc` | echoes the whole server-owned player document as JSON (`WorldQuery.PlayerDocument`) — the read-back an editor/agent pulls before editing a section (Immediate) |
 | `world.bindings.set <overlay-json>` / `world.bindings.remove <id>` | upsert/remove a per-world `WorldBindingOverlay` (§ **Moldable state**'s mutation vocabulary); recomposes every seat on apply |
@@ -517,28 +542,33 @@ migrated names). There is no CLI override for the store path, so the proof
 backs up and restores the owner's REAL `world/` + `profiles/` subtrees whole
 (byte-for-byte) around every session — the real catalog is never destroyed.
 
-**Editor mode (the UI/editor arc's P2)** is the mode layer's first tenant: a
-per-seat client mode entered with **Gamepad Back / Keyboard Tab** (free,
-deliberate controls on the default page) or `editor.enter [seat]`, exited with
-East / Back / Tab or `editor.exit [seat]`. Entering installs
-`WorldEditorBindings` as the seat's mode layer — the merged no-modifier
-**Editor** page (sticks fly, shoulders rise/sink, South toggles fly⇄orbit,
-D-pad steps speed, West echoes status) plus the **LT camera page** (explicit
-fly/orbit + speed; North picks the row under the crosshair so orbit has a
-pivot), the **RT select page**, and the **LT+RT place page** — so the binding
-bar flips to the editor pages with zero bar-side work. The seat's intent diverts through the existing `player.control
-idle` contract on both halves (live devices mask; tapes and `player.press`
-still drive — script outranks idle), its camera swaps from the chase rig to
-the session's free-fly/orbit rig (seeded from the chase framing, restored by
-re-anchoring — neither edge pops), and when exactly ONE seat edits among 2+
-players the layout gives it the full-height left 70% workbench with the
-playing seats stacked in a live right rail. `WorldEditorSession` owns all of
-it client-side; nothing crosses the wire beyond the existing `SetControl`.
-The console twins (`editor.status`, `editor.fly`/`editor.orbit`,
-`editor.cam.speed <v>`, `editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>]`)
-script every chord act, and every discrete chord act echoes a console line.
-Proven on both backends by `proof.cs editor-mode` (mode round trip, camera in
-pixels, diversion honesty, the layout seam).
+**Editor mode (the UI/editor arc's P2, reworked by P3.5)** is the editor
+GROUP's tenancy: a per-seat client mode entered with the ordered **LT-then-RT
+trigger chord** (a command-meaning chord row in the play group — pure binding
+data, the reference chord-command), **Gamepad Back / Keyboard Tab** (the
+assist twins), or `editor.enter [seat]`; exited with East / Back / Tab or
+`editor.exit [seat]`. Entering flips the seat's active group to `editor`
+(`WorldSeatBindings.SetActiveGroup` — a pointer switch, no recompose): the
+**editor resting page** (sticks fly, shoulders rise/sink, South toggles
+fly⇄orbit, D-pad steps speed, West echoes status) plus the **LT camera page**
+(explicit fly/orbit + speed; North picks the row under the crosshair so orbit
+has a pivot), the **RT select page**, and the **LT+RT place page** — the
+binding bar renders whatever page the group's chords select, with the play
+group's `LT+RT Editor` chord hint drawn above the modifier pips. The seat's
+intent diverts through the existing `player.control idle` contract on both
+halves (live devices mask; tapes and `player.press` still drive — script
+outranks idle), its camera swaps from the chase rig to the session's
+free-fly/orbit rig (seeded from the chase framing, restored by re-anchoring —
+neither edge pops), and when exactly ONE seat edits among 2+ players the
+layout gives it the full-height left 70% workbench with the playing seats
+stacked in a live right rail. `WorldEditorSession` owns all of it client-side;
+nothing crosses the wire beyond the existing `SetControl`. The console twins
+(`editor.status` — which echoes `group=` + `page=`, the flip's assertable
+truth — `editor.fly`/`editor.orbit`, `editor.cam.speed <v>`,
+`editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>]`) script every chord act.
+Proven on both backends by `proof.cs editor-mode` (group round trip, the
+chord-command fired from data over `player.signal`, camera in pixels,
+diversion honesty, the layout seam, the loud wire-level rule rejections).
 
 **Selection and manipulation (P3)** builds the targeting and drag layers over
 the mode. A selection is `(section, id-or-index)` — pure client state in

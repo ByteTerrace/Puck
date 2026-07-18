@@ -178,9 +178,12 @@ services.AddSingleton<PlayerRoster>();
 services.AddSingleton<IInputSlotResolver>(implementationFactory: static sp => sp.GetRequiredService<PlayerRoster>());
 services.AddSingleton<ICommandModule, PlayerCommandModule>();
 services.AddSingleton<ICommandModule, ProfileCommandModule>();
-// The rebind surface — player.bind (live session remap) / player.bindings (echo the composed active mapping) /
-// profile.save (fold session rebinds into the seat's profile through the server-owned player document). A SEPARATE
-// module to keep each class under its analyzer ceilings.
+// The rebind surface — player.bind (live session remap + chord rows) / player.bindings (echo the composed active
+// mapping) / player.signal (synthesized raw input over the pipe) / profile.save (fold session rebinds into the seat's
+// profile through the server-owned player document). A SEPARATE module to keep each class under its analyzer ceilings.
+// The router reaches the module LAZILY: the router's factory consumes the CommandRegistry, which aggregates every
+// ICommandModule — a direct dependency would cycle the container.
+services.AddSingleton<Func<InputRouter>>(implementationFactory: static sp => (() => sp.GetRequiredService<InputRouter>()));
 services.AddSingleton<ICommandModule, WorldBindingCommandModule>();
 // The per-seat editor mode (§P2/§P3): the mode owner (binding MODE layer + honest-idle diversion + camera rig swap),
 // the drag preview channel (client-local pending rows, one mutation on release), the look-ray picker (a document-

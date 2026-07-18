@@ -335,18 +335,22 @@ typed text, or a pointer delta/position, each carrying a `CommandPhase`) and nam
   releases are missed. X11 auto-repeat (a release+press pair at the same timestamp) is de-duped in
   `XcbNativeWindow`.
 
-## Binding pages (modifier-chord profiles)
+## Binding chords (grouped modifier-chord profiles)
 
-The engine-side page mechanism lives in `Puck.Commands` (not here): a `BindingProfileDocument` (JSON) declares
-**modifiers** — any input source, e.g. `gamepad.leftTrigger`, made digital by press/release hysteresis
-thresholds — and **pages** selected by the *ordered* held-modifier chord (`["left","right"]` and
-`["right","left"]` are distinct pages; the empty chord is the movement/contextual baseline). `BindingProfile.Compile`
+The engine-side chord mechanism lives in `Puck.Commands` (not here): a `BindingProfileDocument` (JSON,
+`puck.bindings.v8`) declares **modifiers** — any input source, e.g. `gamepad.leftTrigger`, made digital by
+press/release hysteresis thresholds — and **chord rows**: `(group, ordered chord) → meaning`, where the meaning
+is a **page** (an entry table) or a **command** (a direct chord-fired binding). `["left","right"]` and
+`["right","left"]` are distinct rows; the empty chord is a group's resting page. `BindingProfile.Compile`
 validates the document into a `CompiledBindingProfile`; `PagedInputBindings` (a stateful `IInputBindings`)
-resolves each signal against the active page **inside `InputRouter`'s pre-snapshot fold**, so recorded
-`CommandSnapshot`s are already page-resolved and replay needs no changes. A press latches its binding list so its
-release completes as the same command even if the modifier lifted in between (no stuck held entries). Puck.Post's
-`BindingPageStage` (Tier A) proves hysteresis, press-order chords, chord remainders, the release latch, and
-bit-for-bit session determinism.
+resolves each signal against the ACTIVE GROUP's deepest prefix-held page row **inside `InputRouter`'s
+pre-snapshot fold**, so recorded `CommandSnapshot`s are already chord-resolved and replay needs no changes;
+`SetActiveGroup` flips a slot's group as a pointer-level runtime mode switch, and command chords fire synthesized
+edges (`IChordEdgeSource`) the router folds like bound presses. A press latches its binding list so its release
+completes as the same command even if the modifier — or the page, or the group — changed in between (no stuck
+held entries). Puck.Post's `BindingPageStage` (Tier A) proves hysteresis, press-order chords, chord remainders,
+group-scoped prefix resolution, command-chord edges, the latch across page AND group flips, the loud uniqueness
+rules, and bit-for-bit session determinism.
 
 The demo side (`Puck.Demo`): `BindingProfileDocuments.BuildDefault()` is an addon-style layout as data
 (triggers → 5 pages; South = jump / West = interact / left shoulder = target on the no-modifier page), persisted
