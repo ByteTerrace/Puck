@@ -137,6 +137,21 @@ public static class OverlayGamepadGlyphs {
             "action.jump" => OverlayIconId.Jump,
             "action.interact" => OverlayIconId.Interact,
             "action.target" => OverlayIconId.Target,
+            // The editing verb icons (the shader's Edit* cases) as binding-entry strings, so an editor page set is
+            // pure data end to end.
+            "edit.prev" => OverlayIconId.EditPrev,
+            "edit.next" => OverlayIconId.EditNext,
+            "edit.place" => OverlayIconId.EditPlace,
+            "edit.delete" => OverlayIconId.EditDelete,
+            "edit.exit" => OverlayIconId.EditExit,
+            "edit.duplicate" => OverlayIconId.EditDuplicate,
+            "edit.link" => OverlayIconId.EditLink,
+            "edit.material" => OverlayIconId.EditMaterial,
+            "edit.op" => OverlayIconId.EditOpCycle,
+            "edit.style" => OverlayIconId.EditStyle,
+            "edit.deselect" => OverlayIconId.EditDeselect,
+            "edit.record" => OverlayIconId.EditRecord,
+            "edit.play" => OverlayIconId.EditPlay,
             _ => (((icon is not null) &&
                 icon.StartsWith(value: "action.", comparisonType: StringComparison.Ordinal) &&
                 int.TryParse(s: icon.AsSpan(start: "action.".Length), result: out var number) &&

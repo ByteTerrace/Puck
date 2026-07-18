@@ -61,6 +61,12 @@ internal static class WorldDefaultBindings {
                         .. HoldRelease(source: InputSources.Gamepad.ButtonEast, command: PlayerCommandModule.SecondaryCommand),
                         // Start = device cycle (press edge).
                         new BindingPageEntryDefinition(Source: InputSources.Gamepad.Start, Command: PlayerCommandModule.CycleCommand, ActivateOn: CommandPhase.Started, AnyModifiers: true),
+                        // Editor entry — Gamepad Back (the view/menu button) and Keyboard Tab, both free here and both
+                        // deliberate (a rarely-pressed control, so gameplay never trips into the mode by accident). The
+                        // editor's own pages arrive as a per-seat MODE layer on entry (WorldEditorBindings), never as a
+                        // world overlay.
+                        new BindingPageEntryDefinition(Source: InputSources.Gamepad.Back, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor", AnyModifiers: true),
+                        new BindingPageEntryDefinition(Source: InputSources.Keyboard.Tab, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor", AnyModifiers: true),
                     ],
                     Label: "Base"
                 ),

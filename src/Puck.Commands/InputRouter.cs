@@ -93,6 +93,26 @@ public sealed class InputRouter : ISnapshotSource, ICommandInjectionSink {
         }
     }
 
+    /// <summary>Whether a logical command is currently carried held for a slot — a bound digital pressed and not yet
+    /// released, or an analog channel with an active carried sample. The read seam an input-state UI (a binding bar's
+    /// pressed chips) lights from, so held truth has ONE owner instead of a parallel tracker per consumer.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <param name="command">The command name to test.</param>
+    /// <returns><see langword="true"/> when the slot carries the command held.</returns>
+    /// <remarks>Pump-thread only: the held tables mutate inside <see cref="SnapshotForTick"/> and the focus-loss
+    /// release on the same single thread that produces frames, so this read is safe there and nowhere else.</remarks>
+    public bool IsCommandHeld(int slot, string command) {
+        return (m_registry.TryGetId(
+            name: command,
+            id: out var commandId
+        )
+            && m_heldBySlot.TryGetValue(
+                key: slot,
+                value: out var held
+            )
+            && held.ContainsKey(key: commandId));
+    }
+
     /// <summary>Queues one deterministic cancellation per carried logical command, then clears every carried digital
     /// and analog value. Hosts call this on focus loss because platforms do not guarantee release events afterward.</summary>
     public void ReleaseHeld() {

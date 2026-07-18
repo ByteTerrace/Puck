@@ -182,6 +182,11 @@ services.AddSingleton<ICommandModule, ProfileCommandModule>();
 // profile.save (fold session rebinds into the seat's profile through the server-owned player document). A SEPARATE
 // module to keep each class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldBindingCommandModule>();
+// The per-seat editor mode (§P2): the mode owner that flips a seat's binding MODE layer, diverts its intent to the
+// honest idle over the existing SetControl wire, and swaps its camera rig for the free-fly/orbit editor rigs —
+// plus its console twin, the editor.* verb surface (a SEPARATE module for the analyzer ceilings).
+services.AddSingleton<WorldEditorSession>();
+services.AddSingleton<ICommandModule, EditorCommandModule>();
 
 // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
 // activates — the one body system the snapshot reports (up to 128 avatars: the scale target).
@@ -337,8 +342,10 @@ services.AddSingleton(implementationFactory: static sp => {
 });
 services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     bindings: sp.GetRequiredService<WorldSeatBindings>(),
+    editor: sp.GetRequiredService<WorldEditorSession>(),
     gamepads: sp.GetService<GamepadManager>(),
     roster: sp.GetRequiredService<PlayerRoster>(),
+    router: sp.GetRequiredService<InputRouter>(),
     store: sp.GetRequiredService<BindingBarStore>()
 ));
 // The overlay verb surface — world.screenshot (the composed-frame capture) + world.console (the mirror toggle).
@@ -366,7 +373,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         simulation: sp.GetRequiredService<WorldSimulation>(),
         settings: sp.GetRequiredService<WorldRenderSettings>(),
         binder: binder,
-        envelope: sp.GetRequiredService<WorldRenderEnvelope>()
+        envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
+        editor: sp.GetRequiredService<WorldEditorSession>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a

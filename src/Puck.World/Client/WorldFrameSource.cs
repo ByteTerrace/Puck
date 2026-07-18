@@ -24,9 +24,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly PlayerRoster m_roster;
     private readonly WorldClient m_client;
     private readonly WorldSimulation m_simulation;
-    // One over-the-shoulder chase rig per local seat: its defaults (eye up-and-back along the anchor's +Z, target lifted
-    // a touch) frame that seat's avatar from behind, tracking its heading. Only local seats get cameras/views.
-    private readonly OrientedFollowRig[] m_cameraRigs;
+    // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
+    // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
+    // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
+    private readonly ISdfCameraRig[] m_cameraRigs;
+    // The per-seat editor mode: camera rig swap + the sole-editor layout policy, both read during produce.
+    private readonly WorldEditorSession m_editor;
     // Per-frame scratch reused to keep CaptureFrame allocation-free: one transform per leaf in the frozen all-avatar
     // catalog, plus movement-driven gait state per avatar and the joined seats' views. Live programs address only the
     // active avatars' stable slot ranges; stale inactive slots are unreachable.
@@ -56,14 +59,16 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
     /// <param name="envelope">The render-capacity oracle configured here with the probed floors and a candidate
     /// measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
+    /// <param name="editor">The per-seat editor mode (camera rig swap + the sole-editor layout policy).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: envelope);
+        ArgumentNullException.ThrowIfNull(argument: editor);
 
         m_frameRate = frameRate;
         m_client = client;
@@ -71,7 +76,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_simulation = simulation;
         m_settings = settings;
         m_binder = binder;
-        m_cameraRigs = new OrientedFollowRig[PlayerRoster.MaxSlots];
+        m_editor = editor;
+        m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_cameraRigs[slot] = new OrientedFollowRig();
@@ -162,6 +168,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // supplied in full; the active-only program addresses only its avatars' stable leaf ranges.
         var joinedCount = m_roster.Count;
 
+        // Self-heal a seat that left the roster while editing (its mode layer and camera drop), then resolve this
+        // frame's layout policy: a SOLE editing seat among 2+ players takes the dominant workbench region.
+        m_editor.PruneDeparted();
+
+        var soleEditorViewIndex = m_editor.SoleEditorViewIndex();
+
         m_views.Clear();
 
         // Per-instance soft-shadow participation (the crowd lever): a local seat always casts; a stand-in casts only
@@ -216,11 +228,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 continue;
             }
 
-            var region = LayoutRegion(count: joinedCount, index: m_views.Count);
+            var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
             // any lower tier renders that view's SDF at a reduced extent and upsamples.
-            m_views.Add(item: new SdfViewSnapshot(Camera: ResolveCamera(slot: slot, region: region, width: width, height: height), Region: region) {
+            m_views.Add(item: new SdfViewSnapshot(Camera: ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds), Region: region) {
                 RenderScale = m_settings.RenderScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
@@ -295,14 +307,15 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         return false;
     }
 
-    // Frames the slot's avatar with its over-the-shoulder rig at the region's pixel size (region × window dims), so
-    // each split keeps its own aspect. The anchor is the seat's render pose (interpolated and error-eased, resolved by
-    // the client view this frame), so the camera tracks the pose the avatar is drawn at.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height) {
-        var (eye, target, fieldOfView) = m_cameraRigs[slot].Resolve(
-            anchor: new SdfAnchor(Position: m_client.Position(index: slot), Orientation: m_client.Orientation(index: slot)),
-            time: m_elapsedSeconds
-        );
+    // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
+    // The rig is the seat's chase rig by default; while the seat edits, the editor session's rig (advanced by this
+    // frame's presentation delta) frames it instead. The anchor is the seat's render pose (interpolated and
+    // error-eased, resolved by the client view this frame), so the chase camera tracks the pose the avatar is drawn
+    // at and the orbit pivot rides it live.
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds) {
+        var anchor = new SdfAnchor(Position: m_client.Position(index: slot), Orientation: m_client.Orientation(index: slot));
+        var rig = m_editor.ResolveRig(slot: slot, chase: m_cameraRigs[slot], anchor: in anchor, time: m_elapsedSeconds, deltaSeconds: deltaSeconds);
+        var (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, time: m_elapsedSeconds);
 
         return CameraSnapshot.LookAt(
             position: eye,
@@ -311,6 +324,25 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             viewportWidth: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
             viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
         );
+    }
+
+    // The editor-aware viewport resolver: when EXACTLY one seat edits while others play (soleEditorIndex >= 0, 2+
+    // joined), the editing view takes the full-height left 70% — the workbench wants width and an honest aspect —
+    // and the playing seats stack in a live right rail (each keeps a visible, playable view). All-playing,
+    // single-seat, and multi-editor sessions fall through to the standard ladder.
+    internal static NormalizedRect LayoutRegion(int count, int index, int soleEditorIndex) {
+        if ((soleEditorIndex >= 0) && (count >= 2)) {
+            if (index == soleEditorIndex) {
+                return new NormalizedRect(X: 0f, Y: 0f, Width: 0.70f, Height: 1f);
+            }
+
+            var railCount = (count - 1);
+            var railIndex = ((index < soleEditorIndex) ? index : (index - 1));
+
+            return new NormalizedRect(X: 0.70f, Y: ((float)railIndex / railCount), Width: 0.30f, Height: (1f / railCount));
+        }
+
+        return LayoutRegion(count: count, index: index);
     }
 
     // The viewport region for the player at slot-order position `index` of `count`. NormalizedRect convention: origin

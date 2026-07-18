@@ -12,7 +12,7 @@ namespace Puck.World;
 /// authoritative <see cref="WorldServer"/> steps (buffered protocol traffic → every body → the tick's snapshot,
 /// delivered to the client synchronously), then the client-side post-step (the screen machines, the per-tick analog
 /// clear).</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldScreenBinder screens, WorldAddonDriver addons, WorldSeatBindings seatBindings) : IFixedStepSimulation {
+internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldScreenBinder screens, WorldAddonDriver addons, WorldSeatBindings seatBindings, WorldEditorSession editor) : IFixedStepSimulation {
     private const ulong TimingReportInterval = 60UL;
 
     private readonly WorldServer m_server = server;
@@ -20,6 +20,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldScreenBinder m_screens = screens;
     private readonly WorldAddonDriver m_addons = addons;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
+    private readonly WorldEditorSession m_editor = editor;
     private SimulationTiming m_timingWorst;
     private ulong m_timingSamples;
 
@@ -57,6 +58,9 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
 
         phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
         m_client.Roster.ClearAnalog();
+        // Promote this tick's staged editor-stick samples to the frame-visible latch (the editor camera's per-frame
+        // integration cadence), beside the seats' own analog clear.
+        m_editor.LatchTick();
 
         var finishTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
 
