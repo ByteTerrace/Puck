@@ -615,6 +615,44 @@ to each seat's viewport. Proven on both backends by `proof.cs editor-edit`
 (place = one journal entry, drag coalescing at the wire, undo restores the
 position, the look-ray pick, the highlight in pixels, capacity honesty).
 
+**Creations and placements (P5, §D6)** make sculpted content world DATA. Two
+sections in the whole-row pattern: `creations` — ASSET rows embedding a full
+`puck.creation.v1` document INLINE-CANONICAL with its SHA-256 pinned beside it
+(the UIE-6 contract: doc + hash always come from the same
+`CreationCanonicalizer.Canonicalize` result; the compose boundary re-derives
+and REJECTS any hash the pipeline did not itself compute, and the validator
+re-verifies the pin so a tampered world file falls back loudly at boot) — and
+`placements` — INSTANCE rows (`id`, `creationId`, position/yaw/scale, repeat +
+mirror facets as data, a reserved nullable `role` for the driven-body rung).
+Four mutations (`UpsertCreation`/`RemoveCreation`/`UpsertPlacement`/
+`RemovePlacement`); removing a creation with live placements rejects loudly
+(no cascade). Static stamps bake the full placement transform into every
+shape's own segment (repeat rows auto-split so instance bounds stay tight);
+placements of a FRAMED creation are ANIMATED — they replay their timeline
+hold-style at the settled 8-tick cadence on the render clock through a
+reserved dynamic-transform pool (`WorldPlacementAnimator`, reconciled by
+stable id at each delivery: pose edits write in place, content changes
+release+recreate, removals release symmetrically). Every placement policy
+value (stamp budget, headroom, repeat split, animated pool, cadence) lives in
+ONE place — `WorldPlacementPolicy`, the P5.5 data-fication candidate — and the
+probe reserves boot+headroom worst-case stamps plus the whole replay pool, so
+over-budget placements reject with the envelope's word-exact ceiling. The
+place page grows place-by-name: D-pad Left/Right cycle the armed creation,
+North ghosts a placement of it (commit = `editor.grab`, one mutation); the
+typed twins are `editor.import <path> [id]` (the strict canonicalizer is the
+only door in), `editor.creations`, `editor.place <creationId> [yawDeg
+[scale]]`, and the JSON row verbs `world.creation.set`/`.remove` +
+`world.placement.set`/`.remove`. Placements select, pick (reach-sized
+proxies), drag, move, nudge, and delete like every other row, shimmer on
+delivery like scene rows, and `world.save` re-canonicalizes every creation row
+so the persisted pin can never diverge from its embedded bytes. Proven on
+both backends by `proof.cs placements` (import/stamp in pixels, the corrupt
+hash pin, drag coalescing, undo, the no-cascade reject, the animated
+fixture's pixel motion, the capacity flood, and the save→reload→save byte
+ouroboros with creations embedded). Text runs COUNT against the per-stamp
+shape budget but do not render this arc (World binds no world-space glyph
+atlas — the UIE-7 memory posture; binding one later is emission-only).
+
 ## Storage (cloud-ready, local-proven)
 
 Phase 4 lands the **readiness** blueprint the eventual cloud arc executes

@@ -152,6 +152,25 @@
 //       engine's own PNGs inline like ui-floor. A second NARROW pair of sessions (640x480, four seats, two editors)
 //       is the UIE-4 clip proof: the seat-1 HUD paints inside its own 320px viewport and does NOT bleed past the
 //       2x2 seam into seat 2 (control-bounded pixel bands on both backends).
+//   placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The P5 creations/placements proof (§D6), run on BOTH backends like editor-mode. Each session pins the roster
+//       (player.leave 2..4) and census (world.population 0), aims the editor camera at empty grass (so the ONLY pixel
+//       motion in the asserted band is the placement under test), and asserts: (a) editor.import of a committed
+//       docs/examples/creations fixture crosses the strict canonicalizer and lands as EXACTLY one UpsertCreation
+//       journal entry; (b) the STAMP is visible — editor.place'ing the imported creation repaints a static central
+//       band decisively versus a control pair's noise floor; (c) THE HASH PIN — world.creation.set with a corrupted
+//       hash rejects loudly naming the canonical sha256, dirty unchanged (and the load-time half is covered by the
+//       validator: a tampered saved file falls back loudly at boot); (d) the P3 drag channel works on placements —
+//       grab + multi-step editor.drag moves the dirty counter NOT AT ALL mid-drag and release commits EXACTLY one
+//       more journal entry ('retired: applied'); (e) world.undo restores the pre-drag position (editor.select echoes
+//       the original coordinates); (f) RemoveCreation with live placements rejects loudly (the no-cascade ruling);
+//       (g) the ANIMATED fixture (lantern-fish, 8 frames) walks its timeline — two shots 0.7 s apart over the fish
+//       band differ decisively while a static-control pair does not; (h) capacity honesty — flooding placements past
+//       the reserved headroom hits the loud '[world.mutation rejected: ...] ... exceed the probed render envelope'
+//       ceiling and a further placement leaves dirty unchanged; (i) THE OUROBOROS WITH CREATIONS — world.save of the
+//       furnished world, a relaunch --world <that file>, and a second save compare byte-identical (the inline-
+//       canonical embeds and the §D6 world.save hash recompute are byte-stable). Decodes the engine's own PNGs
+//       inline like ui-floor.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -219,8 +238,9 @@ static class ProofApp {
                 "editor-mode" => EditorModeProof.RunEditorMode(opts: opts),
                 "editor-edit" => EditorEditProof.RunEditorEdit(opts: opts),
                 "editor-cameras" => EditorCamerasProof.RunEditorCameras(opts: opts),
+                "placements" => PlacementsProof.RunPlacements(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements)"),
             };
         }
         catch (ArgException ex) {
@@ -250,6 +270,7 @@ static class ProofApp {
         Console.WriteLine(value: "  editor-mode [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  editor-edit [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -6694,7 +6715,7 @@ static class ComposedShotKit {
     }
 
     // The shared launch shape: piped stdio, repo-root working directory, the standard size/backend/exit options.
-    public static Ctx Launch(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, Stopwatch stopwatch) {
+    public static Ctx Launch(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds, Stopwatch stopwatch, string[]? extraArgs = null) {
         var psi = new ProcessStartInfo {
             FileName = exe,
             RedirectStandardError = true,
@@ -6707,6 +6728,10 @@ static class ComposedShotKit {
         if (backend is not null) {
             psi.ArgumentList.Add(item: "--backend");
             psi.ArgumentList.Add(item: backend);
+        }
+
+        foreach (var extra in (extraArgs ?? [])) {
+            psi.ArgumentList.Add(item: extra);
         }
 
         psi.ArgumentList.Add(item: "--width");
@@ -8060,5 +8085,330 @@ static class EditorCamerasProof {
         }
 
         return ComposedShotKit.Check(name: name, ok: true, detail: "no next-boot narration");
+    }
+}
+
+// ============================================================================================
+// PLACEMENTS — the P5 creations/placements proof (§D6): import a committed creation fixture
+// through the strict canonicalizer, stamp it (pixel evidence over empty grass), corrupt the
+// hash pin (loud reject), drag it (one journal entry), undo it, reject the no-cascade
+// creation removal, walk the animated fixture's timeline (pixel motion), flood the reserved
+// headroom (the word-exact envelope ceiling), and prove the ouroboros WITH creations
+// (save -> reload -> save byte-identity of the inline-canonical embeds). Runs on BOTH
+// backends like editor-mode. See the header's subcommand block for the assertion list.
+// ============================================================================================
+static class PlacementsProof {
+    static readonly Regex DirtyEcho = new(pattern: @"dirty (\d+) ", options: RegexOptions.Compiled);
+    static readonly Regex AtEcho = new(pattern: @"at \((-?[0-9.]+), (-?[0-9.]+), (-?[0-9.]+)\)", options: RegexOptions.Compiled);
+
+    public static int RunPlacements(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 1280, name: "--width");
+        var height = opts.GetInt(fallback: 800, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 1;
+        }
+
+        Console.WriteLine(value: "[proof] === placements (a): Direct3D 12 (the default backend) ===");
+        var directXPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === placements (b): Vulkan ===");
+        var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (directXPassed && vulkanPassed);
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] placements proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
+        var pid = Environment.ProcessId;
+        var tag = ((backend ?? "directx") + "-placements");
+        var controlAPath = ShotPath(pid: pid, tag: tag, name: "control-a");
+        var controlBPath = ShotPath(pid: pid, tag: tag, name: "control-b");
+        var stampPath = ShotPath(pid: pid, tag: tag, name: "stamp");
+        var fishAPath = ShotPath(pid: pid, tag: tag, name: "fish-a");
+        var fishBPath = ShotPath(pid: pid, tag: tag, name: "fish-b");
+        var savedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-1.world.json");
+        var resavedPath = Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-2.world.json");
+        var lampFixture = Path.Combine(path1: repoRoot, path2: "docs", path3: "examples", path4: Path.Combine(path1: "creations", path2: "town-lamp.creation.json"));
+        var fishFixture = Path.Combine(path1: repoRoot, path2: "docs", path3: "examples", path4: Path.Combine(path1: "creations", path2: "lantern-fish.creation.json"));
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off, roster to seat 1, zero census — the asserted bands must read ONLY
+            // the placements under test.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "enter-editor");
+
+            // (a) IMPORT: the committed lamp fixture crosses the strict canonicalizer — one UpsertCreation entry.
+            var dirty0 = ReadDirty(ctx: ctx, name: "dirty-baseline");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {lampFixture}",
+                expect: "[world.mutation: UpsertCreation 'town-lamp' applied]", name: "import-lamp-applies");
+            passed &= ComposedShotKit.Check(name: "import-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-import") == (dirty0 + 1)), detail: "import = one journal entry");
+
+            // (b) THE STAMP in pixels: aim at empty grass (+Z of the spawn plaza — no screens, no crowd), bound the
+            // static noise floor with a control pair, place, and demand a decisive central-band repaint.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-grass");
+            Thread.Sleep(millisecondsTimeout: 3400); // let the import toast + shimmer decay before the control pair
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-a", path: controlAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot-b", path: controlBPath);
+
+            var placeMark = ctx.Collector.Count;
+
+            // Scale 2.5: the lamp is a thin post — the bulkier stamp keeps the pixel threshold honestly decisive.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place town-lamp 0 2.5",
+                expect: "[world.mutation: UpsertPlacement 'place-1' applied]", name: "place-lamp-applies");
+
+            var placeEcho = ComposedShotKit.Await(collector: ctx.Collector, mark: placeMark,
+                predicate: l => (l.Contains(value: "[editor.place: seat 1 placement 'place-1'") && AtEcho.IsMatch(input: l)), deadlineSeconds: 15.0);
+            var placedAt = ((placeEcho is not null) ? AtEcho.Match(input: placeEcho).Value : null);
+
+            passed &= ComposedShotKit.Check(name: "place-echo-carries-position", ok: (placedAt is not null), detail: (placedAt ?? "(no position echo)"));
+            Thread.Sleep(millisecondsTimeout: 3400); // toast + shimmer decay: the stamp shot reads geometry only
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "stamp-shot", path: stampPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: controlAPath);
+            var controlB = ComposedShotKit.DecodePng(path: controlBPath);
+            var stamp = ComposedShotKit.DecodePng(path: stampPath);
+            // The stamp band sits ABOVE screen center: the level editor camera puts the horizon at mid-frame and a
+            // placed creation's body rises from its origin, so the upper-middle band is where the stamp paints.
+            var bandX = (int)(width * 0.375);
+            var bandY = (int)(height * 0.08);
+            var bandW = (int)(width * 0.25);
+            var bandH = (int)(height * 0.37);
+            var noise = MeanAbsDiff(a: controlB, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var stampDiff = MeanAbsDiff(a: stamp, b: controlA, x: bandX, y: bandY, w: bandW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "stamp-visible",
+                // The floor matches the animated check: a lamp is a thin post, so its MEAN band diff is modest —
+                // decisiveness comes from the 4x noise guard over a pinned-static control pair.
+                ok: ((stampDiff > 0.8) && (stampDiff > (noise * 4.0))),
+                detail: $"stamp band diff {stampDiff.ToString(format: "F2", provider: ProofApp.Inv)} vs noise {noise.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x noise)"
+            );
+
+            // (c) THE HASH PIN: the same fixture with a zeroed hash must reject loudly naming the canonical sha256,
+            // and the journal must not move — a hash the pipeline did not itself compute is never accepted.
+            var dirtyBeforeBad = ReadDirty(ctx: ctx, name: "dirty-before-bad-hash");
+            var badRow = BuildCorruptCreationRow(fixturePath: lampFixture);
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.creation.set {badRow}",
+                expect: "does not match the canonical sha256", name: "corrupt-hash-rejects-loudly");
+            passed &= ComposedShotKit.Check(name: "corrupt-hash-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-after-bad-hash") == dirtyBeforeBad), detail: "journal unchanged");
+
+            // (d) THE DRAG CHANNEL on a placement: grab + multi-step motion crosses NO wire (dirty frozen), release
+            // commits EXACTLY one whole-row mutation and the frozen preview retires on its own apply.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select placements place-1", expect: "[editor.select: seat 1 placements 'place-1'", name: "select-placement");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging placements 'place-1'", name: "grab-placement");
+
+            var dirtyMidDragBase = ReadDirty(ctx: ctx, name: "dirty-at-grab");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 2 0 1", expect: "[editor.drag: seat 1", name: "drag-step-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1 0 0", expect: "[editor.drag: seat 1", name: "drag-step-2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 0 0 -1", expect: "[editor.drag: seat 1", name: "drag-step-3");
+            passed &= ComposedShotKit.Check(name: "drag-motion-crosses-no-wire", ok: (ReadDirty(ctx: ctx, name: "dirty-mid-drag") == dirtyMidDragBase), detail: "dirty unchanged mid-drag");
+
+            var releaseMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "one mutation submitted", name: "release-commits");
+
+            var retired = ComposedShotKit.Await(collector: ctx.Collector, mark: releaseMark,
+                predicate: l => l.Contains(value: "frozen placement 'place-1' retired: applied"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(name: "frozen-preview-retires-applied", ok: (retired is not null), detail: (retired?.Trim() ?? "(no retire line)"));
+            passed &= ComposedShotKit.Check(name: "release-is-one-journal-entry", ok: (ReadDirty(ctx: ctx, name: "dirty-after-release") == (dirtyMidDragBase + 1)), detail: "release = one journal entry");
+
+            // (e) UNDO restores the pre-drag position (the placement echo's exact coordinates).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1", name: "undo-drag");
+
+            if (placedAt is not null) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select placements place-1", expect: placedAt, name: "undo-restores-position");
+            }
+
+            // (f) NO CASCADE: removing a creation with a live placement rejects loudly.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.creation.remove town-lamp",
+                expect: "has 1 live placement(s)", name: "remove-referenced-creation-rejects");
+
+            // (g) THE ANIMATED FIXTURE walks its timeline: stamp the 8-frame lantern-fish over its own patch of
+            // grass and demand pixel motion between two shots while a fish-free corner band stays at the noise floor.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"editor.import {fishFixture}",
+                expect: "[world.mutation: UpsertCreation 'lantern-fish' applied]", name: "import-fish-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 12 2 10 0 0", expect: "[editor.cam.pose: seat 1", name: "pose-at-fish-grass");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place lantern-fish",
+                expect: "[world.mutation: UpsertPlacement 'place-2' applied]", name: "place-fish-applies");
+            Thread.Sleep(millisecondsTimeout: 3400); // toast + shimmer decay: motion below is the timeline alone
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "fish-shot-a", path: fishAPath);
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "fish-shot-b", path: fishBPath);
+
+            var fishA = ComposedShotKit.DecodePng(path: fishAPath);
+            var fishB = ComposedShotKit.DecodePng(path: fishBPath);
+            var fishMotion = MeanAbsDiff(a: fishB, b: fishA, x: bandX, y: bandY, w: bandW, h: bandH);
+            var cornerStill = MeanAbsDiff(a: fishB, b: fishA, x: (int)(width * 0.02), y: (int)(height * 0.70), w: (int)(width * 0.15), h: (int)(height * 0.20));
+
+            passed &= ComposedShotKit.Check(
+                name: "animated-fixture-walks-timeline",
+                ok: ((fishMotion > 0.8) && (fishMotion > (cornerStill * 4.0))),
+                detail: $"fish band motion {fishMotion.ToString(format: "F2", provider: ProofApp.Inv)} vs still corner {cornerStill.ToString(format: "F2", provider: ProofApp.Inv)} (want > 0.8 and > 4x the still band)"
+            );
+
+            // (i-1) SAVE the furnished world (2 creations, 2 placements) for the ouroboros half below.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {savedPath}", expect: "[world.save:", name: "save-furnished-world");
+
+            // (h) CAPACITY HONESTY: flood placements past the reserved headroom — the ceiling line is word-exact,
+            // and a further placement leaves the journal unchanged.
+            var floodMark = ctx.Collector.Count;
+
+            for (var extra = 0; (extra < 9); extra++) {
+                ComposedShotKit.Send(ctx: ctx, line: "editor.place town-lamp");
+                Thread.Sleep(millisecondsTimeout: 250);
+            }
+
+            var ceiling = ComposedShotKit.Await(collector: ctx.Collector, mark: floodMark,
+                predicate: l => (l.Contains(value: "[world.mutation rejected: UpsertPlacement") && l.Contains(value: "exceed the probed render envelope")), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "flood-hits-envelope-ceiling", ok: (ceiling is not null), detail: (ceiling?.Trim() ?? "(no envelope rejection)"));
+
+            var dirtyAtCeiling = ReadDirty(ctx: ctx, name: "dirty-at-ceiling");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place town-lamp", expect: "exceed the probed render envelope", name: "past-ceiling-rejects-again");
+            passed &= ComposedShotKit.Check(name: "past-ceiling-changes-nothing", ok: (ReadDirty(ctx: ctx, name: "dirty-past-ceiling") == dirtyAtCeiling), detail: "journal unchanged past the ceiling");
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "placements-png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: controlAPath);
+            ComposedShotKit.TryDelete(path: controlBPath);
+            ComposedShotKit.TryDelete(path: stampPath);
+            ComposedShotKit.TryDelete(path: fishAPath);
+            ComposedShotKit.TryDelete(path: fishBPath);
+        }
+
+        // (i-2) THE OUROBOROS WITH CREATIONS: reload the furnished save and save again — byte identity proves the
+        // inline-canonical embeds and the world.save hash recompute are stable end to end.
+        passed &= RunReloadOuroboros(exe: exe, repoRoot: repoRoot, backend: backend, savedPath: savedPath, resavedPath: resavedPath, exitAfterSeconds: exitAfterSeconds);
+        ComposedShotKit.TryDelete(path: savedPath);
+        ComposedShotKit.TryDelete(path: resavedPath);
+
+        return passed;
+    }
+
+    static bool RunReloadOuroboros(string exe, string repoRoot, string? backend, string savedPath, string resavedPath, int exitAfterSeconds) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: 640, height: 480, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", savedPath]);
+        var process = ctx.Process;
+        var passed = true;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: "creations 2 placements 2", name: "reload-carries-creations");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"world.save {resavedPath}", expect: "[world.save:", name: "resave-furnished-world");
+        }
+        finally {
+            ComposedShotKit.KillQuietly(process: process);
+        }
+
+        if (!passed) {
+            return false;
+        }
+
+        var savedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: savedPath)));
+        var resavedHash = Convert.ToHexStringLower(SHA256.HashData(source: File.ReadAllBytes(path: resavedPath)));
+
+        return ComposedShotKit.Check(
+            name: "creations-ouroboros-byte-stable",
+            ok: string.Equals(a: savedHash, b: resavedHash, comparisonType: StringComparison.Ordinal),
+            detail: $"sha256 {savedHash[..12]} vs {resavedHash[..12]}"
+        );
+    }
+
+    // One compact (single-token) WorldCreation JSON row wrapping the fixture's document with a ZEROED hash — the
+    // corrupt-hash probe world.creation.set must reject.
+    static string BuildCorruptCreationRow(string fixturePath) {
+        var document = System.Text.Json.Nodes.JsonNode.Parse(json: File.ReadAllText(path: fixturePath))!;
+        var row = new System.Text.Json.Nodes.JsonObject {
+            ["id"] = "bad-lamp",
+            ["document"] = document,
+            ["hash"] = new string(c: '0', count: 64),
+        };
+
+        return row.ToJsonString();
+    }
+
+    static string ShotPath(int pid, string tag, string name) {
+        return Path.Combine(Path.GetTempPath(), $"puck-placements-{tag}-{pid}-{name}.png");
+    }
+
+    static double MeanAbsDiff((int Width, int Height, byte[] Rgba) a, (int Width, int Height, byte[] Rgba) b, int x, int y, int w, int h) {
+        var sum = 0L;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * a.Width) + col) * 4);
+
+                sum += Math.Abs(value: (a.Rgba[i] - b.Rgba[i]));
+                sum += Math.Abs(value: (a.Rgba[(i + 1)] - b.Rgba[(i + 1)]));
+                sum += Math.Abs(value: (a.Rgba[(i + 2)] - b.Rgba[(i + 2)]));
+            }
+        }
+
+        return ((double)sum / ((long)w * h * 3));
+    }
+
+    // Sends world.status and parses the journal dirty counter (the stdin barrier makes it settled).
+    static int ReadDirty(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: candidate => DirtyEcho.IsMatch(input: candidate), deadlineSeconds: 15.0);
+
+        if (line is null) {
+            _ = ComposedShotKit.Check(name: name, ok: false, detail: "(no world.status dirty echo)");
+
+            return -1;
+        }
+
+        var dirty = int.Parse(s: DirtyEcho.Match(input: line).Groups[1].Value, provider: ProofApp.Inv);
+
+        _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
+
+        return dirty;
     }
 }

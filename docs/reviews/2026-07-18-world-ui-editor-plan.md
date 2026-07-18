@@ -496,6 +496,53 @@ Exit: `proof.cs placements` authors a furnished world over stdin — import,
 stamp, drag, save, reload, byte-stable; an animated flagship creation walks
 its timeline in-world.
 
+**LANDED (P5).** The two sections ship in the whole-row pattern:
+`creations: [{id, document, hash}]` (inline-canonical; the compose boundary
+canonicalizes on `UpsertCreation` and REJECTS any hash the pipeline did not
+itself compute; the validator recomputes the pin on every candidate, so a
+tampered file falls back loudly at boot; `world.save` re-canonicalizes each
+row — doc + hash from the same `CanonicalCreation`) and `placements:
+[{id, creationId, position, yawDegrees, scale, repeat?, mirror?, role?}]`
+(repeat + mirror adopted from the Demo vocabulary; the wallpaper-pattern
+facet and cabinet/companion role strings deliberately NOT adopted — `role`
+stays the reserved nullable driven-body seam). `RemoveCreation` with live
+placements REJECTS loudly (the conservative no-cascade ruling, chosen —
+undo-replay order stays honest and nothing unstamps silently). Rendering:
+static stamps port the Demo path (`WorldPlacementStamper` — the full
+placement prefix baked per shape segment, repeat auto-split at 8/axis,
+per-creation cached 16-clamp palettes, selection amber + change shimmer as
+palette tints); placements of framed creations are ANIMATED —
+`WorldPlacementAnimator` replays hold-style at the settled 8-tick cadence
+through a reserved dynamic pool (4 × (1+48) slots after the avatar catalog),
+reconciled by stable id at the delivery boundary (pose edits write in place,
+creation-content change = release+recreate, removal = symmetric release);
+repeat/mirror reject on an animated row. Every policy value centralizes in
+`WorldPlacementPolicy` (the owner-directed data-fication candidate for the
+P5.5 sweep). The probe reserves boot+headroom (8) worst-case stamps + the
+whole replay pool; `WorldRenderEnvelope` now measures the composed candidate
+DEFINITION, so floods reject with the word-exact ceiling (measured on the
+default world: 2241 probed instances — the 9th lamp measures 2242 and
+rejects). `Puck.Authoring` gained `CreationGeometry` — the canonical
+primitive dimension table (the flagged "genuinely missing accessor": a stamp
+must never fork the geometry a creation was authored against). Editor: the
+place page gains place-by-name (D-pad creation cycle, North stamp ghost);
+`editor.import` (the strict canonicalizer is the only door in),
+`editor.creations`, `editor.place <creationId> [yawDeg [scale]]`, and the
+`world.creation/placement.set/remove` JSON twins; placements select, pick
+(reach-sized proxies), drag (frozen-preview correlator on record equality),
+move, and delete like every row; `WorldChangeShimmer` observes placements
+under prefixed pulse keys. Text runs COUNT in the stamp budget but do not
+render this arc (no world glyph atlas — the UIE-7 posture; a future compact
+world-text artifact makes it emission-only). The CAS-ref import form stays
+unbuilt (World names no store root; the file path is the authoring cache's
+front door). Proven: `proof.cs placements` (both backends — import = one
+journal entry, the stamp in pixels over empty grass, corrupt-hash loud
+reject with the journal frozen, drag coalescing + 'retired: applied', undo
+restores the exact coordinates, the no-cascade reject, the lantern-fish
+walks its timeline in pixels, the 8-slot flood ceiling, and the
+save→reload→save byte ouroboros with embeds); the three checked-in worlds
+migrated once (two empty sections) and the battery re-ran green.
+
 ### P6 — The creation sub-editor: sculpting in World
 
 1. The sculpt model (a `Puck.Authoring` descendant of `CreatorScene`'s
