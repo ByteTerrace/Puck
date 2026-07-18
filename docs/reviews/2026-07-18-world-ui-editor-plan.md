@@ -548,8 +548,9 @@ unbuilt (World names no store root; the file path is the authoring cache's
 front door). Proven: `proof.cs placements` (both backends — import = one
 journal entry, the stamp in pixels over empty grass, corrupt-hash loud
 reject with the journal frozen, drag coalescing + 'retired: applied', undo
-restores the exact coordinates, the no-cascade reject, the lantern-fish
-walks its timeline in pixels, the 8-slot flood ceiling, and the
+restores the exact coordinates, the no-cascade reject, the proof-authored
+4-frame probe walks its timeline in pixels (the proof owns its content —
+no Demo fixture enters a World surface), the 8-slot flood ceiling, and the
 save→reload→save byte ouroboros with embeds); the three checked-in worlds
 migrated once (two empty sections) and the battery re-ran green.
 
