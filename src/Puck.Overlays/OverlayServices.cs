@@ -29,8 +29,11 @@ public sealed record OverlayServices {
     public required IGpuQueueSubmitter QueueSubmitter { get; init; }
     /// <summary>The shader module factory.</summary>
     public required IGpuShaderModuleFactory ShaderModuleFactory { get; init; }
-    /// <summary>The descriptor binding/slot the program storage buffer is written to (Vulkan descriptor binding 1 —
-    /// binding 0 is the combined-image sampler slot; Direct3D 12 table slot 0).</summary>
+    /// <summary>The descriptor binding/slot the program storage buffer is written to. Binding 1 on BOTH backends for
+    /// the one-sampler overlay pipeline shape: Vulkan declares the combined-image sampler at binding 0 and the storage
+    /// buffer at binding 1; the Direct3D 12 graphics root signature packs its descriptor table [t0..tN-1 texture SRVs,
+    /// then the storage SRV at t-textureSamplerCount] with an IDENTITY binding→slot map (see
+    /// <c>DirectXGpuPipelineFactory.BuildLayout</c>), so with one sampled texture the storage SRV is table slot 1 too.</summary>
     public required uint StorageBufferBinding { get; init; }
     /// <summary>The storage buffer factory.</summary>
     public required IGpuStorageBufferFactory StorageBufferFactory { get; init; }
@@ -64,7 +67,7 @@ public sealed record OverlayServices {
             PipelineFactory = Resolve<IGpuPipelineFactory>(),
             QueueSubmitter = Resolve<IGpuQueueSubmitter>(),
             ShaderModuleFactory = Resolve<IGpuShaderModuleFactory>(),
-            StorageBufferBinding = (hostsOnDirectX ? 0u : 1u),
+            StorageBufferBinding = 1u,
             StorageBufferFactory = Resolve<IGpuStorageBufferFactory>(),
             SurfaceTransferFactory = Resolve<IGpuSurfaceTransferFactory>(),
             VertexBufferFactory = Resolve<IGpuVertexBufferFactory>(),

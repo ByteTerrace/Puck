@@ -8,9 +8,22 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
+        <!-- ICaptureRequestTarget + the SdfEngineNode capture-forward fallback + SdfWorldKernels.DefaultDirectory
+             (the shared fullscreen.vert home) live in the render assembly; the unified overlay decorates it. -->
+        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The pre-baked MTSDF glyph assets OverlayGlyphAtlasSet loads (the mono voice + the ONE combined image it is
+             a view of) — copied from the tools/font-atlas bake output so a ProjectReference consumer (Puck.World)
+             receives them in its own output directory with zero fonts of its own. Rebake via tools/font-atlas. -->
+        <Content Include="Assets\Fonts\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets\Fonts\**\*.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
