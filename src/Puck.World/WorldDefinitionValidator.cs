@@ -216,8 +216,8 @@ internal static class WorldDefinitionValidator {
         }
     }
 
-    // The static scene (PRESENTATION-ONLY): albedos and boulder geometry are gated only for structural GPU safety
-    // (finite colors, finite centers, positive radii, non-negative blend) plus boulder-id presence and uniqueness.
+    // The static scene (PRESENTATION-ONLY): albedos and row geometry are gated only for structural GPU safety
+    // (finite colors, finite centers, positive extents, non-negative blends) plus row-id presence and uniqueness.
     private static void ValidateScene(WorldScene scene, List<string> errors) {
         if (scene is null) {
             errors.Add(item: "scene is required.");
@@ -229,30 +229,57 @@ internal static class WorldDefinitionValidator {
             errors.Add(item: "scene albedos must contain finite components.");
         }
 
-        if (scene.Boulders is not { } boulders) {
-            errors.Add(item: "scene.boulders is required.");
+        if (scene.Rows is not { } rows) {
+            errors.Add(item: "scene.rows is required.");
 
             return;
         }
 
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        for (var index = 0; (index < boulders.Count); index++) {
-            var boulder = boulders[index];
-            var path = $"scene.boulders[{index}]";
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var path = $"scene.rows[{index}]";
 
-            if (string.IsNullOrWhiteSpace(value: boulder.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!ids.Add(item: boulder.Id)) {
-                errors.Add(item: $"{path}.id '{boulder.Id}' is duplicated.");
+            if (row is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
             }
 
-            if (!IsFinite(value: boulder.Center)) {
+            if (string.IsNullOrWhiteSpace(value: row.Id)) {
+                errors.Add(item: $"{path}.id is required.");
+            } else if (!ids.Add(item: row.Id)) {
+                errors.Add(item: $"{path}.id '{row.Id}' is duplicated.");
+            }
+
+            if (!IsFinite(value: row.Center)) {
                 errors.Add(item: $"{path}.center must contain finite coordinates.");
             }
 
-            RequirePositive(value: boulder.Radius, name: $"{path}.radius", errors: errors);
-            RequireNonNegative(value: boulder.Smooth, name: $"{path}.smooth", errors: errors);
+            switch (row) {
+                case WorldSceneRow.Boulder boulder:
+                    RequirePositive(value: boulder.Radius, name: $"{path}.radius", errors: errors);
+                    RequireNonNegative(value: boulder.Smooth, name: $"{path}.smooth", errors: errors);
+
+                    break;
+                case WorldSceneRow.Slab slab:
+                    RequirePositive(value: slab.HalfExtents.X, name: $"{path}.halfExtents.x", errors: errors);
+                    RequirePositive(value: slab.HalfExtents.Y, name: $"{path}.halfExtents.y", errors: errors);
+                    RequirePositive(value: slab.HalfExtents.Z, name: $"{path}.halfExtents.z", errors: errors);
+                    RequireNonNegative(value: slab.Round, name: $"{path}.round", errors: errors);
+                    RequireNonNegative(value: slab.Smooth, name: $"{path}.smooth", errors: errors);
+
+                    if (!IsFinite(value: slab.Albedo)) {
+                        errors.Add(item: $"{path}.albedo must contain finite components.");
+                    }
+
+                    break;
+                default:
+                    errors.Add(item: $"{path} is an unknown scene-row kind.");
+
+                    break;
+            }
         }
     }
 

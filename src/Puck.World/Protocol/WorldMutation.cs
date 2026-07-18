@@ -57,10 +57,21 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The camera name to remove.</param>
     internal sealed record RemoveCamera(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 
-    /// <summary>Replaces the whole static scene (ground albedos + boulders).</summary>
+    /// <summary>Replaces the whole static scene (ground albedos + shape rows).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Scene">The scene.</param>
     internal sealed record SetScene(WorldPrincipal Principal, WorldScene Scene) : WorldMutation(Principal);
+
+    /// <summary>Upserts one static-scene shape row addressed by <see cref="WorldSceneRow.Id"/> — replaces the matching
+    /// row or appends a new one. The editor's per-act scene grain (a whole-scene resend per act stays wrong).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Row">The whole scene row.</param>
+    internal sealed record UpsertSceneRow(WorldPrincipal Principal, WorldSceneRow Row) : WorldMutation(Principal);
+
+    /// <summary>Removes the scene row with id <paramref name="Id"/>. Rejected if no row declares that id.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Id">The scene-row id to remove.</param>
+    internal sealed record RemoveSceneRow(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
 
     /// <summary>Replaces the whole seat spawn-point list (order maps slots; takes effect at the next seat activation).</summary>
     /// <param name="Principal">The acting identity.</param>

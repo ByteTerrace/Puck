@@ -16,11 +16,13 @@ namespace Puck.Overlays;
 /// <param name="Toast">The transient-echo source, or <see langword="null"/>.</param>
 /// <param name="FeedTick">Invoked once per produced frame, before the sources are snapshotted — the host's hook to
 /// freshen pull-model feeds (e.g. recomposing the per-seat binding frame). Runs on the render thread.</param>
+/// <param name="EditorHud">The per-seat editor-HUD source, or <see langword="null"/>.</param>
 public sealed record UnifiedOverlaySources(
     IConsolePanelSource? Console,
     IBindingBarSource? BindingBar,
     IOverlayToastSource? Toast,
-    Action? FeedTick
+    Action? FeedTick,
+    IEditorHudSource? EditorHud = null
 );
 
 /// <summary>
@@ -29,8 +31,8 @@ public sealed record UnifiedOverlaySources(
 /// buffer — the design-token slab and the shared glyph SDF pack as a static prefix, then this frame's packed
 /// records. SURFACES ARE WRITERS: the console panel, the per-seat binding bars, and the toast are each a small CPU
 /// writer emitting the shared record vocabulary (panel chrome / rect / fixed-cell text run / icon chip) through
-/// <see cref="OverlayFrameBuilder"/>, so a future surface (the editor HUD) is a new writer, never a new node or
-/// shader. Backend-neutral from its first commit: only neutral <c>IGpu*</c> services (<see cref="OverlayServices"/>),
+/// <see cref="OverlayFrameBuilder"/>, so a future surface is a new writer, never a new node or shader (the editor
+/// HUD proved the seam). Backend-neutral from its first commit: only neutral <c>IGpu*</c> services (<see cref="OverlayServices"/>),
 /// with bytecode selected by the caller.
 /// </summary>
 /// <remarks>
@@ -60,6 +62,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDeviceContext m_deviceContext;
+    private readonly EditorHudWriter? m_editorHudWriter;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
     private readonly uint m_height;
     private readonly IRenderNode m_inner;
@@ -131,6 +134,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_descriptor = new NodeDescriptor(Name: "unified-overlay", SurfaceId: SurfaceId.New());
         m_descriptorAllocator = services.DescriptorAllocator;
         m_deviceContext = services.DeviceContext;
+        m_editorHudWriter = ((sources.EditorHud is { } editorHud) ? new EditorHudWriter(source: editorHud) : null);
         m_fragmentBytecode = fragmentBytecode;
         m_height = height;
         m_inner = inner;
@@ -175,6 +179,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_builder.BeginFrame();
         m_consoleWriter?.Emit(builder: m_builder);
         m_bindingBarWriter?.Emit(builder: m_builder);
+        m_editorHudWriter?.Emit(builder: m_builder);
         m_toastWriter?.Emit(builder: m_builder, renderTicks: context.RenderTicks);
 
         if (!m_builder.HasContent) {

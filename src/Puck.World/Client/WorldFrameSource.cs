@@ -20,10 +20,26 @@ namespace Puck.World.Client;
 /// simulated count changes). A construction probe emits the complete 128-rig catalog and freezes the word, instance,
 /// and dynamic-transform envelopes; live programs contain active avatars only.</remarks>
 internal sealed class WorldFrameSource : ISdfFrameSource {
+    /// <summary>The scene rows of AUTHORING HEADROOM the construction probe reserves beyond the boot scene, so a live
+    /// editor can place rows into a booted world; a mutation past boot + headroom rejects loudly at apply time (the
+    /// envelope's honest ceiling). Sized as worst-case slabs (per-row material + box), which also covers a boulder.</summary>
+    internal const int AuthoringHeadroomRows = 32;
+    /// <summary>The extra screen slots the probe reserves (same rationale: <c>UpsertScreen</c> of a NEW index must fit
+    /// at runtime), bounded by the engine's screen-surface ceiling.</summary>
+    internal const int AuthoringHeadroomScreens = 4;
+    // The selection tint: the selected scene row's albedo pulls toward this amber so a selection reads at a glance
+    // (and a proof can count its hue). A material swap, not a new material system.
+    private static readonly Vector3 s_selectionTint = new(x: 1.0f, y: 0.72f, z: 0.15f);
+    private const float SelectionTintBlend = 0.65f;
+
     private readonly FrameRateMonitor m_frameRate;
     private readonly PlayerRoster m_roster;
     private readonly WorldClient m_client;
     private readonly WorldSimulation m_simulation;
+    // The editor's client-side render seams: the drag channel's pending-row overlay (composed over the delivered
+    // definition each rebuild) and the targeting state's selection highlight. Both fold into the rebuild watch.
+    private readonly WorldEditorTargeting m_targeting;
+    private readonly WorldEditorDrag m_drag;
     // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
     // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
     // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
@@ -60,8 +76,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="envelope">The render-capacity oracle configured here with the probed floors and a candidate
     /// measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
     /// <param name="editor">The per-seat editor mode (camera rig swap + the sole-editor layout policy).</param>
+    /// <param name="targeting">The editor selection state (the render highlight + rebuild watch).</param>
+    /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -69,6 +87,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: envelope);
         ArgumentNullException.ThrowIfNull(argument: editor);
+        ArgumentNullException.ThrowIfNull(argument: targeting);
+        ArgumentNullException.ThrowIfNull(argument: drag);
 
         m_frameRate = frameRate;
         m_client = client;
@@ -77,6 +97,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_settings = settings;
         m_binder = binder;
         m_editor = editor;
+        m_targeting = targeting;
+        m_drag = drag;
         m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -90,28 +112,30 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         var scene = m_client.Definition.Scene;
         var screens = m_client.Definition.Screens;
 
-        // The envelope probe (never rendered): a worst-case all-128-avatars build whose word/instance counts become the
-        // spec's capacity floors, so every active-only live rebuild fits.
-        var probe = BuildWorld(client: client, scene: scene, screens: screens, probeWorstCase: true);
+        // The envelope probe (never rendered): a worst-case all-128-avatars build over the boot scene/screens PLUS the
+        // documented authoring headroom, so a live editor can add rows/screens up to the reserved ceiling. Its
+        // word/instance counts become the spec's capacity floors; every active-only live rebuild fits by construction.
+        var probe = BuildWorld(client: client, scene: WithAuthoringHeadroom(scene: scene), screens: WithAuthoringHeadroom(screens: screens), probeWorstCase: true, highlight: null);
 
         ProgramWordCapacity = probe.Words.Length;
         InstanceCapacity = probe.Instances.Count;
 
         // Publish the probed envelope + a candidate measurer so a scene/screen mutation is capacity-checked at apply
-        // time against the SAME worst-case build (avatars are always at worst case; only scene/screens vary).
+        // time against the SAME worst-case build (avatars are always at worst case; only scene/screens vary). The
+        // candidate measures RAW (no headroom), so authoring consumes the reserved room before rejection.
         envelope.Configure(
             programWordCapacity: ProgramWordCapacity,
             instanceCapacity: InstanceCapacity,
             measure: (candidateScene, candidateScreens) => {
-                var candidate = BuildWorld(client: m_client, scene: candidateScene, screens: candidateScreens, probeWorstCase: true);
+                var candidate = BuildWorld(client: m_client, scene: candidateScene, screens: candidateScreens, probeWorstCase: true, highlight: null);
 
                 return (Words: candidate.Words.Length, Instances: candidate.Instances.Count);
             }
         );
 
-        m_builtRevision = m_client.Revision;
+        m_builtRevision = RebuildRevision();
         m_builtDefinitionRevision = m_client.DefinitionRevision;
-        m_program = BuildWorld(client: client, scene: scene, screens: screens, probeWorstCase: false);
+        m_program = BuildWorld(client: client, scene: scene, screens: screens, probeWorstCase: false, highlight: m_targeting);
     }
 
     /// <summary>The worst-case (all avatars active) program word count — the spec's <c>ProgramWordCapacity</c> floor.</summary>
@@ -140,10 +164,15 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // still reads the authoritative sim pose server-side.
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
 
-        // A declared-set or palette change since the last frame (a seat join/leave/recolor or a simulated-count change)
-        // rebuilds the program and marks ProgramChanged so the engine re-uploads it, always within the frozen
-        // capacities. The first frame also uploads (the initial program is not yet on the GPU).
-        var revision = m_client.Revision;
+        // Retire released drag overlays first (they freeze until the applied definition delivers or the rejection
+        // deadline passes — see WorldEditorDrag), so the revision read below already reflects any retirement.
+        m_drag.Reconcile(definitionRevision: m_client.DefinitionRevision);
+
+        // A declared-set or palette change since the last frame (a seat join/leave/recolor or a simulated-count
+        // change), a selection change (the highlight tint), or a drag-overlay move rebuilds the program and marks
+        // ProgramChanged so the engine re-uploads it, always within the frozen capacities. The first frame also
+        // uploads (the initial program is not yet on the GPU).
+        var revision = RebuildRevision();
         var programChanged = (!m_uploaded || (revision != m_builtRevision));
 
         if (revision != m_builtRevision) {
@@ -156,7 +185,16 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 m_builtDefinitionRevision = definitionRevision;
             }
 
-            m_program = BuildWorld(client: m_client, scene: m_client.Definition.Scene, screens: m_client.Definition.Screens, probeWorstCase: false);
+            // The editor's pending rows compose over the delivered truth: the EXISTING rebuild path renders the drag
+            // preview at drag cadence (≈ the proven seat-recolor cost), and release retires the overlay against the
+            // identical committed document — no second render path.
+            m_program = BuildWorld(
+                client: m_client,
+                scene: m_drag.ComposeScene(live: m_client.Definition.Scene),
+                screens: m_drag.ComposeScreens(live: m_client.Definition.Screens),
+                probeWorstCase: false,
+                highlight: m_targeting
+            );
             m_builtRevision = revision;
         }
 
@@ -362,7 +400,68 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         };
     }
 
-    // The scene: a grass ground plane, then the stone boulders (each smooth-unioned into the accumulated field), then
+    // The combined program-rebuild watch: the client's roster/snapshot/definition counters plus the editor's
+    // selection (highlight) and drag-overlay counters — all monotonic, so the sum only stalls when none has changed.
+    private int RebuildRevision() => ((m_client.Revision + m_targeting.Revision) + m_drag.Revision);
+
+    // The boot scene padded with the documented authoring-headroom rows (worst-case slabs: per-row material + box) —
+    // the probe-only shape that reserves live editing room in the capacity floors. Never validated, never rendered.
+    private static WorldScene WithAuthoringHeadroom(WorldScene scene) {
+        var rows = new List<WorldSceneRow>(capacity: (scene.Rows.Count + AuthoringHeadroomRows));
+
+        rows.AddRange(collection: scene.Rows);
+
+        for (var index = 0; (index < AuthoringHeadroomRows); index++) {
+            rows.Add(item: new WorldSceneRow.Slab(
+                Id: $"authoring-headroom-{index}",
+                Center: Vector3.Zero,
+                HalfExtents: Vector3.One,
+                Round: 0.05f,
+                Smooth: 0.3f,
+                Albedo: Vector3.One
+            ));
+        }
+
+        return (scene with { Rows = rows });
+    }
+
+    // The boot screens padded with headroom slabs at free engine indices (bounded by the engine surface ceiling), so a
+    // runtime UpsertScreen of a NEW index fits the probed envelope.
+    private static IReadOnlyList<WorldScreen> WithAuthoringHeadroom(IReadOnlyList<WorldScreen> screens) {
+        var padded = new List<WorldScreen>(capacity: (screens.Count + AuthoringHeadroomScreens));
+        var used = new HashSet<int>();
+
+        foreach (var screen in screens) {
+            padded.Add(item: screen);
+            _ = used.Add(item: screen.Index);
+        }
+
+        var added = 0;
+
+        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (added < AuthoringHeadroomScreens)); index++) {
+            if (!used.Add(item: index)) {
+                continue;
+            }
+
+            padded.Add(item: new WorldScreen(
+                Index: index,
+                Origin: Vector3.Zero,
+                Right: Vector3.UnitX,
+                Up: Vector3.UnitY,
+                HalfWidth: 1f,
+                HalfHeight: 1f,
+                HalfDepth: 0.1f,
+                Round: 0.05f,
+                Source: new WorldScreenSource.None(),
+                Route: WorldScreenRoute.Passive
+            ));
+            added++;
+        }
+
+        return padded;
+    }
+
+    // The scene: a grass ground plane, then the scene rows (each smooth-unioned into the accumulated field), then
     // the view's active avatars as leaf-level dynamic instances riding frozen catalog slots. Active-only, never
     // declared-but-parked: the per-tile instance mask width derives from the program's total declared instance count
     // (SdfProgram.InstanceMaskWordCount), so parked avatar declarations widen every shadow-gather pixel's mask walk.
@@ -370,10 +469,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // by the spec's capacity floors (ProgramWordCapacity / InstanceCapacity / DynamicTransformCapacity), probed at
     // construction. Every avatar keeps its own body + accent material (cheap constant words), so a recolor is data,
     // not a resize. Unions only, so the accumulator stays additive.
-    private static SdfProgram BuildWorld(WorldClient client, WorldScene scene, IReadOnlyList<WorldScreen> screens, bool probeWorstCase) {
+    private static SdfProgram BuildWorld(WorldClient client, WorldScene scene, IReadOnlyList<WorldScreen> screens, bool probeWorstCase, WorldEditorTargeting? highlight) {
         var builder = new SdfProgramBuilder();
         var grass = builder.AddMaterial(material: new SdfMaterial(Albedo: scene.GroundAlbedo));
-        var stone = builder.AddMaterial(material: new SdfMaterial(Albedo: scene.StoneAlbedo));
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
@@ -387,16 +485,28 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: WorldColor.Nose(body: bodyColor)));
         }
 
-        // The static field from the scene data: the grass ground plane, then each boulder (a sphere smooth-unioned into
-        // the field) translated to its center and reset back for the next (see WorldBoulder for the Puck.Scene
-        // convergence note).
+        // The static field from the scene data: the grass ground plane, then each scene row (its shape smooth-unioned
+        // into the field) translated to its center and reset back for the next. Every row carries its OWN material —
+        // uniformly, so the probe's capacity math and a live highlighted build count identical words — with the
+        // selected row's albedo pulled toward the selection tint (the editor's material-swap highlight).
         _ = builder.Plane(normal: Vector3.UnitY, offset: 0f, material: grass);
 
-        foreach (var boulder in scene.Boulders) {
-            _ = builder
-                .Translate(offset: boulder.Center)
-                .Sphere(radius: boulder.Radius, material: stone, blend: SdfBlendOp.SmoothUnion, smooth: boulder.Smooth)
-                .ResetPoint();
+        foreach (var row in scene.Rows) {
+            var albedo = ((row is WorldSceneRow.Slab slabRow) ? slabRow.Albedo : scene.StoneAlbedo);
+
+            if ((highlight is { } targeting) && targeting.IsSceneRowSelected(id: row.Id)) {
+                albedo = Vector3.Lerp(value1: albedo, value2: s_selectionTint, amount: SelectionTintBlend);
+            }
+
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: albedo));
+
+            _ = builder.Translate(offset: row.Center);
+            _ = (row switch {
+                WorldSceneRow.Boulder boulder => builder.Sphere(radius: boulder.Radius, material: material, blend: SdfBlendOp.SmoothUnion, smooth: boulder.Smooth),
+                WorldSceneRow.Slab slab => builder.Box(halfExtents: slab.HalfExtents, round: slab.Round, material: material, blend: SdfBlendOp.SmoothUnion, smooth: slab.Smooth),
+                _ => builder,
+            });
+            _ = builder.ResetPoint();
         }
 
         // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or the engine's

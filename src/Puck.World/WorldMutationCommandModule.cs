@@ -133,9 +133,26 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.scene.set",
-            description: "Replaces the static scene (ground albedos + boulders) from one inline-JSON WorldScene: world.scene.set <scene-json>. Geometry rebuilds live within the probed render envelope; an over-envelope scene is rejected loudly.",
+            description: "Replaces the static scene (ground albedos + shape rows) from one inline-JSON WorldScene: world.scene.set <scene-json>. Geometry rebuilds live within the probed render envelope; an over-envelope scene is rejected loudly.",
             info: WorldJsonContext.Default.WorldScene,
             toMutation: static scene => new WorldMutation.SetScene(Principal: WorldPrincipal.Console, Scene: scene)
+        );
+        yield return Row(
+            name: "world.scene.row.set",
+            description: "Upserts one static-scene shape row (whole-row, keyed by id) from one inline-JSON WorldSceneRow ($type boulder|slab): world.scene.row.set <row-json>. The editor's per-act scene grain; the typed editor.place/editor.move verbs are its shaped twins.",
+            info: WorldJsonContext.Default.WorldSceneRow,
+            toMutation: static row => new WorldMutation.UpsertSceneRow(Principal: WorldPrincipal.Console, Row: row)
+        );
+        yield return Simulation(
+            name: "world.scene.row.remove",
+            description: "Removes a static-scene shape row by id: world.scene.row.remove <id>. Rejected if no row declares that id.",
+            handler: (context, args) => {
+                if (args.Length != 1) {
+                    return Usage(verb: "world.scene.row.remove", form: "<id>");
+                }
+
+                return Submit(mutation: new WorldMutation.RemoveSceneRow(Principal: WorldPrincipal.Console, Id: args[0]));
+            }
         );
         yield return Row(
             name: "world.spawns.set",

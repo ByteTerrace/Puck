@@ -5,8 +5,8 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
-/// <summary>The editor camera's shape: a free-fly pose driven directly by the sticks, or an orbit around the seat's
-/// avatar (P3 retargets the orbit onto the live selection).</summary>
+/// <summary>The editor camera's shape: a free-fly pose driven directly by the sticks, or an orbit around the live
+/// selection (falling back to the seat's avatar while nothing is selected).</summary>
 internal enum EditorCameraMode {
     Fly,
     Orbit,
@@ -27,7 +27,7 @@ internal enum EditorModeOutcome {
 /// its intent diversion (the seat goes <see cref="IntentSource.Idle"/> client-side AND server-side over the existing
 /// <c>SetControl</c> wire — the honest idle: live device input is masked while tapes/<c>player.press</c> still drive,
 /// exactly the <c>player.control idle</c> contract), and its camera (a free-fly/orbit rig swapped in for the chase
-/// rig, integrated at presentation cadence from the pad samples the <c>editor.move/look</c> routers stage). Exit
+/// rig, integrated at presentation cadence from the pad samples the <c>editor.stick.move/look</c> routers stage). Exit
 /// restores the seat's prior intent source and clears the layer; the chase rig re-anchors deterministically to the
 /// avatar, so there is no pose to restore.
 /// </summary>
@@ -50,9 +50,13 @@ internal sealed class WorldEditorSession {
     // The orbit pivot sits at the avatar's chest height, matching the chase rig's target lift.
     private static readonly Vector3 s_orbitPivotLift = new(x: 0f, y: 1f, z: 0f);
 
+    // The world-space reach of Focus along the look ray — where a spawn ghost lands and proximity candidates sort from.
+    private const float FocusDistance = 6f;
+
     private readonly PlayerRoster m_roster;
     private readonly WorldSeatBindings m_bindings;
     private readonly IServerLink m_link;
+    private readonly WorldEditorDrag m_drag;
     private readonly Seat[] m_seats;
 
     // One seat's mode state: the camera pose/mode, the two-phase stick latches, the vertical holds, and the intent
@@ -67,7 +71,7 @@ internal sealed class WorldEditorSession {
         public Vector3 Eye;
         public float Yaw;
         public float Pitch;
-        // Orbit authoring state (the P3 selection becomes the pivot; today the seat avatar is).
+        // Orbit authoring state (the pivot resolves per frame: selection first, seat avatar fallback).
         public float OrbitYaw;
         public float OrbitPitch = 0.5f;
         public float OrbitDistance = DefaultOrbitDistance;
@@ -86,15 +90,19 @@ internal sealed class WorldEditorSession {
     /// <param name="roster">The participant roster (seat liveness and controllers).</param>
     /// <param name="bindings">The per-seat binding resolver the mode layer enters/leaves.</param>
     /// <param name="link">The server link the intent-source diversion rides (the existing <c>SetControl</c> wire).</param>
+    /// <param name="drag">The drag preview channel: while a seat's drag is live, its latched sticks translate the
+    /// pending row instead of flying the camera.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldEditorSession(PlayerRoster roster, WorldSeatBindings bindings, IServerLink link) {
+    public WorldEditorSession(PlayerRoster roster, WorldSeatBindings bindings, IServerLink link, WorldEditorDrag drag) {
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: link);
+        ArgumentNullException.ThrowIfNull(argument: drag);
 
         m_roster = roster;
         m_bindings = bindings;
         m_link = link;
+        m_drag = drag;
         m_seats = new Seat[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -114,9 +122,29 @@ internal sealed class WorldEditorSession {
     /// <param name="slot">The 0-based seat slot.</param>
     public float Speed(int slot) => m_seats[SlotOrFirst(slot: slot)].Speed;
 
-    /// <summary>The seat's current editor eye position (the fly pose; the resolved orbit eye while orbiting).</summary>
+    /// <summary>The seat's current editor eye position — the AUTHORED fly pose (which the orbit trails every frame),
+    /// not the frame-resolved rig, so a verb batch that poses the camera and then picks/places in the same pump window
+    /// reads the fresh pose without waiting for a produced frame.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    public Vector3 Eye(int slot) => m_seats[SlotOrFirst(slot: slot)].Rig.Eye;
+    public Vector3 Eye(int slot) => m_seats[SlotOrFirst(slot: slot)].Eye;
+
+    /// <summary>The seat's look direction (the pick ray; valid in both camera modes — the fly pose trails the orbit).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public Vector3 Facing(int slot) {
+        var seat = m_seats[SlotOrFirst(slot: slot)];
+
+        return LookDirection(yaw: seat.Yaw, pitch: seat.Pitch);
+    }
+
+    /// <summary>The seat's editor focus point — a fixed reach along the look ray (where a spawn ghost lands, and the
+    /// proximity-candidate sort origin).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public Vector3 Focus(int slot) => (Eye(slot: slot) + (Facing(slot: slot) * FocusDistance));
+
+    /// <summary>The selection-pivot resolver the orbit camera consults: a present, non-null answer retargets the orbit
+    /// at the selection; otherwise the seat's avatar anchors it. Property-injected (the targeting state is composed
+    /// after this session).</summary>
+    public Func<int, Vector3?>? OrbitPivotSource { get; set; }
 
     /// <summary>Enters editor mode for a seat: captures its intent source, diverts it to Idle on BOTH halves (the
     /// client mask and the server body over <c>SetControl</c>), installs the editor binding layer, and arms the
@@ -228,7 +256,7 @@ internal sealed class WorldEditorSession {
         return SetSpeed(slot: slot, unitsPerSecond: (up ? (seat.Speed * SpeedStepFactor) : (seat.Speed / SpeedStepFactor)));
     }
 
-    /// <summary>Stages this tick's movement-stick sample (the <c>editor.move</c> router; +Y flies forward, +X
+    /// <summary>Stages this tick's movement-stick sample (the <c>editor.stick.move</c> router; +Y flies forward, +X
     /// strafes right). Promoted to the frame-visible latch by <see cref="LatchTick"/>.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="move">The deadzoned movement sample.</param>
@@ -238,7 +266,7 @@ internal sealed class WorldEditorSession {
         }
     }
 
-    /// <summary>Stages this tick's look-stick sample (the <c>editor.look</c> router; +X looks right, +Y looks up).</summary>
+    /// <summary>Stages this tick's look-stick sample (the <c>editor.stick.look</c> router; +X looks right, +Y looks up).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="look">The deadzoned look sample.</param>
     public void RouteLook(int slot, Vector2 look) {
@@ -330,13 +358,40 @@ internal sealed class WorldEditorSession {
             seat.SeedPending = false;
         }
 
-        if (seat.Mode == EditorCameraMode.Fly) {
+        if (m_drag.IsDragging(slot: slot)) {
+            // A live drag steals the sticks: the camera holds its last resolved pose (look included — a moving frame
+            // under a precision drag fights the hand), the latched move sample translates the pending row in the
+            // camera's yaw frame, and the shoulder verticals lift/sink it.
+            AdvanceDrag(slot: slot, seat: seat, deltaSeconds: deltaSeconds);
+        } else if (seat.Mode == EditorCameraMode.Fly) {
             AdvanceFly(seat: seat, deltaSeconds: deltaSeconds);
         } else {
-            AdvanceOrbit(seat: seat, pivot: (anchor.Position + s_orbitPivotLift), deltaSeconds: deltaSeconds);
+            // The orbit pivots at the selection when one resolves; the seat avatar (chest-lifted) anchors it otherwise.
+            var pivot = (OrbitPivotSource?.Invoke(arg: slot) ?? (anchor.Position + s_orbitPivotLift));
+
+            AdvanceOrbit(seat: seat, pivot: pivot, deltaSeconds: deltaSeconds);
         }
 
         return seat.Rig;
+    }
+
+    // The drag-steered frame: the same planar camera frame the fly path derives (right = cross(look, up)), fed to the
+    // pending row at the seat's fly speed. Quadratic stick response matches flight so a drag feels like the camera.
+    private void AdvanceDrag(int slot, Seat seat, float deltaSeconds) {
+        var forward = LookDirection(yaw: seat.Yaw, pitch: 0f);
+        var right = Vector3.Normalize(value: Vector3.Cross(vector1: forward, vector2: Vector3.UnitY));
+        var move = seat.ActiveMove;
+        var vertical = ((seat.AscendHeld ? 1f : 0f) - (seat.DescendHeld ? 1f : 0f));
+
+        m_drag.Advance(
+            slot: slot,
+            planarRight: right,
+            planarForward: forward,
+            move: new Vector2(x: Response(value: move.X), y: Response(value: move.Y)),
+            vertical: vertical,
+            speed: seat.Speed,
+            deltaSeconds: deltaSeconds
+        );
     }
 
     // Free-fly integration: quadratic stick response for fine control near center, look before move so the frame's
@@ -365,8 +420,8 @@ internal sealed class WorldEditorSession {
         seat.Rig.Target = (seat.Eye + forward);
     }
 
-    // Orbit integration: left stick orbits the pivot, right stick's Y zooms exponentially, the pivot tracks the
-    // anchor live (the avatar today; the P3 selection later).
+    // Orbit integration: left stick orbits the pivot, right stick's Y zooms exponentially, the pivot tracks its
+    // source live (the selection when one resolves; the avatar otherwise).
     private static void AdvanceOrbit(Seat seat, Vector3 pivot, float deltaSeconds) {
         var move = seat.ActiveMove;
 

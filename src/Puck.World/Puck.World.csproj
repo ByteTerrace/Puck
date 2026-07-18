@@ -37,6 +37,8 @@
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
+        <!-- The editor's shared authoring math (GridSnap — the drag channel's snap core). -->
+        <ProjectReference Include="..\Puck.Authoring\Puck.Authoring.csproj" />
         <ProjectReference Include="..\Puck.Cameras\Puck.Cameras.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />

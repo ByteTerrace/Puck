@@ -414,6 +414,13 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
         }
       },
+      "puck.authoring": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )"
+        }
+      },
       "puck.cameras": {
         "type": "Project"
       },

@@ -182,11 +182,27 @@ services.AddSingleton<ICommandModule, ProfileCommandModule>();
 // profile.save (fold session rebinds into the seat's profile through the server-owned player document). A SEPARATE
 // module to keep each class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldBindingCommandModule>();
-// The per-seat editor mode (§P2): the mode owner that flips a seat's binding MODE layer, diverts its intent to the
-// honest idle over the existing SetControl wire, and swaps its camera rig for the free-fly/orbit editor rigs —
-// plus its console twin, the editor.* verb surface (a SEPARATE module for the analyzer ceilings).
+// The per-seat editor mode (§P2/§P3): the mode owner (binding MODE layer + honest-idle diversion + camera rig swap),
+// the drag preview channel (client-local pending rows, one mutation on release), the look-ray picker (a document-
+// derived fixed-point program), and the selection/targeting state — plus the two editor.* verb modules (SEPARATE
+// modules for the analyzer ceilings). The orbit pivot retargets at the selection via property injection (targeting
+// composes after the session).
+services.AddSingleton<WorldEditorDrag>();
 services.AddSingleton<WorldEditorSession>();
+services.AddSingleton<WorldEditorPicker>();
+services.AddSingleton(implementationFactory: static sp => {
+    var targeting = new WorldEditorTargeting(
+        client: sp.GetRequiredService<WorldClient>(),
+        picker: sp.GetRequiredService<WorldEditorPicker>(),
+        session: sp.GetRequiredService<WorldEditorSession>()
+    );
+
+    sp.GetRequiredService<WorldEditorSession>().OrbitPivotSource = targeting.SelectionPosition;
+
+    return targeting;
+});
 services.AddSingleton<ICommandModule, EditorCommandModule>();
+services.AddSingleton<ICommandModule, EditorSelectionCommandModule>();
 
 // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
 // activates — the one body system the snapshot reports (up to 128 avatars: the scale target).
@@ -323,6 +339,7 @@ if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) 
 // callback both echoes to stdout (scripted runs stay assertable) and records into the mirror.
 services.AddSingleton<ConsolePanelStore>();
 services.AddSingleton<BindingBarStore>();
+services.AddSingleton<EditorHudStore>();
 services.AddSingleton<OverlayToastStore>();
 services.AddSingleton<WorldConsoleMirror>();
 services.AddSingleton(implementationFactory: static sp => {
@@ -342,11 +359,15 @@ services.AddSingleton(implementationFactory: static sp => {
 });
 services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     bindings: sp.GetRequiredService<WorldSeatBindings>(),
+    client: sp.GetRequiredService<WorldClient>(),
+    drag: sp.GetRequiredService<WorldEditorDrag>(),
     editor: sp.GetRequiredService<WorldEditorSession>(),
+    editorHudStore: sp.GetRequiredService<EditorHudStore>(),
     gamepads: sp.GetService<GamepadManager>(),
     roster: sp.GetRequiredService<PlayerRoster>(),
     router: sp.GetRequiredService<InputRouter>(),
-    store: sp.GetRequiredService<BindingBarStore>()
+    store: sp.GetRequiredService<BindingBarStore>(),
+    targeting: sp.GetRequiredService<WorldEditorTargeting>()
 ));
 // The overlay verb surface — world.screenshot (the composed-frame capture) + world.console (the mirror toggle).
 services.AddSingleton<ICommandModule, WorldUiCommandModule>();
@@ -374,7 +395,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         settings: sp.GetRequiredService<WorldRenderSettings>(),
         binder: binder,
         envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
-        editor: sp.GetRequiredService<WorldEditorSession>()
+        editor: sp.GetRequiredService<WorldEditorSession>(),
+        targeting: sp.GetRequiredService<WorldEditorTargeting>(),
+        drag: sp.GetRequiredService<WorldEditorDrag>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a
@@ -421,6 +444,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
                     sources: new UnifiedOverlaySources(
                         BindingBar: sp.GetRequiredService<BindingBarStore>(),
                         Console: sp.GetRequiredService<ConsolePanelStore>(),
+                        EditorHud: sp.GetRequiredService<EditorHudStore>(),
                         FeedTick: sp.GetRequiredService<WorldOverlayFeed>().Tick,
                         Toast: sp.GetRequiredService<OverlayToastStore>()
                     ),

@@ -32,46 +32,50 @@
       0.5,
       0.38
     ],
-    "boulders": [
+    "rows": [
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-n",
         "center": [
           0,
           0.7,
           -2.4
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       },
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-e",
         "center": [
           2.4,
           0.7,
           0
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       },
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-s",
         "center": [
           0,
           0.7,
           2.4
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       },
       {
+        "$type": "boulder",
+        "radius": 0.8,
+        "smooth": 0.45,
         "id": "pillar-w",
         "center": [
           -2.4,
           0.7,
           0
-        ],
-        "radius": 0.8,
-        "smooth": 0.45
+        ]
       }
     ]
   },

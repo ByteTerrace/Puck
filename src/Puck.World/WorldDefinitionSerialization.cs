@@ -22,6 +22,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldScreen))]
 [JsonSerializable(typeof(WorldCamera))]
 [JsonSerializable(typeof(WorldScene))]
+[JsonSerializable(typeof(WorldSceneRow))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]
 [JsonSerializable(typeof(MotionTuning))]
 [JsonSerializable(typeof(WanderTuning))]

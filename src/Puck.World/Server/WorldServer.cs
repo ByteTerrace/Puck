@@ -510,9 +510,10 @@ internal sealed class WorldServer {
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns;
 
-    // Whether a mutation can grow the SDF program past the probed render envelope (scene boulders / screen slabs).
+    // Whether a mutation can grow the SDF program past the probed render envelope (scene rows / screen slabs).
     private static bool AffectsRenderEnvelope(WorldMutation mutation) => mutation is
-        WorldMutation.SetScene or WorldMutation.UpsertScreen or WorldMutation.RemoveScreen;
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen;
 
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
     // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
@@ -520,7 +521,7 @@ internal sealed class WorldServer {
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or WorldMutation.SetKitAssignment => WorldSection.Kits,
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen => WorldSection.Screens,
         WorldMutation.UpsertCamera or WorldMutation.RemoveCamera => WorldSection.Cameras,
-        WorldMutation.SetScene => WorldSection.Scene,
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow => WorldSection.Scene,
         WorldMutation.SetSpawns => WorldSection.Spawns,
         WorldMutation.SetMotion => WorldSection.Motion,
         WorldMutation.SetWander => WorldSection.Wander,
@@ -542,6 +543,8 @@ internal sealed class WorldServer {
         WorldMutation.UpsertCamera m => $"UpsertCamera '{m.Camera.Name}'",
         WorldMutation.RemoveCamera m => $"RemoveCamera '{m.Name}'",
         WorldMutation.SetScene => "SetScene",
+        WorldMutation.UpsertSceneRow m => $"UpsertSceneRow '{m.Row.Id}'",
+        WorldMutation.RemoveSceneRow m => $"RemoveSceneRow '{m.Id}'",
         WorldMutation.SetSpawns => "SetSpawns",
         WorldMutation.SetMotion => "SetMotion",
         WorldMutation.SetWander => "SetWander",
@@ -615,6 +618,21 @@ internal sealed class WorldServer {
                 return true;
             case WorldMutation.SetScene m:
                 candidate = (current with { Scene = m.Scene });
+
+                return true;
+            case WorldMutation.UpsertSceneRow m:
+                candidate = (current with { Scene = (current.Scene with { Rows = Upsert(list: current.Scene.Rows, item: m.Row, keyOf: static row => row.Id) }) });
+
+                return true;
+            case WorldMutation.RemoveSceneRow m:
+                if (!Remove(list: current.Scene.Rows, key: m.Id, keyOf: static row => row.Id, result: out var sceneRows)) {
+                    candidate = current;
+                    reason = $"no scene row with id '{m.Id}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Scene = (current.Scene with { Rows = sceneRows }) });
 
                 return true;
             case WorldMutation.SetSpawns m:

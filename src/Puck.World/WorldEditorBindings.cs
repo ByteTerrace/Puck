@@ -15,8 +15,7 @@ namespace Puck.World;
 /// default base page (the compiled profile admits exactly one empty-chord page): the gamepad sources it names are
 /// REPLACED with editor verbs, while the keyboard's <c>player.*</c> movement entries persist and are masked by the
 /// seat's Idle intent source for the mode's duration. Sticks are re-bound on EVERY editor page, so flight continues
-/// while a trigger chord is held. Page ids for the P3 select/place pages are reserved here as constants; only the
-/// base-merge and camera pages ship this phase.
+/// while a trigger chord is held (and a live drag re-routes those same latched samples onto the pending row).
 /// </remarks>
 internal static class WorldEditorBindings {
     /// <summary>The left-trigger modifier id (chord vocabulary: <c>lt</c>).</summary>
@@ -26,10 +25,9 @@ internal static class WorldEditorBindings {
 
     /// <summary>The camera page id (chord: LT held).</summary>
     public const string CameraPageId = "editor-camera";
-    /// <summary>RESERVED for P3's selection page (chord: RT held). Named now so the page-id vocabulary is settled;
-    /// no page ships under it this phase.</summary>
+    /// <summary>The selection page id (chord: RT held): pick, cycle, deselect, delete, grab.</summary>
     public const string SelectPageId = "editor-select";
-    /// <summary>RESERVED for P3's placement page (chord: LT then RT held). See <see cref="SelectPageId"/>.</summary>
+    /// <summary>The placement page id (chord: LT then RT held): the grab/drag verb set, spawn ghosts, snap.</summary>
     public const string PlacePageId = "editor-place";
 
     /// <summary>The display label the merged no-modifier page carries while the mode layer is active — the binding
@@ -52,7 +50,7 @@ internal static class WorldEditorBindings {
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [
                 new BindingModifierDefinition(Id: LeftTriggerModifierId, Source: InputSources.Gamepad.LeftTrigger, PressThreshold: TriggerPress, ReleaseThreshold: TriggerRelease, Label: "Camera page"),
-                new BindingModifierDefinition(Id: RightTriggerModifierId, Source: InputSources.Gamepad.RightTrigger, PressThreshold: TriggerPress, ReleaseThreshold: TriggerRelease, Label: "Select page (P3)"),
+                new BindingModifierDefinition(Id: RightTriggerModifierId, Source: InputSources.Gamepad.RightTrigger, PressThreshold: TriggerPress, ReleaseThreshold: TriggerRelease, Label: "Select page"),
             ],
             Pages: [
                 // The no-modifier editor page, merged INTO the default base page (same id + empty chord): free-fly
@@ -75,8 +73,9 @@ internal static class WorldEditorBindings {
                     ],
                     Label: BasePageLabel
                 ),
-                // The LT camera page: explicit fly/orbit selection plus the shared speed steps; North is reserved for
-                // P4/P3 focus-selection. Sticks stay bound so flight continues under the held chord.
+                // The LT camera page: explicit fly/orbit selection plus the shared speed steps; North is the
+                // focus-selection (pick under the crosshair, so orbit has a pivot the moment you aim at something).
+                // Sticks stay bound so flight continues under the held chord.
                 new BindingPageDefinition(
                     Id: CameraPageId,
                     Chord: [LeftTriggerModifierId],
@@ -84,10 +83,42 @@ internal static class WorldEditorBindings {
                         .. StickEntries(),
                         Press(source: InputSources.Gamepad.ButtonSouth, command: EditorCommandModule.FlyCommand, label: "Fly", icon: "edit.play"),
                         Press(source: InputSources.Gamepad.ButtonWest, command: EditorCommandModule.OrbitCommand, label: "Orbit", icon: "action.target"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSelectionCommandModule.PickCommand, label: "Focus", icon: "action.target"),
                         Press(source: InputSources.Gamepad.DpadUp, command: EditorCommandModule.FasterCommand, label: "Faster", icon: "edit.next"),
                         Press(source: InputSources.Gamepad.DpadDown, command: EditorCommandModule.SlowerCommand, label: "Slower", icon: "edit.prev"),
                     ],
                     Label: "Camera"
+                ),
+                // The RT select page: the crosshair pick, the proximity cycle, deselect/delete, and the grab toggle
+                // (grab here so pick→grab flows without releasing RT for the LT+RT place chord).
+                new BindingPageDefinition(
+                    Id: SelectPageId,
+                    Chord: [RightTriggerModifierId],
+                    Entries: [
+                        .. StickEntries(),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSelectionCommandModule.PickCommand, label: "Pick", icon: "action.target"),
+                        Press(source: InputSources.Gamepad.ButtonNorth, command: EditorSelectionCommandModule.GrabCommand, label: "Grab", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSelectionCommandModule.DeselectCommand, label: "Clear", icon: "edit.deselect"),
+                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSelectionCommandModule.DeleteCommand, label: "Delete", icon: "edit.delete"),
+                        Press(source: InputSources.Gamepad.DpadRight, command: EditorSelectionCommandModule.NextCommand, label: "Next", icon: "edit.next"),
+                        Press(source: InputSources.Gamepad.DpadLeft, command: EditorSelectionCommandModule.PrevCommand, label: "Prev", icon: "edit.prev"),
+                    ],
+                    Label: "Select"
+                ),
+                // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap) and the two spawn ghosts.
+                // While a drag is live the sticks translate the pending row instead of flying (the session's routing).
+                new BindingPageDefinition(
+                    Id: PlacePageId,
+                    Chord: [LeftTriggerModifierId, RightTriggerModifierId],
+                    Entries: [
+                        .. StickEntries(),
+                        Press(source: InputSources.Gamepad.ButtonSouth, command: EditorSelectionCommandModule.GrabCommand, label: "Grab", icon: "edit.place"),
+                        Press(source: InputSources.Gamepad.ButtonEast, command: EditorSelectionCommandModule.CancelCommand, label: "Cancel", icon: "edit.deselect"),
+                        Press(source: InputSources.Gamepad.ButtonWest, command: EditorSelectionCommandModule.SnapCommand, label: "Snap", icon: "edit.style"),
+                        Press(source: InputSources.Gamepad.DpadUp, command: EditorSelectionCommandModule.SpawnBoulderCommand, label: "Boulder", icon: "edit.duplicate"),
+                        Press(source: InputSources.Gamepad.DpadDown, command: EditorSelectionCommandModule.SpawnSlabCommand, label: "Slab", icon: "edit.duplicate"),
+                    ],
+                    Label: "Place"
                 ),
             ]
         );

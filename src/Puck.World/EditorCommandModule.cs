@@ -9,21 +9,21 @@ namespace Puck.World;
 /// the primary interface; these verbs script and narrate the same acts over the pipe). <c>editor.enter</c>/<c>exit</c>
 /// flip a seat's mode through <see cref="WorldEditorSession"/> (binding mode layer + intent diversion + camera swap);
 /// the camera verbs (<c>editor.fly</c>/<c>orbit</c>/<c>cam.speed</c>/<c>cam.pose</c>) are the typed twins of the
-/// chord toggles plus the numeric setters a chord cannot express; the router/gesture verbs (<c>editor.move</c>/
-/// <c>look</c>/<c>ascend</c>/<c>descend</c>/<c>camera</c>/<c>faster</c>/<c>slower</c>) are the bound-control channels
+/// chord toggles plus the numeric setters a chord cannot express; the router/gesture verbs (<c>editor.stick.move</c>/
+/// <c>stick.look</c>/<c>ascend</c>/<c>descend</c>/<c>camera</c>/<c>faster</c>/<c>slower</c>) are the bound-control channels
 /// the editor pages dispatch. Every discrete chord act returns an echo line, so the pad's acts narrate on stdout
 /// exactly like typed verbs. A SEPARATE module to keep every class under its analyzer ceilings.
 /// </summary>
 /// <remarks><c>editor.enter</c>/<c>exit</c> route Simulation (they divert intent through the same tick-applied
 /// <c>SetControl</c> wire as <c>player.control</c>, and the stdin barrier then serializes a following read); the
 /// camera verbs are presentation-only and stay Immediate.</remarks>
-internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings) : ICommandModule {
+internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings, WorldEditorTargeting targeting, WorldEditorDrag drag) : ICommandModule {
     /// <summary>The Axis2D command the editor pages bind the LEFT stick to (+Y flies forward, +X strafes right) —
     /// routed into the editing seat's camera; not meant to be typed.</summary>
-    public const string MoveCommand = "editor.move";
+    public const string MoveCommand = "editor.stick.move";
     /// <summary>The Axis2D command the editor pages bind the RIGHT stick to (+X looks right, +Y looks up). Same
     /// routing contract as <see cref="MoveCommand"/>.</summary>
-    public const string LookCommand = "editor.look";
+    public const string LookCommand = "editor.stick.look";
     /// <summary>The rise channel (Right Shoulder, both edges) — held vertical ascent while flying.</summary>
     public const string AscendCommand = "editor.ascend";
     /// <summary>The sink channel (Left Shoulder, both edges) — held vertical descent while flying.</summary>
@@ -50,6 +50,8 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldEditorSession m_session = session;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
+    private readonly WorldEditorTargeting m_targeting = targeting;
+    private readonly WorldEditorDrag m_drag = drag;
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -136,7 +138,8 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     // Resolve the acting seat: a bound chord act (no parsed text) targets the pressing device's seat; a typed line
     // reads its trailing [seat] token (1..4, default 1). Returns -1 with an error result on a malformed index.
-    private static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, string[] args, int at, string verb) {
+    // Internal: EditorSelectionCommandModule shares the same convention.
+    internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, string[] args, int at, string verb) {
         if (context.Parse is null) {
             return (Slot: context.Slot, Error: null);
         }
@@ -197,10 +200,23 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
         var view = m_seatBindings.PageView(slot: slot);
         var eye = m_session.Eye(slot: slot);
+        // The selection/drag facts ride the same line — the scripted assertion point for the P3 acts.
+        var selection = "sel=none";
+
+        if (m_targeting.Selected(slot: slot) is { } selected) {
+            var position = (m_targeting.SelectionPosition(slot: slot) ?? default);
+
+            selection = string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"sel={selected.Describe()} at ({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00})"
+            );
+        }
+
+        var dragState = ((m_drag.Describe(slot: slot) is { } dragLine) ? $" drag={dragLine}" : string.Empty);
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00})]"
+            handler: $"[editor.status: seat {seat} editing {ModeWord(mode: m_session.Mode(slot: slot))} speed={m_session.Speed(slot: slot):0.##} page={view.PageId} '{view.Label ?? view.PageId}' eye=({eye.X:0.00}, {eye.Y:0.00}, {eye.Z:0.00}) {selection}{dragState}]"
         ));
     }
 
@@ -306,7 +322,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult MoveRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.move: a routed stick channel, not a typed verb — use editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>] [seat] to script the camera]");
+            return new CommandResult(Output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]");
         }
 
         m_session.RouteMove(slot: context.Slot, move: context.Value.AsAxis2D);
@@ -316,7 +332,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private CommandResult LookRouter(CommandContext context) {
         if (context.Parse is not null) {
-            return new CommandResult(Output: "[editor.look: a routed stick channel, not a typed verb — use editor.cam.pose <x> <y> <z> [<yawDeg> <pitchDeg>] [seat] to script the camera]");
+            return new CommandResult(Output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]");
         }
 
         m_session.RouteLook(slot: context.Slot, look: context.Value.AsAxis2D);

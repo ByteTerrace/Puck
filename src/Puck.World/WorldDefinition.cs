@@ -475,36 +475,68 @@ internal readonly record struct FixedWorldKit(
     );
 }
 
-/// <summary>One stone boulder in the world's static scene — a sphere smooth-unioned into the accumulated field. This
-/// World-local shape carries the position, radius, and smooth-blend radius directly.</summary>
-/// <param name="Id">The boulder's stable string id — its mutation address (unique within the scene). Presentation-only
-/// geometry; the id carries no meaning beyond identity.</param>
-/// <param name="Center">The boulder's world-space center (its translate offset from the origin).</param>
-/// <param name="Radius">The sphere radius.</param>
-/// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
-internal readonly record struct WorldBoulder(string Id, Vector3 Center, float Radius, float Smooth);
+/// <summary>
+/// One row of the world's static scene — a shape smooth-unioned into the accumulated field, addressed by its stable
+/// <paramref name="Id"/> (its mutation address; the <c>UpsertSceneRow</c>/<c>RemoveSceneRow</c> whole-row key).
+/// Presentation-only geometry; the id carries no meaning beyond identity. The <c>$type</c> string is the JSON
+/// discriminator (the <see cref="WorldCamera"/> precedent); a new row kind is a new derived record plus its
+/// <see cref="JsonDerivedTypeAttribute"/> line.
+/// </summary>
+/// <param name="Id">The row's stable string id (unique within the scene).</param>
+/// <param name="Center">The shape's world-space center (its translate offset from the origin) — the position every
+/// manipulation edits.</param>
+[JsonDerivedType(typeof(WorldSceneRow.Boulder), typeDiscriminator: "boulder")]
+[JsonDerivedType(typeof(WorldSceneRow.Slab), typeDiscriminator: "slab")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+internal abstract record WorldSceneRow(string Id, Vector3 Center) {
+    /// <summary>A stone boulder — a sphere carrying the scene's shared <see cref="WorldScene.StoneAlbedo"/>.</summary>
+    /// <param name="Id">The row's stable string id.</param>
+    /// <param name="Center">The sphere's world-space center.</param>
+    /// <param name="Radius">The sphere radius.</param>
+    /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
+    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth) : WorldSceneRow(Id: Id, Center: Center);
 
-/// <summary>The world's static scene — a ground plane plus a loose cluster of stone boulders. The materials are inline
-/// albedo colors (not palette indices): the frame source allocates one grass and one stone material and iterates the
-/// <see cref="Boulders"/>.</summary>
+    /// <summary>A terrain slab — a rounded box patch (a plaza tile, a step, a wall segment) whose material is data on
+    /// the row.</summary>
+    /// <param name="Id">The row's stable string id.</param>
+    /// <param name="Center">The box's world-space center.</param>
+    /// <param name="HalfExtents">The box half-extents along the world axes.</param>
+    /// <param name="Round">The corner-rounding radius.</param>
+    /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
+    /// <param name="Albedo">The slab's own albedo (per-row material, unlike the shared boulder stone).</param>
+    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo) : WorldSceneRow(Id: Id, Center: Center);
+
+    /// <summary>Returns this row with a replaced <see cref="Center"/> — the shape-preserving move every drag commit and
+    /// numeric move composes through.</summary>
+    /// <param name="center">The new world-space center.</param>
+    public WorldSceneRow WithCenter(Vector3 center) => this switch {
+        Boulder boulder => (boulder with { Center = center }),
+        Slab slab => (slab with { Center = center }),
+        _ => this,
+    };
+}
+
+/// <summary>The world's static scene — a ground plane plus the shape rows. The materials are inline albedo colors (not
+/// palette indices): the frame source allocates one grass material, one per-row material (a boulder's from
+/// <see cref="StoneAlbedo"/>, a slab's from its own row), and iterates the <see cref="Rows"/>.</summary>
 /// <param name="GroundAlbedo">The grass ground plane's albedo.</param>
-/// <param name="StoneAlbedo">The shared albedo of every boulder.</param>
-/// <param name="Boulders">The boulder cluster, emitted in order after the ground plane.</param>
+/// <param name="StoneAlbedo">The shared albedo every boulder row renders with.</param>
+/// <param name="Rows">The scene's shape rows, emitted in order after the ground plane.</param>
 internal sealed record WorldScene(
     Vector3 GroundAlbedo,
     Vector3 StoneAlbedo,
-    IReadOnlyList<WorldBoulder> Boulders
+    IReadOnlyList<WorldSceneRow> Rows
 ) {
     /// <summary>The built-in default scene — the grass-and-boulders world.</summary>
     public static WorldScene Default { get; } = new WorldScene(
         GroundAlbedo: new Vector3(x: 0.33f, y: 0.52f, z: 0.24f),
         StoneAlbedo: new Vector3(x: 0.55f, y: 0.55f, z: 0.58f),
-        Boulders: [
-            new WorldBoulder(Id: "boulder-1", Center: new Vector3(x: -1.2f, y: 0.72f, z: -0.3f), Radius: 0.9f, Smooth: 0.5f),
-            new WorldBoulder(Id: "boulder-2", Center: new Vector3(x: 0.6f, y: 0.88f, z: 0.5f), Radius: 1.1f, Smooth: 0.5f),
-            new WorldBoulder(Id: "boulder-3", Center: new Vector3(x: 1.9f, y: 0.48f, z: -0.7f), Radius: 0.6f, Smooth: 0.4f),
-            new WorldBoulder(Id: "boulder-4", Center: new Vector3(x: -0.3f, y: 0.38f, z: 1.3f), Radius: 0.45f, Smooth: 0.35f),
-            new WorldBoulder(Id: "boulder-5", Center: new Vector3(x: 2.4f, y: 0.62f, z: 0.7f), Radius: 0.75f, Smooth: 0.4f),
+        Rows: [
+            new WorldSceneRow.Boulder(Id: "boulder-1", Center: new Vector3(x: -1.2f, y: 0.72f, z: -0.3f), Radius: 0.9f, Smooth: 0.5f),
+            new WorldSceneRow.Boulder(Id: "boulder-2", Center: new Vector3(x: 0.6f, y: 0.88f, z: 0.5f), Radius: 1.1f, Smooth: 0.5f),
+            new WorldSceneRow.Boulder(Id: "boulder-3", Center: new Vector3(x: 1.9f, y: 0.48f, z: -0.7f), Radius: 0.6f, Smooth: 0.4f),
+            new WorldSceneRow.Boulder(Id: "boulder-4", Center: new Vector3(x: -0.3f, y: 0.38f, z: 1.3f), Radius: 0.45f, Smooth: 0.35f),
+            new WorldSceneRow.Boulder(Id: "boulder-5", Center: new Vector3(x: 2.4f, y: 0.62f, z: 0.7f), Radius: 0.75f, Smooth: 0.4f),
         ]
     );
 }
