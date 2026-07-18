@@ -1,7 +1,7 @@
-namespace Puck.Demo.Creator;
+namespace Puck.Authoring;
 
 /// <summary>
-/// What a creation is FOR — the editor frames, previews, and bakes differently per intent, so the tool always knows
+/// What a creation is FOR — an editor frames, previews, and bakes differently per intent, so the tool always knows
 /// which target the player is authoring toward.
 /// </summary>
 public enum CreatorIntent {

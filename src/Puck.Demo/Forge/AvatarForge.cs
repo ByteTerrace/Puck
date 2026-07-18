@@ -1,7 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Authoring;
 using Puck.Cameras;
-using Puck.Demo.Creator;
 using Puck.Demo.Forge.Bake;
 using Puck.SdfVm;
 

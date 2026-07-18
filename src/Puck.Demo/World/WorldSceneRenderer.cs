@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets;
+using Puck.Authoring;
 using Puck.Demo.Creator;
 using Puck.Demo.Forge;
 using Puck.SdfVm;

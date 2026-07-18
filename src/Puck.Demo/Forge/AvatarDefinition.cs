@@ -1,25 +1,8 @@
 using System.Numerics;
+using Puck.Authoring;
 using Puck.SdfVm;
 
 namespace Puck.Demo.Forge;
-
-/// <summary>
-/// The primitives a player can place in creator mode — the SAME set the creator's ghost cycles through, in the same
-/// order (the wire value IS the cycle index, so an avatar authored in the creator round-trips through the forge without
-/// a mapping table). KEEP the order in lockstep with the creator's own primitive cycle.
-/// </summary>
-public enum AvatarPrimitive {
-    Sphere,
-    Box,
-    Torus,
-    Cylinder,
-    Capsule,
-    Ellipsoid,
-    // A tapered capsule (a fat base narrowing to a rounded tip along +Y) — teeth, fangs, dorsal spikes, beaks, horns,
-    // a wizard hat: the "pointy" primitive the six round/boxy ones could never make. Already a builder shape
-    // (SdfShapeType.RoundCone); appended LAST so every avatar authored before it keeps its wire-value cycle index.
-    RoundCone,
-}
 
 /// <summary>One placed shape in a player's avatar: which primitive it draws and its full rigid + scale transform, in
 /// the avatar's own local space (recentered so the avatar stands around the origin — see

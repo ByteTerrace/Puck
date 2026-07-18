@@ -1,21 +1,22 @@
 using System.Text.Json;
 using Puck.Assets;
+using Puck.Authoring;
 using Puck.Commands;
 
 namespace Puck.Demo.World;
 
 /// <summary>
 /// Loads and saves <see cref="WorldDocument"/>s against the <c>./worlds/</c> folder, the sibling store of
-/// <see cref="Creator.CreationStore"/>/<see cref="Forge.AudioDocumentStore"/> — same discipline throughout: a
+/// <see cref="CreationStore"/>/<see cref="Forge.AudioDocumentStore"/> — same discipline throughout: a
 /// blank document is built through <see cref="Normalize"/> (never a hand-built record), an unrecognized
 /// <c>schema</c> tag throws loudly, and names are sanitized identically. Serializes through the ONE shared
 /// <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields = true</c> is LOAD-BEARING here exactly as in
-/// <see cref="Creator.CreationStore"/>: the document's <see cref="System.Numerics.Vector3"/> members expose fields,
+/// <see cref="CreationStore"/>: the document's <see cref="System.Numerics.Vector3"/> members expose fields,
 /// not properties, and omitting the option silently zeroes every transform into a degenerate placement.
 /// </summary>
 public static class WorldDocumentStore {
     /// <summary>The folder world documents persist under (relative to the working directory, the sibling of
-    /// <see cref="Creator.CreationStore.Folder"/>/<see cref="Forge.AudioDocumentStore.Folder"/>).</summary>
+    /// <see cref="CreationStore.DefaultFolder"/>/<see cref="Forge.AudioDocumentStore.Folder"/>).</summary>
     public static string Folder => "worlds";
 
     /// <summary>Serializes a document to indented camel-case JSON.</summary>

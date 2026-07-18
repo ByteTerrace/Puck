@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Authoring;
 using Puck.Demo.Forge;
 using Puck.SdfVm;
 

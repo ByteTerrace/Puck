@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets;
+using Puck.Authoring;
 using Puck.Demo.World;
 using Puck.SdfVm;
 
@@ -128,7 +129,7 @@ public sealed class CompanionState {
             return ((parsed is null) ? null : Normalize(document: parsed));
         }
 
-        return CreationStore.Load(nameOrPath: nameOrHash);
+        return CreationStore.Load(nameOrPath: nameOrHash, creationsRoot: CreationStore.DefaultFolder);
     }
 
     /// <summary>The companion's currently loaded document (immutable once loaded; re-loading replaces the whole

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Authoring;
 
 namespace Puck.Demo.Creator;
 
@@ -48,10 +49,12 @@ public sealed record CreatorChainState(
     Vector3 Goal,
     Vector3 Pole
 ) {
-    /// <summary>The "limb" kind name (exactly 3 shapes / 2 bones, two-bone IK).</summary>
-    public const string KindLimb = "limb";
-    /// <summary>The "spine" kind name (any length ≥ 2, single-pass drag solve).</summary>
-    public const string KindSpine = "spine";
+    /// <summary>The "limb" kind name (exactly 3 shapes / 2 bones, two-bone IK). Library-owned
+    /// (<see cref="ChainDocument.KindLimb"/>).</summary>
+    public const string KindLimb = ChainDocument.KindLimb;
+    /// <summary>The "spine" kind name (any length ≥ 2, single-pass drag solve). Library-owned
+    /// (<see cref="ChainDocument.KindSpine"/>).</summary>
+    public const string KindSpine = ChainDocument.KindSpine;
 
     // Per-solve scratch, lazily sized once on first Solve() and reused every call after (BoneLengths never changes
     // for a chain's lifetime — only Goal/Pole move via `with`, which copies these array REFERENCES, not their

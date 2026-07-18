@@ -1,9 +1,8 @@
 using System.Numerics;
 using System.Text.Json;
-using Puck.Demo.Forge;
 using Puck.SdfVm;
 
-namespace Puck.Demo.Creator;
+namespace Puck.Authoring;
 
 /// <summary>One palette entry on the wire (mirrors <see cref="SdfMaterial"/> with document-doctrine nullability).</summary>
 /// <param name="Albedo">The base color.</param>
@@ -12,7 +11,7 @@ namespace Puck.Demo.Creator;
 /// <param name="Shininess">The specular exponent (null = the material default).</param>
 public sealed record PaletteEntryDocument(Vector3 Albedo, float? Emissive, float? Specular, float? Shininess);
 
-/// <summary>One authored shape on the wire (mirrors <see cref="CreatorShapeState"/>).</summary>
+/// <summary>One authored shape on the wire (mirrors a creator's live placed-shape state).</summary>
 /// <param name="Id">The shape's stable id.</param>
 /// <param name="Name">The optional player-given name.</param>
 /// <param name="Type">The primitive.</param>
@@ -44,7 +43,21 @@ public sealed record ShapeDocument(
     float? Onion = null,
     float? Bend = null,
     float? Dilate = null
-);
+) {
+    /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
+    public const float MaxSmooth = 0.5f;
+    /// <summary>The largest twist rate, in radians per unit of local Y (NOT an isometry, so this stays moderate —
+    /// see <see cref="SdfProgramBuilder.TwistY"/>).</summary>
+    public const float MaxTwist = 3.0f;
+    /// <summary>The largest onion shell thickness a shape's clamp normalizes to.</summary>
+    public const float MaxOnion = 0.2f;
+    /// <summary>The largest dilate (inflation) radius — mirrors <see cref="MaxOnion"/>'s clamp.</summary>
+    public const float MaxDilate = 0.2f;
+    /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
+    /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
+    /// <see cref="SdfProgramBuilder.BendZ"/>'s remarks).</summary>
+    public const float MaxBend = 1.5f;
+}
 
 /// <summary>
 /// One engraved/embossed TEXT RUN a creation carries — a string laid ONTO one of the creation's own surfaces (a shop
@@ -101,13 +114,13 @@ public sealed record TextRunDocument(
     }
 }
 
-/// <summary>One IK chain on the wire (mirrors <see cref="CreatorChainState"/>'s DEFINITION — rest geometry is
+/// <summary>One IK chain on the wire (mirrors a creator's live chain state's DEFINITION — rest geometry is
 /// re-derived from the member shapes' CURRENT positions at load time, never persisted, so a loaded chain always
 /// captures fresh against whatever pose the shapes loaded at).</summary>
 /// <param name="Id">The chain's stable id.</param>
 /// <param name="Name">The player-given name (null = unnamed).</param>
 /// <param name="Shapes">The member shape ids, root→tip order.</param>
-/// <param name="Kind">"limb" or "spine" (null = "limb" when exactly 3 shapes, else "spine").</param>
+/// <param name="Kind"><see cref="KindLimb"/> or <see cref="KindSpine"/> (null = limb when exactly 3 shapes, else spine).</param>
 /// <param name="Goal">The live goal position (null = the rest tip — re-seeded at load).</param>
 /// <param name="Pole">The bend-direction hint (null = above the root — re-seeded at load).</param>
 public sealed record ChainDocument(
@@ -117,7 +130,12 @@ public sealed record ChainDocument(
     string? Kind,
     Vector3? Goal,
     Vector3? Pole
-);
+) {
+    /// <summary>The "limb" kind name (exactly 3 shapes / 2 bones, two-bone IK).</summary>
+    public const string KindLimb = "limb";
+    /// <summary>The "spine" kind name (any length ≥ 2, single-pass drag solve).</summary>
+    public const string KindSpine = "spine";
+}
 
 /// <summary>One timeline frame on the wire: a named full snapshot of every shape's transform (the animation model —
 /// consumed when the timeline lands; carried in the schema from v1 so saved files stay stable).</summary>
@@ -135,10 +153,10 @@ public sealed record FrameTransformDocument(int Id, Vector3 Position, Quaternion
 /// <summary>
 /// One camera EYE a creation carries — a posed viewpoint ANCHORED to one of the creation's own shapes (a
 /// <see cref="ShapeDocument.Id"/>), so the eye rides that shape's live pose through IK/animation frames. This is the
-/// creation-side twin of the world document's placed camera (<c>World.CameraDocument</c>): the lantern-fish's lens
-/// dangling off its lure becomes ONE entry here rather than a hardcoded engine. The offset pose (position/yaw/pitch)
-/// is relative to the anchored shape's frame; the feed it produces is wired onto a screen by name through the
-/// creation's behavior manifest (see <see cref="CreationBehaviorDocument"/>) or the world's wiring table.
+/// creation-side twin of a world document's placed camera: the lantern-fish's lens dangling off its lure becomes ONE
+/// entry here rather than a hardcoded engine. The offset pose (position/yaw/pitch) is relative to the anchored
+/// shape's frame; the feed it produces is wired onto a screen by name through the creation's behavior manifest (see
+/// <see cref="CreationBehaviorDocument"/>) or a world's wiring table.
 /// </summary>
 /// <param name="Id">The eye's stable id within the creation.</param>
 /// <param name="ShapeId">The anchored shape id (a <see cref="ShapeDocument.Id"/>). A camera naming a missing shape is
@@ -179,10 +197,8 @@ public sealed record CreationFaceDocument(
 
 /// <summary>
 /// A creation's BEHAVIOR manifest — the behavioral facts a creation carries so consumers stop re-supplying them by
-/// hand. Today a loaded fish walks because nothing records that it SWIMS; this makes those facts DATA. Minimal and
-/// normalized: a locomotion mode and the creation's declared faces (screen surfaces that show named feeds). Consumers
-/// (the companion state, <c>companion.add</c>, the boot loader, the flagship recipes) are a FOLLOW-UP surgery round —
-/// this workstream lands the schema, normalization, and round-trip only.
+/// hand. A loaded fish without one walks because nothing records that it SWIMS; this makes those facts DATA. Minimal
+/// and normalized: a locomotion mode and the creation's declared faces (screen surfaces that show named feeds).
 /// </summary>
 /// <param name="Locomotion">How the creation moves — <c>walk</c> (default), <c>swim</c> (hover-bob, a swimmer), or
 /// <c>hover</c> (float in place). Null = walk.</param>
@@ -195,10 +211,10 @@ public sealed record CreationBehaviorDocument(
 
 /// <summary>
 /// The <c>puck.creation.v1</c> document — a creator scene as data, the everything-as-data payoff for authoring: a
-/// creation can be named, saved, reloaded, and handed to the bake/forge headlessly. Persisted under
-/// <c>./creations/&lt;name&gt;.creation.json</c>. Document doctrine applies throughout: every OPTIONAL member is
-/// declared nullable (the polymorphic parse path skips property initializers — an omitted member arrives null
-/// regardless), validated only when present, and normalized at consumption (<see cref="CreationStore"/>).
+/// creation can be named, saved, reloaded, and handed to a bake/forge headlessly. Document doctrine applies
+/// throughout: every OPTIONAL member is declared nullable (the polymorphic parse path skips property initializers —
+/// an omitted member arrives null regardless), validated only when present, and normalized at consumption (see
+/// <see cref="CreationStore"/>).
 /// </summary>
 /// <param name="Schema">The document version tag (<c>puck.creation.v1</c>).</param>
 /// <param name="Name">The creation's save/load handle.</param>
@@ -233,15 +249,19 @@ public sealed record CreationDocument(
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
 
+    /// <summary>The material palette's slot count — <see cref="ShapeDocument.Material"/>/<see cref="TextRunDocument.Material"/>
+    /// clamp into <c>[0, PaletteSize)</c> at normalization.</summary>
+    public const int PaletteSize = 16;
+
     /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture (the
-    /// <see cref="Puck.Scene.PuckRunDocument"/> precedent). Null when the document carries no unknown members. A
-    /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
+    /// run-document precedent). Null when the document carries no unknown members. A settable (not <c>init</c>)
+    /// accessor is required: System.Text.Json appends to it during deserialization.</summary>
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
     /// <summary>The creation's total per-stamp shape budget: its authored shapes PLUS every text run's expanded glyph
-    /// count (a run counts as its letters — the world stamps text as real Glyph geometry, so it competes for the same
-    /// <see cref="Puck.Demo.World.WorldScene.MaxShapesPerStamp"/> budget the boxes do).</summary>
+    /// count (a run counts as its letters — a world stamps text as real Glyph geometry, so it competes for the same
+    /// per-stamp shape budget the boxes do).</summary>
     /// <returns>The total shape count a placement of this creation emits.</returns>
     public int StampShapeCount() {
         var count = (Shapes?.Count ?? 0);
@@ -255,14 +275,19 @@ public sealed record CreationDocument(
 }
 
 /// <summary>
-/// Loads and saves <see cref="CreationDocument"/>s against the <c>./creations/</c> folder. Serializes through the ONE
-/// shared <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields = true</c> is LOAD-BEARING:
-/// Vector3/Quaternion expose fields, not properties, and omitting it silently zeroes every transform into degenerate
-/// shapes.
+/// Loads and saves <see cref="CreationDocument"/>s against a creations folder. Serializes through the ONE shared
+/// <see cref="DocumentJsonOptions.Shared"/> instance — <c>IncludeFields = true</c> is LOAD-BEARING: Vector3/Quaternion
+/// expose fields, not properties, and omitting it silently zeroes every transform into degenerate shapes. Root paths
+/// are explicit parameters — this library never bakes in a working-directory convention; a caller's own default
+/// (<see cref="DefaultFolder"/>/<see cref="DefaultCasRoot"/> document what Puck.Demo passes) is the caller's choice.
 /// </summary>
 public static class CreationStore {
-    /// <summary>The folder creations persist under (relative to the working directory, beside forged-avatars/).</summary>
-    public static string Folder => "creations";
+    /// <summary>The conventional creations folder name Puck.Demo passes (relative to the working directory, beside
+    /// forged-avatars/) — documented, not implied: every method still takes the root explicitly.</summary>
+    public const string DefaultFolder = "creations";
+
+    /// <summary>The conventional content-addressed store root Puck.Demo passes — documented, not implied.</summary>
+    public const string DefaultCasRoot = "store";
 
     /// <summary>Serializes a document to indented camel-case JSON.</summary>
     /// <param name="document">The document.</param>
@@ -270,25 +295,30 @@ public static class CreationStore {
     public static string ToJson(CreationDocument document) =>
         JsonSerializer.Serialize(options: DocumentJsonOptions.Shared, value: document);
 
-    /// <summary>Saves a document under <c>./creations/&lt;name&gt;.creation.json</c> (the name is sanitized to
-    /// letters, digits, dashes, and underscores).</summary>
+    /// <summary>Saves a document under <c>&lt;creationsRoot&gt;/&lt;name&gt;.creation.json</c> (the name is sanitized
+    /// to letters, digits, dashes, and underscores), and lands its canonical bytes in the content-addressed store so a
+    /// saved creation is immediately stampable by name.</summary>
     /// <param name="document">The document to save.</param>
     /// <param name="name">The save handle.</param>
+    /// <param name="creationsRoot">The creations folder (Demo's convention: <see cref="DefaultFolder"/>).</param>
+    /// <param name="casRoot">The content-addressed store root (Demo's convention: <see cref="DefaultCasRoot"/>).</param>
     /// <returns>The written path.</returns>
-    public static string Save(CreationDocument document, string name) {
+    public static string Save(CreationDocument document, string name, string creationsRoot, string casRoot) {
         ArgumentNullException.ThrowIfNull(document);
+        ArgumentException.ThrowIfNullOrEmpty(creationsRoot);
+        ArgumentException.ThrowIfNullOrEmpty(casRoot);
 
         var sanitized = Sanitize(name: name);
-        var path = PathFor(name: name);
+        var path = PathFor(name: name, creationsRoot: creationsRoot);
         var json = ToJson(document: (document with { Name = sanitized, Schema = CreationDocument.CurrentSchema }));
 
-        _ = Directory.CreateDirectory(path: Folder);
+        _ = Directory.CreateDirectory(path: creationsRoot);
         File.WriteAllText(contents: json, path: path);
 
         // Everything-CAS: the canonical bytes also land in the shared content-addressed store under
         // refs/creations/<name>, so a saved creation is IMMEDIATELY stampable into the world by name
         // (world.place resolves through the store — the sculpt→stamp loop's front door).
-        var store = new Puck.Assets.ContentAddressedStore(root: "store");
+        var store = new Puck.Assets.ContentAddressedStore(root: casRoot);
         var hash = store.Put(content: System.Text.Encoding.UTF8.GetBytes(s: json));
 
         store.SetRef(category: "creations", hash: hash, name: sanitized);
@@ -298,12 +328,14 @@ public static class CreationStore {
 
     /// <summary>Loads a creation by save handle or file path. The result is normalized — never trust persisted
     /// derived values.</summary>
-    /// <param name="nameOrPath">The save handle (resolved under <c>./creations/</c>) or an explicit file path.</param>
+    /// <param name="nameOrPath">The save handle (resolved under <paramref name="creationsRoot"/>) or an explicit file path.</param>
+    /// <param name="creationsRoot">The creations folder a bare handle resolves against (Demo's convention: <see cref="DefaultFolder"/>).</param>
     /// <returns>The normalized document, or null when nothing readable exists at the location.</returns>
-    public static CreationDocument? Load(string nameOrPath) {
+    public static CreationDocument? Load(string nameOrPath, string creationsRoot) {
         ArgumentException.ThrowIfNullOrEmpty(nameOrPath);
+        ArgumentException.ThrowIfNullOrEmpty(creationsRoot);
 
-        var path = (File.Exists(path: nameOrPath) ? nameOrPath : PathFor(name: nameOrPath));
+        var path = (File.Exists(path: nameOrPath) ? nameOrPath : PathFor(name: nameOrPath, creationsRoot: creationsRoot));
 
         if (!File.Exists(path: path)) {
             return null;
@@ -314,16 +346,19 @@ public static class CreationStore {
         return Normalize(document: JsonSerializer.Deserialize<CreationDocument>(json: json, options: DocumentJsonOptions.Shared));
     }
 
-    /// <summary>Lists the save handles under <c>./creations/</c>.</summary>
+    /// <summary>Lists the save handles under <paramref name="creationsRoot"/>.</summary>
+    /// <param name="creationsRoot">The creations folder (Demo's convention: <see cref="DefaultFolder"/>).</param>
     /// <returns>The handles, sorted ordinally.</returns>
-    public static IReadOnlyList<string> List() {
-        if (!Directory.Exists(path: Folder)) {
+    public static IReadOnlyList<string> List(string creationsRoot) {
+        ArgumentException.ThrowIfNullOrEmpty(creationsRoot);
+
+        if (!Directory.Exists(path: creationsRoot)) {
             return [];
         }
 
         var names = new List<string>();
 
-        foreach (var path in Directory.EnumerateFiles(path: Folder, searchPattern: "*.creation.json")) {
+        foreach (var path in Directory.EnumerateFiles(path: creationsRoot, searchPattern: "*.creation.json")) {
             names.Add(item: Path.GetFileName(path: path)[..^".creation.json".Length]);
         }
 
@@ -344,17 +379,17 @@ public static class CreationStore {
 
         foreach (var shape in (document.Shapes ?? [])) {
             shapes.Add(item: shape with {
-                Bend = Math.Clamp(value: (shape.Bend ?? 0f), max: CreatorScene.MaxBend, min: -CreatorScene.MaxBend),
+                Bend = Math.Clamp(value: (shape.Bend ?? 0f), max: ShapeDocument.MaxBend, min: -ShapeDocument.MaxBend),
                 Blend = (shape.Blend ?? SdfBlendOp.Union),
-                Dilate = Math.Clamp(value: (shape.Dilate ?? 0f), max: CreatorScene.MaxDilate, min: 0f),
+                Dilate = Math.Clamp(value: (shape.Dilate ?? 0f), max: ShapeDocument.MaxDilate, min: 0f),
                 Group = Math.Max(val1: (shape.Group ?? 0), val2: 0),
-                Material = Math.Clamp(value: (shape.Material ?? 0), max: (CreatorScene.PaletteSize - 1), min: 0),
+                Material = Math.Clamp(value: (shape.Material ?? 0), max: (CreationDocument.PaletteSize - 1), min: 0),
                 Mirror = (shape.Mirror ?? false),
-                Onion = Math.Clamp(value: (shape.Onion ?? 0f), max: CreatorScene.MaxOnion, min: 0f),
+                Onion = Math.Clamp(value: (shape.Onion ?? 0f), max: ShapeDocument.MaxOnion, min: 0f),
                 Rotation = ((shape.Rotation == default) ? Quaternion.Identity : Quaternion.Normalize(value: shape.Rotation)),
                 Scale = ((shape.Scale == default) ? Vector3.One : shape.Scale),
-                Smooth = Math.Clamp(value: (shape.Smooth ?? 0f), max: CreatorScene.MaxSmooth, min: 0f),
-                Twist = Math.Clamp(value: (shape.Twist ?? 0f), max: CreatorScene.MaxTwist, min: -CreatorScene.MaxTwist),
+                Smooth = Math.Clamp(value: (shape.Smooth ?? 0f), max: ShapeDocument.MaxSmooth, min: 0f),
+                Twist = Math.Clamp(value: (shape.Twist ?? 0f), max: ShapeDocument.MaxTwist, min: -ShapeDocument.MaxTwist),
             });
             _ = shapeIds.Add(item: shape.Id);
         }
@@ -371,12 +406,12 @@ public static class CreationStore {
                     continue;
                 }
 
-                var kind = (chain.Kind ?? ((memberIds.Count == 3) ? CreatorChainState.KindLimb : CreatorChainState.KindSpine));
+                var kind = (chain.Kind ?? ((memberIds.Count == 3) ? ChainDocument.KindLimb : ChainDocument.KindSpine));
 
                 // "limb" is a structural invariant: exactly 3 shapes (2 bones) or it demotes to "spine" — the spine
                 // solver degrades gracefully to any length, so this can never leave a chain unsolvable.
-                if (string.Equals(a: kind, b: CreatorChainState.KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase) && (memberIds.Count != 3)) {
-                    kind = CreatorChainState.KindSpine;
+                if (string.Equals(a: kind, b: ChainDocument.KindLimb, comparisonType: StringComparison.OrdinalIgnoreCase) && (memberIds.Count != 3)) {
+                    kind = ChainDocument.KindSpine;
                 }
 
                 chains.Add(item: chain with { Kind = kind });
@@ -420,7 +455,7 @@ public static class CreationStore {
             normalized.Add(item: run with {
                 Depth = MathF.Max(x: (run.Depth ?? DefaultTextDepth), y: MinTextDepth),
                 EmHeight = MathF.Max(x: run.EmHeight, y: MinTextEmHeight),
-                Material = Math.Clamp(value: (run.Material ?? 0), max: (CreatorScene.PaletteSize - 1), min: 0),
+                Material = Math.Clamp(value: (run.Material ?? 0), max: (CreationDocument.PaletteSize - 1), min: 0),
                 Mode = (string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.OrdinalIgnoreCase) ? TextRunDocument.ModeEngrave : TextRunDocument.ModeEmboss),
                 Rotation = ((run.Rotation == default) ? Quaternion.Identity : Quaternion.Normalize(value: run.Rotation)),
                 Text = text,
@@ -499,8 +534,8 @@ public static class CreationStore {
 
         return new CreationBehaviorDocument(Faces: faces, Locomotion: locomotion);
     }
-    private static string PathFor(string name) =>
-        Path.Combine(path1: Folder, path2: $"{Sanitize(name: name)}.creation.json");
+    private static string PathFor(string name, string creationsRoot) =>
+        Path.Combine(path1: creationsRoot, path2: $"{Sanitize(name: name)}.creation.json");
     private static string Sanitize(string name) {
         var builder = new System.Text.StringBuilder(capacity: name.Length);
 

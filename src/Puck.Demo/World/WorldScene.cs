@@ -1,11 +1,18 @@
 using System.Numerics;
 using System.Text.Json;
 using Puck.Assets;
+using Puck.Authoring;
 using Puck.Demo.Creator;
 using Puck.Demo.Editing;
 using Puck.Demo.Forge;
 using Puck.Scene;
 using Puck.SdfVm;
+// See CreatorScene.cs's matching remark: Puck.Authoring carries its own copy of the grid-snap primitives for
+// World's future editor; these aliases pin the four ambiguous names to Demo's own Puck.Demo.Editing copies.
+using GridSnap = Puck.Demo.Editing.GridSnap;
+using RotationSnap = Puck.Demo.Editing.RotationSnap;
+using SnapConfig = Puck.Demo.Editing.SnapConfig;
+using SnapReference = Puck.Demo.Editing.SnapReference;
 
 namespace Puck.Demo.World;
 

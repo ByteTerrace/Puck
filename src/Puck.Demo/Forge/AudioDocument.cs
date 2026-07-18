@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Assets;
+using Puck.Authoring;
 
 namespace Puck.Demo.Forge;
 
@@ -62,13 +63,13 @@ public sealed record AudioDocument(
 
 /// <summary>
 /// Loads and saves <see cref="AudioDocument"/>s as indented camel-case JSON through the ONE shared
-/// <see cref="DocumentJsonOptions.Shared"/> instance — the same style as <see cref="Creator.CreationStore"/> (this
+/// <see cref="DocumentJsonOptions.Shared"/> instance — the same style as <see cref="CreationStore"/> (this
 /// document carries no <c>Vector3</c>/<c>Quaternion</c> fields, so <c>IncludeFields</c> is not load-bearing here, but
 /// the shared options instance keeps every document family serializing identically).
 /// </summary>
 public static class AudioDocumentStore {
     /// <summary>The folder tracker documents persist under (relative to the working directory, the audio-document
-    /// sibling of <see cref="Creator.CreationStore.Folder"/>).</summary>
+    /// sibling of <see cref="CreationStore.DefaultFolder"/>).</summary>
     public static string Folder => "tunes";
 
     /// <summary>Serializes a document to indented camel-case JSON.</summary>
@@ -115,7 +116,7 @@ public static class AudioDocumentStore {
 
     /// <summary>Saves a document under <c>./tunes/&lt;name&gt;.audio.json</c> (the name is sanitized to letters,
     /// digits, dashes, and underscores) — the tracker's save verb/button, mirroring
-    /// <see cref="Creator.CreationStore.Save(Creator.CreationDocument, string)"/>'s convention exactly.</summary>
+    /// <see cref="CreationStore.Save"/>'s convention exactly.</summary>
     /// <param name="document">The document to save.</param>
     /// <param name="name">The save handle.</param>
     /// <param name="store">The content-addressed store to also write into (null = today's file-only behavior).</param>

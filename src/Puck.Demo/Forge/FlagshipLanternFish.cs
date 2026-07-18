@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Puck.Authoring;
 using Puck.Demo.Creator;
 using Puck.SdfVm;
 

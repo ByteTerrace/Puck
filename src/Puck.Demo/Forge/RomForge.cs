@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Authoring;
 using Puck.Cameras;
 using Puck.Capture;
 using Puck.Demo.Creator;
@@ -366,7 +367,7 @@ internal static class RomForge {
         var avatar = BuildDemoAvatar();
 
         if (creationPath is { } path) {
-            var document = (CreationStore.Load(nameOrPath: path)
+            var document = (CreationStore.Load(nameOrPath: path, creationsRoot: CreationStore.DefaultFolder)
                 ?? throw new ArgumentException(message: $"No creation document readable at '{path}'.", paramName: nameof(creationPath)));
 
             avatar = AvatarForge.FromCreation(document: document, framePoses: out framePoses);

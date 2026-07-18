@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Authoring;
 using Puck.Compositing;
 using Puck.Demo.Creator;
 using Puck.SdfVm;

@@ -15,7 +15,7 @@ namespace Puck.Demo.World;
 /// </summary>
 internal static class WorldCommands {
     /// <summary>The store root every <c>world.*</c> verb resolves against — cwd-relative, sibling of
-    /// <c>creations/</c>/<c>tunes/</c>/<c>worlds/</c> (see <see cref="Puck.Demo.Creator.CreationStore"/>/
+    /// <c>creations/</c>/<c>tunes/</c>/<c>worlds/</c> (see <see cref="Puck.Authoring.CreationStore"/>/
     /// <see cref="Puck.Demo.Forge.AudioDocumentStore"/>).</summary>
     public static ContentAddressedStore OpenStore() => new(root: "store");
 
