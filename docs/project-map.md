@@ -44,6 +44,7 @@ Composition roots     Puck.Demo                 Puck.World
 Validation            Puck.Post                 emulator .Post projects
 Engine services       Puck.Launcher  Puck.Scene  Puck.SdfVm  Puck.Bench
                       Puck.Text      Puck.Capture Puck.Recording
+                      Puck.Overlays  Puck.Authoring
                       Puck.HumbleGamingBrick    Puck.AdvancedGamingBrick
 Presentation          Puck.Vulkan.Presentation  Puck.DirectX.Presentation
 Backends              Puck.Vulkan               Puck.DirectX
@@ -105,6 +106,8 @@ Backend parity is summarized in
 | `Puck.Scene` | The `puck.run.v1` object model, parser, validator, graph documents, fuzzing and validation roots, and JSON Schema export. |
 | `Puck.SdfVm` | SDF program model and builder, C#↔HLSL instruction contract, world renderer, frame sources, render assembly, debug tools, composition and anchor seams, camera views, and deterministic world queries. |
 | `Puck.Text` | Font-atlas models, text layout, and deterministic coverage-to-distance atlas generation. It is render-agnostic. |
+| `Puck.Overlays` | Backend-neutral screen-space overlay UI: the shared ASCII-95 glyph SDF pack (loaded through a prepacked artifact beside the atlas), design tokens, the packed-record frame builder (panels, rects, fixed-cell text, icon chips, per-record viewport clipping, counted overflow with a tail-reservation priority policy), the console/binding-bar/editor-HUD/toast writers, and the one `UnifiedOverlayNode` decorator (a single GPU-timestamped fullscreen pass) that runs identically on both backends. Surfaces are CPU writers; a new surface is a new writer, never a new node or shader. Depends only on neutral contracts — no producer library. |
+| `Puck.Authoring` | The shared authoring contracts both composition roots consume: the `puck.creation.v1` document model (`CreationDocument`, `CreatorIntent`, `AvatarPrimitive`), creation persistence (`CreationStore`), bounded edit history (`EditHistory<T>`), and grid-snap math (`GridSnap`). The single declaration site the Demo creator surface and the World editor share. |
 | `Puck.Capture` | Frame observers, hashing, and dependency-free PNG encoding. GPU readback occurs upstream. |
 | `Puck.Recording` | The `puck.recording.v1` capture graph: frame source → data-defined overlay compositor → encoder ladder → hand-rolled Matroska/WebM muxer, plus the managed-Opus (Concentus) audio lane and the `RecordingSession` that implements the engine's `ICaptureSink`. It defines the recording document, muxer, overlays, and session; the Media Foundation video-encoder ladder and WASAPI audio sources are the platform backend. Depends only on `Puck.Abstractions`. |
 | `Puck.Bench` | Content-blind benchmark orchestration, timing collection, feature-switch sweeps, scoring, and versioned reports. Content is registered through attach seams. |

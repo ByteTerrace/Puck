@@ -30,6 +30,8 @@ sources remain useful to engineering decisions.
 |---|---|
 | [Disposal implementation audit](reviews/2026-07-17-disposal-implementation-audit.md) | Active full-repository disposal findings, ownership evidence, and remediation work items. |
 | [Moldable-state code review](reviews/2026-07-18-moldable-state-code-review.md) | Active findings from the moldable-state implementation review: grant exclusivity, player-section completeness, screen removal, and source-diff hygiene. |
+| [World UI/editor plan](reviews/2026-07-18-world-ui-editor-plan.md) | The active World UI/editor arc: phases, exit bars, and the settled architecture decisions. |
+| [World UI/editor implementation review](reviews/2026-07-18-world-ui-editor-implementation-review.md) | Current architecture, active P3 findings, measurement gates, and prerequisites for the World-first authoring trajectory. |
 | [SDF renderer performance plan](reviews/2026-07-16-sdf-renderer-sota-perf-plan.md) | Active measurement-gated SDF optimization phases and current reopen criteria. |
 | [World moldable-state handoff](reviews/2026-07-18-world-moldable-state-handoff.md) | Surfaces the executed Puck.World moldable-state arc shipped for the editor and UI arcs to build on, with zero new "make X data" prework. |
 

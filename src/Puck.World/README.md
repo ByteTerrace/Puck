@@ -166,7 +166,9 @@ The guiding rule for what describes a world is **"the definition of a world is
 pulled from the server."** So the hardcoded facts of *this* world are gathered
 into one aggregate, `WorldDefinition`, with a `Default` that is today's world
 verbatim — every value byte-equal to what shipped. It bundles the static
-`WorldScene` (ground + `boulder-N`-id'd boulder placements), the seat
+`WorldScene` (ground albedos + polymorphic `WorldSceneRow` placements —
+`boulder-N` spheres and `slab-N` material-carrying boxes, upserted/removed by
+stable id), the seat
 `SpawnPoints` (each a stable `seat-N` id + position), the `WanderTuning` (the
 stand-ins' drift/weave/inward-steer), the `MotionTuning` (move/turn speeds, the
 ground plane, and the whole jump feel kit — one number, `ActionScale`, still
@@ -215,11 +217,11 @@ levers + `world.save`) reproducible with `proof.cs expo-author`, and proven
 (loud boot line + a distinguishing `world.status` fact + the write-back slice) by
 `proof.cs expodoc`. All three round-trip byte-for-byte under the `worlddoc`
 ouroboros. (One deliberate divergence noted in code: the
-scene's boulders are a minimal World-local `WorldBoulder` record, not a
-`Puck.Scene.SceneObject`, because that vocabulary speaks material *indices* and
-JSON vector arrays through an op chain — a contortion for six inline-colored
-spheres; the convergence onto the `puck.run.v1` scene document is named there
-for when the scene grows.)
+scene's rows are the minimal World-local kind-tagged `WorldSceneRow` records
+(`boulder` | `slab`), not `Puck.Scene.SceneObject`s, because that vocabulary
+speaks material *indices* and JSON vector arrays through an op chain — a
+contortion for a handful of inline-colored shapes; the convergence onto the
+`puck.run.v1` scene document is named there for when the scene grows.)
 
 ## Moldable state (the mutation vocabulary)
 
@@ -243,7 +245,7 @@ scripted `mutate-then-read` pair needs no polling.
 | `world.kit.tune <name> <field> <value>` | console sugar: read-modify-write one `MotionTuning` field into a whole-row `UpsertKit` |
 | `world.screen.set <screen-json>` / `world.screen.remove <index>` | upsert/remove a `WorldScreen` row (keyed by index) |
 | `world.camera.set <camera-json>` / `world.camera.remove <name>` | upsert/remove a `WorldCamera` row (keyed by name); applies LIVE — a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension/kind change recreates it, a removal releases it |
-| `world.scene.set <scene-json>` | replaces the static scene (albedos + boulders) |
+| `world.scene.set <scene-json>` | replaces the whole static scene (albedos + rows); the per-row editor grain is `UpsertSceneRow`/`RemoveSceneRow` (the `editor.*` verbs) |
 | `world.spawns.set <spawns-json-array>` | replaces the seat spawn-point list |
 | `world.motion.set <json>` | replaces the profileless `MotionTuning` |
 | `world.wander.set <json>` | replaces `WanderTuning` |
