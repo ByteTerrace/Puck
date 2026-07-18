@@ -200,7 +200,12 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
 
         m_disposed = true;
 
+        // Drain the producer queue only while the device context is still alive: at host shutdown the DI container
+        // may tear the context down before a late owner (e.g. a screen binder's capture feed) releases its shared
+        // textures, and CommandQueueHandle THROWS on a disposed context — with the queue gone there is nothing left
+        // in flight to wait for, so the drain is skipped rather than resurrected.
         if (
+            m_deviceContext.IsInitialized &&
             (0 != m_deviceContext.CommandQueueHandle) &&
             (0 != m_fence)
         ) {

@@ -315,8 +315,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
     // The viewport region for the player at slot-order position `index` of `count`. NormalizedRect convention: origin
     // top-left, Y increasing down. 1 = fullscreen; 2 = side-by-side halves; 3 = big-top (full-width, top half) over two
-    // bottom quarters; 4 = the 2×2 quad (index 0=TL, 1=TR, 2=BL, 3=BR).
-    private static NormalizedRect LayoutRegion(int count, int index) {
+    // bottom quarters; 4 = the 2×2 quad (index 0=TL, 1=TR, 2=BL, 3=BR). Internal: the overlay feed scopes each seat's
+    // screen-space UI (binding bar, later the editor HUD) into the SAME rect the seat renders in.
+    internal static NormalizedRect LayoutRegion(int count, int index) {
         return count switch {
             1 => new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f),
             2 => new NormalizedRect(X: (0.5f * index), Y: 0f, Width: 0.5f, Height: 1f),

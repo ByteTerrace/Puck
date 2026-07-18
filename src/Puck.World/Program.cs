@@ -11,6 +11,7 @@ using Puck.Hosting;
 using Puck.HumbleGamingBrick;
 using Puck.Input;
 using Puck.Launcher;
+using Puck.Overlays;
 using Puck.Platform;
 using Puck.Platform.Windows;
 using Puck.Platform.Windows.Gamepad;
@@ -310,6 +311,39 @@ if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) 
     services.AddHostedService<GamepadHostedService>();
 }
 
+// The screen-space overlay UI (Puck.Overlays): the console mirror, the per-seat binding bars, and the mutation
+// toasts, all drawn by the ONE UnifiedOverlayNode wrapped around the world render below. The stores are the
+// lock-free read seams; the mirror is stdin/stdout's visible twin (the unification contract's "on-screen panel AND
+// stdin"). The TextCommandSource is registered HERE — before AddLauncherTerminal's TryAdd — so the pump's result
+// callback both echoes to stdout (scripted runs stay assertable) and records into the mirror.
+services.AddSingleton<ConsolePanelStore>();
+services.AddSingleton<BindingBarStore>();
+services.AddSingleton<OverlayToastStore>();
+services.AddSingleton<WorldConsoleMirror>();
+services.AddSingleton(implementationFactory: static sp => {
+    var mirror = sp.GetRequiredService<WorldConsoleMirror>();
+    var output = sp.GetRequiredService<BufferedConsoleOutput>();
+
+    return new TextCommandSource(
+        onResult: (line, result) => {
+            if (!string.IsNullOrEmpty(value: result.Output)) {
+                output.WriteLine(value: result.Output);
+            }
+
+            mirror.Record(line: line, result: result);
+        },
+        registry: sp.GetRequiredService<CommandRegistry>()
+    );
+});
+services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
+    bindings: sp.GetRequiredService<WorldSeatBindings>(),
+    gamepads: sp.GetService<GamepadManager>(),
+    roster: sp.GetRequiredService<PlayerRoster>(),
+    store: sp.GetRequiredService<BindingBarStore>()
+));
+// The overlay verb surface — world.screenshot (the composed-frame capture) + world.console (the mirror toggle).
+services.AddSingleton<ICommandModule, WorldUiCommandModule>();
+
 // The shared easy path owns the one fixed-step accumulator, turns every physical/console input into a per-tick snapshot,
 // applies it, and invokes WorldSimulation. Rendering below only consumes interpolation state.
 services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
@@ -345,6 +379,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         instanceCapacity: frameSource.InstanceCapacity,
         dynamicTransformCapacity: frameSource.DynamicTransformCapacity
     );
+    // Mutation outcomes narrate into the overlay toast beside their loud stderr lines — the P1 rejection surface.
+    sp.GetRequiredService<WorldServer>().EchoTap = sp.GetRequiredService<OverlayToastStore>().Publish;
+
     var render = SdfWorldRenderBuilder.Build(
         serviceProvider: sp,
         spec: new SdfWorldRenderSpec(
@@ -352,6 +389,37 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             Width: width,
             Height: height
         ) {
+            // The unified overlay (console mirror + per-seat binding bars + toasts) wraps the producer on BOTH
+            // backends: neutral services, bytecode selected by the resolved host. Degrades loudly to the bare world
+            // when the pre-baked glyph atlas is missing.
+            Decorate = producer => {
+                var fontsDirectory = Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Fonts");
+                var glyphs = OverlayGlyphSdfPack.TryCreate(monoFont: new OverlayGlyphAtlasSet(fontsDirectory: fontsDirectory).MonoFont);
+
+                if (glyphs is null) {
+                    Console.Error.WriteLine(value: $"[unified-overlay] skipped: no usable glyph atlas under '{fontsDirectory}' (rebake via tools/font-atlas).");
+
+                    return producer;
+                }
+
+                var bytecodeExtension = SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX);
+
+                return new UnifiedOverlayNode(
+                    fragmentBytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: ("overlay-unified.frag" + bytecodeExtension))),
+                    glyphs: glyphs,
+                    height: height,
+                    inner: producer,
+                    services: OverlayServices.Build(hostsOnDirectX: hostsOnDirectX, serviceProvider: sp),
+                    sources: new UnifiedOverlaySources(
+                        BindingBar: sp.GetRequiredService<BindingBarStore>(),
+                        Console: sp.GetRequiredService<ConsolePanelStore>(),
+                        FeedTick: sp.GetRequiredService<WorldOverlayFeed>().Tick,
+                        Toast: sp.GetRequiredService<OverlayToastStore>()
+                    ),
+                    vertexBytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfWorldKernels.DefaultDirectory, path2: ("fullscreen.vert" + bytecodeExtension))),
+                    width: width
+                );
+            },
             DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
             HostsOnDirectX = hostsOnDirectX,
             InstanceCapacity = frameSource.InstanceCapacity,
@@ -367,6 +435,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var probe = sp.GetRequiredService<WorldRenderProbe>();
 
     probe.Node = render.Producer;
+    // world.screenshot arms captures through the render host (routes to the outermost decorator).
+    probe.Render = render;
 
     // The native-capture present tap: wrap the render root once, for the world's whole lifetime, in the backend-neutral
     // CapturingRenderNode. The live windowed present path hands GPU surfaces, so the tap reads each captured frame back
@@ -376,17 +446,23 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var recordingDocument = sp.GetRequiredService<RecordingDocumentSource>().Document;
     var tap = sp.GetRequiredService<RecordingTap>();
 
-    return new CapturingRenderNode(
-        inner: render.Root,
-        sink: tap,
-        options: new CaptureOptions {
-            Enabled = true,
-            FrameRate = (recordingDocument.Video?.FrameRate ?? 60),
-            MaxFrames = 0,
-            SourceFrameRate = 120,
-        },
-        captureGate: () => tap.WantsFrames,
-        cpuReadback: () => (probe.Node?.ReadOutputPixels() ?? default)
+    // The teardown tie: the window loop disposes this root (device alive) before the presenter and long before the
+    // container's reverse-creation-order sweep — ride that safe point for the binder's own GPU holdings (camera
+    // feeds, jumbotron view engines), whose container-ordered disposal would otherwise land after device death.
+    return new WorldRenderTeardown(
+        inner: new CapturingRenderNode(
+            inner: render.Root,
+            sink: tap,
+            options: new CaptureOptions {
+                Enabled = true,
+                FrameRate = (recordingDocument.Video?.FrameRate ?? 60),
+                MaxFrames = 0,
+                SourceFrameRate = 120,
+            },
+            captureGate: () => tap.WantsFrames,
+            cpuReadback: () => (probe.Node?.ReadOutputPixels() ?? default)
+        ),
+        binder
     );
 });
 await builder.Build().RunAsync();

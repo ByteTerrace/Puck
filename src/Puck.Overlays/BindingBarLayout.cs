@@ -75,55 +75,32 @@ public static class BindingBarLayout {
     public static Vector2 BarAnchor(float aspect, float anchorOffsetY) =>
         new(x: (aspect * 0.5f), y: (1f - anchorOffsetY));
 
-    /// <summary>Places one slot.</summary>
+    /// <summary>Places one slot: the shared <see cref="PadPictogramLayout"/> compass geometry (button center + badge
+    /// direction from one source of truth), anchored at the bar's bottom-center point and converted to the overlay's
+    /// y-down frame. <see cref="SlotButtons"/> already feeds the LEFT cluster pre-flipped slot indices (d-pad RIGHT at
+    /// compass-west renders nearest the midpoint — the mirror puts it on the cluster's right side), per the
+    /// primitive's documented mirror semantics.</summary>
     /// <param name="index">The layout slot index, 0-11.</param>
     /// <param name="options">The layout tuning.</param>
     /// <param name="aspect">The region aspect ratio (width / height).</param>
     /// <returns>The slot's placement in region-height units.</returns>
     public static BindingSlotPlacement Place(int index, in BindingBarLayoutOptions options, float aspect) {
-        var iMod2 = (index % 2);
-        var iMod6 = (index % 6);
-        var isReflection = (index > 5);
-        var sign = (isReflection ? 1f : -1f);
-        var size = options.ButtonSize;
-
-        // The column pattern: iMod6 1 sits innermost (2 sizes), 3 and 4 outermost (4 sizes), the rest on the
-        // diamond spine (3 sizes); the center gap pushes both clusters apart.
-        var xMultiplier = ((iMod6 == 1)
-            ? 2f
-            : (((iMod6 == 3) || (iMod6 == 4))
-                ? 4f
-                : 3f));
-        var x = (((xMultiplier * size) + options.CenterGap) * sign);
-        // Even slots offset one size vertically (up for the diamond top / shoulder columns, down otherwise, in the
-        // y-up frame); odd slots ride the spine.
-        var yUp = (((iMod2 == 1)
-            ? 0f
-            : size) * (((iMod6 == 0) || (iMod6 == 4))
-            ? 1f
-            : -1f));
-
+        var slot = PadPictogramLayout.Resolve(
+            index: index,
+            options: new PadPictogramOptions(
+                ButtonSize: options.ButtonSize,
+                CenterGap: options.CenterGap,
+                GlyphOffsetRatio: options.GlyphOffsetRatio
+            )
+        );
         var anchor = BarAnchor(aspect: aspect, anchorOffsetY: options.AnchorOffsetY);
-        var center = new Vector2(x: (anchor.X + x), y: (anchor.Y - yUp));
-
-        // The gamepad glyph hugs the corner that faces away from the cluster, by the same modulo pattern.
-        var badge = (size * options.GlyphOffsetRatio);
-        var glyphX = (((iMod6 == 1)
-            ? badge
-            : (((iMod6 == 3) || (index == 4) || (index == 10))
-                ? -badge
-                : 0f)) * (isReflection ? -1f : 1f));
-        var glyphYUp = (((iMod6 == 0) || (index == 4) || (index == 10))
-            ? badge
-            : ((iMod6 == 2)
-                ? -badge
-                : 0f));
+        var center = new Vector2(x: (anchor.X + slot.X), y: (anchor.Y - slot.YUp));
 
         return new BindingSlotPlacement(
             Center: center,
-            GlyphCenter: new Vector2(x: (center.X + glyphX), y: (center.Y - glyphYUp)),
-            GlyphHalfSize: ((size * options.GlyphSizeRatio) * 0.5f),
-            HalfSize: (size * 0.5f)
+            GlyphCenter: new Vector2(x: (center.X + slot.GlyphX), y: (center.Y - slot.GlyphYUp)),
+            GlyphHalfSize: ((options.ButtonSize * options.GlyphSizeRatio) * 0.5f),
+            HalfSize: (options.ButtonSize * 0.5f)
         );
     }
 }

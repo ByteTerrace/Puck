@@ -93,6 +93,13 @@ internal sealed class WorldSeatBindings : IInputBindings {
         RecomposeSeat(slot: slot);
     }
 
+    /// <summary>The immutable view of the page the seat's held chord currently selects — the binding bar's read
+    /// seam (a single volatile reference read; see <see cref="PagedInputBindings.ViewFor"/>).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <returns>The active page's precomputed view (slot 0's for an out-of-range slot).</returns>
+    public BindingPageView PageView(int slot) =>
+        m_seats[(((uint)slot < SeatCount) ? slot : 0)].ViewFor(slot: slot);
+
     /// <summary>The seat's current live session-rebind layer, or <see langword="null"/> when it has none.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public BindingProfileDocument? SessionRebind(int slot) => (((uint)slot < SeatCount) ? m_sessionRebinds[slot] : null);

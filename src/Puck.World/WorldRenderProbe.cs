@@ -11,4 +11,9 @@ namespace Puck.World;
 internal sealed class WorldRenderProbe {
     /// <summary>The SDF engine node the render root wraps, or <see langword="null"/> until the render factory has run.</summary>
     public SdfEngineNode? Node { get; set; }
+
+    /// <summary>The assembled render host, or <see langword="null"/> until the render factory has run — the
+    /// <c>world.screenshot</c> verb arms captures through its <see cref="SdfWorldRender.RequestCapture"/> (which
+    /// routes to the OUTERMOST decorator, so the readback lands on the final composed frame).</summary>
+    public SdfWorldRender? Render { get; set; }
 }

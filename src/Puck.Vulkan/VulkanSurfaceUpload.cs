@@ -286,41 +286,49 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     }
     private void DisposeResources() {
         var device = m_device;
+        // A dead device (destroyed at host teardown before a late owner released through it) freed every child
+        // object with itself — destroying a pool/buffer/view against its stale handle is a native fault, so each
+        // destroy below gates on liveness and only the managed references are dropped (mirroring the fence guard
+        // this method always had).
+        var deviceAlive = ((device is not null) && !device.IsDisposed);
 
         // The staging/command resources may still feed an outstanding pipelined copy — drain it first.
         WaitForPendingUpload();
 
         if (
-            (device is not null) &&
-            !device.IsDisposed &&
+            deviceAlive &&
             (0 != m_fence)
         ) {
-            m_frameSynchronizationApi!.DestroyFence(deviceHandle: device.Handle, fenceHandle: m_fence);
+            m_frameSynchronizationApi!.DestroyFence(deviceHandle: device!.Handle, fenceHandle: m_fence);
         }
 
         m_fence = 0;
 
         m_uploadPending = false;
-        m_commandResources?.Dispose();
+
+        if (deviceAlive) {
+            m_commandResources?.Dispose();
+            m_stagingBuffer?.Dispose();
+        }
+
         m_commandResources = null;
-        m_stagingBuffer?.Dispose();
         m_stagingBuffer = null;
 
         if (
-            (device is not null) &&
+            deviceAlive &&
             (0 != m_imageViewHandle)
         ) {
             m_framebufferSetApi.DestroyImageView(
-                deviceHandle: device.Handle,
+                deviceHandle: device!.Handle,
                 imageViewHandle: m_imageViewHandle
             );
         }
 
         m_imageViewHandle = 0;
 
-        if (device is not null) {
+        if (deviceAlive) {
             m_offscreenImageApi.DestroyColorImage(
-                deviceHandle: device.Handle,
+                deviceHandle: device!.Handle,
                 imageHandle: m_imageHandle,
                 memoryHandle: m_memoryHandle
             );

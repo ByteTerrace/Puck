@@ -50,6 +50,10 @@
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <!-- The screen-space overlay UI (UnifiedOverlayNode + writers). Its compiled overlay bytecode AND the
+             pre-baked glyph atlas (Assets/Fonts) flow transitively into this output — World still ships no
+             shaders or fonts of its own. -->
+        <ProjectReference Include="..\Puck.Overlays\Puck.Overlays.csproj" />
         <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
         <!-- The recording graph (puck.recording.v1): the capture verbs build a RecordingSession from the recording
              document and the Puck.Platform encoder/audio factories, wired to the CapturingRenderNode tap. -->

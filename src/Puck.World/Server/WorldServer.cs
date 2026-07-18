@@ -76,6 +76,11 @@ internal sealed class WorldServer {
     /// count, and the <c>world.undo</c> budget).</summary>
     public int JournalLength => m_journal.Count;
 
+    /// <summary>An optional edit-echo tap invoked beside the loud stderr accept/reject lines —
+    /// <c>(message, isRejection)</c> — so a UI surface (the overlay toast) can narrate mutation outcomes without
+    /// scraping stderr. Runs on the server's step thread.</summary>
+    public Action<string, bool>? EchoTap { get; set; }
+
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
     /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
     /// console path behind the stdin barrier.</summary>
@@ -370,6 +375,7 @@ internal sealed class WorldServer {
 
         if (!m_grants.Allows(principal: mutation.Principal, capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: section))) {
             Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} cannot mutate section:{section.ToString().ToLowerInvariant()} — {Describe(mutation: mutation)} dropped]");
+            EchoTap?.Invoke(arg1: $"{Describe(mutation: mutation)} denied: no mutate grant", arg2: true);
 
             return false;
         }
@@ -395,6 +401,7 @@ internal sealed class WorldServer {
         Install(definition: candidate, rebuildPopulation: AffectsPopulation(mutation: mutation));
         m_journal.Add(item: new JournalEntry(Tick: tick, Mutation: mutation));
         Console.Error.WriteLine(value: $"[world.mutation: {Describe(mutation: mutation)} applied]");
+        EchoTap?.Invoke(arg1: $"{Describe(mutation: mutation)} applied", arg2: false);
 
         if (mutation is WorldMutation.UpsertCamera or WorldMutation.RemoveCamera) {
             // The offscreen view pool is sized/registered at boot from the probed render envelope; a live camera pool
@@ -494,6 +501,7 @@ internal sealed class WorldServer {
 
     private void Reject(WorldMutation mutation, string reason) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
+        EchoTap?.Invoke(arg1: $"{Describe(mutation: mutation)} rejected: {reason}", arg2: true);
     }
 
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'

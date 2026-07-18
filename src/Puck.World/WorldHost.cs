@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Puck.Abstractions.Gpu;
 using Puck.DirectX.Presentation;
 using Puck.Launcher;
 using Puck.Memory;
@@ -43,6 +45,11 @@ internal static class WorldHost {
             ));
         } else {
             services.AddVulkanPresenter();
+            // The Vulkan block publishes its device context in DI as IVulkanDeviceContext only (the neutral
+            // interface rides a HostCapabilityContribution instead). Alias the neutral seam here so backend-neutral
+            // consumers (the unified overlay's OverlayServices) resolve the SAME device either backend registers —
+            // the DirectX block already registers IGpuDeviceContext itself.
+            services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
             services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
                 Name: "vulkan",
                 Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()
