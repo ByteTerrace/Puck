@@ -136,15 +136,18 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         );
     }
 
-    // Resolve the acting seat: a bound chord act (no parsed text) targets the pressing device's seat; a typed line
-    // reads its trailing [seat] token (1..4, default 1). Returns -1 with an error result on a malformed index.
-    // Internal: EditorSelectionCommandModule shares the same convention.
+    // Resolve the acting seat: a PRESENT trailing [seat] token (1..4) is authoritative; an absent one falls back to
+    // the invocation's slot — the pressing device's seat for a bound chord act, and the text path's default seat 1
+    // (CommandContext.Slot is 0 there by contract). Token PRESENCE is the discriminator, never context.Parse: the
+    // registry's Immediate fast path hands trailing-args handlers a null Parse for TYPED lines too, so a Parse-null
+    // test silently ignored a typed seat token (the editor-edit proof's depart round caught it). Returns -1 with an
+    // error result on a malformed index. Internal: EditorSelectionCommandModule shares the same convention.
     internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, string[] args, int at, string verb) {
-        if (context.Parse is null) {
+        if (args.Length <= at) {
             return (Slot: context.Slot, Error: null);
         }
 
-        if (!WorldArgs.TryParseIndex(args: args, at: at, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var seat)) {
+        if (!WorldArgs.TryParseIndex(args: args, at: at, min: 1, max: PlayerRoster.MaxSlots, fallback: null, value: out var seat)) {
             return (Slot: -1, Error: new CommandResult(Output: $"[{verb}: seat must be an integer 1..{PlayerRoster.MaxSlots}]") {
                 IsError = true,
             });

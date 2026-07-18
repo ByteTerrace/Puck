@@ -141,8 +141,17 @@
 //       boulder-2, editor.pick echoes it); (e) the selection highlight is VISIBLE — select/deselect screenshots over a
 //       static central band differ decisively while a deselected control pair does not; (f) capacity honesty —
 //       flooding placements past the authoring headroom hits the loud '[world.mutation rejected: ...]' envelope line,
-//       a further placement leaves dirty UNCHANGED, and the rejection surfaces as the danger-hued toast. Decodes the
-//       engine's own PNGs inline like ui-floor.
+//       a further placement leaves dirty UNCHANGED, and the rejection surfaces as the danger-hued toast;
+//       (g) UIE-2 — every editor-local typed float surface rejects NaN/Infinity loudly; (h) UIE-1 — exit or seat
+//       departure mid-drag drops the pending row AND the selection (re-entry/rejoin starts clean, the abandoned drag
+//       is uncommittable, dirty unchanged); (i) UIE-3 — a frozen released preview retires on ITS OWN result: apply
+//       narrates 'retired: applied', a revoked-grant rejection batched WITH an unrelated console mutation narrates
+//       'retired: rejected' (never an apply/deadline retire — the unrelated delivery leaves the preview alone) and
+//       the row snaps back to its document pose; (j) UIE-10 — the candidate ring is bounded and narrated (cap 16
+//       engages near the flooded scene, an empty ring far away, editor.status carries the policy). Decodes the
+//       engine's own PNGs inline like ui-floor. A second NARROW pair of sessions (640x480, four seats, two editors)
+//       is the UIE-4 clip proof: the seat-1 HUD paints inside its own 320px viewport and does NOT bleed past the
+//       2x2 seam into seat 2 (control-bounded pixel bands on both backends).
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -7424,12 +7433,120 @@ static class EditorEditProof {
         Console.WriteLine(value: "[proof] === editor-edit (b): Vulkan ===");
         var vulkanPassed = RunSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", width: width, height: height, exitAfterSeconds: exitAfterSeconds);
 
-        var passed = (directXPassed && vulkanPassed);
+        // The UIE-4 clip proof runs NARROW on purpose: 640x480 quad-split gives each seat 320px, well under the
+        // HUD's worst-case line width, so an unclipped panel would visibly cross the seam.
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-edit (c): four-seat HUD viewport clipping, Direct3D 12 (640x480) ===");
+        var clipDirectXPassed = RunHudClipSession(exe: exe, repoRoot: repoRoot, backend: null, exitAfterSeconds: exitAfterSeconds);
+
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === editor-edit (d): four-seat HUD viewport clipping, Vulkan (640x480) ===");
+        var clipVulkanPassed = RunHudClipSession(exe: exe, repoRoot: repoRoot, backend: "vulkan", exitAfterSeconds: exitAfterSeconds);
+
+        var passed = (((directXPassed && vulkanPassed) && clipDirectXPassed) && clipVulkanPassed);
 
         Console.WriteLine();
         Console.WriteLine(value: $"[proof] editor-edit proof {(passed ? "PASS" : "FAIL")}");
 
         return (passed ? 0 : 1);
+    }
+
+    // The UIE-4 pixel proof: 4 seats in the 2x2 quad at 640x480 (320px per seat), seats 1 and 3 editing (TWO editors
+    // = the standard ladder, no sole-editor workbench). Seat 1's HUD panel would be ~480px wide unclipped; the clip
+    // contract must CUT it at the x=320 seam, so the band just right of the seam inside seat 2's region stays at the
+    // control image while the band left of the seam repaints decisively.
+    static bool RunHudClipSession(string exe, string repoRoot, string? backend, int exitAfterSeconds) {
+        const int width = 640;
+        const int height = 480;
+        var pid = Environment.ProcessId;
+        var tag = ((backend ?? "directx") + "-clip");
+        var controlAPath = ShotPath(pid: pid, tag: tag, name: "control-a");
+        var controlBPath = ShotPath(pid: pid, tag: tag, name: "control-b");
+        var hudPath = ShotPath(pid: pid, tag: tag, name: "hud");
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var process = ctx.Process;
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            // Pin the stage: console panel off, exactly four console-joined seats, zero census (static world).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "clip-console-off");
+
+            for (var seat = 2; (seat <= 4); seat++) {
+                passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"clip-pin-leave-{seat}");
+            }
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.population 0", expect: "[world.population:", name: "clip-census-zero");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join cobalt 2", expect: "[player.join:", name: "clip-join-2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join moss 3", expect: "[player.join:", name: "clip-join-3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join violet 4", expect: "[player.join:", name: "clip-join-4");
+
+            // Controls first (no HUD): a pair bounds the static noise floor.
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "clip-control-a", path: controlAPath);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "clip-control-b", path: controlBPath);
+
+            // Two editors (seats 1 and 3) with live SPAWN selections: spawns render no geometry and take no
+            // selection tint, so the ONLY pixel change versus the controls is the HUD surface itself — and the
+            // spawn selection line is wide enough that an unclipped seat-1 panel would cross the x=320 seam.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "clip-enter-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 3", expect: "[editor.enter: seat 3 editing", name: "clip-enter-3");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select spawns seat-2 1", expect: "[editor.select: seat 1 spawns 'seat-2'", name: "clip-select-1");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select spawns seat-3 3", expect: "[editor.select: seat 3 spawns 'seat-3'", name: "clip-select-3");
+            Thread.Sleep(millisecondsTimeout: 700);
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "clip-hud-shot", path: hudPath);
+
+            var controlA = ComposedShotKit.DecodePng(path: controlAPath);
+            var controlB = ComposedShotKit.DecodePng(path: controlBPath);
+            var hud = ComposedShotKit.DecodePng(path: hudPath);
+            // The HUD band: y spans the panel rows under seat 1's top gutter. Left band = inside seat 1 where the
+            // panel must paint; right band = just past the x=320 seam inside seat 2, where an unclipped panel bleeds.
+            var bandY = 20;
+            var bandH = 120;
+            var leftX = 40;
+            var leftW = 270;
+            // The bleed zone: an unclipped ~380px panel would paint x 320..~390 in seat 2's region.
+            var rightX = 322;
+            var rightW = 56;
+            var noiseRight = MeanAbsDiff(a: controlB, b: controlA, x: rightX, y: bandY, w: rightW, h: bandH);
+            var hudLeft = MeanAbsDiff(a: hud, b: controlA, x: leftX, y: bandY, w: leftW, h: bandH);
+            var hudRight = MeanAbsDiff(a: hud, b: controlA, x: rightX, y: bandY, w: rightW, h: bandH);
+
+            passed &= ComposedShotKit.Check(
+                name: "hud-renders-inside-own-seat",
+                ok: (hudLeft > 2.0),
+                detail: $"left-of-seam band diff {hudLeft.ToString(format: "F2", provider: ProofApp.Inv)} (want > 2 — the seat-1 HUD panel is visible)"
+            );
+            passed &= ComposedShotKit.Check(
+                name: "hud-clips-at-seat-seam",
+                ok: (hudRight <= ((noiseRight * 4.0) + 0.5)),
+                detail: $"right-of-seam band diff {hudRight.ToString(format: "F2", provider: ProofApp.Inv)} vs static noise {noiseRight.ToString(format: "F2", provider: ProofApp.Inv)} (an unclipped 480px panel would repaint seat 2)"
+            );
+            passed &= ComposedShotKit.FaultSweep(ctx: ctx);
+        }
+        catch (InvalidDataException exception) {
+            passed = ComposedShotKit.Check(name: "clip-png-decode", ok: false, detail: exception.Message);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: process);
+            ComposedShotKit.TryDelete(path: controlAPath);
+            ComposedShotKit.TryDelete(path: controlBPath);
+            ComposedShotKit.TryDelete(path: hudPath);
+        }
+
+        return passed;
     }
 
     static bool RunSession(string exe, string repoRoot, string? backend, int width, int height, int exitAfterSeconds) {
@@ -7563,7 +7680,133 @@ static class EditorEditProof {
                 detail: $"danger-red pixels in the toast strip: reject {rejectRed} vs control {controlRed}"
             );
 
-            // (g) No loud GPU/runtime faults anywhere in the session (both streams).
+            // (g) UIE-2 — every editor-local typed float surface rejects non-finite values loudly, before any local
+            // state can be poisoned (NaN slides past ordinary range guards; a non-finite center would rebuild the SDF).
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.speed NaN", expect: "as a finite number", name: "finite-cam-speed");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose Infinity 0 0", expect: "as finite numbers", name: "finite-cam-pose");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.snap NaN", expect: "expected on|off|<pitch>", name: "finite-snap-pitch");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag NaN 0 0", expect: "as finite numbers", name: "finite-drag");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.move NaN 0 0", expect: "as finite numbers", name: "finite-move");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.nudge -Infinity 0 0", expect: "as finite numbers", name: "finite-nudge");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.place boulder NaN", expect: "bad radius", name: "finite-place");
+
+            // (h) UIE-1 — editor deactivation owns the COMPLETE teardown: an exit mid-drag drops the pending row and
+            // the selection, so re-entry starts clean and the abandoned drag can never be committed.
+            var dirtyBeforeExit = ReadDirty(ctx: ctx, name: "dirty-before-exit-mid-drag");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-1", expect: "[editor.select: seat 1 scene 'boulder-1'", name: "exit-mid-drag-select");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "exit-mid-drag-grab");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 3 0 0", expect: "[editor.drag: seat 1", name: "exit-mid-drag-move");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit", expect: "[editor.exit: seat 1", name: "exit-mid-drag-exit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter", expect: "[editor.enter: seat 1 editing", name: "exit-mid-drag-reenter");
+
+            var statusMark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "editor.status");
+
+            var statusLine = ComposedShotKit.Await(collector: ctx.Collector, mark: statusMark, predicate: l => l.Contains(value: "[editor.status: seat 1 editing"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(
+                name: "reenter-starts-clean",
+                ok: ((statusLine is not null) && statusLine.Contains(value: "sel=none") && !statusLine.Contains(value: "drag=")),
+                detail: (statusLine?.Trim() ?? "(no editor.status echo)")
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "has no live drag", name: "abandoned-drag-not-committable");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyBeforeExit} ", name: "exit-mid-drag-no-wire");
+
+            // The departure variant: a seat that LEAVES mid-drag is pruned, and its slot's next occupant inherits
+            // neither the drag nor the selection.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join cobalt 2", expect: "[player.join:", name: "depart-join-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 2", expect: "[editor.enter: seat 2 editing", name: "depart-enter-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-2 2", expect: "[editor.select: seat 2 scene 'boulder-2'", name: "depart-select-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab 2", expect: "dragging scene 'boulder-2'", name: "depart-grab-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "depart-leave-mid-drag");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.join cobalt 2", expect: "[player.join:", name: "depart-rejoin-seat2");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 2", expect: "[editor.enter: seat 2 editing", name: "depart-reenter-seat2");
+
+            var rejoinMark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: "editor.status 2");
+
+            var rejoinStatus = ComposedShotKit.Await(collector: ctx.Collector, mark: rejoinMark, predicate: l => l.Contains(value: "[editor.status: seat 2 editing"), deadlineSeconds: 15.0);
+
+            passed &= ComposedShotKit.Check(
+                name: "rejoined-slot-starts-clean",
+                ok: ((rejoinStatus is not null) && rejoinStatus.Contains(value: "sel=none") && !rejoinStatus.Contains(value: "drag=")),
+                detail: (rejoinStatus?.Trim() ?? "(no editor.status 2 echo)")
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release 2", expect: "has no live drag", name: "departed-drag-not-committable");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 2", expect: "[editor.exit: seat 2", name: "depart-cleanup-exit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.leave 2", expect: "[player.leave: player 2 left", name: "depart-cleanup-leave");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.status", expect: $"dirty {dirtyBeforeExit} ", name: "departed-drag-no-wire");
+
+            // (i) UIE-3 — a frozen released preview retires on ITS OWN result, with the honest reason narrated.
+            // Apply: the release's delivery carries exactly the expected row.
+            var applyMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select scene boulder-1", expect: "[editor.select: seat 1 scene 'boulder-1'", name: "retire-apply-select");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "retire-apply-grab");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1 0 0", expect: "[editor.drag: seat 1", name: "retire-apply-move");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.release", expect: "one mutation submitted", name: "retire-apply-release");
+            passed &= ComposedShotKit.Check(
+                name: "frozen-retires-on-own-apply",
+                ok: (ComposedShotKit.Await(collector: ctx.Collector, mark: applyMark, predicate: l => l.Contains(value: "frozen scene 'boulder-1' retired: applied"), deadlineSeconds: 15.0) is not null),
+                detail: "the released preview retired against its own delivered row"
+            );
+
+            // Rejection with a SAME-BATCH unrelated delivery: the seat's release is denied (revoked grant) while a
+            // console kit mutation applies in the same drain — the retire reason must be the REJECTION correlation,
+            // never the unrelated delivery (the old global revision watch retired on ANY delivery).
+            var preRejectStatus = ReadSelectionPosition(ctx: ctx, name: "document-pose-before-rejection");
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke seat1 mutate section:scene", expect: "[world.revoke: seat1 mutate section:scene]", name: "retire-reject-revoke");
+
+            var rejectMark = ctx.Collector.Count;
+
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab", expect: "dragging scene 'boulder-1'", name: "retire-reject-grab");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 2 0 0", expect: "[editor.drag: seat 1", name: "retire-reject-move");
+            ComposedShotKit.Send(ctx: ctx, line: "editor.release");
+            ComposedShotKit.Send(ctx: ctx, line: "world.kit.tune runner moveSpeed 7");
+            passed &= ComposedShotKit.Check(
+                name: "frozen-retires-on-own-rejection",
+                ok: (ComposedShotKit.Await(collector: ctx.Collector, mark: rejectMark, predicate: l => l.Contains(value: "frozen scene 'boulder-1' retired: rejected"), deadlineSeconds: 15.0) is not null),
+                detail: "the rejected release correlated back to its frozen preview"
+            );
+
+            var retireLines = ctx.Collector.Snapshot();
+            var unrelatedRetire = false;
+
+            for (var i = rejectMark; (i < retireLines.Length); i++) {
+                if (retireLines[i].Contains(value: "retired: applied") || retireLines[i].Contains(value: "retired: deadline")) {
+                    unrelatedRetire = true;
+                }
+            }
+
+            passed &= ComposedShotKit.Check(
+                name: "unrelated-delivery-does-not-retire",
+                ok: !unrelatedRetire,
+                detail: "no apply/deadline retirement fired in the rejection round (the same-batch kit delivery left the preview to its own result)"
+            );
+
+            var postRejectStatus = ReadSelectionPosition(ctx: ctx, name: "document-pose-after-rejection");
+
+            passed &= ComposedShotKit.Check(
+                name: "rejected-row-snaps-back",
+                ok: ((preRejectStatus is not null) && string.Equals(a: preRejectStatus, b: postRejectStatus, comparisonType: StringComparison.Ordinal)),
+                detail: $"selection pose before '{preRejectStatus}' vs after '{postRejectStatus}'"
+            );
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.undo", expect: "[world.undo: dropped 1,", name: "retire-reject-undo-kit");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant seat1 mutate section:scene", expect: "[world.grant: seat1 mutate section:scene]", name: "retire-reject-regrant");
+
+            // (j) UIE-10 — the candidate ring is explicit and bounded: near the flooded scene the ring caps at 16;
+            // far from everything it is honestly empty; editor.status narrates the policy.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 0.6 0.88 -5 0 0", expect: "[editor.cam.pose: seat 1", name: "candidates-pose-near");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "of 16 candidates (r 32u, cap 16)", name: "candidates-cap-engages");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.cam.pose 500 5 500 0 0", expect: "[editor.cam.pose: seat 1", name: "candidates-pose-far");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.next", expect: "no candidates within 32u", name: "candidates-radius-bounds");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.status", expect: "cand=0 (r 32u, cap 16)", name: "candidates-status-narrates");
+
+            // (k) No loud GPU/runtime faults anywhere in the session (both streams).
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
         catch (InvalidDataException exception) {
@@ -7584,6 +7827,24 @@ static class EditorEditProof {
 
     static string ShotPath(int pid, string tag, string name) {
         return Path.Combine(Path.GetTempPath(), $"puck-editor-edit-{pid}-{tag}-{name}.png");
+    }
+
+    static readonly Regex SelectionEcho = new(pattern: @"sel=[^)]+\)", options: RegexOptions.Compiled);
+
+    // Sends editor.status and returns the seat-1 selection clause ("sel=scene 'x' at (a, b, c)") — the document-pose
+    // witness the rejection round compares before/after.
+    static string? ReadSelectionPosition(ComposedShotKit.Ctx ctx, string name) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "editor.status");
+
+        var line = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[editor.status: seat 1 editing"), deadlineSeconds: 15.0);
+        var clause = ((line is not null) ? SelectionEcho.Match(input: line) : null);
+        var value = (((clause is { Success: true })) ? clause.Value : null);
+
+        _ = ComposedShotKit.Check(name: name, ok: (value is not null), detail: (value ?? "(no selection clause in editor.status)"));
+
+        return value;
     }
 
     // Sends world.status and parses the journal dirty counter (the read-after-write barrier makes it settled).
