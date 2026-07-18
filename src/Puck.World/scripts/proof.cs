@@ -5382,7 +5382,7 @@ static class BindingsProof {
             var revBeforeBindings = ReadRevision(ctx: ctx, name: "rev-before-bindings");
 
             passed &= ExpectSection(ctx: ctx, name: "bindings-section-applies",
-                line: "profile.section amber bindings {\"version\":\"puck.bindings.v7\",\"modifiers\":[],\"pages\":[{\"id\":\"base\",\"chord\":[],\"entries\":[{\"source\":\"keyboard.q\",\"command\":\"player.forward\",\"anyModifiers\":true}]}]}",
+                line: "profile.section amber bindings {\"version\":\"puck.bindings.v8\",\"modifiers\":[],\"chords\":[{\"group\":\"play\",\"chord\":[],\"page\":{\"id\":\"base\",\"entries\":[{\"source\":\"keyboard.q\",\"command\":\"player.forward\",\"anyModifiers\":true}]}}]}",
                 needle: "amber bindings applied");
 
             var revAfterBindings = ReadRevision(ctx: ctx, name: "rev-after-bindings");

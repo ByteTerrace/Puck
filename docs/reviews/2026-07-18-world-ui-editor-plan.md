@@ -176,7 +176,17 @@ on `(group, chord)`). One resting page per group; one meaning per
 and the press latch are reused unchanged. Mode flips become pointer-level
 switches on the compiled profile — no recompose. This is the P3.5 rework (a
 flagged `Puck.Commands` seam); the diversion remains as intent routing, no
-longer a leak backstop.
+longer a leak backstop. **LANDED (P3.5, `puck.bindings.v8`):**
+`BindingChordDefinition` carries the Page|Command meaning union; resolution
+is group-scoped deepest-prefix; command chords fire synthesized edges the
+router folds (`IChordEdgeSource`) with honest phases; `SetActiveGroup` is the
+runtime flip (latches/tracker/armed chords survive); `editor.enter` rides the
+ordered `[lt, rt]` chord as data; `player.bind` grew the `chord:` grammar and
+`player.signal` scripts pad signals over the pipe. Engine-gated in Post's
+`binding-page` stage; product-proven in `proof.cs editor-mode` on both
+backends. The settled per-signal order: tracker advance → page re-resolve →
+chord-command releases then presses → the signal's own source lookup against
+the post-flip page.
 
 ### D4 — Selection is client state: proximity + cycle now, field-ray later
 
