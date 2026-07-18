@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.Extensions.DependencyInjection.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.0.10",
+        "contentHash": "z/2xXlFw2aLGjHyEm6E0tQ+In6VfzQzTrtArbQ2c0TQE16ZbyDCMGPvaUT9I0s8rgy9sRWlU2P9waW37qV04qA=="
+      },
+      "System.CommandLine": {
+        "type": "Transitive",
+        "resolved": "2.0.10",
+        "contentHash": "6i1D6/U3i1f/PiXTt9pDvbJwdXEe0F2DZPup6BHzeIu5yPk/lkFzgtrJnPbj54JWUh8Y9vJeKG/TZIT6MkF8TA=="
+      },
+      "puck.abstractions": {
+        "type": "Project"
+      },
+      "puck.assets": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+        }
+      },
+      "puck.cameras": {
+        "type": "Project"
+      },
+      "puck.capture": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )"
+        }
+      },
+      "puck.commands": {
+        "type": "Project",
+        "dependencies": {
+          "System.CommandLine": "[2.*, )"
+        }
+      },
+      "puck.compositing": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Assets": "[1.0.0, )"
+        }
+      },
+      "puck.hosting": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Commands": "[1.0.0, )"
+        }
+      },
+      "puck.maths": {
+        "type": "Project"
+      },
+      "puck.sdfvm": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Assets": "[1.0.0, )",
+          "Puck.Cameras": "[1.0.0, )",
+          "Puck.Capture": "[1.0.0, )",
+          "Puck.Compositing": "[1.0.0, )",
+          "Puck.Hosting": "[1.0.0, )",
+          "Puck.Maths": "[1.0.0, )",
+          "Puck.Shaders": "[1.0.0, )",
+          "Puck.Text": "[1.0.0, )"
+        }
+      },
+      "puck.shaders": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )"
+        }
+      },
+      "puck.text": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Assets": "[1.0.0, )"
+        }
+      }
+    }
+  }
+}

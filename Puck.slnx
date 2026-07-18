@@ -4,6 +4,7 @@
         <Project Path="src/Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
         <Project Path="src/Puck.AdvancedGamingBrick.Post/Puck.AdvancedGamingBrick.Post.csproj" />
         <Project Path="src/Puck.Assets/Puck.Assets.csproj" />
+        <Project Path="src/Puck.Authoring/Puck.Authoring.csproj" />
         <Project Path="src/Puck.Bench/Puck.Bench.csproj" />
         <Project Path="src/Puck.Cameras/Puck.Cameras.csproj" />
         <Project Path="src/Puck.Capture/Puck.Capture.csproj" />
@@ -18,6 +19,7 @@
         <Project Path="src/Puck.Input/Puck.Input.csproj" />
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />
+        <Project Path="src/Puck.Overlays/Puck.Overlays.csproj" />
         <Project Path="src/Puck.Platform/Puck.Platform.csproj" />
         <Project Path="src/Puck.Post/Puck.Post.csproj" />
         <Project Path="src/Puck.Recording/Puck.Recording.csproj" />
