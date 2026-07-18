@@ -199,8 +199,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             }
 
             // The editor's pending rows compose over the delivered truth: the EXISTING rebuild path renders the drag
-            // preview at drag cadence (≈ the proven seat-recolor cost), and release retires the overlay against the
-            // identical committed document — no second render path.
+            // preview at drag cadence, and release retires the overlay against the identical committed document — no
+            // second render path. MEASURED (UIE-5, 2026-07-18, Release 1280x800, both backends, world.timing's
+            // capture bucket): a continuous drag's whole-program rebuild+upload costs ~0.07-0.12 ms/frame at 1-4
+            // avatars and ~1.5-2.4 ms worst-of-60 at the 128-avatar ceiling (first-grab spike ~10 ms), with
+            // presentation FPS pinned at 117.0 avg / >=114 worst throughout and GPU frame time unchanged. Verdict:
+            // the full-rebuild path stays; a cheaper preview transform is not demanded by the evidence.
             m_program = BuildWorld(
                 client: m_client,
                 scene: m_drag.ComposeScene(live: m_client.Definition.Scene),
