@@ -719,6 +719,16 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" | {labels[index]} {passMilliseconds[index]:0.00}");
         }
 
+        // The unified overlay decorator's own pass (a separate submit after the engine's) — appended once the
+        // overlay has drawn a timed frame (the UIE-9 instrument).
+        if (renderProbe.Overlay is { } overlay) {
+            Span<double> overlayMilliseconds = stackalloc double[1];
+
+            if (overlay.TryReadPassTimings(passMilliseconds: overlayMilliseconds, passCount: out var overlayCount, frameMilliseconds: out _) && (overlayCount > 0)) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" | overlay {overlayMilliseconds[0]:0.000}");
+            }
+        }
+
         return builder.Append(value: ']').ToString();
     }
 }

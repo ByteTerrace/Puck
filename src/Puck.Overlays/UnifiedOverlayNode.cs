@@ -1,9 +1,7 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Assets;
 using Puck.Capture;
-using Puck.Compositing;
 using Puck.Hosting;
 
 namespace Puck.Overlays;
@@ -41,7 +39,7 @@ public sealed record UnifiedOverlaySources(
 /// whichever node actually produced the shown frame). Zero steady-state allocation: one preallocated scratch, one
 /// reused push-constant array, records packed with <see cref="BitConverter.SingleToUInt32Bits"/>.
 /// </remarks>
-public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
+public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPassTimingSource {
     // counts float4 + sdf float4 + misc float4 — KEEP IN SYNC with overlay-unified.frag.hlsl's OverlayPassData.
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 3);
     // The toast's tail reservation (UIE-8): its worst-case record shape (1 panel + rail/icon rects + two text runs,
@@ -56,11 +54,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private const uint VertexCount = 3;
     private const uint VertexStrideBytes = (sizeof(float) * 2);
 
+    // The one overlay pass's timestamp pair (a begin/end bracket around the fullscreen draw).
+    private const uint TimingQueryCount = 2;
+
     private static readonly byte[] FullscreenTriangleVertexData = CreateFullscreenTriangleVertexData();
+    private static readonly string[] s_passLabels = ["overlay"];
 
     private readonly OverlayFrameBuilder m_builder;
     private readonly BindingBarWriter? m_bindingBarWriter;
-    private readonly GpuCompositor m_compositor;
+    private readonly IGpuCommandRecorder m_commandRecorder;
     private readonly ConsolePanelWriter? m_consoleWriter;
     private readonly Func<uint, uint, IGpuRenderTarget> m_createRenderTarget;
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
@@ -79,6 +81,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly uint m_storageBufferBinding;
     private readonly IGpuStorageBufferFactory m_storageBufferFactory;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
+    private readonly IGpuTimingPoolFactory? m_timingPoolFactory;
+    private readonly IGpuTimingRecorder? m_timingRecorder;
     private readonly ToastWriter? m_toastWriter;
     private readonly IGpuVertexBufferFactory m_vertexBufferFactory;
     private readonly ReadOnlyMemory<byte> m_vertexBytecode;
@@ -87,7 +91,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private nint m_descriptorPool;
     private nint m_descriptorSet;
     private bool m_disposed;
-    private GpuDrawCommand[]? m_drawCommands;
     // The per-frame submission fence (frame-ring discipline): this node's single command buffer / host-visible data
     // buffer / descriptor set may only be rewritten once its PREVIOUS submission retired. This pass is queued ahead
     // of the frame's heavy world submit, so by the next frame it has long retired and the wait is ~free.
@@ -97,12 +100,17 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private bool m_overflowNarrated;
     private string? m_pendingCapturePath;
     private IGpuPipeline? m_pipeline;
-    private AssetContentHash m_pipelineId;
-    private IReadOnlyDictionary<AssetContentHash, IGpuPipeline>? m_pipelines;
+    // The previous drawn frame's overlay-pass GPU milliseconds (the IPassTimingSource readout; UIE-9's instrument).
+    private double m_lastOverlayMilliseconds;
+    private bool m_previousFrameTimed;
     private IGpuSurfaceReadback? m_readback;
     private IGpuRenderTarget? m_renderTarget;
     private bool m_resourcesReady;
     private nint m_sampler;
+    private GpuTimestampCapabilities m_timingCapabilities;
+    private IGpuTimingPool? m_timingPool;
+    private bool m_timingProbed;
+    private bool m_timingReadValid;
     private IGpuShaderModule? m_vertexShader;
     private IGpuVertexBuffer? m_vertexBuffer;
 
@@ -133,7 +141,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         m_builder = new OverlayFrameBuilder(glyphs: glyphs, height: height, width: width);
         m_bindingBarWriter = ((sources.BindingBar is { } bindingBar) ? new BindingBarWriter(source: bindingBar) : null);
-        m_compositor = new GpuCompositor(commandRecorder: services.CommandRecorder);
+        m_commandRecorder = services.CommandRecorder;
         m_consoleWriter = ((sources.Console is { } console) ? new ConsolePanelWriter(source: console) : null);
         m_createRenderTarget = services.CreateRenderTarget;
         m_descriptor = new NodeDescriptor(Name: "unified-overlay", SurfaceId: SurfaceId.New());
@@ -150,6 +158,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_storageBufferBinding = services.StorageBufferBinding;
         m_storageBufferFactory = services.StorageBufferFactory;
         m_surfaceTransferFactory = services.SurfaceTransferFactory;
+        m_timingPoolFactory = services.TimingPoolFactory;
+        m_timingRecorder = services.TimingRecorder;
         m_toastWriter = ((sources.Toast is { } toast) ? new ToastWriter(source: toast) : null);
         m_vertexBufferFactory = services.VertexBufferFactory;
         m_vertexBytecode = vertexBytecode;
@@ -205,6 +215,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         EnsureResources();
         // The previous frame's pass must have retired before the descriptor/buffer/command-buffer rewrites below.
         m_frameFence!.Wait();
+        // The retired previous submission's timestamps are readable now — resolve them before this frame overwrites
+        // the pool (non-stalling by construction: the fence above just proved retirement).
+        ReadPreviousTiming();
 
         if (inner.ImageViewHandle != m_lastImageViewHandle) {
             m_descriptorAllocator.WriteCombinedImageSampler(
@@ -228,13 +241,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             destinationOffsetBytes: (ulong)(m_builder.PanelBaseWords * sizeof(uint))
         );
 
-        var commandBufferHandle = m_compositor.Record(
-            debugLabel: "unified-overlay",
-            deviceContext: m_deviceContext,
-            drawCommands: m_drawCommands!,
-            pipelines: m_pipelines!,
-            target: m_renderTarget!
-        );
+        var timed = (GpuTimingControl.Shared.Armed && EnsureTimingPool());
+        var commandBufferHandle = RecordOverlayPass(timed: timed);
 
         Span<nint> commandBuffers = [commandBufferHandle];
 
@@ -243,6 +251,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             deviceContext: m_deviceContext,
             fence: m_frameFence!
         );
+        m_previousFrameTimed = timed;
 
         CaptureIfPending();
 
@@ -252,6 +261,125 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             ImageViewHandle: m_renderTarget!.ImageViewHandle,
             Width: m_width
         );
+    }
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> PassLabels => s_passLabels;
+
+    /// <inheritdoc/>
+    public int PassCount => 1;
+
+    /// <inheritdoc/>
+    public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frameMilliseconds) {
+        if (!m_timingReadValid || (passMilliseconds.Length < 1)) {
+            passCount = 0;
+            frameMilliseconds = 0.0;
+
+            return false;
+        }
+
+        passMilliseconds[0] = m_lastOverlayMilliseconds;
+        passCount = 1;
+        frameMilliseconds = m_lastOverlayMilliseconds;
+
+        return true;
+    }
+
+    // Records the node's single fullscreen pass into the render target's command buffer, optionally bracketed by the
+    // begin/end GPU timestamps (top-of-pipe before the pass, bottom-of-pipe + resolve after — outside the render
+    // pass, which both backends allow). Returns the recorded command buffer handle, ready to submit.
+    private nint RecordOverlayPass(bool timed) {
+        var deviceHandle = m_deviceContext.DeviceHandle;
+        var commandBufferHandle = m_renderTarget!.CommandBufferHandle;
+
+        m_commandRecorder.BeginCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+
+        if (timed) {
+            var poolHandle = m_timingPool!.PoolHandle;
+
+            m_timingRecorder!.ResetTimestamps(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, firstQuery: 0, poolHandle: poolHandle, queryCount: TimingQueryCount);
+            m_timingRecorder.WriteTimestamp(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, poolHandle: poolHandle, queryIndex: 0, stageFlags: GpuTimingStage.TopOfPipe);
+        }
+
+        m_commandRecorder.BeginDebugGroup(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, label: "unified-overlay");
+        m_commandRecorder.BeginRenderPass(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle,
+            framebufferHandle: m_renderTarget.FramebufferHandle,
+            height: m_renderTarget.Height,
+            renderPassHandle: m_renderTarget.RenderPassHandle,
+            width: m_renderTarget.Width
+        );
+        m_commandRecorder.SetScissor(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, height: m_renderTarget.Height, width: m_renderTarget.Width, x: 0, y: 0);
+        m_commandRecorder.BindGraphicsPipeline(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, pipelineHandle: m_pipeline!.Handle);
+        m_commandRecorder.BindVertexBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, vertexBufferHandle: m_vertexBuffer!.BufferHandle);
+        m_commandRecorder.PushConstants(
+            commandBufferHandle: commandBufferHandle,
+            data: m_pushConstantData,
+            deviceHandle: deviceHandle,
+            offset: 0,
+            pipelineLayoutHandle: m_pipeline.LayoutHandle,
+            stageFlags: GpuShaderStage.Fragment
+        );
+        m_commandRecorder.BindDescriptorSet(commandBufferHandle: commandBufferHandle, descriptorSetHandle: m_descriptorSet, deviceHandle: deviceHandle, pipelineLayoutHandle: m_pipeline.LayoutHandle);
+        m_commandRecorder.Draw(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, firstInstance: 0, firstVertex: 0, instanceCount: 1, vertexCount: VertexCount);
+        m_commandRecorder.EndRenderPass(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+        m_commandRecorder.EndDebugGroup(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+
+        if (timed) {
+            var poolHandle = m_timingPool!.PoolHandle;
+
+            m_timingRecorder!.WriteTimestamp(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, poolHandle: poolHandle, queryIndex: 1, stageFlags: GpuTimingStage.BottomOfPipe);
+            m_timingRecorder.ResolveTimestamps(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, firstQuery: 0, poolHandle: poolHandle, queryCount: TimingQueryCount);
+        }
+
+        m_commandRecorder.EndCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+
+        return commandBufferHandle;
+    }
+
+    // Lazily stands the timestamp pool up on the first ARMED frame (GpuTimingControl.Shared flips live, the
+    // engine-node idiom); false when the backend has no timing seam or the device reports unusable timestamps.
+    private bool EnsureTimingPool() {
+        if (m_timingPool is not null) {
+            return true;
+        }
+
+        if ((m_timingPoolFactory is null) || (m_timingRecorder is null)) {
+            return false;
+        }
+
+        if (!m_timingProbed) {
+            m_timingProbed = true;
+            m_timingCapabilities = m_timingPoolFactory.GetCapabilities(deviceContext: m_deviceContext);
+
+            if (!m_timingCapabilities.IsSupported) {
+                Console.Error.WriteLine(value: "[unified-overlay] the device reports no usable GPU timestamps; the overlay pass runs untimed.");
+            }
+        }
+
+        if (!m_timingCapabilities.IsSupported) {
+            return false;
+        }
+
+        m_timingPool = m_timingPoolFactory.CreateTimestampPool(deviceContext: m_deviceContext, queryCapacity: TimingQueryCount);
+
+        return true;
+    }
+
+    // Reads the retired previous submission's timestamp pair into the published milliseconds (called right after the
+    // frame fence wait, so the read never stalls).
+    private void ReadPreviousTiming() {
+        if (!m_previousFrameTimed || (m_timingPool is null)) {
+            return;
+        }
+
+        Span<ulong> ticks = stackalloc ulong[(int)TimingQueryCount];
+
+        if (m_timingRecorder!.ReadTimestamps(deviceHandle: m_deviceContext.DeviceHandle, firstQuery: 0, poolHandle: m_timingPool.PoolHandle, queryCount: TimingQueryCount, rawTicks: ticks) == TimingQueryCount) {
+            m_lastOverlayMilliseconds = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[0], endTicks: ticks[1]);
+            m_timingReadValid = true;
+        }
     }
 
     // Loud ONCE per node lifetime (never per-frame spam): the first frame any record drops at a capacity, narrate
@@ -326,7 +454,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         m_renderTarget = m_createRenderTarget(arg1: m_width, arg2: m_height);
         m_frameFence = m_queueSubmitter.CreateSubmissionFence(deviceContext: m_deviceContext);
-        m_pipelineId = AssetContentHash.Compute(content: m_fragmentBytecode.Span);
         m_vertexShader = m_shaderModuleFactory.Create(bytecode: m_vertexBytecode, deviceContext: m_deviceContext, stage: GpuShaderStage.Vertex);
         m_fragmentShader = m_shaderModuleFactory.Create(bytecode: m_fragmentBytecode, deviceContext: m_deviceContext, stage: GpuShaderStage.Fragment);
         m_vertexBuffer = m_vertexBufferFactory.Create(deviceContext: m_deviceContext, strideBytes: VertexStrideBytes, vertexData: FullscreenTriangleVertexData);
@@ -361,18 +488,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         // The token slab + glyph atlas are static — upload them ONCE now (the front PanelBaseWords uints); each
         // produced frame rewrites only the dynamic slice after them. A device-loss rebuild re-seeds them here.
         m_dataBuffer.Write<uint>(data: m_builder.Scratch[..m_builder.PanelBaseWords]);
-        m_pipelines = new Dictionary<AssetContentHash, IGpuPipeline> {
-            [m_pipelineId] = m_pipeline,
-        };
-        m_drawCommands = [
-            new GpuDrawCommand(
-                DescriptorSetHandle: m_descriptorSet,
-                DrawParameters: new GpuDrawParameters(instanceCount: 1, vertexCount: VertexCount),
-                PipelineId: m_pipelineId,
-                PushConstants: new GpuPushConstantBinding(data: m_pushConstantData, offset: 0, stageFlags: GpuShaderStage.Fragment),
-                VertexBufferHandle: m_vertexBuffer.BufferHandle
-            ),
-        ];
         m_resourcesReady = true;
     }
     private static byte[] CreateFullscreenTriangleVertexData() {
@@ -427,8 +542,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         m_pipeline?.Dispose();
         m_pipeline = null;
-        m_pipelines = null;
-        m_drawCommands = null;
+        m_timingPool?.Dispose();
+        m_timingPool = null;
+        m_timingProbed = false;
+        m_previousFrameTimed = false;
+        m_timingReadValid = false;
         m_frameFence?.Dispose();
         m_frameFence = null;
         m_readback?.Dispose();

@@ -39,6 +39,11 @@ public sealed record OverlayServices {
     public required IGpuStorageBufferFactory StorageBufferFactory { get; init; }
     /// <summary>The surface transfer factory, used to create the readback for capture.</summary>
     public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
+    /// <summary>The GPU timestamp-pool factory, or <see langword="null"/> when the backend registered no timing seam
+    /// — the overlay pass then runs untimed (mirrors the engine node's granular timing resolution).</summary>
+    public IGpuTimingPoolFactory? TimingPoolFactory { get; init; }
+    /// <summary>The GPU timestamp recorder, or <see langword="null"/> (see <see cref="TimingPoolFactory"/>).</summary>
+    public IGpuTimingRecorder? TimingRecorder { get; init; }
     /// <summary>The vertex buffer factory.</summary>
     public required IGpuVertexBufferFactory VertexBufferFactory { get; init; }
 
@@ -70,6 +75,8 @@ public sealed record OverlayServices {
             StorageBufferBinding = 1u,
             StorageBufferFactory = Resolve<IGpuStorageBufferFactory>(),
             SurfaceTransferFactory = Resolve<IGpuSurfaceTransferFactory>(),
+            TimingPoolFactory = (serviceProvider.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory),
+            TimingRecorder = (serviceProvider.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder),
             VertexBufferFactory = Resolve<IGpuVertexBufferFactory>(),
         };
     }

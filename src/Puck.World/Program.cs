@@ -442,6 +442,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         }
     };
 
+    // Captured out of the Decorate closure so the probe can expose the overlay's pass timing (world.gpu).
+    UnifiedOverlayNode? overlayNode = null;
     var render = SdfWorldRenderBuilder.Build(
         serviceProvider: sp,
         spec: new SdfWorldRenderSpec(
@@ -466,7 +468,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
 
                 var bytecodeExtension = SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX);
 
-                return new UnifiedOverlayNode(
+                return overlayNode = new UnifiedOverlayNode(
                     fragmentBytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: ("overlay-unified.frag" + bytecodeExtension))),
                     glyphs: glyphs,
                     height: height,
@@ -500,6 +502,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     probe.Node = render.Producer;
     // world.screenshot arms captures through the render host (routes to the outermost decorator).
     probe.Render = render;
+    probe.Overlay = overlayNode;
 
     // The native-capture present tap: wrap the render root once, for the world's whole lifetime, in the backend-neutral
     // CapturingRenderNode. The live windowed present path hands GPU surfaces, so the tap reads each captured frame back
