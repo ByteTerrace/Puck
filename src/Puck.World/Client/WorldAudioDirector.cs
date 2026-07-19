@@ -258,11 +258,32 @@ internal sealed class WorldAudioDirector {
             // Transients FIRST — the reserved pool must land even when the derived plan overfills the table.
             PublishTransients(slab: slab, transforms: transforms, deltaSeconds: deltaSeconds);
 
-            foreach (var plan in m_plan) {
+            // The listener eye as float, for the per-row support check (a presentation ECHO fact, never mix math).
+            var listenerEye = new Vector3(
+                x: (slab.Listener.Position.X.Value / 65536f),
+                y: (slab.Listener.Position.Y.Value / 65536f),
+                z: (slab.Listener.Position.Z.Value / 65536f)
+            );
+
+            for (var index = 0; (index < m_plan.Count); index++) {
+                var plan = m_plan[index];
+
                 if (!TryResolvePosition(plan: plan, transforms: transforms, position: out var position)) {
-                    continue; // An unresolvable anchor is an absent emitter — honest silence, zero special cases.
+                    // An unresolvable anchor is an absent emitter — honest silence, zero special cases.
+                    plan.LastResolved = false;
+                    plan.LastInSupport = false;
+                    m_plan[index] = plan;
+
+                    continue;
                 }
 
+                plan.LastResolved = true;
+                plan.LastPosition = position;
+
+                var maxRadius = (plan.MaxRadius.Value / 65536f);
+
+                plan.LastInSupport = (Vector3.DistanceSquared(value1: position, value2: listenerEye) < (maxRadius * maxRadius));
+                m_plan[index] = plan;
                 _ = slab.TryAddEmitter(emitter: new WorldAudioEmitter(
                     Id: plan.Id,
                     Kind: plan.Kind,
@@ -380,6 +401,64 @@ internal sealed class WorldAudioDirector {
 
             return builder.Append(value: ']').ToString();
         }
+    }
+
+    /// <summary>The <c>speaker.state</c> echo — the LIVE per-row status joining <c>audio.state</c>'s device facts:
+    /// for every derived SPEAKER row its kind, source token, binding status (bound / silent-with-reason / faulted),
+    /// the last published resolved position (or <c>unresolved</c> for an absent anchor), and whether the listener
+    /// currently sits inside its finite support (<c>inMix</c>); then the live transient-cue tail (token + remaining
+    /// life). Live facts move frame to frame — a proof asserts presence/shape, never exact poses.</summary>
+    public string DescribeSpeakerState() {
+        lock (m_gate) {
+            var builder = new StringBuilder(value: "[speaker.state:");
+            var wrote = false;
+
+            foreach (var plan in m_plan) {
+                if (!plan.Key.StartsWith(value: "speaker:", comparisonType: StringComparison.Ordinal)) {
+                    continue;
+                }
+
+                var name = plan.Key["speaker:".Length..];
+                var position = (plan.LastResolved
+                    ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"({plan.LastPosition.X:0.0},{plan.LastPosition.Y:0.0},{plan.LastPosition.Z:0.0})")
+                    : "unresolved");
+
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{(wrote ? " | " : " ")}{name} {((plan.Kind == WorldAudioEmitterKind.Bed) ? "bed" : "point")} {SourceToken(source: plan.Source)} {SourceStatus(source: plan.Source)} pos={position} inMix={((plan.LastResolved && plan.LastInSupport) ? "y" : "n")}");
+                wrote = true;
+            }
+
+            if (!wrote) {
+                _ = builder.Append(value: " none declared");
+            }
+
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" | cues {m_transients.Count}");
+
+            foreach (var transient in m_transients) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" cue:{transient.Token}={transient.PatchId}");
+            }
+
+            return builder.Append(value: ']').ToString();
+        }
+    }
+
+    // One speaker row's live binding status: what its source identity resolves to RIGHT NOW (under the gate).
+    private string SourceStatus(in WorldAudioSourceKey source) => source.Kind switch {
+        WorldAudioSourceKind.Machine => (m_machineBindings.ContainsKey(key: source.Slot) ? "bound" : "silent(no-machine)"),
+        WorldAudioSourceKind.Tune => ((source.Id is { } tuneId && m_tuneHosts.ContainsKey(key: tuneId))
+            ? "bound"
+            : ((m_mixer is null) ? "silent(no-device)" : "silent(no-tune)")),
+        WorldAudioSourceKind.Synth => (((source.Id is { } patchId) && HasPatch(patchId: patchId)) ? "bound" : "faulted(no-patch)"),
+        _ => "silent(no-source)",
+    };
+
+    private bool HasPatch(string patchId) {
+        foreach (var (id, _) in m_patchSet) {
+            if (string.Equals(a: id, b: patchId, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ---- derivation ------------------------------------------------------------------------------------------------
@@ -1188,7 +1267,9 @@ internal sealed class WorldAudioDirector {
             new() { Kind = EmitterAnchorKind.Placement, PlacementId = placementId, ShapeId = shapeId, Position = staticPosition, Offset = offset };
     }
 
-    // One derived emitter row — the document-derived stable facts Publish resolves a pose for each frame.
+    // One derived emitter row — the document-derived stable facts Publish resolves a pose for each frame, plus the
+    // last publish's LIVE status (the speaker.state echo: where the row resolved and whether the listener sits
+    // inside its finite support).
     private struct EmitterPlan {
         public string Key;
         public int Id;
@@ -1200,6 +1281,9 @@ internal sealed class WorldAudioDirector {
         public int GainQ16;
         public WorldAudioChannel Channel;
         public WorldAudioSourceKey Source;
+        public Vector3 LastPosition;
+        public bool LastResolved;
+        public bool LastInSupport;
     }
 
     private readonly record struct EmitterIdentity(int Id, ulong Signature);

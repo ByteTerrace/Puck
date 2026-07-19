@@ -92,6 +92,14 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             echoesData: true
         );
         yield return CommandDefinition.WithWireArgs(
+            name: "speaker.state",
+            description: "Echoes every speaker row's LIVE status (the per-row runtime half beside audio.state's device facts): kind, source token, binding status (bound | silent(no-machine|no-tune|no-device|no-source) | faulted(no-patch)), the last published resolved position (unresolved for an absent anchor), and inMix=y|n (whether the listener sits inside the row's finite support), plus the live transient-cue tail (cue:<token>=<patch>). A query — always echoes.",
+            handler: (context, args) => ((args.Count != 0)
+                ? new CommandResult(Output: "[speaker.state: no arguments — echoes every speaker row's live status]") { IsError = true }
+                : new CommandResult(Output: director.DescribeSpeakerState())),
+            echoesData: true
+        );
+        yield return CommandDefinition.WithWireArgs(
             name: "world.volume",
             description: "The master-volume SESSION lever (the render-levers asymmetry): world.volume <0..8> applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
             handler: VolumeHandler,
