@@ -262,6 +262,31 @@ public sealed class OverlayFrameBuilder {
         m_elementCount++;
     }
 
+    /// <summary>Packs one stroked hairline RING (the gizmo radius indicator). Word layout (12): 0..1 center
+    /// (normalized) · 2 radius (px float) · 4 = 3 | (role &lt;&lt; 4) · 7 alpha · 9 clip index.</summary>
+    /// <param name="centerX">The ring center x, px.</param>
+    /// <param name="centerY">The ring center y, px.</param>
+    /// <param name="radius">The ring radius, px.</param>
+    /// <param name="role">The stroke's color role.</param>
+    /// <param name="alpha">The element opacity (composes with the role's own alpha).</param>
+    public void WriteRing(float centerX, float centerY, float radius, OverlayColorRole role, float alpha) {
+        if ((m_elementCount >= (MaxElements - m_reservedElements)) || (m_activeClip < 0)) {
+            m_droppedElements++;
+
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: radius);
+        m_scratch[(offset + 4)] = (3u | ((uint)role << 4));
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 9)] = (uint)m_activeClip;
+        m_elementCount++;
+    }
+
     /// <summary>Packs one fixed-cell text run (codes stored PRE-RESOLVED as atlas glyph indices; anything outside
     /// printable ASCII renders as the blank space cell). Word layout (12): 0..1 origin (normalized) · 2..3 one glyph
     /// cell's on-screen w/h (normalized) · 4 = 0 | (role &lt;&lt; 4) · 5 glyph start (word offset into the text

@@ -398,6 +398,7 @@ if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) 
 services.AddSingleton<ConsolePanelStore>();
 services.AddSingleton<BindingBarStore>();
 services.AddSingleton<EditorHudStore>();
+services.AddSingleton<EditorGizmoStore>();
 services.AddSingleton<OverlayToastStore>();
 services.AddSingleton<WorldConsoleMirror>();
 services.AddSingleton(implementationFactory: static sp => {
@@ -464,7 +465,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         drag: sp.GetRequiredService<WorldEditorDrag>(),
         animator: sp.GetRequiredService<WorldPlacementAnimator>(),
         workbench: sp.GetRequiredService<WorldWorkbench>(),
-        audio: sp.GetRequiredService<WorldAudioDirector>()
+        audio: sp.GetRequiredService<WorldAudioDirector>(),
+        gizmos: sp.GetRequiredService<EditorGizmoStore>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a
@@ -569,6 +571,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
                         Console: sp.GetRequiredService<ConsolePanelStore>(),
                         EditorHud: sp.GetRequiredService<EditorHudStore>(),
                         FeedTick: sp.GetRequiredService<WorldOverlayFeed>().Tick,
+                        Gizmos: sp.GetRequiredService<EditorGizmoStore>(),
                         Toast: sp.GetRequiredService<OverlayToastStore>()
                     ),
                     vertexBytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfWorldKernels.DefaultDirectory, path2: ("fullscreen.vert" + bytecodeExtension))),

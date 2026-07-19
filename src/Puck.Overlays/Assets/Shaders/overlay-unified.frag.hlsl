@@ -390,6 +390,29 @@ float4 actionIcon(uint iconId, float2 p, float stroke, float aa) {
         return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
     }
 
+    if (iconId == 35u) {                                               // AudioSpeaker: cabinet + driver dot + emission arc
+        // The cabinet outline on the left, its filled driver dot (the one focal form — the point of action, where
+        // sound is made), a hairline tweeter pip above it, and one emission arc opening right.
+        float d = abs(sdRoundedBox((p + float2(0.24, 0.0)), float2(0.26, 0.46), 0.08));
+
+        d = min(d, abs(length(p - float2(-0.24, -0.20)) - 0.09));      // the tweeter pip
+        d = min(d, max(abs(length(p - float2(0.16, 0.0)) - 0.42), -(p.x - 0.16))); // the right-opening arc
+
+        float dot_ = (length(p - float2(-0.24, 0.14)) - 0.11);         // the driver — the focal fill
+
+        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), max(strokeMask(d, stroke, aa), strokeMask(dot_, 0.0, aa)));
+    }
+
+    if (iconId == 36u) {                                               // AudioBed: concentric presence rings
+        // A region, not a position: two concentric hairline rings around the focal dot — presence radiating from
+        // an extent center (the drawn twin of the bed's envelope-by-presence semantics).
+        float d = abs(length(p) - 0.30);
+
+        d = min(d, abs(length(p) - 0.56));
+
+        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), max(strokeMask(d, stroke, aa), strokeMask((length(p) - 0.10), 0.0, aa)));
+    }
+
     if ((iconId == 33u) || (iconId == 34u)) {                          // EditUndo / EditRedo: a hook arrow over its arc
         // One drawing, mirrored: the ring's TOP half (an arc from the left point over to the right point) with a
         // downward arrowhead at the left end — the classic "curl back" gesture. EditUndo hooks left; EditRedo is
@@ -496,14 +519,16 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         }
     }
 
-    // ---- elements (rects, text runs, icon chips, in submission order) --------------------------------------------
-    // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon:
-    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon) | colorRole << 4
+    // ---- elements (rects, text runs, icon chips, rings, in submission order) -------------------------------------
+    // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon/WriteRing:
+    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring) | colorRole << 4
     //   text:     0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) · 5 glyph start ·
     //             6 glyph count · 7 alpha
     //   rect:     0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
     //   icon:     0..1 plate center (normalized) · 2 plate half (px) · 3 badge half (px) · 5 glyph<<16|icon ·
     //             6 state bits · 7..8 badge offset (px)
+    //   ring:     0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle (the gizmo
+    //             radius indicator), the ONE hairline weight like every grammar stroke
     for (int e = 0; (e < elementCount); e++) {
         uint o = (elementBase + ((uint)e * ELEMENT_WORDS));
 
@@ -554,6 +579,19 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
             color = lerp(color, float3(0.0, 0.01, 0.015), (sample.y * 0.85 * alpha));
             color = lerp(color, OverlayTokenColor(overlayData, role).rgb, (sample.x * alpha));
+        } else if (kind == 3u) {
+            // A RING: one hairline stroked circle — origin is the center, ab.x the radius in px.
+            float radius = OverlayFloat(overlayData, (o + 2u));
+            float dist = abs(length(local) - radius);
+
+            if (dist > (edgeAa + 1.0)) {
+                continue;
+            }
+
+            float alpha = OverlayFloat(overlayData, (o + 7u));
+            float4 strokeColor = OverlayTokenColor(overlayData, role);
+
+            color = lerp(color, strokeColor.rgb, (strokeMask(dist, 0.5, edgeAa) * strokeColor.a * alpha));
         } else {
             // An ICON CHIP: rounded plate with the four chip-state tiers (REST / HELD / ACCENT / DISABLED), a
             // procedural action icon, and a gamepad badge hugging its corner — atlas letters or procedural symbols.

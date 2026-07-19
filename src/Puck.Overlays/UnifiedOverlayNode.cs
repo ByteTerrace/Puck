@@ -14,12 +14,15 @@ namespace Puck.Overlays;
 /// <param name="FeedTick">Invoked once per produced frame, before the sources are snapshotted — the host's hook to
 /// freshen pull-model feeds (e.g. recomposing the per-seat binding frame). Runs on the render thread.</param>
 /// <param name="EditorHud">The per-seat editor-HUD source, or <see langword="null"/>.</param>
+/// <param name="Gizmos">The per-seat editor-gizmo source (projected chips for geometry-less rows), or
+/// <see langword="null"/>.</param>
 public sealed record UnifiedOverlaySources(
     IConsolePanelSource? Console,
     IBindingBarSource? BindingBar,
     IOverlayToastSource? Toast,
     Action? FeedTick,
-    IEditorHudSource? EditorHud = null
+    IEditorHudSource? EditorHud = null,
+    IEditorGizmoSource? Gizmos = null
 );
 
 /// <summary>
@@ -69,6 +72,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDeviceContext m_deviceContext;
     private readonly EditorHudWriter? m_editorHudWriter;
+    private readonly EditorGizmoWriter? m_gizmoWriter;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
     private readonly uint m_height;
     private readonly IRenderNode m_inner;
@@ -148,6 +152,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_descriptorAllocator = services.DescriptorAllocator;
         m_deviceContext = services.DeviceContext;
         m_editorHudWriter = ((sources.EditorHud is { } editorHud) ? new EditorHudWriter(source: editorHud) : null);
+        m_gizmoWriter = ((sources.Gizmos is { } gizmos) ? new EditorGizmoWriter(source: gizmos) : null);
         m_fragmentBytecode = fragmentBytecode;
         m_height = height;
         m_inner = inner;
@@ -201,6 +206,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
         m_consoleWriter?.Emit(builder: m_builder);
         m_bindingBarWriter?.Emit(builder: m_builder);
+        // Gizmos sit UNDER the HUD text (draw order is writer order): a chip near the panel never occludes a line.
+        m_gizmoWriter?.Emit(builder: m_builder);
         m_editorHudWriter?.Emit(builder: m_builder);
         m_builder.ReleaseTail();
         m_toastWriter?.Emit(builder: m_builder, renderTicks: context.RenderTicks);

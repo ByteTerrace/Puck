@@ -5,6 +5,7 @@ using Puck.Compositing;
 using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World.Client;
@@ -53,6 +54,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // The audio director (AP2): its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every capture.
     private readonly WorldAudioDirector m_audio;
+    // The editor-gizmo feed (AP4): geometry-less rows (speakers) projected into each EDITING seat's viewport as
+    // overlay chips — published every produced frame (leaving editor mode clears the chips), consumed by the
+    // unified overlay's gizmo writer the same frame (CaptureFrame runs before the overlay's FeedTick/writers).
+    private readonly EditorGizmoStore m_gizmos;
+    private readonly OverlayGizmoSeat[] m_gizmoSeats = new OverlayGizmoSeat[PlayerRoster.MaxSlots];
+    private readonly OverlayGizmoChip[][] m_gizmoChips = new OverlayGizmoChip[PlayerRoster.MaxSlots][];
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
     // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
@@ -102,8 +109,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch, §P6).</param>
     /// <param name="audio">The audio director — the emitter derivation reconciled at the delivery boundary and the
     /// per-frame snapshot publisher (AP2).</param>
+    /// <param name="gizmos">The editor-gizmo store the per-frame speaker-chip projections publish into (AP4).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -116,6 +124,13 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: workbench);
         ArgumentNullException.ThrowIfNull(argument: audio);
+        ArgumentNullException.ThrowIfNull(argument: gizmos);
+
+        m_gizmos = gizmos;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            m_gizmoChips[slot] = [];
+        }
 
         m_audio = audio;
         // The machine-source resolver (audio plan A4/AP3): the director diffs the binder's LIVE machines by
@@ -215,8 +230,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             highlight: m_targeting,
             maxPlacementScale: definition.Authoring.MaxPlacementScale
         );
-        // The boot scene + placements are the shimmer baseline — the first delivery pulses only what it changed.
-        m_shimmer.Observe(scene: definition.Scene, placements: definition.Placements, now: 0d);
+        // The boot scene + placements + speakers are the shimmer baseline — the first delivery pulses only what it changed.
+        m_shimmer.Observe(scene: definition.Scene, placements: definition.Placements, speakers: definition.Speakers, now: 0d);
     }
 
     /// <summary>The worst-case (all avatars active) program word count — the spec's <c>ProgramWordCapacity</c> floor.</summary>
@@ -283,7 +298,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and
                 // after the animator (placement-anchored emitters read its registrations).
                 m_audio.ReconcileSpeakers(definition: m_client.Definition);
-                m_shimmer.Observe(scene: m_client.Definition.Scene, placements: m_client.Definition.Placements, now: m_elapsedSeconds);
+                m_shimmer.Observe(scene: m_client.Definition.Scene, placements: m_client.Definition.Placements, speakers: m_client.Definition.Speakers, now: m_elapsedSeconds);
                 m_builtDefinitionRevision = definitionRevision;
             }
 
@@ -389,6 +404,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
         Array.Clear(array: m_seatCameraPoses);
 
+        // The gizmo feed's per-frame accumulators (the composed speaker list resolves lazily on the first editing seat).
+        IReadOnlyList<WorldSpeaker>? gizmoSpeakers = null;
+        var gizmoSeatCount = 0;
+
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is null) {
                 m_seatWasJoined[slot] = false;
@@ -403,17 +422,29 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             }
 
             var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
+            var camera = ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
             // any lower tier renders that view's SDF at a reduced extent and upsamples.
-            m_views.Add(item: new SdfViewSnapshot(Camera: ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target), Region: region) {
+            m_views.Add(item: new SdfViewSnapshot(Camera: camera, Region: region) {
                 RenderScale = m_settings.RenderScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
             // so "focus" listens where the active view looks (audio plan A5).
             m_seatCameraPoses[slot] = new WorldSeatCameraPose(Joined: true, Eye: eye, Forward: (target - eye));
+
+            // The speaker gizmos (AP4): EDITOR-MODE-ONLY chips at each speaker's resolved pose, projected through
+            // the SAME camera this seat renders with. Pending drag rows compose over the delivered truth, so a
+            // dragged chip tracks its snapped position live.
+            if (m_editor.IsEditing(slot: slot)) {
+                gizmoSpeakers ??= m_drag.ComposeSpeakers(live: m_client.Definition.Speakers);
+                m_gizmoSeats[gizmoSeatCount++] = ComposeGizmoSeat(slot: slot, region: region, camera: in camera, width: width, height: height, speakers: gizmoSpeakers);
+            }
         }
+
+        // Published EVERY frame: an empty frame clears the chips the moment no seat edits.
+        m_gizmos.Publish(frame: new OverlayGizmoFrame(Seats: m_gizmoSeats.AsMemory(start: 0, length: gizmoSeatCount)));
 
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras (plan A3 — once per produced
@@ -476,6 +507,71 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         // placeable camera. Called AFTER PrepareScreenSources (the CPU-fed screens the views sample are already this
         // frame's) and BEFORE the source poll (so a View screen's provider returns this frame's offscreen render).
         m_binder.RenderViews(context: in context, program: m_program, revision: m_builtRevision, transforms: m_transforms, time: m_elapsedSeconds);
+    }
+
+    // One editing seat's gizmo set: every composed speaker row resolved to a world pose (the director's own anchor
+    // resolution — leaf/placement anchors track exactly what the audio hears), projected into the seat's viewport.
+    // Selection lights the ACCENT tier; a live change-shimmer pulse the HELD tier; beds carry their projected
+    // support-radius ring. Reuses the per-slot chip array (grown only when the speaker count does).
+    private OverlayGizmoSeat ComposeGizmoSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height, IReadOnlyList<WorldSpeaker> speakers) {
+        if (m_gizmoChips[slot].Length < speakers.Count) {
+            m_gizmoChips[slot] = new OverlayGizmoChip[speakers.Count];
+        }
+
+        var chips = m_gizmoChips[slot];
+        var count = 0;
+        var selection = m_targeting.Selected(slot: slot);
+
+        foreach (var speaker in speakers) {
+            if (!m_audio.TryResolveSpeakerPose(speaker: speaker, transforms: m_transforms, position: out var world) ||
+                !TryProjectGizmo(camera: in camera, region: in region, width: width, height: height, world: world, px: out var px, py: out var py, pixelsPerUnit: out var pixelsPerUnit)) {
+                continue;
+            }
+
+            chips[count++] = new OverlayGizmoChip(
+                CenterX: px,
+                CenterY: py,
+                RingRadiusPx: ((speaker is WorldSpeaker.Bed bed) ? (bed.Radius * pixelsPerUnit) : 0f),
+                Bed: (speaker is WorldSpeaker.Bed),
+                Selected: ((selection is { Section: WorldSection.Speakers } selected) && string.Equals(a: selected.Id, b: speaker.Name, comparisonType: StringComparison.Ordinal)),
+                Pulse: (m_shimmer.SpeakerIntensity(name: speaker.Name, now: m_elapsedSeconds) > 0f)
+            );
+        }
+
+        return new OverlayGizmoSeat(Viewport: region, Chips: chips.AsMemory(start: 0, length: count));
+    }
+
+    // Perspective-projects a world point into a seat viewport's pixel space through the seat's own CameraSnapshot
+    // frame (the render camera's exact basis + FOV). False behind the near plane or generously outside the view
+    // (the clip rect would discard the pixels anyway — this just skips the record). pixelsPerUnit is the on-screen
+    // scale at the point's DEPTH (the bed ring's world-radius → px conversion; an approximation that reads as a
+    // radius indicator, not a perspective-correct 3D circle — deliberate, documented).
+    private static bool TryProjectGizmo(in CameraSnapshot camera, in NormalizedRect region, uint width, uint height, Vector3 world, out float px, out float py, out float pixelsPerUnit) {
+        px = 0f;
+        py = 0f;
+        pixelsPerUnit = 0f;
+
+        var delta = (world - camera.Position);
+        var depth = Vector3.Dot(vector1: delta, vector2: camera.Forward);
+
+        if (depth < 0.05f) {
+            return false;
+        }
+
+        var ndcX = (Vector3.Dot(vector1: delta, vector2: camera.Right) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
+        var ndcY = (Vector3.Dot(vector1: delta, vector2: camera.Up) / (depth * camera.TanHalfFieldOfView));
+
+        if ((MathF.Abs(x: ndcX) > 1.5f) || (MathF.Abs(x: ndcY) > 1.5f)) {
+            return false;
+        }
+
+        var regionHeight = (region.Height * height);
+
+        px = ((region.X * width) + ((0.5f + (0.5f * ndcX)) * (region.Width * width)));
+        py = ((region.Y * height) + ((0.5f - (0.5f * ndcY)) * regionHeight));
+        pixelsPerUnit = ((regionHeight * 0.5f) / (depth * camera.TanHalfFieldOfView));
+
+        return true;
     }
 
     // Whether `position` lies within the crowd radius of any joined local seat (the stand-in soft-shadow gate). With no

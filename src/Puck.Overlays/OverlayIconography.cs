@@ -92,6 +92,12 @@ public enum OverlayIconId : ushort {
     /// <summary>Step the local edit ring forward (the undo arrow's x-mirror).</summary>
     EditRedo = 34,
 
+    // The audio gizmo icons (the AP4 speaker gizmos). KEEP IN SYNC with the shader's actionIcon cases.
+    /// <summary>A point speaker (a cabinet outline, its filled driver dot, an emission arc).</summary>
+    AudioSpeaker = 35,
+    /// <summary>An ambient bed (concentric presence rings around the focal dot — a region, not a position).</summary>
+    AudioBed = 36,
+
     /// <summary>Ids at or above this select a texture-atlas tile instead of a procedural function.</summary>
     AtlasBase = 1024,
 }
@@ -166,6 +172,8 @@ public static class OverlayGamepadGlyphs {
             "edit.play" => OverlayIconId.EditPlay,
             "edit.undo" => OverlayIconId.EditUndo,
             "edit.redo" => OverlayIconId.EditRedo,
+            "edit.speaker" => OverlayIconId.AudioSpeaker,
+            "edit.bed" => OverlayIconId.AudioBed,
             _ => (((icon is not null) &&
                 icon.StartsWith(value: "action.", comparisonType: StringComparison.Ordinal) &&
                 int.TryParse(s: icon.AsSpan(start: "action.".Length), result: out var number) &&

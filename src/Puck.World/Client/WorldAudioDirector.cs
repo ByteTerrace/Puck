@@ -748,6 +748,39 @@ internal sealed class WorldAudioDirector {
         return false;
     }
 
+    /// <summary>Resolves a speaker row's LIVE gizmo pose — Fixed/Bed directly, an anchored row through the same
+    /// anchor resolution the emitter derivation uses (entity roots/leaves off the frame's packed transforms,
+    /// placements off the stamp/animator math). The editor-gizmo feed's read; gate-locked and cheap.</summary>
+    /// <param name="speaker">The (possibly drag-composed) speaker row.</param>
+    /// <param name="transforms">The frame's packed dynamic transforms.</param>
+    /// <param name="position">The resolved world position.</param>
+    /// <returns><see langword="false"/> when the anchor is unresolvable this frame (the chip then hides).</returns>
+    public bool TryResolveSpeakerPose(WorldSpeaker speaker, ReadOnlySpan<DynamicTransform> transforms, out Vector3 position) {
+        switch (speaker) {
+            case WorldSpeaker.Fixed fixedSpeaker:
+                position = fixedSpeaker.Position;
+
+                return true;
+            case WorldSpeaker.Bed bed:
+                position = bed.Center;
+
+                return true;
+            case WorldSpeaker.Anchored anchored: {
+                lock (m_gate) {
+                    var plan = new EmitterPlan {
+                        Anchor = AnchorOf(anchor: anchored.Anchor, offset: anchored.Offset),
+                    };
+
+                    return TryResolvePosition(plan: in plan, transforms: transforms, position: out position);
+                }
+            }
+            default:
+                position = default;
+
+                return false;
+        }
+    }
+
     // ---- the master-volume session lever (AP4) ----------------------------------------------------------------------
 
     /// <summary>Engages the <c>world.volume</c> session lever: the live mix gain applies NOW and owns every later
