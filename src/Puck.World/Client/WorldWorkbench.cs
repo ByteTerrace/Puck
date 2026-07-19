@@ -132,8 +132,11 @@ internal sealed class WorldWorkbench {
         model.SetName(name: rowId);
 
         // The envelope pre-check (matching the ghost-spawn check): the candidate composes the delivered definition, any
-        // live drag ghosts, AND this bench's preview — the measure charges every stamp at worst case, so passing
-        // here keeps ANY later model state (≤ the per-stamp cap) inside the probed floors.
+        // live drag ghosts, this bench's preview, AND every OTHER already-open bench's preview (largechange-06 — the
+        // rendered program in WorldFrameSource composes ALL active benches, so admission must charge all of them, not
+        // only the one opening; two benches each fitting alone can exceed the frozen floor together). The measure
+        // charges every stamp at worst case, so passing here keeps ANY later model state (≤ the per-stamp cap) inside
+        // the probed floors.
         var definition = m_client.Definition;
         var previewDocument = (model.ToDocument() with { Frames = null });
         var creations = new List<WorldCreation>(capacity: (definition.Creations.Count + 1));
@@ -144,7 +147,12 @@ internal sealed class WorldWorkbench {
         placements.AddRange(collection: m_drag.ComposePlacements(live: definition.Placements));
         placements.Add(item: PreviewPlacement(slot: slot, origin: origin));
 
-        if (!m_envelope.TryFit(candidate: (definition with { Creations = creations, Placements = placements }), reason: out var capacityReason)) {
+        // Fold every currently-active bench (this one is not active yet, so no double-count) onto the candidate before
+        // the fit check — the same ComposeCandidate the drag channel pre-checks ride, so concurrent client-local
+        // overlays are admitted TOGETHER against the one frozen envelope.
+        var candidate = ComposeCandidate(candidate: (definition with { Creations = creations, Placements = placements }));
+
+        if (!m_envelope.TryFit(candidate: candidate, reason: out var capacityReason)) {
             error = capacityReason;
 
             return false;
