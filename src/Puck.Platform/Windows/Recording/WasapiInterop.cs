@@ -3,16 +3,19 @@ using System.Runtime.Versioning;
 
 namespace Puck.Platform.Windows.Recording;
 
-// The WASAPI P/Invoke surface, GUIDs, and COM interfaces the loopback/microphone capture sources drive. Hand-rolled
-// beside the camera's Media Foundation interop (the established pattern): each interface declares its vtable slots in
-// order, real signatures only on the methods used. Loopback and microphone share IMMDeviceEnumerator/IMMDevice/
-// IAudioClient/IAudioCaptureClient; the only difference is the endpoint data-flow and the loopback stream flag.
+// The WASAPI P/Invoke surface, GUIDs, and COM interfaces the loopback/microphone capture sources AND the render
+// device drive. Hand-rolled beside the camera's Media Foundation interop (the established pattern): each interface
+// declares its vtable slots in order, real signatures only on the methods used. Loopback and microphone share
+// IMMDeviceEnumerator/IMMDevice/IAudioClient/IAudioCaptureClient; the only difference is the endpoint data-flow and
+// the loopback stream flag. The render path shares everything up through IAudioClient and swaps the capture client
+// for IAudioRenderClient.
 [SupportedOSPlatform("windows")]
 internal static class Wasapi {
     public static Guid CLSID_MMDeviceEnumerator = new(g: "bcde0395-e52f-467c-8e3d-c4579291692e");
     public static Guid IID_IMMDeviceEnumerator = new(g: "a95664d2-9614-4f35-a746-de8db63617e6");
     public static Guid IID_IAudioClient = new(g: "1cb9ad4c-dbfa-4c32-b178-c2f568a703b2");
     public static Guid IID_IAudioCaptureClient = new(g: "c8adbd64-e71e-48a0-a4de-185c395cd317");
+    public static Guid IID_IAudioRenderClient = new(g: "f294acfc-3146-4483-a7bf-addca7c260e2");
 
     public const uint ClsCtxAll = 0x17;
 
@@ -25,6 +28,11 @@ internal static class Wasapi {
     public const int ShareModeShared = 0;
     public const uint StreamFlagsLoopback = 0x00020000;
     public const uint StreamFlagsEventCallback = 0x00040000;
+    // The render stream's exotic-endpoint safety net (audio plan A1): the engine converts/resamples our s16 PCM
+    // whenever the endpoint's shared-mode mix format is not already 48000 Hz — on a native-rate endpoint the
+    // conversion is the trivial s16→float widen and the mixer path stays sample-exact.
+    public const uint StreamFlagsAutoConvertPcm = 0x80000000;
+    public const uint StreamFlagsSrcDefaultQuality = 0x08000000;
 
     // IAudioCaptureClient::GetBuffer flags.
     public const uint BufferFlagsSilent = 0x00000002;
@@ -121,4 +129,15 @@ internal interface IAudioCaptureClient {
     [PreserveSig] int GetBuffer(out nint ppData, out uint pNumFramesToRead, out uint pdwFlags, out ulong pu64DevicePosition, out ulong pu64QpcPosition);
     [PreserveSig] int ReleaseBuffer(uint numFramesRead);
     [PreserveSig] int GetNextPacketSize(out uint pNumFramesInNextPacket);
+}
+
+/// <summary>IAudioRenderClient — the two-method render vtable (GetBuffer / ReleaseBuffer) the world speaker device
+/// fills through.</summary>
+[ComImport]
+[Guid("f294acfc-3146-4483-a7bf-addca7c260e2")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IAudioRenderClient {
+    [PreserveSig] int GetBuffer(uint numFramesRequested, out nint ppData);
+    [PreserveSig] int ReleaseBuffer(uint numFramesWritten, uint dwFlags);
 }
