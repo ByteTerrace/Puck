@@ -312,7 +312,9 @@ internal sealed class WorldEditorTargeting {
                     if (string.Equals(a: camera.Name, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
                         return (camera switch {
                             WorldCamera.Fixed fixedCamera => fixedCamera.Position,
-                            WorldCamera.Anchored anchored => (m_client.Position(index: anchored.AnchorIndex) + anchored.Offset),
+                            WorldCamera.Anchored { Anchor: WorldAnchor.Entity entity } anchored => (m_client.Position(index: entity.Index) + anchored.Offset),
+                            WorldCamera.Anchored { Anchor: WorldAnchor.EntityLeaf leaf } anchored when WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role) =>
+                                (m_client.Position(index: leaf.Index) + WorldAvatarCatalog.RoleOffset(avatar: leaf.Index, role: role) + anchored.Offset),
                             _ => (Vector3?)null,
                         });
                     }

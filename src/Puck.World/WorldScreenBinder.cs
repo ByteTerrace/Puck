@@ -941,9 +941,9 @@ internal sealed class WorldScreenBinder : IDisposable {
     }
 
     // Creates the view pool on first need and registers (or updates in place, idempotent per name) one persistent
-    // SdfCameraView for a camera. Fixed cameras carry their own world-space look-at; anchored cameras resolve the
-    // entity named by AnchorIndex each frame and pose a FirstPersonRig at the declared anchor-local offset. A
-    // camera FILMS an already-lit world, so it is a budgeted offscreen render with no room glow of its own.
+    // SdfCameraView for a camera. Fixed cameras carry their own world-space look-at; anchored cameras resolve their
+    // WorldAnchor's entity each frame and pose a FirstPersonRig at the resolved anchor-local offset. A camera FILMS
+    // an already-lit world, so it is a budgeted offscreen render with no room glow of its own.
     private void RegisterCameraView(WorldCamera camera) {
         m_viewStack ??= new ViewStack();
 
@@ -974,9 +974,9 @@ internal sealed class WorldScreenBinder : IDisposable {
                     break;
                 case WorldCamera.Anchored anchored:
                     view.AnchorSource = m_anchors;
-                    view.AnchorIdSource = () => anchored.AnchorIndex;
+                    view.AnchorIdSource = () => AnchorEntityIndex(anchor: anchored.Anchor);
                     view.Rig = new FirstPersonRig {
-                        EyeOffset = anchored.Offset,
+                        EyeOffset = ResolveAnchorOffset(anchor: anchored.Anchor, offset: anchored.Offset),
                         FovRadians = anchored.FieldOfViewRadians,
                     };
 
@@ -1071,16 +1071,35 @@ internal sealed class WorldScreenBinder : IDisposable {
 
                 break;
             case WorldCamera.Anchored anchored when registration.View.Rig is FirstPersonRig rig:
-                rig.EyeOffset = anchored.Offset;
+                rig.EyeOffset = ResolveAnchorOffset(anchor: anchored.Anchor, offset: anchored.Offset);
                 rig.FovRadians = anchored.FieldOfViewRadians;
-                // Human-cadence closure: the anchor id is captured from the new row (AnchorIndex is plain data).
-                registration.View.AnchorIdSource = () => anchored.AnchorIndex;
+                // Human-cadence closure: the anchor id is captured from the new row (WorldAnchor is plain data).
+                registration.View.AnchorIdSource = () => AnchorEntityIndex(anchor: anchored.Anchor);
 
                 break;
         }
 
         registration.Row = camera;
     }
+
+    // The population-entity index a WorldAnchor's live pose resolves through m_anchors by — Entity rides it directly;
+    // EntityLeaf rides the SAME entity root anchor (its role refines the offset, not the anchor id, since the anchor
+    // table only ever publishes root poses — see ResolveAnchorOffset). Never reached for Placement (the validator
+    // rejects a placement-anchored camera row).
+    private static int AnchorEntityIndex(WorldAnchor anchor) => anchor switch {
+        WorldAnchor.Entity entity => entity.Index,
+        WorldAnchor.EntityLeaf leaf => leaf.Index,
+        _ => -1,
+    };
+
+    // The camera-local eye offset a WorldAnchor resolves to, in the anchor's own frame: a bare Entity anchor is just
+    // the authored offset; an EntityLeaf anchor ADDS the role's avatar-local STATIC rest offset
+    // (WorldAvatarCatalog.RoleOffset) underneath it — the honest minimal leaf-pose resolution (no gait swing; see
+    // that method's remarks) since the anchor table (m_anchors) only ever publishes entity ROOT poses.
+    private static Vector3 ResolveAnchorOffset(WorldAnchor anchor, Vector3 offset) =>
+        ((anchor is WorldAnchor.EntityLeaf leaf) && WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role))
+            ? (WorldAvatarCatalog.RoleOffset(avatar: leaf.Index, role: role) + offset)
+            : offset;
 
     // A removed camera row: every slot filming it unbinds (a slot whose DECLARED source still names it — possible only
     // transiently inside one delivery, the validator rejects a durable dangling reference — keeps a visible fault), and

@@ -231,7 +231,10 @@
   "cameras": [
     {
       "$type": "anchored",
-      "anchorIndex": 0,
+      "anchor": {
+        "$type": "entity",
+        "index": 0
+      },
       "offset": [
         -0.012012234,
         1.4752654,

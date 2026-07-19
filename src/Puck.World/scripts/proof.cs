@@ -8050,7 +8050,7 @@ static class EditorCamerasProof {
 
             // (b) The anchored camera's pose edit rides the same live lane (rig property writes + a fresh anchor id).
             mark = ctx.Collector.Count;
-            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"anchored\",\"anchorIndex\":0,\"offset\":[0,1.5,0],\"name\":\"first-person\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":1.4}");
+            ComposedShotKit.Send(ctx: ctx, line: "world.camera.set {\"$type\":\"anchored\",\"anchor\":{\"$type\":\"entity\",\"index\":0},\"offset\":[0,1.5,0],\"name\":\"first-person\",\"renderWidth\":256,\"renderHeight\":144,\"fieldOfViewRadians\":1.4}");
 
             var anchoredLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark,
                 predicate: l => l.Contains(value: "[world.camera: 'first-person' pose updated live]"), deadlineSeconds: 15.0);

@@ -93,7 +93,7 @@ internal static class WorldDefinitionValidator {
 
         var creationIds = ValidateCreations(creations: definition.Creations, errors: errors);
 
-        ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, errors: errors);
+        var placementIds = ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, errors: errors);
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -120,8 +120,15 @@ internal static class WorldDefinitionValidator {
                         errors.Add(item: $"{path} needs finite, distinct position and lookAt points.");
                         break;
                     case WorldCamera.Anchored anchoredCamera:
-                        if ((anchoredCamera.AnchorIndex < 0) || (anchoredCamera.AnchorIndex >= WorldPopulation.MaxPopulation)) {
-                            errors.Add(item: $"{path}.anchorIndex {anchoredCamera.AnchorIndex} is outside 0..{(WorldPopulation.MaxPopulation - 1)}.");
+                        ValidateAnchor(anchor: anchoredCamera.Anchor, placements: definition.Placements, placementIds: placementIds, creations: definition.Creations, path: $"{path}.anchor", errors: errors);
+
+                        // The camera pose path (WorldScreenBinder) cannot yet resolve a placement's stamped transform
+                        // — a loud rejection here rather than a silent no-op fault at runtime. Entity/EntityLeaf both
+                        // resolve today (EntityLeaf via WorldAvatarCatalog.RoleOffset's static approximation); full
+                        // placement pose resolution for cameras lands with the audio runtime (AP2/AP3), which needs
+                        // the same placement-transform seam for speakers anyway.
+                        if (anchoredCamera.Anchor is WorldAnchor.Placement) {
+                            errors.Add(item: $"{path}.anchor cameras cannot anchor to a placement yet (the camera pose path does not resolve placement transforms this arc).");
                         }
 
                         if (!IsFinite(value: anchoredCamera.Offset)) {
@@ -546,15 +553,17 @@ internal static class WorldDefinitionValidator {
 
     // The placement INSTANCE rows (§D6): id presence/uniqueness, the creation reference, finite transform, the policy
     // scale envelope, the repeat facet's positive counts / finite spacings, the mirror token, and the animated-row
-    // constraints (static-only facets; the reserved replay-pool ceiling, word-exact).
-    private static void ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, List<string> errors) {
+    // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
+    // the anchor-union gate (a WorldAnchor.Placement resolves against it).
+    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, List<string> errors) {
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         if (placements is null) {
             errors.Add(item: "placements is required.");
 
-            return;
+            return ids;
         }
 
-        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
         var animatedCount = 0;
 
         for (var index = 0; (index < placements.Count); index++) {
@@ -616,6 +625,8 @@ internal static class WorldDefinitionValidator {
         if (animatedCount > WorldPlacementPolicy.MaxAnimatedPlacements) {
             errors.Add(item: $"{animatedCount} animated placements exceed the {WorldPlacementPolicy.MaxAnimatedPlacements}-slot replay pool.");
         }
+
+        return ids;
     }
 
     private static WorldCreation? FindCreation(IReadOnlyList<WorldCreation> creations, string id) {
@@ -626,6 +637,75 @@ internal static class WorldDefinitionValidator {
         }
 
         return null;
+    }
+
+    private static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement> placements, string id) {
+        foreach (var placement in (placements ?? [])) {
+            if ((placement is not null) && string.Equals(a: placement.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return placement;
+            }
+        }
+
+        return null;
+    }
+
+    // The WorldAnchor union (§A6): the shared pose-target vocabulary a camera (and a future speaker) rides.
+    // Entity/EntityLeaf are index/role bounded; Placement resolves its row and, when ShapeId is present, that the id
+    // names a real shape in the referenced placement's creation document (the CreationCameraDocument precedent).
+    private static void ValidateAnchor(WorldAnchor anchor, IReadOnlyList<WorldPlacement> placements, HashSet<string> placementIds, IReadOnlyList<WorldCreation> creations, string path, List<string> errors) {
+        switch (anchor) {
+            case null:
+                errors.Add(item: $"{path} is required.");
+
+                break;
+            case WorldAnchor.Entity entity:
+                if ((entity.Index < 0) || (entity.Index >= WorldPopulation.MaxPopulation)) {
+                    errors.Add(item: $"{path}.index {entity.Index} is outside 0..{(WorldPopulation.MaxPopulation - 1)}.");
+                }
+
+                break;
+            case WorldAnchor.EntityLeaf leaf:
+                if ((leaf.Index < 0) || (leaf.Index >= WorldPopulation.MaxPopulation)) {
+                    errors.Add(item: $"{path}.index {leaf.Index} is outside 0..{(WorldPopulation.MaxPopulation - 1)}.");
+                }
+
+                if (!WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out _)) {
+                    errors.Add(item: $"{path}.leaf '{leaf.Leaf}' names no humanoid role (expected one of: {string.Join(separator: ", ", values: WorldAvatarCatalog.HumanoidAnchorRoles)}).");
+                }
+
+                break;
+            case WorldAnchor.Placement placement:
+                if (string.IsNullOrWhiteSpace(value: placement.PlacementId) || !placementIds.Contains(item: placement.PlacementId)) {
+                    errors.Add(item: $"{path}.placementId '{placement.PlacementId}' names no placement row.");
+
+                    break;
+                }
+
+                if (placement.ShapeId is { } shapeId) {
+                    var row = FindPlacement(placements: placements, id: placement.PlacementId);
+                    var creation = ((row is null) ? null : FindCreation(creations: creations, id: row.CreationId));
+
+                    if ((creation?.Document.Shapes is not { } shapes) || !ShapesContain(shapes: shapes, id: shapeId)) {
+                        errors.Add(item: $"{path}.shapeId {shapeId} names no shape in placement '{placement.PlacementId}''s creation.");
+                    }
+                }
+
+                break;
+            default:
+                errors.Add(item: $"{path} is an unknown anchor kind.");
+
+                break;
+        }
+    }
+
+    private static bool ShapesContain(IReadOnlyList<Puck.Authoring.ShapeDocument> shapes, int id) {
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (shapes[index].Id == id) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // The storage host-section (§2.5.5, RESERVED): an endpoint must be an absolute URI when present; a user-id must be

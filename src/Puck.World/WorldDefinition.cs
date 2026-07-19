@@ -552,7 +552,8 @@ internal sealed record WorldScene(
 /// </summary>
 /// <param name="Id">The row's stable string id — its mutation address and the handle placements reference.</param>
 /// <param name="Document">The canonical (validated + normalized) creation document.</param>
-/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Authoring.CanonicalCreation.Hash"/>).</param>
+/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Authoring.CanonicalDocument{TDocument}.Hash"/>
+/// on the <see cref="Puck.Authoring.CanonicalCreation"/> the compose boundary produces).</param>
 internal sealed record WorldCreation(string Id, CreationDocument Document, string Hash);
 
 /// <summary>A placement's repeat facet — a row of copies IS a repeat (the Demo placement vocabulary, adopted): the
@@ -776,15 +777,16 @@ internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderH
     internal sealed record Fixed(string Name, Vector3 Position, Vector3 LookAt, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
         : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
 
-    /// <summary>A camera anchored to one world entity. The entity's root supplies the live position and orientation;
-    /// <paramref name="Offset"/> is the exact anchor-local attachment point — an entity can carry a camera anywhere.</summary>
+    /// <summary>A camera anchored to a <see cref="WorldAnchor"/> — the entity/leaf/placement pose it rides supplies
+    /// the live position and orientation; <paramref name="Offset"/> is the exact attachment point in the anchor's
+    /// local axes on top of that — an anchor can carry a camera anywhere.</summary>
     /// <param name="Name">The camera's stable name.</param>
-    /// <param name="AnchorIndex">The entity to ride, zero based.</param>
-    /// <param name="Offset">The attachment point relative to the entity root, in anchor-local axes.</param>
+    /// <param name="Anchor">What the camera rides (see <see cref="WorldAnchor"/>).</param>
+    /// <param name="Offset">The attachment point relative to the anchor's resolved pose, in anchor-local axes.</param>
     /// <param name="RenderWidth">The offscreen render width in pixels.</param>
     /// <param name="RenderHeight">The offscreen render height in pixels.</param>
     /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-    internal sealed record Anchored(string Name, int AnchorIndex, Vector3 Offset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
+    internal sealed record Anchored(string Name, WorldAnchor Anchor, Vector3 Offset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
         : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
 }
 
@@ -1233,7 +1235,7 @@ internal sealed record WorldDefinition(
         Cameras: [
             new WorldCamera.Anchored(
                 Name: "first-person",
-                AnchorIndex: 0,
+                Anchor: new WorldAnchor.Entity(Index: 0),
                 Offset: WorldAvatarCatalog.EyeOffset(avatar: 0),
                 RenderWidth: 256,
                 RenderHeight: 144,
