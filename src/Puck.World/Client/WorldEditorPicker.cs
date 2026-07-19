@@ -27,6 +27,7 @@ internal readonly record struct EditorPickTarget(WorldSection Section, string Id
 internal sealed class WorldEditorPicker {
     private const float SpawnProxyRadius = 0.4f;
     private const float CameraProxyRadius = 0.3f;
+    private const float SpeakerProxyRadius = 0.3f;
     private static readonly FixedQ4816 MaxPickDistance = FixedQ4816.FromInteger(value: 256L);
 
     private readonly WorldClient m_client;
@@ -155,6 +156,22 @@ internal sealed class WorldEditorPicker {
         foreach (var camera in definition.Cameras) {
             if (camera is WorldCamera.Fixed fixedCamera) {
                 AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Cameras, Id: camera.Name, Index: -1, Focus: fixedCamera.Position), center: fixedCamera.Position, radius: CameraProxyRadius);
+            }
+        }
+
+        // Speakers have no geometry: Fixed and Bed rows pick by a small proxy sphere at their authored point (the
+        // fixed-camera precedent); an ANCHORED row's live pose is not document data — select it by name over the
+        // console twin (editor.select speakers <name>), like anchored cameras.
+        foreach (var speaker in definition.Speakers) {
+            switch (speaker) {
+                case WorldSpeaker.Fixed fixedSpeaker:
+                    AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Speakers, Id: speaker.Name, Index: -1, Focus: fixedSpeaker.Position), center: fixedSpeaker.Position, radius: SpeakerProxyRadius);
+
+                    break;
+                case WorldSpeaker.Bed bed:
+                    AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Speakers, Id: speaker.Name, Index: -1, Focus: bed.Center), center: bed.Center, radius: SpeakerProxyRadius);
+
+                    break;
             }
         }
 

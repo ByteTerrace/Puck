@@ -61,7 +61,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "editor.select",
-            description: "Selects a document row explicitly: editor.select <scene|screens|spawns|cameras|placements> <id-or-index> [seat]. Screens key by engine index; every other section by its stable string id. Selection is client state (never protocol); the selected scene row or placement tints in the render.",
+            description: "Selects a document row explicitly: editor.select <scene|screens|spawns|cameras|placements|speakers> <id-or-index> [seat]. Screens key by engine index; every other section by its stable string id. Selection is client state (never protocol); the selected scene row or placement tints in the render, and a selected speaker's gizmo chip lights accent.",
             handler: SelectHandler
         );
         yield return CommandDefinition.WithTrailingArgs(
@@ -86,13 +86,13 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: DeleteCommand,
-            description: "Deletes the selected row as one whole-row mutation: editor.delete [seat] — RemoveSceneRow / RemoveScreen / RemoveCamera by section; a spawn delete resends the spawn list minus the row (and rejects loudly when the local seats then lack spawns). The chord twin is East on the select page.",
+            description: "Deletes the selected row as one whole-row mutation: editor.delete [seat] — RemoveSceneRow / RemoveScreen / RemoveCamera / RemovePlacement / RemoveSpeaker by section; a spawn delete resends the spawn list minus the row (and rejects loudly when the local seats then lack spawns). The chord twin is East on the select page.",
             handler: DeleteHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: GrabCommand,
-            description: "Toggles the drag channel on the selection: editor.grab [seat] begins a client-local drag (sticks move the pending row; NOTHING crosses the wire), and a second grab commits it as ONE whole-row mutation. Scene rows and screens drag; move spawns/cameras with editor.move. The chord twins are South on the place page and North on the select page.",
+            description: "Toggles the drag channel on the selection: editor.grab [seat] begins a client-local drag (sticks move the pending row; NOTHING crosses the wire), and a second grab commits it as ONE whole-row mutation. Scene rows, screens, placements, and fixed/bed speakers drag; move spawns/cameras/anchored speakers with editor.move. The chord twins are South on the place page and North on the select page.",
             handler: GrabHandler,
             routing: CommandRouting.Simulation
         );
@@ -114,7 +114,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "editor.move",
-            description: "Moves the selected row to an ABSOLUTE position as one whole-row mutation: editor.move <x> <y> <z> [seat]. Scene rows move their center, screens their face origin, spawns their position; a fixed camera moves its eye (aim held), an anchored camera sets its attachment offset.",
+            description: "Moves the selected row to an ABSOLUTE position as one whole-row mutation: editor.move <x> <y> <z> [seat]. Scene rows move their center, screens their face origin, spawns their position; a fixed camera moves its eye (aim held), an anchored camera/speaker sets its attachment offset; a fixed speaker moves its position, a bed its center.",
             handler: (context, args) => MoveHandler(context: context, args: args, relative: false, verb: "editor.move"),
             routing: CommandRouting.Simulation
         );
@@ -149,13 +149,13 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
 
     private CommandResult SelectHandler(CommandContext context, string[] args) {
         if (args.Length is (< 2 or > 3)) {
-            return Error(text: "[editor.select: expected <scene|screens|spawns|cameras> <id-or-index> [seat]]");
+            return Error(text: "[editor.select: expected <scene|screens|spawns|cameras|placements|speakers> <id-or-index> [seat]]");
         }
 
         var section = ParseSection(token: args[0]);
 
         if (section is not { } resolvedSection) {
-            return Error(text: $"[editor.select: unknown section '{args[0]}' — scene|screens|spawns|cameras]");
+            return Error(text: $"[editor.select: unknown section '{args[0]}' — scene|screens|spawns|cameras|placements|speakers]");
         }
 
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: args, at: 2, verb: "editor.select");
@@ -263,6 +263,10 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
                 break;
             case WorldSection.Placements:
                 m_link.SubmitWorldMutation(mutation: new WorldMutation.RemovePlacement(Principal: principal, Id: selection.Id));
+
+                break;
+            case WorldSection.Speakers:
+                m_link.SubmitWorldMutation(mutation: new WorldMutation.RemoveSpeaker(Principal: principal, Name: selection.Id));
 
                 break;
             case WorldSection.Spawns: {
@@ -503,6 +507,34 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
                 }
 
                 break;
+            case WorldSection.Speakers:
+                // The camera pattern's audio sibling: Fixed moves its position, a Bed its center, an Anchored its
+                // attachment OFFSET (the documented v1 numeric channel for anchored rows).
+                foreach (var speaker in definition.Speakers) {
+                    if (!string.Equals(a: speaker.Name, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
+                        continue;
+                    }
+
+                    switch (speaker) {
+                        case WorldSpeaker.Fixed fixedSpeaker:
+                            target = (relative ? (fixedSpeaker.Position + value) : value);
+                            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSpeaker(Principal: principal, Speaker: (fixedSpeaker with { Position = target })));
+
+                            return true;
+                        case WorldSpeaker.Bed bed:
+                            target = (relative ? (bed.Center + value) : value);
+                            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSpeaker(Principal: principal, Speaker: (bed with { Center = target })));
+
+                            return true;
+                        case WorldSpeaker.Anchored anchored:
+                            target = (relative ? (anchored.Offset + value) : value);
+                            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertSpeaker(Principal: principal, Speaker: (anchored with { Offset = target })));
+
+                            return true;
+                    }
+                }
+
+                break;
         }
 
         reason = $"no {selection.Describe()} in the live definition";
@@ -733,6 +765,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         "SPAWNS" => WorldSection.Spawns,
         "CAMERAS" => WorldSection.Cameras,
         "PLACEMENTS" => WorldSection.Placements,
+        "SPEAKERS" => WorldSection.Speakers,
         _ => null,
     };
 

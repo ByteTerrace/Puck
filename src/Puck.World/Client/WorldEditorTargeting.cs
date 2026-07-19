@@ -321,9 +321,40 @@ internal sealed class WorldEditorTargeting {
                 }
 
                 return null;
+            case WorldSection.Speakers:
+                // Fixed/Bed rows are their authored point; an anchored row resolves its anchor approximately (the
+                // anchored-camera precedent: root pose + raw offset — the orbit pivot and self-heal read, not the
+                // audio pose, which the director resolves exactly).
+                foreach (var speaker in definition.Speakers) {
+                    if (string.Equals(a: speaker.Name, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
+                        return (speaker switch {
+                            WorldSpeaker.Fixed fixedSpeaker => fixedSpeaker.Position,
+                            WorldSpeaker.Bed bed => bed.Center,
+                            WorldSpeaker.Anchored { Anchor: WorldAnchor.Entity entity } anchored => (m_client.Position(index: entity.Index) + anchored.Offset),
+                            WorldSpeaker.Anchored { Anchor: WorldAnchor.EntityLeaf leaf } anchored when WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role) =>
+                                (m_client.Position(index: leaf.Index) + WorldAvatarCatalog.RoleOffset(avatar: leaf.Index, role: role) + anchored.Offset),
+                            WorldSpeaker.Anchored { Anchor: WorldAnchor.Placement placementAnchor } anchored => AnchoredPlacementPosition(definition: definition, placementId: placementAnchor.PlacementId, offset: anchored.Offset),
+                            _ => (Vector3?)null,
+                        });
+                    }
+                }
+
+                return null;
             default:
                 return null;
         }
+    }
+
+    // A placement-anchored speaker's approximate focus: the placement root plus the raw offset (null when the
+    // placement row departed — the selection then self-heals like any dangling reference).
+    private static Vector3? AnchoredPlacementPosition(WorldDefinition definition, string placementId, Vector3 offset) {
+        foreach (var placement in definition.Placements) {
+            if (string.Equals(a: placement.Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                return (placement.Position + offset);
+            }
+        }
+
+        return null;
     }
 
     private static EditorSelection ToSelection(in EditorPickTarget target) =>

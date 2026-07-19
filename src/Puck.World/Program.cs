@@ -227,6 +227,9 @@ services.AddSingleton(implementationFactory: static sp => {
 });
 services.AddSingleton<ICommandModule, EditorCommandModule>();
 services.AddSingleton<ICommandModule, EditorSelectionCommandModule>();
+// The speaker authoring numeric twins (AP4) — console-only by an honest chord audit (every place-page slot is
+// spoken for); a SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, EditorSpeakerCommandModule>();
 // The sculpt verb surface (§P6): lifecycle/commit/easel, shapes, style, and timeline/rig — SEPARATE modules per
 // concern to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, EditorSculptCommandModule>();
