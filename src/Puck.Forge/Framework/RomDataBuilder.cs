@@ -57,7 +57,7 @@ internal sealed class RomDataBuilder {
 
     /// <summary>Appends a text string encoded to font tile ids, with the print routines' <c>0xFF</c> terminator.</summary>
     /// <param name="name">A unique diagnostic name.</param>
-    /// <param name="text">The text (the framework font's character set: space, 0-9, A-Z, '&gt;', '-').</param>
+    /// <param name="text">The text (the framework font's character set: space, 0-9, A-Z, '&gt;', '-', '.').</param>
     /// <returns>The block's address and length (including the terminator byte).</returns>
     public RomTable AddText(string name, string text) {
         ArgumentNullException.ThrowIfNull(text);

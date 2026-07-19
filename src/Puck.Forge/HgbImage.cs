@@ -4,7 +4,7 @@ namespace Puck.Forge;
 /// The pure-C# image half of the ROM forge: it turns an RGBA8 buffer (as produced by
 /// <see cref="Puck.SdfVm.SdfWorldEngine.RenderFrame"/>) into the Humble GamingBrick's brutal indexed-tile world — a
 /// derived 4-colour palette, per-pixel colour indices, and deduplicated 8×8 2bpp tiles + a tilemap. Every byte layout
-/// here is the INVERSE of the emulator's own decode (<c>experimental/Puck.HumbleGamingBrick/Ppu.cs</c>): a tile is 16
+/// here is the INVERSE of the emulator's own decode (<c>src/Puck.HumbleGamingBrick/Ppu.cs</c>): a tile is 16
 /// bytes (per row a low byte then a high byte, bit 7 = leftmost pixel, pixel = <c>(high&lt;&lt;1)|low</c>); a CGB colour
 /// is 2 bytes little-endian RGB555 (<c>bbbbbgggggrrrrr</c>). No external image library — this is the whole point of the
 /// pure-.NET forge.
@@ -12,6 +12,9 @@ namespace Puck.Forge;
 internal static class HgbImage {
     /// <summary>A straight 0..255-per-channel colour; the forge's working currency before it is crushed to RGB555.</summary>
     public readonly record struct Rgb(byte R, byte G, byte B) {
+        /// <summary>The squared Euclidean distance to <paramref name="other"/> in RGB space.</summary>
+        /// <param name="other">The color to measure against.</param>
+        /// <returns>The squared distance.</returns>
         public int DistanceSquaredTo(Rgb other) {
             var dr = (R - other.R);
             var dg = (G - other.G);

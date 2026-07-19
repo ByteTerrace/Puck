@@ -120,7 +120,7 @@ internal sealed class TuneGame {
     }
 
     // The overlays: the song name (sanitized to the framework font's character set) centred-ish on one row, "PUSH
-    // START" on another — the whole "title screen" the task asks for, since this cart has no separate title state.
+    // START" on another — the whole title screen this cart needs, since it has no separate title state.
     private static IReadOnlyList<ScreenText> BuildOverlays(AudioDocument document) {
         var name = SanitizeForFont(text: (document.Name ?? "UNTITLED"));
         var nameColumn = Math.Clamp(value: ((32 - name.Length) / 2), max: 31, min: 0);
@@ -131,8 +131,9 @@ internal sealed class TuneGame {
         ];
     }
 
-    // The framework font only has space, 0-9, A-Z, '>', '-': fold to upper invariant and replace anything else with
-    // a space so an arbitrary document name never throws the linker's overlay encoder.
+    // The title sanitizer restricts to space, 0-9, A-Z, '>', '-' for the cart's title art (the framework font also
+    // has '.', deliberately excluded here): fold to upper invariant and replace anything else with a space so an
+    // arbitrary document name never throws the linker's overlay encoder.
     private static string SanitizeForFont(string text) {
         var upper = text.ToUpperInvariant();
         var builder = new System.Text.StringBuilder(capacity: upper.Length);

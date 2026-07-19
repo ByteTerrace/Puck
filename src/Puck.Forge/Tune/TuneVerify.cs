@@ -5,10 +5,10 @@ using Puck.HumbleGamingBrick.Interfaces;
 namespace Puck.Forge.Tune;
 
 /// <summary>
-/// The jukebox self-verify battery: boots the freshly-forged ROM on a REAL Humble machine (pure CPU, the same core
-/// the demo's cabinets run) and asserts the state machine runs and START toggles play/stop — the state-graph half
-/// of the forge's "verify by running" discipline (the WAV-capture half of the demo's battery stays with
-/// the demo's chain; <see cref="TuneRom"/> covers the state graph here).
+/// The jukebox self-verify battery: boots the freshly-forged ROM on a REAL Humble machine (pure CPU, the same
+/// <c>Puck.HumbleGamingBrick</c> core the engine hosts) and asserts the state machine runs and START toggles
+/// play/stop — the state-graph half of the forge's "verify by running" discipline; <see cref="TuneRom"/> covers
+/// the state graph here.
 /// </summary>
 internal static class TuneVerify {
     private const ulong TCyclesPerFrame = 70224UL;

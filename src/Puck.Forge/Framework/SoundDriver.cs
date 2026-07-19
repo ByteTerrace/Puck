@@ -6,9 +6,8 @@ namespace Puck.Forge.Framework;
 /// <see cref="EmitLibrary"/> for its subroutines beside the other module libraries. The driver's DATA rides the
 /// game's manifest like every other table: <see cref="SoundTables.DefineIn"/> declares the catalog streams, and the
 /// real driver (<see cref="ApuSoundDriver"/>) resolves them from the linked manifest through
-/// <see cref="ApuSoundDriver.Bind"/> after <see cref="GameManifest.Link"/>. The call sites are wired into the kernel
-/// and the games from day one, so swapping drivers touches no game logic; <see cref="NoOpSoundDriver"/> keeps a
-/// cartridge silent.
+/// <see cref="ApuSoundDriver.Bind"/> after <see cref="GameManifest.Link"/>. The call sites are wired into the
+/// kernel, so swapping drivers touches no game logic; <see cref="NoOpSoundDriver"/> keeps a cartridge silent.
 /// </summary>
 internal interface ISoundDriver {
     /// <summary>Emits the boot-time hardware setup (runs once, LCD off, after the work-RAM clear, before the main

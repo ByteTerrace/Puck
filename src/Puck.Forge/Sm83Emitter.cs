@@ -34,9 +34,8 @@ internal enum Condition : byte { NotZero = 0, Zero = 1, NoCarry = 2, Carry = 3 }
 /// <see cref="ShiftOp"/>, <see cref="Condition"/>), so a future author reaches any instruction without editing this
 /// class. The genuinely irregular opcodes (high-page and absolute memory access, the accumulator rotates, stack-pointer
 /// arithmetic, and the control singletons) are exposed as named methods; a one-pass label fixup resolves both the
-/// relative <c>jr</c> back-edges and the absolute <c>jp</c>/<c>call</c> targets. It is private to the forge, expected to
-/// be lifted into a reusable <c>Puck.HumbleGamingBrickRom</c> toolkit later. Opcodes are the standard SM83 encoding (see
-/// the emulator's decoder, <c>experimental/Puck.HumbleGamingBrick/Sm83.Decode.cs</c>).
+/// relative <c>jr</c> back-edges and the absolute <c>jp</c>/<c>call</c> targets. It is private to the forge. Opcodes
+/// are the standard SM83 encoding (see the emulator's decoder, <c>src/Puck.HumbleGamingBrick/Sm83.Decode.cs</c>).
 /// </summary>
 internal sealed class Sm83Emitter {
     private readonly List<byte> m_code = [];

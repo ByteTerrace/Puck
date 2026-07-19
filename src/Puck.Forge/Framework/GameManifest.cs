@@ -5,7 +5,7 @@ namespace Puck.Forge.Framework;
 /// baked art can ever ship a screen the player cannot read their way off of (the menu-text contract).</summary>
 /// <param name="Row">The map row (0..31).</param>
 /// <param name="Column">The map column of the first character.</param>
-/// <param name="Text">The text (the framework font's character set: space, 0-9, A-Z, '&gt;', '-').</param>
+/// <param name="Text">The text (the framework font's character set: space, 0-9, A-Z, '&gt;', '-', '.').</param>
 internal sealed record ScreenText(int Row, int Column, string Text);
 
 /// <summary>One step of a scripted input sequence (an attract script): hold <paramref name="Buttons"/> for
@@ -466,6 +466,18 @@ internal sealed class LinkedManifest {
     private readonly Dictionary<string, RomTable> m_tables;
     private readonly Dictionary<string, RomTable> m_texts;
 
+    /// <summary>Creates the manifest over every declared asset, already resolved to its table address.</summary>
+    /// <param name="backgroundArt">The linked background art, keyed by name.</param>
+    /// <param name="backgroundPalettes">The sealed background palette table.</param>
+    /// <param name="fontTileBase">The linked font tile base.</param>
+    /// <param name="objectPalettes">The sealed object palette table.</param>
+    /// <param name="records">The linked record tables, keyed by name.</param>
+    /// <param name="screens">The linked screens, keyed by name.</param>
+    /// <param name="scripts">The linked attract scripts, keyed by name.</param>
+    /// <param name="spriteArt">The linked sprite art sets, keyed by name.</param>
+    /// <param name="tables">The linked raw tables, keyed by name.</param>
+    /// <param name="texts">The linked text blocks, keyed by name.</param>
+    /// <param name="tileBank">The sealed tile bank.</param>
     internal LinkedManifest(
         Dictionary<string, LinkedBackground> backgroundArt,
         RomTable backgroundPalettes,

@@ -12,7 +12,7 @@ namespace Puck.Forge.Framework;
 internal readonly record struct FrameworkBootSpec(RomTable BgPalettes, RomTable ObjPalettes, RomTable Tiles, int TileByteCount, RomTable InitialMap, byte Lcdc, byte InitialState);
 
 /// <summary>
-/// The interrupt-driven kernel (design D1): the fixed 3-byte <c>jp boot</c> prologue that pins the VBlank handler at
+/// The interrupt-driven kernel: the fixed 3-byte <c>jp boot</c> prologue that pins the VBlank handler at
 /// <see cref="Hw.VBlankHandlerAddress"/>; the handler itself (save registers → <c>call 0xFF80</c> for the HRAM OAM-DMA
 /// trampoline → drain the background write queue → advance the 16-bit frame counter → restore, <c>reti</c> — about
 /// 560 of the 1140 available VBlank machine cycles at worst case); the boot sequence (stack, work-RAM clear,

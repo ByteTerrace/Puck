@@ -11,8 +11,8 @@ namespace Puck.Forge.Framework;
 /// BUILD time and emits a three-store trigger (pointer + zeroed wait), so triggering is race-free with the tick that
 /// runs later in the same frame. The streams themselves are MANIFEST tables: the game declares them with
 /// <see cref="SoundTables.DefineIn"/> beside its other data, links, then hands the linked manifest to
-/// <see cref="Bind"/> — so the card games consume the catalog through the exact table layer they consume everything
-/// else through. Everything the driver plays is deterministic work-RAM state driven by the frame counter and inputs
+/// <see cref="Bind"/> — so games consume the catalog through the table layer. Everything the driver plays is
+/// deterministic work-RAM state driven by the frame counter and inputs
 /// — replay-identical like the rest of the framework.
 /// </summary>
 internal sealed class ApuSoundDriver : ISoundDriver {

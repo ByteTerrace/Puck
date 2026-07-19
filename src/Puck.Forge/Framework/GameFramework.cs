@@ -60,7 +60,8 @@ internal sealed class GameFramework {
     public TextModule Text { get; }
     /// <summary>The game state machine.</summary>
     public GameStateMachine States { get; }
-    /// <summary>The sound driver (games trigger effects through it so a real driver drops in later).</summary>
+    /// <summary>The sound driver — games trigger effects through this seam so drivers swap without touching game
+    /// logic.</summary>
     public ISoundDriver Sound => m_sound;
 
     /// <summary>Assembles the finished cartridge.</summary>

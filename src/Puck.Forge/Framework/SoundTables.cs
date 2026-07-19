@@ -25,8 +25,8 @@ internal readonly record struct SoundEffect(byte Id, string Name, SoundVoice Voi
 /// terminates the stream — an effect voice falls silent (envelope zeroed, DAC off), the music sequencer loops back
 /// to the pattern's start. Register values are resolved at BUILD time (note periods from integer millihertz math),
 /// so a stream is plain bytes and the in-ROM driver stays a dumb register pump. The effect ids are the REUSABLE
-/// surface: the card games trigger <see cref="EffectDeal"/>/<see cref="EffectFlip"/>/<see cref="EffectShuffle"/>/
-/// <see cref="EffectWin"/> exactly like any other framework game triggers its own set.
+/// surface: <see cref="EffectDeal"/>/<see cref="EffectFlip"/>/<see cref="EffectShuffle"/>/<see cref="EffectWin"/>
+/// and the rest, so games consume the catalog through the table layer.
 /// </summary>
 internal static class SoundTables {
     /// <summary>A soft two-hiss noise tick — a card sliding off the deck (also any small "object placed" moment).</summary>
@@ -200,7 +200,7 @@ internal static class SoundTables {
     private static byte[] MusicRest(byte frames) =>
         [frames, DutyQuarter, 0x00, 0x00, 0x00];
 
-    // The 11-bit period register value for a frequency — LIFTED to ApuNotePeriod so AudioDocumentCompiler shares the
-    // exact same integer math (this class's public surface is unchanged).
+    // The 11-bit period register value for a frequency — delegates to ApuNotePeriod, the shared integer-math
+    // implementation, so AudioDocumentCompiler shares the exact same integer math.
     private static int Period(int millihertz) => ApuNotePeriod.Period(millihertz: millihertz);
 }

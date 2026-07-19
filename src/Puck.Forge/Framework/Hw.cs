@@ -2,22 +2,22 @@ namespace Puck.Forge.Framework;
 
 /// <summary>
 /// The framework's own hardware constants — high-page I/O ports, memory-mapped regions, LCDC bits, and the fixed
-/// cartridge prologue addresses. Deliberately self-contained (about thirty lines) so the framework depends only on <see cref="Sm83Emitter"/>, <see cref="HgbImage"/>, and its own files
-/// (the lift posture: this folder should extract cleanly into a standalone toolkit).
+/// cartridge prologue addresses. Deliberately self-contained — the framework depends only on
+/// <see cref="Sm83Emitter"/>, <see cref="HgbImage"/>, and its own files.
 /// </summary>
 internal static class Hw {
     // High-page (0xFF00 + port) I/O ports.
     /// <summary>P1/JOYP — the joypad matrix select/read register.</summary>
     public const byte PortJoypad = 0x00;
     /// <summary>SB — the serial link cable's data shift register (matches <c>MemoryMap.SerialData</c> in
-    /// <c>experimental/Puck.HumbleGamingBrick/Interfaces/ISerial.cs</c>).</summary>
+    /// <c>src/Puck.HumbleGamingBrick/MemoryMap.cs</c>).</summary>
     public const byte PortSerialData = 0x01;
     /// <summary>SC — the serial link cable's control register (matches <c>MemoryMap.SerialControl</c>).</summary>
     public const byte PortSerialControl = 0x02;
     /// <summary>DIV — the free-running divider register (the upper byte of the 16-bit divider counter). Reading it is a
     /// cheap deterministic-yet-hard-to-predict entropy source: two machines that reached the same code point after
     /// different amounts of execution hold different DIV values, so a link protocol seeds a symmetry-breaking backoff
-    /// from it (see the demo's link protocol module, the machinery this library's tune closure deliberately leaves behind). Writing any value resets the whole counter to zero.</summary>
+    /// from it. Writing any value resets the whole counter to zero.</summary>
     public const byte PortDivider = 0x04;
     /// <summary>IF — the interrupt request flags.</summary>
     public const byte PortInterruptFlag = 0x0F;
@@ -84,7 +84,7 @@ internal static class Hw {
     public const byte InterruptVBlankBit = 0x01;
 
     // SC (PortSerialControl) bits — matches SerialComponent's TransferActive/ClockSelect/FastClock constants in
-    // experimental/Puck.HumbleGamingBrick/SerialComponent.cs (0x80/0x01/0x02 respectively).
+    // src/Puck.HumbleGamingBrick/SerialComponent.cs (0x80/0x01/0x02 respectively).
     /// <summary>SC bit 7 — writing it with the transfer bit set arms a link exchange (hardware clears it when the
     /// eighth bit shifts).</summary>
     public const byte SerialTransferStart = 0x80;

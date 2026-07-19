@@ -4,7 +4,7 @@ namespace Puck.Forge.Tune;
 /// <summary>
 /// The jukebox cartridge's public face: a minimal framework cart whose ENTIRE identity beyond the standard sound
 /// plumbing is an authored <c>puck.audio.v1</c> document (see <see cref="AudioDocument"/>) compiled through
-/// <see cref="AudioDocumentCompiler"/> — the music-as-data workstream's first playable proof. The
+/// <see cref="AudioDocumentCompiler"/>. The
 /// <see cref="Build"/>/<see cref="Verify"/> pair follows the same shape as every other framework game's forge facade.
 /// </summary>
 public static class TuneRom {

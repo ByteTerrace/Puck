@@ -44,7 +44,7 @@ internal sealed class TextModule {
 
     /// <summary>Maps a supported character to its font tile id.</summary>
     /// <param name="fontTileBase">The tile id of the font's first glyph.</param>
-    /// <param name="character">The character (space, 0-9, A-Z, '&gt;', '-').</param>
+    /// <param name="character">The character (space, 0-9, A-Z, '&gt;', '-', '.').</param>
     /// <returns>The tile id.</returns>
     public static byte TileFor(byte fontTileBase, char character) => (byte)(fontTileBase + GlyphIndexOf(character: character));
 
@@ -122,7 +122,7 @@ internal sealed class TextModule {
     }
 
     /// <summary>Builds the font's 2bpp tile bytes (<see cref="GlyphCount"/> × 16), glyph order: space, 0-9, A-Z,
-    /// '&gt;', '-'. Append to the game's tile data at the <c>fontTileBase</c> given to the constructor.</summary>
+    /// '&gt;', '-', '.'. Append to the game's tile data at the <c>fontTileBase</c> given to the constructor.</summary>
     /// <returns>The tile bytes.</returns>
     public static byte[] BuildFontTiles() {
         var tiles = new byte[(GlyphCount * 16)];

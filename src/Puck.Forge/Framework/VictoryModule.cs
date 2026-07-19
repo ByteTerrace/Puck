@@ -4,8 +4,8 @@ namespace Puck.Forge.Framework;
 /// The 128-bit victory-metadata seam shared by framework games: on a game's win
 /// edge it copies this cabinet's authored 16-byte "share" — seeded by the host into the framework's
 /// <see cref="FrameworkMemoryMap.VictoryShareSource"/> work-RAM slot at boot — verbatim into the TOP 16 bytes of the
-/// cartridge's external (battery) RAM, the region the host's meta gate reads and XORs across cabinets
-/// (<c>VictoryGate</c> / <c>MetaVictoryWatch</c>). Whole-region-on-win, not progressive: the game writes all 16 share
+/// cartridge's external (battery) RAM, the region the host's meta-victory gate reads and XORs across cabinets
+/// (<c>VictoryGate</c> in Puck.Scene). Whole-region-on-win, not progressive: the game writes all 16 share
 /// bytes at once when it completes, which is all a binary "complete X games" gate needs.
 ///
 /// <para>The write follows SaveModule's exact anti-corruption discipline — SRAM is enabled (<c>0x0A → 0x0000</c>) only

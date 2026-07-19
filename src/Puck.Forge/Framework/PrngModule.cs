@@ -3,12 +3,12 @@ namespace Puck.Forge.Framework;
 /// <summary>
 /// The framework PRNG: a 16-bit linear congruential generator (<c>state = state × 5 + 1</c>, output = the state's
 /// high byte) — deterministic from its seed, cheap on the SM83 (two <c>add hl, hl</c> and an <c>add hl, de</c>).
-/// The stock seeding discipline is D4: pure INPUT ENTROPY — sample the free-running frame counter at the title
+/// The stock seeding discipline is pure INPUT ENTROPY — sample the free-running frame counter at the title
 /// screen's START press edge, whitened with an XOR constant so an early press never yields a near-zero state. No
 /// wall clock and no hardware noise: two players pressing on the same frame replay the same game.
 /// </summary>
 internal sealed class PrngModule {
-    // The D4 whitening constant (seed = FrameCounter16 XOR 0xA5C3).
+    // The whitening constant (seed = FrameCounter16 XOR 0xA5C3).
     private const byte SeedWhitenLow = 0xC3;
     private const byte SeedWhitenHigh = 0xA5;
 
@@ -47,7 +47,7 @@ internal sealed class PrngModule {
         m_emitter.MarkLabel(label: done);
     }
 
-    /// <summary>Emits the D4 seeding: state = FrameCounter16 XOR 0xA5C3, sampled at the current instant (call it on
+    /// <summary>Emits the seeding: state = FrameCounter16 XOR 0xA5C3, sampled at the current instant (call it on
     /// the title screen's START press edge). Clobbers A.</summary>
     public void EmitSeedFromFrameCounter() {
         m_emitter.LoadAFromAddress(address: FrameworkMemoryMap.FrameCounter);

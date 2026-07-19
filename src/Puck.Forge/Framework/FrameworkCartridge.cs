@@ -9,7 +9,7 @@ namespace Puck.Forge.Framework;
 /// enters the routine at <see cref="Hw.EntryAddress"/> whose first instruction must be <c>jp boot</c>. Both 16 KiB
 /// ROM banks are visible without a single bank-switch write (MBC1's primary bank resets to 1), so code lives in
 /// 0x0150..0x3FFF and data in 0x4000..0x7FFF. The header/logo/checksum machinery is the framework's own — a
-/// deliberate self-contained copy, not a shared dependency, so the framework folder lifts cleanly.
+/// deliberate self-contained copy, not a shared dependency.
 ///
 /// <para>Puck's <c>--rom</c> path runs no boot ROM (it starts at the seeded post-boot handoff, A = 0x11), so the
 /// logo/checksums are not required to boot here; they are written so the <c>.gbc</c> is valid on real hardware.</para>

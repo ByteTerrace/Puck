@@ -2,10 +2,10 @@ namespace Puck.Forge.Framework;
 
 /// <summary>
 /// The shared integer note-period math every APU stream compiler needs: an 11-bit pulse/wave period register value
-/// for a note frequency, resolved at BUILD time so the in-ROM driver stays a dumb register pump. LIFTED out of
-/// <see cref="SoundTables"/> (whose public surface is unchanged) so <c>AudioDocumentCompiler</c> shares the exact
-/// same integer math — pure millihertz arithmetic, so the same document compiles to byte-identical streams on every
-/// run, on every machine, forever (no floats anywhere in the compile path).
+/// for a note frequency, resolved at BUILD time so the in-ROM driver stays a dumb register pump. <see cref="SoundTables"/>
+/// delegates to this, the shared integer math, so <c>AudioDocumentCompiler</c> shares the exact same integer math —
+/// pure millihertz arithmetic, so the same document compiles to byte-identical streams on every run, on every
+/// machine, forever (no floats anywhere in the compile path).
 /// </summary>
 internal static class ApuNotePeriod {
     /// <summary>Common note frequencies in millihertz (equal temperament, A4 = 440 Hz) — integers so the period math
