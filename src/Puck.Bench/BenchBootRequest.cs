@@ -2,7 +2,7 @@ namespace Puck.Bench;
 
 /// <summary>
 /// The headless <c>--bench</c> handshake (plan §9) — the ONE cross-agent seam between the CLI parser and the demo's
-/// composition root, so neither needs to reference the other's types. <c>Puck.Demo.Program</c> (the CLI) SETS these
+/// composition root, so neither needs to reference the other's types. The CLI host SETS these
 /// properties, pre-host-build, from <c>--bench</c>/<c>--bench-samples</c>; the demo's bench installer READS them
 /// after composition (once <see cref="BenchRuntime"/> and its scenes exist) and, when <see cref="Suite"/> is
 /// non-null, submits the <c>bench.run</c> console line — subscribing <see cref="BenchRuntime.RunCompleted"/> to set
