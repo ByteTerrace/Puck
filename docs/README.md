@@ -21,7 +21,7 @@ sources remain useful to engineering decisions.
 | [Backend parity summary](feature-parity-summary.md) | Current Vulkan and Direct3D 12 parity status. |
 | [Backend parity table](feature-parity-table.md) | Capability-level backend support and evidence. |
 | [Platform display kinds](platform-display-kinds.md) | Native display and surface dispatch contracts. |
-| [Engine benchmark](engine-bench-plan.md) | Benchmark scenes, scoring, report format, and operation. |
+| [Engine benchmark](engine-bench-plan.md) | Benchmark scenes, scoring, report format, and operation (the `Puck.Bench` contract is current; the retired Demo suite registration ports into World at Arc 10). |
 | [UI design tokens](ui-design-tokens.md) | Shared visual-token vocabulary and ownership. |
 
 ## Active engineering ledgers
@@ -31,7 +31,7 @@ sources remain useful to engineering decisions.
 | [Disposal implementation audit](reviews/2026-07-17-disposal-implementation-audit.md) | Active full-repository disposal findings, ownership evidence, and remediation work items. |
 | [World authoring, audio, and Forge implementation review](reviews/2026-07-19-large-change-set-review.md) | Static review of the landed P3–P6, audio, Forge, and overlay work: capacity contracts, transactional/lifetime defects, proof gaps, and ordered remediation. |
 | [SDF renderer performance plan](reviews/2026-07-16-sdf-renderer-sota-perf-plan.md) | Active measurement-gated SDF optimization phases and current reopen criteria. |
-| [Demo port ledger](reviews/2026-07-18-demo-port-ledger.md) | Row-by-row tracking of Demo capabilities against their World successors. |
+| [Demo port ledger](reviews/2026-07-18-demo-port-ledger.md) | Superseded as an execution plan by the Demo → World port; survives as the Arc-12 orientation-doc-sweep checklist (row-by-row Demo-capability → World re-home mapping). |
 
 The moldable-state, World UI/editor, World audio, and branch-closeout documents
 retired once their arcs landed: their commitments are carried in the
@@ -45,22 +45,25 @@ Git history holds the rest.
 
 | Document | Purpose |
 |---|---|
-| [Demo to World port](demo-to-world-port-plan.md) | The twelve-arc plan that ports `Puck.Demo` capabilities into `Puck.World` and removes the project. |
-| [Game studio](game-studio-plan.md) | Current creator workflow and remaining product roadmap. |
+| [Demo to World port](demo-to-world-port-plan.md) | **The plan of record.** The twelve-arc plan that ports `Puck.Demo` capabilities into `Puck.World` and removes the project — start at its **State of execution** block (7 arcs landed, unmerged; 8–12 remain). Carries the deletion ledger, open questions, and the parallel carried tracks. |
+| [Game studio](game-studio-plan.md) | Creator workflow and remaining product roadmap; port-reference for arcs 7/8 (banner-dated — destination is World, the Demo is a library that no longer runs). |
 | [Machine fleet](machine-fleet-plan.md) | Emulator-fleet performance model and optimization priorities. |
 | [Machine fleet briefing](machine-fleet-briefing.md) | Workload classes, scale posture, and design constraints. |
 | [Ideal GamingBrick](ideal-gaming-brick-plan.md) | Cross-generation emulator architecture and roadmap. |
 | [Run-document examples](examples/) | Valid and intentionally invalid data examples used by verification. |
 
-## Demo (retiring)
+## Demo (retiring — now a library that does not run)
 
-`Puck.Demo` is the prototyping ground `Puck.World` supersedes; its capabilities port into World and shared
-libraries over time, and nothing in a live project depends on it.
+`Puck.Demo` was flipped to a **library** at Beat B of the
+[Demo → World port](demo-to-world-port-plan.md): its composition root is gone and it
+no longer runs. Its capabilities port into `Puck.World` and the shared libraries
+across the port's arcs; Arc 12 deletes the project. The two docs below are
+**port-reference** (banner-dated), not runnable-product docs.
 
 | Document | Purpose |
 |---|---|
-| [Overworld demo](overworld-demo-plan.md) | The unified demo experience, control plane, data model, and open work. |
-| [`Puck.Demo`](../src/Puck.Demo/README.md) | Project handoff notes for the retiring demo project. |
+| [Overworld demo](overworld-demo-plan.md) | Port-reference: the former unified demo experience, control plane, data model, and seams — historical intent for arcs 5/7/9 (the Demo no longer runs). |
+| [`Puck.Demo`](../src/Puck.Demo/README.md) | Library status + held-files map + the forge/cartridge port-reference for Arc 8. |
 
 ## SDF world
 

@@ -1,5 +1,12 @@
 # Puck engine benchmark
 
+> **STATUS (2026-07-19): CURRENT engine reference; one line is stale.** The
+> `Puck.Bench` contract below is live. The Demo composition root that "registers
+> the standard suite" was deleted at Beat B of the
+> [Demo → World port](demo-to-world-port-plan.md) (the Demo is now a library that
+> does not run), so that registration is currently unwired. **Arc 10 (Bench &
+> Scenarios)** ports the suite registration into `Puck.World`.
+
 `puck.bench` is a content-blind engine benchmark. It runs registered scenes in
 sequence, records GPU and CPU timing, produces a versioned report, and combines
 scene throughput into one score without allowing a fast scene to hide a slow

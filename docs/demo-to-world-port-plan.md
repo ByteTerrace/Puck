@@ -9,6 +9,65 @@ This is not a port in the file-copy sense. Every arc names what the Demo
 original got *wrong* or got *specific* about, and what the World version does
 instead. An arc whose diff is a namespace change has failed.
 
+## State of execution
+
+**Branch `claude/puck-realtime-world-editing-4fd13f`, tip `2020d00`. Nothing is
+merged to `main`.** The execution records under each arc are the binding record;
+this block is the index.
+
+**DONE (7 arcs, in execution order):**
+
+| Arc | Commits |
+|---|---|
+| **3 · Beat B** — teardown (executed first, OQ-15) | `686d009`, review `33595eb` |
+| **1** — Solidity & Response | `aa77091` |
+| **3 · Beat A** — host section | `eea151e` |
+| **2** — Field Provider | `ab2a87f` |
+| **4** — Views | `2d20ccf` |
+| **6** — Population & Looks | `16ce575` (largechange-06), `da63bfe` (largechange-09), `2728b58` (arc) |
+| **5** — Cabinets | `bca1656` |
+| **7** — Creator & Inhabitation | `006c84f` (largechange-01/-15), `20d0ed2` (arc) |
+| Per-wave review fixes | `d275ee1`, `cfe7786`, `bc20a9c`, `2020d00` |
+
+**REMAINING:** Arcs **8** (RomForge), **9** (Reveal & Progression), **10** (Bench
+& Scenarios), **11** (Nested Worlds), **12** (Terminal teardown), plus the
+**[carried tracks](#carried-tracks)** (the parallel non-port half — a different
+team). `src/Puck.Demo` still exists as a **library that does not run** (R0/OQ-11):
+it compiles so the surviving pinned files build, and Arc 12 deletes it.
+
+**Standing deferral ledger a resuming agent must know:**
+
+- **The (c)-disposition ledger.** Arcs 1, 2, 4, 6, 7 each declined to excise their
+  Demo deletion targets because the pinned **OQ-14 survivors** (`OverworldWorld.cs`,
+  `OverworldFrameSource*.cs`, `TownWorld.cs`) and the **HELD** `Museum/MuseumRenderer.cs`
+  still consume them. Every carcass is named in its arc's "Demo deletion —
+  (c)-disposition" note; all of them die wholesale once **OQ-14** is decided and the
+  survivors are removed on the Demo-retirement trajectory. **This chain is pinned to
+  the still-open OQ-14.**
+- **Arc 5 deferrals:** the **P7 world-event channel** seam + `ScreenEngageDirector`
+  (Arc 9 inherits the decision); **console-feed live rendering** (OQ-13's
+  `ConsoleFeed`/`ProceduralFeed` port — the `console` source renders the no-signal
+  fallback until it lands); **live cross-worker cable-link co-stepping** (links are
+  spec-legal **dormant**, naming why); and the reconfigure path is **proven-built,
+  not proven-live** (World ships no bundled SM83 cart).
+- **Arc 7 deferrals:** the **derived-face SDF slab + live handle** (a face wired to a
+  *derived* camera reads no-signal until the slab enters the render program with its
+  own probe reservation; a face on a *document* camera binds live today); and the
+  **`WorldLookResolver` reroute** of the 5 humanoid-role call sites (a humanoid-leaf
+  anchor on a creation-look body resolves through the catalog rig — never black,
+  never crash).
+- **The `autoInsert` third touch of the frozen worlds.** Arc 5's non-null `autoInsert`
+  route field re-goldened all three shipped worlds (`default`, `expo`, `kart-remap`)
+  a **third** time, beyond constraint 2's two *named* exceptions (Arc 1
+  collision/motion, Arc 4 OQ-12 cameras). It is byte-preserving in intent but is an
+  unmentioned touch **awaiting owner accept/reverse**.
+
+**THE NEXT ACTION.** **Arc 8 Phase P1 (fork collapse)** is the plan's named
+pull-forward and the natural resumption point (it depends only on the landed teardown).
+**[OQ-14](#open-questions)** is the one owed **owner decision** — an explicit, recorded
+sitting (with OQ-17's introspection half) that unpins the entire (c)-disposition
+deletion ledger; it does not block Arc 8.
+
 ## How to use this document
 
 **This document has two halves, and they are independent of each other.**
@@ -564,20 +623,23 @@ dependency.
 > B running first has not found an overridden owner ruling; they have found the
 > ruling being honored at the layer it applies to.
 
-| # | Arc | Delivers | Size | Position justified by |
-|---|---|---|---|---|
-| 1 | [Solidity & Response](#arc-1--solidity--response) | scene-row `solid` facet, body volume, `MotionResponse` table, `IContactField` seam, analytic collider set | **XL** | Owner ruling. Holds the owner's *named* `default.world.json` exception (collision + motion). Lands 4 of the 10 shared primitives. |
-| 2 | [Field Provider](#arc-2--field-provider) | SDF-derived contact field, planetoid / arbitrary-up walking | **M** | Owner ruling. Second because it is a *second implementation* of Arc 1's seam. |
-| 3 | [Shell & root teardown](#arc-3--shell--root-teardown) | `host` world-document section + `world.host.*`; deletes the Demo composition root and the three god files; **R17 remainder survey** | **M** | R0. Beat A depends on nothing; Beat B is the unblocking act for every remaining arc and the only arc that can close the remainder. **Beat B EXECUTES FIRST (OQ-15)**, ahead of Arcs 1–2, while Arcs 1–2 remain the shipped-first deliverable. |
-| 4 | [Views](#arc-4--views) | `WorldRig` × `WorldAnchor`, `WorldAnchor.Group`, `Views` section, `WorldViewComposer` | **L** | Highest downstream fan-out of the remaining arcs (Creator, Reveal, + soft Cabinets/Bench). **Carries the owner-granted OQ-12 re-encoding exception (2026-07-19)** covering `default`, `expo`, and `kart-remap`. |
-| 5 | [Cabinets](#arc-5--cabinets) | screen magazine, live machine reconfigure, machine link, world-event channel seam | **L→XL** | Owns `WorldScreenSource`/`WorldScreenBinder`/the machine capability family that Arcs 8 and 9 both extend. |
-| 6 | [Population & Looks](#arc-6--population--looks) | `WorldLook`, `WorldRowAssignment`/`RowFor`, `WorldSpawnPolicy`, `WorldStampPool` | **L** | Independent of 4/5 — runs in parallel. Before Creator because Creator consumes all three. |
-| 7 | [Creator & Inhabitation](#arc-7--creator--inhabitation) | placement `inhabit` facet, `IntentSource.Attend`, creation camera/face derivation | **L** | Needs 4 (camera shape), 6 (looks, stamp pool, `RowFor`), soft 1 (an inhabited body wants collision). |
-| 8 | [RomForge](#arc-8--romforge) | `Cartridges` section, `WorldCartridgeSource` union, `ISm83GameSource`, frame-spread materializer | **XL** | Needs 5. Precedes 9 so the intro cart is a `WorldCartridgeSource.Game`. Phase P1 pulls forward beside Arc 3. |
-| 9 | [Reveal & Progression](#arc-9--reveal--progression) | `WorldProgression` milestones, machine ports, withheld grants, save slots | **L** | Needs 5, 4, 8. Depended on by nothing. |
-| 10 | [Bench & Scenarios](#arc-10--bench--scenarios) | `WorldScenario` section, one generic `IBenchSceneController`, lever registry derived from verbs | **L** | Independent after Arc 3. Soft dependency on 4 for the camera-track seam. |
-| 11 | [Nested Worlds](#arc-11--nested-worlds) | `NestedWorldView` reached from a world document — a second world server rendered into a screen; preserves `MuseumRenderer` and the Droste door as a capability | **UNKNOWN — pending survey** | Owner ruling, 2026-07-19 (OQ-2): nested worlds are carved into their own arc rather than approximated or deleted. Needs 4 (camera/anchor vocabulary, `WorldViewComposer`). Depended on by nothing. |
-| 12 | [Terminal teardown](#arc-12--terminal-teardown) | `git rm -r src/Puck.Demo`, `.sln`, `Puck.Scene` Demo-only surface, doc sweep | **S** | Terminal by definition. |
+**Status column:** ✅ DONE (see [State of execution](#state-of-execution) for
+commits) · ⏳ remaining.
+
+| # | ✓ | Arc | Delivers | Size | Position justified by |
+|---|---|---|---|---|---|
+| 1 | ✅ | [Solidity & Response](#arc-1--solidity--response) | scene-row `solid` facet, body volume, `MotionResponse` table, `IContactField` seam, analytic collider set | **XL** | Owner ruling. Holds the owner's *named* `default.world.json` exception (collision + motion). Lands 4 of the 10 shared primitives. |
+| 2 | ✅ | [Field Provider](#arc-2--field-provider) | SDF-derived contact field, planetoid / arbitrary-up walking | **M** | Owner ruling. Second because it is a *second implementation* of Arc 1's seam. |
+| 3 | ✅ | [Shell & root teardown](#arc-3--shell--root-teardown) | `host` world-document section + `world.host.*`; deletes the Demo composition root and the three god files; **R17 remainder survey** | **M** | R0. Beat A depends on nothing; Beat B is the unblocking act for every remaining arc and the only arc that can close the remainder. **Beat B EXECUTES FIRST (OQ-15)**, ahead of Arcs 1–2, while Arcs 1–2 remain the shipped-first deliverable. |
+| 4 | ✅ | [Views](#arc-4--views) | `WorldRig` × `WorldAnchor`, `WorldAnchor.Group`, `Views` section, `WorldViewComposer` | **L** | Highest downstream fan-out of the remaining arcs (Creator, Reveal, + soft Cabinets/Bench). **Carries the owner-granted OQ-12 re-encoding exception (2026-07-19)** covering `default`, `expo`, and `kart-remap`. |
+| 5 | ✅ | [Cabinets](#arc-5--cabinets) | screen magazine, live machine reconfigure, machine link, world-event channel seam | **L→XL** | Owns `WorldScreenSource`/`WorldScreenBinder`/the machine capability family that Arcs 8 and 9 both extend. |
+| 6 | ✅ | [Population & Looks](#arc-6--population--looks) | `WorldLook`, `WorldRowAssignment`/`RowFor`, `WorldSpawnPolicy`, `WorldStampPool` | **L** | Independent of 4/5 — runs in parallel. Before Creator because Creator consumes all three. |
+| 7 | ✅ | [Creator & Inhabitation](#arc-7--creator--inhabitation) | placement `inhabit` facet, `IntentSource.Attend`, creation camera/face derivation | **L** | Needs 4 (camera shape), 6 (looks, stamp pool, `RowFor`), soft 1 (an inhabited body wants collision). |
+| 8 | ⏳ | [RomForge](#arc-8--romforge) | `Cartridges` section, `WorldCartridgeSource` union, `ISm83GameSource`, frame-spread materializer | **XL** | Needs 5. Precedes 9 so the intro cart is a `WorldCartridgeSource.Game`. Phase P1 pulls forward beside Arc 3. |
+| 9 | ⏳ | [Reveal & Progression](#arc-9--reveal--progression) | `WorldProgression` milestones, machine ports, withheld grants, save slots | **L** | Needs 5, 4, 8. Depended on by nothing. |
+| 10 | ⏳ | [Bench & Scenarios](#arc-10--bench--scenarios) | `WorldScenario` section, one generic `IBenchSceneController`, lever registry derived from verbs | **L** | Independent after Arc 3. Soft dependency on 4 for the camera-track seam. |
+| 11 | ⏳ | [Nested Worlds](#arc-11--nested-worlds) | `NestedWorldView` reached from a world document — a second world server rendered into a screen; preserves `MuseumRenderer` and the Droste door as a capability | **UNKNOWN — pending survey** | Owner ruling, 2026-07-19 (OQ-2): nested worlds are carved into their own arc rather than approximated or deleted. Needs 4 (camera/anchor vocabulary, `WorldViewComposer`). Depended on by nothing. |
+| 12 | ⏳ | [Terminal teardown](#arc-12--terminal-teardown) | `git rm -r src/Puck.Demo`, `.sln`, `Puck.Scene` Demo-only surface, doc sweep | **S** | Terminal by definition. |
 
 ### Dependency graph
 
@@ -7446,16 +7508,23 @@ what changed; a future reader needs to know they were decided, not overlooked.
 | ~~Before Arc 4~~ | OQ-12 (re-encoding the three shipped worlds' cameras), OQ-2 (`MuseumRenderer`) | *was:* Arc 4's first commit | **RESOLVED 2026-07-19.** Re-encoding approved for all three worlds; nested worlds carved into **Arc 11** |
 | ~~Before Arc 8 P3~~ | R15 (the verbatim-move exemption) | *was:* Arc 8's size estimate | **RESOLVED 2026-07-19.** Granted **case by case, with written justification** — the estimate stands and P3/P4 need no re-scoping |
 
-The rest are not gates. **Measurement:** OQ-7 (render-envelope headroom, before
-Arc 6 and re-measured at 6 → 7 → 10) and **OQ-8 inside Arc 2** (measure the SDF
-contact cost there; do not pre-build the escape tier). **Cheap verification:**
-OQ-9's three seam checks, each at the start of the arc that owns them — Arc 8,
-Arc 5, Arc 7 (the Arc 8 one is a five-minute grep and should be done
-immediately). **Scheduled forcing points:** OQ-3 and OQ-14/OQ-17 at **Arc 3 Beat
-B** (the R17 survey), OQ-4 at **Arc 8's exit**, and OQ-6 at the **Arc 9 and Arc
-12 reviews**. **OQ-14 and OQ-17 are scheduled by ruling rather than by default** —
-the owner deliberately chose the scheduled-decision option on 2026-07-19, which
-raises rather than lowers the bar at Beat B (see OQ-14).
+The rest are not gates. **Measurement:** OQ-7 is **MEASURED** (Arc 6 read the boot
+probe — numbers below — and catalog looks reserve nothing; re-measure still owed at
+10) and **OQ-8** landed its mitigations inside Arc 2 (the SDF contact path is live)
+but its **cost is still unmeasured**, deferred to a 128-body measurement (below).
+**Cheap verification: OQ-9's three seams are all RESOLVED** at their arcs — Arc 5
+built the `QueuedMachineWorker.Reconfigure` FIFO seam, Arc 7 reserved the derived
+face-screen key set at construction, and Arc 8's `InternalsVisibleTo` check is the
+one still owed at P1 (a five-minute grep — see OQ-9). **Scheduled forcing points:**
+OQ-3 and OQ-14/OQ-17 at **Arc 3 Beat B** (the R17 survey — Beat B EXECUTED, but
+**OQ-14/OQ-17 were deliberately deferred forward** to the recorded owner sitting,
+still owed), OQ-4 at **Arc 8's exit**, and OQ-6 at the **Arc 9 and Arc 12 reviews**.
+**OQ-14 and OQ-17 are scheduled by ruling rather than by default** — the owner
+deliberately chose the scheduled-decision option on 2026-07-19, which raises rather
+than lowers the bar (see OQ-14). **OQ-13 and OQ-16 were resolved 2026-07-19 and
+their landings are recorded below** (OQ-13's `console` variant shipped as data with
+its live feed deferred; OQ-16's `--emit-schema` relocation to `tools/` is DONE in
+Beat A).
 
 **OQ-10 is closed** — its subject is now the [carried tracks](#carried-tracks)
 half of this document. **OQ-16 and OQ-17 were raised by that consolidation**;
@@ -7542,34 +7611,55 @@ literals whose *subject* has died, which constraint 6 permits — but deleting a
 stage is a larger act than deleting Demo code. **Surface both as explicit owner
 decisions at the Arc 9 and Arc 12 reviews.** Arc 9 names its fallback if overturned.
 
-**OQ-7 — render-envelope headroom, unmeasured.** Arcs 6, 7, and 10 each reserve
-construction-probe headroom (creation looks, inhabitants + derived face screens,
-scenario workload instances), and the **current headroom is undetermined.**
-`MaxWorkloadInstances`' built-in default may need to be 0 rather than 1024 if the
-floor is tight. **Measure before Arc 6 starts, and re-measure at each of 6 → 7 →
-10.** This is the sync-pair hazard the sdf-world skill warns about.
+**OQ-7 — render-envelope headroom. MEASURED at Arc 6; Arc 7 confirmed; Arc 10
+re-measure still owed.** Arcs 6, 7, and 10 each reserve construction-probe headroom
+(creation looks, inhabitants + derived face screens, scenario workload instances).
+**Arc 6 instrumented the boot probe on the default world: ProgramWordCapacity
+407 172, InstanceCapacity 2 241, DynamicTransformCapacity 2 237.** The catalog-look
+path adds **zero** to all three (scale is bound-radius/shape-size only; the pin is
+clamped to the entity's own slot range), so **no render-envelope headroom is
+reserved for catalog looks — none is needed**, and the uncapped creation-look path
+the envelope exists to forbid was not shipped. **Arc 7 confirmed the same for
+inhabitants and creation-look bodies:** `MaxStampRegistrations = 8` (4 animated + 4
+body-rooted headroom) sizes the stamp pool and the construction probe already emits
+every slot worst-case, so the frozen floor stayed honest with no new probe path.
+The derived-face slab is deferred precisely so it enters the program **with its own
+probe reservation** rather than uncapped. **Arc 10's scenario-workload measurement
+is still owed** (`MaxWorkloadInstances`' default may need to be 0 rather than 1024
+if the floor is tight). This is the sync-pair hazard the sdf-world skill warns about.
 
-**OQ-8 — Arc 2's SDF contact cost is unmeasured.** Worst case is 48 full SDF
-program walks per body per step, at up to 128 bodies and a 240 Hz sim step, against
-a program with no early-out, no spatial cull, and no Lipschitz reuse. The
-mitigations are real (only collider-bearing kits pay; the gradient tap fires only on
-actual penetration; the analytic provider is the default) and the escape hatch
-exists behind the same seam (`BakedWorldQuery` as a bounded-confidence tier) — **but
-measure before assuming, and do not pre-build the tier.**
+**OQ-8 — Arc 2's SDF contact cost: MITIGATIONS LANDED, COST STILL UNMEASURED.**
+Worst case is 48 full SDF program walks per body per step, at up to 128 bodies and a
+240 Hz sim step, against a program with no early-out, no spatial cull, and no
+Lipschitz reuse. **Arc 2 landed the mitigations it promised** — only
+collider-bearing kits pay, the gradient tap fires only on actual penetration (the
+`WorldSolidField.Resolve` depenetration path), and the analytic provider stays the
+default — and the escape hatch remains available behind the same seam
+(`BakedWorldQuery` as a bounded-confidence tier, deliberately **not** pre-built). But
+Arc 2 verified on a single authored planetoid world, **not at 128-body scale**, so
+the cost itself is still unmeasured. **Measure at scale before assuming the SDF path
+is the default at high body counts; do not pre-build the escape tier.**
 
-**OQ-9 — three unverified seams that could reshape their arcs.**
+**OQ-9 — three seams that could reshape their arcs. TWO RESOLVED (Arcs 5, 7); ONE
+still owed (Arc 8).**
 
-- **Arc 8, cheapest to check:** whether `Bake/BakeRasterizer.cs` or
-  `SceneForge.Render` reach `internal` `Puck.SdfVm` surface via an
+- **Arc 8, cheapest to check — STILL OWED at P1:** whether `Bake/BakeRasterizer.cs`
+  or `SceneForge.Render` reach `internal` `Puck.SdfVm` surface via an
   `InternalsVisibleTo` granted to `Puck.Demo`. If so, a read-only seam becomes a
-  real API-widening one. **A five-minute grep and a compile-only spike.**
-- **Arc 5:** whether `QueuedMachineWorker` exposes a drain/quiesce operation
-  (needed because `Machine.SwitchModel` must be called between steps and up to 8 may
-  be in flight). If absent, it is an additional `Puck.HumbleGamingBrick` seam and the
-  arc tips XL.
-- **Arc 7:** whether `WorldScreenBinder`'s per-index provider key set tolerates
-  indices appearing and disappearing at the delivery boundary, and whether any
-  recursion guard exists for a face showing a view of a camera that sees that face.
+  real API-widening one. **A five-minute grep and a compile-only spike**, and the
+  only OQ-9 seam not yet answered (Arc 8 is unstarted).
+- **Arc 5 — RESOLVED (see Arc 5 execution record).** `QueuedMachineWorker` had no
+  public drain/quiesce, but the established internal marshal-a-`WorkKind`-between-steps
+  pattern (`MemoryRequest`/`TimeTravelRequest`) was exactly what `TryReconfigure`
+  needed. A `WorkKind.Reconfigure` + `ReconfigureRequest` that FIFO-orders behind
+  accepted steps was BUILT (no explicit pre-drain needed). The arc tipped XL as the
+  seam predicted, but correctness was never in doubt.
+- **Arc 7 — RESOLVED (see Arc 7 execution record).** `WorldScreenBinder` **reserves
+  the derived face-screen key range at construction** (`[DerivedFaceBase=24,
+  +DerivedFaceScreens)`), so a face re-points a slot that already exists rather than
+  one appearing/disappearing at the delivery boundary. The recursion concern is moot
+  today: the derived-face slab is deferred, so a face wired to a derived camera reads
+  no-signal rather than rendering a view of a camera that sees that face.
 
 **OQ-10 — the independent workstreams this plan does not carry. CLOSED — they
 are now [carried tracks](#carried-tracks) in this document.**
@@ -7685,6 +7775,18 @@ diegetic half. Two options were on the table: **(a)** give Arc 5 a
   already has open (union case, `ValidateScreenSource`, the
   `ApplyDeclaredSource` dispatch), and the two feeds move as working code.
 
+*LANDED with a disposition (Arc 5 execution record, `bca1656`).* The
+`WorldScreenSource.Console(Rows, Columns, Procedural)` **union case, its validator
+(the at-most-one-live-console ceiling, `Rows [1,120]`/`Columns [1,400]`), and the
+grant path shipped as data.** The **live frame producer is deferred**
+(**(c)-disposition**): the 817-line `ConsoleFeed`/`ProceduralFeed` producer is
+GDI-atlas + `Puck.Text` + `Puck.Demo.DevConsole`-coupled and its proof is
+human-visual, so a declared `console` source currently renders the **procedural
+no-signal fallback** (honest, no crash — the same precedent Arc 6 set for
+creation-look rendering). `ConsoleFeed.cs`/`ProceduralFeed.cs` **remain in
+`src/Puck.Demo/Overworld/`**, pinned by that deferred port — Beat B's held-file
+count is unaffected because OQ-13 already moved them out of the survey.
+
 **OQ-14 — deterministic replay and tick introspection (Arc 3 Beat B, R17).** Nine
 files — `OverworldDeterminism.cs` (194), `OverworldReplayCapture.cs` (158),
 `OverworldRecording.cs` (99), `OverworldReplayStore.cs` (87),
@@ -7721,6 +7823,17 @@ here. **Forcing point: Arc 3 Beat B.**
 >   sitting. Deciding OQ-14 alone is exactly the accident OQ-17 exists to prevent.
 >
 > Deferral here is a scheduling choice, not a downgrade in the standard of proof.
+
+**STATUS: STILL OPEN — the single remaining pin for the (c)-disposition deletion
+ledger.** Arc 3 Beat B executed (`686d009`), but per the owner's ruling the OQ-14
+decision was **deliberately deferred forward** rather than taken during the survey.
+Every one of Arcs 1/2/4/6/7's declined Demo excisions ((c)-dispositions) is chained
+to the **OQ-14 survivors** (`OverworldWorld.cs`, `OverworldFrameSource*.cs`,
+`TownWorld.cs`) staying pinned: the nine replay/introspection files cannot be deleted
+and the carcasses that lean on them cannot be removed until this one owner sitting
+records its outcome (with OQ-17's introspection half). It does not block Arc 8, but
+it is the owed decision that unblocks the whole deletion trajectory. See the [State
+of execution](#state-of-execution) deferral ledger.
 
 **OQ-15 — does the owner ruling pin delivery order or execution order? (Arcs
 1–3.) RESOLVED 2026-07-19 — DELIVERY ORDER.**
@@ -7786,6 +7899,13 @@ so Beat A is the first thing that executes with nothing owed before it. Arc 3's
 risk 5 keeps only the `AddDemoPresentation` half. The destination is a `tools/`
 generator, **not** a `Puck.World` flag — constraint 7 and the no-`--flag` verb
 rule both still apply, and they are what makes `tools/` the only legal home.
+
+**STATUS: DONE (Beat A, `eea151e`).** `DemoRunRegistrar.EmitSchema` was extracted
+verbatim to `SchemaEmitter.cs`, and the schema generator now lives as the `schema`
+command in **`tools/Tools.cs`**, emitting `schema/run.schema.json` by calling the
+library directly (`Puck.Scene.RunDocumentSchema.Export()`) — the plain move, not the
+retarget the owner explicitly deferred. Pointing it at `puck.world.def.v1` remains
+separate, unscheduled work.
 
 <a id="oq-17"></a>
 **OQ-17 — three replay-shaped commitments, three different scopes, one shared
@@ -8022,8 +8142,12 @@ read these as decisions, not as leftovers:
 - `docs/machine-fleet-plan.md`, `docs/agb-sota-survey.md` — live emulator plans;
   Track D carries only their open rows.
 - `docs/overworld-demo-plan.md`, `docs/game-studio-plan.md` — **Arc 12's** to
-  retire and rewrite respectively, not this pass's. Retiring them before the Demo
-  is gone would orphan the still-running Demo.
+  retire and rewrite respectively, not this pass's; **carried now with a status
+  banner** (see the closeout adjudication below). The former reason here ("would
+  orphan the still-running Demo") is **stale**: the Demo stopped running at Beat B
+  (R0/OQ-11). The real reason to keep them is that unstarted arcs 8/9/11 still use
+  them as **port-reference**; the banner kills the run-the-Demo scar tissue without
+  deleting reference material those arcs need.
 - `docs/capability-catalog.md`, `docs/project-map.md`, `docs/agent-guide.md`,
   `docs/README.md`, everything under `docs/sdf-wiki/` and `docs/agb-wiki/`, and
   `src/Puck.Input/README.md` — **orientation and verdict docs.** They describe what
@@ -8031,6 +8155,25 @@ read these as decisions, not as leftovers:
   or rewrite them. The sdf-wiki verdict ledgers and negative-results pages are the
   load-bearing case: they exist precisely to stop work being redone.
 - All bare-metal documents, per the ruling above.
+
+### Closeout adjudication (2026-07-19 — zero-scar-tissue pass)
+
+The zero-scar-tissue closeout re-adjudicated the docs a resuming agent is most
+likely to trip over. **No doc was deleted this pass** — every candidate is either a
+living reference or port-reference for an unstarted arc — but four gained a status
+banner so nothing tells an agent to run a surface that no longer runs. Verdicts:
+
+| Doc | Verdict | Reason |
+|---|---|---|
+| `docs/overworld-demo-plan.md` | **KEEP + banner** | Describes the now-dead runnable Demo surface, but its unification-contract / reveal-ladder / cabinet / seam content is port-reference for unstarted arcs 5/7/9. Banner marks the Demo a library that does not run and voids the run-to-verify instruction; full retirement stays Arc 12's. |
+| `docs/game-studio-plan.md` | **KEEP + banner** | Living studio roadmap whose stated destination is already World; port-reference for arcs 7/8. Banner ties execution order to this plan; Arc 12 rewrites it. |
+| `docs/reviews/2026-07-18-demo-port-ledger.md` | **KEEP + banner** | Superseded **as an execution plan** by this document (OQ-16 already resolved its one contradiction in-plan). Survives as the Arc-12 orientation-doc-sweep checklist (the capability-catalog re-home mapping). Banner records the supersession. |
+| `docs/engine-bench-plan.md` | **KEEP + banner** | The `Puck.Bench` contract is current engine reference; only the "the demo registers the standard suite" line is stale. Banner notes Arc 10 ports the registration into World. |
+| `docs/carve-bake-plan.md` | **KEEP untouched** | Current SDF render-cache implementation contract; not port/demo. |
+| `docs/ideal-gaming-brick-plan.md` | **KEEP untouched** | Current cross-generation emulator architecture/accuracy contract (gaming-bricks skill territory). |
+| `docs/sdf-world-render-centralization-plan.md` | **KEEP untouched** | Current shared SDF render-assembly reference (sdf-world skill territory). |
+| `docs/sdf-sota-survey.md` | **KEEP untouched** | Current SDF-technique decision aid pointing at the sdf-wiki verdict ledgers and backlog. |
+| `docs/feature-parity-summary.md` | **KEEP untouched** | Current cross-backend parity summary pointing at `feature-parity-table.md`. |
 
 ## Track A — Engine lifetime (disposal)
 
@@ -8193,23 +8336,36 @@ grows a new consumer of the defect**, not after. Three further rows are
 adjacency-only — same file, no blocking order. All eighteen rows are classified
 in one list or the other below; none is left unsorted.
 
+**Sweep (2026-07-19 closeout).** Four rows landed as the leading commits of the
+arcs that grew a new consumer, exactly as the ordering rule required:
+**largechange-01 FIXED `006c84f`** (Arc 7), **largechange-06 FIXED `16ce575`** and
+**largechange-09 FIXED `da63bfe`** (Arc 6), and **largechange-15 PARTIAL `006c84f`**
+(mixer-side saturation landed; validator representable-radius bounds + occupancy
+servo still open). The findings ledger these route to
+([`2026-07-19-large-change-set-review.md`](reviews/2026-07-19-large-change-set-review.md),
+LSR-1/-6/-9/-15) is updated to match. **largechange-05 was NOT fixed** — Arc 2
+consumed the `Reach`-sized proxy sphere but did not touch the negative-scale bug, so
+it remains open against any future negatively-scaled consumer. All other Track C
+rows remain CONFIRMED-OPEN; no Track E or F row was closed by the port path (those
+are a different team's parallel work).
+
 | ID | Commitment | Target | Status | Size |
 |---|---|---|---|---|
-| largechange-01 | Validate the complete derived audio plan (emitters/sources/patches) at the compose boundary; reclaim retired registry slots; contain `TryAddEmitter` failure instead of silently dropping | `src/Puck.World/Audio/WorldAudioSnapshot.cs`, `WorldAudioMixer.cs` (verified: `MaxSources=16`, `MaxPatches=32`) | CONFIRMED-OPEN | M |
+| largechange-01 | Validate the complete derived audio plan (emitters/sources/patches) at the compose boundary; reclaim retired registry slots; contain `TryAddEmitter` failure instead of silently dropping | `src/Puck.World/Audio/WorldAudioSnapshot.cs`, `WorldAudioMixer.cs` (verified: `MaxSources=16`, `MaxPatches=32`) | **FIXED `006c84f`** (Arc 7 leading commit — `RegisterPatch`/`SetSource` contain full-table overflow with a loud drop + `DroppedRegistrationCount`; `RetirePatches` reclaims left-plan slots; director validates the derived plan against mixer caps) | M |
 | largechange-02 | Make WASAPI init/stop/disposal cancellable, join-aware, and `SafeHandle`-backed; fix the use-after-close and partial-init leak risk | `src/Puck.Platform/Windows/Audio/WasapiAudioRenderDevice.cs`, `src/Puck.World/Audio/WorldAudioRenderService.cs` | CONFIRMED-OPEN | M |
 | largechange-03 | Validate the real tune-compiler grammar (note vocabulary, tempo range, envelope byte bounds, effect voices, null members, compiled size) **before hash-pinning**; contain compile/capacity exceptions at runtime attachment | `src/Puck.Authoring/AudioDocument.cs` (`AudioCanonicalizer.Validate`), `WorldAudioDirector.CreateTuneHost` | CONFIRMED-OPEN | M |
 | largechange-04 | `HOLD` must carry forward the previous register/period state, not write zero/mute; only `OFF` should mute | `src/Puck.Forge/AudioDocumentCompiler.cs` | CONFIRMED-OPEN | S |
 | largechange-05 | Unify scale to one positive/bounded domain across editor, bounds (`Reach`), and SDF emission; strengthen chain (≥2 unique members, finite solver inputs) and frame (non-zero quaternion, frame-scale parity) invariants at canonicalization | `src/Puck.Authoring/CreationGeometry.cs` (`Reach`) | CONFIRMED-OPEN | M |
-| largechange-06 | Compose **all** active workbenches into render-envelope admission, not only the one opening; add a non-throwing capacity-refusal path on the final composed program | `src/Puck.World/Client/WorldWorkbench.cs` (`TryEnter`), `WorldFrameSource.cs` | CONFIRMED-OPEN | M |
+| largechange-06 | Compose **all** active workbenches into render-envelope admission, not only the one opening; add a non-throwing capacity-refusal path on the final composed program | `src/Puck.World/Client/WorldWorkbench.cs` (`TryEnter`), `WorldFrameSource.cs` | **FIXED `16ce575`** (Arc 6 leading commit — `ComposeCandidate` charges every active bench at admission, so the frozen floor honestly bounds the composed program and no `Build` overflow is reachable; the refusal clause is subsumed) | M |
 | largechange-07 | Advance sculpt commit's clean baseline only on **server-confirmed apply**, not on enqueue; correlate rejection back to the commit path | `src/Puck.World/EditorSculptCommandModule.cs`, `WorldWorkbench.NoteCommitted` | CONFIRMED-OPEN | S |
 | largechange-08 | `editor.exit` must refuse, confirm, commit, or narrate discard of dirty sculpt work instead of silently discarding it (coordinate with largechange-07) | `src/Puck.World/Client/WorldEditorSession.cs` | CONFIRMED-OPEN | S |
-| largechange-09 | Bound speaker/gizmo admission — cull by distance/density policy, assign a per-seat gizmo budget, or reserve editor-HUD capacity before lower-priority decoration in the 192-record overlay table | `src/Puck.World/Client/WorldFrameSource.cs` (`ComposeGizmoSeat`), `src/Puck.Overlays/EditorGizmoWriter.cs` | CONFIRMED-OPEN | M |
+| largechange-09 | Bound speaker/gizmo admission — cull by distance/density policy, assign a per-seat gizmo budget, or reserve editor-HUD capacity before lower-priority decoration in the 192-record overlay table | `src/Puck.World/Client/WorldFrameSource.cs` (`ComposeGizmoSeat`), `src/Puck.Overlays/EditorGizmoWriter.cs` | **FIXED `da63bfe`** (Arc 6 leading commit — a per-seat `MaxGizmoChipsPerSeat = 16` budget, nearest-to-camera kept, so gizmo admission is a bounded documented fraction of the table) | M |
 | largechange-10 | Complete the exclusive edit acquire/deny/release lifecycle on selection and workbench entry+exit; add base-hash conflict checking before commit | `src/Puck.World` (selection/workbench modules; server grant path) | CONFIRMED-OPEN | M |
 | largechange-11 | Forward matching apply echoes to drag/workbench channels **by operation identity**, so a same-drain overwrite cannot leave a stale frozen preview | `src/Puck.World` server FIFO-drain path | CONFIRMED-OPEN | S |
 | largechange-12 | Reject reserved `workbench:<seat>` id prefixes at every authoring/import boundary — or stop expressing preview identity as an author-reachable document id | `src/Puck.World` creation validation/import/sculpt verbs; `WorldPlacementStamper.FindCreation` | CONFIRMED-OPEN | S |
 | largechange-13 | Open a real clip scope per binding-bar seat (dedupe identical seat rects across writers, or resize the 8-entry clip table for the real writer set); cap modifier/command label length | `src/Puck.Overlays/BindingBarWriter.cs` | CONFIRMED-OPEN | S |
 | largechange-14 | Make glyph-pack generation an explicit **bake step** with a read-only currentness gate (compare committed header hashes to PNG/JSON, fail with the bake command) instead of runtime-repairing and rewriting source assets | `src/Puck.Overlays/OverlayGlyphAtlasSet.cs` (`LoadOverlayPack`) | CONFIRMED-OPEN | S |
-| largechange-15 | Validate audio radius/fade values against runtime representable bounds; do squared-distance and frame-conversion math in `Int128`/saturating (overflow above ~46 340 units); add a queued-machine ring-occupancy watermark/servo seam | `src/Puck.World/Audio/WorldAudioMixer.cs`; `IAudioMachine`/`MachineBlockSource` | CONFIRMED-OPEN | M |
+| largechange-15 | Validate audio radius/fade values against runtime representable bounds; do squared-distance and frame-conversion math in `Int128`/saturating (overflow above ~46 340 units); add a queued-machine ring-occupancy watermark/servo seam | `src/Puck.World/Audio/WorldAudioMixer.cs`; `IAudioMachine`/`MachineBlockSource` | **PARTIAL `006c84f`** (Arc 7 leading commit — per-emitter radius squares now saturate through `Int128`/`SaturatingSquareQ16`, closing the ~46 340-unit overflow; **STILL OPEN:** the validator-side representable-radius bounds and the queued-machine occupancy watermark/servo seam) | M |
 | largechange-16 | Stop stamping schema during save (strict save = strict load); keep the neutral serializer internal; freeze `DocumentJsonOptions.Shared` eagerly; make `CanonicalDocument<T>.Bytes` and extension dictionaries immutable; recursively canonicalize extension JSON property order | `src/Puck.Authoring`/`src/Puck.World` canonical-identity primitives — **paths not verified, class-named only** | CONFIRMED-OPEN | M |
 | largechange-17 | Fix `PbakBundle.ReadChunks`' integer-overflow bounds-check bypass (`offset + (int)byteLength`) and require full input consumption; enforce the documented ≥1 minimum on `EmitBlockCopy`/`EmitBlockFill` block counts | `src/Puck.Forge/Framework/PbakBundle.cs`, `FrameworkKernel.cs` | CONFIRMED-OPEN | S |
 | largechange-18 | Add an independent-oracle Forge verifier that does not share `TuneProtocol` constants with the code it verifies and observes real cartridge output; split `Puck.Authoring`'s public `SdfProgramBuilder` exposure (via `CreationGeometry`) away from audio-only `Puck.Forge`; update `game-studio-plan.md`'s stale "framework is under Demo" claim | `src/Puck.Forge` `TuneVerify` (**path not verified**), `src/Puck.Authoring/CreationGeometry.cs`, `docs/game-studio-plan.md` | CONFIRMED-OPEN | M |

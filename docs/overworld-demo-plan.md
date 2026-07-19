@@ -1,5 +1,16 @@
 # Puck.Demo overworld
 
+> **STATUS (2026-07-19): PORT-REFERENCE — the Demo no longer runs.** `Puck.Demo`
+> was flipped to a **library** at Beat B of the
+> [Demo → World port](demo-to-world-port-plan.md) (R0/OQ-11): its composition root
+> is deleted and the default run is gone. **The "verify by running the demo"
+> instruction below is void** — the port's verification target is `Puck.World`
+> (`dotnet run --project src/Puck.World`). This document is retained only as
+> **port-reference** for the unstarted arcs that carry its experience into World —
+> the unification contract and reveal ladder (Arc 9), cabinets/console screen
+> (Arc 5), creator/inhabitation (Arc 7). It is retired and its residue re-homed at
+> **Arc 12**. Read the running contract as historical intent, not current behavior.
+
 `Puck.Demo` is a greenfield game and composition root. Its default run is one
 continuous arcade-room experience with bootable cabinets, live screen content,
 authoring tools, and a console control plane. Verify demo behavior by running

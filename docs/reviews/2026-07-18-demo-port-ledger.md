@@ -1,5 +1,15 @@
 # Demo-dependency ledger (docs) — 2026-07-18
 
+> **STATUS (2026-07-19): SUPERSEDED as an execution plan by the
+> [Demo → World port](../demo-to-world-port-plan.md).** That twelve-arc plan now
+> carries the port itself, and its OQ-16 ruling already resolved this ledger's one
+> live contradiction (the `--emit-schema` re-home, in the ledger's favor). This
+> document survives as the **Arc-12 orientation-doc-sweep checklist**: the
+> row-by-row mapping below of each capability-catalog / project-map / agent-guide /
+> `docs/README` claim to its World (or library) re-home is exactly the sweep Arc 12
+> performs when `src/Puck.Demo` is deleted. It is a checklist, not a plan — no work
+> is scheduled here.
+
 Owner trajectory: `Puck.Demo`'s work is being steadily refactored/ported into
 `Puck.World` (or library projects) and the Demo will eventually be fully
 removed. This ledger records, for the **living reference docs** (not the Demo's

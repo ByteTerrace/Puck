@@ -97,6 +97,13 @@ be fixed at the shared boundary rather than papered over in an individual caller
 
 ### LSR-1 — Runtime audio ceilings are outside the document contract
 
+**Status: FIXED — `006c84f` (Arc 7 leading commit, `claude/puck-realtime-world-editing-4fd13f`).**
+`WorldAudioMixer.RegisterPatch`/`SetSource` now contain a full-table overflow (a loud
+stderr drop + `DroppedRegistrationCount`) instead of throwing; `RetirePatches`
+reclaims patch slots whose id left the derived plan; and the director validates the
+whole derived plan's patch/source counts against the mixer caps at the compose
+boundary. Carried in the port plan as `largechange-01`.
+
 [`WorldAudioSnapshot`](../../src/Puck.World/Audio/WorldAudioSnapshot.cs) holds 32
 emitters, with four slots reserved for transient cues. The director nevertheless
 derives every speaker, emission facet, and creation sound. It only writes a console
@@ -210,6 +217,11 @@ adopt sparse-frame semantics and implement them identically in preview and playb
 
 ### LSR-6 — Concurrent benches bypass the render-envelope admission check
 
+**Status: FIXED — `16ce575` (Arc 6 leading commit).** `ComposeCandidate` folds every
+currently-active bench onto the admission candidate, so the frozen floor honestly
+bounds the composed program and no `Build` overflow is reachable (the non-throwing
+capacity-refusal clause is subsumed). Carried as `largechange-06`.
+
 [`WorldWorkbench.TryEnter`](../../src/Puck.World/Client/WorldWorkbench.cs) measures
 the delivered definition, current drag ghosts, and only the bench being opened. It
 does not include benches already open for other seats. `ComposeCreations` and
@@ -252,6 +264,11 @@ how many edits were discarded. This must be coordinated with LSR-7 so a submitte
 but unacknowledged commit is not mistaken for clean state.
 
 ### LSR-9 — Speaker gizmos can starve the primary editor HUD
+
+**Status: FIXED — `da63bfe` (Arc 6 leading commit).** `ComposeGizmoSeat` now carries a
+per-seat `MaxGizmoChipsPerSeat = 16` budget, nearest-to-camera kept (farthest evicted
+in place), so gizmo admission is a bounded, documented fraction of the 192-record
+table. Carried as `largechange-09`.
 
 The overlay record table has 192 elements. Speaker count has no document ceiling,
 and `WorldFrameSource.ComposeGizmoSeat` projects every composed speaker for every
@@ -335,6 +352,12 @@ Runtime fallback may use a disposable/cache directory, but proofs should never
 repair their own source evidence.
 
 ### LSR-15 — Audio representability and source-clock policy are incomplete
+
+**Status: PARTIAL — `006c84f` (Arc 7 leading commit).** The per-emitter radius squares
+now saturate through `Int128` (`SaturatingSquareQ16`), closing the ~46 340-unit
+overflow. **Still open:** the validator-side representable-radius bounds (a clean
+follow-up) and the queued-machine ring-occupancy watermark/servo seam. Carried as
+`largechange-15`.
 
 The mixer uses `Int128` for position-distance math but squares Q16 radii in `long`.
 An otherwise valid radius above roughly 46,340 world units overflows and commonly
