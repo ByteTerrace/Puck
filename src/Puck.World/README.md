@@ -1303,6 +1303,61 @@ Start / Back→Select; the growth point is the `PlayerIntent` action-lane vocabu
 (only the Jump lane fills a button today — new lanes light up the rest in
 `WorldEngagement.Translate`, not a per-button verb).
 
+## Audio (the mixer core — spatial audio arc AP1)
+
+`Audio/` holds the pure mixing core the spatial audio arc builds on
+(`docs/reviews/2026-07-18-world-audio-arc-plan.md`); the world data model (AP2)
+and the WASAPI device (AP3) land on top of it without reshaping.
+
+**The rate.** 48000 Hz, fixed (plan A1): device-native, exactly **200 frames
+per 240 Hz sim step** (`WorldAudioMixer.FramesPerSimStep`), 21/20 engine ticks
+per audio frame. Machines configure to 48000 directly — the only resampler in
+the machine path is the core's own exact-rational one.
+
+**The mix law** (`WorldAudioMixer.MixBlock`) is fixed-point end to end:
+s16 samples × Q16 composite gains → int32 accumulate → a deterministic
+polynomial soft-clip → s16. Per block, each emitter derives TARGET
+coefficients from the `WorldAudioSnapshot` — finite-support squared-smoothstep
+attenuation (smoothstep over the SQUARED-distance ratio between
+`MinRadius²`/`MaxRadius²`: no square root, and the support's zero IS the
+cull — a fully-silent emitter is bit-identical to an absent one and its source
+is never pulled), equal-power pan from listener-relative azimuth (one
+`FixedQ4816.SinCos` per point emitter; beds center-pan with a
+`FadeFrames`-bounded presence slew) — and the LIVE coefficients ramp linearly
+across the block from the previous block's values (the zipper-noise killer;
+ramp state keys on stable emitter ids). Sources are shared identities: each
+distinct `WorldAudioSourceKey` is pulled ONCE per block through the
+`IAudioBlockSource` seam and every feed taps the scratch (`left|right|mix`) —
+a stereo pair is two rows sharing one source. The soft-clip is the smooth-knee
+cubic `y = H + G·(1 − (1 − t)³)`: bit-transparent to `H = 24575` (0.75 FS),
+C¹-saturating over `t = (|s| − H)/24576` into the `32767` ceiling at 1.5 FS —
+never a libm call.
+
+**The synth** (`WorldVoiceSynth`, plan A9): 32 fixed-struct voices, zero
+steady-state alloc — sine as a `FixedComplex` rotor, Q32 phase-accumulator
+pulse/saw/triangle, seeded `Pcg32XshRr` noise with a one-pole tilt, ADSR in
+sample units, control-rate (64-sample) pitch sweep + triangle vibrato, one
+Chamberlin SVF per voice. Triggers ride snapshots with strictly increasing
+sequence numbers (once-only under snapshot hold); allocation steals the
+QUIETEST voice, oldest on ties. Patches arrive as post-`Normalize`
+`puck.synth.v1` documents, flattened once at registration
+(`WorldVoicePatch.FromDocument`).
+
+**The two-driver contract** (plan A12): `MixBlock` is synchronous and owns no
+thread. The offline proof (`scripts/audio-mix.cs`) and the future device pump
+are two drivers of the same code — the proof drives tune audio through a
+SYNCHRONOUS headless Humble core (never `QueuedMachineWorker`), steps the
+scripted pose table at the sim cadence, and SHA-256-hashes the raw s16 PCM.
+
+**The golden-hash doctrine.** The proof's printed PCM hash is
+self-referential: it proves the whole path is deterministic (two full fresh
+runs must agree bit for bit), never that history is preserved — a deliberate
+mix-law correction is EXPECTED to change it; re-run and take the new value.
+Verify with `dotnet run src/Puck.World/scripts/audio-mix.cs` (the hash proof
+plus structural batteries: pan geometry, the cull contract, single-pull,
+soft-clip exactness, ramp bounds, seeded-synth reproducibility, voice steal,
+SVF, bed fade).
+
 ## Engine boundaries worth knowing
 
 - **16384 instances**: mask-first cull measured at the cap; mask memory ~41 MB
