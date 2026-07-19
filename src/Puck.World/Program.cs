@@ -13,11 +13,13 @@ using Puck.Input;
 using Puck.Launcher;
 using Puck.Overlays;
 using Puck.Platform;
+using Puck.Platform.Audio;
 using Puck.Platform.Windows;
 using Puck.Platform.Windows.Gamepad;
 using Puck.Platform.Windows.Hid;
 using Puck.SdfVm;
 using Puck.World;
+using Puck.World.Audio;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -237,12 +239,21 @@ services.AddSingleton<ICommandModule, EditorCreationCommandModule>();
 services.AddSingleton(implementationInstance: new WorldPlacementAnimator(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
 
 // The audio director (AP2): derives the emitter table from the delivered definition, resolves poses per produced
-// frame (the frame source calls it inside CaptureFrame), and publishes WorldAudioSnapshots for AP3's device pump.
+// frame (the frame source calls it inside CaptureFrame), and publishes WorldAudioSnapshots for the device pump.
 // Registered as its own singleton so the audio verb surface (audio.emitters) reads the same instance.
 services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
     client: sp.GetRequiredService<WorldClient>(),
     animator: sp.GetRequiredService<WorldPlacementAnimator>()
 ));
+// The world speaker device (AP3): the hosted service owning the mixer + the WASAPI governor/pump threads.
+// Deterministic StopAsync ordering (the GamepadHostedService template — never a bare DI-teardown singleton); a
+// platform without a render backend gets a null factory and the service parks as 'unsupported'. Registered as its
+// own singleton FIRST so the audio verb surface (audio.state) reads the same instance the host runs.
+services.AddSingleton(implementationFactory: static sp => new WorldAudioRenderService(
+    director: sp.GetRequiredService<WorldAudioDirector>(),
+    factory: AudioRenderPlatform.CreateFactory()
+));
+services.AddHostedService(implementationFactory: static sp => sp.GetRequiredService<WorldAudioRenderService>());
 
 // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
 // activates — the one body system the snapshot reports (up to 128 avatars: the scale target).

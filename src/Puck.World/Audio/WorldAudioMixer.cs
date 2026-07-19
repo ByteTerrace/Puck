@@ -115,6 +115,26 @@ public sealed class WorldAudioMixer {
     /// by AP2's <c>speaker.state</c>.</summary>
     public int DroppedTriggerCount { get; private set; }
 
+    /// <summary>Gets the running peak |output sample| since construction — the <c>audio.state</c> meter. Monotone
+    /// by design: a nonzero value is durable proof the mix has produced signal (the live smoke's assertion), and a
+    /// zero proves every block so far was silent.</summary>
+    public int OutputPeak { get; private set; }
+
+    /// <summary>Gets the count of source identities currently bound to a live block source.</summary>
+    public int BoundSourceCount {
+        get {
+            var count = 0;
+
+            for (var i = 0; (i < m_sourceCount); i++) {
+                if (m_sources[i] is not null) {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
+
     /// <summary>Registers (or replaces) a synth patch under an id.</summary>
     /// <param name="id">The patch id trigger events reference.</param>
     /// <param name="patch">The runtime parameter block.</param>
@@ -249,11 +269,19 @@ public sealed class WorldAudioMixer {
             m_rowPreviousRight[rowOf[e]] = targetRight[e];
         }
 
-        // Output: the deterministic soft-clip, then interleave.
+        // Output: the deterministic soft-clip, then interleave (feeding the running peak meter on the way out).
+        var peak = OutputPeak;
+
         for (var n = 0; (n < frames); n++) {
-            stereoInterleaved[(2 * n)] = SoftClip(sample: accumulateLeft[n]);
-            stereoInterleaved[((2 * n) + 1)] = SoftClip(sample: accumulateRight[n]);
+            var left = SoftClip(sample: accumulateLeft[n]);
+            var right = SoftClip(sample: accumulateRight[n]);
+
+            stereoInterleaved[(2 * n)] = left;
+            stereoInterleaved[((2 * n) + 1)] = right;
+            peak = Math.Max(val1: peak, val2: Math.Max(val1: Math.Abs(value: (int)left), val2: Math.Abs(value: (int)right)));
         }
+
+        OutputPeak = peak;
     }
 
     /// <summary>The soft-clip transfer curve, exposed for the proof's structural assertions.</summary>

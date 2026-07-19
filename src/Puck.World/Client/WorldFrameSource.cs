@@ -116,6 +116,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: audio);
 
         m_audio = audio;
+        // The machine-source resolver (audio plan A4/AP3): the director diffs the binder's LIVE machines by
+        // reference each produced frame, so a boot/eject/live-swap rebinds the mixer source and a machine booting
+        // late into a referenced slot self-heals. Wired here — the produce path's composition point — and only ever
+        // invoked from the director's pump-thread Publish.
+        audio.MachineSourceResolver = binder.AudioMachine;
         m_frameRate = frameRate;
         m_client = client;
         m_roster = client.Roster;

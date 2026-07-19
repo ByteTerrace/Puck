@@ -19,7 +19,7 @@ namespace Puck.World;
 /// <remarks>JSON arguments must be a single whitespace-free token (compact JSON) — the console tokenizer rule the
 /// mutation module documents. Mutation verbs route <see cref="CommandRouting.Simulation"/> (the stdin barrier makes a
 /// following listing read the settled state); the listings are queries.</remarks>
-internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink link, WorldAudioDirector director) : ICommandModule {
+internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink link, WorldAudioDirector director, Audio.WorldAudioRenderService device) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Row(
@@ -86,6 +86,12 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             echoesData: true
         );
         yield return CommandDefinition.WithWireArgs(
+            name: "audio.state",
+            description: "Echoes the live speaker-device state (AP3 — the runtime half AP4's speaker.state joins): device token (playing|silent|rebinding|unsupported|stopped), last fault, frames delivered across device generations, rebind attempts, fill faults, bound mixer sources, live synth voices, the running output peak (monotone — nonzero proves the mix has produced signal), dropped triggers, and derived emitters. A query — always echoes.",
+            handler: StateHandler,
+            echoesData: true
+        );
+        yield return CommandDefinition.WithWireArgs(
             name: "audio.emitters",
             description: "Dumps the derived audio emitter table, one segment each — stable id, key (speaker:<name>|scene:<id>|placement:<id>|sound:<placement>:<name>), kind, source token, channel, gain, and support radii. Deterministic document-derived facts (never live poses), so a piped proof asserts the derivation. A query — always echoes.",
             handler: (context, args) => ((args.Count != 0)
@@ -93,6 +99,24 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
                 : new CommandResult(Output: director.DescribeEmitters())),
             echoesData: true
         );
+    }
+
+    // The audio.state echo: device lifecycle facts off the render service (its own counters are cross-thread-safe
+    // reads), mixer meters off the service-owned mixer, and the derived-emitter count off the director. The fault
+    // detail is a free-form tail so its spaces never split the machine-read fields before it.
+    private CommandResult StateHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 0) {
+            return new CommandResult(Output: "[audio.state: no arguments — echoes the live speaker-device state]") {
+                IsError = true,
+            };
+        }
+
+        var mixer = device.Mixer;
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[audio.state: device={device.StateToken} frames={device.FramesDelivered} rebinds={device.RebindAttempts} fillFaults={device.FillFaults} sources={mixer.BoundSourceCount} voices={mixer.Synth.ActiveVoiceCount} peak={mixer.OutputPeak} droppedTriggers={mixer.DroppedTriggerCount} emitters={director.EmitterCount} fault={device.Fault ?? "none"}]"
+        ));
     }
 
     // The world.speakers listing: one segment per declared row off the LIVE definition, so a speaker mutation's new
