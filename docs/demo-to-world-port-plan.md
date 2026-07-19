@@ -11,9 +11,10 @@ instead. An arc whose diff is a namespace change has failed.
 
 ## State of execution
 
-**Branch `claude/puck-realtime-world-editing-4fd13f`, tip `2020d00`. Nothing is
-merged to `main`.** The execution records under each arc are the binding record;
-this block is the index.
+**Branch `claude/puck-realtime-world-editing-4fd13f`; the path completed at
+`2020d00`, with closeout/doc commits on top — `git log` is authoritative for the
+tip. Nothing is merged to `main`.** The execution records under each arc are the
+binding record; this block is the index.
 
 **DONE (7 arcs, in execution order):**
 
