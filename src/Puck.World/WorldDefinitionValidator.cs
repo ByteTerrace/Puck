@@ -98,9 +98,15 @@ internal static class WorldDefinitionValidator {
 
         ValidateAuthoring(authoring: authoring, errors: errors);
 
+        // The contact-solver tuning (SIM-AFFECTING): absent-in-JSON coalesces to WorldCollision.None (collision off,
+        // the plan-wide new-section idiom), so every downstream solidity read sees a concrete provider.
+        var collision = (definition.Collision ?? WorldCollision.None);
+
+        ValidateCollision(collision: collision, errors: errors);
+
         var creationIds = ValidateCreations(creations: definition.Creations, errors: errors);
 
-        var placementIds = ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, patchIds: patchIds, errors: errors);
+        var placementIds = ValidatePlacements(placements: definition.Placements, creations: definition.Creations, creationIds: creationIds, authoring: authoring, patchIds: patchIds, provider: collision.Provider, errors: errors);
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -232,6 +238,13 @@ internal static class WorldDefinitionValidator {
                         errors.Add(item: $"{path}.source.view references undeclared camera '{view.CameraName}'.");
 
                         break;
+                }
+
+                // The screen's solidity facet — a box collider from the slab's frame + margin (R3). The effective
+                // per-axis extent must stay positive (a margin that inverts the box is rejected by name).
+                if (screen.Solid is { } screenSolid) {
+                    RequireFinite(value: screenSolid.Margin, name: $"{path}.solid.margin", errors: errors);
+                    RequirePositiveEffectiveExtent(halfExtents: new Vector3(x: screen.HalfWidth, y: screen.HalfHeight, z: screen.HalfDepth), margin: screenSolid.Margin, path: $"{path}.solid.margin", errors: errors);
                 }
             }
         }
@@ -630,6 +643,16 @@ internal static class WorldDefinitionValidator {
                     RequirePositive(value: boulder.Radius, name: $"{path}.radius", errors: errors);
                     RequireNonNegative(value: boulder.Smooth, name: $"{path}.smooth", errors: errors);
 
+                    // The solidity facet's effective-extent check: a margin that inverts the sphere is rejected by name,
+                    // not turned into a negative-radius collider.
+                    if (boulder.Solid is { } boulderSolid) {
+                        RequireFinite(value: boulderSolid.Margin, name: $"{path}.solid.margin", errors: errors);
+
+                        if (float.IsFinite(f: boulder.Radius) && float.IsFinite(f: boulderSolid.Margin) && ((boulder.Radius + boulderSolid.Margin) <= 0f)) {
+                            errors.Add(item: $"{path}.solid.margin {boulderSolid.Margin} inverts the collider (radius + margin must be > 0).");
+                        }
+                    }
+
                     break;
                 case WorldSceneRow.Slab slab:
                     RequirePositive(value: slab.HalfExtents.X, name: $"{path}.halfExtents.x", errors: errors);
@@ -640,6 +663,11 @@ internal static class WorldDefinitionValidator {
 
                     if (!IsFinite(value: slab.Albedo)) {
                         errors.Add(item: $"{path}.albedo must contain finite components.");
+                    }
+
+                    if (slab.Solid is { } slabSolid) {
+                        RequireFinite(value: slabSolid.Margin, name: $"{path}.solid.margin", errors: errors);
+                        RequirePositiveEffectiveExtent(halfExtents: slab.HalfExtents, margin: slabSolid.Margin, path: $"{path}.solid.margin", errors: errors);
                     }
 
                     break;
@@ -716,6 +744,7 @@ internal static class WorldDefinitionValidator {
             ValidateWanderFlavor(flavor: kit.Flavor, path: $"{path}.flavor", errors: errors);
             ValidateActionSpec(spec: kit.PrimaryAction, path: $"{path}.primaryAction", errors: errors);
             ValidateActionSpec(spec: kit.SecondaryAction, path: $"{path}.secondaryAction", errors: errors);
+            ValidateCollider(collider: kit.Collider, path: $"{path}.collider", errors: errors);
         }
 
         if (!kitNames.Contains(item: definition.DefaultSeatKit)) {
@@ -906,7 +935,7 @@ internal static class WorldDefinitionValidator {
     // scale envelope, the repeat facet's positive counts / finite spacings, the mirror token, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
-    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, HashSet<string> patchIds, List<string> errors) {
+    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, HashSet<string> creationIds, WorldAuthoringDefaults authoring, HashSet<string> patchIds, WorldContactProvider provider, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (placements is null) {
@@ -965,6 +994,17 @@ internal static class WorldDefinitionValidator {
             // The emission facet binds to the placement ROOT under a repeat (documented on WorldPlacement) — no
             // per-copy constraint to gate; only patch resolution and the shared gain/radius bounds.
             ValidateEmission(emission: placement.Emission, patchIds: patchIds, path: $"{path}.emission", errors: errors);
+
+            // The R3 provider-coverage rule: a creation stamp has no honest convex proxy the document alone can derive,
+            // so a solid placement needs the FIELD provider (Arc 2). Under analytic it is a loud error by name rather
+            // than a silently-inert facet. Arc 2 deletes this rejection when it lands the provider that can answer.
+            if (placement.Solid is { } placementSolid) {
+                RequireFinite(value: placementSolid.Margin, name: $"{path}.solid.margin", errors: errors);
+
+                if (provider == WorldContactProvider.Analytic) {
+                    errors.Add(item: $"{path}.solid needs the field contact provider; set collision.provider to 'field' or drop the facet.");
+                }
+            }
 
             // The animated-row constraints: a placement of a framed creation replays through the reserved dynamic
             // pool — single copy only (repeat/mirror are static-stamp facets), and at most the reserved pool count.
@@ -1095,6 +1135,108 @@ internal static class WorldDefinitionValidator {
         RequireNonNegative(value: tuning.JumpCutMultiplier, name: $"{path}.jumpCutMultiplier", errors: errors);
         RequireNonNegative(value: tuning.CoyoteTime, name: $"{path}.coyoteTime", errors: errors);
         RequireNonNegative(value: tuning.JumpBufferTime, name: $"{path}.jumpBufferTime", errors: errors);
+        ValidateResponse(response: tuning.Response, path: $"{path}.response", errors: errors);
+    }
+
+    // A kit/motion velocity-response table (SIM-AFFECTING): each row's engage/release rates must be positive (a zero
+    // rate never converges — a stuck body, not a feel), each gate is a body-fact-only predicate (the lane-scoped
+    // CooldownElapsed/UsesBelow kinds are rejected by name), and a null (always) gate before the final row makes every
+    // later row unreachable.
+    private static void ValidateResponse(IReadOnlyList<MotionResponse>? response, string path, List<string> errors) {
+        if (response is null) {
+            return;
+        }
+
+        for (var index = 0; (index < response.Count); index++) {
+            var row = response[index];
+            var rowPath = $"{path}[{index}]";
+
+            if (row is null) {
+                errors.Add(item: $"{rowPath} is required.");
+
+                continue;
+            }
+
+            RequirePositive(value: row.EngageRate, name: $"{rowPath}.engageRate", errors: errors);
+            RequirePositive(value: row.ReleaseRate, name: $"{rowPath}.releaseRate", errors: errors);
+            ValidateMotionGate(predicate: row.Gate, path: $"{rowPath}.gate", errors: errors);
+
+            if ((row.Gate is null) && (index < (response.Count - 1))) {
+                errors.Add(item: $"{rowPath}.gate is the always-row (null) but is not last — every later row is unreachable.");
+            }
+        }
+    }
+
+    // A motion-response gate: the body-fact predicate vocabulary ONLY. Now/Recently/All are accepted; the lane-scoped
+    // CooldownElapsed/UsesBelow kinds are rejected by name ("lane-scoped predicates apply only to action lanes"); an
+    // unknown kind is loud. Mirrors ValidatePredicate's structure but narrows the admissible set.
+    private static void ValidateMotionGate(ActionPredicate? predicate, string path, List<string> errors) {
+        switch (predicate) {
+            case null:
+                break;
+            case ActionPredicate.Now now when !Enum.IsDefined(value: now.Fact):
+                errors.Add(item: $"{path}.fact '{now.Fact}' is not a defined ActionFact.");
+                break;
+            case ActionPredicate.Now:
+                break;
+            case ActionPredicate.Recently recently:
+                if (!Enum.IsDefined(value: recently.Fact)) {
+                    errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
+                }
+
+                if (!float.IsFinite(f: recently.WindowSeconds) || (recently.WindowSeconds <= 0f)) {
+                    errors.Add(item: $"{path}.windowSeconds must be finite and greater than 0.");
+                }
+
+                break;
+            case ActionPredicate.All all:
+                if (all.Predicates is not { Count: > 0 } inner) {
+                    errors.Add(item: $"{path}.all must contain at least one predicate.");
+
+                    break;
+                }
+
+                for (var index = 0; (index < inner.Count); index++) {
+                    ValidateMotionGate(predicate: inner[index], path: $"{path}.all[{index}]", errors: errors);
+                }
+
+                break;
+            case ActionPredicate.CooldownElapsed:
+            case ActionPredicate.UsesBelow:
+                errors.Add(item: $"{path} is a lane-scoped predicate ('{PredicateKind(predicate: predicate)}') — lane-scoped predicates apply only to action lanes, not a motion response gate.");
+                break;
+            default:
+                errors.Add(item: $"{path} is an unknown predicate kind.");
+                break;
+        }
+    }
+
+    private static string PredicateKind(ActionPredicate predicate) => predicate switch {
+        ActionPredicate.CooldownElapsed => "cooldownElapsed",
+        ActionPredicate.UsesBelow => "usesBelow",
+        _ => "?",
+    };
+
+    // The contact-solver tuning (SIM-AFFECTING). ContactSkin positive; MaxIterations 1..8 (above 8 is a solver
+    // pathology, not a choice); the provider defined; MaxSlopeDegrees in (0, 90) — 0 grounds nothing, 90 grounds a wall;
+    // GradientProbe non-negative, and > 0 is an error under analytic (the analytic set has no gradient to probe).
+    private static void ValidateCollision(WorldCollision collision, List<string> errors) {
+        RequirePositive(value: collision.ContactSkin, name: "collision.contactSkin", errors: errors);
+        RequireIntRange(value: collision.MaxIterations, min: 1, max: 8, name: "collision.maxIterations", errors: errors);
+
+        if (!Enum.IsDefined(value: collision.Provider)) {
+            errors.Add(item: $"collision.provider '{collision.Provider}' is not a defined WorldContactProvider.");
+        }
+
+        if (!float.IsFinite(f: collision.MaxSlopeDegrees) || (collision.MaxSlopeDegrees <= 0f) || (collision.MaxSlopeDegrees >= 90f)) {
+            errors.Add(item: $"collision.maxSlopeDegrees must be in (0, 90) (was {collision.MaxSlopeDegrees}).");
+        }
+
+        RequireNonNegative(value: collision.GradientProbe, name: "collision.gradientProbe", errors: errors);
+
+        if ((collision.Provider == WorldContactProvider.Analytic) && float.IsFinite(f: collision.GradientProbe) && (collision.GradientProbe > 0f)) {
+            errors.Add(item: "collision.gradientProbe > 0 is meaningless under provider 'analytic' (the analytic set has no gradient to probe) — set it to 0 or switch to 'field'.");
+        }
     }
 
     // A wander tuning: disc radii positive, drift/frequencies non-negative, the rest finite.
@@ -1237,6 +1379,33 @@ internal static class WorldDefinitionValidator {
             _ = EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz);
         } catch (ArgumentException exception) {
             errors.Add(item: $"{path}.refreshRateHz is invalid: {exception.Message}");
+        }
+    }
+
+    // A kit's body VOLUME (SIM-AFFECTING): radius positive, height finite and at least twice the radius (a capsule
+    // shorter than its diameter is a sphere; the validator names the fix rather than silently clamping).
+    private static void ValidateCollider(WorldCollider? collider, string path, List<string> errors) {
+        if (collider is not { } value) {
+            return;
+        }
+
+        RequirePositive(value: value.Radius, name: $"{path}.radius", errors: errors);
+        RequireFinite(value: value.Height, name: $"{path}.height", errors: errors);
+
+        if (float.IsFinite(f: value.Height) && float.IsFinite(f: value.Radius) && (value.Height < (2f * value.Radius))) {
+            errors.Add(item: $"{path}.height {value.Height} is a capsule shorter than its diameter ({2f * value.Radius}) — raise height or lower radius.");
+        }
+    }
+
+    // The per-axis effective-extent check for a box solidity facet: a margin that inverts any axis (halfExtent + margin
+    // <= 0) is rejected by name, not turned into a negative-extent collider.
+    private static void RequirePositiveEffectiveExtent(Vector3 halfExtents, float margin, string path, List<string> errors) {
+        if (!float.IsFinite(f: margin)) {
+            return;
+        }
+
+        if (((halfExtents.X + margin) <= 0f) || ((halfExtents.Y + margin) <= 0f) || ((halfExtents.Z + margin) <= 0f)) {
+            errors.Add(item: $"{path} {margin} inverts the collider (halfExtent + margin must be > 0 on every axis).");
         }
     }
 

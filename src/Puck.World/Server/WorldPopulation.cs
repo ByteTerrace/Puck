@@ -74,6 +74,10 @@ internal sealed class WorldPopulation {
     // The forward-drift deflection a stand-in's synthetic move stick holds: DriftSpeed as a fraction of the profileless
     // move speed, so player.Advance integrates DriftSpeed u/s exactly (deflection × speed = DriftSpeed). Derived once.
     private FixedQ4816 m_wanderForwardDeflection;
+    // The world contact field derived from the definition's solid rows + collision tuning (null = collision off). Built
+    // by CompileFixedTables and handed to every live body, so a live world.scene.solid / world.collision edit takes
+    // effect on the next tick with no restart. Grounded bodies solve their swept position against it.
+    private IContactField? m_contactField;
     private int m_simulatedCount;
     private int m_revision;
     private IntentSource m_defaultPeerSource = IntentSource.Wander;
@@ -140,6 +144,9 @@ internal sealed class WorldPopulation {
             m_kits[kit] = FixedWorldKit.Compile(kit: definition.Kits[kit]);
         }
 
+        // Derive the analytic contact field from the document's solid rows + collision tuning (null when collision is
+        // off) — the ONE derivation both a fresh activation and a live body read.
+        m_contactField = WorldColliderSet.Build(definition: definition);
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
     }
 
@@ -186,7 +193,10 @@ internal sealed class WorldPopulation {
             var kitIndex = ((index < LocalSeatCount) ? m_seatKit : m_entries[index].KitIndex);
             var kit = m_kits[kitIndex];
 
-            body.RecompileKit(tuning: m_kitRows[kitIndex].Tuning, primary: kit.Primary, secondary: kit.Secondary, model: kit.Model);
+            body.RecompileKit(tuning: m_kitRows[kitIndex].Tuning, primary: kit.Primary, secondary: kit.Secondary, model: kit.Model, collider: kit.Collider);
+            // Hand the (possibly rebuilt) contact field to every live body, so a live world.scene.solid / world.collision
+            // edit takes effect on the next tick.
+            body.SetContactField(field: m_contactField);
         }
 
         m_revision++;
@@ -294,9 +304,12 @@ internal sealed class WorldPopulation {
 
         // The seat body constructs from the definition's designated seat kit row (its tuning and lane bindings); the
         // seated profile's speeds still override live.
-        var body = new WorldBody(tuning: m_kitRows[m_seatKit].Tuning, primary: m_kits[m_seatKit].Primary, secondary: m_kits[m_seatKit].Secondary) {
+        var body = new WorldBody(tuning: m_kitRows[m_seatKit].Tuning, primary: m_kits[m_seatKit].Primary, secondary: m_kits[m_seatKit].Secondary, collider: m_kits[m_seatKit].Collider) {
             Profile = profile,
         };
+
+        body.SetContactField(field: m_contactField);
+
         var spawn = m_seatSpawns[slot].Position;
 
         body.Warp(x: spawn.X, z: spawn.Z);
@@ -527,7 +540,9 @@ internal sealed class WorldPopulation {
         var entry = m_entries[index];
         var kit = m_kits[entry.KitIndex];
         // Profileless — advances on the kit row's tuning with the row's lane bindings.
-        var player = new WorldBody(tuning: m_kitRows[entry.KitIndex].Tuning, primary: kit.Primary, secondary: kit.Secondary);
+        var player = new WorldBody(tuning: m_kitRows[entry.KitIndex].Tuning, primary: kit.Primary, secondary: kit.Secondary, collider: kit.Collider);
+
+        player.SetContactField(field: m_contactField);
 
         if (kit.Model == MotionModel.Free) {
             player.SetModel(model: MotionModel.Free);

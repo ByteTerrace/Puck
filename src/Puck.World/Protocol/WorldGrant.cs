@@ -36,7 +36,9 @@ internal enum WorldSection : byte {
     /// <summary>The placeable camera rows.</summary>
     Cameras,
 
-    /// <summary>The static scene (ground albedos + boulders).</summary>
+    /// <summary>The static scene (ground albedos + boulders) AND the per-row solidity facets. A principal holding
+    /// <see cref="WorldCapability.Mutate"/> over this section can now change SIMULATION behavior (mark a row solid so
+    /// bodies bump into it), not just appearance — a real authority widening from the appearance-only scope this held before.</summary>
     Scene,
 
     /// <summary>The seat spawn-point list.</summary>
@@ -83,6 +85,9 @@ internal enum WorldSection : byte {
 
     /// <summary>The audio host-section defaults (master gain, attenuation coalescing, the listener policy).</summary>
     Audio,
+
+    /// <summary>The contact-solver tuning (the <see cref="WorldMutation.SetCollision"/> mutation).</summary>
+    Collision,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

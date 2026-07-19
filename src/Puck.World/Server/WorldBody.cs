@@ -88,6 +88,24 @@ internal sealed class WorldBody {
     private FixedQ4816 m_verticalVelocity;
     private bool m_grounded = true;
 
+    // The response-shaped planar velocity — the ramped horizontal velocity the grounded model integrates. With an empty
+    // response table it equals the commanded target every tick (today's instant snap, byte-identical); with a table it
+    // converges on the target at the matching row's engage/release rate through m_planarRampAccumulator. SURVIVES a live
+    // kit recompile (a retune must not jerk the crowd) but is zeroed by every hard teleport (no momentum across a warp).
+    private FixedVector3 m_planarVelocity;
+    private FixedRateAccumulator m_planarRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    // The response table's shared recency clocks — one per Recently gate across the whole table (allocated to match the
+    // compiled tuning's RecencySlots), refreshed while the fact holds and decaying otherwise. Reset by a teleport and a
+    // recompile (the clocks are bound to the OLD table shape).
+    private ulong[] m_motionRecency = [];
+    // The world contact field this body solves its swept grounded position against (null = collision off, so the body
+    // keeps its flat ground-plane land) and the body's own capsule volume (null = a volumeless kit, never solved).
+    private IContactField? m_contactField;
+    private FixedWorldCollider? m_collider;
+    // The number of surfaces (ground plane + colliders) the last grounded Advance resolved this body against — the
+    // world.contacts read-back. Zero while collision is off.
+    private int m_lastContactCount;
+
     // The per-lane action runtime: the compiled binding (null = unbound) and its mutable state — the press latch (the
     // buffer), the cooldown clock, the use counter (reset on ground contact), and one recency clock per
     // Recently-predicate instance. Allocated once at construction to match the bindings.
@@ -144,12 +162,14 @@ internal sealed class WorldBody {
     /// <param name="tuning">The locomotion/jump feel to integrate under, or <see langword="null"/> for the default.</param>
     /// <param name="primary">The Primary lane's compiled binding.</param>
     /// <param name="secondary">The Secondary lane's compiled binding.</param>
-    public WorldBody(MotionTuning? tuning = null, CompiledActionSpec? primary = null, CompiledActionSpec? secondary = null) {
+    /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
+    public WorldBody(MotionTuning? tuning = null, CompiledActionSpec? primary = null, CompiledActionSpec? secondary = null, FixedWorldCollider? collider = null) {
         var authoredTuning = (tuning ?? MotionTuning.Default);
 
         m_tuning = FixedMotionTuning.Compile(tuning: in authoredTuning);
         m_laneBindings[0] = primary;
         m_laneBindings[1] = secondary;
+        m_collider = collider;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             if (m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding) {
@@ -157,8 +177,20 @@ internal sealed class WorldBody {
             }
         }
 
+        if (m_tuning.RecencySlots > 0) {
+            m_motionRecency = new ulong[m_tuning.RecencySlots];
+        }
+
         // The body rests on the tuning's ground plane at the origin.
         m_position = new FixedVector3(X: FixedQ4816.Zero, Y: m_tuning.GroundY, Z: FixedQ4816.Zero);
+    }
+
+    /// <summary>Sets (or clears) the world contact field this body's grounded integrator solves its swept position
+    /// against — the population hands it the live field on activation and every rebuild. A <see langword="null"/> field
+    /// (collision off) restores the flat ground-plane land.</summary>
+    /// <param name="field">The world contact field, or <see langword="null"/> when collision is off.</param>
+    public void SetContactField(IContactField? field) {
+        m_contactField = field;
     }
 
     /// <summary>Swaps this body's compiled kit feel in place after a live kit retune — the once-at-the-boundary
@@ -171,10 +203,12 @@ internal sealed class WorldBody {
     /// <param name="primary">The Primary lane's compiled binding.</param>
     /// <param name="secondary">The Secondary lane's compiled binding.</param>
     /// <param name="model">The kit's motion model.</param>
-    public void RecompileKit(MotionTuning tuning, CompiledActionSpec? primary, CompiledActionSpec? secondary, MotionModel model) {
+    /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
+    public void RecompileKit(MotionTuning tuning, CompiledActionSpec? primary, CompiledActionSpec? secondary, MotionModel model, FixedWorldCollider? collider) {
         m_tuning = FixedMotionTuning.Compile(tuning: in tuning);
         m_laneBindings[0] = primary;
         m_laneBindings[1] = secondary;
+        m_collider = collider;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;
@@ -183,6 +217,10 @@ internal sealed class WorldBody {
                 m_laneActions[lane].Recency = new ulong[binding.RecencyFacts.Length];
             }
         }
+
+        // The response recency clocks are bound to the OLD table shape (a new table may have a different Recently count),
+        // so they reset on a recompile — but m_planarVelocity SURVIVES, because a live retune must not jerk the crowd.
+        m_motionRecency = ((m_tuning.RecencySlots > 0) ? new ulong[m_tuning.RecencySlots] : []);
 
         // Authoritative model switch — re-pins/levels the pose the same way player.motion does; a no-op if unchanged.
         SetModel(model: model);
@@ -218,6 +256,18 @@ internal sealed class WorldBody {
     /// <c>player.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
+
+    /// <summary>Whether the body is grounded this tick (resting on the ground plane or a walkable solid surface) — the
+    /// <c>world.contacts</c> read-back.</summary>
+    public bool Grounded => m_grounded;
+
+    /// <summary>The body's response-shaped planar speed (world units/second) — the coast/momentum witness the
+    /// <c>world.contacts</c> read reports.</summary>
+    public float PlanarSpeed => (float)(double)m_planarVelocity.Length;
+
+    /// <summary>The number of surfaces the last grounded <see cref="Advance"/> resolved this body against (0 while
+    /// collision is off) — the <c>world.contacts</c> read-back.</summary>
+    public int ContactCount => m_lastContactCount;
 
     /// <summary>Whether this player is ENGAGED on a diegetic screen — the route latch the engagement table sets. While
     /// engaged its resolved per-frame intent is delivered to the screen's machine (read via <see cref="EngagedIntent"/>)
@@ -723,7 +773,10 @@ internal sealed class WorldBody {
         var orientation = FixedQuaternion.FromAxisAngle(axis: s_unitY, angle: m_yaw);
         var facing = orientation.Rotate(vector: -s_unitZ);
         var right = orientation.Rotate(vector: s_unitX);
-        var planarVelocity = (((facing * intent.MoveForward) + (right * intent.MoveStrafe)) * moveSpeed);
+        // --- Shape: the commanded target planar velocity converges through the response table (the ramp), replacing
+        // the direct assignment an unopted world instant-snaps. ---
+        var planarTarget = (((facing * intent.MoveForward) + (right * intent.MoveStrafe)) * moveSpeed);
+        var planarVelocity = ShapePlanarVelocity(target: planarTarget, intent: in intent, stepTicks: stepTicks);
 
         m_orientation = orientation;
 
@@ -762,7 +815,28 @@ internal sealed class WorldBody {
         );
         var nextPosition = (m_position + step);
 
-        if (nextPosition.Y <= m_tuning.GroundY) {
+        // --- Resolve: the swept position becomes a legal position through the contact field, which also DERIVES
+        // grounded (rather than reading it off a plane compare) and kills velocity into any resolved surface. With no
+        // field (collision off) or a volumeless kit, the flat ground-plane land runs exactly as before, byte-identically.
+        if ((m_contactField is { } field) && (m_collider is { } collider)) {
+            var resolvedVelocity = new FixedVector3(X: m_planarVelocity.X, Y: m_verticalVelocity, Z: m_planarVelocity.Z);
+
+            m_grounded = field.Resolve(position: ref nextPosition, velocity: ref resolvedVelocity, radius: collider.Radius, height: collider.Height);
+            m_position = nextPosition;
+            m_planarVelocity = m_planarVelocity with { X = resolvedVelocity.X, Z = resolvedVelocity.Z };
+
+            if (resolvedVelocity.Y != m_verticalVelocity) {
+                m_verticalVelocity = resolvedVelocity.Y;
+                m_verticalVelocityAccumulator.Reset();
+            }
+
+            if (m_grounded) {
+                m_positionAccumulator.ResetY();
+                ResetLaneUses();
+            }
+
+            m_lastContactCount = (m_grounded ? 1 : 0);
+        } else if (nextPosition.Y <= m_tuning.GroundY) {
             // Land: snap to the plane exactly (so a resting avatar reads y = 0.00), zero any downward velocity, ground
             // it, and refill the lane-use budgets (ground contact).
             m_position = nextPosition with { Y = m_tuning.GroundY };
@@ -774,11 +848,84 @@ internal sealed class WorldBody {
             }
 
             m_grounded = true;
+            m_lastContactCount = 0;
             ResetLaneUses();
         } else {
             m_position = nextPosition;
             m_grounded = false;
+            m_lastContactCount = 0;
         }
+    }
+
+    // --- The response table (the Shape stage). ---
+    // Converge the ramped planar velocity on the commanded target through the matching response row's engage/release
+    // rate. An empty table snaps instantly (today's exact behavior, the only path an unopted world takes, byte-identical).
+    // A body matching no row also snaps (the always-row is optional). The has-input axis — a property of the command,
+    // not a body fact — picks the engage (stick deflected) or release (stick centered) rate.
+    private FixedVector3 ShapePlanarVelocity(FixedVector3 target, in PlayerIntent intent, ulong stepTicks) {
+        var response = m_tuning.Response;
+
+        if (response.Length == 0) {
+            m_planarVelocity = target;
+
+            return target;
+        }
+
+        // Refresh the shared response recency clocks (a Recently window refills while its fact holds, decays otherwise).
+        for (var slot = 0; (slot < m_motionRecency.Length); slot++) {
+            m_motionRecency[slot] = (FactHolds(fact: m_tuning.ResponseRecencyFacts[slot])
+                ? m_tuning.ResponseRecencyWindows[slot]
+                : SubtractSaturating(value: m_motionRecency[slot], amount: stepTicks));
+        }
+
+        var hasInput = ((intent.MoveForward != FixedQ4816.Zero) || (intent.MoveStrafe != FixedQ4816.Zero));
+
+        foreach (var row in response) {
+            if (!MotionGateOpen(gate: row.Gate)) {
+                continue;
+            }
+
+            var rate = (hasInput ? row.EngageRate : row.ReleaseRate);
+            var maxDelta = m_planarRampAccumulator.Integrate(ratePerSecond: rate, elapsedTicks: stepTicks);
+
+            m_planarVelocity = MoveToward(current: m_planarVelocity, target: target, maxDelta: maxDelta);
+
+            return m_planarVelocity;
+        }
+
+        m_planarVelocity = target;
+
+        return target;
+    }
+
+    // A motion-response gate: a flattened conjunction of BODY-FACT predicates only (Now/Recently — the validator rejects
+    // the lane-scoped CooldownElapsed/UsesBelow kinds on a response gate). Every element must hold.
+    private bool MotionGateOpen(CompiledPredicate[] gate) {
+        foreach (var predicate in gate) {
+            var holds = predicate.Kind switch {
+                CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
+                CompiledPredicateKind.Recently => (m_motionRecency[predicate.RecencySlot] > 0),
+                _ => false,
+            };
+
+            if (!holds) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Move current toward target by at most maxDelta (the ramp step) — four fixed-point ops; deliberately NOT promoted
+    // to Puck.Maths (that would add a gameplay verb to the deterministic numerics toolkit; Arc 2's provider is the
+    // second-caller moment that justifies promotion).
+    private static FixedVector3 MoveToward(FixedVector3 current, FixedVector3 target, FixedQ4816 maxDelta) {
+        var delta = (target - current);
+        var distance = delta.Length;
+
+        return (((distance <= maxDelta) || (distance <= FixedQ4816.Zero))
+            ? target
+            : (current + ((delta / distance) * maxDelta)));
     }
 
     // Reset the grounded vertical state to a clean rest on the plane — called by every hard teleport, so a jump never
@@ -790,6 +937,12 @@ internal sealed class WorldBody {
         m_positionAccumulator.ResetY();
         m_grounded = true;
         ResetLaneUses();
+
+        // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carry, and the response
+        // table's recency clocks.
+        m_planarVelocity = default;
+        m_planarRampAccumulator.Reset();
+        Array.Clear(array: m_motionRecency);
     }
 
     // Ground contact resets every lane's use counter — the UsesBelow budget refills on landing.

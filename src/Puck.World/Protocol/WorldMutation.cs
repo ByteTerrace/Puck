@@ -201,4 +201,10 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Authoring">The whole authoring policy row.</param>
     internal sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldAuthoringDefaults Authoring) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole contact-solver tuning (the <see cref="WorldCollision"/> section). Applies LIVE: the
+    /// population rebuilds the collider set and hands it to every body on the next tick.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Collision">The contact-solver tuning.</param>
+    internal sealed record SetCollision(WorldPrincipal Principal, WorldCollision Collision) : WorldMutation(Principal);
 }

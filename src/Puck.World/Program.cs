@@ -345,6 +345,9 @@ services.AddSingleton<ICommandModule, WorldCommandModule>();
 // The world-mutation verb surface — the dev reflection of the WorldMutation protocol (world.kit.*/screen.*/scene.*/…,
 // world.load/undo/status/save). A SEPARATE module from WorldCommandModule to keep that class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldMutationCommandModule>();
+// The contact/solidity verb surface — world.collision(.on/.off/.skin/.slope/.gradient/.provider), world.kit.collider/
+// .model/.response, world.scene.solid, and the world.contacts read. A SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
 // The capability-grant verb surface — world.grant/world.revoke/world.grants (the principal/grant control plane).
 // A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldGrantCommandModule>();

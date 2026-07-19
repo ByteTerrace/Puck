@@ -40,6 +40,10 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldPlacement))]
 // The editor/authoring policy row (world.authoring.set verb accessor).
 [JsonSerializable(typeof(WorldAuthoringDefaults))]
+// The contact-solver tuning (world.collision verb accessor) and the velocity-response array (world.kit.response verb
+// accessor). Both are also reachable from WorldDefinition/MotionTuning already; these entries expose the typed accessors.
+[JsonSerializable(typeof(WorldCollision))]
+[JsonSerializable(typeof(MotionResponse[]))]
 // The audio sections: the speaker row + tune/patch asset rows + the audio defaults (world.speaker.set /
 // world.tune.set / world.patch.set / world.audio.set verb accessors). The embedded puck.audio.v1 / puck.synth.v1
 // documents ride their families' OWN canonical serializer shape, matching CreationDocumentJsonConverter's.

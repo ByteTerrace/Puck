@@ -9,7 +9,30 @@
     "maxFallSpeed": 20,
     "jumpCutMultiplier": 0.45,
     "coyoteTime": 0.09,
-    "jumpBufferTime": 0.1
+    "jumpBufferTime": 0.1,
+    "response": [
+      {
+        "gate": {
+          "$type": "recently",
+          "fact": "Grounded",
+          "windowSeconds": 0.09
+        },
+        "engageRate": 45,
+        "releaseRate": 55
+      },
+      {
+        "gate": {
+          "$type": "now",
+          "fact": "Falling"
+        },
+        "engageRate": 34,
+        "releaseRate": 18
+      },
+      {
+        "engageRate": 30,
+        "releaseRate": 17
+      }
+    ]
   },
   "wander": {
     "driftSpeed": 1.5,
@@ -42,7 +65,10 @@
           -1.2,
           0.72,
           -0.3
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -53,7 +79,10 @@
           0.6,
           0.88,
           0.5
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -64,7 +93,10 @@
           1.9,
           0.48,
           -0.7
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -75,7 +107,10 @@
           -0.3,
           0.38,
           1.3
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "$type": "boulder",
@@ -86,7 +121,10 @@
           2.4,
           0.62,
           0.7
-        ]
+        ],
+        "solid": {
+          "margin": 0
+        }
       }
     ]
   },
@@ -175,6 +213,9 @@
       "route": {
         "engageable": true,
         "engageRadius": 2.5
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -211,6 +252,9 @@
       "route": {
         "engageable": false,
         "engageRadius": 0
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -241,6 +285,9 @@
       "route": {
         "engageable": false,
         "engageRadius": 0
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -275,6 +322,9 @@
       "route": {
         "engageable": false,
         "engageRadius": 0
+      },
+      "solid": {
+        "margin": 0
       }
     },
     {
@@ -307,6 +357,9 @@
       "route": {
         "engageable": false,
         "engageRadius": 0
+      },
+      "solid": {
+        "margin": 0
       }
     }
   ],
@@ -460,7 +513,30 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0,
@@ -548,6 +624,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     },
     {
@@ -563,7 +643,30 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0,
@@ -651,6 +754,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     },
     {
@@ -666,7 +773,30 @@
         "maxFallSpeed": 20,
         "jumpCutMultiplier": 0.45,
         "coyoteTime": 0.09,
-        "jumpBufferTime": 0.1
+        "jumpBufferTime": 0.1,
+        "response": [
+          {
+            "gate": {
+              "$type": "recently",
+              "fact": "Grounded",
+              "windowSeconds": 0.09
+            },
+            "engageRate": 45,
+            "releaseRate": 55
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 34,
+            "releaseRate": 18
+          },
+          {
+            "engageRate": 30,
+            "releaseRate": 17
+          }
+        ]
       },
       "flavor": {
         "forward": 0.88,
@@ -754,6 +884,10 @@
           ]
         },
         "onRelease": null
+      },
+      "collider": {
+        "radius": 0.35,
+        "height": 1.7
       }
     }
   ],
@@ -791,6 +925,14 @@
     "defaultCurve": "smoothstep",
     "defaultBedFadeSeconds": 0.5,
     "listener": "focus"
+  },
+  "collision": {
+    "enabled": true,
+    "provider": "Analytic",
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
   },
   "schema": "puck.world.def.v1"
 }

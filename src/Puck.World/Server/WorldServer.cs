@@ -552,10 +552,12 @@ internal sealed class WorldServer {
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults;
 
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
-    // compiled tuning/actions). Scene/screen/camera/render/population-default/addon edits do not.
+    // compiled tuning/actions, AND the analytic collider set). A scene-row/collision edit rebuilds the collider set so a
+    // live world.scene.solid / world.collision takes effect on the next tick with no restart.
     private static bool AffectsPopulation(WorldMutation mutation) => mutation is
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
-        WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns;
+        WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns or
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or WorldMutation.SetCollision;
 
     // Whether a mutation can grow the SDF program past the probed render envelope (scene rows / screen slabs /
     // creation stamps — an UpsertCreation re-shapes every live placement of it, so it measures too).
@@ -586,6 +588,7 @@ internal sealed class WorldServer {
         WorldMutation.UpsertTune or WorldMutation.RemoveTune => WorldSection.Tunes,
         WorldMutation.UpsertPatch or WorldMutation.RemovePatch => WorldSection.Patches,
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
+        WorldMutation.SetCollision => WorldSection.Collision,
         _ => WorldSection.Kits,
     };
 
@@ -674,6 +677,7 @@ internal sealed class WorldServer {
         WorldMutation.UpsertPatch m => $"UpsertPatch '{m.Patch.Id}'",
         WorldMutation.RemovePatch m => $"RemovePatch '{m.Id}'",
         WorldMutation.SetAudioDefaults => "SetAudioDefaults",
+        WorldMutation.SetCollision => "SetCollision",
         _ => "unknown",
     };
 
@@ -982,6 +986,10 @@ internal sealed class WorldServer {
                 return true;
             case WorldMutation.SetAuthoringDefaults m:
                 candidate = (current with { Authoring = m.Authoring });
+
+                return true;
+            case WorldMutation.SetCollision m:
+                candidate = (current with { Collision = m.Collision });
 
                 return true;
             case WorldMutation.RemoveBindingOverlay m:

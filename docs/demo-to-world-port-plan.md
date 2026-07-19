@@ -1256,6 +1256,93 @@ real work out of the arc; OQ-1 confirmed the R2 synthesis, which is what merged
 two L designs into this one in the first place. The owner pinned the size
 explicitly: **Arc 1 stays XL, Arc 2 stays M.**
 
+### Arc 1 execution record — EXECUTED
+
+**Landed the whole engine arc; the Demo deletion is deferred as four `(c)`
+dispositions.** Verified by building the full solution in Release and running
+`Puck.World` for 2 s plus the arc's stdin verb script.
+
+**Built (all in `src/Puck.World`):**
+
+- **Records** (`WorldDefinition.cs`): `MotionResponse`, `WorldSolid`,
+  `WorldCollider`, `WorldCollision` + `WorldContactProvider`; compiled forms
+  `FixedMotionResponse`, `FixedWorldCollider`, `FixedWorldCollision`;
+  `FixedMotionTuning` gained `Response[]`/`ResponseRecencyFacts[]`/`…Windows[]`
+  (+ `RecencySlots`); `WorldSolid?` threaded through `WorldSceneRow` base →
+  `Boulder`/`Slab` + `WorldScreen` + `WorldPlacement`; `WorldCollider?` on
+  `WorldKit`; `WorldCollision? Collision` as the trailing nullable section on
+  `WorldDefinition` (R12 idiom). `FlattenPredicate` promoted `private`→`internal`
+  so `FixedMotionResponse` reuses the lane predicate slotting (Risk 1 confirmed a
+  visibility bump, not a redesign). `WorldScene`/`WorldSceneRow` doc comments
+  carry the PRESENTATION-ONLY→SIM-AFFECTING reclassification.
+- **Seam + provider**: `Server/IContactField.cs` (`Resolve` + `TryUp`, R2) and
+  `Server/WorldColliderSet.cs` — the analytic provider (sphere from a solid
+  boulder, box from a solid slab, AABB-bounded box from a solid screen frame, the
+  ground plane; vertical-capsule depenetration; the compiled `cos(maxSlope)`
+  grounded test; `TryUp` returns `+Y`). `MoveToward` lives in `WorldBody` (not
+  promoted to `Puck.Maths`, per the arc).
+- **`WorldBody`**: `m_planarVelocity` + `m_planarRampAccumulator` + shared
+  `m_motionRecency`; the two-stage `IntegrateGrounded` split (Shape = response
+  ramp replacing the instant assignment; Resolve = `IContactField` deriving
+  `grounded`); empty table stays byte-identical; `ResetVertical` zeroes the new
+  momentum state; `RecompileKit` resets the recency clocks but keeps
+  `m_planarVelocity` (Risk 5); `SetContactField` + `Grounded`/`PlanarSpeed`/
+  `ContactCount` reads. `WorldPopulation.CompileFixedTables` builds the collider
+  set and hands it to every body on activate + `Rebuild`.
+- **Validator**: `ValidateCollision`, `ValidateResponse` + `ValidateMotionGate`
+  (rejects `cooldownElapsed`/`usesBelow` by name), `ValidateCollider`
+  (`height >= 2·radius`), the solid-facet effective-extent checks on scene rows /
+  screens / placements, and the R3 analytic-placement rejection by name.
+- **Protocol/apply/grant/verbs**: `WorldMutation.SetCollision`; `WorldSection.Collision`;
+  `SectionOf`/`TryCompose`/`Describe` + `AffectsPopulation` gains
+  `SetScene`/`UpsertSceneRow`/`RemoveSceneRow`/`SetCollision` (live
+  `world.scene.solid` takes effect next tick); the new `WorldCollisionCommandModule`
+  (`world.collision`(`.on`/`.off`/`.skin`/`.slope`/`.gradient`/`.provider`),
+  `world.kit.collider`/`.model`/`.response`, `world.scene.solid`, and the
+  Immediate `world.contacts`), registered in `Program.cs`; JSON-context accessors
+  for `WorldCollision` + `MotionResponse[]`.
+- **`default.world.json`** (the named carve-out): the `collision` section, the
+  three-row `motion.response`, `solid:{margin:0}` on all five `boulder-*` rows and
+  all five screen rows, and — see the deviation below — colliders + the response
+  table on the three grounded kits.
+
+**Contradicted the plan / deviations:**
+
+1. **Response table also on the grounded kits, not `motion` alone.** The carve-out
+   text names only `motion` (the profileless fallback), but bodies read their
+   **kit** tuning (`WorldBody.m_tuning = FixedMotionTuning.Compile(kit.Tuning)`) —
+   the profileless `motion` is never a body tuning (seats/peers construct from kit
+   rows). Adding `response` to `motion` alone would be a facet with no body
+   consumer (the R3 schema-lie the plan forbids) and no crowd momentum. Colliders
+   + the response table were added to `jumper`/`runner`/`kart` (the grounded kits)
+   so seats and the grounded crowd actually get weight, which is what the arc's
+   Intent and manual verification ("the avatar has momentum", "the crowd visibly
+   stops sliding") require. `motion` keeps the table too (harmless fallback).
+2. **The Demo deletion is four `(c)` dispositions, NOT four `git rm`s.** The
+   plan's "four `git rm`s" (and the delta-recon's "18 hand-excision sites") both
+   undercount the coupling. The four files co-locate or *are* the sim substrate of
+   the held-pinned survivors, so none is cleanly deletable:
+   - `PlatformerBody.cs` defines `FixedRoom`/`FixedConsole`/`PlatformerBody` — the
+     entire collision substrate of `OverworldWorld` (the OQ-14-pinned god file):
+     `m_collision` (a `FixedRoom`) is read at ~40 sites and every `PlayerSlot.Body`
+     is a `PlatformerBody`. Deleting it is a rewrite of the held god file, which
+     risks the OQ-14 replay closure the ground rules protect.
+   - `PlatformerTuning.cs` and `FixedWalkGrid.cs` are consumed by that same
+     `OverworldWorld` (the `m_tuning` field / `Step` call; `FixedRoom.WalkGrid` +
+     `LoadWorld`), so they share its fate.
+   - `WalkGridBaker.cs` additionally **co-locates `WalkOverrideInput` and
+     `WalkGridKind`**, shared vocabulary consumed by four surviving files
+     (`OverworldFrameSource`, `OverworldWorld`, `WorldCommands`, `WorldScene`) —
+     deleting it broke them, so it was restored.
+
+   This is exactly the correction Beat B's own execution record made ("the god
+   files did NOT all die — a real consumer exists → `(c)`") and that the ground
+   rules cite as precedent. The four files, and their re-homing / `OverworldWorld`
+   collision rewrite, fall to the arc that retires `OverworldWorld` (Arc 3's
+   remaining god-file teardown / the Demo-retirement trajectory), not to Arc 1,
+   whose engine feature is delivered whole. **No survivor excision was needed**
+   because nothing was deleted out from under a survivor.
+
 ---
 
 ## Arc 2 — Field Provider

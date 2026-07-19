@@ -30,6 +30,9 @@ namespace Puck.World;
 /// <param name="JumpCutMultiplier">The early-release up-velocity cut (a dimensionless ratio) — a tap is a short hop.</param>
 /// <param name="CoyoteTime">The grace after leaving ground where a jump still fires (seconds — a time, so unscaled).</param>
 /// <param name="JumpBufferTime">The window before landing where a press is remembered and fires on touchdown (seconds — unscaled).</param>
+/// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — SIM-AFFECTING; <see langword="null"/>
+/// (the default) is the empty table, which snaps planar velocity instantly (today's exact behavior). Omitted from the
+/// wire when null.</param>
 internal readonly record struct MotionTuning(
     float MoveSpeed,
     float TurnSpeed,
@@ -40,7 +43,8 @@ internal readonly record struct MotionTuning(
     float MaxFallSpeed,
     float JumpCutMultiplier,
     float CoyoteTime,
-    float JumpBufferTime
+    float JumpBufferTime,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<MotionResponse>? Response = null
 ) {
     /// <summary>The factor <see cref="Default"/> scales its jump-kit spatial constants by (World runs at half the speed
     /// scale the constants were authored at). See the type remarks for why the ratios and windows are exempt.</summary>
@@ -60,6 +64,62 @@ internal readonly record struct MotionTuning(
         CoyoteTime: 0.09f,
         JumpBufferTime: 0.10f
     );
+}
+
+/// <summary>One row of a kit's velocity-response table: how fast planar velocity converges on the commanded
+/// target while <paramref name="Gate"/> holds. Rows evaluate in order, FIRST match wins; a body matching no row
+/// snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the
+/// action-lane predicate vocabulary — only body-fact kinds (<c>now</c>/<c>recently</c>/<c>all</c>) are admissible.</summary>
+/// <param name="Gate">The body-fact predicate that must hold for this row to win, or <see langword="null"/> for the
+/// always-row (permitted only as the final row).</param>
+/// <param name="EngageRate">The convergence rate (world units/second²) while the stick is deflected — acceleration
+/// toward the commanded target.</param>
+/// <param name="ReleaseRate">The convergence rate while the stick is centered — deceleration toward rest (the coast).</param>
+internal sealed record MotionResponse(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate,
+    float EngageRate,
+    float ReleaseRate
+);
+
+/// <summary>A row's solidity facet — it participates in contact resolution using its own declared shape. Presence is
+/// the whole switch; <see langword="null"/> means decoration, which is every existing row in every existing world.</summary>
+/// <param name="Margin">The signed skin added to the shape for contact purposes. Positive fattens the collider past the
+/// drawn surface; negative lets a body sink in. Compensates the smooth-union blend.</param>
+internal sealed record WorldSolid(float Margin);
+
+/// <summary>A kit's body VOLUME — a vertical capsule from the foot point in the body's own up axis. A kit with no
+/// collider is not solved against the contact field at all.</summary>
+/// <param name="Radius">The capsule radius (world units).</param>
+/// <param name="Height">Total height from the foot point; must be at least twice <paramref name="Radius"/> — a shorter
+/// capsule is a sphere and is rejected rather than silently clamped.</param>
+internal sealed record WorldCollider(float Radius, float Height);
+
+/// <summary>Which contact field answers a world's collision queries.</summary>
+internal enum WorldContactProvider : byte {
+    /// <summary>Derives convex colliders from the document's own solid rows (cheap, the default).</summary>
+    Analytic,
+
+    /// <summary>Compiles the solid rows into an SDF (required for planetoids, smooth-union contact surfaces, and solid
+    /// placements — landed by Arc 2).</summary>
+    Field,
+}
+
+/// <summary>The contact solver's world-scale tuning. Collision is OFF by default: a world declaring nothing keeps the
+/// flat <see cref="MotionTuning.GroundY"/> plane it had before, byte-identically.</summary>
+/// <param name="Enabled">Whether contact resolution runs at all.</param>
+/// <param name="Provider">Which contact field answers. <c>analytic</c> derives convex colliders from the document's own
+/// solid rows (cheap, the default); <c>field</c> compiles them into an SDF (Arc 2).</param>
+/// <param name="ContactSkin">The signed skin the solver keeps between a body and every surface (world units).</param>
+/// <param name="MaxIterations">The relaxation iteration count per tick (above 8 is a solver pathology, not a choice).</param>
+/// <param name="MaxSlopeDegrees">The steepest surface a body still counts as STANDING on. A contact whose normal leans
+/// further from the body's up axis than this pushes the body but never grounds it — the walkable-slope limit.</param>
+/// <param name="GradientProbe">The finite-difference step the FIELD provider samples the surface normal with, in world
+/// units; 0 takes the evaluator's own default. Only meaningful under <c>field</c>.</param>
+internal sealed record WorldCollision(bool Enabled, WorldContactProvider Provider, float ContactSkin,
+    int MaxIterations, float MaxSlopeDegrees, float GradientProbe) {
+    /// <summary>The built-in default: collision OFF (a world declaring nothing keeps its flat ground plane).</summary>
+    public static WorldCollision None { get; } = new(Enabled: false, Provider: WorldContactProvider.Analytic,
+        ContactSkin: 0.02f, MaxIterations: 4, MaxSlopeDegrees: 60f, GradientProbe: 0f);
 }
 
 /// <summary>
@@ -286,13 +346,16 @@ internal readonly record struct WanderFlavor(
 /// <param name="Flavor">The wander-producer flavor.</param>
 /// <param name="PrimaryAction">The <see cref="Puck.World.Protocol.ActionLanes.Primary"/> binding, or <see langword="null"/> unbound.</param>
 /// <param name="SecondaryAction">The <see cref="Puck.World.Protocol.ActionLanes.Secondary"/> binding, or <see langword="null"/> unbound.</param>
+/// <param name="Collider">The kit's body VOLUME — a vertical capsule solved against the world contact field, or
+/// <see langword="null"/> for a kit with no volume (never solved against the field). Omitted from the wire when null.</param>
 internal sealed record WorldKit(
     string Name,
     MotionModel Model,
     MotionTuning Tuning,
     WanderFlavor Flavor,
     ActionSpec? PrimaryAction,
-    ActionSpec? SecondaryAction
+    ActionSpec? SecondaryAction,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null
 );
 
 /// <summary>The flattened, fixed-point form of one predicate (a conjunction element).</summary>
@@ -370,7 +433,9 @@ internal sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrig
         );
     }
 
-    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows) {
+    // Flattens a predicate ADT into a fixed-point conjunction gate, allocating one shared recency slot per Recently
+    // instance. Promoted to internal so the motion-response compiler (a non-lane caller) reuses the same slotting.
+    internal static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows) {
         switch (predicate) {
             case null:
                 break;
@@ -456,7 +521,8 @@ internal readonly record struct FixedWorldKit(
     FixedQ4816 AltitudeBase,
     FixedQ4816 AltitudeRange,
     CompiledActionSpec? Primary,
-    CompiledActionSpec? Secondary
+    CompiledActionSpec? Secondary,
+    FixedWorldCollider? Collider
 ) {
     /// <summary>Compiles a kit row's authored floats to fixed point (the once-at-the-boundary rule).</summary>
     public static FixedWorldKit Compile(WorldKit kit) => new(
@@ -472,14 +538,17 @@ internal readonly record struct FixedWorldKit(
         AltitudeBase: FixedQ4816.FromDouble(value: kit.Flavor.AltitudeBase),
         AltitudeRange: FixedQ4816.FromDouble(value: kit.Flavor.AltitudeRange),
         Primary: CompiledActionSpec.Compile(spec: kit.PrimaryAction),
-        Secondary: CompiledActionSpec.Compile(spec: kit.SecondaryAction)
+        Secondary: CompiledActionSpec.Compile(spec: kit.SecondaryAction),
+        Collider: FixedWorldCollider.Compile(collider: kit.Collider)
     );
 }
 
 /// <summary>
 /// One row of the world's static scene — a shape smooth-unioned into the accumulated field, addressed by its stable
 /// <paramref name="Id"/> (its mutation address; the <c>UpsertSceneRow</c>/<c>RemoveSceneRow</c> whole-row key).
-/// Presentation-only geometry; the id carries no meaning beyond identity. The <c>$type</c> string is the JSON
+/// The geometry is PRESENTATION-ONLY, but the <paramref name="Solid"/> facet is SIM-AFFECTING when present: the analytic
+/// contact field derives a convex collider from the row's shape, so a slice of a scene row now feeds
+/// <see cref="WorldBody.Advance"/>. The id carries no meaning beyond identity. The <c>$type</c> string is the JSON
 /// discriminator, matching <see cref="WorldCamera"/>'s convention; a new row kind is a new derived record plus its
 /// <see cref="JsonDerivedTypeAttribute"/> line.
 /// </summary>
@@ -489,13 +558,17 @@ internal readonly record struct FixedWorldKit(
 /// <param name="Emission">The row's emission facet (a synth voice the shape itself makes — see
 /// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Omitted from the wire when null, so
 /// emission-free rows stay byte-identical.</param>
+/// <param name="Solid">The row's solidity facet (see <see cref="WorldSolid"/>) — SIM-AFFECTING: when present the analytic
+/// contact field derives a convex collider from the row's shape and bodies bump into and stand on it. <see langword="null"/>
+/// means decoration (every existing row in every existing world). Omitted from the wire when null.</param>
 [JsonDerivedType(typeof(WorldSceneRow.Boulder), typeDiscriminator: "boulder")]
 [JsonDerivedType(typeof(WorldSceneRow.Slab), typeDiscriminator: "slab")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 internal abstract record WorldSceneRow(
     string Id,
     Vector3 Center,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid
 ) {
     /// <summary>A stone boulder — a sphere carrying the scene's shared <see cref="WorldScene.StoneAlbedo"/>.</summary>
     /// <param name="Id">The row's stable string id.</param>
@@ -503,7 +576,8 @@ internal abstract record WorldSceneRow(
     /// <param name="Radius">The sphere radius.</param>
     /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
     /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
-    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
+    /// <param name="Solid">The row's solidity facet (a sphere of <c>Radius + Margin</c>), or <see langword="null"/>.</param>
+    internal sealed record Boulder(string Id, Vector3 Center, float Radius, float Smooth, WorldEmission? Emission = null, WorldSolid? Solid = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission, Solid: Solid);
 
     /// <summary>A terrain slab — a rounded box patch (a plaza tile, a step, a wall segment) whose material is data on
     /// the row.</summary>
@@ -514,7 +588,8 @@ internal abstract record WorldSceneRow(
     /// <param name="Smooth">The smooth-union blend radius that melds it into the field.</param>
     /// <param name="Albedo">The slab's own albedo (per-row material, unlike the shared boulder stone).</param>
     /// <param name="Emission">The row's emission facet, or <see langword="null"/> for silent.</param>
-    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo, WorldEmission? Emission = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission);
+    /// <param name="Solid">The row's solidity facet (a box of <c>HalfExtents + Margin</c>), or <see langword="null"/>.</param>
+    internal sealed record Slab(string Id, Vector3 Center, Vector3 HalfExtents, float Round, float Smooth, Vector3 Albedo, WorldEmission? Emission = null, WorldSolid? Solid = null) : WorldSceneRow(Id: Id, Center: Center, Emission: Emission, Solid: Solid);
 
     /// <summary>Returns this row with a replaced <see cref="Center"/> — the shape-preserving move every drag commit and
     /// numeric move composes through.</summary>
@@ -528,7 +603,8 @@ internal abstract record WorldSceneRow(
 
 /// <summary>The world's static scene — a ground plane plus the shape rows. The materials are inline albedo colors (not
 /// palette indices): the frame source allocates one grass material, one per-row material (a boulder's from
-/// <see cref="StoneAlbedo"/>, a slab's from its own row), and iterates the <see cref="Rows"/>.</summary>
+/// <see cref="StoneAlbedo"/>, a slab's from its own row), and iterates the <see cref="Rows"/>. The scene is
+/// PRESENTATION-ONLY except for any row carrying a <see cref="WorldSolid"/> facet, which is SIM-AFFECTING (contact).</summary>
 /// <param name="GroundAlbedo">The grass ground plane's albedo.</param>
 /// <param name="StoneAlbedo">The shared albedo every boulder row renders with.</param>
 /// <param name="Rows">The scene's shape rows, emitted in order after the ground plane.</param>
@@ -599,6 +675,8 @@ internal sealed record WorldPlacementRepeat(float SpacingX, float SpacingZ, int 
 /// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
 /// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Under <paramref name="Repeat"/> the emission
 /// binds to the placement ROOT only. Omitted from the wire when null.</param>
+/// <param name="Solid">The placement's solidity facet (see <see cref="WorldSolid"/>) — needs the FIELD contact provider
+/// (Arc 2); a solid placement under the analytic provider is a loud validator error. Omitted from the wire when null.</param>
 internal sealed record WorldPlacement(
     string Id,
     string CreationId,
@@ -608,7 +686,8 @@ internal sealed record WorldPlacement(
     WorldPlacementRepeat? Repeat = null,
     string? Mirror = null,
     string? Role = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEmission? Emission = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null
 );
 
 /// <summary>
@@ -706,6 +785,9 @@ internal readonly record struct WorldScreenRoute(bool Engageable, float EngageRa
 /// <param name="Round">The corner-rounding radius.</param>
 /// <param name="Source">The signal the lit face carries.</param>
 /// <param name="Route">The engage-route policy.</param>
+/// <param name="Solid">The screen slab's solidity facet (a box collider derived from the slab's oriented frame +
+/// <c>Margin</c> by <see cref="WorldColliderSet"/>), or <see langword="null"/> for a decorative screen. Omitted from the
+/// wire when null.</param>
 internal sealed record WorldScreen(
     int Index,
     Vector3 Origin,
@@ -716,10 +798,19 @@ internal sealed record WorldScreen(
     float HalfDepth,
     float Round,
     WorldScreenSource Source,
-    WorldScreenRoute Route
+    WorldScreenRoute Route,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null
 );
 
+/// <summary>The flattened, fixed-point form of one velocity-response row: the conjunction gate (body-fact predicates
+/// only), and the engage/release convergence rates the ramp integrates through the shared rate accumulator.</summary>
+internal readonly record struct FixedMotionResponse(CompiledPredicate[] Gate, FixedQ4816 EngageRate, FixedQ4816 ReleaseRate);
+
 /// <summary>The one-time fixed-point compilation of authored motion tuning. Runtime simulation reads only this form.</summary>
+/// <remarks>SIM-AFFECTING extension: <see cref="Response"/> promotes a slice of the tuning that the shaping stage of
+/// <see cref="WorldBody"/>'s grounded integrator reads. <see cref="ResponseRecencyFacts"/>/<see cref="ResponseRecencyWindows"/>
+/// are the shared recency-clock table across every row's <see cref="ActionPredicate.Recently"/> gate (the per-tick clock
+/// updater walks it), slotted by the SAME <see cref="CompiledActionSpec.FlattenPredicate"/> the lane bindings use.</remarks>
 internal readonly record struct FixedMotionTuning(
     FixedQ4816 MoveSpeed,
     FixedQ4816 TurnSpeed,
@@ -730,20 +821,80 @@ internal readonly record struct FixedMotionTuning(
     FixedQ4816 MaxFallSpeed,
     FixedQ4816 CoyoteTime,
     FixedQ4816 JumpBufferTime,
-    FixedQ4816 JumpCutMultiplier
+    FixedQ4816 JumpCutMultiplier,
+    FixedMotionResponse[] Response,
+    ActionFact[] ResponseRecencyFacts,
+    ulong[] ResponseRecencyWindows
 ) {
+    /// <summary>The number of recency clocks the response table's Recently gates share.</summary>
+    public int RecencySlots => ResponseRecencyFacts.Length;
+
     /// <summary>Compiles the authored floating-point motion tuning to its fixed-point form.</summary>
-    public static FixedMotionTuning Compile(in MotionTuning tuning) => new(
-        MoveSpeed: FixedQ4816.FromDouble(value: tuning.MoveSpeed),
-        TurnSpeed: FixedQ4816.FromDouble(value: tuning.TurnSpeed),
-        GroundY: FixedQ4816.FromDouble(value: tuning.GroundY),
-        JumpSpeed: FixedQ4816.FromDouble(value: tuning.JumpSpeed),
-        RiseGravity: FixedQ4816.FromDouble(value: tuning.RiseGravity),
-        FallGravity: FixedQ4816.FromDouble(value: tuning.FallGravity),
-        MaxFallSpeed: FixedQ4816.FromDouble(value: tuning.MaxFallSpeed),
-        CoyoteTime: FixedQ4816.FromDouble(value: tuning.CoyoteTime),
-        JumpBufferTime: FixedQ4816.FromDouble(value: tuning.JumpBufferTime),
-        JumpCutMultiplier: FixedQ4816.FromDouble(value: tuning.JumpCutMultiplier)
+    public static FixedMotionTuning Compile(in MotionTuning tuning) {
+        var rows = (tuning.Response ?? []);
+        var response = new FixedMotionResponse[rows.Count];
+        var recencyFacts = new List<ActionFact>();
+        var recencyWindows = new List<ulong>();
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var gate = new List<CompiledPredicate>();
+
+            // The response table shares ONE recency-clock table across all rows (as one lane's press/release channels
+            // share one), slotted by the same predicate flattener the action lanes use.
+            CompiledActionSpec.FlattenPredicate(predicate: rows[index].Gate, gate: gate, recencyFacts: recencyFacts, recencyWindows: recencyWindows);
+
+            response[index] = new FixedMotionResponse(
+                Gate: gate.ToArray(),
+                EngageRate: FixedQ4816.FromDouble(value: rows[index].EngageRate),
+                ReleaseRate: FixedQ4816.FromDouble(value: rows[index].ReleaseRate)
+            );
+        }
+
+        return new(
+            MoveSpeed: FixedQ4816.FromDouble(value: tuning.MoveSpeed),
+            TurnSpeed: FixedQ4816.FromDouble(value: tuning.TurnSpeed),
+            GroundY: FixedQ4816.FromDouble(value: tuning.GroundY),
+            JumpSpeed: FixedQ4816.FromDouble(value: tuning.JumpSpeed),
+            RiseGravity: FixedQ4816.FromDouble(value: tuning.RiseGravity),
+            FallGravity: FixedQ4816.FromDouble(value: tuning.FallGravity),
+            MaxFallSpeed: FixedQ4816.FromDouble(value: tuning.MaxFallSpeed),
+            CoyoteTime: FixedQ4816.FromDouble(value: tuning.CoyoteTime),
+            JumpBufferTime: FixedQ4816.FromDouble(value: tuning.JumpBufferTime),
+            JumpCutMultiplier: FixedQ4816.FromDouble(value: tuning.JumpCutMultiplier),
+            Response: response,
+            ResponseRecencyFacts: recencyFacts.ToArray(),
+            ResponseRecencyWindows: recencyWindows.ToArray()
+        );
+    }
+}
+
+/// <summary>The one-time fixed-point compilation of a kit's body volume (the vertical capsule).</summary>
+internal readonly record struct FixedWorldCollider(FixedQ4816 Radius, FixedQ4816 Height) {
+    /// <summary>Compiles an authored collider to fixed point, or <see langword="null"/> for a volumeless kit.</summary>
+    public static FixedWorldCollider? Compile(WorldCollider? collider) => ((collider is { } value)
+        ? new FixedWorldCollider(Radius: FixedQ4816.FromDouble(value: value.Radius), Height: FixedQ4816.FromDouble(value: value.Height))
+        : null);
+}
+
+/// <summary>The one-time fixed-point compilation of the world's contact tuning — read by the analytic contact field
+/// and the grounded integrator. <see cref="GroundedThreshold"/> is the compiled <c>cos(maxSlopeDegrees)</c> a contact
+/// normal's up-alignment must clear to ground a body (the same test both providers use).</summary>
+internal readonly record struct FixedWorldCollision(
+    bool Enabled,
+    WorldContactProvider Provider,
+    FixedQ4816 ContactSkin,
+    int MaxIterations,
+    FixedQ4816 GroundedThreshold,
+    FixedQ4816 GradientProbe
+) {
+    /// <summary>Compiles the authored contact tuning to fixed point.</summary>
+    public static FixedWorldCollision Compile(WorldCollision collision) => new(
+        Enabled: collision.Enabled,
+        Provider: collision.Provider,
+        ContactSkin: FixedQ4816.FromDouble(value: collision.ContactSkin),
+        MaxIterations: collision.MaxIterations,
+        GroundedThreshold: FixedQ4816.FromDouble(value: Math.Cos(d: (collision.MaxSlopeDegrees * (Math.PI / 180.0)))),
+        GradientProbe: FixedQ4816.FromDouble(value: collision.GradientProbe)
     );
 }
 
@@ -1060,6 +1211,9 @@ internal sealed record WorldAuthoringDefaults(
 /// <param name="Audio">The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the
 /// listener policy — see <see cref="WorldAudioDefaults"/>). <see langword="null"/> in JSON coalesces to
 /// <see cref="WorldAudioDefaults.Default"/>.</param>
+/// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — SIM-AFFECTING. <see langword="null"/>
+/// in JSON coalesces to <see cref="WorldCollision.None"/> (collision OFF), so an existing world keeps its flat ground
+/// plane byte-identically; omitted from the wire when null (the plan-wide new-section idiom).</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -1081,7 +1235,8 @@ internal sealed record WorldDefinition(
     IReadOnlyList<WorldSpeaker> Speakers,
     IReadOnlyList<WorldTune> Tunes,
     IReadOnlyList<WorldPatch> Patches,
-    WorldAudioDefaults Audio
+    WorldAudioDefaults Audio,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollision? Collision = null
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
