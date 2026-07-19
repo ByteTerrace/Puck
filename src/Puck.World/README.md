@@ -857,6 +857,34 @@ headless-ish run may capture silence), the file is non-trivial, `capture.status`
 reads idle before and after, and the recording document used carries the
 capture-only overlay row.
 
+### The sim clock, and what an offline renderer already has
+
+`RecordingDocument.Clock` picks the timestamp source. `wall` is the live-capture
+story. **`sim` takes a frame's presentation time from the engine tick**
+(`ticks x 1e9 / 50400`) rather than the wall clock, so a render can be divorced
+from real time entirely. The validator enforces the pairing rule:
+**a `sim`-clock document rejects audio rows** — a deterministic render carries no
+live audio, so a sim-clock reel is silent or scored later
+(`RecordingDocumentValidator`).
+
+The mode is shipped but **unexercised**: nothing in the tree drives the loop from
+a tick counter yet. The seams an offline/sim-clock renderer would compose are all
+already present, so nobody needs to re-derive them:
+
+| Need | Already shipped |
+|---|---|
+| Deterministic stepping | The fixed-step launcher + `Puck.Maths` fixed point |
+| Scripted input | The proof-corpus format and the feeder's pacing machinery (`scripts/proof.cs`) |
+| Frame tap with tick timestamps | `CapturingRenderNode` → `CaptureFrame.TimestampTicks` |
+| Sim-clock muxing | `RecordingDocument.Clock = Sim` → `RecordingSession` |
+| Encoders, overlays, muxer | The whole recording graph described above |
+| CPU pixels off-screen | The same readback the live tap uses, under headless hosting |
+
+The genuinely missing piece is an **offline pump** — a host mode that advances the
+fixed-step loop from a tick counter instead of the presentation clock and blocks
+on the encode queue instead of dropping when it backs up (offline inverts the
+drop policy: correctness over liveness).
+
 ## The command wire (stdin format)
 
 The console is a hot path — a flood corpus lands tens of thousands of `player.*`
@@ -1294,8 +1322,7 @@ Start / Back→Select; the growth point is the `PlayerIntent` action-lane vocabu
 ## Audio (the mixer core, the world data model, and the device)
 
 `Audio/` holds the pure mixing core; the world data model sits on top of it,
-and the WASAPI device (below) drives both without reshaping either — see
-`docs/reviews/2026-07-18-world-audio-arc-plan.md` for the design history.
+and the WASAPI device (below) drives both without reshaping either.
 
 **The rate.** 48000 Hz, fixed: device-native, exactly **200 frames
 per 240 Hz sim step** (`WorldAudioMixer.FramesPerSimStep`), 21/20 engine ticks
@@ -1483,8 +1510,105 @@ thereafter, `world.save` folds it back into `audio.masterGain`
 - **XInput = 4 Xbox-family pads locally** (a Windows API bound that happens to
   equal the local-seat cap; HID pads are uncapped).
 
+## Settled questions — do not re-litigate
+
+These were argued, verified against the tree, and decided while the moldable-state
+and UI/editor substrates were built. Re-deriving or re-flagging them wastes a
+session; changing one is a deliberate decision, not a cleanup.
+
+**The standing genre-neutrality audit.** Every new or changed contract surface a
+future arc proposes — an editor message, a UI binding surface, a genre-specific
+verb — must answer: **"Would an RTS / FPS / RPG / MMO / puzzle world need a
+different *message* here, or just different *data*?"** If the answer is "a
+different message," the surface is wrong: generalize it, or move the specificity
+into data. This is the calcification audit applied to the wire, and it did not
+retire with the arc that introduced it.
+
+**Identity and extensibility conventions.** Every row a document carries is
+addressed by a string id (screens are position-addressed by index): kits, screens,
+cameras, spawn points, boulders, addon rows, binding-overlay rows, profiles.
+Mutations target ids; ids never carry meaning beyond identity. Both document
+families carry `[JsonExtensionData] Extensions` bags — `puck.world.def.v1` at the
+document level, `puck.world.player.v1` at both the document and per-profile level
+— the same posture as `PuckRunDocument`. Unknown sections and fields survive a
+round-trip untouched; that is the data-side plugin story until the addon ABI grows
+host imports.
+
+**Decided, with the reason:**
+
+- The binding-profile stack (`BindingProfileDocument`, `BindingProfile.Compile`,
+  `CompiledBindingProfile`, `PagedInputBindings` with per-slot chords) lives in
+  `Puck.Commands`, public. There is nothing to lift and no copy to migrate.
+- Compiled-level `LayeredInputBindings` is **not** the per-entry overlay
+  primitive — it composes wholesale per `(slot, source)`. Document pre-merge keyed
+  `(page id + ordered chord, source)` is the rule. Do not swap back.
+- The player scope is a **catalog** of seat-selectable profiles, not a
+  single-person record. Flattening it regresses couch co-op.
+- Storage version tokens are opaque: they **guard** (if-match), they cannot
+  **order**. `Revision` + `UpdatedAtUtc` orders. Two mechanisms, never conflated.
+- Section-granular protocol messages do **not** imply section-granular storage.
+  The storage grain is per-profile blobs; same-profile cross-device concurrency is
+  whole-profile last-writer-wins with detection.
+- Azurite's connection-string path carries no Entra principal — it can prove blob
+  mechanics, never the identity resolver.
+- Ownership latching is unified through principals and grants. There were exactly
+  three ad-hoc precedents (`WorldEngagement`, machine-input ownership,
+  `AddonHost.SlotOwner`); do not invent a fourth.
+- `WorldServer.Step`'s buffered drain fits mutations as-is — mutations buffer like
+  intents. Commands applying in the pre-Step window (read-after-write inside one
+  stdin batch) is a documented deviation, not a bug in the command path.
+- `puck.run.v1` is not the player-data home.
+- `Guid.ToString()` is a valid Azure container name — verified against Azure's
+  container-naming rules. The storage target and the claims-based resolver both
+  need the container-id shape; do not re-derive it.
+
+**Steady-state performance contracts for this substrate.** These are narrower than
+the repo's general doctrine and specific to the moldable-state pipeline:
+
+- The per-tick pipeline — intent fold → sim step → snapshot emit → binding
+  resolution — **allocates nothing.** Document and JSON work is confined to
+  boundaries: load, save, and mutation application.
+- Binding composition compiles **once per change** (then
+  `PagedInputBindings.Reload`), **never per frame.**
+- Mutation application **rebuilds only the derived state of the changed section**,
+  never the whole document's.
+
+**Accepted asymmetries, by design:**
+
+- **Cameras are document-only.** `world.camera.set`/`.remove` upserts the row; the
+  change applies at next boot, not live.
+- **Screen-source live-apply is index-scoped** — live for existing screen indices,
+  with geometry fully live. Population, render, and camera defaults are
+  document-only edits (their *session* state still folds back on `world.save`).
+  **Addons are the exception and are not in this by-design list** — their
+  boot-only mounting is deferred work with a prerequisite, under Known
+  limitations below.
+- **`BindingCommandSource` is dormant in World.** The dispatch path exists and
+  derives from the same composed base layers, but `InputRouter` owns all physical
+  input, so nothing drives it today.
+- **Per-profile `Edit` subjects are not granular.** `Edit` scopes to a section kind
+  (identity/motion/bindings/prefs), not to which catalog profile is being edited.
+  Finer-grained per-profile trust is unbuilt.
+
 ## Known limitations
 
+- **Addon mounting is boot-time only. This is DEFERRED WORK WITH A PREREQUISITE,
+  not a by-design asymmetry** (owner ruling, 2026-07-19).
+  `world.addon.set`/`.remove` edits and journals the document row correctly, but
+  `WorldAddonDriver.Create` mounts only the **enabled** rows of the definition it
+  is constructed with, and it is constructed once, at `Program.cs:282` — so a new
+  or newly enabled addon does not mount until **save + relaunch**. Closing this
+  means either a `world.addon.reload` verb or remounting through
+  `WorldAddonDriver` on `UpsertAddon`. **The prerequisite is deciding what a
+  mid-session driver swap means for the principal's grants and for the body's
+  in-flight state**, plus an `AddonHost` per-instance teardown proof. That
+  prerequisite is why it has not been built — not a decision that it should not
+  be.
+- **A cartridge DECLARED in the world document fires no `screen.boot` cue.**
+  Constructor-time declared machine boots run before the binder lifecycle tap is
+  wired, so the cue producer never observes them. Runtime inserts and
+  reconcile-driven source changes all fire the cue correctly. This is an
+  asymmetry to fix, not an intended distinction.
 - A signal from an unbound control or inactive binding map can reserve an input
   slot even though it dispatches no command. The reservation remains until the
   device mapping is replaced or the session restarts.
@@ -1497,6 +1621,14 @@ thereafter, `world.save` folds it back into `audio.masterGain`
 - Losing window focus can prevent release or cancellation edges from reaching
   the input router. A held simulation action may remain active until another
   edge clears it or the session restarts.
+- **Authoring gestures sit outside the simulation-replay contract.** A committed
+  mutation and the journal are deterministic once the final row exists, but stick
+  drag integrates *presentation* `deltaSeconds` and then persists the resulting
+  float row — so replaying identical command snapshots need not reproduce the
+  authored coordinates. This is the presentation/artistic exception applied
+  deliberately to edit gestures. If a future arc needs gestures themselves to
+  replay to the same coordinates, integrate them at fixed ticks instead; do not
+  assume today's drag path already does.
 
 ## Verifying
 
@@ -1520,7 +1652,7 @@ dotnet run src/Puck.World/scripts/proof.cs -- <subcommand> [options]
 It is the reference "N remote players" session: 1–4 live local seats versus a
 scripted corpus driving entities 5..128 over stdin — the console standing in for
 the remote server, sending **inputs only**, per the simulation-authority
-contract. Twelve subcommands:
+contract. Nineteen subcommands:
 
 - **`generate --kind parade|flood|flight|hop|expo`** `[--population N] [--seed S]
   [--out PATH]` (+ flood knobs `--duration/--control-rate/--arena/--correction-interval`)
@@ -1662,6 +1794,29 @@ contract. Twelve subcommands:
   and `capture.status` reads idle again. It also asserts the recording document the
   world resolved carries the capture-only overlay row. `--out` copies the artifact
   out for a real player to open.
+- **`ui-floor`** — the rendered-overlay floor on both backends: the unified
+  overlay node, the console panel, per-seat binding bars, toasts, and HUD.
+- **`editor-mode`** — editor entry/exit, binding groups, chord meanings as data,
+  and the group round trip (see **Editor mode**).
+- **`editor-edit`** — selection, drag-coalesced manipulation, whole-row commit,
+  frozen-preview retirement, and per-seat viewport clipping.
+- **`editor-cameras`** — the client-side editor camera rig swap and live camera
+  reconcile.
+- **`placements`** — creation/placement rows as world data: import and stamp in
+  pixels, plus the corrupt-input rejection path.
+- **`sculpt`** — the sculpt workbench, whose preview is stamp-identical to the
+  committed stamp by construction, including the 48-shape stamp cap.
+- **`audio`** — the audio world data model end to end: the emitter graph,
+  emission facets, cues, and the device's honest-silence posture.
+
+Three standalone harnesses sit beside `proof.cs` in `scripts/`, run the same way
+and gating the same surface:
+
+| Harness | Proves |
+|---|---|
+| `audio-mix.cs` | The pure mixer core offline, pinned by two golden PCM hashes — no device, no GPU |
+| `audio-device.cs` | Device liveness, structurally: the failure paths (unsupported, declining, mid-stream fault) degrade to silence, count rebinds, and stop without a throw |
+| `overlay-envelope.cs` | `OverlayFrameBuilder` at its declared maxima with no GPU: saturation drops are counted (never silent), the toast tail reservation cannot be starved, and clip-table overflow drops rather than bleeding unclipped |
 
 Everywhere numbers are formatted or parsed runs through the invariant culture, so
 a corpus and its asserts are locale-stable.

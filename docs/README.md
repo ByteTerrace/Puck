@@ -29,18 +29,23 @@ sources remain useful to engineering decisions.
 | Document | Purpose |
 |---|---|
 | [Disposal implementation audit](reviews/2026-07-17-disposal-implementation-audit.md) | Active full-repository disposal findings, ownership evidence, and remediation work items. |
-| [Moldable-state code review](reviews/2026-07-18-moldable-state-code-review.md) | Active findings from the moldable-state implementation review: grant exclusivity, player-section completeness, screen removal, and source-diff hygiene. |
-| [World UI/editor plan](reviews/2026-07-18-world-ui-editor-plan.md) | The active World UI/editor arc: phases, exit bars, and the settled architecture decisions. |
-| [World UI/editor implementation review](reviews/2026-07-18-world-ui-editor-implementation-review.md) | Current architecture, active editor-selection findings, measurement gates, and prerequisites for the World-first authoring trajectory. |
-| [World audio arc plan](reviews/2026-07-18-world-audio-arc-plan.md) | The World audio design: the mixer core, the world data model, the WASAPI device, and the design history behind them. |
 | [World authoring, audio, and Forge implementation review](reviews/2026-07-19-large-change-set-review.md) | Static review of the landed P3–P6, audio, Forge, and overlay work: capacity contracts, transactional/lifetime defects, proof gaps, and ordered remediation. |
 | [SDF renderer performance plan](reviews/2026-07-16-sdf-renderer-sota-perf-plan.md) | Active measurement-gated SDF optimization phases and current reopen criteria. |
-| [World moldable-state handoff](reviews/2026-07-18-world-moldable-state-handoff.md) | Surfaces the executed Puck.World moldable-state arc shipped for the editor and UI arcs to build on, with zero new "make X data" prework. |
+| [Demo port ledger](reviews/2026-07-18-demo-port-ledger.md) | Row-by-row tracking of Demo capabilities against their World successors. |
+
+The moldable-state, World UI/editor, World audio, and branch-closeout documents
+retired once their arcs landed: their commitments are carried in the
+[Demo to World port](demo-to-world-port-plan.md) plan's carried tracks, and their
+durable contracts — the settled questions, the genre-neutrality audit, the
+accepted asymmetries, the authoring-gesture determinism boundary, and the full
+proof-battery enumeration — live in [`Puck.World`](../src/Puck.World/README.md).
+Git history holds the rest.
 
 ## Content and roadmap
 
 | Document | Purpose |
 |---|---|
+| [Demo to World port](demo-to-world-port-plan.md) | The twelve-arc plan that ports `Puck.Demo` capabilities into `Puck.World` and removes the project. |
 | [Game studio](game-studio-plan.md) | Current creator workflow and remaining product roadmap. |
 | [Machine fleet](machine-fleet-plan.md) | Emulator-fleet performance model and optimization priorities. |
 | [Machine fleet briefing](machine-fleet-briefing.md) | Workload classes, scale posture, and design constraints. |
