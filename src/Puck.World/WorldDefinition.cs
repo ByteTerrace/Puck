@@ -1208,8 +1208,9 @@ internal enum WorldBackendPreference : byte {
 /// <param name="ExitAfterSeconds">Seconds before the world auto-exits; <c>0</c> runs until the window is closed.</param>
 /// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
 /// <param name="Timing">Whether GPU per-pass timing boots armed; the <c>world.timing</c> live lever owns it thereafter.</param>
-/// <param name="Genlock">The external-clock election policy (SHAPE-only: <see langword="null"/> for automatic, or a
-/// non-whitespace source id / <c>off</c>), or <see langword="null"/> for the launcher's automatic election.</param>
+/// <param name="Genlock">The external-clock election policy, consumed at boot by the clock registry (which tolerates an
+/// unknown source id): <see langword="null"/> for the launcher's automatic election, or a non-whitespace source id /
+/// <c>off</c>. SHAPE-only validation (null or non-whitespace); the registry, not the validator, interprets the id.</param>
 internal sealed record WorldHostDefaults(
     WorldBackendPreference Backend,
     int Width,

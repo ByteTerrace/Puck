@@ -145,7 +145,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "world.contacts",
-            description: "Reports the solidity state (Immediate read): world.contacts prints the solid-row census (spheres + boxes); world.contacts <body-index> prints that 1-based body's grounded flag, planar speed, and resolved contact count.",
+            description: "Reports the solidity state (Immediate read): world.contacts prints the solid-row census (spheres + boxes); world.contacts <body-index> prints that 1-based body's grounded flag, planar speed, and grounded witness (resolved=1 when grounded, else 0).",
             handler: (_, args) => {
                 if (args.Length == 0) {
                     return Census();

@@ -1130,8 +1130,8 @@ internal static class WorldDefinitionValidator {
 
     // The host section (PRESENTATION-ONLY): window extents bounded, exit/pacing non-negative, the closed engine enums
     // in range (a mutation can carry an out-of-range cast the JSON converter alone would not catch), and the surface
-    // format not the Unknown hole. Genlock is SHAPE-only (null or non-whitespace), mirroring storage.endpoint's
-    // reserved-field posture.
+    // format not the Unknown hole. Genlock is SHAPE-only (null or non-whitespace) — unlike storage.endpoint (nothing yet
+    // consumes it), genlock IS wired at boot into the external-clock election, which tolerates an unknown source id.
     private static void ValidateHost(WorldHostDefaults host, List<string> errors) {
         RequireIntRange(value: host.Width, min: 1, max: 16384, name: "host.width", errors: errors);
         RequireIntRange(value: host.Height, min: 1, max: 16384, name: "host.height", errors: errors);

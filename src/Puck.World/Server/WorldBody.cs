@@ -265,8 +265,10 @@ internal sealed class WorldBody {
     /// <c>world.contacts</c> read reports.</summary>
     public float PlanarSpeed => (float)(double)m_planarVelocity.Length;
 
-    /// <summary>The number of surfaces the last grounded <see cref="Advance"/> resolved this body against (0 while
-    /// collision is off) — the <c>world.contacts</c> read-back.</summary>
+    /// <summary>The last <see cref="Advance"/>'s grounded witness echoed as a count — <c>1</c> when the resolve grounded
+    /// this body, <c>0</c> otherwise (and always <c>0</c> while collision is off). The field-contact seam reports only a
+    /// grounded bool, so this is not a per-surface tally: a body depenetrated by a wall while airborne still reads
+    /// <c>0</c>. Introspection-only, surfaced by the <c>world.contacts</c> read-back.</summary>
     public int ContactCount => m_lastContactCount;
 
     /// <summary>Whether this player is ENGAGED on a diegetic screen — the route latch the engagement table sets. While

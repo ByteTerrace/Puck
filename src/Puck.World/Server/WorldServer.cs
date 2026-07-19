@@ -590,7 +590,9 @@ internal sealed class WorldServer {
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
-        _ => WorldSection.Kits,
+        // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
+        // missing arm is a build-time authoring gap, surfaced loudly rather than mis-authorized.
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(mutation), actualValue: mutation, message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."),
     };
 
     // The dependents a placement-removal guard names: every speaker anchored to the placement (null = none).

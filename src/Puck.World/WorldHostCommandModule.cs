@@ -123,13 +123,23 @@ internal sealed class WorldHostCommandModule(WorldServer server, IServerLink lin
             case "timing":
                 return TryBool(value: value, name: "timing", apply: flag => (host with { Timing = flag }), error: out error);
             case "presentMode":
-                if (!Enum.TryParse<PresentMode>(value: value, ignoreCase: true, result: out var mode) || !Enum.IsDefined(value: mode)) {
+                // Explicit-token grammar only (like backend/surfaceFormat) — Enum.TryParse would passthrough-accept numeric
+                // strings ("0" → Vsync), which the stated vsync|mailbox|immediate|adaptive vocabulary does not offer.
+                PresentMode? mode = value.ToLowerInvariant() switch {
+                    "vsync" => PresentMode.Vsync,
+                    "mailbox" => PresentMode.Mailbox,
+                    "immediate" => PresentMode.Immediate,
+                    "adaptive" => PresentMode.Adaptive,
+                    _ => null,
+                };
+
+                if (mode is not { } presentMode) {
                     error = $"bad presentMode '{value}' — vsync|mailbox|immediate|adaptive";
 
                     return null;
                 }
 
-                return (host with { PresentMode = mode });
+                return (host with { PresentMode = presentMode });
             case "targetHertz":
                 if (!double.TryParse(s: value, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var hertz) || !double.IsFinite(d: hertz) || (hertz < 0.0)) {
                     error = $"bad targetHertz '{value}' — a non-negative finite number (0 = automatic display pacing)";
