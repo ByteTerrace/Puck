@@ -68,6 +68,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly float[] m_avatarGaitPhases = new float[WorldPopulation.MaxPopulation];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldPopulation.MaxPopulation];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldPopulation.MaxPopulation];
+    // The seat.join cue's edge detector (A11b): a slot's roster presence last frame.
+    private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
     private readonly WorldRenderSettings m_settings;
     // The binder that owns the diegetic screens' CPU-fed GPU sources. The scene (ground + boulders) and the screens are
@@ -354,8 +356,18 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 // Phase advances by DISTANCE, not wall time: idle avatars hold their pose; walking speed controls cadence.
                 // Clamp a teleport/server snap so it cannot spin the limbs through dozens of cycles in one frame.
                 var travelled = MathF.Min(x: Vector3.Distance(value1: position, value2: m_avatarPreviousPositions[index]), y: 0.25f);
+                var previousPhase = m_avatarGaitPhases[index];
 
                 m_avatarGaitPhases[index] += (travelled * 8.0f);
+
+                // The player.footstep cue (A11b): LOCAL seat avatars fire one at-site cue per gait-phase half-cycle
+                // wrap — one footfall per π of phase (a stride swings one leg through), so cadence follows walking
+                // speed and an idle avatar is silent. Presentation-side by design: the phase is the same
+                // distance-driven presentation state that swings the limbs.
+                if ((index < WorldPopulation.LocalSeatCount) &&
+                    (((int)(m_avatarGaitPhases[index] / MathF.PI)) > ((int)(previousPhase / MathF.PI)))) {
+                    m_audio.SubmitCue(eventToken: WorldAudioCue.PlayerFootstep, site: position);
+                }
             } else {
                 m_avatarPoseSeeded[index] = true;
             }
@@ -379,7 +391,15 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is null) {
+                m_seatWasJoined[slot] = false;
+
                 continue;
+            }
+
+            // The seat.join cue (A11b): the roster arrival edge, at the seat avatar's spawn pose.
+            if (!m_seatWasJoined[slot]) {
+                m_seatWasJoined[slot] = true;
+                m_audio.SubmitCue(eventToken: WorldAudioCue.SeatJoin, site: m_client.Position(index: slot));
             }
 
             var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
@@ -397,8 +417,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras (plan A3 — once per produced
-        // frame, from the produce path where render poses are already resolved).
-        _ = m_audio.Publish(transforms: m_transforms, seats: m_seatCameraPoses);
+        // frame, from the produce path where render poses are already resolved). The presentation delta ages the
+        // transient cue pool (visual-only clock use — audio is presentation).
+        _ = m_audio.Publish(transforms: m_transforms, seats: m_seatCameraPoses, deltaSeconds: deltaSeconds);
 
         return new SdfFrame(
             Program: m_program,

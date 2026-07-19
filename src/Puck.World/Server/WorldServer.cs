@@ -24,8 +24,12 @@ internal enum WorldEditEchoKind {
 /// <param name="Rejected">Whether the outcome is a rejection/denial.</param>
 /// <param name="Kind">The edit-boundary class the outcome belongs to.</param>
 /// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the correlation key a
-/// released drag preview retires against (<c>WorldEditorDrag.NoteRejected</c>); <see langword="null"/> otherwise.</param>
-internal readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null);
+/// released drag preview retires against (<c>WorldEditorDrag.NoteRejected</c>) and the at-site position source the
+/// applied-cue lane derives from; <see langword="null"/> otherwise.</param>
+/// <param name="Denied">Whether the rejection was a CAPABILITY denial (a missing mutate grant, a refused grant
+/// acquisition) rather than a validator/guard rejection — the discriminator the cue lane's <c>grant.denied</c> vs
+/// <c>mutation.rejected</c> tokens ride.</param>
+internal readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false);
 
 /// <summary>
 /// The authoritative world server — one logical instance owning the LIVE <see cref="WorldDefinition"/>, the entity
@@ -171,7 +175,7 @@ internal sealed class WorldServer {
             EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label}{(grant.Exclusive ? " exclusive" : string.Empty)}", Rejected: false, Kind: WorldEditEchoKind.GrantTable));
         } else {
             Console.Error.WriteLine(value: $"[world.grant rejected: {label} — {reason}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.GrantTable));
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true));
         }
     }
 
@@ -406,7 +410,7 @@ internal sealed class WorldServer {
 
         if (!m_grants.Allows(principal: mutation.Principal, capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: section))) {
             Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} cannot mutate section:{section.ToString().ToLowerInvariant()} — {Describe(mutation: mutation)} dropped]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} denied: no mutate grant", Rejected: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation));
+            EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} denied: no mutate grant", Rejected: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation, Denied: true));
 
             return false;
         }
@@ -445,7 +449,7 @@ internal sealed class WorldServer {
             : $"{Describe(mutation: mutation)} applied{(documentOnly ? " — document default (next boot; live levers unchanged)" : string.Empty)}");
 
         Console.Error.WriteLine(value: $"[world.mutation: {message}]");
-        EchoTap?.Invoke(obj: new WorldEditEcho(Message: message, Rejected: false, Kind: (documentOnly ? WorldEditEchoKind.DocumentDefaults : WorldEditEchoKind.Mutation)));
+        EchoTap?.Invoke(obj: new WorldEditEcho(Message: message, Rejected: false, Kind: (documentOnly ? WorldEditEchoKind.DocumentDefaults : WorldEditEchoKind.Mutation), Mutation: mutation));
 
         return true;
     }

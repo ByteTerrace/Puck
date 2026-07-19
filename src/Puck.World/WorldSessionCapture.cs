@@ -1,4 +1,5 @@
 using Puck.Scene;
+using Puck.World.Client;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -18,19 +19,22 @@ namespace Puck.World;
 /// byte-identity) still holds after a save learns to fold. <see cref="DescribeDrift"/> is the honest cheap witness of
 /// whether the live session has since diverged from the loaded document, reported by <c>world.status</c> at verb time.</remarks>
 internal static class WorldSessionCapture {
-    /// <summary>Composes the save snapshot: the live definition with the three session dimensions (render levers, live
-    /// census, screen inserts) folded into <see cref="WorldDefinition.Render"/>, <see cref="WorldDefinition.Population"/>,
-    /// and the <see cref="WorldDefinition.Screens"/> rows' machine sources.</summary>
+    /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, live
+    /// census, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
+    /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
+    /// and <see cref="WorldDefinition.Audio"/>'s master gain.</summary>
     /// <param name="definition">The server's live definition (mutations already applied).</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table (census + peer-source default).</param>
     /// <param name="binder">The live screen binder (runtime machine inserts).</param>
+    /// <param name="audio">The audio director (the <c>world.volume</c> session lever).</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder) {
+    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: render);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: binder);
+        ArgumentNullException.ThrowIfNull(argument: audio);
 
         return (definition with {
             Render = CaptureRender(render: render, defaults: definition.Render),
@@ -39,6 +43,7 @@ internal static class WorldSessionCapture {
             Creations = CaptureCreations(creations: definition.Creations),
             Tunes = CaptureTunes(tunes: definition.Tunes),
             Patches = CapturePatches(patches: definition.Patches),
+            Audio = CaptureAudio(audio: audio, defaults: definition.Audio),
         });
     }
 
@@ -102,9 +107,10 @@ internal static class WorldSessionCapture {
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table.</param>
     /// <param name="binder">The live screen binder.</param>
+    /// <param name="audio">The audio director (the master-volume lever).</param>
     /// <returns>The drift hint token.</returns>
-    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder) {
-        var drifted = new List<string>(capacity: 3);
+    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio) {
+        var drifted = new List<string>(capacity: 4);
 
         if (CaptureRender(render: render, defaults: definition.Render) != definition.Render) {
             drifted.Add(item: "render");
@@ -118,6 +124,10 @@ internal static class WorldSessionCapture {
             drifted.Add(item: "screens");
         }
 
+        if (audio.MasterVolumeLeverEngaged && (audio.EffectiveMasterVolume != definition.Audio.MasterGain)) {
+            drifted.Add(item: "audio");
+        }
+
         return ((drifted.Count == 0) ? "none" : string.Join(separator: '+', values: drifted));
     }
 
@@ -129,6 +139,13 @@ internal static class WorldSessionCapture {
         AmbientOcclusion = render.AmbientOcclusion,
         RenderScale = NearestRenderScaleTier(scale: render.RenderScale),
         UpscaleSharpness = render.UpscaleSharpness,
+    });
+
+    // Fold the world.volume session lever into the document's audio master gain (the render-levers asymmetry: the
+    // lever owns "now", the document owns boot, a save reconciles them). EffectiveMasterVolume equals the document
+    // value while the lever is unengaged, so the fold is exactly idempotent on a fresh boot (the ouroboros holds).
+    private static WorldAudioDefaults CaptureAudio(WorldAudioDirector audio, WorldAudioDefaults defaults) => (defaults with {
+        MasterGain = audio.EffectiveMasterVolume,
     });
 
     // Fold the live census: the current simulated stand-in count and the live peer-source default become the boot

@@ -53,6 +53,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldTune))]
 [JsonSerializable(typeof(WorldPatch))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
+[JsonSerializable(typeof(WorldAudioCue))]
 [JsonSourceGenerationOptions(
     Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

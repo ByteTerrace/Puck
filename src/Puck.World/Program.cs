@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Capture;
@@ -426,7 +427,8 @@ services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     settings: sp.GetRequiredService<WorldRenderSettings>(),
     store: sp.GetRequiredService<BindingBarStore>(),
     targeting: sp.GetRequiredService<WorldEditorTargeting>(),
-    workbench: sp.GetRequiredService<WorldWorkbench>()
+    workbench: sp.GetRequiredService<WorldWorkbench>(),
+    audio: sp.GetRequiredService<WorldAudioDirector>()
 ));
 // The overlay verb surface — world.screenshot (the composed-frame capture) + world.console (the mirror toggle).
 services.AddSingleton<ICommandModule, WorldUiCommandModule>();
@@ -477,6 +479,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var toasts = sp.GetRequiredService<OverlayToastStore>();
     var overlayFeed = sp.GetRequiredService<WorldOverlayFeed>();
     var editorDrag = sp.GetRequiredService<WorldEditorDrag>();
+    var audioDirector = sp.GetRequiredService<WorldAudioDirector>();
 
     sp.GetRequiredService<WorldServer>().EchoTap = echo => {
         toasts.Publish(message: echo.Message, isError: echo.Rejected);
@@ -491,6 +494,39 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         if (echo.Rejected && (echo.Mutation is { } rejectedMutation)) {
             editorDrag.NoteRejected(mutation: rejectedMutation);
         }
+
+        // THE EDIT-ECHO CUE LANE (audio A11b — the shimmer's audio twin): the same outcome fires its cue token —
+        // capability denials as grant.denied, other rejections as mutation.rejected, applied edits as
+        // mutation.applied AT the changed row's authored position where the mutation payload carries one (an upsert;
+        // removals and section edits fall back to the listener placement). Cue coverage is world DATA — a world with
+        // no cue rows hears nothing.
+        if (echo.Denied) {
+            audioDirector.SubmitCue(eventToken: WorldAudioCue.GrantDenied, site: null);
+        } else if (echo.Kind != WorldEditEchoKind.GrantTable) {
+            audioDirector.SubmitCue(
+                eventToken: (echo.Rejected ? WorldAudioCue.MutationRejected : WorldAudioCue.MutationApplied),
+                site: WorldAudioDirector.MutationSite(mutation: echo.Mutation)
+            );
+        }
+    };
+
+    // THE BINDER LIFECYCLE CUE LANE (audio A11b): machine boot/fault outcomes fire screen.boot / screen.fault at the
+    // screen row's authored face origin (resolved from the LIVE definition at event time; an undeclared index falls
+    // back to the listener placement). Pump-thread invocation; SubmitCue is gate-safe.
+    var audioCueClient = sp.GetRequiredService<WorldClient>();
+
+    binder.MachineLifecycleTap = (index, faulted) => {
+        Vector3? site = null;
+
+        foreach (var screen in audioCueClient.Definition.Screens) {
+            if (screen.Index == index) {
+                site = screen.Origin;
+
+                break;
+            }
+        }
+
+        audioDirector.SubmitCue(eventToken: (faulted ? WorldAudioCue.ScreenFault : WorldAudioCue.ScreenBoot), site: site);
     };
 
     // Captured out of the Decorate closure so the probe can expose the overlay's pass timing (world.gpu).

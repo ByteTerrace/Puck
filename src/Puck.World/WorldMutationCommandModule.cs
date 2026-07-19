@@ -21,7 +21,7 @@ namespace Puck.World;
 /// <remarks>JSON arguments must be a single whitespace-free token (compact JSON): the console tokenizer that identifies
 /// the verb would otherwise split the object, and the raw line the handler parses is reconstructed from the submitted
 /// text. The verbs read that raw line, so quotes survive.</remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Row(
@@ -316,7 +316,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 try {
-                    var snapshot = WorldSessionCapture.Capture(definition: server.Definition, render: renderSettings, population: server.Population, binder: screenBinder);
+                    var snapshot = WorldSessionCapture.Capture(definition: server.Definition, render: renderSettings, population: server.Population, binder: screenBinder, audio: audioDirector);
                     var bytes = WorldDefinitionSerialization.Save(definition: snapshot, path: target);
 
                     server.Compact();
@@ -336,7 +336,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var definition = server.Definition;
                 var source = (definitionSource.SourcePath ?? "baked default");
                 var dirty = server.JournalLength;
-                var drift = WorldSessionCapture.DescribeDrift(definition: definition, render: renderSettings, population: server.Population, binder: screenBinder);
+                var drift = WorldSessionCapture.DescribeDrift(definition: definition, render: renderSettings, population: server.Population, binder: screenBinder, audio: audioDirector);
 
                 return new CommandResult(Output: $"[world.status: source {source} schema {definition.Schema} kits {definition.Kits.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} session-drift {drift} dirty {dirty} undoable {dirty}]");
             }

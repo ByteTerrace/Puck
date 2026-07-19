@@ -165,9 +165,90 @@ internal sealed record WorldPatch(string Id, SynthPatchDocument Document, string
 internal sealed record WorldEmission(string PatchId, float Level, float? Radius = null);
 
 /// <summary>
+/// One world-event → sound binding (audio plan A11b) — a row of the Audio section's CUE TABLE: when the named engine
+/// event fires, the referenced patch voices through a short-lived TRANSIENT emitter placed per <see cref="Placement"/>.
+/// Event tokens are a CLOSED, published vocabulary of engine MECHANISMS (<see cref="EventTokens"/> — the leaf-role
+/// precedent): a genre ships different cue rows; new tokens appear only when the engine grows new mechanisms.
+/// </summary>
+/// <param name="Event">The event token (must be one of <see cref="EventTokens"/>).</param>
+/// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> the cue voices (must resolve).</param>
+/// <param name="GainThousandths">The cue's voice gain in thousandths (1000 = unity), or <see langword="null"/> for
+/// unity. Bounded by <see cref="CreationSoundDocument.MaxLevel"/> × 1000 — the shared audio gain ceiling in the cue
+/// table's integer unit.</param>
+/// <param name="Placement">Where the cue sounds: <see cref="PlacementAtSite"/> (spatial, at the event's world
+/// position — the shimmer's audio twin; events with no derivable site fall back to the listener),
+/// <see cref="PlacementListener"/> (UI feedback — rides the listener pose, so distance 0 renders full gain and the
+/// mixer's on-top-of-listener pan hold centers it), or <c>emitter:&lt;name&gt;</c> (sounds from the named speaker's
+/// resolved pose and support radius).</param>
+internal sealed record WorldAudioCue(
+    string Event,
+    string PatchId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? GainThousandths,
+    string Placement
+) {
+    /// <summary>The spatial placement token — the cue sounds at the event's world position.</summary>
+    public const string PlacementAtSite = "at-site";
+    /// <summary>The listener placement token — the cue rides the listener pose (centered, full gain).</summary>
+    public const string PlacementListener = "listener";
+    /// <summary>The named-speaker placement prefix (<c>emitter:&lt;speaker-name&gt;</c>).</summary>
+    public const string PlacementEmitterPrefix = "emitter:";
+
+    /// <summary>A world mutation applied (the edit-echo lane — fired beside the loud accept line).</summary>
+    public const string MutationApplied = "mutation.applied";
+    /// <summary>A world mutation rejected (validator/guard/capacity — never a grant denial).</summary>
+    public const string MutationRejected = "mutation.rejected";
+    /// <summary>A capability denial — a mutate attempt without its grant, or a refused grant acquisition.</summary>
+    public const string GrantDenied = "grant.denied";
+    /// <summary>A local seat avatar's jump takeoff. RESERVED: no producer is wired yet (the client view carries no
+    /// grounded/airborne signal; deriving one from Y heuristics would misfire on flying/swimming kits).</summary>
+    public const string PlayerJump = "player.jump";
+    /// <summary>A local seat avatar's landing. RESERVED (see <see cref="PlayerJump"/>).</summary>
+    public const string PlayerLand = "player.land";
+    /// <summary>A local seat avatar's footstep — derived from the presentation gait phase (one footfall per half
+    /// gait cycle; distance-driven, so an idle avatar is silent). Presentation-side by design.</summary>
+    public const string PlayerFootstep = "player.footstep";
+    /// <summary>A machine booted onto a screen slot (the binder lifecycle — <c>screen.insert</c> and the
+    /// reconcile-driven declared-source boot).</summary>
+    public const string ScreenBoot = "screen.boot";
+    /// <summary>A machine boot/lifecycle fault on a screen slot (missing content, unresolved engine).</summary>
+    public const string ScreenFault = "screen.fault";
+    /// <summary>A local seat joined the roster.</summary>
+    public const string SeatJoin = "seat.join";
+
+    /// <summary>The CLOSED cue-event vocabulary (the <see cref="WorldAvatarCatalog.HumanoidAnchorRoles"/> precedent):
+    /// the validator rejects any token outside it, and this list IS the published contract — new tokens appear only
+    /// when the engine grows new mechanisms, never per feature.</summary>
+    public static readonly IReadOnlyList<string> EventTokens = [
+        MutationApplied,
+        MutationRejected,
+        GrantDenied,
+        PlayerJump,
+        PlayerLand,
+        PlayerFootstep,
+        ScreenBoot,
+        ScreenFault,
+        SeatJoin,
+    ];
+
+    /// <summary>Whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>
+    /// <param name="token">The candidate token.</param>
+    public static bool IsEventToken(string? token) {
+        foreach (var candidate in EventTokens) {
+            if (string.Equals(a: candidate, b: token, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+/// <summary>
 /// The world's audio host-section defaults (audio plan A11) — document defaults with the absence-coalesce convention
 /// (the <see cref="WorldStorageDefaults"/> precedent): absent-in-JSON coalesces to <see cref="Default"/>. These are
-/// document data, not editor policy; live master volume is a session lever verb (AP4).
+/// document data, not editor policy; live master volume is the <c>world.volume</c> session lever (AP4): the lever
+/// owns "now" once touched, <see cref="MasterGain"/> owns boot, and <c>world.save</c> folds the lever back into
+/// <see cref="MasterGain"/> (the render-levers asymmetry).
 /// </summary>
 /// <param name="MasterGain">The master gain the mix path applies over every emitter (1 = unity), bounded by
 /// <see cref="CreationSoundDocument.MaxLevel"/>.</param>
@@ -179,12 +260,15 @@ internal sealed record WorldEmission(string PatchId, float Level, float? Radius 
 /// <param name="Listener">The listener policy (audio plan A5): <see cref="ListenerFocus"/> (the active view
 /// camera's pose listens), <c>seat:&lt;n&gt;</c> (that seat's view camera), or a declared camera name — so a stage
 /// or museum world can pin its listener without touching the runtime.</param>
+/// <param name="Cues">THE CUE TABLE (audio plan A11b, default empty/absent): world events tied to sound as data —
+/// see <see cref="WorldAudioCue"/>. <see langword="null"/> in JSON reads as empty and is omitted on write.</param>
 internal sealed record WorldAudioDefaults(
     float MasterGain,
     float DefaultSpeakerRadius,
     string DefaultCurve,
     float DefaultBedFadeSeconds,
-    string Listener
+    string Listener,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAudioCue>? Cues = null
 ) {
     /// <summary>The focus listener policy token — the active view camera's pose listens.</summary>
     public const string ListenerFocus = "focus";

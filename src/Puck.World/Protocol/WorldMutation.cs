@@ -185,7 +185,10 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     internal sealed record RemovePatch(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
 
     /// <summary>Replaces the audio host-section defaults (the whole <see cref="WorldAudioDefaults"/> row). Applies
-    /// LIVE: the mixer's master gain and the emitter-derivation coalescing read the delivered row.</summary>
+    /// LIVE: the emitter-derivation coalescing, the listener policy, and the cue table read the delivered row.
+    /// <c>MasterGain</c> follows the AP4 lever precedence: it flows live only until the <c>world.volume</c> session
+    /// lever engages — thereafter the lever owns "now" and the field owns the next boot (<c>world.save</c> folds the
+    /// lever back into it).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Audio">The audio defaults row.</param>
     internal sealed record SetAudioDefaults(WorldPrincipal Principal, WorldAudioDefaults Audio) : WorldMutation(Principal);

@@ -254,6 +254,13 @@ internal sealed class WorldScreenBinder : IDisposable {
     /// <param name="index">The engine screen-surface index.</param>
     public bool HasMachine(int index) => (m_slots.TryGetValue(key: index, value: out var slot) && (slot.Machine is not null));
 
+    /// <summary>The machine-lifecycle tap (audio cue lane A11b): invoked with <c>(index, faulted)</c> on every
+    /// runtime machine boot outcome — <see langword="false"/> when a machine boots onto a slot (<c>screen.insert</c>
+    /// and the reconcile-driven declared-source path both cross <see cref="TryInsert"/>), <see langword="true"/> when
+    /// a boot attempt faults (missing content, unresolved engine, rejected options). Constructor-time declared boots
+    /// precede any wiring and do not fire. Invoked on the pump thread.</summary>
+    public Action<int, bool>? MachineLifecycleTap { get; set; }
+
     /// <summary>The live machine on a screen slot as its audio drain seam, or <see langword="null"/> when the slot
     /// carries no machine (or one without the capability). The audio director's machine-source resolver (audio plan
     /// A4/AP3): compared by REFERENCE each produced frame, so a boot/eject/live-swap rebinds the mixer source and a
@@ -366,10 +373,14 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
 
         if (!TryResolveEngine(engineId: engineId, engine: out var engine, error: out var engineError)) {
+            MachineLifecycleTap?.Invoke(arg1: index, arg2: true);
+
             return (Ok: false, Message: engineError);
         }
 
         if (!TryReadContent(contentPath: contentPath, content: out var content, fault: out var fault)) {
+            MachineLifecycleTap?.Invoke(arg1: index, arg2: true);
+
             return (Ok: false, Message: fault!);
         }
 
@@ -382,6 +393,8 @@ internal sealed class WorldScreenBinder : IDisposable {
             // cores' audio carries no state).
             created = engine.Create(options: options, contentBytes: content, savePath: null, audioSampleRate: Audio.WorldAudioMixer.SampleRate);
         } catch (ArgumentException exception) {
+            MachineLifecycleTap?.Invoke(arg1: index, arg2: true);
+
             return (Ok: false, Message: exception.Message);
         }
 
@@ -396,6 +409,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         slot.MachineOptions = options;
         slot.DeclaredFault = null;
         slot.FramesStepped = 0;
+        MachineLifecycleTap?.Invoke(arg1: index, arg2: false);
 
         return (Ok: true, Message: $"screen {index} booted {engine.Id} '{Path.GetFileName(path: contentPath)}'{(string.IsNullOrWhiteSpace(value: options) ? "" : $" ({options})")}");
     }
@@ -671,13 +685,10 @@ internal sealed class WorldScreenBinder : IDisposable {
                 ++slot.FramesStepped;
             }
 
-            // SEAM (named-deferred, README "Known screen limitations"): every IScreenMachineEngine's host already
-            // implements the optional Puck.Abstractions.Machines.IAudioMachine capability (MachineHost/
-            // AdvancedMachineHost drain their core's audio ring for free, gated on attachment). A spatialized
-            // surface-audio device is not built — no engine-wide speaker/mixer layer exists yet, mirroring
-            // WorldScreenBinder's own webcam-session pattern — so this loop drains nothing today. The device, once
-            // built, hooks in exactly here: `(machine as IAudioMachine)?.ReadSamples(...)` positioned at the slot's
-            // WorldScreen world frame (Origin/Right/Up), the same per-slot data this binder already owns.
+            // Machine AUDIO deliberately does not drain here (AP3): the world speaker device's fill thread drains
+            // each referenced machine's ring through the mixer's single-pull MachineBlockSource (ReadSamples is
+            // any-thread-safe by contract), bound per frame by WorldAudioDirector.SyncMachineSources via
+            // AudioMachine(index). This loop supplies the machines' TIME; speakers supply their pose.
         }
     }
 

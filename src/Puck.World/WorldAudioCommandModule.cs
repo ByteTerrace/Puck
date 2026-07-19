@@ -75,7 +75,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         );
         yield return Row(
             name: "world.audio.set",
-            description: "Replaces the audio host-section defaults from one inline-JSON WorldAudioDefaults {masterGain, defaultSpeakerRadius, defaultCurve, defaultBedFadeSeconds, listener}: world.audio.set <json>. Applies LIVE (the mixer's master gain and the derivation coalescing read the delivered row).",
+            description: "Replaces the audio host-section defaults from one inline-JSON WorldAudioDefaults {masterGain, defaultSpeakerRadius, defaultCurve, defaultBedFadeSeconds, listener, cues?}: world.audio.set <json>. Applies LIVE (the derivation coalescing, the listener policy, and the cue table read the delivered row; masterGain also flows live UNTIL the world.volume session lever engages — the lever then owns the live gain and masterGain owns the next boot).",
             info: WorldJsonContext.Default.WorldAudioDefaults,
             toMutation: static audio => new WorldMutation.SetAudioDefaults(Principal: WorldPrincipal.Console, Audio: audio)
         );
@@ -92,6 +92,12 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             echoesData: true
         );
         yield return CommandDefinition.WithWireArgs(
+            name: "world.volume",
+            description: "The master-volume SESSION lever (the render-levers asymmetry): world.volume <0..8> applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
+            handler: VolumeHandler,
+            echoesData: true
+        );
+        yield return CommandDefinition.WithWireArgs(
             name: "audio.emitters",
             description: "Dumps the derived audio emitter table, one segment each — stable id, key (speaker:<name>|scene:<id>|placement:<id>|sound:<placement>:<name>), kind, source token, channel, gain, and support radii. Deterministic document-derived facts (never live poses), so a piped proof asserts the derivation. A query — always echoes.",
             handler: (context, args) => ((args.Count != 0)
@@ -99,6 +105,32 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
                 : new CommandResult(Output: director.DescribeEmitters())),
             echoesData: true
         );
+    }
+
+    // The world.volume lever: one float argument engages the session lever (bounded by the shared audio gain
+    // ceiling); no argument reads the effective volume and which side owns it.
+    private CommandResult VolumeHandler(CommandContext context, WireArgs args) {
+        if (args.Count == 0) {
+            return new CommandResult(Output: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"[world.volume: {director.EffectiveMasterVolume:0.###} ({(director.MasterVolumeLeverEngaged ? "session lever; world.save folds" : "document audio.masterGain")})]"
+            ));
+        }
+
+        if ((args.Count != 1) ||
+            !float.TryParse(s: args[0], style: System.Globalization.NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var volume) ||
+            !float.IsFinite(f: volume) || (volume < 0f) || (volume > Puck.Authoring.CreationSoundDocument.MaxLevel)) {
+            return new CommandResult(Output: $"[world.volume: expected one value within [0, {Puck.Authoring.CreationSoundDocument.MaxLevel}]]") {
+                IsError = true,
+            };
+        }
+
+        director.SetMasterVolume(value: volume);
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.volume: {volume:0.###} (session lever; world.save folds into audio.masterGain)]"
+        ));
     }
 
     // The audio.state echo: device lifecycle facts off the render service (its own counters are cross-thread-safe

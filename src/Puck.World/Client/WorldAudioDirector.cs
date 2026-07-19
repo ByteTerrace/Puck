@@ -6,6 +6,7 @@ using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.World.Audio;
+using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -57,6 +58,18 @@ internal sealed class WorldAudioDirector {
     public const int SnapshotRotation = 4;
     /// <summary>How many published snapshots a pending trigger rides (see the type remarks).</summary>
     public const int TriggerPublishRetention = 8;
+    /// <summary>The transient cue-emitter pool size (A11b) — capacity STRUCTURE like the snapshot's emitter cap, an
+    /// engine invariant rather than world data: these slots are RESERVED off <see cref="WorldAudioSnapshot.DefaultMaxEmitters"/>
+    /// (the reconcile overflow warning charges them), so a full derived plan can never starve a cue. A cue arriving
+    /// with the pool full evicts the transient nearest its own expiry (its voice releases with the departed emitter).</summary>
+    public const int TransientCueCapacity = 4;
+    /// <summary>The life cap for a cue voicing a LOOPING patch (no authored duration): 2 s of audio frames. A cue is
+    /// a transient by definition — a finite patch's life derives from its own envelope (data); only the loop cap is
+    /// an invariant.</summary>
+    public const long LoopingCueLifeFrames = (2L * WorldAudioMixer.SampleRate);
+    /// <summary>The default per-publish clock advance for cue aging: one 240 Hz sim step (the offline drivers'
+    /// cadence — one publish per mixed 200-frame block). The live frame source passes its real presentation delta.</summary>
+    public const float DefaultPublishDeltaSeconds = (1f / 240f);
 
     private const ulong Fnv64OffsetBasis = 14695981039346656037UL;
     private const ulong Fnv64Prime = 1099511628211UL;
@@ -83,11 +96,22 @@ internal sealed class WorldAudioDirector {
     private bool m_machineBindingsDirty;
     // THE serialization gate (see the type remarks): reentrant, so Admit's SubmitTrigger nests under ReconcileSpeakers.
     private readonly Lock m_gate = new();
+    // THE CUE TABLE (A11b), derived at reconcile: event token → its cue rows (gain in Q16, placement resolved to a
+    // kind + optional speaker name). Cue patches are world patch rows, so the ordinary patch-set registration covers them.
+    private readonly Dictionary<string, List<CueRow>> m_cueRows = new(comparer: StringComparer.Ordinal);
+    // The live transient cue emitters (bounded by TransientCueCapacity; aged by the publish clock).
+    private readonly List<TransientCue> m_transients = new(capacity: TransientCueCapacity);
     private WorldDefinition? m_definition;
     private WorldAudioMixer? m_mixer;
     private int m_nextEmitterId = 1;
     private ulong m_nextTriggerSequence;
+    private ulong m_cueOrdinal;
     private int m_slabIndex;
+    private FixedQ4816 m_defaultCueRadius = FixedQ4816.FromInteger(value: 8L);
+    // The world.volume session lever (A11/AP4, the render-levers asymmetry): null until touched — the document's
+    // MasterGain then owns the live gain (reconcile follows it; the offline drivers stay purely document-driven);
+    // once set, the lever owns "now" for the rest of the session and world.save folds it back into the document.
+    private float? m_sessionMasterVolume;
     private FixedComplex m_lastListenerYaw = FixedComplex.MultiplicativeIdentity;
 
     /// <summary>Initializes the director over the client view and the animated-placement pool. Both are nullable so
@@ -105,7 +129,9 @@ internal sealed class WorldAudioDirector {
         }
     }
 
-    /// <summary>The document master gain in Q16 — the value an attached mixer's <c>MasterGainQ16</c> follows.</summary>
+    /// <summary>The LIVE master gain in Q16 — the value an attached mixer's <c>MasterGainQ16</c> follows: the
+    /// document master gain until the <c>world.volume</c> session lever engages, the lever thereafter (see
+    /// <see cref="SetMasterVolume"/>).</summary>
     public int MasterGainQ16 { get; private set; } = 65536;
 
     /// <summary>The derived emitter count (the plan's row count, before any capacity refusal).</summary>
@@ -187,9 +213,13 @@ internal sealed class WorldAudioDirector {
 
             var audio = definition.Audio;
 
-            MasterGainQ16 = GainQ16(gain: audio.MasterGain);
+            // The lever precedence (AP4): the document master gain owns boot and every reconcile UNTIL world.volume
+            // engages the session lever; from then on the lever owns "now" (world.save folds it back).
+            MasterGainQ16 = GainQ16(gain: (m_sessionMasterVolume ?? audio.MasterGain));
+            m_defaultCueRadius = FixedQ4816.FromDouble(value: audio.DefaultSpeakerRadius);
             m_plan.Clear();
             m_patchSet.Clear();
+            BuildCueTable(audio: audio);
 
             foreach (var patch in definition.Patches) {
                 m_patchSet.Add(item: (Id: patch.Id, Patch: WorldVoicePatch.FromDocument(document: patch.Document)));
@@ -200,8 +230,9 @@ internal sealed class WorldAudioDirector {
             DeriveCreationSounds(definition: definition, audio: audio);
             RetireDepartedKeys();
 
-            if (m_plan.Count > WorldAudioSnapshot.DefaultMaxEmitters) {
-                Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {WorldAudioSnapshot.DefaultMaxEmitters}-row snapshot table — the overflow renders silent]");
+            // The reserved transient pool is charged against the snapshot cap: the plan may only fill what cues never need.
+            if (m_plan.Count > (WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)) {
+                Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {(WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)}-row plan budget ({WorldAudioSnapshot.DefaultMaxEmitters}-row snapshot table minus the {TransientCueCapacity} reserved cue transients) — the overflow renders silent]");
             }
 
             ApplyMixerBindings();
@@ -213,7 +244,10 @@ internal sealed class WorldAudioDirector {
     /// <param name="transforms">The frame's packed dynamic transforms (empty headless — leaf anchors then resolve
     /// absent).</param>
     /// <param name="seats">The per-slot resolved view-camera poses (the listener policy's candidates).</param>
-    public WorldAudioSnapshot Publish(ReadOnlySpan<DynamicTransform> transforms, ReadOnlySpan<WorldSeatCameraPose> seats) {
+    /// <param name="deltaSeconds">The clock advance since the previous publish — ages the transient cue pool. The
+    /// default is one sim step (the offline drivers publish once per mixed block); the live frame source passes its
+    /// clamped presentation delta.</param>
+    public WorldAudioSnapshot Publish(ReadOnlySpan<DynamicTransform> transforms, ReadOnlySpan<WorldSeatCameraPose> seats, float deltaSeconds = DefaultPublishDeltaSeconds) {
         lock (m_gate) {
             SyncMachineSources();
 
@@ -221,6 +255,8 @@ internal sealed class WorldAudioDirector {
 
             m_slabIndex = ((m_slabIndex + 1) % SnapshotRotation);
             slab.Reset(listener: ResolveListener(seats: seats, transforms: transforms));
+            // Transients FIRST — the reserved pool must land even when the derived plan overfills the table.
+            PublishTransients(slab: slab, transforms: transforms, deltaSeconds: deltaSeconds);
 
             foreach (var plan in m_plan) {
                 if (!TryResolvePosition(plan: plan, transforms: transforms, position: out var position)) {
@@ -509,6 +545,244 @@ internal sealed class WorldAudioDirector {
                 ),
                 RemainingPublishes = TriggerPublishRetention,
             });
+        }
+    }
+
+    // ---- the cue engine (A11b) --------------------------------------------------------------------------------------
+
+    /// <summary>Fires a world-event CUE — the producers' one entry (the edit-echo lane, the binder lifecycle, the
+    /// gait derivation, the seat roster), gate-safe from any thread: every cue row bound to
+    /// <paramref name="eventToken"/> allocates a short-lived transient point emitter (placed per the row) and one
+    /// seeded trigger. The trigger and its transient land in the SAME next published snapshot, so the mixer's
+    /// unbound-voice release can never race the voice's own emitter. An unknown or cue-less token is a no-op — cue
+    /// coverage is world DATA, never engine policy.</summary>
+    /// <param name="eventToken">The published event token (<see cref="WorldAudioCue.EventTokens"/>).</param>
+    /// <param name="site">The event's world position, or <see langword="null"/> when none is derivable — an
+    /// <c>at-site</c> row then falls back to the listener placement (documented on <see cref="WorldAudioCue"/>).</param>
+    public void SubmitCue(string eventToken, Vector3? site) {
+        lock (m_gate) {
+            if (!m_cueRows.TryGetValue(key: eventToken, value: out var rows)) {
+                return;
+            }
+
+            foreach (var row in rows) {
+                var placement = (((row.Placement == CuePlacement.AtSite) && (site is null)) ? CuePlacement.Listener : row.Placement);
+                var id = m_nextEmitterId++;
+
+                if (m_transients.Count >= TransientCueCapacity) {
+                    EvictNearestExpiry();
+                }
+
+                m_transients.Add(item: new TransientCue {
+                    Id = id,
+                    Token = eventToken,
+                    PatchId = row.PatchId,
+                    GainQ16 = row.GainQ16,
+                    Placement = placement,
+                    Site = (site ?? default),
+                    SpeakerName = row.SpeakerName,
+                    RemainingFrames = CueLifeFrames(patchId: row.PatchId),
+                });
+                // Voice gain stays unity — the transient emitter's own gain carries the cue level (the arrival-trigger
+                // precedent: a voice gain here would double-scale). The seed folds the token with a session ordinal:
+                // repeated cues of one event get distinct noise streams.
+                SubmitTrigger(patchId: row.PatchId, seed: (Fnv64(text: eventToken) ^ ++m_cueOrdinal), gainQ16: 65536, emitterId: id);
+            }
+        }
+    }
+
+    /// <summary>The live transient-cue count (the <c>speaker.state</c> echo's cue meter).</summary>
+    public int LiveCueCount {
+        get {
+            lock (m_gate) {
+                return m_transients.Count;
+            }
+        }
+    }
+
+    /// <summary>The at-site position a mutation's cue can derive, or <see langword="null"/>: upserts carry their
+    /// row's authored pose in the mutation payload; removals and section-wide edits have no single site (their cues
+    /// fall back to the listener placement — honest, documented).</summary>
+    /// <param name="mutation">The mutation the edit echo answered, or <see langword="null"/>.</param>
+    public static Vector3? MutationSite(WorldMutation? mutation) => mutation switch {
+        WorldMutation.UpsertSceneRow upsert => upsert.Row.Center,
+        WorldMutation.UpsertScreen upsert => upsert.Screen.Origin,
+        WorldMutation.UpsertPlacement upsert => upsert.Placement.Position,
+        WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed fixedSpeaker } => fixedSpeaker.Position,
+        WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed bed } => bed.Center,
+        WorldMutation.UpsertCamera { Camera: WorldCamera.Fixed fixedCamera } => fixedCamera.Position,
+        _ => null,
+    };
+
+    // Rebuild the event → cue-row table from the delivered Audio section (called under the gate from reconcile).
+    private void BuildCueTable(WorldAudioDefaults audio) {
+        m_cueRows.Clear();
+
+        foreach (var cue in (audio.Cues ?? [])) {
+            CuePlacement placement;
+            string? speakerName = null;
+
+            if (string.Equals(a: cue.Placement, b: WorldAudioCue.PlacementListener, comparisonType: StringComparison.Ordinal)) {
+                placement = CuePlacement.Listener;
+            } else if (cue.Placement.StartsWith(value: WorldAudioCue.PlacementEmitterPrefix, comparisonType: StringComparison.Ordinal)) {
+                placement = CuePlacement.Emitter;
+                speakerName = cue.Placement[WorldAudioCue.PlacementEmitterPrefix.Length..];
+            } else {
+                placement = CuePlacement.AtSite;
+            }
+
+            if (!m_cueRows.TryGetValue(key: cue.Event, value: out var rows)) {
+                m_cueRows[cue.Event] = rows = new List<CueRow>();
+            }
+
+            rows.Add(item: new CueRow(
+                PatchId: cue.PatchId,
+                GainQ16: ((int)((((long)(cue.GainThousandths ?? 1000)) * 65536L) / 1000L)),
+                Placement: placement,
+                SpeakerName: speakerName
+            ));
+        }
+    }
+
+    // A cue's life derives from its own patch envelope (data): a finite patch lives its duration + release plus one
+    // sim step of slack; a looping patch takes the invariant cap (a cue is a transient by definition). A patch the
+    // table no longer carries gets one step (its trigger would drop in the mixer anyway).
+    private long CueLifeFrames(string patchId) {
+        foreach (var (id, patch) in m_patchSet) {
+            if (string.Equals(a: id, b: patchId, comparisonType: StringComparison.Ordinal)) {
+                return ((patch.DurationFrames > 0)
+                    ? (((long)patch.DurationFrames + patch.ReleaseFrames) + WorldAudioMixer.FramesPerSimStep)
+                    : LoopingCueLifeFrames);
+            }
+        }
+
+        return WorldAudioMixer.FramesPerSimStep;
+    }
+
+    private void EvictNearestExpiry() {
+        var victim = 0;
+
+        for (var index = 1; (index < m_transients.Count); index++) {
+            if (m_transients[index].RemainingFrames < m_transients[victim].RemainingFrames) {
+                victim = index;
+            }
+        }
+
+        m_transients.RemoveAt(index: victim);
+    }
+
+    // Emit the live transient cue emitters into the slab (FIRST — the reserved pool always lands) and age them by
+    // this publish's clock advance. Placement resolution per kind: at-site holds the event position; listener rides
+    // the slab's already-resolved listener (distance 0 = full gain, and the mixer's on-top-of-listener pan hold
+    // centers it); emitter follows the named speaker's live plan pose and support radius (falling back to the
+    // listener while the speaker is absent).
+    private void PublishTransients(WorldAudioSnapshot slab, ReadOnlySpan<DynamicTransform> transforms, float deltaSeconds) {
+        if (m_transients.Count == 0) {
+            return;
+        }
+
+        var elapsedFrames = ((long)MathF.Round(x: (MathF.Max(x: deltaSeconds, y: 0f) * WorldAudioMixer.SampleRate)));
+
+        for (var index = (m_transients.Count - 1); index >= 0; index--) {
+            var transient = m_transients[index];
+            var position = slab.Listener.Position;
+            var minRadius = FixedQ4816.Zero;
+            var maxRadius = m_defaultCueRadius;
+
+            switch (transient.Placement) {
+                case CuePlacement.AtSite:
+                    position = ToFixed(value: transient.Site);
+
+                    break;
+                case CuePlacement.Emitter:
+                    if (TryFindSpeakerPlan(name: transient.SpeakerName, plan: out var speakerPlan) &&
+                        TryResolvePosition(plan: in speakerPlan, transforms: transforms, position: out var resolved)) {
+                        position = ToFixed(value: resolved);
+                        minRadius = speakerPlan.MinRadius;
+                        maxRadius = speakerPlan.MaxRadius;
+                    }
+
+                    break;
+                case CuePlacement.Listener:
+                default:
+                    break;
+            }
+
+            _ = slab.TryAddEmitter(emitter: new WorldAudioEmitter(
+                Id: transient.Id,
+                Kind: WorldAudioEmitterKind.Point,
+                Position: position,
+                MinRadius: minRadius,
+                MaxRadius: maxRadius,
+                FadeFrames: 0,
+                GainQ16: transient.GainQ16,
+                Channel: WorldAudioChannel.Mix,
+                Source: WorldAudioSourceKey.Synth(patchId: transient.PatchId)
+            ));
+
+            transient.RemainingFrames -= elapsedFrames;
+
+            if (transient.RemainingFrames <= 0) {
+                m_transients.RemoveAt(index: index);
+            } else {
+                m_transients[index] = transient;
+            }
+        }
+    }
+
+    private bool TryFindSpeakerPlan(string? name, out EmitterPlan plan) {
+        if (name is not null) {
+            var key = $"speaker:{name}";
+
+            foreach (var candidate in m_plan) {
+                if (string.Equals(a: candidate.Key, b: key, comparisonType: StringComparison.Ordinal)) {
+                    plan = candidate;
+
+                    return true;
+                }
+            }
+        }
+
+        plan = default;
+
+        return false;
+    }
+
+    // ---- the master-volume session lever (AP4) ----------------------------------------------------------------------
+
+    /// <summary>Engages the <c>world.volume</c> session lever: the live mix gain applies NOW and owns every later
+    /// reconcile; the document's <see cref="WorldAudioDefaults.MasterGain"/> keeps owning boot, and
+    /// <c>world.save</c> folds the lever back into it (the render-levers asymmetry). Until first engaged, the
+    /// document value flows live (so the offline document-driven proofs and <c>world.audio.set</c>'s live master
+    /// gain keep their AP2 behavior).</summary>
+    /// <param name="value">The master volume (1 = unity), validated by the verb against the shared gain ceiling.</param>
+    public void SetMasterVolume(float value) {
+        lock (m_gate) {
+            m_sessionMasterVolume = value;
+            MasterGainQ16 = GainQ16(gain: value);
+
+            if (m_mixer is { } mixer) {
+                mixer.MasterGainQ16 = MasterGainQ16;
+            }
+        }
+    }
+
+    /// <summary>The live master volume — the session lever when engaged, else the document master gain. The
+    /// <c>world.save</c> fold and the session-drift hint read this.</summary>
+    public float EffectiveMasterVolume {
+        get {
+            lock (m_gate) {
+                return (m_sessionMasterVolume ?? (m_definition?.Audio.MasterGain ?? 1f));
+            }
+        }
+    }
+
+    /// <summary>Whether the session lever has been engaged (the drift hint's cheap discriminator).</summary>
+    public bool MasterVolumeLeverEngaged {
+        get {
+            lock (m_gate) {
+                return m_sessionMasterVolume.HasValue;
+            }
         }
     }
 
@@ -900,6 +1174,28 @@ internal sealed class WorldAudioDirector {
     private struct PendingTrigger {
         public WorldSynthTrigger Trigger;
         public int RemainingPublishes;
+    }
+
+    private enum CuePlacement : byte {
+        AtSite,
+        Listener,
+        Emitter,
+    }
+
+    // One cue-table row, placement pre-parsed (BuildCueTable) so SubmitCue allocates nothing per event.
+    private readonly record struct CueRow(string PatchId, int GainQ16, CuePlacement Placement, string? SpeakerName);
+
+    // One live transient cue emitter (the reserved pool's unit): its stable id, its voice's patch/gain, where it
+    // rides, and its remaining life in audio frames (aged by the publish clock).
+    private struct TransientCue {
+        public int Id;
+        public string Token;
+        public string PatchId;
+        public int GainQ16;
+        public CuePlacement Placement;
+        public Vector3 Site;
+        public string? SpeakerName;
+        public long RemainingFrames;
     }
 
     private readonly record struct TuneHost(string TuneId, string Hash, TuneMachineSource Source);

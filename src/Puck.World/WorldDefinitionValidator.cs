@@ -237,9 +237,11 @@ internal static class WorldDefinitionValidator {
         }
 
         // Speakers and the audio defaults validate LAST: their references span every earlier row set (the screen
-        // index set, the placement rows, the tune/patch ids, the camera names).
-        ValidateSpeakers(definition: definition, screenIndices: screenIndices, placementIds: placementIds, tuneIds: tuneIds, patchIds: patchIds, errors: errors);
-        ValidateAudioDefaults(audio: audio, cameras: cameras, errors: errors);
+        // index set, the placement rows, the tune/patch ids, the camera names — and the cue table's emitter
+        // placements name speaker rows, so the speaker pass hands its name set forward).
+        var speakerNames = ValidateSpeakers(definition: definition, screenIndices: screenIndices, placementIds: placementIds, tuneIds: tuneIds, patchIds: patchIds, errors: errors);
+
+        ValidateAudioDefaults(audio: audio, cameras: cameras, patchIds: patchIds, speakerNames: speakerNames, errors: errors);
 
         if (errors.Count > 0) {
             throw new InvalidOperationException(message: $"Invalid WorldDefinition:{Environment.NewLine} - {string.Join(separator: $"{Environment.NewLine} - ", values: errors)}");
@@ -356,15 +358,16 @@ internal static class WorldDefinitionValidator {
     // The speaker rows (PRESENTATION-ONLY — audio never enters sim state): name presence/uniqueness, the per-kind
     // pose/extent invariants, the feed (source resolution, channel token, the gain ceiling), and the attenuation
     // policy. A Machine source checks only that the screen row EXISTS — never its declared source kind (runtime
-    // inserts overlay declared sources; no live machine at drain time is silence, not a reject).
-    private static void ValidateSpeakers(WorldDefinition definition, HashSet<int> screenIndices, HashSet<string> placementIds, HashSet<string> tuneIds, HashSet<string> patchIds, List<string> errors) {
+    // inserts overlay declared sources; no live machine at drain time is silence, not a reject). Returns the name
+    // set (the cue table's emitter placements resolve against it).
+    private static HashSet<string> ValidateSpeakers(WorldDefinition definition, HashSet<int> screenIndices, HashSet<string> placementIds, HashSet<string> tuneIds, HashSet<string> patchIds, List<string> errors) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         if (definition.Speakers is not { } speakers) {
             errors.Add(item: "speakers is required.");
 
-            return;
+            return names;
         }
-
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < speakers.Count); index++) {
             var speaker = speakers[index];
@@ -434,6 +437,8 @@ internal static class WorldDefinitionValidator {
                 }
             }
         }
+
+        return names;
     }
 
     private static void ValidateFeed(WorldSpeakerFeed? feed, HashSet<int> screenIndices, HashSet<string> tuneIds, HashSet<string> patchIds, string path, List<string> errors) {
@@ -488,9 +493,10 @@ internal static class WorldDefinitionValidator {
     }
 
     // The audio host-section defaults: the master gain rides the shared ceiling, the coalescing radius/fade are
-    // physical, the curve token is v1's one recognized value, and the listener policy resolves (focus | seat:<n> |
-    // a declared camera name).
-    private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, List<string> errors) {
+    // physical, the curve token is v1's one recognized value, the listener policy resolves (focus | seat:<n> |
+    // a declared camera name), and every cue-table row resolves (a CLOSED event token, a live patch id, the gain
+    // ceiling in thousandths, a placement token whose emitter form names a declared speaker).
+    private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, HashSet<string> patchIds, HashSet<string> speakerNames, List<string> errors) {
         RequireGain(value: audio.MasterGain, name: "audio.masterGain", errors: errors);
         RequirePositive(value: audio.DefaultSpeakerRadius, name: "audio.defaultSpeakerRadius", errors: errors);
         RequireNonNegative(value: audio.DefaultBedFadeSeconds, name: "audio.defaultBedFadeSeconds", errors: errors);
@@ -511,6 +517,58 @@ internal static class WorldDefinitionValidator {
                 }
             } else {
                 errors.Add(item: $"audio.listener '{listener}' is not 'focus', 'seat:<n>', or a declared camera name.");
+            }
+        }
+
+        ValidateCues(cues: audio.Cues, patchIds: patchIds, speakerNames: speakerNames, errors: errors);
+    }
+
+    // THE CUE TABLE (A11b): absent is empty; each row's event token must sit in the CLOSED published vocabulary,
+    // its patch must resolve, its gain rides the shared ceiling in thousandths, and an emitter placement must name
+    // a declared speaker (at-site and listener are the only other recognized placements).
+    private static void ValidateCues(IReadOnlyList<WorldAudioCue>? cues, HashSet<string> patchIds, HashSet<string> speakerNames, List<string> errors) {
+        if (cues is null) {
+            return;
+        }
+
+        for (var index = 0; (index < cues.Count); index++) {
+            var cue = cues[index];
+            var path = $"audio.cues[{index}]";
+
+            if (cue is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (!WorldAudioCue.IsEventToken(token: cue.Event)) {
+                errors.Add(item: $"{path}.event '{cue.Event}' is not a published cue event token ({string.Join(separator: " | ", values: WorldAudioCue.EventTokens)}).");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: cue.PatchId) || !patchIds.Contains(item: cue.PatchId)) {
+                errors.Add(item: $"{path}.patchId '{cue.PatchId}' names no patch row.");
+            }
+
+            if ((cue.GainThousandths is { } gain) && ((gain < 0) || (gain > (int)(Puck.Authoring.CreationSoundDocument.MaxLevel * 1000f)))) {
+                errors.Add(item: $"{path}.gainThousandths {gain} must be within [0, {(int)(Puck.Authoring.CreationSoundDocument.MaxLevel * 1000f)}].");
+            }
+
+            switch (cue.Placement) {
+                case WorldAudioCue.PlacementAtSite:
+                case WorldAudioCue.PlacementListener:
+                    break;
+                case { } placement when placement.StartsWith(value: WorldAudioCue.PlacementEmitterPrefix, comparisonType: StringComparison.Ordinal):
+                    var speaker = placement[WorldAudioCue.PlacementEmitterPrefix.Length..];
+
+                    if (!speakerNames.Contains(item: speaker)) {
+                        errors.Add(item: $"{path}.placement 'emitter:{speaker}' names no declared speaker.");
+                    }
+
+                    break;
+                default:
+                    errors.Add(item: $"{path}.placement '{cue.Placement}' must be '{WorldAudioCue.PlacementAtSite}', '{WorldAudioCue.PlacementListener}', or '{WorldAudioCue.PlacementEmitterPrefix}<speaker-name>'.");
+
+                    break;
             }
         }
     }
