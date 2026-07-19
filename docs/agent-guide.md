@@ -144,7 +144,7 @@ kind changes:
 3. Regenerate `schema/run.schema.json`:
 
    ```powershell
-   dotnet run --project src/Puck.Demo -c Release -- --emit-schema schema/run.schema.json
+   dotnet run -c Release tools/Tools.cs schema schema/run.schema.json
    ```
 
 4. Add or update an example.

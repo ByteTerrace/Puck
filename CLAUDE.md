@@ -38,11 +38,14 @@ For an area's settled contract facts, load its skill: `sdf-world`,
    rather than watering the change down. Gates prove *observable* behavior
    (pixels, hashes, parity, determinism), never internal structure. Full
    doctrine: [agent-guide.md](docs/agent-guide.md#engineering-doctrine).
-3. **The Demo is greenfield; Post gates the engine.** `Puck.Demo` — the
-   overworld and everything under `src/Puck.Demo/` — is the playground: expected
-   to churn, never settled precedent. Verify demo changes by RUNNING the demo
-   (`dotnet run --project src/Puck.Demo -c Release -- --exit-after-seconds 2`;
-   0 or less runs until the window is closed), never by a gate; never add a `--validate-*` flag or a Post stage for a demo
+3. **The game is greenfield; Post gates the engine.** `Puck.World` — the
+   overworld and everything under `src/Puck.World/` — is the playground: expected
+   to churn, never settled precedent. (`Puck.Demo` is a **library that no longer
+   runs**, being retired into `Puck.World` across the
+   [Demo → World port](docs/demo-to-world-port-plan.md); its composition root was
+   deleted at Beat B.) Verify game/overworld changes by RUNNING `Puck.World`
+   (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
+   0 or less runs until the window is closed), never by a gate; never add a `--validate-*` flag or a Post stage for a game
    feature, or promote one into Post, unless explicitly asked. `Puck.Post`
    (`dotnet run --project src/Puck.Post -c Release`) is the verification story
    for the shared *engine* contract only — the cross-backend render path, the
@@ -72,6 +75,16 @@ For an area's settled contract facts, load its skill: `sdf-world`,
    no WIP noise, no merge bubbles, no `Co-Authored-By` trailers.
 
 ## The demo is the overworld
+
+> **STATUS (2026-07-19): PORT-REFERENCE — the Demo no longer runs.** `Puck.Demo`
+> was flipped to a **library** at Beat B of the
+> [Demo → World port](docs/demo-to-world-port-plan.md) (R0/OQ-11): its
+> composition root is deleted and the default run is gone. The overworld
+> experience described below is being carried into `Puck.World` across the port's
+> twelve arcs (seven landed). Read it as the product's intent — verified by
+> running `Puck.World`, not as current `Puck.Demo` behavior. The plan of record
+> is [docs/demo-to-world-port-plan.md](docs/demo-to-world-port-plan.md); start at
+> its **State of execution** block.
 
 `Puck.Demo`'s default run IS the demo: a controller-driven player in a room of
 bootable console cabinets — the dmg/cgb/agb costumes of one GamingBrick machine.
