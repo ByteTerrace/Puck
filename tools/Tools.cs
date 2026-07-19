@@ -64,6 +64,7 @@
 //   Required braces live in .editorconfig (IDE0011, csharp_prefer_braces) and are applied by
 //   `dotnet format style`, not by a pass here.
 #:package Microsoft.CodeAnalysis.CSharp@4.*
+#:project ../src/Puck.Scene/Puck.Scene.csproj
 #nullable enable
 using System.Buffers.Binary;
 using System.Diagnostics;
@@ -139,23 +140,25 @@ namespace Puck.Tools
             return EngineRun.RunPostTier("C");
         }
 
-        // Emits the data-driven run-document JSON Schema by running the demo's headless --emit-schema (so the schema
-        // is exported from the live System.Text.Json source-gen model and can never drift from the types). The first
-        // positional argument overrides the output path (default schema/run.schema.json); -NoBuild skips the build.
+        // Emits the data-driven run-document JSON Schema IN-PROCESS (relocated here by Arc 3 Beat A / OQ-16 from the
+        // retired Demo composition root): RunDocumentSchema.Export() is the SAME source-gen model that reads documents,
+        // so the schema cannot drift from the types. The first positional argument overrides the output path
+        // (default schema/run.schema.json).
         private static int SchemaCommand(string[] arguments)
         {
             var output = (arguments.FirstOrDefault(static argument => !argument.StartsWith("-", StringComparison.Ordinal)) ?? Path.Combine(EngineRun.RepositoryRoot, "schema", "run.schema.json"));
+            var schema = Puck.Scene.RunDocumentSchema.Export();
+            var directory = Path.GetDirectoryName(output);
 
-            if (!ToolsNoBuild(arguments) && (EngineRun.Build("Debug") != 0))
+            if (!string.IsNullOrEmpty(directory))
             {
-                Console.Error.WriteLine("ERROR: build failed.");
-                return 2;
+                Directory.CreateDirectory(directory);
             }
 
-            return EngineRun.RunDemo("--emit-schema", output);
+            File.WriteAllText(output, schema);
+            Console.WriteLine($"[emit-schema] wrote the run-document schema ({schema.Length} chars) to '{output}'.");
+            return 0;
         }
-        private static bool ToolsNoBuild(string[] arguments) =>
-            arguments.Any(static argument => string.Equals(argument, "-NoBuild", StringComparison.OrdinalIgnoreCase));
 
         // Cross-backend DIFFERENTIAL FUZZER. Spawns one ISOLATED child per seed running Puck.Post's
         // `--stage fuzz --fuzz-seed <n>` (a fuzz-generated SDF program rendered identically on both backends and
@@ -3397,8 +3400,6 @@ namespace Puck.Tools
         public static int Build(string configuration) =>
             ToolProcess.RunStreamed(environment: null, "dotnet", "build", Path.Combine(RepositoryRoot, "Puck.slnx"), "-c", configuration);
 
-        public static string DemoProject =>
-            Path.Combine(RepositoryRoot, "src", "Puck.Demo", "Puck.Demo.csproj");
         public static string PostProject =>
             Path.Combine(RepositoryRoot, "src", "Puck.Post", "Puck.Post.csproj");
 
@@ -3425,24 +3426,6 @@ namespace Puck.Tools
             };
 
             arguments.AddRange(extraArguments);
-
-            return ToolProcess.RunStreamed(null, "dotnet", arguments.ToArray());
-        }
-
-        // Runs the (already-built) demo with arbitrary arguments — used by the headless data-driven utilities
-        // (--emit-schema), which short-circuit before any window is created.
-        public static int RunDemo(params string[] demoArguments)
-        {
-            var arguments = new List<string>
-            {
-                "run",
-                "--no-build",
-                "--project",
-                DemoProject,
-                "--",
-            };
-
-            arguments.AddRange(demoArguments);
 
             return ToolProcess.RunStreamed(null, "dotnet", arguments.ToArray());
         }

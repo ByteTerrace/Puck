@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
 using Puck.Authoring;
 using Puck.Commands;
 using Puck.Maths;
@@ -1166,6 +1167,79 @@ internal sealed record WorldAuthoringDefaults(
     );
 }
 
+/// <summary>Which graphics backend a world PREFERS. <see cref="Auto"/> — the default — picks the OS-appropriate backend,
+/// so a shared world document is portable across an OS boundary; an explicit preference the running OS cannot satisfy
+/// degrades LOUDLY (a document author preference) or hard-exits (a CLI operator assertion) rather than silently
+/// mispresenting.</summary>
+internal enum WorldBackendPreference : byte {
+    /// <summary>Pick the OS-appropriate backend at boot — Direct3D 12 on Windows 10+, Vulkan elsewhere.</summary>
+    Auto,
+
+    /// <summary>Prefer Direct3D 12.</summary>
+    DirectX,
+
+    /// <summary>Prefer Vulkan.</summary>
+    Vulkan,
+}
+
+/// <summary>
+/// The world's HOST defaults — how the world asks to be PRESENTED, independent of what it contains. PRESENTATION-ONLY
+/// throughout (never simulation state). Two consumption classes share this one row, named per field:
+/// <list type="bullet">
+/// <item><description><b>BOOT-ONLY</b> (<see cref="Backend"/>, <see cref="Width"/>, <see cref="Height"/>,
+/// <see cref="SurfaceFormat"/>, <see cref="Fullscreen"/>, <see cref="PresentMode"/>, <see cref="ExitAfterSeconds"/>,
+/// <see cref="RayQuery"/>, <see cref="Genlock"/>): read once at composition; a live edit is journaled and validated
+/// immediately but takes effect next boot.</description></item>
+/// <item><description><b>BOOT-DEFAULT WITH A LIVE LEVER</b> (<see cref="TargetHertz"/> via <c>world.target</c>,
+/// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on; <see cref="WorldSessionCapture"/>
+/// folds the live values back at <c>world.save</c>.</description></item>
+/// </list>
+/// <see cref="Default"/> reproduces World's current boot exactly, so a world that authors no host section boots
+/// identically (its <c>host</c> key is absent and coalesces to <see cref="Default"/>).
+/// </summary>
+/// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable).</param>
+/// <param name="Width">The window client width in pixels.</param>
+/// <param name="Height">The window client height in pixels.</param>
+/// <param name="SurfaceFormat">The swapchain surface format (<see cref="SurfaceFormat.Unknown"/> is rejected by the validator).</param>
+/// <param name="Fullscreen">Whether the window enters borderless fullscreen when first shown.</param>
+/// <param name="PresentMode">The swapchain presentation algorithm.</param>
+/// <param name="TargetHertz">The boot present-pacing target in Hz; <c>0</c> selects automatic display pacing. The
+/// <c>world.target</c> live lever owns "now" thereafter.</param>
+/// <param name="ExitAfterSeconds">Seconds before the world auto-exits; <c>0</c> runs until the window is closed.</param>
+/// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
+/// <param name="Timing">Whether GPU per-pass timing boots armed; the <c>world.timing</c> live lever owns it thereafter.</param>
+/// <param name="Genlock">The external-clock election policy (SHAPE-only: <see langword="null"/> for automatic, or a
+/// non-whitespace source id / <c>off</c>), or <see langword="null"/> for the launcher's automatic election.</param>
+internal sealed record WorldHostDefaults(
+    WorldBackendPreference Backend,
+    int Width,
+    int Height,
+    SurfaceFormat SurfaceFormat,
+    bool Fullscreen,
+    PresentMode PresentMode,
+    double TargetHertz,
+    int ExitAfterSeconds,
+    bool RayQuery,
+    bool Timing,
+    string? Genlock
+) {
+    /// <summary>The built-in host defaults — reproducing World's current hardcoded boot exactly (1280×800, auto backend,
+    /// immediate present, automatic display pacing, R8G8B8A8 surface, ray-query on, timing off, no auto-exit).</summary>
+    public static WorldHostDefaults Default { get; } = new WorldHostDefaults(
+        Backend: WorldBackendPreference.Auto,
+        Width: 1280,
+        Height: 800,
+        SurfaceFormat: SurfaceFormat.R8G8B8A8Unorm,
+        Fullscreen: false,
+        PresentMode: PresentMode.Immediate,
+        TargetHertz: 0.0,
+        ExitAfterSeconds: 0,
+        RayQuery: true,
+        Timing: false,
+        Genlock: null
+    );
+}
+
 /// <summary>
 /// The definition of this world — the aggregate describing what the world is, distinct from the live session state that
 /// plays in it. It gathers the static scene (<see cref="Scene"/>), the seat spawn points (<see cref="SpawnPoints"/>),
@@ -1214,6 +1288,10 @@ internal sealed record WorldAuthoringDefaults(
 /// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — SIM-AFFECTING. <see langword="null"/>
 /// in JSON coalesces to <see cref="WorldCollision.None"/> (collision OFF), so an existing world keeps its flat ground
 /// plane byte-identically; omitted from the wire when null (the plan-wide new-section idiom).</param>
+/// <param name="Host">The host-section defaults — how the world asks to be PRESENTED (window/backend/present/pacing/
+/// timing/genlock — see <see cref="WorldHostDefaults"/>). OPT-IN: <see langword="null"/> (the frozen default, no
+/// <c>host</c> key) coalesces to <see cref="WorldHostDefaults.Default"/>, which reproduces World's current boot exactly.
+/// The CLI window/backend flags override it at boot (a deployment surface laid over the author's intent).</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -1236,7 +1314,10 @@ internal sealed record WorldDefinition(
     IReadOnlyList<WorldTune> Tunes,
     IReadOnlyList<WorldPatch> Patches,
     WorldAudioDefaults Audio,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollision? Collision = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollision? Collision = null,
+    // OPT-IN and WhenWritingNull: a world that authors no host section carries no `host` key, so the frozen default
+    // world stays byte-identical. Absence coalesces to WorldHostDefaults.Default (World's current boot) at every read.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHostDefaults? Host = null
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1449,6 +1530,9 @@ internal sealed record WorldDefinition(
         Speakers: [],
         Tunes: [],
         Patches: [],
-        Audio: WorldAudioDefaults.Default
+        Audio: WorldAudioDefaults.Default,
+        // No authored host section: the baked default boots on WorldHostDefaults.Default (World's current boot), and a
+        // world.save from the baked default gains no `host` key (the ouroboros — see WorldSessionCapture.CaptureHost).
+        Host: null
     );
 }

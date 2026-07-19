@@ -88,6 +88,10 @@ internal enum WorldSection : byte {
 
     /// <summary>The contact-solver tuning (the <see cref="WorldMutation.SetCollision"/> mutation).</summary>
     Collision,
+
+    /// <summary>The host-section defaults — window/backend/present/pacing/timing/genlock presentation intent
+    /// (see <see cref="WorldHostDefaults"/>).</summary>
+    Host,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

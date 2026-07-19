@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 
 namespace Puck.World;
@@ -58,8 +59,12 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldPatch))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSerializable(typeof(WorldAudioCue))]
+// The host-section defaults row (world.host.set verb accessor + the document `host` section). WorldBackendPreference
+// and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
+// "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).
+[JsonSerializable(typeof(WorldHostDefaults))]
 [JsonSourceGenerationOptions(
-    Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter) },
+    Converters = new[] { typeof(Vector3JsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true,
     WriteIndented = true
@@ -105,6 +110,45 @@ internal sealed class Vector3JsonConverter : JsonConverter<Vector3> {
         }
 
         return reader.GetSingle();
+    }
+}
+
+/// <summary>
+/// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
+/// / <c>vulkan</c>) rather than the context's camelCase enum policy, which would emit <c>directX</c> — a spelling no one
+/// types and gratuitously divergent from World's token style. The <c>world.host.tune backend</c> value grammar uses the
+/// same map, so the verb and the document never disagree.
+/// </summary>
+internal sealed class WorldBackendPreferenceJsonConverter : JsonConverter<WorldBackendPreference> {
+    /// <inheritdoc/>
+    public override WorldBackendPreference Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return (WorldHostTokens.ParseBackend(token: reader.GetString())
+            ?? throw new JsonException(message: $"backend '{reader.GetString()}' must be '{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}'."));
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, WorldBackendPreference value, JsonSerializerOptions options) {
+        writer.WriteStringValue(value: WorldHostTokens.BackendToken(backend: value));
+    }
+}
+
+/// <summary>
+/// Reads and writes the two authorable <see cref="SurfaceFormat"/> values as explicit tokens (<c>r8g8b8a8</c> /
+/// <c>b8g8r8a8</c>) rather than the context's camelCase enum policy, which would emit the unreadable <c>r8G8B8A8Unorm</c>.
+/// <see cref="SurfaceFormat.Unknown"/> and any other member are rejected at read (the validator also rejects
+/// <see cref="SurfaceFormat.Unknown"/> — the hole the Demo's string list could not express). The
+/// <c>world.host.tune surfaceFormat</c> value grammar uses the same map.
+/// </summary>
+internal sealed class SurfaceFormatJsonConverter : JsonConverter<SurfaceFormat> {
+    /// <inheritdoc/>
+    public override SurfaceFormat Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return (WorldHostTokens.ParseSurfaceFormat(token: reader.GetString())
+            ?? throw new JsonException(message: $"surfaceFormat '{reader.GetString()}' must be '{WorldHostTokens.SurfaceFormatRgba}' or '{WorldHostTokens.SurfaceFormatBgra}'."));
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, SurfaceFormat value, JsonSerializerOptions options) {
+        writer.WriteStringValue(value: WorldHostTokens.SurfaceFormatToken(format: value));
     }
 }
 

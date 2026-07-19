@@ -549,7 +549,7 @@ internal sealed class WorldServer {
     // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
     // Everything else, cameras included, applies live on delivery.
     private static bool IsDocumentDefaults(WorldMutation mutation) => mutation is
-        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults;
+        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetHostDefaults;
 
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
     // compiled tuning/actions, AND the analytic collider set). A scene-row/collision edit rebuilds the collider set so a
@@ -589,6 +589,7 @@ internal sealed class WorldServer {
         WorldMutation.UpsertPatch or WorldMutation.RemovePatch => WorldSection.Patches,
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
         WorldMutation.SetCollision => WorldSection.Collision,
+        WorldMutation.SetHostDefaults => WorldSection.Host,
         _ => WorldSection.Kits,
     };
 
@@ -678,6 +679,7 @@ internal sealed class WorldServer {
         WorldMutation.RemovePatch m => $"RemovePatch '{m.Id}'",
         WorldMutation.SetAudioDefaults => "SetAudioDefaults",
         WorldMutation.SetCollision => "SetCollision",
+        WorldMutation.SetHostDefaults => "SetHostDefaults",
         _ => "unknown",
     };
 
@@ -990,6 +992,10 @@ internal sealed class WorldServer {
                 return true;
             case WorldMutation.SetCollision m:
                 candidate = (current with { Collision = m.Collision });
+
+                return true;
+            case WorldMutation.SetHostDefaults m:
+                candidate = (current with { Host = m.Host });
 
                 return true;
             case WorldMutation.RemoveBindingOverlay m:

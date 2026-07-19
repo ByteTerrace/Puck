@@ -2287,6 +2287,87 @@ is a different capability) → **Arc 5** (cabinet boot). `Camera/` (1 — the Ga
 Camera cart's webcam adapter; `Puck.Cameras` is a view-rig library, a pure name
 collision) → **Arc 5**.
 
+### Beat A execution record — the host section (EXECUTED)
+
+**Beat A was executed exactly as the target shape specifies**, and it deleted
+**one** Demo source (`SchemaEmitter.cs`, the OQ-16 move) — the beat is otherwise
+purely additive in `Puck.World`. No hand-excision was owed: `SchemaEmitter.cs` had
+**zero callers** (verified — it was already a standing island since Beat B), so no
+surviving file needed a call site removed. Everything landed following an already-
+shipped ritual; three points where execution refined the aspirational text:
+
+1. **`presentMode` serializes PascalCase (`"Immediate"`), NOT camelCase
+   (`"immediate"`) as the target shape's parenthetical implied.** The document's
+   *actual* enum convention — verified against the shipped `default.world.json` —
+   is exact PascalCase member names (`"shadows": "Off"`, `"model": "Grounded"`,
+   `"renderScale": "Half"`); `UseStringEnumConverter` carries no camelCase policy.
+   `PresentMode`'s members are perfectly readable PascalCase, so — unlike
+   `SurfaceFormat`/`WorldBackendPreference`, which DO get explicit lowercase
+   converters (`WorldHostTokens`, shared with the `world.host.tune` grammar) per
+   risk 1 — `PresentMode` keeps the generic converter for **document consistency**.
+   `world.host` displays a cosmetic lowercase token and `world.host.tune presentMode`
+   parses case-insensitively, so no author-facing surface diverges.
+2. **`Host` is nullable-and-NOT-coalesced in `Normalize`, and `CaptureHost` is
+   null-preserving.** The other opt-in sections (`Audio`/`Storage`/`Authoring`)
+   coalesce to their default in `WorldDefinitionLoader.Normalize`, but they carry a
+   key in the frozen default file so the coalesce round-trips as a no-op. `host` is
+   authored by **no** shipped world, so coalescing it would materialize a `host`
+   key on the first `world.save` and break the frozen default. Instead `Host` stays
+   `null` through load (consumers coalesce at each read), and `CaptureHost` returns
+   `null` when the section was absent AND both live levers still sit at
+   `WorldHostDefaults.Default` — proven: a fresh default `world.save` is
+   byte-identical to the shipped file (no `host` key). A live lever moved off
+   default materializes the section from `Default`.
+3. **The OQ-16 move folded into `tools/Tools.cs` in-process rather than a new
+   loose file.** `tools/` is a set of **file-based .NET 10 apps**, not a
+   multi-file project, so the emitter body could not be a standalone `tools/*.cs`
+   companion — it became `SchemaCommand`'s in-process body calling
+   `Puck.Scene.RunDocumentSchema.Export()` through a new
+   `#:project ../src/Puck.Scene/Puck.Scene.csproj` directive (the exact precedent
+   `tools/maths-battery.cs` already set with `#:project …/Puck.Maths`). This
+   **un-broke** the command, which Beat B had silently left pointing at a
+   `dotnet run` on the now-library Demo (recon's second casualty). The dead
+   `EngineRun.RunDemo`/`DemoProject`/`ToolsNoBuild` members were removed with it;
+   `tools/packages.lock.json` regenerated (expected floating-lock churn).
+
+**Landed (all in `src/Puck.World` unless noted):** `WorldBackendPreference` +
+`WorldHostDefaults` (+ `Default`) and the nullable `Host` field on `WorldDefinition`
+(`WorldDefinition.cs`); `WorldBackendPreferenceJsonConverter` +
+`SurfaceFormatJsonConverter` + the `WorldHostDefaults` serializable entry
+(`WorldDefinitionSerialization.cs`); `ValidateHost` (`WorldDefinitionValidator.cs`);
+`WorldSection.Host` (`Protocol/WorldGrant.cs` — auto-seeds the grant via the
+existing `SeedDomain` loop); `WorldMutation.SetHostDefaults` + its apply case,
+`SectionOf`, `IsDocumentDefaults`, and `Describe` entries (`Protocol/WorldMutation.cs`,
+`Server/WorldServer.cs`); `WorldHostTokens` + `WorldHostSettings.Resolve`
+(`WorldHostSettings.cs`, new, the pure `WorldStorageSettings.Resolve` twin);
+`WorldHostCommandModule` (`world.host`/`.set`/`.tune`, new); the `CaptureHost` fold
+threaded through `Capture`/`DescribeDrift` on a new `PresentPacingControl` parameter
+(`WorldSessionCapture.cs`, wired through `WorldMutationCommandModule` +
+`WorldOverlayFeed`); and the `Program.cs` restructure (nullable options,
+load-before-register, resolved-`WorldHostSettings` singleton, backend hard-exit vs
+loud downgrade split by source, `StartFullscreen`/`TargetRenderRate`/present/
+surface/`ExternalClockRegistry(genlock)` from the resolved record,
+`GpuTimingControl.Shared.TrySeed(host.Timing)`, and
+`SdfWorldRenderSpec.RayQuery = host.RayQuery`). **R16 is satisfied by construction:**
+the World host section carries no `features` escape-hatch map — there is nothing to
+delete, the untyped surface simply is not ported. **S1 (the `PUCK_RAY_QUERY` env
+fallback) stays** per its own instruction — World now passes an explicit
+`SdfWorldRenderSpec.RayQuery`, so the fallback is dead for World; its physical
+deletion waits for Arc 4's `DiegeticUiInstaller` caller.
+
+**Verified (Windows, Release):** full-solution build clean; `--exit-after-seconds 2`
+with no host section boots byte-identically to pre-arc (1280×800, auto→DirectX, the
+same display-pacing line); the `world.host.*` stdin script exercised every branch —
+the three-column read-back, `tune`→document-with-live-levers-unchanged (`world.status`
+`session-drift host dirty 1`), `undo`→`none`/`0`, a revoked `mutate section:host`
+loudly denying `world.host.tune width 640`, a `world.host.set width:0` REJECT naming
+`host.width 0 is outside 1..16384`, and a `world.save` that folded the live
+`world.target 90` + `world.timing on` into the file; a reboot from that file came up
+with the pacer at `90 Hz (ExplicitTarget)` and `world.timing` reporting `on`; a
+`--width 800 --height 600` override showed the window at 800×600 with the DOCUMENT
+column unchanged and the RESOLVED column at 800×600; and a fresh default
+`world.save` is byte-identical to the shipped `default.world.json`.
+
 ### Verification
 
 ```

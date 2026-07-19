@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+using Puck.Launcher;
 using Puck.Scene;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -28,13 +30,15 @@ internal static class WorldSessionCapture {
     /// <param name="population">The live entity table (census + peer-source default).</param>
     /// <param name="binder">The live screen binder (runtime machine inserts).</param>
     /// <param name="audio">The audio director (the <c>world.volume</c> session lever).</param>
+    /// <param name="pacing">The live present-pacing control (the <c>world.target</c> session lever).</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio) {
+    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: render);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: audio);
+        ArgumentNullException.ThrowIfNull(argument: pacing);
 
         return (definition with {
             Render = CaptureRender(render: render, defaults: definition.Render),
@@ -44,6 +48,7 @@ internal static class WorldSessionCapture {
             Tunes = CaptureTunes(tunes: definition.Tunes),
             Patches = CapturePatches(patches: definition.Patches),
             Audio = CaptureAudio(audio: audio, defaults: definition.Audio),
+            Host = CaptureHost(host: definition.Host, pacing: pacing),
         });
     }
 
@@ -108,9 +113,10 @@ internal static class WorldSessionCapture {
     /// <param name="population">The live entity table.</param>
     /// <param name="binder">The live screen binder.</param>
     /// <param name="audio">The audio director (the master-volume lever).</param>
+    /// <param name="pacing">The live present-pacing control (the <c>world.target</c> lever).</param>
     /// <returns>The drift hint token.</returns>
-    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio) {
-        var drifted = new List<string>(capacity: 4);
+    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing) {
+        var drifted = new List<string>(capacity: 5);
 
         if (CaptureRender(render: render, defaults: definition.Render) != definition.Render) {
             drifted.Add(item: "render");
@@ -126,6 +132,12 @@ internal static class WorldSessionCapture {
 
         if (audio.MasterVolumeLeverEngaged && (audio.EffectiveMasterVolume != definition.Audio.MasterGain)) {
             drifted.Add(item: "audio");
+        }
+
+        // The host live levers (world.target / world.timing) folded home differ from the document's host row — the same
+        // comparison a save would make, so 'host' shows exactly when a world.save would rewrite the host section.
+        if (CaptureHost(host: definition.Host, pacing: pacing) != definition.Host) {
+            drifted.Add(item: "host");
         }
 
         return ((drifted.Count == 0) ? "none" : string.Join(separator: '+', values: drifted));
@@ -147,6 +159,17 @@ internal static class WorldSessionCapture {
     private static WorldAudioDefaults CaptureAudio(WorldAudioDirector audio, WorldAudioDefaults defaults) => (defaults with {
         MasterGain = audio.EffectiveMasterVolume,
     });
+
+    // Fold the two host live levers (world.target's present Hz, world.timing's armed state) into the host section; every
+    // boot-only field is preserved as authored. A world that authored no host section (null) keeps it absent when the
+    // levers still sit at their document defaults, so a fresh default world saves without gaining a `host` key (the
+    // ouroboros); a live lever moved off default materializes the section from WorldHostDefaults.Default.
+    private static WorldHostDefaults? CaptureHost(WorldHostDefaults? host, PresentPacingControl pacing) {
+        var basis = (host ?? WorldHostDefaults.Default);
+        var folded = (basis with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
+
+        return (((host is null) && (folded == WorldHostDefaults.Default)) ? null : folded);
+    }
 
     // Fold the live census: the current simulated stand-in count and the live peer-source default become the boot
     // census. The local-seat default is document-level, not a live seating figure, so it stays as authored.

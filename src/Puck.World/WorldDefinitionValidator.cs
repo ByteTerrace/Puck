@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -91,6 +92,10 @@ internal static class WorldDefinitionValidator {
         ValidateAddons(addons: definition.Addons, errors: errors);
         ValidateBindingOverlays(overlays: definition.BindingOverlays, errors: errors);
         ValidateStorage(storage: definition.Storage, errors: errors);
+
+        // The host section: absent-in-JSON coalesces to the built-in default HERE (the same absence convention the
+        // storage/authoring/audio sections use). Called early — it references no other section.
+        ValidateHost(host: (definition.Host ?? WorldHostDefaults.Default), errors: errors);
 
         // The editor/authoring policy row: absent-in-JSON coalesces to the built-in default HERE (the
         // same absence-coalesce convention WorldStorageDefaults uses) so every downstream read below sees a concrete row, never null.
@@ -1120,6 +1125,36 @@ internal static class WorldDefinitionValidator {
 
         if ((storage.UserId is { } userId) && string.IsNullOrWhiteSpace(value: userId)) {
             errors.Add(item: "storage.userId must be non-empty or null.");
+        }
+    }
+
+    // The host section (PRESENTATION-ONLY): window extents bounded, exit/pacing non-negative, the closed engine enums
+    // in range (a mutation can carry an out-of-range cast the JSON converter alone would not catch), and the surface
+    // format not the Unknown hole. Genlock is SHAPE-only (null or non-whitespace), mirroring storage.endpoint's
+    // reserved-field posture.
+    private static void ValidateHost(WorldHostDefaults host, List<string> errors) {
+        RequireIntRange(value: host.Width, min: 1, max: 16384, name: "host.width", errors: errors);
+        RequireIntRange(value: host.Height, min: 1, max: 16384, name: "host.height", errors: errors);
+        RequireIntRange(value: host.ExitAfterSeconds, min: 0, max: int.MaxValue, name: "host.exitAfterSeconds", errors: errors);
+
+        if (!double.IsFinite(d: host.TargetHertz) || (host.TargetHertz < 0.0)) {
+            errors.Add(item: $"host.targetHertz {host.TargetHertz} must be finite and non-negative (0 = automatic display pacing).");
+        }
+
+        if (!Enum.IsDefined(value: host.Backend)) {
+            errors.Add(item: $"host.backend '{host.Backend}' is not a defined WorldBackendPreference.");
+        }
+
+        if (!Enum.IsDefined(value: host.PresentMode)) {
+            errors.Add(item: $"host.presentMode '{host.PresentMode}' is not a defined PresentMode.");
+        }
+
+        if (!Enum.IsDefined(value: host.SurfaceFormat) || (host.SurfaceFormat == SurfaceFormat.Unknown)) {
+            errors.Add(item: $"host.surfaceFormat '{host.SurfaceFormat}' must be a defined non-Unknown SurfaceFormat.");
+        }
+
+        if ((host.Genlock is { } genlock) && string.IsNullOrWhiteSpace(value: genlock)) {
+            errors.Add(item: "host.genlock must be non-whitespace or null.");
         }
     }
 

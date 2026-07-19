@@ -207,4 +207,13 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Collision">The contact-solver tuning.</param>
     internal sealed record SetCollision(WorldPrincipal Principal, WorldCollision Collision) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole host-section defaults row (window/backend/present/pacing/timing/genlock). DOCUMENT-
+    /// DEFAULTS class: the boot-only fields take effect at the NEXT boot (a running window cannot resize its backend or
+    /// surface), and the two live-lever fields (<c>TargetHertz</c> via <c>world.target</c>, <c>Timing</c> via
+    /// <c>world.timing</c>) set the value the next boot wakes on — <c>world.save</c> folds the running levers back into
+    /// them. The row is validated immediately, so a bad value is rejected loudly regardless of when it applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Host">The whole host defaults row.</param>
+    internal sealed record SetHostDefaults(WorldPrincipal Principal, WorldHostDefaults Host) : WorldMutation(Principal);
 }

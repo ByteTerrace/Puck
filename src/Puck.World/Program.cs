@@ -3,7 +3,9 @@ using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Capture;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.AdvancedGamingBrick;
@@ -25,25 +27,28 @@ using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
-var backendOption = new Option<string>(name: "--backend") {
-    DefaultValueFactory = static _ => (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240) ? "directx" : "vulkan"),
-    Description = "The graphics backend: directx (the Windows default) or vulkan.",
+// The host CLI flags are a DEPLOYMENT OVERRIDE laid over the world document's presentation intent, so each is NULLABLE
+// with no DefaultValueFactory: absent means "the document decides" (WorldHostSettings.Resolve coalesces to the authored
+// host defaults). A DefaultValueFactory here would silently defeat the document on every unflagged run.
+var backendOption = new Option<string?>(name: "--backend") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the world's graphics backend: auto, directx, or vulkan. Absent uses the world document's host.backend. A --backend directx on a non-Direct3D-12 OS is an operator assertion and hard-exits (a document preference degrades to Vulkan loudly instead).",
 };
-var widthOption = new Option<int>(name: "--width") {
-    DefaultValueFactory = static _ => 1280,
-    Description = "The window client width in pixels.",
+var widthOption = new Option<int?>(name: "--width") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the window client width in pixels. Absent uses the world document's host.width.",
 };
-var heightOption = new Option<int>(name: "--height") {
-    DefaultValueFactory = static _ => 800,
-    Description = "The window client height in pixels.",
+var heightOption = new Option<int?>(name: "--height") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the window client height in pixels. Absent uses the world document's host.height.",
 };
-var exitAfterSecondsOption = new Option<int>(name: "--exit-after-seconds") {
-    DefaultValueFactory = static _ => 0,
-    Description = "Seconds before the world auto-exits; 0 or less runs until the window is closed.",
+var exitAfterSecondsOption = new Option<int?>(name: "--exit-after-seconds") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the auto-exit seconds; 0 or less runs until the window is closed. Absent uses the world document's host.exitAfterSeconds.",
 };
-var presentModeOption = new Option<string>(name: "--present-mode") {
-    DefaultValueFactory = static _ => "immediate",
-    Description = "Swapchain presentation algorithm: vsync, mailbox, immediate, or adaptive. Immediate is the measured World default under VRR.",
+var presentModeOption = new Option<string?>(name: "--present-mode") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the swapchain presentation algorithm: vsync, mailbox, immediate, or adaptive. Absent uses the world document's host.presentMode.",
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
@@ -83,48 +88,84 @@ if (parseResult.Errors.Count > 0) {
 
     return 1;
 }
-var exitAfterSeconds = parseResult.GetValue(option: exitAfterSecondsOption);
-var backendName = parseResult.GetValue(option: backendOption)!;
-bool? backendIsDirectX = backendName.ToUpperInvariant() switch {
-    "DIRECTX" => true,
-    "VULKAN" => false,
-    _ => null,
-};
+// Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
+// mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
+WorldBackendPreference? backendOverride = null;
 
-if (backendIsDirectX is not { } hostsOnDirectX) {
-    Console.Error.WriteLine(value: $"Unknown --backend '{backendName}'; expected directx or vulkan.");
+if (parseResult.GetValue(option: backendOption) is { } backendName) {
+    backendOverride = WorldHostTokens.ParseBackend(token: backendName);
 
-    return 1;
+    if (backendOverride is null) {
+        Console.Error.WriteLine(value: $"Unknown --backend '{backendName}'; expected auto, directx, or vulkan.");
+
+        return 1;
+    }
+}
+PresentMode? presentModeOverride = null;
+
+if (parseResult.GetValue(option: presentModeOption) is { } presentModeName) {
+    presentModeOverride = presentModeName.ToUpperInvariant() switch {
+        "VSYNC" => PresentMode.Vsync,
+        "MAILBOX" => PresentMode.Mailbox,
+        "IMMEDIATE" => PresentMode.Immediate,
+        "ADAPTIVE" => PresentMode.Adaptive,
+        _ => null,
+    };
+
+    if (presentModeOverride is null) {
+        Console.Error.WriteLine(value: $"Unknown --present-mode '{presentModeName}'; expected vsync, mailbox, immediate, or adaptive.");
+
+        return 1;
+    }
 }
 
-if (hostsOnDirectX && !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+// The world definition (see WorldDefinition) — a --world file, or Assets/worlds/default.world.json beside the
+// executable, loaded / schema-checked / validated with a loud baked-default fallback on ANY failure (see
+// WorldDefinitionLoader). LOADED BEFORE the window/launcher/presentation registrations because those now read their
+// values from the resolved host section. Read by DI from the roster, population, frame source, render settings, and the
+// world.quality verb; the resolved source is registered so world.save knows its default target (null when baked/fallback).
+var worldSource = WorldDefinitionLoader.Load(explicitPath: parseResult.GetValue(option: worldOption));
+
+// Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Default,
+// which reproduces World's current boot) overlaid by the nullable CLI flags. Backend authority differs by source — a CLI
+// assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
+var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
+var hostSettings = WorldHostSettings.Resolve(
+    defaults: (worldSource.Definition.Host ?? WorldHostDefaults.Default),
+    directXAvailable: directXAvailable,
+    backendOverride: backendOverride,
+    widthOverride: parseResult.GetValue(option: widthOption),
+    heightOverride: parseResult.GetValue(option: heightOption),
+    exitAfterSecondsOverride: parseResult.GetValue(option: exitAfterSecondsOption),
+    presentModeOverride: presentModeOverride
+);
+
+if (hostSettings.BackendUnsatisfiable) {
     Console.Error.WriteLine(value: "The Direct3D 12 backend requires Windows 10 or newer; use --backend vulkan on this platform.");
 
     return 1;
 }
 
-var height = (uint)Math.Max(val1: 1, val2: parseResult.GetValue(option: heightOption));
-var presentModeName = parseResult.GetValue(option: presentModeOption)!;
-PresentMode? presentMode = presentModeName.ToUpperInvariant() switch {
-    "VSYNC" => PresentMode.Vsync,
-    "MAILBOX" => PresentMode.Mailbox,
-    "IMMEDIATE" => PresentMode.Immediate,
-    "ADAPTIVE" => PresentMode.Adaptive,
-    _ => null,
-};
-
-if (presentMode is not { } resolvedPresentMode) {
-    Console.Error.WriteLine(value: $"Unknown --present-mode '{presentModeName}'; expected vsync, mailbox, immediate, or adaptive.");
-
-    return 1;
+if (hostSettings.BackendDowngraded) {
+    Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
 }
+var hostsOnDirectX = hostSettings.HostsOnDirectX;
+var width = (uint)hostSettings.Width;
+var height = (uint)hostSettings.Height;
+// The GPU-timing arm boots from the host section's timing field — the lowest-precedence seed (a live world.timing
+// SetArmed always overrides). TrySeed is idempotent and claims the control only if nothing above has.
+GpuTimingControl.Shared.TrySeed(armed: hostSettings.Timing);
 
-var width = (uint)Math.Max(val1: 1, val2: parseResult.GetValue(option: widthOption));
 var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
+services.AddSingleton(implementationInstance: worldSource);
+services.AddSingleton(implementationInstance: worldSource.Definition);
+// The resolved host settings — read by the window/launcher/presentation registrations below and the world.host verb.
+services.AddSingleton(implementationInstance: hostSettings);
 services.Configure<NativeWindowOptions>(configureOptions: options => {
     options.Height = height;
     options.Mode = NativeWindowMode.PlatformWindow;
+    options.StartFullscreen = hostSettings.Fullscreen;
     options.Title = WorldApplicationDefaults.WindowTitle;
     options.Width = width;
 });
@@ -132,20 +173,17 @@ services.Configure<NativeWindowOptions>(configureOptions: options => {
 // TryAddSingleton<LauncherOptions> defers to this one. A null target selects automatic display pacing from verified
 // VRR capabilities or active signal timing; the world.fps verb observes the result.
 services.AddSingleton(implementationInstance: new LauncherOptions {
-    ExitAfter = ((exitAfterSeconds > 0) ? TimeSpan.FromSeconds(value: exitAfterSeconds) : null),
-    TargetRenderRate = null,
+    ExitAfter = ((hostSettings.ExitAfterSeconds > 0) ? TimeSpan.FromSeconds(value: hostSettings.ExitAfterSeconds) : null),
+    TargetRenderRate = hostSettings.TargetRenderRate,
 });
 services.AddSingleton(implementationInstance: new PresentationOptions {
-    PresentMode = resolvedPresentMode,
-    SurfaceFormat = SurfaceFormat.R8G8B8A8Unorm,
+    PresentMode = hostSettings.PresentMode,
+    SurfaceFormat = hostSettings.SurfaceFormat,
 });
-// The world definition (see WorldDefinition) — a --world file, or Assets/worlds/default.world.json beside the
-// executable, loaded / schema-checked / validated with a loud baked-default fallback on ANY failure (see
-// WorldDefinitionLoader). Read by DI from the roster, population, frame source, render settings, and the world.quality
-// verb. The resolved source is registered so world.save knows its default target (null SourcePath when baked/fallback).
-var worldSource = WorldDefinitionLoader.Load(explicitPath: parseResult.GetValue(option: worldOption));
-services.AddSingleton(implementationInstance: worldSource);
-services.AddSingleton(implementationInstance: worldSource.Definition);
+// The external-clock election policy from the host section's genlock field. Registered BEFORE AddWorldGpuHost →
+// AddLauncherTerminal so the launcher's TryAddSingleton<ExternalClockRegistry> defers to this one. A null genlock is the
+// launcher's automatic election (exactly the current behavior — the frozen default carries no genlock).
+services.AddSingleton(implementationInstance: new ExternalClockRegistry(electionPolicy: hostSettings.Genlock));
 
 // The storage host-section: the world doc's reserved endpoint + user-id, overlaid by the --storage-uri /
 // --user-id CLI reflection. RESERVED — nothing constructs an Azure target from these yet. The identity resolver
@@ -351,6 +389,10 @@ services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
 // The capability-grant verb surface — world.grant/world.revoke/world.grants (the principal/grant control plane).
 // A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldGrantCommandModule>();
+// The host-section verb surface — world.host (the DOCUMENT/RESOLVED/LIVE read-back) + world.host.set/world.host.tune.
+// A SEPARATE module because the world.host read needs PresentPacingControl + GpuTimingControl, which would push
+// WorldMutationCommandModule past its analyzer ceiling.
+services.AddSingleton<ICommandModule, WorldHostCommandModule>();
 // The audio verb surface — world.speaker.*/tune.*/patch.*/audio.set + world.speakers/audio.emitters (the
 // mutation twins and the derived-emitter listing). A SEPARATE module for the analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
@@ -436,7 +478,8 @@ services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
     store: sp.GetRequiredService<BindingBarStore>(),
     targeting: sp.GetRequiredService<WorldEditorTargeting>(),
     workbench: sp.GetRequiredService<WorldWorkbench>(),
-    audio: sp.GetRequiredService<WorldAudioDirector>()
+    audio: sp.GetRequiredService<WorldAudioDirector>(),
+    pacing: sp.GetRequiredService<PresentPacingControl>()
 ));
 // The overlay verb surface — world.screenshot (the composed-frame capture) + world.console (the mirror toggle).
 services.AddSingleton<ICommandModule, WorldUiCommandModule>();
@@ -586,6 +629,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             HostsOnDirectX = hostsOnDirectX,
             InstanceCapacity = frameSource.InstanceCapacity,
             ProgramWordCapacity = frameSource.ProgramWordCapacity,
+            // The ray-query hardware path from the host section — World previously left this unset, so SdfEngineNode fell
+            // back to the PUCK_RAY_QUERY env read (an env var no world document could see); now the document decides.
+            RayQuery = hostSettings.RayQuery,
             // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its room glow;
             // an unbound screen has no provider (the engine's procedural fallback lights it).
             ScreenLights = binder.ScreenLights,
