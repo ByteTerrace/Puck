@@ -348,6 +348,18 @@ Exit: an author places, aims, and hears a speaker without leaving the
 session; every proof green both backends.
 
 ## 3. Deferred ledger
+**Adaptive/contextual music (owner-confirmed direction, post-AP1):** three
+tiers, none needing new mechanism kinds. Tier 1 ships with this arc (spatial
+context via beds/attenuation; event stingers via A11b cues). Tier 2 is one
+thin data seam — a context-token→input-bit mapping on the Tune source, so a
+composer authors a REACTIVE tune cart that reads KEYINPUT bits as context
+flags (layer mutes, section jumps — the authentic chip-music technique);
+the machine input surface already exists. Tier 3 is the music DIRECTOR: an
+addon granted audio authority drives per-speaker stem gains/triggers/tune
+inputs from world queries — capabilities-first-class, score logic stays
+author-land; a data-only context→gain-curve shortcut may follow for simple
+cases. Beat-synchronized transitions defer until tempo awareness is
+demanded by a real composer.
 HRTF + occlusion (tier 2 — slots into the pan stage and the snapshot);
 clip/sample source kind (no decode infra exists; from-scratch when
 wanted); per-copy repeat emitters; directional cones; box beds;
