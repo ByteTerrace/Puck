@@ -28,7 +28,7 @@ internal static class Wasapi {
     public const int ShareModeShared = 0;
     public const uint StreamFlagsLoopback = 0x00020000;
     public const uint StreamFlagsEventCallback = 0x00040000;
-    // The render stream's exotic-endpoint safety net (audio plan A1): the engine converts/resamples our s16 PCM
+    // The render stream's exotic-endpoint safety net: the engine converts/resamples our s16 PCM
     // whenever the endpoint's shared-mode mix format is not already 48000 Hz — on a native-rate endpoint the
     // conversion is the trivial s16→float widen and the mixer path stays sample-exact.
     public const uint StreamFlagsAutoConvertPcm = 0x80000000;

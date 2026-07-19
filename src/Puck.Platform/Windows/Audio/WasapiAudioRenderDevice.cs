@@ -34,18 +34,18 @@ internal sealed class WasapiAudioRenderDeviceFactory : IAudioRenderDeviceFactory
     }
 }
 
-// The WASAPI render device. Cloned from WasapiAudioCaptureSource (the proven template): one dedicated MTA COM thread
-// owns enumerator→Activate→Initialize(Shared, event-driven)→GetService(IAudioRenderClient), with a
-// ManualResetEventSlim init handshake and a bounded Join on dispose. The stream requests OUR s16/stereo format at the
-// caller's rate with AUTOCONVERTPCM|SRC_DEFAULT_QUALITY (audio plan A1: 48000 is the shared-mode native rate on real
-// endpoints, so the engine's convert is the trivial s16→float widen; the SRC flags are the exotic-endpoint net, never
-// the design point). Per event wake the pump reads GetCurrentPadding and fills the buffer's free space through the
-// fill callback in ≤maxQuantumFrames chunks, writing DIRECTLY into GetBuffer's mapping — zero copies, zero
+// The WASAPI render device. One dedicated MTA COM thread owns enumerator→Activate→Initialize(Shared, event-driven)
+// →GetService(IAudioRenderClient), with a ManualResetEventSlim init handshake and a bounded Join on dispose; it
+// shares its threading shape with the capture source. The stream requests OUR s16/stereo format at the caller's
+// rate with AUTOCONVERTPCM|SRC_DEFAULT_QUALITY: 48000 is the shared-mode native rate on real endpoints, so the
+// engine's convert is the trivial s16→float widen; the SRC flags are the exotic-endpoint net, never the design
+// point. Per event wake the pump reads GetCurrentPadding and fills the buffer's free space through the fill
+// callback in ≤maxQuantumFrames chunks, writing DIRECTLY into GetBuffer's mapping — zero copies, zero
 // steady-state allocation. Any failing HRESULT parks the pump and surfaces on Fault; the owner disposes and reopens.
 [SupportedOSPlatform("windows")]
 internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
-    // The event wait's watchdog (the capture template's value): the pump re-checks the stop flag at least this often
-    // even if the endpoint stops signaling, bounding both dispose latency and a wedged-driver hang.
+    // The event wait's watchdog, matching the capture source's value: the pump re-checks the stop flag at least
+    // this often even if the endpoint stops signaling, bounding both dispose latency and a wedged-driver hang.
     private const uint EventTimeoutMilliseconds = 100;
 
     private readonly AudioRenderFill m_fill;
