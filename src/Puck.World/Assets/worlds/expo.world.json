@@ -230,7 +230,7 @@
   ],
   "cameras": [
     {
-      "$type": "anchored",
+      "name": "first-person",
       "anchor": {
         "$type": "entity",
         "index": 0
@@ -240,27 +240,38 @@
         1.4752654,
         -0.15992874
       ],
-      "name": "first-person",
+      "rig": {
+        "$type": "firstPerson",
+        "eyeOffset": [
+          0,
+          0,
+          0
+        ],
+        "focusDistance": 0,
+        "fieldOfViewRadians": 1.1868238
+      },
       "renderWidth": 256,
-      "renderHeight": 144,
-      "fieldOfViewRadians": 1.1868238
+      "renderHeight": 144
     },
     {
-      "$type": "fixed",
-      "position": [
+      "name": "overhead",
+      "anchor": null,
+      "offset": [
         0,
         15,
         7
       ],
-      "lookAt": [
-        0,
-        0.5,
-        -2.5
-      ],
-      "name": "overhead",
+      "rig": {
+        "$type": "lookAt",
+        "target": [
+          0,
+          0.5,
+          -2.5
+        ],
+        "fieldOfViewRadians": 0.9599311
+      },
       "renderWidth": 256,
-      "renderHeight": 144,
-      "fieldOfViewRadians": 0.9599311
+      "renderHeight": 144
     }
   ],
   "population": {

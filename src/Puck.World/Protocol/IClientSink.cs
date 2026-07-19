@@ -17,4 +17,9 @@ internal interface IClientSink {
     /// source re-reads the scene/screens on its next rebuild.</summary>
     /// <param name="definition">The world definition now live on the server.</param>
     void DeliverDefinition(WorldDefinition definition);
+
+    /// <summary>Delivers an accepted LIVE window-composition override for the client to apply to its composer (the
+    /// <c>view.layout</c>/<c>view.camera</c> path and Arc 9's milestone camera cut).</summary>
+    /// <param name="composition">The composition override.</param>
+    void DeliverComposition(WorldComposition composition);
 }

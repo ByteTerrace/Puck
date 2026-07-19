@@ -216,4 +216,23 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Host">The whole host defaults row.</param>
     internal sealed record SetHostDefaults(WorldPrincipal Principal, WorldHostDefaults Host) : WorldMutation(Principal);
+
+    /// <summary>Replaces the whole window-composition defaults row — the seat framing plus the authored layouts (see
+    /// <see cref="WorldViewDefaults"/>). Applies LIVE: the frame source recompiles the seat rigs and the composer reads
+    /// the new layouts on the next produced frame. The <c>world.view.rig</c> verb RMWs the seat rig into this.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Views">The whole views defaults row.</param>
+    internal sealed record SetViewDefaults(WorldPrincipal Principal, WorldViewDefaults Views) : WorldMutation(Principal);
+
+    /// <summary>Upserts one named window layout addressed by <see cref="WorldViewLayout.Name"/> — replaces the matching
+    /// row or appends a new one (the views section's layout grain).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Layout">The whole layout row.</param>
+    internal sealed record UpsertViewLayout(WorldPrincipal Principal, WorldViewLayout Layout) : WorldMutation(Principal);
+
+    /// <summary>Removes the window layout named <paramref name="Name"/>. Always allowed — the composer falls back to the
+    /// authored/built-in selection when the active layout is removed.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The layout name to remove.</param>
+    internal sealed record RemoveViewLayout(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 }

@@ -534,7 +534,7 @@ internal sealed class WorldAudioDirector {
                 Admit(plan: new EmitterPlan {
                     Key = key,
                     Kind = WorldAudioEmitterKind.Point,
-                    Anchor = EmitterAnchor.PlacementPoint(placementId: placement.Id, shapeId: sound.ShapeId, staticPosition: StaticShapePosition(placement: placement, creation: creation, shapeId: sound.ShapeId)),
+                    Anchor = EmitterAnchor.PlacementPoint(placementId: placement.Id, shapeId: sound.ShapeId, staticPosition: WorldAnchorGeometry.StaticShapePosition(placement: placement, creation: creation, shapeId: sound.ShapeId)),
                     MinRadius = FixedQ4816.Zero,
                     MaxRadius = FixedQ4816.FromDouble(value: (sound.Radius ?? audio.DefaultSpeakerRadius)),
                     FadeFrames = 0,
@@ -689,7 +689,7 @@ internal sealed class WorldAudioDirector {
         WorldMutation.UpsertPlacement upsert => upsert.Placement.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed fixedSpeaker } => fixedSpeaker.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed bed } => bed.Center,
-        WorldMutation.UpsertCamera { Camera: WorldCamera.Fixed fixedCamera } => fixedCamera.Position,
+        WorldMutation.UpsertCamera upsert when (upsert.Camera.Anchor is null) => upsert.Camera.Offset,
         _ => null,
     };
 
@@ -1092,25 +1092,25 @@ internal sealed class WorldAudioDirector {
                 continue;
             }
 
-            switch (camera) {
-                case WorldCamera.Fixed fixedCamera:
-                    return (Eye: fixedCamera.Position, Forward: (fixedCamera.LookAt - fixedCamera.Position));
-                case WorldCamera.Anchored anchored: {
-                    var plan = new EmitterPlan {
-                        Anchor = AnchorOf(anchor: anchored.Anchor, offset: anchored.Offset),
-                    };
-
-                    if (TryResolvePosition(plan: in plan, transforms: transforms, position: out var eye) && (m_client is { } client) &&
-                        (anchored.Anchor is WorldAnchor.Entity or WorldAnchor.EntityLeaf)) {
-                        var index = ((anchored.Anchor is WorldAnchor.Entity entity) ? entity.Index : ((WorldAnchor.EntityLeaf)anchored.Anchor).Index);
-
-                        // Avatar-local forward is -Z (the body convention every kit composition rides).
-                        return (Eye: eye, Forward: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: -1f), rotation: client.Orientation(index: index)));
-                    }
-
-                    return null;
-                }
+            // An unanchored look-at camera listens from its world eye toward its target; other unanchored rigs have no
+            // simple static listener pose (fall back to the listener placement).
+            if (camera.Anchor is null) {
+                return ((camera.Rig is WorldRig.LookAt look) ? (Eye: camera.Offset, Forward: (look.Target - camera.Offset)) : ((Vector3 Eye, Vector3 Forward)?)null);
             }
+
+            var plan = new EmitterPlan {
+                Anchor = AnchorOf(anchor: camera.Anchor, offset: camera.Offset),
+            };
+
+            if (TryResolvePosition(plan: in plan, transforms: transforms, position: out var eye) && (m_client is { } client) &&
+                (camera.Anchor is WorldAnchor.Entity or WorldAnchor.EntityLeaf)) {
+                var index = ((camera.Anchor is WorldAnchor.Entity entity) ? entity.Index : ((WorldAnchor.EntityLeaf)camera.Anchor).Index);
+
+                // Avatar-local forward is -Z (the body convention every kit composition rides).
+                return (Eye: eye, Forward: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: -1f), rotation: client.Orientation(index: index)));
+            }
+
+            return null;
         }
 
         return null;
@@ -1131,41 +1131,9 @@ internal sealed class WorldAudioDirector {
         _ => EmitterAnchor.FixedPoint(position: offset),
     };
 
-    // A static placement anchor's stamped position: root position, or root ∘ (scale · shape local) under the yaw
-    // rotation — the stamp math WorldPlacementStamper bakes, reduced to the anchor point.
-    private Vector3 StaticPlacementPosition(string placementId, int? shapeId) {
-        if (m_definition is not { } definition) {
-            return Vector3.Zero;
-        }
-
-        foreach (var placement in definition.Placements) {
-            if (!string.Equals(a: placement.Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
-                continue;
-            }
-
-            var creation = WorldPlacementStamper.FindCreation(creations: definition.Creations, id: placement.CreationId);
-
-            return ((creation is null) ? placement.Position : StaticShapePosition(placement: placement, creation: creation, shapeId: shapeId));
-        }
-
-        return Vector3.Zero;
-    }
-
-    private static Vector3 StaticShapePosition(WorldPlacement placement, WorldCreation creation, int? shapeId) {
-        if (shapeId is not { } targetShapeId) {
-            return placement.Position;
-        }
-
-        foreach (var shape in (creation.Document.Shapes ?? [])) {
-            if (shape.Id == targetShapeId) {
-                var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
-
-                return (placement.Position + Vector3.Transform(value: (shape.Position * placement.Scale), rotation: rotation));
-            }
-        }
-
-        return placement.Position;
-    }
+    // A static placement anchor's stamped position — the ONE shared resolver cameras and speakers both read (P9).
+    private Vector3 StaticPlacementPosition(string placementId, int? shapeId) =>
+        ((m_definition is { } definition) ? WorldAnchorGeometry.StaticPlacementPosition(definition: definition, placementId: placementId, shapeId: shapeId) : Vector3.Zero);
 
     private static WorldAudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
         WorldSpeakerSource.Machine machine => WorldAudioSourceKey.Machine(slot: machine.ScreenIndex),

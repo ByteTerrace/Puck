@@ -29,6 +29,9 @@ internal static class WorldDefinitionValidator {
     // before it can become an unchecked pixel-buffer or offscreen-render allocation.
     private const int MaxSurfaceDimension = 4096;
     private const float MinimumBasisLengthSquared = 1e-8f;
+    // Each camera can carry a persistent offscreen render (a View screen samples it); the bound keeps a floody document
+    // from declaring thousands of budgeted offscreen engines (ViewStack.MaxRegisteredViews is the runtime floor).
+    private const int MaxCameras = 64;
 
     /// <summary>Validates a candidate definition without throwing — the apply-time seam a buffered mutation runs its
     /// composed candidate through before the server swaps it in. On failure, <paramref name="reason"/> carries the
@@ -118,6 +121,10 @@ internal static class WorldDefinitionValidator {
         if (definition.Cameras is not { } authoredCameras) {
             errors.Add(item: "cameras is required.");
         } else {
+            if (authoredCameras.Count > MaxCameras) {
+                errors.Add(item: $"cameras count {authoredCameras.Count} exceeds the maximum of {MaxCameras}.");
+            }
+
             for (var index = 0; (index < authoredCameras.Count); index++) {
                 var camera = authoredCameras[index];
                 var path = $"cameras[{index}]";
@@ -133,40 +140,30 @@ internal static class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.name '{camera.Name}' is duplicated.");
                 }
 
-                switch (camera) {
-                    case WorldCamera.Fixed fixedCamera when !IsFinite(value: fixedCamera.Position) || !IsFinite(value: fixedCamera.LookAt) || (fixedCamera.Position == fixedCamera.LookAt):
-                        errors.Add(item: $"{path} needs finite, distinct position and lookAt points.");
-                        break;
-                    case WorldCamera.Anchored anchoredCamera:
-                        ValidateAnchor(anchor: anchoredCamera.Anchor, placements: definition.Placements, placementIds: placementIds, creations: definition.Creations, path: $"{path}.anchor", errors: errors);
-
-                        // The camera pose path (WorldScreenBinder) cannot yet resolve a placement's stamped transform
-                        // — a loud rejection here rather than a silent no-op fault at runtime. Entity/EntityLeaf both
-                        // resolve today (EntityLeaf via WorldAvatarCatalog.RoleOffset's static approximation).
-                        // SPEAKERS resolve every anchor kind (WorldAudioDirector rides the placement transform);
-                        // lifting cameras onto that seam means swapping the binder's anchor-source path, not growing
-                        // this rejection.
-                        if (anchoredCamera.Anchor is WorldAnchor.Placement) {
-                            errors.Add(item: $"{path}.anchor cameras cannot anchor to a placement yet (the camera pose path does not resolve placement transforms).");
-                        }
-
-                        if (!IsFinite(value: anchoredCamera.Offset)) {
-                            errors.Add(item: $"{path}.offset must contain finite coordinates.");
-                        }
-
-                        break;
+                // WHERE it rides: a null anchor poses directly in world space (offset IS the eye), any anchor kind
+                // resolves through the one shared resolver (P9) — a placement-anchored camera is no longer rejected.
+                if (camera.Anchor is { } anchor) {
+                    ValidateAnchor(anchor: anchor, placements: definition.Placements, placementIds: placementIds, creations: definition.Creations, path: $"{path}.anchor", errors: errors);
                 }
+
+                if (!IsFinite(value: camera.Offset)) {
+                    errors.Add(item: $"{path}.offset must contain finite coordinates.");
+                }
+
+                // HOW it frames.
+                ValidateRig(rig: camera.Rig, path: $"{path}.rig", errors: errors);
 
                 if ((camera.RenderWidth == 0U) || (camera.RenderHeight == 0U) ||
                     (camera.RenderWidth > MaxSurfaceDimension) || (camera.RenderHeight > MaxSurfaceDimension)) {
                     errors.Add(item: $"{path} render dimensions must be within 1..{MaxSurfaceDimension}.");
                 }
-
-                if (!float.IsFinite(f: camera.FieldOfViewRadians) || (camera.FieldOfViewRadians <= 0f) || (camera.FieldOfViewRadians >= MathF.PI)) {
-                    errors.Add(item: $"{path}.fieldOfViewRadians must be finite and between 0 and pi.");
-                }
             }
         }
+
+        // The window-composition defaults: absent-in-JSON coalesces to the built-in default (empty layouts -> the
+        // built-in seat ladder), so every downstream read sees a concrete row. Named cameras a layout slot references
+        // must resolve against the camera set just built.
+        ValidateViews(views: (definition.Views ?? WorldViewDefaults.Default), cameras: cameras, errors: errors);
 
         var screenIndices = new HashSet<int>();
 
@@ -1092,10 +1089,157 @@ internal static class WorldDefinitionValidator {
                 }
 
                 break;
+            case WorldAnchor.Group group:
+                if (group.Indices is { } indices) {
+                    for (var index = 0; (index < indices.Count); index++) {
+                        if ((indices[index] < 0) || (indices[index] >= WorldPopulation.MaxPopulation)) {
+                            errors.Add(item: $"{path}.indices[{index}] {indices[index]} is outside 0..{(WorldPopulation.MaxPopulation - 1)}.");
+                        }
+                    }
+                }
+
+                if (!float.IsFinite(f: group.SmoothRate) || (group.SmoothRate <= 0f)) {
+                    errors.Add(item: $"{path}.smoothRate must be positive and finite.");
+                }
+
+                break;
             default:
                 errors.Add(item: $"{path} is an unknown anchor kind.");
 
                 break;
+        }
+    }
+
+    // A camera rig (PRESENTATION-ONLY): the field of view finite and in (0, pi), and every rig kind's offsets/scalars
+    // finite with the physical signs its engine rig needs (a positive orbit distance and dolly duration, a non-negative
+    // focus distance). A closed switch with a loud unknown-kind branch.
+    private static void ValidateRig(WorldRig rig, string path, List<string> errors) {
+        if (rig is null) {
+            errors.Add(item: $"{path} is required.");
+
+            return;
+        }
+
+        if (!float.IsFinite(f: rig.FieldOfViewRadians) || (rig.FieldOfViewRadians <= 0f) || (rig.FieldOfViewRadians >= MathF.PI)) {
+            errors.Add(item: $"{path}.fieldOfViewRadians must be finite and between 0 and pi.");
+        }
+
+        switch (rig) {
+            case WorldRig.Chase chase:
+                if (!IsFinite(value: chase.EyeOffset) || !IsFinite(value: chase.TargetOffset)) {
+                    errors.Add(item: $"{path} needs finite eye and target offsets.");
+                }
+
+                if (!float.IsFinite(f: chase.SpreadPullback)) {
+                    errors.Add(item: $"{path}.spreadPullback must be finite.");
+                }
+
+                break;
+            case WorldRig.FirstPerson firstPerson:
+                if (!IsFinite(value: firstPerson.EyeOffset)) {
+                    errors.Add(item: $"{path}.eyeOffset must contain finite coordinates.");
+                }
+
+                if (!float.IsFinite(f: firstPerson.FocusDistance) || (firstPerson.FocusDistance < 0f)) {
+                    errors.Add(item: $"{path}.focusDistance must be finite and non-negative.");
+                }
+
+                break;
+            case WorldRig.Orbit orbit:
+                if (!float.IsFinite(f: orbit.Distance) || (orbit.Distance <= 0f)) {
+                    errors.Add(item: $"{path}.distance must be positive and finite.");
+                }
+
+                if (!float.IsFinite(f: orbit.Yaw) || !float.IsFinite(f: orbit.Pitch) || !IsFinite(value: orbit.PivotLift)) {
+                    errors.Add(item: $"{path} needs a finite yaw, pitch, and pivot lift.");
+                }
+
+                break;
+            case WorldRig.LookAt lookAt:
+                if (!IsFinite(value: lookAt.Target)) {
+                    errors.Add(item: $"{path}.target must contain finite coordinates.");
+                }
+
+                break;
+            case WorldRig.Dolly dolly:
+                if (!IsFinite(value: dolly.Start) || !IsFinite(value: dolly.End)) {
+                    errors.Add(item: $"{path} needs finite start and end points.");
+                }
+
+                if (!float.IsFinite(f: dolly.DurationSeconds) || (dolly.DurationSeconds <= 0f)) {
+                    errors.Add(item: $"{path}.durationSeconds must be positive and finite.");
+                }
+
+                break;
+            default:
+                errors.Add(item: $"{path} is an unknown rig kind.");
+
+                break;
+        }
+    }
+
+    // The window-composition defaults (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
+    // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set.
+    private static void ValidateViews(WorldViewDefaults views, HashSet<string> cameras, List<string> errors) {
+        if (views is null) {
+            errors.Add(item: "views is required.");
+
+            return;
+        }
+
+        ValidateRig(rig: views.SeatRig, path: "views.seatRig", errors: errors);
+
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var layouts = (views.Layouts ?? []);
+
+        for (var index = 0; (index < layouts.Count); index++) {
+            var layout = layouts[index];
+            var path = $"views.layouts[{index}]";
+
+            if (layout is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: layout.Name)) {
+                errors.Add(item: $"{path}.name is required.");
+            } else if (!names.Add(item: layout.Name)) {
+                errors.Add(item: $"{path}.name '{layout.Name}' is duplicated.");
+            }
+
+            if (layout.SeatCount < 0) {
+                errors.Add(item: $"{path}.seatCount {layout.SeatCount} must be non-negative.");
+            }
+
+            if (!float.IsFinite(f: layout.TransitionSeconds) || (layout.TransitionSeconds < 0f)) {
+                errors.Add(item: $"{path}.transitionSeconds must be finite and non-negative.");
+            }
+
+            if (!float.IsFinite(f: layout.TransitionRenderScale) || (layout.TransitionRenderScale <= 0f) || (layout.TransitionRenderScale > 1f)) {
+                errors.Add(item: $"{path}.transitionRenderScale must be finite and within (0, 1].");
+            }
+
+            var slots = (layout.Slots ?? []);
+
+            if (slots.Count == 0) {
+                errors.Add(item: $"{path}.slots must declare at least one slot.");
+            }
+
+            for (var slotIndex = 0; (slotIndex < slots.Count); slotIndex++) {
+                var slot = slots[slotIndex];
+                var slotPath = $"{path}.slots[{slotIndex}]";
+
+                if (!float.IsFinite(f: slot.X) || !float.IsFinite(f: slot.Y) || !float.IsFinite(f: slot.Width) || !float.IsFinite(f: slot.Height) ||
+                    (slot.X < 0f) || (slot.Y < 0f) || (slot.Width <= 0f) || (slot.Height <= 0f) ||
+                    ((slot.X + slot.Width) > 1.0001f) || ((slot.Y + slot.Height) > 1.0001f)) {
+                    errors.Add(item: $"{slotPath} rect must lie within [0, 1] with positive extents.");
+                }
+
+                if ((slot.Camera is { } camera) && !cameras.Contains(item: camera)) {
+                    errors.Add(item: $"{slotPath}.camera '{camera}' names no camera row.");
+                }
+            }
         }
     }
 

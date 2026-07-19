@@ -86,6 +86,10 @@ internal sealed class WorldGrants {
     private void SeedDomain(WorldPrincipal principal) {
         _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false), reason: out _);
         _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Edit, Subject: GrantSubject.All, Exclusive: false), reason: out _);
+        // The shared window-composition authority — seats and the console can drive the live view.layout/view.camera
+        // overrides (peers, who get only Control/all above, do not receive this concrete grant). A director can still
+        // acquire it exclusively over this concrete subject to own the shot.
+        _ = TryGrant(grant: new WorldGrant(Principal: principal, Capability: WorldCapability.Control, Subject: GrantSubject.Composition, Exclusive: false), reason: out _);
 
         foreach (var section in Enum.GetValues<WorldSection>()) {
             var subject = GrantSubject.Section(section: section);

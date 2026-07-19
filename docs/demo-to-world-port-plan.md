@@ -3115,6 +3115,102 @@ Arc 3's gate against Arc 4 — Arc 3 runs first and touches no world file.
    a predicate DSL with one consumer, but flagged as the most likely place this
    schema needs a second field later (Arc 7 may want authored workbench layouts).
 
+### Execution record (2026-07-19, branch `claude/puck-realtime-world-editing-4fd13f`)
+
+**Landed as designed, with the corrections below.** The collapsed `WorldCamera`
+(`Name, Anchor?, Offset, Rig, RenderWidth, RenderHeight`), the `WorldRig` union
+(`chase`/`firstPerson`/`orbit`/`lookAt`/`dolly`), `WorldAnchor.Group`, the `views`
+section (`WorldViewDefaults`/`WorldViewLayout`/`WorldViewSlot`, R12 trailing
+nullable), `WorldRigCompiler`, `Client/WorldGroupAnchors`, `Client/WorldViewComposer`
+(consuming the engine `ViewTransition`), the validator rewrite (rig + views +
+`Group`, placement-rejection **deleted**, bounded `MaxCameras = 64`), the three
+mutations + `SectionOf`/`Describe`/`TryCompose`, `WorldSection.Views` +
+`GrantSubject.Composition`, `WorldViewCommandModule` (`world.view.rig`/`.layout.set`/
+`.remove`, `view.layout`/`view.camera`, `world.view.state`), and the OQ-12
+re-encoding of `default`/`expo`/`kart-remap` all shipped. Full solution builds clean
+in Release; `Puck.Demo` still compiles as a library.
+
+Corrections that bind future arcs:
+
+1. **P9 shared resolver landed as `WorldAnchorGeometry` (placement stamp math) + the
+   frame source's `ResolveCameraAnchorPose`, not a single monolithic resolver.** The
+   audio director, the binder's offscreen views, and the main-window composer resolve
+   a *placement* anchor through the one `WorldAnchorGeometry.StaticPlacementPosition`
+   (the audio director's private copy was deleted and now delegates). Entity/leaf
+   poses still come from each consumer's own pose source (the binder's
+   `ISdfAnchorSource`, the frame source's `WorldClient`) because those are genuinely
+   different live-pose seams; unifying them further buys nothing. The validator's
+   placement-camera rejection is **gone** — a placement-anchored camera resolves.
+2. **`SelectCamera`/`SetActiveLayout` landed as a `WorldComposition` union on a new
+   `IServerLink.SubmitComposition` → `IClientSink.DeliverComposition` path**, not on
+   `WorldCommand` (whose base carries an `EntityIndex` these do not have). The server
+   grant-checks `Control`/`Composition` and pushes to the client's shared
+   `WorldCompositionState`; the composer reads it. This is the server→client seam Arc
+   9's `MilestoneEffect.SelectCamera` publishes into — Arc 9 emits a
+   `WorldComposition.SelectCamera`, nothing new.
+3. **`world.view.state`'s transition fraction is observable only across produced
+   frames.** Consecutive `Immediate` reads drain in one command window (one frame), so
+   they return identical composer state; a following-frame read needs a `Simulation`
+   command between reads to advance the render clock. Verified: interspersing a cheap
+   `Simulation` verb shows `transition` climb `0 → 0.51 → 0.62 → 0.74 → 0.87 → 1`, the
+   region rects morph continuously, the occupant cuts at the midpoint (`slot0` becomes
+   `cam:wide`), and the settled read is `slots=2 slot0=0,0,1,0.7:cam:wide
+   slot1=0,0.7,1,0.3:seat0` — the authored cinema composition. A same-frame burst of
+   reads is not a regression, it is how the barrier works.
+4. **`WorldRig`/`WorldViewSlot` `Vector3` fields ride the existing
+   `Vector3JsonConverter` (array form), not `IncludeFields`** (risk 4 resolved) — so
+   a `world.view.rig`/`world.camera.set` JSON argument spells offsets as
+   `[x,y,z]` arrays, matching every other authored coordinate. The plan's
+   author-surface examples that show `{"x":..,"y":..}` object form are **aspirational
+   and wrong**; the wire shape is arrays.
+5. **The seat rig is now `WorldViewDefaults.Default.SeatRig` compiled through
+   `WorldRigCompiler`, reproducing `OrientedFollowRig`'s own field defaults exactly**
+   — the frozen default world's seat framing is byte-identical, and `world.view.rig`
+   recompiles every seat rig on the views delivery (verified: the seat pulls back,
+   `world.undo` snaps it back, `dirty` returns to 0).
+6. **Demo deletion is a full (c)-disposition (Arc 1 precedent), nothing deleted.**
+   `World/CameraEye.cs`, `Overworld/ScreenLayoutDirector.cs`, `ScreenSlotLedger.cs`,
+   `DiegeticUiDirector.cs`, `DiegeticUiInstaller.cs` are each consumed by the SURVIVING
+   pinned god files (`OverworldFrameSource`, `OverworldWorld`, `OverworldFrameSource.Control`,
+   the bench scenes, the creator companion, the binding bar) — deleting them would
+   break the Demo library build, which the ground rules forbid. They remain pinned and
+   die with those survivors under the Demo-retirement trajectory (Arc 12). **Because
+   `Puck.Demo.World.CameraEye` and `Puck.Demo.Overworld.ScreenLayoutDirector` therefore
+   still exist, the flagged `Puck.SdfVm` engine-seam doc comments that `<c>`-reference
+   them are NOT dangling and were left untouched** — the arc's "no compiled engine
+   change" holds literally (the SdfCameraRig/ViewStack/SdfAnchorKind/SdfBenchScene/
+   SdfDebugController edits the spec anticipated are unnecessary until those Demo types
+   actually die). Arc 5/10/12 own the eventual doc-comment refresh when they remove the
+   files.
+7. **Binder camera re-registration keys on RENDER DIMENSIONS only now (risk 2
+   resolved).** With `WorldCamera` no longer polymorphic, the recreation guard dropped
+   its `GetType()` clause; any pose/aim/FOV/rig/anchor edit re-wires the live view in
+   place via `ConfigureCameraView` (a freshly compiled rig + re-pointed anchor
+   sources), and only a `RenderWidth`/`RenderHeight` change recreates the offscreen
+   render target. A rig `$type` swap re-wires live, no restart.
+
+**Verified (Windows, Release):** full-solution build clean; `Puck.Demo` compiles;
+the default world boots from the re-encoded `default.world.json` (no baked-default
+fallback) and `world.save` reproduces it **byte-identically** (ouroboros holds); the
+default world's `default.world.json` diff is **camera-rows-only** (hunks confined to
+the `cameras` block, lines 368–409), and `expo`/`kart-remap` diffs are likewise
+camera-rows-only; `world.view.rig` live-reframes the seat and `world.undo` restores
+it; `world.camera.set` of a group-anchored chase camera + `world.view.layout.set` +
+`view.layout cinema` eases into the two-band cinema composition with `spreadPullback`
+on the top band; orbit/dolly rigs are author-reachable; `view.layout auto` returns to
+the built-in ladder; the composer selects `override` → `authored` (a `seatCount: 0`
+catch-all) → `builtin` in that order.
+
+**Plan contradictions found:** (a) the author-surface `{"x":..}` object-form Vector3
+examples contradict the actual array-form converter (correction 4); (b) the Demo
+deletion table assumed the five files become "unreferenced islands post-R0", but R0's
+top-down teardown has **not** run against them (Beat B deleted the composition-root
+god files, not these presentation files, which the surviving `OverworldFrameSource`/
+`OverworldWorld` still consume) — so the deletion is a (c)-disposition, not a `git rm`
+(correction 6); (c) `SelectCamera`/`SetActiveLayout` cannot be `WorldCommand` records
+as the target-shape comment's file hint implied, since that base requires an
+`EntityIndex` (correction 2).
+
 ### Sizing
 
 **L.** Broad but shallow and almost entirely additive: five new record families,

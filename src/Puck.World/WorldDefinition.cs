@@ -923,39 +923,19 @@ internal readonly record struct FixedWanderTuning(
     );
 }
 
-/// <summary>One placeable camera in the world — either a fixed look-at or an anchored mount riding a world entity's
-/// live pose. A <see cref="WorldScreenSource.View"/> resolves the stable name and renders the resulting live view
-/// offscreen.</summary>
-/// <param name="Name">The camera's stable name — the handle a View screen samples by.</param>
+/// <summary>One placeable camera in the world — WHERE it rides (<see cref="Anchor"/> + <see cref="Offset"/>) times HOW it
+/// frames (<see cref="Rig"/>), two orthogonal axes rather than one welded kind. A <see cref="WorldScreenSource.View"/>
+/// resolves the stable name and renders the resulting live view offscreen; an authored layout slot renders it into the
+/// main window. Identity, placement, framing, render target — no behaviour hides in a kind.</summary>
+/// <param name="Name">The camera's stable name — the handle a View screen / layout slot samples by.</param>
+/// <param name="Anchor">What the camera rides (see <see cref="WorldAnchor"/>), or <see langword="null"/> to pose directly
+/// in world space (an unanchored camera's <paramref name="Offset"/> IS its world eye position).</param>
+/// <param name="Offset">The attachment point relative to the anchor's resolved pose (anchor-local axes), or — when
+/// <paramref name="Anchor"/> is <see langword="null"/> — the eye's world position.</param>
+/// <param name="Rig">How the camera frames from that pose (see <see cref="WorldRig"/>).</param>
 /// <param name="RenderWidth">The offscreen render width in pixels.</param>
 /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-/// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-[JsonDerivedType(typeof(WorldCamera.Fixed), typeDiscriminator: "fixed")]
-[JsonDerivedType(typeof(WorldCamera.Anchored), typeDiscriminator: "anchored")]
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-internal abstract record WorldCamera(string Name, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians) {
-    /// <summary>A camera posed directly in world space.</summary>
-    /// <param name="Name">The camera's stable name.</param>
-    /// <param name="Position">The fixed eye position, world space.</param>
-    /// <param name="LookAt">The fixed look-at target, world space.</param>
-    /// <param name="RenderWidth">The offscreen render width in pixels.</param>
-    /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-    /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-    internal sealed record Fixed(string Name, Vector3 Position, Vector3 LookAt, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
-        : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
-
-    /// <summary>A camera anchored to a <see cref="WorldAnchor"/> — the entity/leaf/placement pose it rides supplies
-    /// the live position and orientation; <paramref name="Offset"/> is the exact attachment point in the anchor's
-    /// local axes on top of that — an anchor can carry a camera anywhere.</summary>
-    /// <param name="Name">The camera's stable name.</param>
-    /// <param name="Anchor">What the camera rides (see <see cref="WorldAnchor"/>).</param>
-    /// <param name="Offset">The attachment point relative to the anchor's resolved pose, in anchor-local axes.</param>
-    /// <param name="RenderWidth">The offscreen render width in pixels.</param>
-    /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-    /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
-    internal sealed record Anchored(string Name, WorldAnchor Anchor, Vector3 Offset, uint RenderWidth, uint RenderHeight, float FieldOfViewRadians)
-        : WorldCamera(Name: Name, RenderWidth: RenderWidth, RenderHeight: RenderHeight, FieldOfViewRadians: FieldOfViewRadians);
-}
+internal sealed record WorldCamera(string Name, WorldAnchor? Anchor, Vector3 Offset, WorldRig Rig, uint RenderWidth, uint RenderHeight);
 
 /// <summary>The built-in session census. Local players occupy the split-screen seats; network players are represented
 /// by authoritative local stand-ins until a transport supplies their intent stream.</summary>
@@ -1293,6 +1273,10 @@ internal sealed record WorldHostDefaults(
 /// timing/genlock — see <see cref="WorldHostDefaults"/>). OPT-IN: <see langword="null"/> (the frozen default, no
 /// <c>host</c> key) coalesces to <see cref="WorldHostDefaults.Default"/>, which reproduces World's current boot exactly.
 /// The CLI window/backend flags override it at boot (a deployment surface laid over the author's intent).</param>
+/// <param name="Views">The window-composition defaults — the seat framing every seat wakes on plus the authored named
+/// layouts (see <see cref="WorldViewDefaults"/>). <see langword="null"/> (the frozen default, no <c>views</c> key)
+/// coalesces to <see cref="WorldViewDefaults.Default"/>, whose empty layout list falls the composer through to the
+/// built-in seat ladder — rendered output byte-unchanged.</param>
 internal sealed record WorldDefinition(
     MotionTuning Motion,
     WanderTuning Wander,
@@ -1318,7 +1302,11 @@ internal sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollision? Collision = null,
     // OPT-IN and WhenWritingNull: a world that authors no host section carries no `host` key, so the frozen default
     // world stays byte-identical. Absence coalesces to WorldHostDefaults.Default (World's current boot) at every read.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHostDefaults? Host = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHostDefaults? Host = null,
+    // OPT-IN and WhenWritingNull: a world that authors no views section carries no `views` key, so the frozen default
+    // world stays byte-identical. Absence coalesces to WorldViewDefaults.Default (empty layouts -> the built-in seat
+    // ladder + OrientedFollowRig's own field defaults) at every read.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? Views = null
 ) {
     /// <summary>The document schema version. A loader rejects (→ loud baked-default fallback) any other value; the
     /// canonical writer always emits it.</summary>
@@ -1493,21 +1481,21 @@ internal sealed record WorldDefinition(
         // The two live world cameras: one anchored to player one's entity for the jumbotron, and one fixed high above
         // the plaza for the separate overhead monitor.
         Cameras: [
-            new WorldCamera.Anchored(
+            new WorldCamera(
                 Name: "first-person",
                 Anchor: new WorldAnchor.Entity(Index: 0),
                 Offset: WorldAvatarCatalog.EyeOffset(avatar: 0),
+                Rig: new WorldRig.FirstPerson(EyeOffset: Vector3.Zero, FocusDistance: 0f, FieldOfViewRadians: (68f * (MathF.PI / 180f))),
                 RenderWidth: 256,
-                RenderHeight: 144,
-                FieldOfViewRadians: (68f * (MathF.PI / 180f))
+                RenderHeight: 144
             ),
-            new WorldCamera.Fixed(
+            new WorldCamera(
                 Name: "overhead",
-                Position: new Vector3(x: 0f, y: 15f, z: 7f),
-                LookAt: new Vector3(x: 0f, y: 0.5f, z: -2.5f),
+                Anchor: null,
+                Offset: new Vector3(x: 0f, y: 15f, z: 7f),
+                Rig: new WorldRig.LookAt(Target: new Vector3(x: 0f, y: 0.5f, z: -2.5f), FieldOfViewRadians: (55f * (MathF.PI / 180f))),
                 RenderWidth: 256,
-                RenderHeight: 144,
-                FieldOfViewRadians: (55f * (MathF.PI / 180f))
+                RenderHeight: 144
             ),
         ],
         // The kit→entity assignment: the R1 low-discrepancy hash policy with an empty table.

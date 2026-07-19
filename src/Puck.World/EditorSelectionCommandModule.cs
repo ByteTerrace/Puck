@@ -487,23 +487,18 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
                         continue;
                     }
 
-                    switch (camera) {
-                        case WorldCamera.Fixed fixedCamera:
-                            target = (relative ? (fixedCamera.Position + value) : value);
-                            // A relative nudge carries the aim along (a parallel translate); an absolute move re-poses
-                            // the eye and holds the authored aim point.
-                            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(Principal: principal, Camera: (fixedCamera with {
-                                Position = target,
-                                LookAt = (relative ? (fixedCamera.LookAt + value) : fixedCamera.LookAt),
-                            })));
+                    target = (relative ? (camera.Offset + value) : value);
+                    var moved = (camera with { Offset = target });
 
-                            return true;
-                        case WorldCamera.Anchored anchored:
-                            target = (relative ? (anchored.Offset + value) : value);
-                            m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(Principal: principal, Camera: (anchored with { Offset = target })));
-
-                            return true;
+                    // An unanchored look-at carries its aim along on a relative nudge (a parallel translate); an
+                    // absolute move re-poses the eye and holds the authored aim point.
+                    if (relative && (camera.Anchor is null) && (camera.Rig is WorldRig.LookAt look)) {
+                        moved = (moved with { Rig = (look with { Target = (look.Target + value) }) });
                     }
+
+                    m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(Principal: principal, Camera: moved));
+
+                    return true;
                 }
 
                 break;

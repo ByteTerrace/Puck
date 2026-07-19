@@ -323,13 +323,21 @@ services.AddSingleton(implementationFactory: static sp => WorldAddonDriver.Creat
     server: sp.GetRequiredService<WorldServer>()
 ));
 
+// The shared live composition-override store — written by DeliverComposition (an accepted view.layout/view.camera), read
+// by the frame source's view composer. One instance shared by the client and the frame source.
+services.AddSingleton<WorldCompositionState>();
+// The window composer — layout selection + eased transitions. One shared instance the frame source drives each produced
+// frame and the world.view.state read observes.
+services.AddSingleton<WorldViewComposer>();
+
 // The client half: the snapshot-fed entity view + per-tick seat-intent submitter, bound to the loopback at
 // construction (the bind delivers a primer snapshot so the render path sees the boot state before the first tick).
 services.AddSingleton(implementationFactory: static sp => {
     var client = new WorldClient(
         roster: sp.GetRequiredService<PlayerRoster>(),
         link: sp.GetRequiredService<IServerLink>(),
-        definition: sp.GetRequiredService<WorldDefinition>()
+        definition: sp.GetRequiredService<WorldDefinition>(),
+        composition: sp.GetRequiredService<WorldCompositionState>()
     );
 
     sp.GetRequiredService<LoopbackTransport>().Bind(sink: client);
@@ -393,6 +401,9 @@ services.AddSingleton<ICommandModule, WorldGrantCommandModule>();
 // A SEPARATE module because the world.host read needs PresentPacingControl + GpuTimingControl, which would push
 // WorldMutationCommandModule past its analyzer ceiling.
 services.AddSingleton<ICommandModule, WorldHostCommandModule>();
+// The window-composition verb surface — world.view.rig/.layout.set/.remove (durable), view.layout/view.camera (live
+// overrides), and the world.view.state read. A SEPARATE module for the analyzer ceilings.
+services.AddSingleton<ICommandModule, WorldViewCommandModule>();
 // The audio verb surface — world.speaker.*/tune.*/patch.*/audio.set + world.speakers/audio.emitters (the
 // mutation twins and the derived-emitter listing). A SEPARATE module for the analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
@@ -513,7 +524,9 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         animator: sp.GetRequiredService<WorldPlacementAnimator>(),
         workbench: sp.GetRequiredService<WorldWorkbench>(),
         audio: sp.GetRequiredService<WorldAudioDirector>(),
-        gizmos: sp.GetRequiredService<EditorGizmoStore>()
+        gizmos: sp.GetRequiredService<EditorGizmoStore>(),
+        composition: sp.GetRequiredService<WorldCompositionState>(),
+        composer: sp.GetRequiredService<WorldViewComposer>()
     );
 
     // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen registers a

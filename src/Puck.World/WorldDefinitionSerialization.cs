@@ -22,6 +22,12 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldKit))]
 [JsonSerializable(typeof(WorldScreen))]
 [JsonSerializable(typeof(WorldCamera))]
+// The camera's rig union (world.camera.set / world.view.rig accessors) and the views section rows (world.view.rig /
+// world.view.layout.set accessors). WorldRig is polymorphic ($type chase|firstPerson|orbit|lookAt|dolly); registering
+// the base emits every variant's source-gen metadata.
+[JsonSerializable(typeof(WorldRig))]
+[JsonSerializable(typeof(WorldViewDefaults))]
+[JsonSerializable(typeof(WorldViewLayout))]
 [JsonSerializable(typeof(WorldScene))]
 [JsonSerializable(typeof(WorldSceneRow))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]

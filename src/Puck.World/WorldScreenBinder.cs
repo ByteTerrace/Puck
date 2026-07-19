@@ -11,6 +11,7 @@ using Puck.Hosting;
 using Puck.Platform;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -987,27 +988,7 @@ internal sealed class WorldScreenBinder : IDisposable {
                 DisableSoftShadows = true,
             };
 
-            switch (camera) {
-                case WorldCamera.Fixed fixedCamera:
-                    view.Rig = new FixedRig {
-                        Eye = fixedCamera.Position,
-                        FovRadians = fixedCamera.FieldOfViewRadians,
-                        Target = fixedCamera.LookAt,
-                    };
-
-                    break;
-                case WorldCamera.Anchored anchored:
-                    view.AnchorSource = m_anchors;
-                    view.AnchorIdSource = () => AnchorEntityIndex(anchor: anchored.Anchor);
-                    view.Rig = new FirstPersonRig {
-                        EyeOffset = ResolveAnchorOffset(anchor: anchored.Anchor, offset: anchored.Offset),
-                        FovRadians = anchored.FieldOfViewRadians,
-                    };
-
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(paramName: nameof(camera), actualValue: camera, message: "Unknown world camera kind.");
-            }
+            ConfigureCameraView(view: view, camera: camera);
 
             registration = new CameraRegistration { Row = camera, View = view };
             m_cameraViews[camera.Name] = registration;
@@ -1051,8 +1032,7 @@ internal sealed class WorldScreenBinder : IDisposable {
             }
 
             if ((next.RenderWidth != registration.Row.RenderWidth) ||
-                (next.RenderHeight != registration.Row.RenderHeight) ||
-                (next.GetType() != registration.Row.GetType())) {
+                (next.RenderHeight != registration.Row.RenderHeight)) {
                 // The offscreen render target is sized (and the rig shaped) at construction: release the registration
                 // (ViewStack.Release disposes the SdfCameraView and its engine) and rebuild fresh from the new row,
                 // re-narrowing the survivors' self-reference set.
@@ -1083,33 +1063,69 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
     }
 
-    // A same-kind pose/aim/FOV edit lands as property writes on the LIVE rig — the offscreen engine, its ViewStack
-    // budget entry, and every wired slot survive untouched. The registration's row snapshot advances so the next
-    // reconcile diffs against what the view now embodies.
+    // A same-dimensions pose/aim/FOV/rig/anchor edit re-wires the LIVE view in place (a freshly compiled rig plus its
+    // anchor sources) — the offscreen engine, its ViewStack budget entry, and every wired slot survive untouched. The
+    // registration's row snapshot advances so the next reconcile diffs against what the view now embodies.
     private void ApplyCameraPose(CameraRegistration registration, WorldCamera camera) {
-        switch (camera) {
-            case WorldCamera.Fixed fixedCamera when registration.View.Rig is FixedRig rig:
-                rig.Eye = fixedCamera.Position;
-                rig.Target = fixedCamera.LookAt;
-                rig.FovRadians = fixedCamera.FieldOfViewRadians;
-
-                break;
-            case WorldCamera.Anchored anchored when registration.View.Rig is FirstPersonRig rig:
-                rig.EyeOffset = ResolveAnchorOffset(anchor: anchored.Anchor, offset: anchored.Offset);
-                rig.FovRadians = anchored.FieldOfViewRadians;
-                // Human-cadence closure: the anchor id is captured from the new row (WorldAnchor is plain data).
-                registration.View.AnchorIdSource = () => AnchorEntityIndex(anchor: anchored.Anchor);
-
-                break;
-        }
+        ConfigureCameraView(view: registration.View, camera: camera);
 
         registration.Row = camera;
     }
 
+    // Compiles a camera's rig and wires its anchor sources onto the offscreen view (the shared collapsed-camera path for
+    // both first registration and a live pose edit): a null anchor bakes the offset as the world eye and binds no anchor;
+    // an entity/leaf anchor rides the live anchor table with the offset folded into the anchor-local rig offsets; a
+    // placement/group anchor bakes the resolved static world position (via WorldAnchorGeometry / a one-shot group
+    // centroid — an offscreen jumbotron does not per-frame smooth a group the way the main-window composer does).
+    private void ConfigureCameraView(SdfCameraView view, WorldCamera camera) {
+        var rig = WorldRigCompiler.Compile(rig: camera.Rig);
+
+        switch (camera.Anchor) {
+            case null:
+                view.AnchorSource = null;
+                view.AnchorIdSource = null;
+                WorldRigCompiler.BakeUnanchored(rig: rig, worldOffset: camera.Offset);
+
+                break;
+            case WorldAnchor.Entity or WorldAnchor.EntityLeaf: {
+                var anchor = camera.Anchor;
+
+                view.AnchorSource = m_anchors;
+                view.AnchorIdSource = () => AnchorEntityIndex(anchor: anchor);
+                WorldRigCompiler.FoldAnchorLocal(rig: rig, anchorLocalOffset: ResolveAnchorOffset(anchor: anchor, offset: camera.Offset));
+
+                break;
+            }
+            case WorldAnchor.Placement placement:
+                view.AnchorSource = null;
+                view.AnchorIdSource = null;
+                WorldRigCompiler.BakeUnanchored(rig: rig, worldOffset: (StaticAnchorPosition(placement: placement) + camera.Offset));
+
+                break;
+            case WorldAnchor.Group group:
+                view.AnchorSource = null;
+                view.AnchorIdSource = null;
+                WorldRigCompiler.BakeUnanchored(rig: rig, worldOffset: (GroupCentroid(group: group) + camera.Offset));
+
+                break;
+        }
+
+        view.Rig = rig;
+    }
+
+    // The stamped world position of a placement anchor (the same WorldAnchorGeometry math speakers read) — needs the live
+    // definition, which the anchor source carries in practice (the client).
+    private Vector3 StaticAnchorPosition(WorldAnchor.Placement placement) =>
+        ((m_anchors is WorldClient client) ? WorldAnchorGeometry.StaticPlacementPosition(definition: client.Definition, placementId: placement.PlacementId, shapeId: placement.ShapeId) : Vector3.Zero);
+
+    // The one-shot centroid of a group anchor (an offscreen view seeds statically; the main-window composer smooths it).
+    private Vector3 GroupCentroid(WorldAnchor.Group group) =>
+        ((m_anchors is WorldClient client) ? WorldGroupAnchors.ComputeRaw(group: group, client: client, maxPopulation: WorldClient.EntityCapacity).Centroid : Vector3.Zero);
+
     // The population-entity index a WorldAnchor's live pose resolves through m_anchors by — Entity rides it directly;
     // EntityLeaf rides the SAME entity root anchor (its role refines the offset, not the anchor id, since the anchor
-    // table only ever publishes root poses — see ResolveAnchorOffset). Never reached for Placement (the validator
-    // rejects a placement-anchored camera row).
+    // table only ever publishes root poses — see ResolveAnchorOffset). Placement/group anchors resolve statically (not
+    // through the anchor table), so this only serves the entity/leaf path.
     private static int AnchorEntityIndex(WorldAnchor anchor) => anchor switch {
         WorldAnchor.Entity entity => entity.Index,
         WorldAnchor.EntityLeaf leaf => leaf.Index,

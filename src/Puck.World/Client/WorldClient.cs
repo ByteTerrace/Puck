@@ -41,6 +41,8 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
+    // The shared live composition-override store — the frame source's composer reads it; DeliverComposition writes it.
+    private readonly WorldCompositionState m_composition;
 
     /// <summary>The entity-view capacity — the server table's hard ceiling.</summary>
     public const int EntityCapacity = 128;
@@ -50,15 +52,19 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <param name="roster">The client seat table (device metadata, seat controllers, pending state).</param>
     /// <param name="link">The client→server link intents ride.</param>
     /// <param name="definition">The boot world definition — the initial live definition the frame source reads.</param>
+    /// <param name="composition">The shared live composition-override store (also read by the frame source's composer);
+    /// <see cref="DeliverComposition"/> applies accepted overrides into it.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldClient(PlayerRoster roster, IServerLink link, WorldDefinition definition) {
+    public WorldClient(PlayerRoster roster, IServerLink link, WorldDefinition definition, WorldCompositionState composition) {
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: link);
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: composition);
 
         m_roster = roster;
         m_link = link;
         m_definition = definition;
+        m_composition = composition;
 
         for (var index = 0; (index < EntityCapacity); index++) {
             m_previousOrientation[index] = Quaternion.Identity;
@@ -231,6 +237,23 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
         m_definitionRevision++;
+    }
+
+    /// <inheritdoc/>
+    public void DeliverComposition(WorldComposition composition) {
+        ArgumentNullException.ThrowIfNull(argument: composition);
+
+        // Apply the accepted override into the shared store the composer reads next frame. A null name clears it (auto).
+        switch (composition) {
+            case WorldComposition.SetActiveLayout layout:
+                m_composition.ActiveLayout = layout.Name;
+
+                break;
+            case WorldComposition.SelectCamera camera:
+                m_composition.SelectedCamera = camera.Name;
+
+                break;
+        }
     }
 
     /// <summary>Resolves this frame's render pose for every active entity: position <c>Lerp(previous, current,

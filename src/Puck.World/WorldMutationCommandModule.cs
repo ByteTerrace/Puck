@@ -117,7 +117,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.camera.set",
-            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera ($type fixed|anchored): world.camera.set <camera-json>. Applies LIVE: a pose/aim/FOV edit rewrites the running offscreen view's rig in place, a dimension or kind change recreates it, and every jumbotron filming it updates without a restart.",
+            description: "Upserts a placeable camera (whole-row, keyed by name) from one inline-JSON WorldCamera (name, anchor entity|entityLeaf|placement|group|null, offset, rig $type chase|firstPerson|orbit|lookAt|dolly): world.camera.set <camera-json>. Applies LIVE: a pose/aim/FOV/rig edit re-wires the running offscreen view in place, a dimension change recreates it, and every jumbotron filming it updates without a restart.",
             info: WorldJsonContext.Default.WorldCamera,
             toMutation: static camera => new WorldMutation.UpsertCamera(Principal: WorldPrincipal.Console, Camera: camera)
         );

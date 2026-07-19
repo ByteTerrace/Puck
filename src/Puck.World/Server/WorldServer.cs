@@ -212,6 +212,24 @@ internal sealed class WorldServer {
         EchoTap?.Invoke(obj: new WorldEditEcho(Message: (removed ? $"revoke {label}" : $"revoke {label} — nothing held"), Rejected: !removed, Kind: WorldEditEchoKind.GrantTable));
     }
 
+    /// <summary>Applies a LIVE window-composition override SYNCHRONOUSLY (the <c>view.layout</c>/<c>view.camera</c> path
+    /// and Arc 9's milestone camera cut). Checks <see cref="WorldCapability.Control"/> over
+    /// <see cref="GrantSubject.Composition"/>; on accept pushes it to the client composer, on denial prints a loud line
+    /// and changes nothing. Never durable — no document, no journal.</summary>
+    /// <param name="composition">The composition override.</param>
+    /// <param name="principal">The acting identity the override is checked against.</param>
+    public void ApplyComposition(WorldComposition composition, WorldPrincipal principal) {
+        ArgumentNullException.ThrowIfNull(argument: composition);
+
+        if (!m_grants.Allows(principal: principal, capability: WorldCapability.Control, subject: GrantSubject.Composition)) {
+            Console.Error.WriteLine(value: $"[world.grant denied: {principal.Describe()} cannot control composition — {composition.GetType().Name} dropped]");
+
+            return;
+        }
+
+        m_sink?.DeliverComposition(composition: composition);
+    }
+
     /// <summary>Applies an authority command to its target body. Synchronous at submit (see the class summary), so a
     /// policy read following the command in the same batch observes its effect. A command whose entity is not live
     /// no-ops (validation happened at submit; the miss is benign).</summary>
@@ -687,6 +705,7 @@ internal sealed class WorldServer {
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
+        WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
         // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
         // missing arm is a build-time authoring gap, surfaced loudly rather than mis-authorized.
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(mutation), actualValue: mutation, message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."),
@@ -779,6 +798,9 @@ internal sealed class WorldServer {
         WorldMutation.SetAudioDefaults => "SetAudioDefaults",
         WorldMutation.SetCollision => "SetCollision",
         WorldMutation.SetHostDefaults => "SetHostDefaults",
+        WorldMutation.SetViewDefaults => "SetViewDefaults",
+        WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",
+        WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
         _ => "unknown",
     };
 
@@ -1097,6 +1119,31 @@ internal sealed class WorldServer {
                 candidate = (current with { Host = m.Host });
 
                 return true;
+            case WorldMutation.SetViewDefaults m:
+                candidate = (current with { Views = m.Views });
+
+                return true;
+            case WorldMutation.UpsertViewLayout m: {
+                var views = (current.Views ?? WorldViewDefaults.Default);
+
+                candidate = (current with { Views = (views with { Layouts = Upsert(list: (views.Layouts ?? []), item: m.Layout, keyOf: static layout => layout.Name) }) });
+
+                return true;
+            }
+            case WorldMutation.RemoveViewLayout m: {
+                var views = (current.Views ?? WorldViewDefaults.Default);
+
+                if (!Remove(list: (views.Layouts ?? []), key: m.Name, keyOf: static layout => layout.Name, result: out var layouts)) {
+                    candidate = current;
+                    reason = $"no view layout named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { Views = (views with { Layouts = layouts }) });
+
+                return true;
+            }
             case WorldMutation.RemoveBindingOverlay m:
                 if (!Remove(list: current.BindingOverlays, key: m.Id, keyOf: static overlay => overlay.Id, result: out var overlays)) {
                     candidate = current;

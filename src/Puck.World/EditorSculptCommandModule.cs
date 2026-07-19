@@ -316,13 +316,13 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         // re-pointed at the camera's view — both land through the live reconcile path (no restart, no new machinery).
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(
             Principal: principal,
-            Camera: new WorldCamera.Fixed(
+            Camera: new WorldCamera(
                 Name: cameraName,
-                Position: (origin + s_easelEyeOffset),
-                LookAt: (origin + s_easelLookOffset),
+                Anchor: null,
+                Offset: (origin + s_easelEyeOffset),
+                Rig: new WorldRig.LookAt(Target: (origin + s_easelLookOffset), FieldOfViewRadians: EaselFieldOfViewRadians),
                 RenderWidth: EaselRenderWidth,
-                RenderHeight: EaselRenderHeight,
-                FieldOfViewRadians: EaselFieldOfViewRadians
+                RenderHeight: EaselRenderHeight
             )
         ));
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertScreen(

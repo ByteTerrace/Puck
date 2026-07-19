@@ -92,6 +92,11 @@ internal enum WorldSection : byte {
     /// <summary>The host-section defaults — window/backend/present/pacing/timing/genlock presentation intent
     /// (see <see cref="WorldHostDefaults"/>).</summary>
     Host,
+
+    /// <summary>The window-composition defaults — the seat rig and the authored named layouts (the
+    /// <see cref="WorldMutation.SetViewDefaults"/> / <see cref="WorldMutation.UpsertViewLayout"/> /
+    /// <see cref="WorldMutation.RemoveViewLayout"/> mutations).</summary>
+    Views,
 }
 
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
@@ -110,6 +115,11 @@ internal enum GrantSubjectKind : byte {
 
     /// <summary>A single player profile, by its stable string id (<see cref="GrantSubject.Id"/>).</summary>
     Profile,
+
+    /// <summary>The shared window-composition authority — the live <c>view.layout</c>/<c>view.camera</c> overrides that
+    /// change what EVERY seat sees (not a body, a screen, or a section). A director principal can hold it exclusively to
+    /// own the shot for a recording session.</summary>
+    Composition,
 }
 
 /// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, a document section,
@@ -140,6 +150,9 @@ internal readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, s
     /// <param name="id">The profile id.</param>
     public static GrantSubject Profile(string id) => new(Kind: GrantSubjectKind.Profile, Value: 0, Id: id);
 
+    /// <summary>The shared window-composition authority subject.</summary>
+    public static GrantSubject Composition { get; } = new(Kind: GrantSubjectKind.Composition, Value: 0);
+
     /// <summary>A short stable label for console echoes — <c>all</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>,
     /// <c>section:&lt;name&gt;</c>, <c>profile:&lt;id&gt;</c>.</summary>
     /// <returns>The label.</returns>
@@ -149,6 +162,7 @@ internal readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, s
         GrantSubjectKind.Screen => $"screen:{Value}",
         GrantSubjectKind.Section => $"section:{((WorldSection)Value).ToString().ToLowerInvariant()}",
         GrantSubjectKind.Profile => $"profile:{Id}",
+        GrantSubjectKind.Composition => "composition",
         _ => "?",
     };
 }

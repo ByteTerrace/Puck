@@ -66,6 +66,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
     // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
     private readonly ISdfCameraRig[] m_cameraRigs;
+    // The window composer (layout selection + eased transitions; a shared singleton the world.view.state read also
+    // observes), the group-anchor resolver (smoothed centroids for establishing shots), and the shared live
+    // composition-override store (view.layout/view.camera). All presentation-only.
+    private readonly WorldViewComposer m_composer;
+    private readonly WorldGroupAnchors m_groupAnchors = new();
+    private readonly WorldCompositionState m_composition;
     // The per-seat editor mode: camera rig swap + the sole-editor layout policy, both read during produce.
     private readonly WorldEditorSession m_editor;
     // Per-frame scratch reused to keep CaptureFrame allocation-free: one transform per leaf in the frozen all-avatar
@@ -110,8 +116,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="audio">The audio director — the emitter derivation reconciled at the delivery boundary and the
     /// per-frame snapshot publisher.</param>
     /// <param name="gizmos">The editor-gizmo store the per-frame speaker-chip projections publish into.</param>
+    /// <param name="composition">The shared live composition-override store (view.layout/view.camera) the composer reads.</param>
+    /// <param name="composer">The shared window composer (layout selection + eased transitions) the world.view.state read observes.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldCompositionState composition, WorldViewComposer composer) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -125,7 +133,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         ArgumentNullException.ThrowIfNull(argument: workbench);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: gizmos);
+        ArgumentNullException.ThrowIfNull(argument: composition);
+        ArgumentNullException.ThrowIfNull(argument: composer);
 
+        m_composition = composition;
+        m_composer = composer;
         m_gizmos = gizmos;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -150,10 +162,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_animator = animator;
         m_workbench = workbench;
         m_cameraRigs = new ISdfCameraRig[PlayerRoster.MaxSlots];
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            m_cameraRigs[slot] = new OrientedFollowRig();
-        }
+        RebuildSeatRigs(seatRig: (m_client.Definition.Views ?? WorldViewDefaults.Default).SeatRig);
 
         // Resolve the primer snapshot's render poses once so the initial program and camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
@@ -290,6 +299,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             var definitionRevision = m_client.DefinitionRevision;
 
             if (definitionRevision != m_builtDefinitionRevision) {
+                // A views-section edit recompiles each seat's chase rig from the delivered seat rig (world.view.rig live).
+                RebuildSeatRigs(seatRig: (m_client.Definition.Views ?? WorldViewDefaults.Default).SeatRig);
                 m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
                 m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
                 // The animated-placement pool reconciles at the same delivery boundary: cheap pose
@@ -404,6 +415,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         IReadOnlyList<WorldSpeaker>? gizmoSpeakers = null;
         var gizmoSeatCount = 0;
 
+        // The roster bookkeeping pass: the seat.join cue (a roster arrival edge, layout-independent) and the ordered
+        // list of joined seat slots a composed seat slot binds against by position.
+        Span<int> joinedRosterSlots = stackalloc int[PlayerRoster.MaxSlots];
+        var joinedRosterCount = 0;
+
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is null) {
                 m_seatWasJoined[slot] = false;
@@ -411,19 +427,55 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 continue;
             }
 
-            // The seat.join cue: the roster arrival edge, at the seat avatar's spawn pose.
             if (!m_seatWasJoined[slot]) {
                 m_seatWasJoined[slot] = true;
                 m_audio.SubmitCue(eventToken: WorldAudioCue.SeatJoin, site: m_client.Position(index: slot));
             }
 
-            var region = LayoutRegion(count: joinedCount, index: m_views.Count, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
+            joinedRosterSlots[joinedRosterCount++] = slot;
+        }
+
+        // Compose the window: layout selection + eased transition. An empty authored layout list (the frozen default)
+        // falls through to the built-in seat ladder, reproducing today's composition exactly.
+        m_composer.Compose(
+            joinedCount: joinedCount,
+            soleEditorIndex: soleEditorViewIndex,
+            workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction,
+            views: (m_client.Definition.Views ?? WorldViewDefaults.Default),
+            layoutOverride: m_composition.ActiveLayout,
+            cameraOverride: m_composition.SelectedCamera,
+            elapsedSeconds: m_elapsedSeconds
+        );
+
+        var transitionScale = m_composer.CurrentRenderScale;
+
+        foreach (var composed in m_composer.Slots) {
+            var region = composed.Region;
+
+            if (composed.Camera is { } cameraName) {
+                // A camera-bearing slot: render the named authored camera into the rect (no seat pose / gizmo).
+                if (ResolveNamedCamera(name: cameraName, region: region, width: width, height: height, deltaSeconds: deltaSeconds, camera: out var namedCamera)) {
+                    m_views.Add(item: new SdfViewSnapshot(Camera: namedCamera, Region: region) {
+                        RenderScale = transitionScale,
+                        UpscaleSharpness = m_settings.UpscaleSharpness,
+                    });
+                }
+
+                continue;
+            }
+
+            // A seat slot: bind the seat at this slot's order among the joined seats.
+            if ((uint)composed.SeatOrder >= (uint)joinedRosterCount) {
+                continue;
+            }
+
+            var slot = joinedRosterSlots[composed.SeatOrder];
             var camera = ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
-            // any lower tier renders that view's SDF at a reduced extent and upsamples.
+            // any lower tier renders that view's SDF at a reduced extent and upsamples. A layout transition dips it.
             m_views.Add(item: new SdfViewSnapshot(Camera: camera, Region: region) {
-                RenderScale = m_settings.RenderScale,
+                RenderScale = (m_settings.RenderScale * transitionScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
@@ -601,6 +653,105 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             viewportWidth: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
             viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
         );
+    }
+
+    // Recompiles every seat's chase rig from the authored seat rig (the built-in default reproduces OrientedFollowRig's
+    // own field defaults, so the frozen world's seat framing is byte-identical). Called at construction and on any
+    // views-section delivery (world.view.rig live).
+    private void RebuildSeatRigs(WorldRig seatRig) {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            m_cameraRigs[slot] = WorldRigCompiler.Compile(rig: seatRig);
+        }
+    }
+
+    // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/leaf/placement/
+    // group, or null = world), its offset, its rig, and — for a group-anchored chase — its spread pullback. Returns
+    // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
+    private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera) {
+        camera = default;
+
+        WorldCamera? found = null;
+
+        foreach (var row in m_client.Definition.Cameras) {
+            if (string.Equals(a: row.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                found = row;
+
+                break;
+            }
+        }
+
+        if (found is not { } cameraRow) {
+            return false;
+        }
+
+        var (basePosition, baseOrientation, spread) = ResolveCameraAnchorPose(row: cameraRow, deltaSeconds: deltaSeconds);
+        // WHERE the eye rides: an unanchored offset IS the world eye; an anchored offset attaches in the anchor's frame.
+        var effectivePosition = ((cameraRow.Anchor is null) ? cameraRow.Offset : (basePosition + Vector3.Transform(value: cameraRow.Offset, rotation: baseOrientation)));
+        var pivotLift = ((cameraRow.Rig is WorldRig.Orbit orbit) ? orbit.PivotLift : Vector3.Zero);
+        var rig = WorldRigCompiler.Compile(rig: cameraRow.Rig);
+
+        // The establishing shot's spread-adaptive widening: scale a group-riding chase rig's eye offset by the group spread.
+        if ((cameraRow.Rig is WorldRig.Chase chase) && (chase.SpreadPullback != 0f) && (spread > 0f)) {
+            var factor = (1f + (chase.SpreadPullback * spread));
+
+            switch (rig) {
+                case OrientedFollowRig oriented:
+                    oriented.EyeOffset *= factor;
+
+                    break;
+                case FollowRig follow:
+                    follow.EyeOffset *= factor;
+
+                    break;
+            }
+        }
+
+        // A fixed rig ignores its anchor; its eye is the resolved world position (an unanchored look-at's offset).
+        if (rig is FixedRig fixedRig) {
+            fixedRig.Eye += effectivePosition;
+        }
+
+        var anchor = new SdfAnchor(Position: (effectivePosition + pivotLift), Orientation: baseOrientation);
+        var (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, time: m_elapsedSeconds);
+
+        camera = CameraSnapshot.LookAt(
+            position: eye,
+            target: target,
+            fieldOfViewRadians: fieldOfView,
+            viewportWidth: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
+            viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
+        );
+
+        return true;
+    }
+
+    // The one shared anchor→pose resolver the camera path reads (P9): entity/leaf ride the live snapshot pose, a
+    // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
+    // smoothed centroid + spread, and a null anchor is the world origin. A group has no facing → identity orientation.
+    private (Vector3 Position, Quaternion Orientation, float Spread) ResolveCameraAnchorPose(WorldCamera row, float deltaSeconds) {
+        switch (row.Anchor) {
+            case WorldAnchor.Entity entity:
+                return (m_client.Position(index: entity.Index), m_client.Orientation(index: entity.Index), 0f);
+            case WorldAnchor.EntityLeaf leaf: {
+                var position = m_client.Position(index: leaf.Index);
+                var orientation = m_client.Orientation(index: leaf.Index);
+
+                if (WorldAvatarCatalog.TryHumanoidRole(token: leaf.Leaf, role: out var role)) {
+                    position += Vector3.Transform(value: WorldAvatarCatalog.RoleOffset(avatar: leaf.Index, role: role), rotation: orientation);
+                }
+
+                return (position, orientation, 0f);
+            }
+            case WorldAnchor.Placement placement:
+                return (WorldAnchorGeometry.StaticPlacementPosition(definition: m_client.Definition, placementId: placement.PlacementId, shapeId: placement.ShapeId), Quaternion.Identity, 0f);
+            case WorldAnchor.Group group: {
+                var (centroid, spread) = m_groupAnchors.Resolve(key: row.Name, group: group, client: m_client, maxPopulation: WorldPopulation.MaxPopulation, deltaSeconds: deltaSeconds);
+
+                return (centroid, Quaternion.Identity, spread);
+            }
+            default:
+                return (Vector3.Zero, Quaternion.Identity, 0f);
+        }
     }
 
     // The editor-aware viewport resolver: when EXACTLY one seat edits while others play (soleEditorIndex >= 0, 2+

@@ -57,4 +57,12 @@ internal interface IServerLink {
     /// <see cref="WorldGrant.Exclusive"/> is ignored (the subject is revoked whether or not it was exclusive).</summary>
     /// <param name="grant">The grant (capability + subject) to revoke.</param>
     void SubmitRevoke(WorldGrant grant);
+
+    /// <summary>Submits a LIVE window-composition override (<c>view.layout</c>/<c>view.camera</c>). Applies SYNCHRONOUSLY
+    /// at submit (like a command): the server checks <paramref name="principal"/> holds <see cref="WorldCapability.Control"/>
+    /// over <see cref="GrantSubject.Composition"/>, and on accept pushes it to the client's composer through
+    /// <see cref="IClientSink.DeliverComposition"/>. Not durable — it never enters the document or the journal.</summary>
+    /// <param name="composition">The composition override.</param>
+    /// <param name="principal">The acting identity the override is checked against.</param>
+    void SubmitComposition(WorldComposition composition, WorldPrincipal principal);
 }

@@ -154,8 +154,11 @@ internal sealed class WorldEditorPicker {
         }
 
         foreach (var camera in definition.Cameras) {
-            if (camera is WorldCamera.Fixed fixedCamera) {
-                AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Cameras, Id: camera.Name, Index: -1, Focus: fixedCamera.Position), center: fixedCamera.Position, radius: CameraProxyRadius);
+            // An UNANCHORED camera poses at a fixed world point (its offset IS the eye) — pick it by a proxy sphere
+            // there, the same proxy approach fixed speakers use. An anchored camera has no static geometry; select it by
+            // name over the console twin (editor.select cameras <name>).
+            if (camera.Anchor is null) {
+                AddProxy(builder: builder, targets: targets, target: new EditorPickTarget(Section: WorldSection.Cameras, Id: camera.Name, Index: -1, Focus: camera.Offset), center: camera.Offset, radius: CameraProxyRadius);
             }
         }
 

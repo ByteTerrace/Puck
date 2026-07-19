@@ -70,4 +70,9 @@ internal sealed class LoopbackTransport : IServerLink {
     public void SubmitRevoke(WorldGrant grant) {
         m_server.Revoke(grant: grant);
     }
+
+    /// <inheritdoc/>
+    public void SubmitComposition(WorldComposition composition, WorldPrincipal principal) {
+        m_server.ApplyComposition(composition: composition, principal: principal);
+    }
 }
