@@ -185,6 +185,13 @@
 //       (revoking console mutate section:speakers denies the mutation loudly; re-granting restores it). world.save
 //       compacts; session B relaunches --world <the saved file>, PINS the fresh-boot audio.emitters listing exactly
 //       (stable ids in document order), and a second save byte-compares — the ouroboros with audio sections.
+//       AP4 rounds ride the same sessions: THE CUE TABLE (authored as data, its validator table, the producer
+//       lanes — an applied mutation's at-site chime, a grant denial, gait-derived footsteps under player.run, the
+//       binder's screen.fault lane — each asserted through speaker.state's live transient tail), speakers through
+//       the editor (select/grab/drag/release/undo + the editor.speaker.* numeric twins, dirty-count disciplined),
+//       the world.volume session lever (document read → lever engage → 'audio' drift → the save FOLDS it into
+//       audio.masterGain), and the ouroboros now carries the cue table + folded volume — with the rebooted cue
+//       table still FIRING (the behavioral half). speaker.state itself is exercised throughout.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -6987,6 +6994,8 @@ static class UiFloorProof {
         var overlayPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-overlay.png");
         var controlPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-control.png");
         var toastPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-toast.png");
+        var gizmoPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-gizmo.png");
+        var gizmoControlPath = Path.Combine(Path.GetTempPath(), $"puck-ui-floor-{pid}-{tag}-gizmo-control.png");
         var stopwatch = new Stopwatch();
         var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: backend, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
         var process = ctx.Process;
@@ -7053,6 +7062,33 @@ static class UiFloorProof {
                 detail: $"danger-red pixels in the toast strip: toast {toastRed} vs control {controlRed}"
             );
 
+            // (4c) THE SPEAKER GIZMO (AP4): a bed speaker dead ahead of the seat camera, SELECTED in editor mode —
+            // its accent-tier chip (accent bloom ring + halo) and accent radius ring put an accent-orange population
+            // in the central stage that leaving editor mode removes (gizmos are editor-mode-only). Screenshots ride
+            // the stdin barrier behind the Simulation-routed acts.
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: """world.speaker.set {"$type":"bed","name":"gizmo-bed","center":[0,1.2,-5],"radius":2.5,"feed":{"source":{"$type":"none"},"channel":"mix","gain":1}}""", expect: "[world.mutation: UpsertSpeaker 'gizmo-bed' applied]", name: "gizmo-speaker-applies");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "gizmo-editor-enters");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select speakers gizmo-bed", expect: "speakers 'gizmo-bed'", name: "gizmo-selects");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "gizmo-shot", path: gizmoPath);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 1", expect: "[editor.exit: seat 1", name: "gizmo-editor-exits");
+            passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "gizmo-control-shot", path: gizmoControlPath);
+
+            var gizmo = ComposedShotKit.DecodePng(path: gizmoPath);
+            var gizmoControl = ComposedShotKit.DecodePng(path: gizmoControlPath);
+            // The central stage (clear of the console corner, the mid-right toast strip, and the bottom binding bar).
+            var stageX = (int)(width * 0.32);
+            var stageY = (int)(height * 0.25);
+            var stageW = ((int)(width * 0.52) - stageX);
+            var stageH = ((int)(height * 0.68) - stageY);
+            var gizmoAccent = CountAccentOrange(image: gizmo, x: stageX, y: stageY, w: stageW, h: stageH);
+            var controlAccent = CountAccentOrange(image: gizmoControl, x: stageX, y: stageY, w: stageW, h: stageH);
+
+            passed &= ComposedShotKit.Check(
+                name: "gizmo-lights-editor-mode-only",
+                ok: ((gizmoAccent > (controlAccent + 40)) && (gizmoAccent > 60)),
+                detail: $"accent-orange pixels in the stage: editor {gizmoAccent} vs exited {controlAccent}"
+            );
+
             // (5) No loud GPU/runtime faults anywhere in the session (both streams).
             passed &= ComposedShotKit.FaultSweep(ctx: ctx);
         }
@@ -7066,6 +7102,8 @@ static class UiFloorProof {
             ComposedShotKit.TryDelete(path: overlayPath);
             ComposedShotKit.TryDelete(path: controlPath);
             ComposedShotKit.TryDelete(path: toastPath);
+            ComposedShotKit.TryDelete(path: gizmoPath);
+            ComposedShotKit.TryDelete(path: gizmoControlPath);
         }
 
         return passed;
@@ -7099,6 +7137,27 @@ static class UiFloorProof {
                 int b = image.Rgba[(i + 2)];
 
                 if ((r > (g + 40)) && (r > (b + 40))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    // Accent-hue population: the token accent #FF6A2B (electric amber-orange) — red far over green AND green well
+    // over blue, which the danger family (g ≈ b) and every world hue fail. The gizmo assertion's discriminator.
+    static int CountAccentOrange((int Width, int Height, byte[] Rgba) image, int x, int y, int w, int h) {
+        var count = 0;
+
+        for (var row = y; (row < (y + h)); row++) {
+            for (var col = x; (col < (x + w)); col++) {
+                var i = (((row * image.Width) + col) * 4);
+                int r = image.Rgba[i];
+                int g = image.Rgba[(i + 1)];
+                int b = image.Rgba[(i + 2)];
+
+                if ((r > (g + 60)) && (g > (b + 20))) {
                     count++;
                 }
             }
@@ -8984,6 +9043,16 @@ static class AudioProof {
     const string JingleDoc = """{"schema":"puck.audio.v1","name":"jingle"}""";
     const string StatueDoc = """{"schema":"puck.creation.v1","name":"statue","shapes":[{"id":1,"type":"Sphere","position":{"x":0,"y":0.6,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1},"scale":{"x":1,"y":1,"z":1}}],"behavior":{"locomotion":"hover","sounds":[{"name":"hum","shapeId":1,"patch":{"schema":"puck.synth.v1","oscillator":"Sine","pitchMillihertz":220000},"level":1,"radius":6}]}}""";
 
+    // THE CUE TABLE (AP4): the full audio-defaults row re-asserted with cue rows — drone everywhere (a looping
+    // patch takes the 2 s transient cap, a reliable polling window), covering all three placements. Compact JSON
+    // (the console tokenizer rule).
+    const string CueTableLine =
+        """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","gainThousandths":800,"placement":"at-site"},{"event":"grant.denied","patchId":"drone","placement":"listener"},{"event":"player.footstep","patchId":"drone","gainThousandths":500,"placement":"at-site"},{"event":"screen.fault","patchId":"drone","placement":"listener"},{"event":"screen.boot","patchId":"drone","placement":"emitter:left"}]}""";
+    // The (b) boulder row resubmitted VERBATIM: the applied echo fires the mutation.applied cue while the document
+    // stays byte-identical (the later save/pin sees no drift from this round).
+    const string BoulderResubmitLine =
+        """world.scene.row.set {"$type":"boulder","id":"boulder-1","center":[-1.2,0.72,-0.3],"emission":{"patchId":"chirp","level":1,"radius":8},"radius":0.9,"smooth":0.5}""";
+
     // The fresh-boot derivation pin (session B): stable ids in document order — the whole listing, byte-for-byte.
     const string ExpectedEmittersAfterReboot =
         "[audio.emitters: 1 speaker:left point tune:jingle left gain=1 min=0 max=8" +
@@ -9117,7 +9186,60 @@ static class AudioProof {
             passed &= Mutate(ctx: ctx, name: "applies-after-regrant", line: "world.speaker.remove wind", needle: "[world.mutation: RemoveSpeaker 'wind' applied]", dirty: 13);
             passed &= Mutate(ctx: ctx, name: "undo-restores-wind", line: "world.undo", needle: "[world.undo: dropped 1, 12 remaining]", dirty: 12);
 
-            Console.WriteLine(value: "[proof] === audio (f): world.save compacts the furnished world ===");
+            Console.WriteLine(value: "[proof] === audio (f): THE CUE TABLE — world events tie to sound as data (AP4) ===");
+            passed &= Mutate(ctx: ctx, name: "cue-table-applies", line: CueTableLine, needle: "[world.mutation: SetAudioDefaults applied]", dirty: 13);
+
+            var idleState = AwaitEcho(ctx: ctx, line: "speaker.state", needle: "[speaker.state:");
+
+            passed &= ComposedShotKit.Check(name: "cues-idle-before-any-event", ok: ((idleState is not null) && idleState.Contains(value: "cues 0")), detail: (idleState?.Trim() ?? "(no speaker.state echo)"));
+            passed &= Mutate(ctx: ctx, name: "mutation-fires-cue", line: BoulderResubmitLine, needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 14);
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "mutation-applied-cue-lands", needle: "cue:mutation.applied=drone");
+
+            Console.WriteLine(value: "[proof] === audio (g): the cue validator table — each loud, the document unchanged ===");
+            passed &= Reject(ctx: ctx, name: "cue-bad-token", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"volcano.erupts","patchId":"drone","placement":"listener"}]}""", needle: "is not a published cue event token");
+            passed &= Reject(ctx: ctx, name: "cue-unknown-patch", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"nope","placement":"listener"}]}""", needle: "names no patch row");
+            passed &= Reject(ctx: ctx, name: "cue-unknown-emitter", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","placement":"emitter:ghost"}]}""", needle: "names no declared speaker");
+            passed &= Reject(ctx: ctx, name: "cue-bad-placement", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","placement":"sideways"}]}""", needle: "must be 'at-site', 'listener', or 'emitter:");
+            passed &= Reject(ctx: ctx, name: "cue-gain-ceiling", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1","cues":[{"event":"mutation.applied","patchId":"drone","gainThousandths":9001,"placement":"listener"}]}""", needle: "must be within [0, 8000]");
+            passed &= ExpectDirty(ctx: ctx, name: "cue-rejections-changed-nothing", dirty: 14);
+
+            Console.WriteLine(value: "[proof] === audio (h): the cue producers — denial, footsteps, the binder fault lane ===");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke console mutate section:speakers", expect: "[world.revoke: console mutate section:speakers]", name: "revoke-for-denied-cue");
+            passed &= Reject(ctx: ctx, name: "denied-mutation-rejects", line: "world.speaker.remove wind", needle: "cannot mutate section:speakers", rejectPrefix: "[world.grant denied:");
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "grant-denied-cue-lands", needle: "cue:grant.denied=drone");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant console mutate section:speakers", expect: "[world.grant: console mutate section:speakers]", name: "regrant-after-denied-cue");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.run 1 0 0 1.5", expect: "[player.run:", name: "walk-for-footsteps");
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "footstep-cues-advance", needle: "cue:player.footstep=drone");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "player.stop 1", expect: "[player.stop:", name: "walk-stops");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"screen.insert 0 {Path.Combine(path1: Path.GetTempPath(), path2: "puck-audio-missing.gb")}", expect: "[screen.insert:", name: "insert-missing-content");
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "screen-fault-cue-lands", needle: "cue:screen.fault=drone");
+            passed &= ExpectDirty(ctx: ctx, name: "producers-changed-nothing", dirty: 14);
+
+            Console.WriteLine(value: "[proof] === audio (i): speakers through the editor — select, drag, undo, the numeric twins ===");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.enter 1", expect: "[editor.enter: seat 1 editing", name: "editor-enters");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.select speakers left", expect: "speakers 'left'", name: "speaker-selects");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.grab 1", expect: "dragging speakers 'left'", name: "speaker-grabs");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.drag 1 0 0", expect: "[editor.drag: seat 1 speaker 'left'", name: "speaker-drags");
+            passed &= Mutate(ctx: ctx, name: "speaker-release-commits", line: "editor.release 1", needle: "[world.mutation: UpsertSpeaker 'left' applied]", dirty: 15);
+            passed &= Mutate(ctx: ctx, name: "speaker-drag-undoes", line: "world.undo", needle: "[world.undo: dropped 1, 14 remaining]", dirty: 14);
+            passed &= Mutate(ctx: ctx, name: "speaker-place-verb", line: "editor.speaker.place probe synth:chirp 4", needle: "[world.mutation: UpsertSpeaker 'probe' applied]", dirty: 15);
+            passed &= Mutate(ctx: ctx, name: "speaker-gain-verb", line: "editor.speaker.gain probe 0.5", needle: "[world.mutation: UpsertSpeaker 'probe' applied]", dirty: 16);
+            passed &= Mutate(ctx: ctx, name: "speaker-delete-verb", line: "editor.speaker.delete probe", needle: "[world.mutation: RemoveSpeaker 'probe' applied]", dirty: 17);
+            passed &= Mutate(ctx: ctx, name: "speaker-verbs-unwind", line: "world.undo 3", needle: "[world.undo: dropped 3, 14 remaining]", dirty: 14);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "editor.exit 1", expect: "[editor.exit: seat 1", name: "editor-exits");
+
+            Console.WriteLine(value: "[proof] === audio (j): the master-volume session lever (the render-levers asymmetry) ===");
+
+            var volumeRead = AwaitEcho(ctx: ctx, line: "world.volume", needle: "[world.volume:");
+
+            passed &= ComposedShotKit.Check(name: "volume-reads-document", ok: ((volumeRead is not null) && volumeRead.Contains(value: "0.8 (document audio.masterGain)")), detail: (volumeRead?.Trim() ?? "(no world.volume echo)"));
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.volume 0.5", expect: "[world.volume: 0.5 (session lever", name: "volume-lever-engages");
+
+            var driftStatus = AwaitEcho(ctx: ctx, line: "world.status", needle: "[world.status:");
+
+            passed &= ComposedShotKit.Check(name: "volume-names-audio-drift", ok: ((driftStatus is not null) && driftStatus.Contains(value: "session-drift audio ")), detail: (driftStatus?.Trim() ?? "(no world.status echo)"));
+
+            Console.WriteLine(value: "[proof] === audio (k): world.save compacts the furnished world (cues + the volume fold inside) ===");
 
             var mark = ctx.Collector.Count;
 
@@ -9127,6 +9249,11 @@ static class AudioProof {
 
             passed &= ComposedShotKit.Check(name: "save-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
             passed &= ExpectDirty(ctx: ctx, name: "save-compacts", dirty: 0);
+
+            var savedJson = (File.Exists(path: savePath) ? File.ReadAllText(path: savePath) : string.Empty);
+
+            passed &= ComposedShotKit.Check(name: "save-folds-volume-lever", ok: savedJson.Contains(value: "\"masterGain\": 0.5"), detail: (savedJson.Contains(value: "\"masterGain\": 0.5") ? "audio.masterGain carries the 0.5 lever" : "saved masterGain is not the lever value"));
+            passed &= ComposedShotKit.Check(name: "save-carries-cues", ok: (savedJson.Contains(value: "\"cues\":") && savedJson.Contains(value: "mutation.applied")), detail: "the cue table persisted in the audio section");
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -9183,7 +9310,15 @@ static class AudioProof {
 
             var identical = (File.Exists(path: resavePath) && File.ReadAllBytes(path: savePath).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: resavePath)));
 
-            passed &= ComposedShotKit.Check(name: "ouroboros-with-audio-sections", ok: identical, detail: (identical ? "save -> reboot -> save byte-identical (hash recompute included)" : "byte mismatch between the two saves"));
+            passed &= ComposedShotKit.Check(name: "ouroboros-with-audio-sections", ok: identical, detail: (identical ? "save -> reboot -> save byte-identical (cue table + the folded volume lever included)" : "byte mismatch between the two saves"));
+
+            // The folded lever is the REBOOTED document's master gain (the lever itself starts unengaged), and the
+            // persisted cue table still FIRES — the behavioral half of the ouroboros.
+            var volumeRead = AwaitEcho(ctx: ctx, line: "world.volume", needle: "[world.volume:");
+
+            passed &= ComposedShotKit.Check(name: "reboot-wakes-on-folded-volume", ok: ((volumeRead is not null) && volumeRead.Contains(value: "0.5 (document audio.masterGain)")), detail: (volumeRead?.Trim() ?? "(no world.volume echo)"));
+            passed &= Mutate(ctx: ctx, name: "reboot-mutation-applies", line: BoulderResubmitLine, needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 1);
+            passed &= AwaitSpeakerCue(ctx: ctx, name: "reboot-cue-table-still-fires", needle: "cue:mutation.applied=drone");
         }
         finally {
             Console.CancelKeyPress -= cancelHandler;
@@ -9244,6 +9379,23 @@ static class AudioProof {
         ComposedShotKit.Send(ctx: ctx, line: line);
 
         return ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: 20.0);
+    }
+
+    // Poll speaker.state for a live transient-cue token: a fired cue registers in the director SYNCHRONOUSLY with
+    // its producing event, but the loudest producers (footsteps mid-run) land between polls — a bounded re-read
+    // keeps the round honest without riding exact TTL timing (drone cues live the 2 s looping cap).
+    static bool AwaitSpeakerCue(ComposedShotKit.Ctx ctx, string name, string needle) {
+        for (var attempt = 0; (attempt < 10); attempt++) {
+            var echo = AwaitEcho(ctx: ctx, line: "speaker.state", needle: "[speaker.state:");
+
+            if ((echo is not null) && echo.Contains(value: needle)) {
+                return ComposedShotKit.Check(name: name, ok: true, detail: $"{needle} live in speaker.state");
+            }
+
+            Thread.Sleep(millisecondsTimeout: 150);
+        }
+
+        return ComposedShotKit.Check(name: name, ok: false, detail: $"'{needle}' never appeared in speaker.state");
     }
 
     static bool ExpectDirty(ComposedShotKit.Ctx ctx, string name, int dirty) {
