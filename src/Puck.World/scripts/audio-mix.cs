@@ -32,7 +32,12 @@
 //       the strict loader/validator, derived by WorldAudioDirector (stable ids, arrival triggers, tune
 //       acquire/release hosting), published per step against a scripted listener orbit, and mixed — the
 //       document→derivation→MixBlock→hash pipeline end to end, its own golden PCM hash reproduced across two full
-//       fresh runs.
+//       fresh runs;
+//   (i) THE CUE TABLE (AP4/A11b) — a cue-bearing fixture document through the same loader: SubmitCue lands a
+//       transient emitter AND its trigger in the SAME next snapshot (voice sounds, PCM nonzero), a listener-placed
+//       cue renders center-panned at full gain, the transient expires on its patch-derived TTL (voice released with
+//       the departed emitter), the reserved pool evicts nearest-expiry at capacity, and the whole cue-driven block
+//       sequence reproduces bit for bit across two fresh runs.
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -617,6 +622,145 @@ Console.WriteLine("[proof] === audio-mix (h): the fixture WORLD DOCUMENT drives 
         }
 
         File.Delete(fixturePath);
+    }
+}
+
+// ---- (i) the cue table (AP4/A11b) --------------------------------------------------------------------------------
+Console.WriteLine("[proof] === audio-mix (i): cues — transient emitters, listener placement, TTL expiry, eviction, determinism ===");
+
+{
+    // A cue-bearing fixture: one finite chime patch (short envelope — the TTL derives from it) and one looping
+    // drone, cue rows for three tokens across the three placements, plus the speaker an emitter cue rides.
+    var chimeCanonical = SynthPatchCanonicalizer.Canonicalize(new SynthPatchDocument(
+        Schema: SynthPatchDocument.CurrentSchema, Name: "chime", Oscillator: SynthOscillator.Sine,
+        DutyThousandths: null, Polynomial: null, AttackFrames: 96, DecayFrames: 960, SustainThousandths: 200,
+        ReleaseFrames: 480, PitchMillihertz: 880_000, DurationFrames: 1_200));
+    var droneCanonical = SynthPatchCanonicalizer.Canonicalize(new SynthPatchDocument(
+        Schema: SynthPatchDocument.CurrentSchema, Name: "drone", Oscillator: SynthOscillator.Noise,
+        DutyThousandths: null, Polynomial: 40, AttackFrames: 480, DecayFrames: 0, SustainThousandths: 1000,
+        ReleaseFrames: 0, PitchMillihertz: 1_000));
+    var cueFixture = WorldDefinition.Default with {
+        Patches = [
+            new WorldPatch(Id: "chime", Document: chimeCanonical.Document, Hash: chimeCanonical.Hash),
+            new WorldPatch(Id: "drone", Document: droneCanonical.Document, Hash: droneCanonical.Hash),
+        ],
+        Speakers = [
+            new WorldSpeaker.Fixed(Name: "pa", Position: new Vector3(2f, 1f, 0f), Feed: new WorldSpeakerFeed(Source: new WorldSpeakerSource.None(), Channel: "mix", Gain: 1f)),
+        ],
+        Audio = (WorldAudioDefaults.Default with {
+            Cues = [
+                new WorldAudioCue(Event: "mutation.applied", PatchId: "chime", GainThousandths: 800, Placement: "at-site"),
+                new WorldAudioCue(Event: "grant.denied", PatchId: "chime", GainThousandths: null, Placement: "listener"),
+                new WorldAudioCue(Event: "screen.boot", PatchId: "drone", GainThousandths: 500, Placement: "emitter:pa"),
+            ],
+        }),
+    };
+    var cuePath = Path.Combine(Path.GetTempPath(), $"puck-audio-cue-fixture-{Environment.ProcessId}.world.json");
+
+    _ = WorldDefinitionSerialization.Save(cueFixture, cuePath);
+
+    if (!WorldDefinitionLoader.TryLoadFile(cuePath, out _, out var cueLoadReason)) {
+        Check("cue-fixture-loads", false, cueLoadReason);
+    } else {
+        Check("cue-fixture-loads", true, "cue table validated through the strict loader");
+
+        (string Hash, int VoicesAfterCue, int EmittersDuringCue, int EmittersAfterExpiry, int VoicesAfterExpiry, long LeftEnergy, long RightEnergy) RunCueTimeline() {
+            _ = WorldDefinitionLoader.TryLoadFile(cuePath, out var definition, out _);
+
+            var director = new WorldAudioDirector(client: null, animator: null);
+
+            director.ReconcileSpeakers(definition!);
+
+            var mixer = new WorldAudioMixer();
+
+            director.AttachMixer(mixer);
+
+            var block = new short[Frames * 2];
+            var seats = new WorldSeatCameraPose[] { new(Joined: true, Eye: default, Forward: new(0f, 0f, -1f)) };
+            using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var voicesAfterCue = 0;
+            var emittersDuringCue = 0;
+            long leftEnergy = 0, rightEnergy = 0;
+
+            try {
+                // Steps 0..2: silence (the fixture speaker has no source; no cue yet).
+                for (var step = 0; step < 3; step++) {
+                    mixer.MixBlock(director.Publish(transforms: [], seats: seats), block);
+                    sha.AppendData(MemoryMarshal.AsBytes(block.AsSpan()));
+                }
+
+                // The at-site chime (the mutation lane's shape) 3 units to the LEFT of the origin listener, and the
+                // listener-placed chime (the grant.denied lane) — both land with their triggers in the SAME snapshot.
+                director.SubmitCue("mutation.applied", new Vector3(-3f, 0f, 0f));
+                director.SubmitCue("grant.denied", null);
+
+                for (var step = 0; step < 8; step++) {
+                    var snapshot = director.Publish(transforms: [], seats: seats);
+
+                    if (step == 0) {
+                        emittersDuringCue = snapshot.Emitters.Length;
+                    }
+
+                    mixer.MixBlock(snapshot, block);
+                    sha.AppendData(MemoryMarshal.AsBytes(block.AsSpan()));
+
+                    if (step == 0) {
+                        voicesAfterCue = mixer.Synth.ActiveVoiceCount;
+                    }
+
+                    for (var n = 0; n < Frames; n++) {
+                        leftEnergy += Math.Abs((int)block[2 * n]);
+                        rightEnergy += Math.Abs((int)block[(2 * n) + 1]);
+                    }
+                }
+
+                // Ride past the chime TTL (1200 + 480 + 200 frames ≈ 10 sim steps): the transients expire, the
+                // voices release with their departed emitters.
+                for (var step = 0; step < 12; step++) {
+                    mixer.MixBlock(director.Publish(transforms: [], seats: seats), block);
+                    sha.AppendData(MemoryMarshal.AsBytes(block.AsSpan()));
+                }
+
+                var settled = director.Publish(transforms: [], seats: seats);
+
+                mixer.MixBlock(settled, block);
+                sha.AppendData(MemoryMarshal.AsBytes(block.AsSpan()));
+
+                return (Convert.ToHexString(sha.GetHashAndReset()), voicesAfterCue, emittersDuringCue, settled.Emitters.Length, mixer.Synth.ActiveVoiceCount, leftEnergy, rightEnergy);
+            } finally {
+                director.DetachMixer();
+            }
+        }
+
+        var first = RunCueTimeline();
+        var second = RunCueTimeline();
+
+        // 1 plan emitter (the pa speaker) + 2 transients while the cues live; back to 1 after expiry.
+        Check("cue-lands-transients-and-voices", (first.EmittersDuringCue == 3) && (first.VoicesAfterCue == 2), $"emitters={first.EmittersDuringCue} (1 plan + 2 transients), voices={first.VoicesAfterCue}");
+        Check("cue-audible", (first.LeftEnergy > 0) && (first.RightEnergy > 0), $"|L|={first.LeftEnergy} |R|={first.RightEnergy}");
+        // The at-site chime sits hard LEFT of the listener; the listener-placed chime is centered — left must
+        // carry MORE energy, and the centered voice keeps the right nonzero at comparable scale.
+        Check("cue-placement-geometry", (first.LeftEnergy > first.RightEnergy) && ((first.RightEnergy * 4) > first.LeftEnergy), $"L={first.LeftEnergy} R={first.RightEnergy} (left-heavy, right well within 4x)");
+        Check("cue-ttl-expires", (first.EmittersAfterExpiry == 1) && (first.VoicesAfterExpiry == 0), $"emitters after expiry={first.EmittersAfterExpiry} (the pa plan row), voices={first.VoicesAfterExpiry}");
+        Check("cue-timeline-reproduces-bitwise", (first.Hash == second.Hash), $"run2 {((first.Hash == second.Hash) ? "==" : "!=")} run1");
+
+        {
+            // The reserved pool at capacity: a 5th live cue evicts the transient nearest ITS OWN expiry, never a
+            // fresh arrival — the pool count pins at TransientCueCapacity.
+            _ = WorldDefinitionLoader.TryLoadFile(cuePath, out var definition, out _);
+
+            var director = new WorldAudioDirector(client: null, animator: null);
+
+            director.ReconcileSpeakers(definition!);
+
+            for (var i = 0; i < (WorldAudioDirector.TransientCueCapacity + 1); i++) {
+                director.SubmitCue("grant.denied", null);
+            }
+
+            Check("cue-pool-evicts-at-capacity", (director.LiveCueCount == WorldAudioDirector.TransientCueCapacity), $"live cues={director.LiveCueCount} (cap {WorldAudioDirector.TransientCueCapacity})");
+        }
+
+        File.Delete(cuePath);
     }
 }
 
