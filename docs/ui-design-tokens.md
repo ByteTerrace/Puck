@@ -60,7 +60,7 @@ exempt from `r.*`.
 
 ## 3 · Type scale (5 steps · MSDF-safe floor)
 
-**MSDF floor rule (Cabinet graft):** primary chip labels are **12px**; the
+**MSDF floor rule:** primary chip labels are **12px**; the
 absolute minimum anywhere in the UI is **11px** (eyebrows, legends, badge
 glyphs, micro readouts). **Nothing renders at 10px or below** — below 11px,
 MSDF glyph coverage degrades over the moving world.
@@ -155,7 +155,7 @@ line in the console, (c) the console status dot.
 
 ---
 
-## 5 · Elevation — the two-tier rule (Phosphor graft)
+## 5 · Elevation — the two-tier rule
 
 **Tier 0 · RESTING = flat fill + hairline. No glow, ever.**
 **Tier 1 · LIT (active / held / selected / transient) = SDF distance-falloff
@@ -210,7 +210,7 @@ halo 0.22 — pressed metal, not a signal.
 | `shadow.seat` | `ShadowSeat` | `0 18px 44px -18px rgba(0,0,0,0.72)` |
 | `shadow.seat.strip` | `ShadowSeatStrip` | `0 18px 44px -20px rgba(0,0,0,0.75)` |
 
-### Status ring — OPTIONAL second separation (Cabinet graft)
+### Status ring — OPTIONAL second separation
 
 | Token | C# constant | Value |
 |---|---|---|
@@ -243,7 +243,7 @@ wider than 2px.
 
 ---
 
-## 6 · Diegetic material — emboss / engrave physics (Phosphor graft, stricter)
+## 6 · Diegetic material — emboss / engrave physics
 
 Plate: brushed metal `#2C2F33 → #24272B → #1C1F22` (2-stop vertical, optional)
 with 1px × 3px 90° hairline stripe `rgba(255,255,255,0.018)` (optional).
