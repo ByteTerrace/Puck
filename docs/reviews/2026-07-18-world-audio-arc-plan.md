@@ -290,7 +290,16 @@ The generalized canonicalizer + adapters; `puck.audio.v1` maturation and
 lift; `puck.synth.v1`; the tune-compile-chain lift out of Demo (the
 scheduled prerequisite); `WorldAnchor` union + `WorldCamera.Anchored`
 migration (worlds migrated once, worlddoc ouroboros green).
-Exit: libraries build, Demo runs on the lifted chain, camera proofs green.
+Exit: libraries build, camera proofs green, the library tune chain
+byte-matches the oracle.
+
+**Owner ruling (landed mid-AP0): Demo is fully untouched by this arc.** No
+rewiring, not even the data-contract tier — the library copies mature IN
+SPIRIT (Demo's originals stay and die with Demo), schema kinship holds by
+name so Demo-authored files import through the strict pipeline, and Demo's
+tune chain serves as the read-only behavioral ORACLE (the library's cart
+output byte-compares against it). Where a shared surface would force a
+Demo edit, the library keeps a source-compatible adapter instead.
 
 ### AP1 — The mixer core, the synth, and the offline proof
 `WorldVoiceSynth` + `WorldAudioMixer.MixBlock` + the fixed-point
