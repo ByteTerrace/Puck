@@ -833,27 +833,36 @@ internal static class WorldDefinitionValidator {
 
     // The look assignment policy (PRESENTATION-ONLY): null coalesces to the hash default (nothing to validate); a table
     // needs a non-empty cycle whose every entry resolves to a declared look name. Reuses the assignment shape verbatim.
+    // The optional look assignment (PRESENTATION-ONLY, a trailing nullable section): absent is valid; a present row
+    // validates through the shared row-assignment gate against the look-name set.
     private static void ValidateLookAssignment(WorldRowAssignment? assignment, HashSet<string> lookNames, List<string> errors) {
         if (assignment is null) {
             return;
         }
 
+        ValidateRowAssignment(assignment: assignment, section: "lookAssignment", rowNoun: "look", rowNames: lookNames, errors: errors);
+    }
+
+    // The shared hash/table policy gate for a row-assignment section (kit assignment and look assignment carry the SAME
+    // shape): a defined policy, a non-empty cycle under the table policy, and every table entry resolving to a declared
+    // row name. Each caller owns its own null policy (kit assignment is required; look assignment is optional).
+    private static void ValidateRowAssignment(WorldRowAssignment assignment, string section, string rowNoun, HashSet<string> rowNames, List<string> errors) {
         var isHash = string.Equals(a: assignment.Policy, b: WorldRowAssignment.HashPolicy, comparisonType: StringComparison.Ordinal);
         var isTable = string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal);
 
         if (!isHash && !isTable) {
-            errors.Add(item: $"lookAssignment.policy '{assignment.Policy ?? "(absent)"}' must be '{WorldRowAssignment.HashPolicy}' or '{WorldRowAssignment.TablePolicy}'.");
+            errors.Add(item: $"{section}.policy '{assignment.Policy ?? "(absent)"}' must be '{WorldRowAssignment.HashPolicy}' or '{WorldRowAssignment.TablePolicy}'.");
         }
 
         var table = (assignment.Table ?? []);
 
         if (isTable && (table.Count == 0)) {
-            errors.Add(item: $"lookAssignment.table must be non-empty under the '{WorldRowAssignment.TablePolicy}' policy.");
+            errors.Add(item: $"{section}.table must be non-empty under the '{WorldRowAssignment.TablePolicy}' policy.");
         }
 
         for (var index = 0; (index < table.Count); index++) {
-            if (!lookNames.Contains(item: table[index])) {
-                errors.Add(item: $"lookAssignment.table[{index}] '{table[index]}' names no look row.");
+            if (!rowNames.Contains(item: table[index])) {
+                errors.Add(item: $"{section}.table[{index}] '{table[index]}' names no {rowNoun} row.");
             }
         }
     }
@@ -912,24 +921,7 @@ internal static class WorldDefinitionValidator {
             return;
         }
 
-        var isHash = string.Equals(a: assignment.Policy, b: WorldRowAssignment.HashPolicy, comparisonType: StringComparison.Ordinal);
-        var isTable = string.Equals(a: assignment.Policy, b: WorldRowAssignment.TablePolicy, comparisonType: StringComparison.Ordinal);
-
-        if (!isHash && !isTable) {
-            errors.Add(item: $"assignment.policy '{assignment.Policy ?? "(absent)"}' must be '{WorldRowAssignment.HashPolicy}' or '{WorldRowAssignment.TablePolicy}'.");
-        }
-
-        var table = (assignment.Table ?? []);
-
-        if (isTable && (table.Count == 0)) {
-            errors.Add(item: $"assignment.table must be non-empty under the '{WorldRowAssignment.TablePolicy}' policy.");
-        }
-
-        for (var index = 0; (index < table.Count); index++) {
-            if (!kitNames.Contains(item: table[index])) {
-                errors.Add(item: $"assignment.table[{index}] '{table[index]}' names no kit row.");
-            }
-        }
+        ValidateRowAssignment(assignment: assignment, section: "assignment", rowNoun: "kit", rowNames: kitNames, errors: errors);
     }
 
     // The data-side addon descriptors: non-empty, unique names (the rest is Phase 2b's concern).

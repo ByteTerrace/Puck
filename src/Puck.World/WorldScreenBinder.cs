@@ -1118,7 +1118,10 @@ internal sealed class WorldScreenBinder : IDisposable {
     private Vector3 StaticAnchorPosition(WorldAnchor.Placement placement) =>
         ((m_anchors is WorldClient client) ? WorldAnchorGeometry.StaticPlacementPosition(definition: client.Definition, placementId: placement.PlacementId, shapeId: placement.ShapeId) : Vector3.Zero);
 
-    // The one-shot centroid of a group anchor (an offscreen view seeds statically; the main-window composer smooths it).
+    // The one-shot centroid of a group anchor. A filmed/offscreen view bakes only this raw centroid: it DROPS the group
+    // Chase.SpreadPullback widening entirely (not merely its per-frame smoothing), so an establishing shot filmed onto a
+    // diegetic screen frames the centroid without widening for the group's spread. The main-window composer applies and
+    // smooths the spread; documented so authors don't expect spread-widening on a filmed establishing shot.
     private Vector3 GroupCentroid(WorldAnchor.Group group) =>
         ((m_anchors is WorldClient client) ? WorldGroupAnchors.ComputeRaw(group: group, client: client, maxPopulation: WorldClient.EntityCapacity).Centroid : Vector3.Zero);
 

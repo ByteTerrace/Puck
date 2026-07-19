@@ -479,10 +479,19 @@ internal sealed class WorldServer {
         var solids = m_solids;
         var solidAffecting = AffectsSolidField(mutation: mutation);
 
-        if (solidAffecting && !TryBuildSolids(definition: candidate, solids: out solids, reason: out var solidReason)) {
-            Reject(mutation: mutation, reason: solidReason);
+        if (solidAffecting) {
+            // A SetCollision edit touches only the collision tuning row — the compiled SDF program (scene rows, screens,
+            // placements, ground plane) is byte-identical — so when the live field is already the field provider and the
+            // candidate still is, re-wrap the existing evaluator with the new scalars instead of recompiling the program
+            // (a slope/skin drag never rebuilds hundreds of instructions). Every other solid-affecting edit, and a
+            // provider/enabled flip, rebuilds from scratch.
+            if ((mutation is WorldMutation.SetCollision) && (m_solids is { } live) && UsesFieldProvider(definition: candidate)) {
+                solids = live.WithTuning(tuning: FixedWorldCollision.Compile(collision: (candidate.Collision ?? WorldCollision.None)));
+            } else if (!TryBuildSolids(definition: candidate, solids: out solids, reason: out var solidReason)) {
+                Reject(mutation: mutation, reason: solidReason);
 
-            return false;
+                return false;
+            }
         }
 
         // Assign the field BEFORE the rebuild so a recompiled body's first step already solves against it. A field change
@@ -633,12 +642,15 @@ internal sealed class WorldServer {
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetHostDefaults;
 
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
-    // compiled tuning/actions, AND the analytic collider set). A scene-row/collision edit rebuilds the collider set so a
-    // live world.scene.solid / world.collision takes effect on the next tick with no restart.
+    // compiled tuning/actions, AND the analytic collider set). A scene-row/screen/collision edit rebuilds the collider
+    // set so a live world.scene.solid / world.screen / world.collision takes effect on the next tick with no restart —
+    // the analytic WorldColliderSet bakes solid SCREENS too, so a screen edit must rebuild it (the field provider already
+    // rebuilds on screens via AffectsSolidField; this closes the same staleness under the analytic provider).
     private static bool AffectsPopulation(WorldMutation mutation) => mutation is
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns or
         WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or WorldMutation.SetCollision or
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         // The LOOK mutations re-resolve the population's look table (PRESENTATION-ONLY, but Rebuild is the one path that
         // re-runs ResolveLookIndices and bumps the client's program-rebuild revision).
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment or
@@ -695,8 +707,10 @@ internal sealed class WorldServer {
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
-        // A creation look changes the emitted program word count (a body worn as a stamp), so all three look mutations
-        // ride the envelope gate — the loud capacity rejection fires at apply time, not at a later GPU allocation.
+        // A creation look will change the emitted program word count (a body worn as a stamp) once creation-look
+        // rendering lands (Arc 7); catalog looks add zero words today, so this arm is honest groundwork — all three look
+        // mutations already ride the envelope gate so the loud capacity rejection will fire at apply time, not at a later
+        // GPU allocation, the moment creation stamps render.
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment;
 
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section

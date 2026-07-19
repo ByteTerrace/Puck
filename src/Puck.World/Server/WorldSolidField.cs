@@ -24,9 +24,12 @@ namespace Puck.World.Server;
 /// <see cref="TryBuild"/> forwards the constructor's <see cref="ArgumentException"/> message verbatim as its reject
 /// reason, so <see cref="WorldServer"/> turns an unsupported solid into a LOUD apply-time rejection instead of a
 /// constructor throw at install time.</para>
-/// <para>OQ-8 cost posture: only collider-bearing kits are solved at all, and <see cref="Resolve"/> takes the gradient
-/// tap (four extra field samples) only on ACTUAL penetration — the common per-sphere cost is one
-/// <see cref="IFieldEvaluator.TryDistance"/>. Broadphase/Lipschitz-reuse (the <c>BakedWorldQuery</c> tier) stays behind
+/// <para>OQ-8 cost posture: only collider-bearing kits are solved at all. Every grounded step runs the ONE always-on
+/// up tap — <see cref="Resolve"/> reads the field gradient (four <see cref="IFieldEvaluator.TryDistance"/> samples via
+/// the tetrahedron) once per iteration to orient the capsule — plus one <see cref="IFieldEvaluator.TryDistance"/> per
+/// capsule sphere; <see cref="ResolveSphere"/> takes the SECOND gradient tap (four more samples) only on ACTUAL
+/// penetration. So the steady-state floor is <c>4 (up) + 2 (spheres)</c> samples per collider-bearing body per step,
+/// rising by four per penetrating sphere. Broadphase/Lipschitz-reuse (the <c>BakedWorldQuery</c> tier) stays behind
 /// this seam, unbuilt, until measurement demands it.</para>
 /// </remarks>
 internal sealed class WorldSolidField : IContactField {
@@ -50,6 +53,17 @@ internal sealed class WorldSolidField : IContactField {
     /// <summary>The compiled program's instruction count — the <c>world.collision.status</c> read-back (a rough size of
     /// the solid field the solver walks).</summary>
     public int InstructionCount { get; }
+
+    /// <summary>Re-wraps this field's ALREADY-COMPILED program with fresh solver scalars, reusing the wrapped
+    /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array). A
+    /// <c>SetCollision</c> edit touches only the collision tuning row, never the geometry the program bakes (scene rows,
+    /// screens, placements, ground plane), so a slope/skin/probe/iteration tweak reuses the program instead of
+    /// recompiling it. The result is a distinct instance (per-revision immutability) so the install-time reference swap
+    /// still bumps the revision.</summary>
+    /// <param name="tuning">The recompiled collision tuning to adopt.</param>
+    /// <returns>A new field over the same evaluator with the new scalars.</returns>
+    public WorldSolidField WithTuning(FixedWorldCollision tuning) =>
+        new(evaluator: m_evaluator, instructionCount: InstructionCount, tuning: tuning);
 
     /// <summary>The field evaluator the <c>world.collision.probe</c> verb reads distance/material/gradient from, so the
     /// surface the simulation itself solves against is directly observable.</summary>
