@@ -163,7 +163,8 @@
       },
       "route": {
         "engageable": true,
-        "engageRadius": 2.5
+        "engageRadius": 2.5,
+        "autoInsert": false
       }
     },
     {
@@ -194,7 +195,8 @@
       },
       "route": {
         "engageable": false,
-        "engageRadius": 0
+        "engageRadius": 0,
+        "autoInsert": false
       }
     },
     {
@@ -224,7 +226,8 @@
       },
       "route": {
         "engageable": false,
-        "engageRadius": 0
+        "engageRadius": 0,
+        "autoInsert": false
       }
     }
   ],
@@ -744,7 +747,8 @@
     "candidateRadius": 32,
     "candidateCap": 16,
     "workbenchFraction": 0.7,
-    "previewDeadlineFrames": 12
+    "previewDeadlineFrames": 12,
+    "derivedFaceScreens": 0
   },
   "speakers": [],
   "tunes": [],

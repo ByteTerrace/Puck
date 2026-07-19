@@ -1143,7 +1143,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     }
 
     // The catalog geometry-source rig for a look: a Catalog(Index) pin, or -1 (the entity's own index-derived rig) for
-    // an unpinned catalog look. A Creation look renders through the catalog on the entity's own rig for now — a
-    // documented degradation (never a black/vanished body) until the creation-stamp render path lands.
+    // an unpinned catalog OR a Creation look. A Creation look's body renders through the stamp pool (its catalog avatar
+    // parks below the floor via s_hiddenAvatar), so this catalog rig is reached only as the pool-pressure fallback — a
+    // body a full stamp pool starved renders as a catalog avatar rather than vanishing.
     private static int LookRig(WorldLook look) => (look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : -1;
 }

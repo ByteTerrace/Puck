@@ -183,6 +183,11 @@ internal static class WorldDefinitionValidator {
         // The declared-live console sources (screens[*].source, NOT magazine entries): the feed owns ONE upload surface,
         // so at most one may be live at a time. A console entry sitting unselected in a magazine is legal.
         var consoleLiveIndices = new List<int>();
+        // The derived-face slots the binder reserves up front (Program.cs concatenates them after the document screens):
+        // a document screen at one of these indices would silently collide with the reserved placeholder in the binder's
+        // dict-fill, so the range is carved out of the authored screen-index space here.
+        var reservedFaceStart = Puck.World.Client.WorldCreationFacets.DerivedFaceBase;
+        var reservedFaceEnd = (reservedFaceStart + (definition.Authoring ?? WorldAuthoringDefaults.Default).DerivedFaceScreens);
 
         if (definition.Screens is not { } screens) {
             errors.Add(item: "screens is required.");
@@ -200,6 +205,8 @@ internal static class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.index {screen.Index} is outside 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}.");
                 } else if (!screenIndices.Add(item: screen.Index)) {
                     errors.Add(item: $"{path}.index {screen.Index} is duplicated.");
+                } else if ((screen.Index >= reservedFaceStart) && (screen.Index < reservedFaceEnd)) {
+                    errors.Add(item: $"{path}.index {screen.Index} is inside the reserved derived-face range {reservedFaceStart}..{(reservedFaceEnd - 1)} (creation faces bind there — author screens below {reservedFaceStart}).");
                 }
 
                 if (!IsFinite(value: screen.Origin) || !IsFinite(value: screen.Right) || !IsFinite(value: screen.Up)) {
@@ -1020,9 +1027,10 @@ internal static class WorldDefinitionValidator {
         }
 
         RequireIntRange(value: authoring.PreviewDeadlineFrames, min: 1, max: 600, name: "authoring.previewDeadlineFrames", errors: errors);
-        // The Arc 7 boot-consumed headroom fields: the creation-stamp body reserve and the derived-face screen reserve.
-        RequireIntRange(value: authoring.InhabitantHeadroom, min: 0, max: 16, name: "authoring.inhabitantHeadroom", errors: errors);
-        RequireIntRange(value: authoring.DerivedFaceScreens, min: 0, max: 16, name: "authoring.derivedFaceScreens", errors: errors);
+        // The derived-face reserve: the slots boot-registered at [DerivedFaceBase, DerivedFaceBase + count). The ceiling
+        // is the screen-surface span ABOVE the reserved base — a larger count would push a reserved slot past the
+        // engine's MaxScreenSurfaces and throw at the first frame.
+        RequireIntRange(value: authoring.DerivedFaceScreens, min: 0, max: (SdfProgramBuilder.MaxScreenSurfaces - Puck.World.Client.WorldCreationFacets.DerivedFaceBase), name: "authoring.derivedFaceScreens", errors: errors);
     }
 
     // The creation ASSET rows: id presence/uniqueness, the document's own strict schema + structural invariants

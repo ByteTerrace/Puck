@@ -23,8 +23,9 @@ internal static class WorldPlacementPolicy {
     /// timeline frames) OR a body-rooted creation stamp (an inhabited placement's body, or a crowd body wearing a
     /// creation look). CONTRACT INVARIANT: sizes <see cref="Client.WorldStampPool"/>'s pool array
     /// (<c>new Registration?[MaxStampRegistrations]</c>) and the field-initializer-time dynamic-transform capacity — the
-    /// validator's rejection line names this ceiling word-exactly. Set to 8: 4 animated placements plus the
-    /// <see cref="WorldAuthoringDefaults.InhabitantHeadroom"/> default of 4 body-rooted creation stamps.</summary>
+    /// validator's rejection line names this ceiling word-exactly. Set to 8: animated placements and body-rooted creation
+    /// stamps (inhabitants + crowd creation-looks) share the pool; the validator gates animated placements against it and
+    /// the pool degrades a starved body-rooted stamp to a catalog avatar with a loud warn.</summary>
     public const int MaxStampRegistrations = 8;
 
     /// <summary>The per-animated-placement shape-slot pool — equal to <see cref="MaxShapesPerStamp"/>, so an animated

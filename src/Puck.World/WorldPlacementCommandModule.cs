@@ -22,7 +22,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "world.placement.inhabit",
-            description: "Molds a placement's INHABIT facet (RMW): world.placement.inhabit <id> <kit|-> [idle|wander|attend|live] [count] [radius]. '-' as <kit> clears the facet (the placement reverts to furniture); an omitted <kit> resolves the creation's own locomotion token as a kit name. Applies LIVE; a full-document revalidation rejects loudly (e.g. an unresolved kit names every kit the world declares).",
+            description: "Molds a placement's INHABIT facet (RMW): world.placement.inhabit <id> <kit|auto|-> [idle|wander|attend|live] [count] [radius]. '-' as <kit> clears the facet (the placement reverts to furniture); 'auto' resolves the creation's own locomotion token as the kit name. Applies LIVE; a full-document revalidation rejects loudly (e.g. an unresolved kit names every kit the world declares).",
             handler: (_, args) => Inhabit(args: args),
             routing: CommandRouting.Simulation
         );
@@ -52,7 +52,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
 
     private CommandResult Inhabit(string[] args) {
         if ((args.Length < 2) || (args.Length > 5)) {
-            return Usage(verb: "world.placement.inhabit", form: "<id> <kit|-> [idle|wander|attend|live] [count] [radius]");
+            return Usage(verb: "world.placement.inhabit", form: "<id> <kit|auto|-> [idle|wander|attend|live] [count] [radius]");
         }
 
         if (FindPlacement(id: args[0]) is not { } placement) {

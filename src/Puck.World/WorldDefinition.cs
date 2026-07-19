@@ -1375,13 +1375,10 @@ internal sealed record WorldStorageDefaults(string? Endpoint, string? UserId) {
 /// frame by <see cref="Client.WorldFrameSource.LayoutRegion(int, int, int, float)"/>.</param>
 /// <param name="PreviewDeadlineFrames">LIVE-CONSUMED. The drag preview channel's missing-response fallback: a
 /// released overlay with no definition delivery after this many produced frames drops honestly.</param>
-/// <param name="InhabitantHeadroom">BOOT-CONSUMED. The population entity-table slots reserved for creation-STAMP bodies
-/// (inhabited placements plus crowd bodies wearing a creation look) — the count of bodies that may render their creation
-/// geometry through the stamp pool rather than a catalog avatar. The construction probe reserves exactly this many
-/// body-rooted stamp registrations, so a document declaring more creation-stamp bodies than this fails the frozen
-/// render-envelope gate LOUDLY at apply time rather than blowing a later GPU allocation.</param>
-/// <param name="DerivedFaceScreens">BOOT-CONSUMED. The derived screen slots the envelope probe reserves for creation
-/// FACES (a face declared by a placement's creation, lit by a feed). Bounded by the engine's screen-surface ceiling.</param>
+/// <param name="DerivedFaceScreens">BOOT-CONSUMED. The derived screen slots the binder reserves at boot for creation
+/// FACES (a face declared by a placement's creation, lit by a feed), registered at
+/// <c>[<see cref="Client.WorldCreationFacets.DerivedFaceBase"/>, DerivedFaceBase + this)</c>. Bounded so the range
+/// stays within the engine's screen-surface ceiling.</param>
 internal sealed record WorldAuthoringDefaults(
     int AuthoringHeadroomRows,
     int AuthoringHeadroomScreens,
@@ -1393,7 +1390,6 @@ internal sealed record WorldAuthoringDefaults(
     int CandidateCap,
     float WorkbenchFraction,
     int PreviewDeadlineFrames,
-    int InhabitantHeadroom,
     int DerivedFaceScreens
 ) {
     /// <summary>The built-in default authoring policy.</summary>
@@ -1408,7 +1404,6 @@ internal sealed record WorldAuthoringDefaults(
         CandidateCap: 16,
         WorkbenchFraction: 0.70f,
         PreviewDeadlineFrames: 12,
-        InhabitantHeadroom: 4,
         DerivedFaceScreens: 4
     );
 }

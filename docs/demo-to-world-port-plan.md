@@ -4785,10 +4785,10 @@ internal sealed record WorldPlacementFace(string Face, WorldScreenSource Source)
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementInhabit? Inhabit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementFace>? FaceSources = null,
 
-// WorldAuthoringDefaults gains two BOOT-CONSUMED headroom fields, documented on the BOOT side of its
-// existing mixed-timing doc comment:
-    int InhabitantHeadroom,   // default 4 — entity-table slots reserved for inhabited placements
-    int DerivedFaceScreens,   // default 4 — derived screen slots the envelope probe reserves
+// WorldAuthoringDefaults gains one BOOT-CONSUMED headroom field, documented on the BOOT side of its
+// existing mixed-timing doc comment (a planned InhabitantHeadroom field was dropped in review — inert;
+// see the Arc 7 landed section):
+    int DerivedFaceScreens,   // default 4 — derived-face screen slots the binder reserves at boot (bounded 0..8)
 ```
 
 `FaceSources` reuses the **existing** `WorldScreenSource` union verbatim — no new
@@ -4817,12 +4817,15 @@ one error naming both terms. Inhabited bodies allocate downward from slot 127,
 census peers upward from slot 4, so the rule is exactly "they must not meet."
 
 For a non-null `FaceSources`: each `Face` resolves against the creation's
-`Behavior.Faces` names; duplicate face names in one row is an error; each `Source`
-runs through the **existing** screen-source validator (`:193`), so a `View` face
-naming a missing camera gets the same message a screen row gets.
-`ValidateCreations` gains a uniqueness check on declared `Cameras[].Feed` names —
-derived camera names collide otherwise. `ValidateAuthoring` gains
-`RequireIntRange(0, 16)` on the two new headroom fields.
+`Behavior.Faces` names; duplicate face names in one row is an error. **A `View`
+face's camera name is resolved LENIENTLY** (implementation reality — the design's
+"run through the `:193` screen-source validator" was softened): a derived
+creation-camera name is unknown to the document validator, so hard-rejecting it
+would break the primary use case (a face fed by another creation's eye); the binder
+lights the no-signal card for an unresolved feed instead. `ValidateCreations` gains
+a uniqueness check on declared `Cameras[].Feed` names — derived camera names collide
+otherwise. `ValidateAuthoring` gains `RequireIntRange(0, 8)` on `DerivedFaceScreens`
+(the reserved range must stay under `MaxScreenSurfaces`).
 
 **Protocol.** **No new mutation kinds, no new section, no new capability.**
 `Inhabit` and `FaceSources` ride `UpsertPlacement`/`RemovePlacement`; `Attend`
@@ -4909,9 +4912,13 @@ concatenate. Derived faces bind into a reserved screen-index range
 `[DerivedFaceBase, DerivedFaceBase + DerivedFaceScreens)` above the document's
 declared indices, with slab geometry computed from the placement stamp's shape
 bound (recomputed each frame from the body pose for an inhabited row).
-`screen.state` reports them like any other slot. `WorldFrameSource`'s construction
-probe reserves `InhabitantHeadroom` extra stamp registrations and
-`DerivedFaceScreens` extra screen slabs (the 6 → 7 → 10 probe sequence).
+`screen.state` reports them like any other slot. The binder reserves
+`DerivedFaceScreens` derived-face screen slabs up front (registered at
+`[DerivedFaceBase, DerivedFaceBase + DerivedFaceScreens)`), bounded so the range
+stays within the engine's `MaxScreenSurfaces` ceiling. (The stamp-registration pool
+is NOT probe-reserved per world — it is the compile-time `MaxStampRegistrations`
+const, sized by a field initializer; the review-fix that dropped the inert
+`InhabitantHeadroom` field is recorded in the Arc 7 landed section below.)
 
 **Verbs** — a new `WorldPlacementCommandModule` (`WorldMutationCommandModule` is at
 its analyzer ceiling and splits by verb family by policy):
@@ -5168,10 +5175,21 @@ a radius-ceiling validator pass is a clean follow-up, noted here honestly.
   once** (and its `"role"` lines struck from `docs/examples/puckton.world.json`).
   `WorldPlacementFace(Face, Source)` + `FaceSources`. `IntentSource.Attend`;
   `AttendTarget`/`AttendFlavor`/`FixedAttendFlavor` on `WorldKit`.
-  `WorldAuthoringDefaults` gained `InhabitantHeadroom`/`DerivedFaceScreens` (default
-  4/4) — **re-goldened `default.world.json`'s authoring block** (the load-time-0
-  bug: the checked-in file authored the old field set, so the frozen probe read 0
-  derived-face slots until the two fields were added).
+  `WorldAuthoringDefaults` gained `DerivedFaceScreens` (default 4) — **re-goldened
+  `default.world.json`'s authoring block** (the load-time-0 bug: the checked-in file
+  authored the old field set, so the frozen probe read 0 derived-face slots until the
+  field was added). **Review-fix (this pass): `InhabitantHeadroom` was DROPPED** — it
+  was authored, validated, and documented "BOOT-CONSUMED" yet read by NOTHING (the
+  stamp pool is the compile-time `MaxStampRegistrations = 8` const, sized by a field
+  initializer that runs before any definition loads, so a per-world field can never
+  size it; the census-fit rule and the pool's graceful degradation already guard the
+  ceiling). **`DerivedFaceScreens` was re-bounded `0..8`** (`MaxScreenSurfaces −
+  DerivedFaceBase`): the old `0..16` admitted a value that placed a reserved face slot
+  at index ≥ 32 and threw at the first frame. **The reserved derived-face index range
+  is now carved out of the authored screen-index space** in the validator (a document
+  screen at index 24 previously collided with the reserved placeholder). All three
+  shipped worlds were re-goldened so `world.save` round-trips byte-identically (Arc 5's
+  non-null `autoInsert` route field had drifted every shipped world's golden).
 - **Inhabitation (server).** `PopulationKind.Inhabitant`; `Entry.PlacementId`;
   **`MaxSimulated` is now a computed instance property** reading an inhabitant
   FLOOR (`m_inhabitantFloor - LocalSeatCount`) — inhabitants claim slots downward
