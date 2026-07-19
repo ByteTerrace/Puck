@@ -7,7 +7,7 @@ using Puck.Hosting;
 namespace Puck.Overlays;
 
 /// <summary>The read seams the unified overlay consumes, each optional (an absent source simply contributes no
-/// records), bundled so the node's constructor stays at the proven decorator arity.</summary>
+/// records), bundled so the constructor arity stays small.</summary>
 /// <param name="Console">The console-panel source, or <see langword="null"/>.</param>
 /// <param name="BindingBar">The per-seat binding-bar source, or <see langword="null"/>.</param>
 /// <param name="Toast">The transient-echo source, or <see langword="null"/>.</param>
@@ -31,12 +31,12 @@ public sealed record UnifiedOverlaySources(
 /// buffer — the design-token slab and the shared glyph SDF pack as a static prefix, then this frame's packed
 /// records. SURFACES ARE WRITERS: the console panel, the per-seat binding bars, and the toast are each a small CPU
 /// writer emitting the shared record vocabulary (panel chrome / rect / fixed-cell text run / icon chip) through
-/// <see cref="OverlayFrameBuilder"/>, so a future surface is a new writer, never a new node or shader (the editor
-/// HUD proved the seam). Backend-neutral from its first commit: only neutral <c>IGpu*</c> services (<see cref="OverlayServices"/>),
-/// with bytecode selected by the caller.
+/// <see cref="OverlayFrameBuilder"/>, so a future surface is a new writer, never a new node or shader.
+/// Backend-neutral: only neutral <c>IGpu*</c> services (<see cref="OverlayServices"/>), with bytecode selected by
+/// the caller.
 /// </summary>
 /// <remarks>
-/// Keeps the proven overlay decorator contract whole: the per-node submission fence (the previous frame's pass must
+/// The overlay decorator contract in full: the per-node submission fence (the previous frame's pass must
 /// retire before the buffer/descriptor rewrites), the pass-through fast path (nothing visible = the inner frame
 /// returns untouched, no extra pass), and <see cref="ICaptureRequestTarget"/> forwarding (a pending capture lands on
 /// whichever node actually produced the shown frame). Zero steady-state allocation: one preallocated scratch, one
@@ -45,7 +45,7 @@ public sealed record UnifiedOverlaySources(
 public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPassTimingSource {
     // counts float4 + sdf float4 + misc float4 — KEEP IN SYNC with overlay-unified.frag.hlsl's OverlayPassData.
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 3);
-    // The toast's tail reservation (UIE-8): its worst-case record shape (1 panel + rail/icon rects + two text runs,
+    // The toast's tail reservation: its worst-case record shape (1 panel + rail/icon rects + two text runs,
     // 46 glyph words) held back from the earlier writers so the transient echo always lands.
     private const int ToastReservedPanels = 1;
     private const int ToastReservedElements = 4;
@@ -104,7 +104,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private bool m_overflowNarrated;
     private string? m_pendingCapturePath;
     private IGpuPipeline? m_pipeline;
-    // The previous drawn frame's overlay-pass GPU milliseconds (the IPassTimingSource readout; UIE-9's instrument).
+    // The previous drawn frame's overlay-pass GPU milliseconds (the IPassTimingSource readout).
     private double m_lastOverlayMilliseconds;
     private bool m_previousFrameTimed;
     private IGpuSurfaceReadback? m_readback;
@@ -196,7 +196,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         // Freshen the pull-model feeds, then let each present writer pack this frame's records CPU-side. Nothing
         // visible = pass the frame through untouched (no extra pass). Writer order is DRAW order (console under
         // bars under HUD under toast); the tail reservation keeps the last, most urgent surface (the toast) from
-        // being starved by the earlier ones — the declared capacity/priority policy (UIE-8).
+        // being starved by the earlier ones — the declared capacity/priority policy.
         m_sources.FeedTick?.Invoke();
         m_builder.BeginFrame();
 
@@ -390,7 +390,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     }
 
     // Loud ONCE per node lifetime (never per-frame spam): the first frame any record drops at a capacity, narrate
-    // the shape on stderr; the per-frame counters keep counting silently after (UIE-8's observable overflow).
+    // the shape on stderr; the per-frame counters keep counting silently after.
     private void NarrateOverflowOnce() {
         if (m_overflowNarrated || !m_builder.HasOverflow) {
             return;

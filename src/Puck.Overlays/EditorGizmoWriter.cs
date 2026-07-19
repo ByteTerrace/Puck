@@ -4,7 +4,7 @@ namespace Puck.Overlays;
 /// The editor-gizmo writer: draws each EDITING seat's projected gizmo chips from an <see cref="IEditorGizmoSource"/>
 /// snapshot — an icon chip (the world icon grammar's speaker/bed symbols) at every projected pose, and a translucent
 /// hairline radius RING for region rows — all inside a <see cref="OverlayFrameBuilder.BeginClip"/> scope on the
-/// seat's viewport rect (UIE-4: a chip near a split boundary cuts, never bleeds). The chip-state tiers carry the
+/// seat's viewport rect (a chip near a split boundary cuts, never bleeds). The chip-state tiers carry the
 /// editor semantics for free: selection lights the ACCENT tier, a live change shimmer the HELD tier. Pure record
 /// emission; no GPU types (a surface is a writer, never a new shader).
 /// </summary>

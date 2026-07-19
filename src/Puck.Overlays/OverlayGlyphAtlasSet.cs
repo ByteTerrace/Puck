@@ -7,12 +7,10 @@ namespace Puck.Overlays;
 /// The font-atlas seam every overlay glyph consumer shares — the console panel, the binding bar, and the editor
 /// HUD: loads the pre-baked MTSDF atlas set (<see cref="MonoFont"/>, the uniform-grid console/terminal voice
 /// <see cref="OverlayGlyphSdfPack"/> requires, and the <see cref="UiFont"/> family — tight-packed with GPOS
-/// kerning) from a caller-supplied assets root. Lifted from <c>Puck.Demo.Text.SharedGlyphAtlas</c>: the static
-/// per-process singleton hardcoded to the demo's own <c>Assets/Fonts</c> path, and its GDI+ runtime fallback
-/// (<c>GlyphAtlasBuilder</c>), both stay in Demo — a missing pre-baked atlas here is a LOUD degradation
+/// kerning) from a caller-supplied assets root. Loads a prepacked atlas and degrades LOUDLY if absent
 /// (<see cref="IsAvailable"/> is <see langword="false"/>, one clear message to <see cref="Console.Error"/>), never
-/// a raster fallback. A caller that owns its own fallback atlas (Demo's GDI+ build, or any other source) supplies
-/// it through the <c>monoFallback</c> constructor seam instead.
+/// a raster fallback. The caller owns any runtime fallback atlas, supplied through the <c>monoFallback</c>
+/// constructor seam.
 /// </summary>
 /// <remarks>
 /// Each property loads once, lazily, on first access; results — including <see langword="null"/> — are cached so
@@ -20,7 +18,7 @@ namespace Puck.Overlays;
 /// </remarks>
 public sealed class OverlayGlyphAtlasSet {
     // The bake packs EVERY font's glyphs into this one image (the one-GPU-texture law); each atlas JSON is a view of
-    // it. KEEP IN SYNC with tools/font-atlas/manifest.json's output image name.
+    // it. KEEP IN SYNC with COMBINED_PNG_NAME in tools/font-atlas/bake.py (the combined atlas image name).
     private const string CombinedImageName = "puck-fonts-mtsdf.png";
     // The mono voice's layout view (the overlay pack's source) and the prepacked overlay artifact written beside it.
     private const string MonoFontName = "jetbrains-mono-regular";
@@ -76,15 +74,15 @@ public sealed class OverlayGlyphAtlasSet {
 
     /// <summary>
     /// Loads the overlay glyph pack through the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>):
-    /// a warm start reads the ~1.4 MiB finished pack and NEVER decodes the ~79 MiB combined PNG (UIE-7 — the decode
-    /// held ≥150 MiB transient to retain 1.4 MiB); a cold or rebaked start builds the pack from
-    /// <see cref="MonoFont"/> once and persists it, keyed by the SHA-256 of the source PNG + mono layout JSON bytes.
-    /// Returns <see langword="null"/> exactly when <see cref="OverlayGlyphSdfPack.TryCreate"/> would (no usable
-    /// atlas), preserving the loud-degradation contract.
+    /// a warm start reads the ~1.4 MiB finished pack and NEVER decodes the ~79 MiB combined PNG (the combined MTSDF
+    /// decode held ≥150 MiB transient to retain 1.4 MiB, so the prepacked path is mandatory); a cold or rebaked
+    /// start builds the pack from <see cref="MonoFont"/> once and persists it, keyed by the SHA-256 of the source
+    /// PNG + mono layout JSON bytes. Returns <see langword="null"/> exactly when
+    /// <see cref="OverlayGlyphSdfPack.TryCreate"/> would (no usable atlas), preserving the loud-degradation
+    /// contract.
     /// </summary>
-    /// <remarks>Measured 2026-07-18 (Release, this repo's committed atlas): the full-decode path costs ~2.0 s and
-    /// ~471 MiB of allocation; the warm artifact read costs ~19 ms and ~3 MiB, and the loaded pack is bit-identical
-    /// to the built one.</remarks>
+    /// <remarks>A cold SDF bake is dramatically slower and far heavier than loading the prepacked artifact; warm
+    /// startup uses the committed pack, and the loaded pack is bit-identical to the built one.</remarks>
     public OverlayGlyphSdfPack? LoadOverlayPack() {
         var imagePath = Path.Combine(path1: m_fontsDirectory, path2: CombinedImageName);
         var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: (MonoFontName + ".json"));

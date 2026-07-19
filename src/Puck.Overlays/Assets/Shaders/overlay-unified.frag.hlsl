@@ -1,8 +1,6 @@
-// COST MODEL (UIE-9, measured 2026-07-18 at 1280x800 on the dev 2070-class GPU via the node's timestamp bracket —
-// world.gpu's 'overlay' column): every pixel walks every submitted record with per-record early-outs. Representative
-// in-game loads: 1 seat (console + bar) 0.4-0.6 ms, 2 seats 0.6-0.8 ms, 4 seats 0.8-1.0 ms, 4 seats + 2 editor HUDs
-// + toast ~0.9-1.0 ms (occasional 1.7 ms outlier) on BOTH backends. Verdict: the linear scan stays; spatial binning
-// is not demanded at these loads. Re-measure through the live instrument before growing content past the ceilings.
+// COST MODEL: the overlay is a single linear scan over declared rows — every pixel walks every submitted record
+// with per-record early-outs. Re-measure through the live pass-timing instrument before growing content; the
+// linear scan stays until it does.
 //
 // The unified overlay pass (single-source HLSL; DXC -> SPIR-V for Vulkan AND DXIL for Direct3D 12). ONE decorator
 // draws every 2D surface from one packed storage buffer: N PANELS (token chrome — a scrim fill in a rounded rect, a

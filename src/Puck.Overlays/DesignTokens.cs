@@ -58,13 +58,12 @@ public readonly record struct BloomHue(RgbaColor Ring, RgbaColor Halo);
 public readonly record struct CubicBezier(float X1, float Y1, float X2, float Y2);
 
 /// <summary>
-/// The canonical Puck UI design tokens — docs/ui-design-tokens.md, "Instrument + grafts", FINAL — transcribed to C#
-/// constants. This is the single source every 2D overlay surface reads instead of hand-picked literals, so the whole
-/// UI shares one 4px grid, one radius/type scale, and one semantic palette. Lifted verbatim from the demo's
-/// <c>Puck.Demo.Ui.DesignTokens</c> into the library home (the demo keeps its copy until it dies — the retirement
-/// doctrine); unlike the demo era, the palette reaches the shaders through the <see cref="OverlayTokenBlock"/> storage
-/// slab, never hand-mirrored HLSL literal tables. Every nested class mirrors one numbered section of the spec 1:1 —
-/// read the spec for full rationale and the rendered reference capture.
+/// The canonical Puck UI design tokens — docs/ui-design-tokens.md, "Instrument + grafts" — transcribed to C#
+/// constants. This is the design-token source of record: one C# definition every 2D overlay surface reads instead
+/// of hand-picked literals, so the whole UI shares one 4px grid, one radius/type scale, and one semantic palette.
+/// The palette reaches shaders only through the <see cref="OverlayTokenBlock"/> storage slab, never hand-mirrored
+/// HLSL literal tables. Every nested class mirrors one numbered section of the spec 1:1 — read the spec for full
+/// rationale and the rendered reference capture.
 /// </summary>
 public static class DesignTokens {
     /// <summary>Section 1 — the strict 4px spacing grid and the grid-locked component heights (all multiples of 2).</summary>
@@ -282,9 +281,9 @@ public static class DesignTokens {
     }
 
     /// <summary>
-    /// Section 6 — the diegetic material's emboss/engrave physics (the WORLD-GEOMETRY tier; owned by a sibling
-    /// work package, transcribed here only so the whole token set has one C# source). Law: raised fill is strictly
-    /// brighter than the plate; engraved fill is strictly darker; the two shadows carry OPPOSITE polarity.
+    /// Section 6 — the diegetic material's emboss/engrave physics (the world-geometry-side tier), kept here so the
+    /// token set has one C# source. Law: raised fill is strictly brighter than the plate; engraved fill is strictly
+    /// darker; the two shadows carry OPPOSITE polarity.
     /// </summary>
     public static class Diegetic {
         public static readonly RgbaColor PlateTop = RgbaColor.FromHex(hexRgb: 0x2C2F33);

@@ -6,7 +6,7 @@ namespace Puck.Overlays;
 /// hint, the session-honesty line (last act class / drift / exclusive holds), and the drag line (accent-ringed while
 /// a drag is live) — CONFINED to that seat's normalized viewport rect: the panel anchors at the rect's top-left AND
 /// every record rides a <see cref="OverlayFrameBuilder.BeginClip"/> scope on the same rect, so a narrow seat CUTS
-/// the HUD at its boundary instead of bleeding into a neighbor (the UIE-4 clip contract). Pure record emission;
+/// the HUD at its boundary instead of bleeding into a neighbor (the clip-scope contract). Pure record emission;
 /// no GPU types. A deliberate NON-consumer of <see cref="PadPictogramLayout"/>: the binding bar already renders the
 /// active chord page's full chip cluster per seat, so a second pictogram here would duplicate that surface at lower
 /// fidelity.

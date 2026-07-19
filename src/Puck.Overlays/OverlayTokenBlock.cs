@@ -8,16 +8,20 @@ namespace Puck.Overlays;
 public enum OverlayColorRole : uint {
     TextPrimary = 0,
     TextDim = 1,
+    /// <summary>The muted text tone — CPU-selected; no dedicated HLSL macro.</summary>
     TextMute = 2,
     Accent = 3,
     Positive = 4,
     Warning = 5,
     Danger = 6,
+    /// <summary>The phosphor accent tone — CPU-selected; no dedicated HLSL macro.</summary>
     Phosphor = 7,
     AccentInk = 8,
     SurfaceRaised = 9,
+    /// <summary>The inset-surface tone — CPU-selected; no dedicated HLSL macro.</summary>
     SurfaceInset = 10,
     AccentQuiet = 11,
+    /// <summary>The cyan phosphor accent tone — CPU-selected; no dedicated HLSL macro.</summary>
     PhosphorCyan = 12,
     SurfaceBase = 13,
     BadgeDark = 14,
@@ -30,8 +34,8 @@ public enum OverlayColorRole : uint {
 }
 
 /// <summary>
-/// The design-token slab uploaded ONCE into the front of the unified overlay's storage buffer — the buffer-fed
-/// successor of the demo era's four hand-synced HLSL literal tables. Layout (all words, block at buffer word 0):
+/// The single GPU token slab, uploaded ONCE into the front of the unified overlay's storage buffer. Layout (all
+/// words, block at buffer word 0):
 /// <list type="bullet">
 /// <item><description>Words <c>[0, 4×RoleCount)</c> — one RGBA <c>float4</c> per <see cref="OverlayColorRole"/>, in
 /// enum order; role <c>r</c> occupies <c>uint4</c> element <c>r</c> exactly (scrims/quiet roles bake their token
@@ -45,18 +49,29 @@ public enum OverlayColorRole : uint {
 public static class OverlayTokenBlock {
     /// <summary>The geometry-scalar slots, indexed after the color table.</summary>
     public enum Scalar : int {
+        /// <summary>The panel corner radius, px.</summary>
         Radius1 = 0,
+        /// <summary>The strip corner radius, px.</summary>
         Radius2 = 1,
+        /// <summary>The chip corner radius, px.</summary>
         Radius3 = 2,
+        /// <summary>The hairline outline width, px.</summary>
         EdgeHairlineWidth = 3,
+        /// <summary>The status ring stroke width, px.</summary>
         RingStatusWidth = 4,
+        /// <summary>The bloom halo's Gaussian blur radius, px.</summary>
         BloomHaloBlur = 5,
+        /// <summary>The Tier-1 status ring's bloom alpha.</summary>
         BloomRingAlpha = 6,
+        /// <summary>The Tier-1 status halo's bloom alpha.</summary>
         BloomHaloAlpha = 7,
+        /// <summary>The neutral-tier status ring's bloom alpha.</summary>
         BloomNeutralRingAlpha = 8,
+        /// <summary>The neutral-tier status halo's bloom alpha.</summary>
         BloomNeutralHaloAlpha = 9,
         /// <summary>The anti-alias ramp width for hairline/rounded-rect edges, px (<see cref="DesignTokens.Icon.EdgeAaRamp"/>).</summary>
         EdgeAa = 10,
+        /// <summary>The REST-tier chip plate's translucency.</summary>
         ChipRestOpacity = 11,
         /// <summary>The procedural icon/glyph stroke half-width, in glyph-local units (<see cref="DesignTokens.Icon.StrokeHalfWidth"/>).</summary>
         GlyphStroke = 12,

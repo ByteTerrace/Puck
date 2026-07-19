@@ -14,12 +14,11 @@ namespace Puck.Overlays;
 /// MTSDF atlas medians to sharp corners.
 /// </summary>
 /// <remarks>
-/// Lifted from <c>Puck.Demo.Text.SharedGlyphSdfPack</c>, decoupled from the static <c>SharedGlyphAtlas</c>
-/// singleton — <see cref="TryCreate"/> is a pure function of whatever <see cref="FontAtlas"/> it is given
+/// <see cref="TryCreate"/> is a pure function of whatever <see cref="FontAtlas"/> it is given
 /// (typically <see cref="OverlayGlyphAtlasSet.MonoFont"/>), so it returns <see langword="null"/> only when the atlas
 /// itself is <see langword="null"/> or carries no usable glyph bounds — never by reaching into a global. ASCII-95
-/// (<see cref="FirstChar"/>..<see cref="FirstChar"/>+<see cref="GlyphCount"/>-1) is the documented v1 ceiling; a
-/// wider charset is a deferred-ledger item (non-Latin glyph paging), not extended here.
+/// (<see cref="FirstChar"/>..<see cref="FirstChar"/>+<see cref="GlyphCount"/>-1) is the v1 ceiling; a wider charset
+/// would page glyphs (non-Latin), not extend this one.
 /// </remarks>
 public sealed class OverlayGlyphSdfPack {
     /// <summary>The first code point in the pack (space).</summary>
@@ -60,8 +59,8 @@ public sealed class OverlayGlyphSdfPack {
             return null;
         }
 
-        // Probe the first glyph that HAS atlas bounds for the uniform cell size — SPACE (the old probe) carries no
-        // bounds in the committed atlas (no ink, no cell); boundless glyphs stay blank cells in the pack.
+        // Probe the first glyph that HAS atlas bounds for the uniform cell size — SPACE carries no bounds in the
+        // committed atlas (no ink, no cell); boundless glyphs stay blank cells in the pack.
         FontAtlasBounds? probed = null;
 
         for (var unicode = FirstChar; ((unicode < (FirstChar + GlyphCount)) && (probed is null)); unicode++) {
@@ -126,7 +125,7 @@ public sealed class OverlayGlyphSdfPack {
             ? (codePoint - FirstChar)
             : -1);
 
-    // ---- the prepacked artifact (UIE-7) ------------------------------------------------------------------------
+    // ---- the prepacked artifact ---------------------------------------------------------------------------------
     // The pack is ~1.4 MiB of already-flattened cells, but building it from the atlas decodes the WHOLE combined
     // MTSDF PNG (4435x4440 RGBA ≈ 79 MiB, ≥150 MiB transient with the decoder's scanlines) at every startup. The
     // binary artifact below persists the finished pack beside the atlas, keyed by the SHA-256 of the source PNG and

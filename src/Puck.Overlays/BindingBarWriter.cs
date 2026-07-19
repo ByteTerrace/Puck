@@ -2,7 +2,7 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The binding-bar writer: renders each seat's active-page slot cluster from an <see cref="IBindingBarSource"/>
-/// snapshot as icon elements — the twelve slot chips (the proven mirrored-diamond layout) plus the modifier pips —
+/// snapshot as icon elements — the twelve slot chips (the mirrored-diamond layout) plus the modifier pips —
 /// CONFINED to that seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars
 /// with the render node staying dumb. Pure record emission; no GPU types.
 /// </summary>

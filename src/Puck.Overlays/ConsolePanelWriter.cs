@@ -40,8 +40,8 @@ public sealed class ConsolePanelWriter {
         var cellWidth = builder.CellWidth(cellHeight: cellHeight);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
 
-        // The grid fills the top-left without overrunning: cols across, rows up to ~55% of the height (the proven
-        // console proportions), then the panel's outer rect wraps the padded grid + title band.
+        // The grid fills the top-left without overrunning: cols across, rows up to ~55% of the height, then the
+        // panel's outer rect wraps the padded grid + title band.
         var availableWidth = ((builder.Width - (2f * margin)) - (2f * pad));
         var availableHeight = (((builder.Height * 0.55f) - bandHeight) - (2f * pad));
         var cols = Math.Clamp(value: (int)(availableWidth / cellWidth), min: 8, max: 120);

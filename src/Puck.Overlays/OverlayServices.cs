@@ -3,16 +3,13 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Overlays;
 
 /// <summary>
-/// The neutral GPU services bundle an overlay render decorator draws through — the library's counterpart to
-/// <c>Puck.Demo.SdfProducerServices</c>, made backend-neutral. World registers exactly one backend
-/// (<c>Puck.World.WorldHost.AddWorldGpuHost</c>), so <see cref="Build"/> resolves <see cref="IGpuDeviceContext"/>
-/// directly instead of casting up from a backend-specific interface (the Demo Vulkan-only pattern in
-/// <c>Puck.Demo.SdfParityProducers.BuildVulkanServices</c>).
+/// The backend-neutral GPU service bundle an overlay render decorator draws through. World registers exactly one
+/// backend (<c>Puck.World.WorldHost.AddWorldGpuHost</c>), so <see cref="Build"/> resolves
+/// <see cref="IGpuDeviceContext"/> directly, with no cast up from a backend-specific interface.
 /// </summary>
 public sealed record OverlayServices {
-    /// <summary>The shader bytecode file extension for the resolved backend (".spv" or ".dxil") — the overlay's
-    /// counterpart of <c>Puck.SdfVm.SdfWorldRenderBuilder.BytecodeExtension</c>, carried alongside the services so a
-    /// caller never re-derives it from the backend flag a second time.</summary>
+    /// <summary>The shader bytecode file extension for the resolved backend (".spv" or ".dxil"), carried alongside
+    /// the services so a caller never re-derives it from the backend flag a second time.</summary>
     public required string BytecodeExtension { get; init; }
     /// <summary>The command recorder the compositor drives.</summary>
     public required IGpuCommandRecorder CommandRecorder { get; init; }
@@ -40,7 +37,7 @@ public sealed record OverlayServices {
     /// <summary>The surface transfer factory, used to create the readback for capture.</summary>
     public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
     /// <summary>The GPU timestamp-pool factory, or <see langword="null"/> when the backend registered no timing seam
-    /// — the overlay pass then runs untimed (mirrors the engine node's granular timing resolution).</summary>
+    /// — the overlay pass then runs untimed.</summary>
     public IGpuTimingPoolFactory? TimingPoolFactory { get; init; }
     /// <summary>The GPU timestamp recorder, or <see langword="null"/> (see <see cref="TimingPoolFactory"/>).</summary>
     public IGpuTimingRecorder? TimingRecorder { get; init; }

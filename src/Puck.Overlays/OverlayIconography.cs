@@ -9,10 +9,15 @@ namespace Puck.Overlays;
 /// slot in later without touching the data model.
 /// </summary>
 public enum OverlayGlyphId : ushort {
+    /// <summary>No glyph.</summary>
     None = 0,
+    /// <summary>The d-pad up arrow.</summary>
     ArrowUp = 1,
+    /// <summary>The d-pad right arrow.</summary>
     ArrowRight = 2,
+    /// <summary>The d-pad down arrow.</summary>
     ArrowDown = 3,
+    /// <summary>The d-pad left arrow.</summary>
     ArrowLeft = 4,
     /// <summary>The four-position face diamond with the NORTH position marked — the neutral, family-invariant
     /// face-button treatment (abstract positions, no vendor's branding).</summary>
@@ -23,11 +28,17 @@ public enum OverlayGlyphId : ushort {
     FaceSouth = 7,
     /// <summary>The face diamond with the WEST position marked.</summary>
     FaceWest = 8,
+    /// <summary>The left-bumper pictogram glyph.</summary>
     BumperLeft = 9,
+    /// <summary>The right-bumper pictogram glyph.</summary>
     BumperRight = 10,
+    /// <summary>The left-trigger pictogram glyph.</summary>
     TriggerLeft = 11,
+    /// <summary>The right-trigger pictogram glyph.</summary>
     TriggerRight = 12,
+    /// <summary>The left-stick-press pictogram glyph.</summary>
     StickLeft = 13,
+    /// <summary>The right-stick-press pictogram glyph.</summary>
     StickRight = 14,
 
     /// <summary>Ids at or above this select a texture-atlas tile instead of a procedural function.</summary>
@@ -38,26 +49,42 @@ public enum OverlayGlyphId : ushort {
 /// Procedural action-icon ids for the symbol drawn on an icon element's plate. The same procedural/atlas split as
 /// <see cref="OverlayGlyphId"/> (KEEP IN SYNC with the shader); <see cref="Number1"/> through <see cref="Number12"/>
 /// render as the icon grammar's hairline drafting digits for generic placeholder actions. The editor verbs
-/// (<see cref="EditPrev"/> onward) are the sculpt/select/place repertoire the P2 editor pages bind.
+/// (<see cref="EditPrev"/> onward) are the sculpt/select/place repertoire the editor pages bind.
 /// </summary>
 public enum OverlayIconId : ushort {
+    /// <summary>No icon.</summary>
     None = 0,
     /// <summary>An unrecognized icon string: a plain dot so a bound slot is never invisible.</summary>
     Generic = 1,
+    /// <summary>The jump action icon.</summary>
     Jump = 2,
+    /// <summary>The interact action icon.</summary>
     Interact = 3,
+    /// <summary>The target action icon.</summary>
     Target = 4,
+    /// <summary>The digit-1 placeholder icon.</summary>
     Number1 = 8,
+    /// <summary>The digit-2 placeholder icon.</summary>
     Number2 = 9,
+    /// <summary>The digit-3 placeholder icon.</summary>
     Number3 = 10,
+    /// <summary>The digit-4 placeholder icon.</summary>
     Number4 = 11,
+    /// <summary>The digit-5 placeholder icon.</summary>
     Number5 = 12,
+    /// <summary>The digit-6 placeholder icon.</summary>
     Number6 = 13,
+    /// <summary>The digit-7 placeholder icon.</summary>
     Number7 = 14,
+    /// <summary>The digit-8 placeholder icon.</summary>
     Number8 = 15,
+    /// <summary>The digit-9 placeholder icon.</summary>
     Number9 = 16,
+    /// <summary>The digit-10 placeholder icon.</summary>
     Number10 = 17,
+    /// <summary>The digit-11 placeholder icon.</summary>
     Number11 = 18,
+    /// <summary>The digit-12 placeholder icon.</summary>
     Number12 = 19,
 
     // The editing verb icons. KEEP IN SYNC with the shader's actionIcon cases.
@@ -92,7 +119,7 @@ public enum OverlayIconId : ushort {
     /// <summary>Step the local edit ring forward (the undo arrow's x-mirror).</summary>
     EditRedo = 34,
 
-    // The audio gizmo icons (the AP4 speaker gizmos). KEEP IN SYNC with the shader's actionIcon cases.
+    // The audio gizmo icons. KEEP IN SYNC with the shader's actionIcon cases.
     /// <summary>A point speaker (a cabinet outline, its filled driver dot, an emission arc).</summary>
     AudioSpeaker = 35,
     /// <summary>An ambient bed (concentric presence rings around the focal dot — a region, not a position).</summary>

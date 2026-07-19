@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the overlay HLSL to
-             both SPIR-V (Vulkan) and DXIL (DirectX) — the overlay is backend-neutral from its first commit per D2.
+             both SPIR-V (Vulkan) and DXIL (DirectX) — the overlay is backend-neutral.
              Override with /p:DxcCommand="path\to\dxc". -->
         <DxcCommand>dxc</DxcCommand>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <!-- PngEncoder for the capture readback (previously transitive through the retired Puck.SdfVm reference). -->
+        <!-- PngEncoder for the capture readback. -->
         <ProjectReference Include="..\Puck.Capture\Puck.Capture.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Compositing\Puck.Compositing.csproj" />
@@ -30,10 +30,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- The committed bytecode: SPIR-V for Vulkan, DXIL for DirectX, both compiled from the same HLSL source
-             (mirrors Puck.SdfVm/Puck.Demo's dual-compile shape). A ProjectReference propagates these Content items
-             into a consumer's own output directory (see Puck.Demo.csproj's overlay-bytecode comment for the
-             precedent this relies on). -->
+        <!-- The committed bytecode: SPIR-V for Vulkan, DXIL for DirectX, both compiled from the same HLSL source.
+             The committed .spv/.dxil bytecode is packaged as Content and propagates to referencing projects via
+             ProjectReference; a consumer needs no compiler. -->
         <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
         <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
         <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
@@ -43,7 +42,7 @@
         <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
         <!-- Not compiled directly — an Input to CompileShaders below so an overlay-common.hlsli edit invalidates
-             every *.frag.hlsl/*.comp.hlsl that includes it (mirrors Puck.SdfVm's ShaderInclude). -->
+             every *.frag.hlsl/*.comp.hlsl that includes it. -->
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
     </ItemGroup>
 
@@ -54,10 +53,10 @@
         />
     </Target>
 
-    <!-- Compile each *.frag.hlsl to BOTH SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX), mirroring
-         Puck.SdfVm/Puck.Demo. The vk:: attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute
-         ignored" warnings. An empty FragmentShaderSource/ComputeShaderSource batch (no *.frag.hlsl/*.comp.hlsl yet)
-         runs the target with every Exec's FullPath condition false, so it is a no-op rather than an error. -->
+    <!-- Compile each *.frag.hlsl to BOTH SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX). The vk::
+         attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. An empty
+         FragmentShaderSource/ComputeShaderSource batch (no *.frag.hlsl/*.comp.hlsl yet) runs the target with every
+         Exec's FullPath condition false, so it is a no-op rather than an error. -->
     <Target
         BeforeTargets="PrepareForBuild"
         Inputs="@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)"
@@ -70,7 +69,7 @@
         <Error Condition="'$(DxcProbeExitCode)' != '0'" Text="Puck.Overlays shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
         <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
         <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
-        <!-- Compute kernels: SPIR-V only for now (no overlay compute stage exists yet), matching Puck.Demo's shape. -->
+        <!-- Compute kernels: SPIR-V only for now (no overlay compute stage exists yet). -->
         <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
     </Target>
 </Project>

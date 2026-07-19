@@ -6,7 +6,7 @@ namespace Puck.Overlays;
 /// <summary>One projected gizmo chip — a geometry-less document row (a speaker) made visible in editor mode: the
 /// host projects its resolved WORLD pose into the seat's viewport and the writer draws an icon chip there (plus a
 /// translucent radius ring for region rows). Positions are PIXELS in full-frame space; the seat's clip rect confines
-/// them (UIE-4).</summary>
+/// them.</summary>
 /// <param name="CenterX">The chip center x, px.</param>
 /// <param name="CenterY">The chip center y, px.</param>
 /// <param name="RingRadiusPx">The projected support-radius ring, px (0 = no ring — point rows).</param>

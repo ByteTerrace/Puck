@@ -21,10 +21,10 @@ public enum OverlayPanelStyle : uint {
 /// Buffer geography (32-bit words): <c>[0, TokenWords)</c> the <see cref="OverlayTokenBlock"/> slab and
 /// <c>[TokenWords, PanelBaseWords)</c> the glyph SDF pack — both static, uploaded once by the node —
 /// then the per-frame region this builder owns: panel records, element records, glyph-code words, and the clip
-/// table. <para>CLIP CONTRACT (UIE-4): a writer scoping per-seat UI wraps its records in
+/// table. <para>CLIP CONTRACT: a writer scoping per-seat UI wraps its records in
 /// <see cref="BeginClip"/>/<see cref="EndClip"/>; every record carries a clip index (word 9; 0 = unclipped) into
 /// the clip table and the shader discards the record's contribution outside its rect — placement inside a seat
-/// viewport is therefore also CLIPPING to it.</para><para>OVERFLOW CONTRACT (UIE-8): a record past a capacity is
+/// viewport is therefore also CLIPPING to it.</para><para>OVERFLOW CONTRACT: a record past a capacity is
 /// dropped and COUNTED (<see cref="DroppedPanels"/>/<see cref="DroppedElements"/>/<see cref="DroppedTextWords"/>/
 /// <see cref="DroppedClips"/>, reset each frame) so the node can narrate loudly; the tail reservation
 /// (<see cref="ReserveTail"/>/<see cref="ReleaseTail"/>) holds capacity back from earlier writers so the LAST,
@@ -384,7 +384,7 @@ public sealed class OverlayFrameBuilder {
         m_elementCount++;
     }
 
-    /// <summary>The on-screen glyph cell height for a token type SIZE — the proven size-to-cell ratio
+    /// <summary>The on-screen glyph cell height for a token type SIZE — the size-to-cell ratio
     /// (<c>TypeMonoLine / TypeMonoSize</c> = 1.5), so a 12px mono run gets an 18px cell.</summary>
     /// <param name="sizePx">The token type size, px.</param>
     /// <returns>The cell height, px.</returns>

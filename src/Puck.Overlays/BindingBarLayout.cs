@@ -44,10 +44,9 @@ public readonly record struct BindingSlotPlacement(
 /// <summary>
 /// The pure math that places one bar's twelve binding slots — two mirrored six-slot clusters around a bottom-center
 /// anchor: within a cluster the <c>index % 6</c> pattern shapes a diamond (d-pad / face buttons) with the stick press
-/// at its middle and the shoulder at its outer top; slots 6-11 mirror 0-5 across the center. Lifted from the demo's
-/// proven layout, minus its multi-bar quadrant fan-out — per-seat placement is the WRITER's job here (each seat's bar
-/// lays out inside its own viewport region), so the layout itself is always single-bar. No state, no rendering —
-/// indices in, placements out.
+/// at its middle and the shoulder at its outer top; slots 6-11 mirror 0-5 across the center. Per-seat placement is
+/// the WRITER's job here (each seat's bar lays out inside its own viewport region), so the layout itself is always
+/// single-bar. No state, no rendering — indices in, placements out.
 /// </summary>
 public static class BindingBarLayout {
     /// <summary>The physical buttons a bar's twelve slots represent, in slot order (the d-pad diamond, left
