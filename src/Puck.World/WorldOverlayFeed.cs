@@ -8,7 +8,7 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The class of the last edit act the editor HUD tags (the D7 asymmetry, presented): a LIVE session lever
+/// <summary>The class of the last edit act the editor HUD tags: a LIVE session lever
 /// (applies now, <c>world.save</c> folds it), an ordinary DOCUMENT mutation (applies live on delivery), or a
 /// DOCUMENT-DEFAULTS mutation (next boot; live levers unchanged).</summary>
 internal enum EditorActClass {
@@ -58,7 +58,7 @@ internal sealed class WorldOverlayFeed {
     private readonly WorldEditorTargeting m_targeting;
     private readonly WorldWorkbench m_workbench;
     private readonly GamepadManager? m_gamepads;
-    // The session-honesty sources (loopback-local reads, the DescribePopulation precedent): the live render levers
+    // The session-honesty sources (loopback-local reads): the live render levers
     // (their Revision is the live-act watch), the live census, the screen binder's runtime inserts, and the server's
     // grant table for exclusive-hold readouts.
     private readonly WorldRenderSettings m_settings;
@@ -107,7 +107,7 @@ internal sealed class WorldOverlayFeed {
     /// <param name="server">The server whose grant table answers exclusive-hold readouts (loopback-local).</param>
     /// <param name="gamepads">The gamepad manager for family-resolved badge glyphs, or <see langword="null"/>
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
-    /// <param name="workbench">The sculpt workbench whose bench facts the HUD narrates while a seat sculpts (§P6).</param>
+    /// <param name="workbench">The sculpt workbench whose bench facts the HUD narrates while a seat sculpts.</param>
     /// <param name="audio">The audio director (the master-volume lever — a drift dimension).</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads, WorldWorkbench workbench, WorldAudioDirector audio) {
@@ -329,7 +329,7 @@ internal sealed class WorldOverlayFeed {
             cache.SelectionLine = ComposeSculptTargetLine(model: sculpt);
             cache.ContextLine = string.Create(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                // ASCII only — the overlay glyph pack is ASCII-95. The shape budget is the §P6 HUD narration.
+                // ASCII only — the overlay glyph pack is ASCII-95. The next line narrates the sculpt shape budget.
                 handler: $"'{m_workbench.RowId(slot: slot)}' shapes {sculpt.StampShapeCount}/{sculpt.ShapeCapacity} | frame {sculpt.CurrentFrame}/{sculpt.FrameCount}{(sculpt.Playing ? " play" : string.Empty)} | chains {sculpt.Chains.Count}"
             );
             cache.SessionLine = ComposeSessionLine(slot: slot);
@@ -385,7 +385,7 @@ internal sealed class WorldOverlayFeed {
     }
 
     // The session-honesty line: the last act's class ("live" applies now and folds at world.save; "doc" applied live
-    // on delivery; "defaults" is next-boot only — the D7 asymmetry made visible), the world.status session-drift hint
+    // on delivery; "defaults" is next-boot only), the world.status session-drift hint
     // while drift exists, and the exclusive holder of the selection's section. Empty when nothing needs saying.
     private string ComposeSessionLine(int slot) {
         var act = m_lastActClass switch {

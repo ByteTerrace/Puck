@@ -176,17 +176,16 @@ internal sealed class WorldRenderSettings {
     /// intermediate values blend between them. Native render scale ignores it.</summary>
     public float UpscaleSharpness { get => m_upscaleSharpness; set { m_upscaleSharpness = value; m_revision++; } }
 
-    /// <summary>Whether the F1 beam-published per-tile FAR BOUND is active (default <see langword="true"/> = the shipped
-    /// behavior). Set <see langword="false"/> (via <c>world.far-field bound off</c>) to march far-field sky rays to
-    /// MaxDistance exactly as pre-F1 — the "off" side of the owner's far-field A/B. Rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableFarBound"/> lane <see cref="Client.WorldFrameSource"/> inverts each frame, so no
-    /// rebuild. A pure performance isolator (output-identical when on), so it is session state, never durable config.</summary>
+    /// <summary>Whether the per-tile far-field bound is active (default <see langword="true"/>). Set
+    /// <see langword="false"/> (via <c>world.far-field bound off</c>) to march far-field sky rays to
+    /// MaxDistance exactly — a pure performance isolator (output-identical when on), so it is session state, never
+    /// durable config. Rides the per-frame <see cref="Puck.SdfVm.SdfFrame.DisableFarBound"/> lane
+    /// <see cref="Client.WorldFrameSource"/> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
 
-    /// <summary>Whether the F2 soft-shadow light-side EARLY EXIT is active (default <see langword="true"/> = the shipped
-    /// behavior). Set <see langword="false"/> (via <c>world.far-field shadow off</c>) to run the full shadow step
-    /// budget/reach exactly as pre-F2 — the "off" side of the owner's shadow far-exit A/B. Rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowFarExit"/> lane <see cref="Client.WorldFrameSource"/> inverts each frame. A
-    /// march-path change (not bit-identical), so it lives in session state, not durable config.</summary>
+    /// <summary>Whether the soft-shadow light-side early exit is active (default <see langword="true"/>). Set
+    /// <see langword="false"/> (via <c>world.far-field shadow off</c>) to run the full shadow step budget/reach — a
+    /// march-path change, session state, not durable config. Rides the per-frame
+    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowFarExit"/> lane <see cref="Client.WorldFrameSource"/> inverts each frame.</summary>
     public bool ShadowFarExit { get => m_shadowFarExit; set { m_shadowFarExit = value; m_revision++; } }
 }

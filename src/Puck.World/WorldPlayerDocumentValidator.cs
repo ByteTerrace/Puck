@@ -79,7 +79,7 @@ internal static class WorldPlayerDocumentValidator {
         } else if (!ids.Add(item: profile.Id)) {
             errors.Add(item: $"{path}.id '{profile.Id}' is duplicated.");
         } else if (profile.Id.IndexOfAny(anyOf: Path.GetInvalidFileNameChars()) >= 0) {
-            // The id is the per-profile blob's key segment (world/profiles/<id>.json, §2.5.3) — it must be filename-safe
+            // The id is the per-profile blob's key segment (world/profiles/<id>.json) — it must be filename-safe
             // so it addresses one blob and never escapes the container.
             errors.Add(item: $"{path}.id '{profile.Id}' contains characters invalid for a profile blob key.");
         }
@@ -121,8 +121,8 @@ internal static class WorldPlayerDocumentValidator {
         }
     }
 
-    // A #RRGGBB (or bare RRGGBB) hex color — the persisted convention. Mirrors WorldProfile.ParseColor's accepted form
-    // so a value that parses to a real color passes and a malformed one is rejected at the boundary.
+    // A #RRGGBB (or bare RRGGBB) hex color — the persisted convention. Must accept exactly the hex forms
+    // WorldProfile.ParseColor accepts, so a value that validates always parses (keep the two in sync).
     private static bool IsHexColor(string? value) {
         var span = (value ?? string.Empty).AsSpan().Trim();
 

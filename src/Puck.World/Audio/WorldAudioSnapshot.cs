@@ -14,7 +14,7 @@ public enum WorldAudioEmitterKind {
 }
 
 /// <summary>Selects which channel of a stereo source an emitter taps. Mono sources (the synth) degenerate every
-/// selector to <see cref="Mix"/> — documented, never rejected (plan A7).</summary>
+/// selector to <see cref="Mix"/> — documented, never rejected.</summary>
 public enum WorldAudioChannel {
     /// <summary>The average of both channels.</summary>
     Mix,
@@ -24,7 +24,7 @@ public enum WorldAudioChannel {
     Right,
 }
 
-/// <summary>The signal kinds an emitter can bind (plan A7: sources are shared identities, never inline
+/// <summary>The signal kinds an emitter can bind (sources are shared identities, never inline
 /// payloads — two emitters naming the same source share ONE per-block pull).</summary>
 public enum WorldAudioSourceKind {
     /// <summary>Honest silence — the emitter holds its place with no signal.</summary>
@@ -37,8 +37,8 @@ public enum WorldAudioSourceKind {
     Synth,
 }
 
-/// <summary>One source identity — the key the mixer's per-block single-pull dedupes on and the seam AP2/AP3 bind
-/// live hosting to. <see cref="Slot"/> carries machine identity; <see cref="Id"/> carries tune/patch identity;
+/// <summary>One source identity — the key the mixer's per-block single-pull dedupes on and the seam live hosting
+/// binds to. <see cref="Slot"/> carries machine identity; <see cref="Id"/> carries tune/patch identity;
 /// the unused member is zero/null so value equality is exact.</summary>
 /// <param name="Kind">The source kind.</param>
 /// <param name="Slot">The screen slot for <see cref="WorldAudioSourceKind.Machine"/>; 0 otherwise.</param>
@@ -63,7 +63,7 @@ public readonly record struct WorldAudioSourceKey(WorldAudioSourceKind Kind, int
 /// <summary>The listener pose the mixer spatializes against: a world position plus a yaw rotor. The mixer's frame
 /// convention: the ground plane is world X/Z with Y up; <paramref name="Yaw"/> rotates LISTENER-LOCAL (X = right,
 /// Y = forward) into world (X, Z), so <c>Yaw.Conjugate().Rotate(worldDelta)</c> yields the local direction pan
-/// derives azimuth from. Elevation is ignored for pan and included in distance (plan A1).</summary>
+/// derives azimuth from. Elevation is ignored for pan and included in distance.</summary>
 /// <param name="Position">The listener's world position.</param>
 /// <param name="Yaw">The unit rotor taking listener-local (right, forward) into world (X, Z).</param>
 public readonly record struct WorldAudioListener(FixedVector3 Position, FixedComplex Yaw);
@@ -76,7 +76,7 @@ public readonly record struct WorldAudioListener(FixedVector3 Position, FixedCom
 /// <param name="Position">The world position (a bed's extent center).</param>
 /// <param name="MinRadius">Full-gain support: inside this distance attenuation is 1 (a bed's inner radius).</param>
 /// <param name="MaxRadius">The finite support edge: at or beyond this distance the emitter is CULLED — finite
-/// support IS the cull (plan A1). Must exceed <paramref name="MinRadius"/>.</param>
+/// support IS the cull. Must exceed <paramref name="MinRadius"/>.</param>
 /// <param name="FadeFrames">Bed presence slew bound: the per-block coefficient change is limited to full scale per
 /// this many frames (0 = unbounded). Points ignore it — the block ramp already bounds their slew.</param>
 /// <param name="GainQ16">The base gain, Q16 (65536 = unity).</param>
@@ -99,7 +99,7 @@ public readonly record struct WorldAudioEmitter(
 /// snapshot mixed for several blocks (or a skipped snapshot) can never double- or drop-fire.</summary>
 /// <param name="Sequence">The producer-assigned strictly increasing event number (start at 1).</param>
 /// <param name="PatchId">The registered patch to voice.</param>
-/// <param name="Seed">The noise seed — the same seed reproduces the voice bit for bit (plan A9).</param>
+/// <param name="Seed">The noise seed — the same seed reproduces the voice bit for bit.</param>
 /// <param name="GainQ16">The voice gain, Q16 (65536 = unity).</param>
 /// <param name="EmitterId">The emitter the voice spatializes through (its source must be
 /// <see cref="WorldAudioSourceKind.Synth"/>).</param>
@@ -107,12 +107,12 @@ public readonly record struct WorldSynthTrigger(ulong Sequence, string PatchId, 
 
 /// <summary>
 /// The immutable per-frame record the mixer consumes: listener pose, a fixed-capacity emitter table, and seeded
-/// synth trigger events. Built for the <c>PublishBuffer&lt;WorldAudioSnapshot&gt;</c> slab-rotation contract
-/// (plan A3): the producer preallocates a rotation of ≥4 instances, fills one via <see cref="Reset"/> +
+/// synth trigger events. Built for the <c>PublishBuffer&lt;WorldAudioSnapshot&gt;</c> slab-rotation contract:
+/// the producer preallocates a rotation of ≥4 instances, fills one via <see cref="Reset"/> +
 /// <see cref="TryAddEmitter"/>/<see cref="TryAddTrigger"/>, publishes it, and must not touch it again until the
 /// rotation laps — consumers treat a published snapshot as immutable. Zero steady-state allocation: capacity is
 /// fixed at construction and adds past it are refused (returning <see langword="false"/>), never grown.
-/// The live publisher lands in AP2; the offline proof scripts this builder directly.
+/// <see cref="Client.WorldAudioDirector"/> is the live publisher; the offline proof scripts this builder directly.
 /// </summary>
 public sealed class WorldAudioSnapshot {
     /// <summary>The default emitter-table capacity.</summary>

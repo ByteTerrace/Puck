@@ -19,7 +19,7 @@ internal static class WorldEditorBindings {
 
     /// <summary>The sculpt page group — a seat's active group while its workbench is open (a mode WITHIN editor
     /// mode: <c>editor.sculpt.new</c>/<c>edit</c> flip onto it, <c>editor.sculpt.exit</c> flips back — modes are
-    /// page groups, the P3.5 doctrine; the editor group's five ordered trigger chords are all spoken for, and the
+    /// page groups; the editor group's five ordered trigger chords are all spoken for, and the
     /// sculpt feature set is a page FAMILY of its own).</summary>
     public const string SculptGroupId = "sculpt";
 
@@ -113,8 +113,8 @@ internal static class WorldEditorBindings {
                 )
             ),
             // The LT+RT place page: the drag verb set (grab/commit toggle, cancel, snap), the two scene spawn ghosts,
-            // and place-by-name — D-pad Left/Right cycle the armed world creation, North ghosts a placement of it
-            // (§D6/P5). While a drag is live the sticks translate the pending row instead of flying (the session's
+            // and place-by-name — D-pad Left/Right cycle the armed world creation, North ghosts a placement of it.
+            // While a drag is live the sticks translate the pending row instead of flying (the session's
             // routing).
             new BindingChordDefinition(
                 Group: GroupId,
@@ -135,7 +135,7 @@ internal static class WorldEditorBindings {
                     Label: "Place"
                 )
             ),
-            // ---- the sculpt group (§P6): the workbench mode's page family. Sticks stay bound on EVERY page (the
+            // ---- the sculpt group: the workbench mode's page family. Sticks stay bound on EVERY page (the
             // session routes move onto the sculpt target and look onto the orbit while a bench is open), and the
             // shoulder verticals ride along so raise/lower never stalls under a held chord.
             // The sculpt resting page: build acts.

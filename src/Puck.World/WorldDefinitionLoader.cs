@@ -45,8 +45,8 @@ internal static class WorldDefinitionLoader {
     /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
     /// reuses so it never reimplements the deserialize → coalesce → schema-check → validate path. Read → deserialize →
     /// coalesce absent optional sections → schema-check → validate. Any failure yields a one-line reason (line endings
-    /// collapsed) and <see langword="false"/>; a broad catch is deliberate here — a load boundary with a safe fallback,
-    /// mirroring WorldProfileRegistration's malformed-document posture.</summary>
+    /// collapsed) and <see langword="false"/>; a broad catch is deliberate here — a load boundary must fail safe to
+    /// the baked default, never throw out of <see cref="TryLoadFile"/>.</summary>
     /// <param name="path">The file to load.</param>
     /// <param name="definition">The loaded definition on success; <see cref="WorldDefinition.Default"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>

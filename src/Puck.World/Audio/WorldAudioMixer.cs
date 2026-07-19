@@ -5,8 +5,8 @@ namespace Puck.World.Audio;
 
 /// <summary>
 /// The seam every non-synth signal reaches the mixer through: pull up to <c>frames</c> stereo frames
-/// for the current block. AP1's offline proof binds a synchronous headless core to it; AP2 binds tune
-/// acquire/release hosting; AP3 binds the live machine worker — <see cref="WorldAudioMixer.MixBlock"/> never
+/// for the current block. The offline proof binds a synchronous headless core to it; the tune host binds
+/// acquire/release hosting; the live device pump binds the live machine worker — <see cref="WorldAudioMixer.MixBlock"/> never
 /// reshapes. A shortfall is honest underrun: the mixer treats the missing tail as silence.
 /// </summary>
 public interface IAudioBlockSource {
@@ -19,7 +19,7 @@ public interface IAudioBlockSource {
 }
 
 /// <summary>Adapts a live <see cref="IAudioMachine"/> ring to <see cref="IAudioBlockSource"/>: one destructive
-/// drain per block (plan A7 — sharing rows tap the mixer's scratch, never re-drain). The ring's occupancy IS the
+/// drain per block — sharing rows tap the mixer's scratch, never re-drain. The ring's occupancy IS the
 /// watermark — a drain that comes up short is an underrun and the mixer renders the shortfall silent.</summary>
 /// <param name="machine">The machine to drain.</param>
 public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSource {
@@ -31,7 +31,7 @@ public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSourc
 }
 
 /// <summary>
-/// The world audio mixer core (plan A1/A12): <see cref="MixBlock"/> is a synchronous pure function owning no
+/// The world audio mixer core: <see cref="MixBlock"/> is a synchronous pure function owning no
 /// thread — the future device pump and the offline hash proof are two drivers of the same code. Fixed-point end to
 /// end: s16 samples × Q16 composite gains → int32 accumulate → the deterministic polynomial soft-clip → s16.
 /// <para>Per block: each emitter's TARGET coefficients derive from the snapshot (finite-support squared-smoothstep
@@ -49,14 +49,14 @@ public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSourc
 /// Zero steady-state allocation: every scratch and table is preallocated at construction.
 /// </summary>
 public sealed class WorldAudioMixer {
-    /// <summary>The mixer rate (plan A1): device-native, exactly <see cref="FramesPerSimStep"/> frames per 240 Hz
+    /// <summary>The mixer rate: device-native, exactly <see cref="FramesPerSimStep"/> frames per 240 Hz
     /// sim step, 21/20 engine ticks per frame.</summary>
     public const int SampleRate = 48_000;
     /// <summary>Audio frames per 240 Hz sim step (stepTicks 210 of the 50400/s engine clock): 48000/240 = 200 —
     /// the offline proof's block size. A contract invariant, not a tunable.</summary>
     public const int FramesPerSimStep = 200;
     /// <summary>The largest block <see cref="MixBlock"/> renders — sized to the device pump's 256-frame quantum
-    /// (plan A2) with the proof's 200-frame sim block inside it.</summary>
+    /// with the proof's 200-frame sim block inside it.</summary>
     public const int MaxBlockFrames = 256;
     /// <summary>The registered-source capacity (each slot preallocates one stereo scratch).</summary>
     public const int MaxSources = 16;
@@ -108,11 +108,11 @@ public sealed class WorldAudioMixer {
 
     /// <summary>Gets the synth (proof introspection; triggers route through snapshots).</summary>
     public WorldVoiceSynth Synth => m_synth;
-    /// <summary>Gets the master gain, Q16. A code default until AP2's <c>WorldAudioDefaults</c> section lands
-    /// (liftable: <c>MasterGain</c>).</summary>
+    /// <summary>Gets or sets the master gain, Q16. Defaults to unity; <see cref="Client.WorldAudioDirector"/> follows
+    /// the world document's <c>WorldAudioDefaults.MasterGain</c> and the live <c>world.volume</c> lever from there.</summary>
     public int MasterGainQ16 { get; set; } = 65536;
     /// <summary>Gets the count of triggers refused because their patch id was unregistered — honest loss, echoed
-    /// by AP2's <c>speaker.state</c>.</summary>
+    /// by <c>speaker.state</c>.</summary>
     public int DroppedTriggerCount { get; private set; }
 
     /// <summary>Gets the running peak |output sample| since construction — the <c>audio.state</c> meter. Monotone
@@ -193,7 +193,7 @@ public sealed class WorldAudioMixer {
     /// <summary>Mixes one block from the given snapshot into interleaved stereo s16 — synchronous, pure, owning
     /// no thread. The span length fixes the block size (<c>2·frames</c> samples, frames ≤
     /// <see cref="MaxBlockFrames"/>).</summary>
-    /// <param name="snapshot">The current published snapshot (held, not interpolated — plan A3).</param>
+    /// <param name="snapshot">The current published snapshot (held, not interpolated).</param>
     /// <param name="stereoInterleaved">The output block; fully overwritten.</param>
     public void MixBlock(WorldAudioSnapshot snapshot, Span<short> stereoInterleaved) {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
@@ -320,7 +320,7 @@ public sealed class WorldAudioMixer {
             return;
         }
 
-        // Squared-smoothstep (plan A1): smoothstep over the SQUARED-distance ratio — finite support, no sqrt.
+        // Squared-smoothstep: smoothstep over the SQUARED-distance ratio — finite support, no sqrt.
         var t = (((max2Q16 - d2Q16) << 16) / (max2Q16 - min2Q16));
 
         attenuationQ16 = ((int)((((t * t) >> 16) * ((3L << 16) - (2L * t))) >> 16));
@@ -331,7 +331,7 @@ public sealed class WorldAudioMixer {
         var dyRaw = (emitter.Position.Y.Value - listener.Position.Y.Value);
         var dzRaw = (emitter.Position.Z.Value - listener.Position.Z.Value);
 
-        // Distance is 3D; azimuth ignores elevation (plan A1). Squares stay exact in Int128, saturated to long.
+        // Distance is 3D; azimuth ignores elevation. Squares stay exact in Int128, saturated to long.
         var d2Wide = ((((Int128)dxRaw * dxRaw) + ((Int128)dyRaw * dyRaw) + ((Int128)dzRaw * dzRaw)) >> 16);
         var d2Q16 = ((d2Wide > long.MaxValue) ? long.MaxValue : ((long)d2Wide));
         var min2Q16 = ((emitter.MinRadius.Value * emitter.MinRadius.Value) >> 16);
@@ -391,7 +391,7 @@ public sealed class WorldAudioMixer {
         var direction = new FixedComplex(Real: local.X, Imaginary: local.Y).Normalize();
         var p = Math.Clamp(value: direction.Real.Value, min: -65536L, max: 65536L);
 
-        // Equal-power: φ = (p + 1)·π/4 ∈ [0, π/2]; gL = cos φ, gR = sin φ — ONE SinCos per emitter (plan A1).
+        // Equal-power: φ = (p + 1)·π/4 ∈ [0, π/2]; gL = cos φ, gR = sin φ — ONE SinCos per emitter.
         var phi = (((p + 65536L) * QuarterPiRawQ16) >> 16);
         var (sin, cos) = FixedQ4816.SinCos(angle: FixedQ4816.FromRawBits(value: phi));
 
@@ -437,7 +437,7 @@ public sealed class WorldAudioMixer {
         var slot = FindSource(key: emitter.Source);
 
         if ((slot < 0) || (m_sources[slot] is null)) {
-            // Unbound source: honest silence (AP2's speaker.state echoes the fault).
+            // Unbound source: honest silence (speaker.state echoes the fault).
             return;
         }
 

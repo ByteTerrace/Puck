@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 /// <summary>
 /// The world's live player catalog: the runtime <see cref="WorldProfile"/> handles compiled from the loaded
 /// <see cref="WorldPlayerDocument"/>, the machine-local boot seat (<see cref="LastUsed"/>, kept in a sidecar so it never
-/// roams), the document <see cref="Revision"/> (§2.5 ordering key), and the save path back to storage. Participants
+/// roams), the document <see cref="Revision"/> (the ordering key), and the save path back to storage. Participants
 /// reference these handles by identity, so a settings mutation is picked up live; a rarely-run mutation (create/set/
 /// reseat/a folded rebind) persists synchronously (human-cadence actions, not a per-frame path).
 /// </summary>
@@ -26,7 +26,7 @@ internal sealed class WorldProfiles {
     /// seat.</summary>
     /// <param name="document">The loaded (or reseeded/migrated) player document to view.</param>
     /// <param name="lastUsedId">The machine-local boot-seat profile id (from the sidecar).</param>
-    /// <param name="lastSyncedRevision">The last-synced revision cursor (§2.5.1; 0 with no cloud wired).</param>
+    /// <param name="lastSyncedRevision">The last-synced revision cursor (0 with no cloud wired).</param>
     /// <param name="versionToken">The catalog blob's storage version token at load, or <see langword="null"/>.</param>
     /// <param name="store">The store to persist mutations back through.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
@@ -74,10 +74,10 @@ internal sealed class WorldProfiles {
     /// <summary>The profile id player 1 seats on at boot (machine-local; sidecar-persisted).</summary>
     public string LastUsed => m_lastUsedId;
 
-    /// <summary>The document revision (§2.5 ordering key) — bumped on every save.</summary>
+    /// <summary>The document revision (the ordering key) — bumped on every save.</summary>
     public long Revision => m_revision;
 
-    /// <summary>The last-synced revision cursor (§2.5.1) — the highest revision a cloud sync has confirmed. Stays 0 while
+    /// <summary>The last-synced revision cursor — the highest revision a cloud sync has confirmed. Stays 0 while
     /// no cloud is wired.</summary>
     public long LastSyncedRevision => m_lastSyncedRevision;
 
@@ -89,12 +89,12 @@ internal sealed class WorldProfiles {
     /// <summary>The last-persist wall-clock stamp (the Revision tiebreak) — bumped on every save.</summary>
     public string UpdatedAtUtc => m_updatedAtUtc;
 
-    /// <summary>The catalog blob's storage version token as of the last read/write (the clobber-guard input the cloud
-    /// arc's if-match rides), or <see langword="null"/> when unavailable.</summary>
+    /// <summary>The catalog blob's storage version token as of the last read/write (the clobber-guard input a
+    /// cloud-backed store's if-match rides), or <see langword="null"/> when unavailable.</summary>
     public string? VersionToken => m_versionToken;
 
     /// <summary>Whether the last save was refused by an if-match precondition (the clobber guard fired). Always false on
-    /// the local backend this arc (saves are unconditional LWW); the honest field the cloud arc's conditional writes
+    /// the local backend (unconditional last-writer-wins); the field a cloud-backed store's conditional writes
     /// set.</summary>
     public bool LastPreconditionFailed => m_lastPreconditionFailed;
 

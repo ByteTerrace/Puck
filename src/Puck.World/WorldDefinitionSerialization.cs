@@ -33,16 +33,16 @@ namespace Puck.World;
 // emits its metadata for both the canonical writer and the verb accessor.
 [JsonSerializable(typeof(WorldBindingOverlay))]
 [JsonSerializable(typeof(BindingProfileDocument))]
-// The §D6 creation/placement rows (world.creation.set / world.placement.set verb accessors). The embedded
+// The creation/placement rows (world.creation.set / world.placement.set verb accessors). The embedded
 // puck.creation.v1 document rides CreationDocumentJsonConverter — its OWN canonical serializer — never this context's
 // member policies (see the converter's remarks).
 [JsonSerializable(typeof(WorldCreation))]
 [JsonSerializable(typeof(WorldPlacement))]
-// The P5.5 editor/authoring policy row (world.authoring.set verb accessor).
+// The editor/authoring policy row (world.authoring.set verb accessor).
 [JsonSerializable(typeof(WorldAuthoringDefaults))]
-// The audio sections (AP2): the speaker row + tune/patch asset rows + the audio defaults (world.speaker.set /
+// The audio sections: the speaker row + tune/patch asset rows + the audio defaults (world.speaker.set /
 // world.tune.set / world.patch.set / world.audio.set verb accessors). The embedded puck.audio.v1 / puck.synth.v1
-// documents ride their families' OWN canonical serializer shape (the CreationDocumentJsonConverter precedent).
+// documents ride their families' OWN canonical serializer shape, matching CreationDocumentJsonConverter's.
 [JsonSerializable(typeof(WorldSpeaker))]
 // The speaker union's nested kinds collide by simple name with the camera/screen-source unions' (Fixed/Anchored and
 // None/Machine); explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031).
@@ -126,7 +126,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Authori
 /// Bridges an embedded <see cref="Puck.Authoring.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
 /// audio contract's OWN serializer shape (<see cref="Puck.Authoring.DocumentJsonOptions.Shared"/>) instead of this
 /// context's policies, so the inline-canonical embed carries exactly the member vocabulary
-/// <see cref="Puck.Authoring.AudioCanonicalizer"/> hashes (the <see cref="CreationDocumentJsonConverter"/> precedent).
+/// <see cref="Puck.Authoring.AudioCanonicalizer"/> hashes, matching <see cref="CreationDocumentJsonConverter"/>'s approach.
 /// </summary>
 internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Authoring.AudioDocument> {
     /// <inheritdoc/>

@@ -55,11 +55,11 @@ var recordingOption = new Option<string?>(name: "--recording") {
 };
 var storageUriOption = new Option<string?>(name: "--storage-uri") {
     DefaultValueFactory = static _ => null,
-    Description = "Reserved (§2.5.5): the per-user blob endpoint, overriding the world doc's storage.endpoint. RESERVED this arc — nothing constructs an Azure target from it; storage.status echoes it.",
+    Description = "Reserved: the per-user blob endpoint, overriding the world doc's storage.endpoint. Not yet wired to any Azure target; storage.status echoes it.",
 };
 var userIdOption = new Option<string?>(name: "--user-id") {
     DefaultValueFactory = static _ => null,
-    Description = "The explicit storage user-id override (an Entra oid Guid), overriding the world doc's storage.userId. Feeds the identity resolver's explicit-override source (§2.5.4); storage.status reports the resolution.",
+    Description = "The explicit storage user-id override (an Entra oid Guid), overriding the world doc's storage.userId. Feeds the identity resolver's explicit-override source; storage.status reports the resolution.",
 };
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
@@ -147,8 +147,8 @@ var worldSource = WorldDefinitionLoader.Load(explicitPath: parseResult.GetValue(
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
 
-// The storage host-section (§2.5.5): the world doc's reserved endpoint + user-id, overlaid by the --storage-uri /
-// --user-id CLI reflection. RESERVED this arc — nothing constructs an Azure target from these. The identity resolver
+// The storage host-section: the world doc's reserved endpoint + user-id, overlaid by the --storage-uri /
+// --user-id CLI reflection. RESERVED — nothing constructs an Azure target from these yet. The identity resolver
 // maps an explicit user-id to a per-user container Guid, or DECLINES (local-only); its result feeds storage.status.
 var storageSettings = WorldStorageSettings.Resolve(
     defaults: worldSource.Definition.Storage,
@@ -158,8 +158,8 @@ var storageSettings = WorldStorageSettings.Resolve(
 services.AddSingleton(implementationInstance: storageSettings);
 services.AddSingleton(implementationInstance: IPlayerStorageIdentityResolver.Create(settings: storageSettings));
 
-// The player's controls as DATA (§2.4): the engine-default binding document (the data-file successor of the former
-// hard-coded inputBindingTable — WASD/arrows movement, Space/South/East gestures, Enter/F1-F4 roster, sticks, Start),
+// The player's controls as DATA: the engine-default binding document (WASD/arrows movement, Space/South/East
+// gestures, Enter/F1-F4 roster, sticks, Start),
 // composed per seat with the world's binding overlays, the seat's profile bindings, and its live session rebinds. One
 // WorldSeatBindings resolves every seat's input; both input consumers derive from the same composed documents — the
 // per-seat sim-fold (the IInputBindings handed to AddFixedStepSimulation) and the slot-blind console dispatch
@@ -188,13 +188,13 @@ services.AddSingleton<ICommandModule, ProfileCommandModule>();
 // ICommandModule — a direct dependency would cycle the container.
 services.AddSingleton<Func<InputRouter>>(implementationFactory: static sp => (() => sp.GetRequiredService<InputRouter>()));
 services.AddSingleton<ICommandModule, WorldBindingCommandModule>();
-// The per-seat editor mode (§P2/§P3): the mode owner (binding MODE layer + honest-idle diversion + camera rig swap),
+// The per-seat editor mode: the mode owner (binding MODE layer + honest-idle diversion + camera rig swap),
 // the drag preview channel (client-local pending rows, one mutation on release), the look-ray picker (a document-
 // derived fixed-point program), and the selection/targeting state — plus the two editor.* verb modules (SEPARATE
 // modules for the analyzer ceilings). The orbit pivot retargets at the selection via property injection (targeting
 // composes after the session).
 services.AddSingleton<WorldEditorDrag>();
-// The sculpt workbench (§P6): the per-seat creation sub-editor's client context — its preview creation/placement
+// The sculpt workbench: the per-seat creation sub-editor's client context — its preview creation/placement
 // compose over the delivered rows through the SAME stamp path a committed placement uses. The drag channel's ghost
 // envelope pre-checks fold the workbench preview in (property-injected — the workbench composes after the drag).
 services.AddSingleton(implementationFactory: static sp => {
@@ -220,37 +220,38 @@ services.AddSingleton(implementationFactory: static sp => {
     var session = sp.GetRequiredService<WorldEditorSession>();
 
     session.OrbitPivotSource = targeting.SelectionPosition;
-    // Deactivation (exit / departed seat) clears the seat's selection with its drag — the UIE-1 teardown contract.
+    // Deactivation (exit / departed seat) clears the seat's selection with its drag (the teardown contract every
+    // deactivation path must honor).
     session.SelectionReset = slot => targeting.Deselect(slot: slot);
 
     return targeting;
 });
 services.AddSingleton<ICommandModule, EditorCommandModule>();
 services.AddSingleton<ICommandModule, EditorSelectionCommandModule>();
-// The speaker authoring numeric twins (AP4) — console-only by an honest chord audit (every place-page slot is
+// The speaker authoring numeric twins — console-only by an honest chord audit (every place-page slot is
 // spoken for); a SEPARATE module for the analyzer ceilings.
 services.AddSingleton<ICommandModule, EditorSpeakerCommandModule>();
-// The sculpt verb surface (§P6): lifecycle/commit/easel, shapes, style, and timeline/rig — SEPARATE modules per
+// The sculpt verb surface: lifecycle/commit/easel, shapes, style, and timeline/rig — SEPARATE modules per
 // concern to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, EditorSculptCommandModule>();
 services.AddSingleton<ICommandModule, EditorSculptShapeCommandModule>();
 services.AddSingleton<ICommandModule, EditorSculptStyleCommandModule>();
 services.AddSingleton<ICommandModule, EditorSculptRigCommandModule>();
-// The creation-asset surface (§D6/P5): editor.import/creations/creation.next|prev/spawn.creation — the place page's
+// The creation-asset surface: editor.import/creations/creation.next|prev/spawn.creation — the place page's
 // place-by-name twins. The animated-placement replay pool sits immediately after the avatar catalog's frozen
 // dynamic-transform capacity (the slot-base contract the frame source's capacity arithmetic mirrors).
 services.AddSingleton<ICommandModule, EditorCreationCommandModule>();
 services.AddSingleton(implementationInstance: new WorldPlacementAnimator(slotBase: WorldAvatarCatalog.DynamicTransformCapacity));
 
-// The audio director (AP2): derives the emitter table from the delivered definition, resolves poses per produced
+// The audio director: derives the emitter table from the delivered definition, resolves poses per produced
 // frame (the frame source calls it inside CaptureFrame), and publishes WorldAudioSnapshots for the device pump.
 // Registered as its own singleton so the audio verb surface (audio.emitters) reads the same instance.
 services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
     client: sp.GetRequiredService<WorldClient>(),
     animator: sp.GetRequiredService<WorldPlacementAnimator>()
 ));
-// The world speaker device (AP3): the hosted service owning the mixer + the WASAPI governor/pump threads.
-// Deterministic StopAsync ordering (the GamepadHostedService template — never a bare DI-teardown singleton); a
+// The world speaker device: the hosted service owning the mixer + the WASAPI governor/pump threads.
+// One dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown; a
 // platform without a render backend gets a null factory and the service parks as 'unsupported'. Registered as its
 // own singleton FIRST so the audio verb surface (audio.state) reads the same instance the host runs.
 services.AddSingleton(implementationFactory: static sp => new WorldAudioRenderService(
@@ -275,7 +276,7 @@ services.AddSingleton<WorldServer>();
 services.AddSingleton<LoopbackTransport>();
 services.AddSingleton<IServerLink>(implementationFactory: static sp => sp.GetRequiredService<LoopbackTransport>());
 
-// The addon principals — the §2.7 keystone: mounts the world document's enabled addon rows through a Puck.Scripting
+// The addon principals: mounts the world document's enabled addon rows through a Puck.Scripting
 // AddonHost (consumed, never modified) and drives each granted addon over the SAME IServerLink as a seat. Ticked by
 // WorldSimulation between the seat-intent submit and the server step. DI disposes it (the owned Wasmtime engine/stores).
 services.AddSingleton(implementationFactory: static sp => WorldAddonDriver.Create(
@@ -344,10 +345,10 @@ services.AddSingleton<ICommandModule, WorldCommandModule>();
 // The world-mutation verb surface — the dev reflection of the WorldMutation protocol (world.kit.*/screen.*/scene.*/…,
 // world.load/undo/status/save). A SEPARATE module from WorldCommandModule to keep that class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldMutationCommandModule>();
-// The capability-grant verb surface — world.grant/world.revoke/world.grants (the §2.7 principal/grant control plane).
+// The capability-grant verb surface — world.grant/world.revoke/world.grants (the principal/grant control plane).
 // A SEPARATE module from WorldCommandModule/WorldMutationCommandModule to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldGrantCommandModule>();
-// The audio verb surface — world.speaker.*/tune.*/patch.*/audio.set + world.speakers/audio.emitters (the AP2
+// The audio verb surface — world.speaker.*/tune.*/patch.*/audio.set + world.speakers/audio.emitters (the
 // mutation twins and the derived-emitter listing). A SEPARATE module for the analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
 // The diegetic screens' verb surface — screen.insert/eject boot cabinets over the wire, screen.state/peek make the
@@ -357,7 +358,7 @@ services.AddSingleton<ICommandModule, ScreenCommandModule>();
 // reserved endpoint, per-catalog revision/sync/token). A SEPARATE module to keep every class under its analyzer ceilings.
 services.AddSingleton<ICommandModule, WorldStorageCommandModule>();
 
-// The recording graph (puck.recording.v1) — native capture for YouTube, defined as data. The recording document is
+// The recording graph (puck.recording.v1) — native capture for streaming/upload workflows, defined as data. The recording document is
 // HOST-scope data (like the storage host-section): resolved once at boot from --recording (or the checked-in
 // Assets/recordings/default.recording.json), it describes the encoder ladder, audio topology, and capture-only overlays.
 // AddRecordingPlatform registers the Media Foundation encoder ladder + WASAPI loopback/microphone sources (declining
@@ -441,8 +442,8 @@ services.AddSingleton<ICommandModule, WorldUiCommandModule>();
 // applies it, and invokes WorldSimulation. Rendering below only consumes interpolation state.
 services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
 
-// The trimmed GPU host (windowing, allocator, one complete launch-selected backend), adapted from the demo's
-// GpuHostComposition minus the demo-only camera-capture concern. Registering only the selected backend ensures the
+// The trimmed GPU host (windowing, allocator, one complete launch-selected backend), minus the demo-only
+// camera-capture concern. Registering only the selected backend ensures the
 // neutral compute services and presenter name the same physical device and shader format.
 WorldHost.AddWorldGpuHost(services: services, hostsOnDirectX: hostsOnDirectX);
 
@@ -479,8 +480,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         instanceCapacity: frameSource.InstanceCapacity,
         dynamicTransformCapacity: frameSource.DynamicTransformCapacity
     );
-    // Edit-boundary outcomes narrate into the overlay toast beside their loud stderr lines (the P1 rejection surface,
-    // grown to grant/revoke outcomes), and applied mutations stamp the HUD's act-class tag (the D7 asymmetry surface).
+    // Edit-boundary outcomes narrate into the overlay toast beside their loud stderr lines, grown to grant/revoke
+    // outcomes, and applied mutations stamp the HUD's act-class tag.
     var toasts = sp.GetRequiredService<OverlayToastStore>();
     var overlayFeed = sp.GetRequiredService<WorldOverlayFeed>();
     var editorDrag = sp.GetRequiredService<WorldEditorDrag>();
@@ -494,13 +495,13 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             overlayFeed.NoteMutationApplied(documentOnly: (echo.Kind == WorldEditEchoKind.DocumentDefaults));
         }
 
-        // A rejected mutation correlates back to the frozen released drag preview that submitted it (UIE-3): the
+        // A rejected mutation correlates back to the frozen released drag preview that submitted it: the
         // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the deadline.
         if (echo.Rejected && (echo.Mutation is { } rejectedMutation)) {
             editorDrag.NoteRejected(mutation: rejectedMutation);
         }
 
-        // THE EDIT-ECHO CUE LANE (audio A11b — the shimmer's audio twin): the same outcome fires its cue token —
+        // THE EDIT-ECHO CUE LANE (the shimmer's audio twin): the same outcome fires its cue token —
         // capability denials as grant.denied, other rejections as mutation.rejected, applied edits as
         // mutation.applied AT the changed row's authored position where the mutation payload carries one (an upsert;
         // removals and section edits fall back to the listener placement). Cue coverage is world DATA — a world with
@@ -515,7 +516,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         }
     };
 
-    // THE BINDER LIFECYCLE CUE LANE (audio A11b): machine boot/fault outcomes fire screen.boot / screen.fault at the
+    // THE BINDER LIFECYCLE CUE LANE: machine boot/fault outcomes fire screen.boot / screen.fault at the
     // screen row's authored face origin (resolved from the LIVE definition at event time; an undeclared index falls
     // back to the listener placement). Pump-thread invocation; SubmitCue is gate-safe.
     var audioCueClient = sp.GetRequiredService<WorldClient>();
@@ -548,7 +549,7 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             // when the pre-baked glyph atlas is missing.
             Decorate = producer => {
                 var fontsDirectory = Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Fonts");
-                // The prepacked-artifact path (UIE-7): a warm start reads the ~1.4 MiB pack beside the atlas; only a
+                // The prepacked-artifact path: a warm start reads the ~1.4 MiB pack beside the atlas; only a
                 // cold/rebaked start decodes the combined PNG (and persists the pack for the next boot).
                 var glyphs = new OverlayGlyphAtlasSet(fontsDirectory: fontsDirectory).LoadOverlayPack();
 

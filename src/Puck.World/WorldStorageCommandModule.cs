@@ -5,7 +5,7 @@ namespace Puck.World;
 
 /// <summary>
 /// The storage console surface — <c>storage.status</c>, one honest Immediate echo of the player-catalog persistence
-/// state (§2.5.6): the tier (local authoritative; cloud unwired this arc), the identity resolver's decision (an explicit
+/// state: the tier (local authoritative; cloud unwired today), the identity resolver's decision (an explicit
 /// override id or why it declined), the reserved endpoint, and the per-catalog ordering/sync facts — the document
 /// <see cref="WorldProfiles.Revision"/>, the last-synced cursor, the derived dirty flag, the storage version token, and
 /// whether the last write hit an if-match precondition. It reports the TRUTH: with no cloud wired, identity is absent or
@@ -23,7 +23,7 @@ internal sealed class WorldStorageCommandModule(WorldProfiles profiles, IPlayerS
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithTrailingArgs(
             name: "storage.status",
-            description: "Reports the honest player-catalog storage state (Immediate): tier (local authoritative; cloud unwired this arc), the identity resolver's decision, the reserved endpoint, and the per-catalog revision / last-synced cursor / derived dirty flag / storage version token / last-write precondition result.",
+            description: "Reports the honest player-catalog storage state (Immediate): tier (local authoritative; cloud unwired), the identity resolver's decision, the reserved endpoint, and the per-catalog revision / last-synced cursor / derived dirty flag / storage version token / last-write precondition result.",
             handler: (_, args) => (args.Length > 0)
                 ? new CommandResult(Output: "[storage.status: expected no arguments]") { IsError = true }
                 : new CommandResult(Output: Describe())

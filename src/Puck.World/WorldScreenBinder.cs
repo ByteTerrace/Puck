@@ -254,7 +254,7 @@ internal sealed class WorldScreenBinder : IDisposable {
     /// <param name="index">The engine screen-surface index.</param>
     public bool HasMachine(int index) => (m_slots.TryGetValue(key: index, value: out var slot) && (slot.Machine is not null));
 
-    /// <summary>The machine-lifecycle tap (audio cue lane A11b): invoked with <c>(index, faulted)</c> on every
+    /// <summary>The machine-lifecycle tap: invoked with <c>(index, faulted)</c> on every
     /// runtime machine boot outcome — <see langword="false"/> when a machine boots onto a slot (<c>screen.insert</c>
     /// and the reconcile-driven declared-source path both cross <see cref="TryInsert"/>), <see langword="true"/> when
     /// a boot attempt faults (missing content, unresolved engine, rejected options). Constructor-time declared boots
@@ -262,8 +262,8 @@ internal sealed class WorldScreenBinder : IDisposable {
     public Action<int, bool>? MachineLifecycleTap { get; set; }
 
     /// <summary>The live machine on a screen slot as its audio drain seam, or <see langword="null"/> when the slot
-    /// carries no machine (or one without the capability). The audio director's machine-source resolver (audio plan
-    /// A4/AP3): compared by REFERENCE each produced frame, so a boot/eject/live-swap rebinds the mixer source and a
+    /// carries no machine (or one without the capability). The audio director's machine-source resolver:
+    /// compared by REFERENCE each produced frame, so a boot/eject/live-swap rebinds the mixer source and a
     /// machine booting late into a referenced slot self-heals. Pump-thread only, like every other read of the slot
     /// table; the returned machine's <see cref="IAudioMachine.ReadSamples"/> is any-thread-safe by contract.</summary>
     /// <param name="index">The engine screen-surface index.</param>
@@ -272,7 +272,7 @@ internal sealed class WorldScreenBinder : IDisposable {
 
     /// <summary>Reads back the live machine insert on a screen index — its engine id, content path, and options — so
     /// <c>world.save</c> can fold a runtime <c>screen.insert</c> into that screen row's <see cref="WorldScreenSource.Machine"/>
-    /// source (§2.1 session write-back). Returns <see langword="false"/> when the slot has no booted machine or the
+    /// source. Returns <see langword="false"/> when the slot has no booted machine or the
     /// booting content path is unknown (a producer that was not an insert), leaving the screen's declared source untouched.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <param name="engine">The engine id that booted the live machine (as supplied to the insert, else the resolved default).</param>
@@ -387,7 +387,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         IScreenMachine created;
 
         try {
-            // ALWAYS-ON machine audio (audio plan A4): every screen machine synthesizes at the mixer rate from boot,
+            // ALWAYS-ON machine audio: every screen machine synthesizes at the mixer rate from boot,
             // so speakers bind (and mutations add them) at any time without a machine reboot. The accepted cost is
             // ~192 KB of ring plus low-single-digit % CPU per booted machine; emulator snapshots are unaffected (the
             // cores' audio carries no state).
@@ -402,7 +402,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         slot.Machine = created;
         slot.MachineEngine = engine.Id;
         // Remember what booted this machine so world.save can fold a live insert back into the screen row's Machine
-        // source (§2.1 session write-back). The engine id argument is preserved verbatim when supplied (so a declared
+        // source. The engine id argument is preserved verbatim when supplied (so a declared
         // machine round-trips its authored id); a bare screen.insert records the resolved default id.
         slot.MachineContentPath = contentPath;
         slot.MachineSourceEngine = ((engineId is { Length: > 0 }) ? engineId : engine.Id);
@@ -523,7 +523,7 @@ internal sealed class WorldScreenBinder : IDisposable {
     /// entries dropped from <c>m_slots</c>/<c>m_sources</c>/<c>m_lights</c> — so a removed screen stops advancing,
     /// publishing, and answering screen commands (the shared webcam session and the boot-sized view POOL are NOT
     /// disposed here — the binder owns their lifetime). A removed <c>View</c> screen additionally releases its camera's
-    /// offscreen render when no surviving slot still films that camera (§CR-3: the orphaned <see cref="ViewStack"/> entry
+    /// offscreen render when no surviving slot still films that camera (the orphaned <see cref="ViewStack"/> entry
     /// is disposed so it stops consuming refresh budget), while a camera two jumbotrons share stays live for the
     /// survivor. Then, for a declared index whose source CHANGED, it re-applies
     /// the new source through the same insert/eject/camera/capture/view machinery a <c>screen.*</c> verb uses
@@ -549,7 +549,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
 
         // Camera names a removed View screen referenced — collected during the removal pass, reconciled after it so a
-        // camera view no remaining slot references is released (§CR-3). Null (the common case) when no View screen was
+        // camera view no remaining slot references is released. Null (the common case) when no View screen was
         // removed, so a plain screen removal allocates nothing.
         HashSet<string>? removedViewCameras = null;
 
@@ -609,7 +609,7 @@ internal sealed class WorldScreenBinder : IDisposable {
     // Apply one screen's changed source through the runtime machinery. Each Try* already faults loudly rather than
     // throwing; a test-pattern or unconfigured-machine source has no runtime setter, so it takes effect at the next boot.
     // Every transition AWAY from View clears the slot's jumbotron reference and releases the camera registration when no
-    // surviving slot films it (§CR-6 — TryEject/ClearLive deliberately keep the DECLARED view for the eject verb, so the
+    // surviving slot films it (TryEject/ClearLive deliberately keep the DECLARED view for the eject verb, so the
     // declared-source change must drop it here); a View→View re-point releases the superseded camera inside TryView.
     private void ApplySourceChange(int index, ScreenSlot slot, WorldScreenSource source) {
         var outcome = source switch {
@@ -685,7 +685,7 @@ internal sealed class WorldScreenBinder : IDisposable {
                 ++slot.FramesStepped;
             }
 
-            // Machine AUDIO deliberately does not drain here (AP3): the world speaker device's fill thread drains
+            // Machine AUDIO deliberately does not drain here: the world speaker device's fill thread drains
             // each referenced machine's ring through the mixer's single-pull MachineBlockSource (ReadSamples is
             // any-thread-safe by contract), bound per frame by WorldAudioDirector.SyncMachineSources via
             // AudioMachine(index). This loop supplies the machines' TIME; speakers supply their pose.
@@ -866,7 +866,7 @@ internal sealed class WorldScreenBinder : IDisposable {
     /// <summary>How many camera views are registered in the offscreen view pool right now — each one is a live
     /// <see cref="SdfCameraView"/> spending refresh budget. Zero when no View screen is declared (no pool) or the pool
     /// has not been configured yet. Removing the last screen wired to a camera releases its view, so this count drops
-    /// (the pipe-observable witness that a removed View screen's offscreen render stopped, §CR-3).</summary>
+    /// (the pipe-observable witness that a removed View screen's offscreen render stopped).</summary>
     public int ActiveCameraViewCount => (m_viewStack?.ActiveViewCount ?? 0);
 
     /// <summary>Points a declared screen at a placeable camera — the runtime <c>screen.view</c> path. Any existing
@@ -901,7 +901,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         m_viewStack!.SetWiredScreens(name: camera.Name, screenIndices: WiredScreensFor(name: camera.Name));
 
         // A re-point away from another camera releases (or re-narrows) the superseded registration AFTER the new bind,
-        // so a view no slot films stops rendering (§CR-6's View A → View B case).
+        // so a view no slot films stops rendering (the View A → View B case).
         if ((previousView is { } previous) && !string.Equals(a: previous.Name, b: camera.Name, comparisonType: StringComparison.Ordinal)) {
             ReleaseOrphanedCameraView(name: previous.Name);
         }
@@ -1144,7 +1144,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         Console.Error.WriteLine(value: $"[world.camera: view '{name}' released — camera removed]");
     }
 
-    // After a slot stops filming a camera (a screen removal OR any source transition away from it, §CR-3/§CR-6),
+    // After a slot stops filming a camera (a screen removal OR any source transition away from it),
     // recompute the surviving wired set: an empty set RELEASES the view (ViewStack.Release disposes the SdfCameraView,
     // freeing its offscreen SdfWorldEngine) and drops the cached registration so a later screen.view rebuilds it
     // fresh; a non-empty set (another jumbotron still films this camera) only re-narrows the self-reference set to the
@@ -1435,7 +1435,7 @@ internal sealed class WorldScreenBinder : IDisposable {
                 feed.Light = AverageColor(pixels: glowSurface.Pixels.Span);
             }
 
-            // Live once the platform has completed its first GPU copy — mirrors the CPU-path first-frame gate.
+            // Live once the platform has completed its first GPU copy — the same first-frame gate the CPU path uses.
             feed.Live = (feed.Source!.GpuRevision > 0L);
             feed.Fault = (feed.Live ? null : $"{feed.Label} awaiting a compositor frame");
 
@@ -1536,7 +1536,7 @@ internal sealed class WorldScreenBinder : IDisposable {
         }
 
         try {
-            // Always-on machine audio at the mixer rate — the same A4 posture the runtime-insert path documents.
+            // Always-on machine audio at the mixer rate, matching the runtime-insert boot.
             slot.Machine = engine.Create(options: machine.Options, contentBytes: content, savePath: null, audioSampleRate: Audio.WorldAudioMixer.SampleRate);
             slot.MachineEngine = engine.Id;
         } catch (ArgumentException exception) {

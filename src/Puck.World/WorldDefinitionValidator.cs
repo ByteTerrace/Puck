@@ -92,8 +92,8 @@ internal static class WorldDefinitionValidator {
         ValidateBindingOverlays(overlays: definition.BindingOverlays, errors: errors);
         ValidateStorage(storage: definition.Storage, errors: errors);
 
-        // The editor/authoring policy row (P5.5): absent-in-JSON coalesces to the built-in default HERE (the
-        // WorldStorageDefaults absence convention) so every downstream read below sees a concrete row, never null.
+        // The editor/authoring policy row: absent-in-JSON coalesces to the built-in default HERE (the
+        // same absence-coalesce convention WorldStorageDefaults uses) so every downstream read below sees a concrete row, never null.
         var authoring = (definition.Authoring ?? WorldAuthoringDefaults.Default);
 
         ValidateAuthoring(authoring: authoring, errors: errors);
@@ -136,7 +136,7 @@ internal static class WorldDefinitionValidator {
                         // lifting cameras onto that seam means swapping the binder's anchor-source path, not growing
                         // this rejection.
                         if (anchoredCamera.Anchor is WorldAnchor.Placement) {
-                            errors.Add(item: $"{path}.anchor cameras cannot anchor to a placement yet (the camera pose path does not resolve placement transforms this arc).");
+                            errors.Add(item: $"{path}.anchor cameras cannot anchor to a placement yet (the camera pose path does not resolve placement transforms).");
                         }
 
                         if (!IsFinite(value: anchoredCamera.Offset)) {
@@ -249,7 +249,7 @@ internal static class WorldDefinitionValidator {
     }
 
     // The tune ASSET rows: id presence/uniqueness, the document's own strict schema + structural invariants through
-    // AudioCanonicalizer (the ONE pipeline — never a re-implementation), and the UIE-6 hash pin (the carried hash
+    // AudioCanonicalizer (the ONE pipeline — never a re-implementation), and the hash pin (the carried hash
     // must equal the canonical hash — a tampered/corrupt row rejects loudly). Returns the id set for the source gate.
     private static HashSet<string> ValidateTunes(IReadOnlyList<WorldTune> tunes, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -523,7 +523,7 @@ internal static class WorldDefinitionValidator {
         ValidateCues(cues: audio.Cues, patchIds: patchIds, speakerNames: speakerNames, errors: errors);
     }
 
-    // THE CUE TABLE (A11b): absent is empty; each row's event token must sit in the CLOSED published vocabulary,
+    // THE CUE TABLE: absent is empty; each row's event token must sit in the CLOSED published vocabulary,
     // its patch must resolve, its gain rides the shared ceiling in thousandths, and an emitter placement must name
     // a declared speaker (at-site and listener are the only other recognized placements).
     private static void ValidateCues(IReadOnlyList<WorldAudioCue>? cues, HashSet<string> patchIds, HashSet<string> speakerNames, List<string> errors) {
@@ -767,7 +767,7 @@ internal static class WorldDefinitionValidator {
         }
     }
 
-    // The per-world binding overlays (§2.4): non-empty unique ids, and the COMPOSED result (engine default ⊕ every
+    // The per-world binding overlays: non-empty unique ids, and the COMPOSED result (engine default ⊕ every
     // overlay) passes the existing binding compiler — a partial overlay page that only makes sense post-merge still
     // gates against the real runtime artifact, and the binding validator is never reimplemented.
     private static void ValidateBindingOverlays(IReadOnlyList<WorldBindingOverlay> overlays, List<string> errors) {
@@ -810,7 +810,7 @@ internal static class WorldDefinitionValidator {
         }
     }
 
-    // The editor/authoring policy row (P5.5): every field finite/positive with a sane ceiling. The BOOT-CONSUMED
+    // The editor/authoring policy row: every field finite/positive with a sane ceiling. The BOOT-CONSUMED
     // fields (headroom, max-repeat-per-segment) are additionally capped against the engine's own limits — see
     // WorldAuthoringDefaults' remarks for which fields are boot-consumed vs. live-consumed — so a bad authored value
     // can never reach a boot's frozen render-envelope probe (a live-consumed field's bad value is caught the same
@@ -839,8 +839,8 @@ internal static class WorldDefinitionValidator {
         RequireIntRange(value: authoring.PreviewDeadlineFrames, min: 1, max: 600, name: "authoring.previewDeadlineFrames", errors: errors);
     }
 
-    // The creation ASSET rows (§D6): id presence/uniqueness, the document's own strict schema + structural invariants
-    // through CreationCanonicalizer (the ONE pipeline — never a re-implementation), the UIE-6 hash pin (the carried
+    // The creation ASSET rows: id presence/uniqueness, the document's own strict schema + structural invariants
+    // through CreationCanonicalizer (the ONE pipeline — never a re-implementation), the hash pin (the carried
     // hash must equal the canonical hash — a tampered/corrupt row rejects loudly), and the per-stamp shape budget
     // (word-exact ceiling). Returns the resolved id set for the placement gate.
     private static HashSet<string> ValidateCreations(IReadOnlyList<WorldCreation> creations, List<string> errors) {
@@ -902,7 +902,7 @@ internal static class WorldDefinitionValidator {
         return ids;
     }
 
-    // The placement INSTANCE rows (§D6): id presence/uniqueness, the creation reference, finite transform, the policy
+    // The placement INSTANCE rows: id presence/uniqueness, the creation reference, finite transform, the policy
     // scale envelope, the repeat facet's positive counts / finite spacings, the mirror token, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
@@ -1004,9 +1004,10 @@ internal static class WorldDefinitionValidator {
         return null;
     }
 
-    // The WorldAnchor union (§A6): the shared pose-target vocabulary a camera (and a future speaker) rides.
+    // The WorldAnchor union: the shared pose-target vocabulary a camera (and a future speaker) rides.
     // Entity/EntityLeaf are index/role bounded; Placement resolves its row and, when ShapeId is present, that the id
-    // names a real shape in the referenced placement's creation document (the CreationCameraDocument precedent).
+    // names a real shape in the referenced placement's creation document, the same rule
+    // Puck.Authoring.CreationCameraDocument enforces.
     private static void ValidateAnchor(WorldAnchor anchor, IReadOnlyList<WorldPlacement> placements, HashSet<string> placementIds, IReadOnlyList<WorldCreation> creations, string path, List<string> errors) {
         switch (anchor) {
             case null:
@@ -1063,7 +1064,7 @@ internal static class WorldDefinitionValidator {
         return false;
     }
 
-    // The storage host-section (§2.5.5, RESERVED): an endpoint must be an absolute URI when present; a user-id must be
+    // The storage host-section (RESERVED): an endpoint must be an absolute URI when present; a user-id must be
     // non-empty when present. Both null (WorldStorageDefaults.None) is the built-in — cloud unwired, identity declined.
     private static void ValidateStorage(WorldStorageDefaults storage, List<string> errors) {
         if (storage is null) {

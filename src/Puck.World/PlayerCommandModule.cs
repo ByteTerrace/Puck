@@ -52,8 +52,8 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     public const string SecondaryCommand = "player.secondary";
     /// <summary>The Gamepad-South gesture command (BOTH edges) — the CONTEXT-routed South button: while the pressing pad's
     /// seat is PENDING (or the pad is unmapped) it is the CONFIRM flow byte-for-byte (join, then confirm, Started edge); once
-    /// the seat is ACTIVE it is the <see cref="ActionLanes.Primary"/> channel (both edges for variable height). Replaces the
-    /// former South→confirm binding so one button both seats a player and acts for them, with no restart.</summary>
+    /// the seat is ACTIVE it is the <see cref="ActionLanes.Primary"/> channel (both edges for variable height). One
+    /// button both seats a player and acts for them, with no restart.</summary>
     public const string SouthCommand = "player.south";
 
     // The action-lane names player.press parses against, surfaced in the unknown-lane error. A new lane joins here and
@@ -140,7 +140,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         );
         yield return CommandDefinition.WithWireArgs(
             name: "player.motion",
-            description: "Sets or echoes a player's motion model: player.motion [grounded|free] [player]. grounded is the ground avatar (planar, Y pinned, pitch/roll zero — the default); free is the space-sim / Subnautica model (full 6DOF body-frame flight). With no mode it echoes the target's current model. A switch is authoritative like a game-mode change (free→grounded snaps to the plane and levels the attitude). The optional trailing player index is 1..128 (default 1) — 1..4 local seats, 5..128 simulated entries.",
+            description: "Sets or echoes a player's motion model: player.motion [grounded|free] [player]. grounded is the ground avatar (planar, Y pinned, pitch/roll zero — the default); free is the space-sim full-6DOF body-frame flight model. With no mode it echoes the target's current model. A switch is authoritative like a game-mode change (free→grounded snaps to the plane and levels the attitude). The optional trailing player index is 1..128 (default 1) — 1..4 local seats, 5..128 simulated entries.",
             handler: MotionHandler
         );
         yield return CommandDefinition.WithWireArgs(

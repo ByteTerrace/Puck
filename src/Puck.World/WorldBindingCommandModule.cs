@@ -16,7 +16,7 @@ namespace Puck.World;
 /// module from the profile/settings surface to keep each class under its analyzer ceilings.
 /// </summary>
 /// <remarks>Live rebinding changes the input→command mapping mid-run — deliberately breaking replay-stable command
-/// streams (Puck.World is not determinism-gated, §2.4). <c>player.bind</c>/<c>player.signal</c>/<c>profile.save</c>
+/// streams (Puck.World is not determinism-gated). <c>player.bind</c>/<c>player.signal</c>/<c>profile.save</c>
 /// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
 internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, IInputClock? clock = null) : ICommandModule {
@@ -242,7 +242,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         // Acknowledged: the server applied the merged bindings to the shared profile handle. Clear this seat's session
         // layer, then re-derive the profile-bindings layer for EVERY active seat on this profile (this seat and any
-        // couch co-op seat sharing it) off the now-durable handle — the one live-refresh path (§CR-5).
+        // couch co-op seat sharing it) off the now-durable handle — the one live-refresh path.
         m_seatBindings.SetSessionRebind(slot: slot, rebinds: null);
         RefreshSeatsBoundTo(profileId: profile.Id);
 
@@ -278,7 +278,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         }
 
         // A durable BINDINGS edit must reach seated players LIVE (no reseat) — mirror profile.save's fold-refresh and
-        // re-derive the profile-bindings layer for every active seat on this profile (§CR-5). Identity/motion/preferences
+        // re-derive the profile-bindings layer for every active seat on this profile. Identity/motion/preferences
         // carry no input mapping, so they need no seat recompose (color already refreshes server-side).
         if (section == WorldPlayerSection.Bindings) {
             RefreshSeatsBoundTo(profileId: args[0]);

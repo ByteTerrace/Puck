@@ -720,7 +720,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         }
 
         // The unified overlay decorator's own pass (a separate submit after the engine's) — appended once the
-        // overlay has drawn a timed frame (the UIE-9 instrument).
+        // overlay has drawn a timed frame.
         if (renderProbe.Overlay is { } overlay) {
             Span<double> overlayMilliseconds = stackalloc double[1];
 

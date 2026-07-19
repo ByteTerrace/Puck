@@ -8,9 +8,10 @@
         smooth-blended stone boulders, rendered through the shared SDF render assembly. Profiles persist locally
         through Puck.Storage (cloud-ready behind the same seam). Its authoritative simulation uses the Hosting/Launcher
         fixed-step easy path, per-tick command snapshots, and Puck.Maths fixed point. World-specific behavior has no
-        Post stage or validate flag and is verified by running; the shared engine contracts are Post Tier-A gated. The GPU-host composition block is COPIED/adapted from the
-        demo's GpuHostComposition rather than referenced, so Puck.World never depends on Puck.Demo. It ships no shaders
-        of its own; the SDF kernels come from Puck.SdfVm's content (copied transitively into this output).
+        Post stage or validate flag and is verified by running; the shared engine contracts are Post Tier-A gated. The
+        GPU-host composition block registers the same GPU-host block Puck.Demo uses, independently — Puck.World never
+        references Puck.Demo. It ships no shaders of its own; the SDF kernels come from Puck.SdfVm's content (copied
+        transitively into this output).
     -->
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -27,7 +28,7 @@
         <!-- The offline audio proof (scripts/audio-mix.cs) drives the internal document→emitter-derivation pipeline
              (WorldDefinition, WorldAudioDirector) headlessly; a file-based app's assembly name is its file name. -->
         <InternalsVisibleTo Include="audio-mix" />
-        <!-- The AP3 live device smoke (scripts/audio-device.cs) drives WorldAudioRenderService's failure paths
+        <!-- The live device smoke (scripts/audio-device.cs) drives WorldAudioRenderService's failure paths
              in-process against mock render-device factories. -->
         <InternalsVisibleTo Include="audio-device" />
     </ItemGroup>
@@ -54,7 +55,7 @@
         <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
         <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
         <!-- The tune compile chain (AudioDocumentCompiler/TuneRom): a WorldTune asset compiles to a headless cart the
-             audio director's acquire/release hosting boots (TuneMachineSource) — the AP0 library lift, consumed. -->
+             audio director's acquire/release hosting boots (TuneMachineSource), consumed. -->
         <ProjectReference Include="..\Puck.Forge\Puck.Forge.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
@@ -70,7 +71,7 @@
              document and the Puck.Platform encoder/audio factories, wired to the CapturingRenderNode tap. -->
         <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
         <ProjectReference Include="..\Puck.Scene\Puck.Scene.csproj" />
-        <!-- Phase 2b: the addon-as-principal keystone. Puck.Scripting is CONSUMED, never modified — WorldAddonDriver
+        <!-- The addon-as-principal keystone. Puck.Scripting is CONSUMED, never modified — WorldAddonDriver
              mounts the world document's addon rows through its AddonHost and drives them over IServerLink. The pinned
              Wasmtime [44.0.0] native engine flows transitively. -->
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />

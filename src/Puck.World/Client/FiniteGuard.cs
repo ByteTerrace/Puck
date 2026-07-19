@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Puck.World.Client;
 
-/// <summary>The editor state-setter finite guard (UIE-2): the console twins reject non-finite input at parse time,
+/// <summary>The editor state-setter finite guard: the console twins reject non-finite input at parse time,
 /// and these throw at the public setters so a non-console caller can never poison camera, snap, or preview state
 /// (a NaN center rebuilds the SDF program; a NaN pitch slides past ordinary range clamps).</summary>
 internal static class FiniteGuard {

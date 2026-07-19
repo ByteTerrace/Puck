@@ -3,7 +3,7 @@ using Puck.Commands;
 namespace Puck.World;
 
 /// <summary>
-/// The §2.4 document PRE-MERGE — the pure, boundary-only function that layers N <see cref="BindingProfileDocument"/>s
+/// The document PRE-MERGE — the pure, boundary-only function that layers N <see cref="BindingProfileDocument"/>s
 /// into one before it goes through the existing <see cref="BindingProfile.Compile"/> once per seat. Chord rows merge
 /// on <c>(group, ordered chord)</c>: a later layer's row for the same key OVERRIDES the earlier one — wholesale when
 /// the meaning kind or page id differs (a page becoming a command, a renamed page), entry-by-source when both are the

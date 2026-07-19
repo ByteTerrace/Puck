@@ -6,16 +6,16 @@ using Puck.HumbleGamingBrick.Interfaces;
 namespace Puck.World.Audio;
 
 /// <summary>
-/// The headless tune host (audio plan A7): one <c>puck.audio.v1</c> document compiled to a cart
+/// The headless tune host: one <c>puck.audio.v1</c> document compiled to a cart
 /// (<see cref="TuneRom.Build(AudioDocument, string)"/>) and played by a synchronous Humble core stepped cycle-exactly
 /// inside <see cref="Pull"/> — never a queued worker (its worker thread is the one nondeterministic scheduling
-/// element, plan A12). The exact-rational cycle accumulator (subtract-not-reset) keeps machine time locked to the
+/// element). The exact-rational cycle accumulator (subtract-not-reset) keeps machine time locked to the
 /// mixer rate with zero drift. Acquired by the audio director while any speaker references the tune, released when
 /// orphaned — hosting is a runtime derivation, never a data concept.
 /// </summary>
 public sealed class TuneMachineSource : IAudioBlockSource, IDisposable {
     private const long CyclesPerSecond = 4_194_304L;
-    // Boot pre-roll: the jukebox reaches its play state within 8 frames (TuneVerify's boot bar); the buffered boot
+    // Boot pre-roll: the jukebox reaches its play state within 8 frames; the buffered boot
     // audio simply becomes the stream's deterministic head.
     private const ulong BootPrerollFrames = 8UL;
     private const ulong CyclesPerVideoFrame = 70_224UL;

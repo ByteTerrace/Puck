@@ -33,7 +33,7 @@ internal sealed class WorldConsoleMirror {
         Publish();
     }
 
-    /// <summary>Gets whether the panel is currently shown.</summary>
+    /// <summary>Whether the panel is currently shown.</summary>
     public bool Visible => m_visible;
 
     /// <summary>Records one submitted console line and its result: the echoed input (the phosphor voice) then each

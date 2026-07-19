@@ -9,9 +9,9 @@ namespace Puck.World;
 
 /// <summary>
 /// The dev reflection of the world-mutation protocol — the console surface an agent (or a deterministic test) molds a
-/// running world through over stdin, reusing the SAME <see cref="WorldMutation"/> messages the editor arc will drive
-/// tomorrow. Every row-valued verb takes ONE inline-JSON argument in the exact wire shape of the document section (no
-/// second grammar, parsed through the Phase 1 <see cref="WorldJsonContext"/>); a parse error echoes inline and submits
+/// running world through over stdin, reusing the SAME <see cref="WorldMutation"/> messages the editor drives. Every
+/// row-valued verb takes ONE inline-JSON argument in the exact wire shape of the document section (no
+/// second grammar, parsed through <see cref="WorldJsonContext"/>); a parse error echoes inline and submits
 /// nothing. Every mutation verb routes <see cref="CommandRouting.Simulation"/>, so it buffers on the server and the
 /// stdin barrier serializes a following <c>world.status</c> read-after-write for free; the server's own loud accept/
 /// reject line is printed when the buffered edit applies at the tick boundary. <c>world.status</c> and <c>world.save</c>
@@ -212,7 +212,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.bindings.set",
-            description: "Upserts a per-world binding overlay (whole-row, keyed by id) from one inline-JSON WorldBindingOverlay: world.bindings.set <overlay-json>. Layered (§2.4) over the engine default beneath every seat's profile bindings; rejected loudly if the composed mapping then fails to compile. Recomposes every seat on apply.",
+            description: "Upserts a per-world binding overlay (whole-row, keyed by id) from one inline-JSON WorldBindingOverlay: world.bindings.set <overlay-json>. Layered over the engine default beneath every seat's profile bindings; rejected loudly if the composed mapping then fails to compile. Recomposes every seat on apply.",
             info: WorldJsonContext.Default.WorldBindingOverlay,
             toMutation: static overlay => new WorldMutation.UpsertBindingOverlay(Principal: WorldPrincipal.Console, Overlay: overlay)
         );
@@ -229,7 +229,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Row(
             name: "world.creation.set",
-            description: "Upserts a creation ASSET row (whole-row, keyed by id) from one inline-JSON WorldCreation {id, document, hash}: world.creation.set <json>. The compose boundary re-canonicalizes the document and REJECTS a hash the pipeline did not itself compute (the UIE-6 pin); editor.import <path> is the file-reading twin.",
+            description: "Upserts a creation ASSET row (whole-row, keyed by id) from one inline-JSON WorldCreation {id, document, hash}: world.creation.set <json>. The compose boundary re-canonicalizes the document and REJECTS a hash the pipeline did not itself compute; editor.import <path> is the file-reading twin.",
             info: WorldJsonContext.Default.WorldCreation,
             toMutation: static creation => new WorldMutation.UpsertCreation(Principal: WorldPrincipal.Console, Creation: creation)
         );
@@ -269,7 +269,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.load",
-            description: "Loads a world file through the Phase 1 loader and submits it as a whole-document swap (validate → swap → derived rebuild → journal RESET): world.load <path>. A missing/invalid file echoes a loud line and swaps nothing.",
+            description: "Loads a world file and submits it as a whole-document swap (validate → swap → derived rebuild → journal RESET): world.load <path>. A missing/invalid file echoes a loud line and swaps nothing.",
             handler: (context, args) => {
                 var path = RawArgument(context: context, args: args);
 
@@ -305,7 +305,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "world.save",
-            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources (§2.1 write-back). No argument writes back to the loaded --world file; booted from the baked default with no path is an error.",
+            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources. No argument writes back to the loaded --world file; booted from the baked default with no path is an error.",
             handler: (_, args) => {
                 var target = ((args.Length >= 1) ? string.Join(separator: ' ', values: args) : definitionSource.SourcePath);
 

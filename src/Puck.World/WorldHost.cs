@@ -11,8 +11,9 @@ namespace Puck.World;
 
 /// <summary>
 /// The GPU-host registration for Puck.World: the launcher terminal, platform windowing, the unmanaged allocator, and
-/// the launch-selected Vulkan or Direct3D 12 presenter. Adapted from the demo's <c>GpuHostComposition</c> without
-/// referencing it (Puck.World must not depend on Puck.Demo) and without the demo-only camera-capture concern.
+/// the launch-selected Vulkan or Direct3D 12 presenter. Registers the GPU-host block (windowing, allocator, one
+/// launch-selected backend) directly; Puck.World must not depend on Puck.Demo, and this omits the demo-only
+/// camera-capture concern.
 /// </summary>
 internal static class WorldHost {
     /// <summary>Registers the shared GPU-host block: launcher terminal, windowing, allocator, and the selected

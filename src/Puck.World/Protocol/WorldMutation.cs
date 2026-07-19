@@ -4,8 +4,8 @@ namespace Puck.World.Protocol;
 /// The kind-tagged vocabulary of live world edits carried over <see cref="IServerLink.SubmitWorldMutation"/> — the
 /// closed set of in-flight mutations that <em>is</em> the editor substrate. One coarse record per
 /// <see cref="WorldDefinition"/> section, addressed by stable id, whole-row upsert (never a field poke): a genre world
-/// arrives as different DATA through these same messages, never a new message shape (the §2.6 audit). Mutations buffer
-/// on the server and drain at the tick boundary before intents (settled question 9); each composes a candidate
+/// arrives as different DATA through these same messages, never a new message shape. Mutations buffer
+/// on the server and drain at the tick boundary before intents; each composes a candidate
 /// definition, revalidates the whole document, and — on success — swaps the server's live definition, appends to the
 /// journal (the undo engine), and rebuilds the changed section's derived state.
 /// </summary>
@@ -122,8 +122,8 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Id">The overlay id to remove.</param>
     internal sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
 
-    /// <summary>Upserts a creation ASSET row addressed by <see cref="WorldCreation.Id"/> (§D6). The compose boundary
-    /// canonicalizes the row's document (UIE-6: doc + hash from the SAME <see cref="Puck.Authoring.CanonicalDocument{TDocument}"/>)
+    /// <summary>Upserts a creation ASSET row addressed by <see cref="WorldCreation.Id"/>. The compose boundary
+    /// canonicalizes the row's document (doc + hash always come from the SAME <see cref="Puck.Authoring.CanonicalDocument{TDocument}"/>)
     /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
     /// compute is never accepted.</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -136,7 +136,7 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Id">The creation id to remove.</param>
     internal sealed record RemoveCreation(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
 
-    /// <summary>Upserts a placement INSTANCE row addressed by <see cref="WorldPlacement.Id"/> (§D6). Rejected loudly
+    /// <summary>Upserts a placement INSTANCE row addressed by <see cref="WorldPlacement.Id"/>. Rejected loudly
     /// when it names no creation row, violates the placement policy envelope, or would exceed the probed render
     /// envelope (the capacity-honesty contract).</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -161,7 +161,7 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
 
     /// <summary>Upserts a tune ASSET row addressed by <see cref="WorldTune.Id"/>. The compose boundary
     /// re-canonicalizes the embedded <c>puck.audio.v1</c> document and REJECTS a hash the pipeline did not itself
-    /// compute (the UIE-6 pin — the <see cref="UpsertCreation"/> pattern verbatim).</summary>
+    /// compute, the same rule as <see cref="UpsertCreation"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Tune">The whole tune row.</param>
     internal sealed record UpsertTune(WorldPrincipal Principal, WorldTune Tune) : WorldMutation(Principal);
@@ -186,14 +186,14 @@ internal abstract record WorldMutation(WorldPrincipal Principal) {
 
     /// <summary>Replaces the audio host-section defaults (the whole <see cref="WorldAudioDefaults"/> row). Applies
     /// LIVE: the emitter-derivation coalescing, the listener policy, and the cue table read the delivered row.
-    /// <c>MasterGain</c> follows the AP4 lever precedence: it flows live only until the <c>world.volume</c> session
+    /// <c>MasterGain</c> follows the lever-precedence rule: it flows live only until the <c>world.volume</c> session
     /// lever engages — thereafter the lever owns "now" and the field owns the next boot (<c>world.save</c> folds the
     /// lever back into it).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Audio">The audio defaults row.</param>
     internal sealed record SetAudioDefaults(WorldPrincipal Principal, WorldAudioDefaults Audio) : WorldMutation(Principal);
 
-    /// <summary>Replaces the whole editor/authoring policy row (P5.5). A single whole-row mutation carries both
+    /// <summary>Replaces the whole editor/authoring policy row. A single whole-row mutation carries both
     /// consumption classes the row holds (see <see cref="WorldAuthoringDefaults"/>'s remarks): the boot-consumed
     /// headroom/repeat-cap fields apply at the NEXT boot (the frozen render-envelope probe cannot retroactively grow),
     /// while the live-consumed candidate/layout/preview fields apply at the very next tick — the server's accept echo

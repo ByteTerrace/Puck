@@ -8,11 +8,11 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The sculpt workbench's lifecycle console surface (§P6) — the assist-layer twins of the sculpt group's deliberate
+/// The sculpt workbench's lifecycle console surface — the assist-layer twins of the sculpt group's deliberate
 /// chords. <c>editor.sculpt.new</c>/<c>edit</c> open a seat's bench (a blank model, or an existing creation row
 /// loaded through the canonical pipeline) and flip its active binding group onto the sculpt pages;
-/// <c>editor.sculpt.commit</c> canonicalizes the model and submits ONE <c>UpsertCreation</c> (doc + hash from the
-/// SAME <see cref="CanonicalDocument{TDocument}"/> — the UIE-6 contract; live placements of the row refresh on delivery,
+/// <c>editor.sculpt.commit</c> canonicalizes the model and submits ONE <c>UpsertCreation</c> (doc + hash always come
+/// from the same canonicalize call; live placements of the row refresh on delivery,
 /// animated ones through the animator's hash-diff release+recreate); <c>editor.sculpt.easel</c> authors the diegetic
 /// preview easel (a fixed workbench camera + an existing screen row re-pointed at its feed — two ordinary mutations,
 /// zero engine change); <c>editor.sculpt.undo</c>/<c>redo</c> walk the LOCAL ring (the world journal is untouched —
@@ -254,7 +254,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
             return Error(text: $"[{CommitCommand}: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
 
-        // Doc + hash from the SAME canonical result — the UIE-6 sentence, satisfied structurally.
+        // Doc + hash from the SAME canonical result — the hash-provenance contract, satisfied structurally.
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCreation(
             Principal: WorldPrincipal.Seat(slot: slot),
             Creation: new WorldCreation(Id: rowId, Document: canonical.Document, Hash: canonical.Hash)
@@ -313,7 +313,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
         var principal = WorldPrincipal.Seat(slot: slot);
 
         // Two ordinary mutations: the fixed easel camera framing the bench, then the screen row moved beside it and
-        // re-pointed at the camera's view — both land through the live P4 reconcile (no restart, no new machinery).
+        // re-pointed at the camera's view — both land through the live reconcile path (no restart, no new machinery).
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCamera(
             Principal: principal,
             Camera: new WorldCamera.Fixed(

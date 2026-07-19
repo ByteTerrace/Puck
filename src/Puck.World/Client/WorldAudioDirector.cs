@@ -19,8 +19,8 @@ namespace Puck.World.Client;
 internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Vector3 Forward);
 
 /// <summary>
-/// The client-side audio director — the seam between the world DOCUMENT and the mixer's emitter vocabulary
-/// (audio plan AP2). <see cref="ReconcileSpeakers"/> derives the emitter TABLE from the delivered definition (speaker rows by
+/// The client-side audio director — the seam between the world DOCUMENT and the mixer's emitter vocabulary.
+/// <see cref="ReconcileSpeakers"/> derives the emitter TABLE from the delivered definition (speaker rows by
 /// kind, emission facets keyed by row family, creation-sound emitters per placement of a sound-bearing creation) with
 /// STABLE emitter ids — diff-by-key: a property edit keeps its id (the mixer's coefficient ramps survive), an
 /// identity change (kind, anchor kind, source identity, or the referenced asset's content HASH — the restart
@@ -34,7 +34,7 @@ internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Ve
 /// <para><b>The v1 trigger policy (deliberate, documented):</b> every synth-fed emitter fires exactly ONE seeded
 /// trigger on emitter ARRIVAL (a new or identity-recreated key) — a looping patch (no duration) sustains until the
 /// emitter departs (the mixer frees unbound voices); a one-shot patch plays once. Periodic/behavioral retriggering
-/// is deferred (AP4+). Seeds derive from the emitter key + content signature, so a voice reproduces bit for bit
+/// is deferred. Seeds derive from the emitter key + content signature, so a voice reproduces bit for bit
 /// across runs. A pending trigger rides the next <see cref="TriggerPublishRetention"/> published snapshots: the
 /// publish buffer keeps only the latest, so retention ≥ two device quanta guarantees a consumer sees the event once,
 /// and the mixer's high-water sequence makes repeats free.</para>
@@ -45,7 +45,7 @@ internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Ve
 /// binder's LIVE machines by reference for every machine-fed plan row, so a boot/eject/live-swap rebinds the mixer
 /// source and a machine booting late into a referenced slot self-heals — the keys
 /// (<see cref="WorldAudioSourceKey.Machine"/> by slot) stay stable across swaps.</para>
-/// <para><b>Threading (AP3):</b> derivation and publishing stay on the window-pump thread, and the resolver is only
+/// <para><b>Threading:</b> derivation and publishing stay on the window-pump thread, and the resolver is only
 /// ever invoked there (it reads the binder's pump-owned slot table). The device pump adds two cross-thread callers —
 /// <see cref="AttachMixer"/>/<see cref="DetachMixer"/> from the render service's governor and
 /// <see cref="TryMixBlock"/> from the endpoint's fill thread — so every member that touches the mixer or the derived
@@ -53,12 +53,12 @@ internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Ve
 /// is microseconds), which is the deliberate trade: one honest lock instead of a lock-free mixer-mutation protocol.</para>
 /// </remarks>
 internal sealed class WorldAudioDirector {
-    /// <summary>The slab-rotation depth (plan A3): the consumer holds one snapshot for one ~5.33 ms block; the
+    /// <summary>The slab-rotation depth: the consumer holds one snapshot for one ~5.33 ms block; the
     /// producer needs ≥33 ms to lap four slabs — safe by an order of magnitude.</summary>
     public const int SnapshotRotation = 4;
     /// <summary>How many published snapshots a pending trigger rides (see the type remarks).</summary>
     public const int TriggerPublishRetention = 8;
-    /// <summary>The transient cue-emitter pool size (A11b) — capacity STRUCTURE like the snapshot's emitter cap, an
+    /// <summary>The transient cue-emitter pool size — capacity STRUCTURE like the snapshot's emitter cap, an
     /// engine invariant rather than world data: these slots are RESERVED off <see cref="WorldAudioSnapshot.DefaultMaxEmitters"/>
     /// (the reconcile overflow warning charges them), so a full derived plan can never starve a cue. A cue arriving
     /// with the pool full evicts the transient nearest its own expiry (its voice releases with the departed emitter).</summary>
@@ -96,7 +96,7 @@ internal sealed class WorldAudioDirector {
     private bool m_machineBindingsDirty;
     // THE serialization gate (see the type remarks): reentrant, so Admit's SubmitTrigger nests under ReconcileSpeakers.
     private readonly Lock m_gate = new();
-    // THE CUE TABLE (A11b), derived at reconcile: event token → its cue rows (gain in Q16, placement resolved to a
+    // THE CUE TABLE, derived at reconcile: event token → its cue rows (gain in Q16, placement resolved to a
     // kind + optional speaker name). Cue patches are world patch rows, so the ordinary patch-set registration covers them.
     private readonly Dictionary<string, List<CueRow>> m_cueRows = new(comparer: StringComparer.Ordinal);
     // The live transient cue emitters (bounded by TransientCueCapacity; aged by the publish clock).
@@ -108,7 +108,7 @@ internal sealed class WorldAudioDirector {
     private ulong m_cueOrdinal;
     private int m_slabIndex;
     private FixedQ4816 m_defaultCueRadius = FixedQ4816.FromInteger(value: 8L);
-    // The world.volume session lever (A11/AP4, the render-levers asymmetry): null until touched — the document's
+    // The world.volume session lever (the render-levers asymmetry): null until touched — the document's
     // MasterGain then owns the live gain (reconcile follows it; the offline drivers stay purely document-driven);
     // once set, the lever owns "now" for the rest of the session and world.save folds it back into the document.
     private float? m_sessionMasterVolume;
@@ -213,7 +213,7 @@ internal sealed class WorldAudioDirector {
 
             var audio = definition.Audio;
 
-            // The lever precedence (AP4): the document master gain owns boot and every reconcile UNTIL world.volume
+            // The lever precedence: the document master gain owns boot and every reconcile UNTIL world.volume
             // engages the session lever; from then on the lever owns "now" (world.save folds it back).
             MasterGainQ16 = GainQ16(gain: (m_sessionMasterVolume ?? audio.MasterGain));
             m_defaultCueRadius = FixedQ4816.FromDouble(value: audio.DefaultSpeakerRadius);
@@ -606,7 +606,7 @@ internal sealed class WorldAudioDirector {
 
     /// <summary>Submits one seeded synth trigger request — THE one trigger-production seam: stamps the
     /// strictly-increasing sequence and rides the pending ring onto the next published snapshots. Emitter-arrival
-    /// policy is just this seam's first caller; AP4's cue producers (world-event cues, footstep derivation, screen
+    /// policy is just this seam's first caller; the cue producers (world-event cues, footstep derivation, screen
     /// lifecycle) feed the same sequence-stamped path.</summary>
     /// <param name="patchId">The registered patch the voice plays.</param>
     /// <param name="seed">The noise seed — the same seed reproduces the voice bit for bit.</param>
@@ -627,7 +627,7 @@ internal sealed class WorldAudioDirector {
         }
     }
 
-    // ---- the cue engine (A11b) --------------------------------------------------------------------------------------
+    // ---- the cue engine ----------------------------------------------------------------------------------------------
 
     /// <summary>Fires a world-event CUE — the producers' one entry (the edit-echo lane, the binder lifecycle, the
     /// gait derivation, the seat roster), gate-safe from any thread: every cue row bound to
@@ -662,8 +662,8 @@ internal sealed class WorldAudioDirector {
                     SpeakerName = row.SpeakerName,
                     RemainingFrames = CueLifeFrames(patchId: row.PatchId),
                 });
-                // Voice gain stays unity — the transient emitter's own gain carries the cue level (the arrival-trigger
-                // precedent: a voice gain here would double-scale). The seed folds the token with a session ordinal:
+                // Voice gain stays unity — the transient emitter's own gain carries the cue level; a voice gain here
+                // would double-scale. The seed folds the token with a session ordinal:
                 // repeated cues of one event get distinct noise streams.
                 SubmitTrigger(patchId: row.PatchId, seed: (Fnv64(text: eventToken) ^ ++m_cueOrdinal), gainQ16: 65536, emitterId: id);
             }
@@ -860,13 +860,13 @@ internal sealed class WorldAudioDirector {
         }
     }
 
-    // ---- the master-volume session lever (AP4) ----------------------------------------------------------------------
+    // ---- the master-volume session lever --------------------------------------------------------------------------
 
     /// <summary>Engages the <c>world.volume</c> session lever: the live mix gain applies NOW and owns every later
     /// reconcile; the document's <see cref="WorldAudioDefaults.MasterGain"/> keeps owning boot, and
     /// <c>world.save</c> folds the lever back into it (the render-levers asymmetry). Until first engaged, the
     /// document value flows live (so the offline document-driven proofs and <c>world.audio.set</c>'s live master
-    /// gain keep their AP2 behavior).</summary>
+    /// gain keep flowing from the document).</summary>
     /// <param name="value">The master volume (1 = unity), validated by the verb against the shared gain ceiling.</param>
     public void SetMasterVolume(float value) {
         lock (m_gate) {
@@ -927,7 +927,7 @@ internal sealed class WorldAudioDirector {
     // ---- source hosting --------------------------------------------------------------------------------------------
 
     // Apply the derived bindings to the attached mixer: master gain, the patch set, and tune acquire/release with
-    // the tune HASH as the restart discriminator. No mixer attached = derivation only (the AP2 live posture).
+    // the tune HASH as the restart discriminator. No mixer attached = derivation only.
     private void ApplyMixerBindings() {
         if ((m_mixer is not { } mixer) || (m_definition is not { } definition)) {
             return;
@@ -940,7 +940,7 @@ internal sealed class WorldAudioDirector {
         }
 
         // The referenced-tune set: acquire a headless host per tune some plan row taps; release orphans; a hash
-        // change restarts the host honestly (the placement animator's release+recreate precedent).
+        // change restarts the host honestly, the same release+recreate approach the placement animator uses.
         List<string>? orphaned = null;
 
         foreach (var (tuneId, host) in m_tuneHosts) {
@@ -1054,7 +1054,7 @@ internal sealed class WorldAudioDirector {
         return new WorldAudioListener(Position: ToFixed(value: eye), Yaw: m_lastListenerYaw);
     }
 
-    // The listener policy (plan A5): focus = the first joined seat's resolved view camera (the editor rig when that
+    // The listener policy: focus = the first joined seat's resolved view camera (the editor rig when that
     // seat edits — the frame source resolves the SAME rig the seat renders through); seat:<n> pins that seat (falling
     // back to focus while it is unjoined); a camera name resolves the declared camera row. No candidate at all
     // (headless, no seats) listens from the origin facing -Z.

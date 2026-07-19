@@ -5,11 +5,11 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The ANIMATED-placement replay pool (§D6): a placement whose creation carries timeline frames renders as per-shape
+/// The ANIMATED-placement replay pool: a placement whose creation carries timeline frames renders as per-shape
 /// dynamic instances riding a reserved dynamic-transform pool, replaying the frames HOLD-STYLE on the render clock at
-/// the settled 8-tick cadence (<see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>) — the Demo companion
-/// pattern, presentation-only (never simulation state). Reconciliation follows the P4 camera template: delivered
-/// placement rows diff by stable id against live registrations — a pose/scale edit is a cheap property write (the
+/// the fixed 8-tick cadence (<see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>), presentation-only (never
+/// simulation state). Reconciliation diffs delivered placement rows by stable id against live registrations, the
+/// same pattern camera reconciliation uses — a pose/scale edit is a cheap property write (the
 /// replay clock survives), a creation-content change releases + recreates (the clock resets), and a removed row
 /// releases its pool slot at the delivery boundary (the symmetric-release rule).
 /// </summary>
@@ -19,8 +19,8 @@ namespace Puck.World.Client;
 /// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source
 /// measures it once at construction. Single-threaded on the window-pump thread, like every editor/render type here.</remarks>
 internal sealed class WorldPlacementAnimator {
-    // Per-shape dynamic-instance bound at unit scale (mirrors the settled avatar/companion margin — a cull contract,
-    // not a policy: too tight clips a shape at its own tile boundary).
+    // Per-shape dynamic-instance bound at unit scale — a cull contract, not a policy: too tight clips a shape at
+    // its own tile boundary.
     private const float InstanceRadiusUnitScale = 0.9f;
     private const float GroupBoundMargin = 0.4f;
     private static readonly Vector3 s_hiddenPosition = new(x: 0f, y: -1000f, z: 0f);
@@ -177,8 +177,8 @@ internal sealed class WorldPlacementAnimator {
     }
 
     /// <summary>Emits the whole pool (constant slot count): per live registration its palette, ungrouped shapes as
-    /// per-slot dynamic instances, and blend groups as root-anchored scoped instances (the settled companion emission
-    /// shape); parked placeholders elsewhere. The probe path takes the largest legal form.</summary>
+    /// per-slot dynamic instances, and blend groups as root-anchored scoped instances (a traveling bound for the
+    /// group); parked placeholders elsewhere. The probe path takes the largest legal form.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
     /// <param name="maxPlacementScale">LIVE-CONSUMED: the placement scale envelope's ceiling
@@ -394,7 +394,7 @@ internal sealed class WorldPlacementAnimator {
     }
 
     // One shape's emission: ResetPoint + TransformDynamic + Scale + [mirror/twist/bend point ops] + the primitive +
-    // [dilate/onion field ops, scoped outside a group] — the settled companion op sequence over the canonical
+    // [dilate/onion field ops, scoped outside a group] — the fixed op sequence over the canonical
     // CreationGeometry dimensions. probeWorstCase emits EVERY op unconditionally (the probe binding rule).
     private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false) {
         var chain = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: scale);

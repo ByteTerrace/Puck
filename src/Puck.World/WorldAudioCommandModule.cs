@@ -10,7 +10,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The audio sections' verb surface — the dev reflection of the AP2 mutation vocabulary (<c>world.speaker.*</c>,
+/// The audio sections' verb surface — the dev reflection of the mutation vocabulary (<c>world.speaker.*</c>,
 /// <c>world.tune.*</c>, <c>world.patch.*</c>, <c>world.audio.set</c>: the inline-JSON Row pattern over the SAME
 /// <see cref="WorldMutation"/> messages) plus the two listings: <c>world.speakers</c> (the document rows) and
 /// <c>audio.emitters</c> (the derived emitter table — the document→emitter derivation made assertable). A SEPARATE
@@ -41,7 +41,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         );
         yield return Row(
             name: "world.tune.set",
-            description: "Upserts a tune ASSET row (whole-row, keyed by id) from one inline-JSON WorldTune {id, document, hash}: world.tune.set <json>. The compose boundary re-canonicalizes the puck.audio.v1 document and REJECTS a hash the pipeline did not itself compute (the UIE-6 pin; the rejection names the canonical sha256).",
+            description: "Upserts a tune ASSET row (whole-row, keyed by id) from one inline-JSON WorldTune {id, document, hash}: world.tune.set <json>. The compose boundary re-canonicalizes the puck.audio.v1 document and REJECTS a hash the pipeline did not itself compute (the rejection names the canonical sha256).",
             info: WorldJsonContext.Default.WorldTune,
             toMutation: static tune => new WorldMutation.UpsertTune(Principal: WorldPrincipal.Console, Tune: tune)
         );
@@ -87,7 +87,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         );
         yield return CommandDefinition.WithWireArgs(
             name: "audio.state",
-            description: "Echoes the live speaker-device state (AP3 — the runtime half AP4's speaker.state joins): device token (playing|silent|rebinding|unsupported|stopped), last fault, frames delivered across device generations, rebind attempts, fill faults, bound mixer sources, live synth voices, the running output peak (monotone — nonzero proves the mix has produced signal), dropped triggers, and derived emitters. A query — always echoes.",
+            description: "Echoes the live speaker-device state (the device-state half; speaker.state joins it with per-row facts): device token (playing|silent|rebinding|unsupported|stopped), last fault, frames delivered across device generations, rebind attempts, fill faults, bound mixer sources, live synth voices, the running output peak (monotone — nonzero proves the mix has produced signal), dropped triggers, and derived emitters. A query — always echoes.",
             handler: StateHandler,
             echoesData: true
         );
@@ -160,7 +160,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     }
 
     // The world.speakers listing: one segment per declared row off the LIVE definition, so a speaker mutation's new
-    // source narrates honestly (the world.screens pattern).
+    // source narrates honestly, the same live-definition read world.screens uses.
     private CommandResult SpeakersHandler(CommandContext context, WireArgs args) {
         if (args.Count != 0) {
             return new CommandResult(Output: "[world.speakers: no arguments — lists every declared speaker]") {
@@ -199,8 +199,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
 
-    // The Row/Simulation/Submit helpers mirror WorldMutationCommandModule's (each module owns its copies — the
-    // separate-module-per-ceiling convention).
+    // The Row/Simulation/Submit helpers duplicate WorldMutationCommandModule's: each module owns its own copies to
+    // stay under the analyzer ceiling.
     private CommandDefinition Row<T>(string name, string description, JsonTypeInfo<T> info, Func<T, WorldMutation> toMutation) {
         return CommandDefinition.WithTrailingArgs(
             name: name,

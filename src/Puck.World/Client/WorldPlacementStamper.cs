@@ -5,16 +5,16 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 /// <summary>
-/// Emits the world's STATIC placements (§D6) into the program under construction — each placement one (or several,
+/// Emits the world's STATIC placements into the program under construction — each placement one (or several,
 /// repeat-auto-split) static <see cref="SdfProgramBuilder.BeginInstance"/> whose shapes replay the referenced
 /// creation's shape list with the FULL placement transform baked into EVERY shape's own segment (Translate → yaw
 /// Rotate → the optional mirror fold → the optional repeat → the uniform placement Scale, then the shape's local
-/// T·R·S and the canonical primitive) — the settled Demo stamp path, ported. Animated placements (framed creations)
+/// T·R·S and the canonical primitive). Animated placements (framed creations)
 /// are NOT emitted here — they ride <see cref="WorldPlacementAnimator"/>'s reserved dynamic pool.
 /// </summary>
 /// <remarks>Text runs count against the per-stamp shape budget (<see cref="CreationDocument.StampShapeCount"/>) but do
-/// not EMIT this arc: World deliberately binds no world-space glyph atlas (the UIE-7 memory posture — the combined
-/// MTSDF decode is the condemned path), so a run's letters wait on a compact world-text atlas artifact. The budget
+/// not EMIT yet: World deliberately binds no world-space glyph atlas (the combined
+/// MTSDF decode is far too memory-heavy for a runtime bind), so a run's letters wait on a compact world-text atlas artifact. The budget
 /// already reserves their envelope, so binding an atlas later is emission-only, never a capacity change.</remarks>
 internal static class WorldPlacementStamper {
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
@@ -181,7 +181,7 @@ internal static class WorldPlacementStamper {
     }
 
     // One placement's static instances: the single-copy fast path, or the repeat auto-split (no segment bound covers
-    // more than maxRepeatPerSegment copies per axis — the tile-cull contract the Demo path settled).
+    // more than maxRepeatPerSegment copies per axis — the segment-cap contract).
     private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, int maxRepeatPerSegment) {
         var reach = CreationGeometry.Reach(document: creation);
         var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
@@ -231,8 +231,8 @@ internal static class WorldPlacementStamper {
     }
 
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
-    // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead
-    // (the settled Demo stamp lesson). Uniform placement scale commutes with the per-shape rotations (shear-free).
+    // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
+    // Uniform placement scale commutes with the per-shape rotations (shear-free).
     private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? repeatSpacing, Vector3? repeatLimit) {
         foreach (var shape in (creation.Shapes ?? [])) {
             var material = paletteIds[Math.Clamp(value: (shape.Material ?? 0), max: (paletteIds.Length - 1), min: 0)];

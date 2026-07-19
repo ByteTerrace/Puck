@@ -4,15 +4,15 @@ using Puck.Authoring;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The per-seat sculpt WORKBENCH — the client-local context a <see cref="SculptModel"/> edits inside (§P6). The live
+/// The per-seat sculpt WORKBENCH — the client-local context a <see cref="SculptModel"/> edits inside. The live
 /// preview is a composed pending placement: <see cref="ComposeCreations"/>/<see cref="ComposePlacements"/> overlay a
 /// synthetic creation row (the model's document, timeline frames stripped — the preview shows the LIVE pose) and a
 /// synthetic placement at the workbench origin onto the delivered rows, so the preview renders through the SAME
 /// <see cref="WorldPlacementStamper"/>/<see cref="CreationGeometry"/> path a committed stamp uses — what you sculpt IS
 /// what stamps, byte-for-byte. Nothing here crosses the wire: commit is the verb layer's ONE <c>UpsertCreation</c>.
 /// </summary>
-/// <remarks>Capacity: entry pre-verifies the composed candidate against the probed render envelope (the ghost-spawn
-/// precedent), and the apply-time measure charges every stamp at worst case — so a preview that entered under budget
+/// <remarks>Capacity: entry pre-verifies the composed candidate against the probed render envelope, matching the
+/// ghost-spawn check, and the apply-time measure charges every stamp at worst case — so a preview that entered under budget
 /// stays in budget for any model within the <see cref="WorldPlacementPolicy.MaxShapesPerStamp"/> cap the model itself
 /// enforces. Single-threaded like every input-fold type (verb mutators in the pump's apply window, <see cref="Tick"/>
 /// and the composes during frame produce — one window-pump thread).</remarks>
@@ -131,7 +131,7 @@ internal sealed class WorldWorkbench {
 
         model.SetName(name: rowId);
 
-        // The envelope pre-check (the ghost-spawn precedent): the candidate composes the delivered definition, any
+        // The envelope pre-check (matching the ghost-spawn check): the candidate composes the delivered definition, any
         // live drag ghosts, AND this bench's preview — the measure charges every stamp at worst case, so passing
         // here keeps ANY later model state (≤ the per-stamp cap) inside the probed floors.
         var definition = m_client.Definition;
@@ -218,7 +218,7 @@ internal sealed class WorldWorkbench {
 
         // The camera-frame deflection maps into the model's world-aligned planar convention (+Y of the vector is
         // +Z); the workbench frame IS the world frame (the preview placement stamps yaw 0, scale 1), so no further
-        // transform applies. Speed stays the model's settled 3.2 u/s contract.
+        // transform applies. Speed stays the model's fixed 3.2 u/s move rate.
         var world = ((planarRight * move.X) + (planarForward * move.Y));
 
         model.Move(planar: new Vector2(x: world.X, y: world.Z), vertical: vertical, deltaSeconds: deltaSeconds);

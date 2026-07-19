@@ -4,8 +4,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>
-/// The server's ONE capability table — the single primitive the three former ad-hoc ownership forms (the engagement
-/// latch, machine-input ownership, the addon slot owner) unify into: a set of <c>(principal, capability, subject)</c>
+/// The server's ONE capability table — the single primitive that engagement, machine-input ownership, and addon
+/// slot ownership all reduce to: a set of <c>(principal, capability, subject)</c>
 /// grants, seeded permissive for local play and mutated live through <c>world.grant</c>/<c>world.revoke</c>. Every
 /// write boundary asks <see cref="Allows"/> before it acts; <see cref="WorldEngagement"/> is a VIEW over the
 /// <see cref="WorldCapability.Control"/> screen routes here, not a parallel table.
@@ -74,8 +74,8 @@ internal sealed class WorldGrants {
         SeedDomain(principal: WorldPrincipal.Console);
         _ = TryGrant(grant: new WorldGrant(Principal: WorldPrincipal.Console, Capability: WorldCapability.Drive, Subject: GrantSubject.All, Exclusive: false), reason: out _);
 
-        // Population peers can engage a diegetic screen (a network human's route) — seed the Control capability so the
-        // grant-backed engagement view behaves exactly as the former index-only route table did.
+        // Population peers can engage a diegetic screen (a network human's route) — seed the Control capability so
+        // a population peer's engagement route behaves identically to a seat's.
         for (var index = seatCount; (index < population); index++) {
             _ = TryGrant(grant: new WorldGrant(Principal: WorldPrincipal.Peer(index: index), Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false), reason: out _);
         }
@@ -107,7 +107,7 @@ internal sealed class WorldGrants {
     /// <param name="subject">The subject to test.</param>
     public bool Allows(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
         // The exclusivity override: a reserved subject answers for its reserver ALONE, so an exclusively-held body has
-        // exactly one effective driver even though the console still holds the seeded Drive/all wildcard (§CR-1).
+        // exactly one effective driver even though the console still holds the seeded Drive/all wildcard.
         if (ExclusiveHolderOf(capability: capability, subject: subject) is { } holder) {
             return (holder == principal);
         }
@@ -152,7 +152,7 @@ internal sealed class WorldGrants {
         return true;
     }
 
-    /// <summary>Adds a grant, enforcing exclusivity in BOTH orders (§CR-1). An incoming EXCLUSIVE grant over the wildcard
+    /// <summary>Adds a grant, enforcing exclusivity in BOTH orders. An incoming EXCLUSIVE grant over the wildcard
     /// <see cref="GrantSubject.All"/> is rejected outright (an exclusive reservation must name a concrete subject). The
     /// grant is REJECTED when a DIFFERENT principal already holds a conflicting exclusive reservation of an overlapping
     /// subject (whether the incoming grant is exclusive or ordinary), or when an incoming EXCLUSIVE grant would share the
@@ -180,7 +180,7 @@ internal sealed class WorldGrants {
         return true;
     }
 
-    // Whether an incoming grant conflicts with an existing hold under the §CR-1 exclusivity rule. Grant/revoke is a
+    // Whether an incoming grant conflicts with an existing hold under the exclusivity rule. Grant/revoke is a
     // human-cadence op (never the tick path), so the two scans are affordable; both are skipped entirely for the common
     // idempotent re-grant (a matching holder is the incoming principal itself).
     private bool Conflicts(WorldGrant grant, out string reason) {

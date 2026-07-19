@@ -6,7 +6,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// The sculpt TIMELINE + RIG console surface (§P6) — the assist-layer twins of the LT+RT frames page and the RT+LT
+/// The sculpt TIMELINE + RIG console surface — the assist-layer twins of the LT+RT frames page and the RT+LT
 /// rig page: recording/stepping/playing the hold-style frame timeline, and defining/tuning the IK chains (goal
 /// posing rides the target cycle + move stick; these verbs are the named/numeric half). All client-local model
 /// state. A SEPARATE module to keep every class under its analyzer ceilings.
@@ -63,7 +63,7 @@ internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, W
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: "editor.sculpt.frame.ticks",
-            description: "Sets the playback hold per frame in engine ticks at 60/s (clamped 1..60; the settled 8-tick cadence is the default): editor.sculpt.frame.ticks <n> [seat].",
+            description: "Sets the playback hold per frame in engine ticks at 60/s (clamped 1..60; the fixed 8-tick cadence is the default): editor.sculpt.frame.ticks <n> [seat].",
             handler: FrameTicksHandler
         );
         yield return CommandDefinition.WithTrailingArgs(

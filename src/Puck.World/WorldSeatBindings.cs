@@ -4,8 +4,8 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The World-side per-seat <see cref="IInputBindings"/> the <see cref="InputRouter"/> resolves through — the successor
-/// of the single shared table. It holds one <see cref="PagedInputBindings"/> per local seat, each compiled from that
+/// The World-side per-seat <see cref="IInputBindings"/> the <see cref="InputRouter"/> resolves through. It holds one
+/// <see cref="PagedInputBindings"/> per local seat, each compiled from that
 /// seat's composed document (engine default ⊕ world overlays ⊕ the seat's profile bindings ⊕ its live session
 /// rebinds). Composition and compilation happen only on a CHANGE (a profile selection, a rebind, an overlay mutation)
 /// — never per frame; the per-signal resolve path stays the existing paged lookups. A seat's runtime MODE is NOT a

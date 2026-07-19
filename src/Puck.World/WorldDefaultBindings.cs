@@ -4,9 +4,9 @@ using Puck.Input;
 namespace Puck.World;
 
 /// <summary>
-/// The engine-default binding document — the data-file successor of the former hard-coded <c>inputBindingTable</c> in
-/// <c>Program.cs</c>. It is the FIRST layer of every seat's composed mapping (§2.4: engine default ⊕ world overlays ⊕
-/// profile bindings ⊕ live rebinds), code-authored (never serialized — a null profile <c>Bindings</c> section inherits
+/// The engine-default binding document, authored as a data file rather than code. It is the FIRST layer of every
+/// seat's composed mapping (engine default ⊕ world overlays ⊕ profile bindings ⊕ live rebinds), code-authored
+/// (never serialized — a null profile <c>Bindings</c> section inherits
 /// it), and carries BOTH page groups: the <see cref="PlayGroup"/> rows below (the <c>player.*</c> vocabulary) and the
 /// <see cref="WorldEditorBindings"/> rows (group <c>editor</c>, always compiled in — entering the editor is a per-seat
 /// <see cref="WorldSeatBindings.SetActiveGroup"/> pointer flip, never a recompose).

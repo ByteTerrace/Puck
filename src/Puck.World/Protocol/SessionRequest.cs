@@ -4,7 +4,7 @@ namespace Puck.World.Protocol;
 /// management verbs translate into (join/leave/profile → seat allocation, population/behavior → the simulated census).
 /// The server validates it and answers with a <see cref="SessionReply"/>. Every request carries its acting
 /// <see cref="Principal"/> on the base (uniform with <see cref="WorldCommand"/> and <see cref="WorldMutation"/>); seat
-/// management stays UNGATED this arc (it is couch-local), so the field is carried for the socket arc, not yet checked.</summary>
+/// management stays UNGATED (couch-local); the field is carried for future network validation, not yet checked.</summary>
 /// <param name="Principal">The acting identity the request is attributed to.</param>
 internal abstract record SessionRequest(WorldPrincipal Principal) {
     /// <summary>Joins a player: a named <see cref="ProfileName"/> joins directly active on it, a null one joins pending
@@ -55,7 +55,7 @@ internal abstract record SessionRequest(WorldPrincipal Principal) {
 }
 
 /// <summary>The player-profile sections a <see cref="SessionRequest.SetPlayerSection"/> targets — the message grain
-/// (storage stays per-profile, §2.5). A genre world arrives as different DATA in the preferences bag, never a new
+/// (storage stays per-profile). A genre world arrives as different DATA in the preferences bag, never a new
 /// section kind here.</summary>
 internal enum WorldPlayerSection : byte {
     /// <summary>The display identity (name + color) — a <c>WorldPlayerIdentity</c> payload.</summary>

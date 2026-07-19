@@ -9,7 +9,7 @@ internal enum WorldEditEchoKind {
     Mutation,
 
     /// <summary>A DOCUMENT-DEFAULTS mutation — it changes what the next boot wakes on while the live session levers
-    /// keep their values (the D7 asymmetry: <c>world.render.defaults</c> / <c>world.population.defaults</c>).</summary>
+    /// keep their values (<c>world.render.defaults</c> / <c>world.population.defaults</c>).</summary>
     DocumentDefaults,
 
     /// <summary>A grant-table change (<c>world.grant</c>/<c>world.revoke</c>) — runtime capability state, not a
@@ -37,8 +37,8 @@ internal readonly record struct WorldEditEcho(string Message, bool Rejected, Wor
 /// and queries apply synchronously at submit (the host guarantees submissions arrive inside the command-apply window
 /// immediately preceding the tick's <see cref="Step"/>, so every mutation lands before that tick's advance in stdin
 /// FIFO order). Live world EDITS — mutations, definition swaps, and journal undo — instead BUFFER and drain at
-/// <see cref="Step"/>, before the intent drain, so they are tick-aligned (settled question 9: they buffer like intents,
-/// they are not synchronous like commands). Per-tick intents also buffer and drain at <see cref="Step"/>, which then
+/// <see cref="Step"/>, before the intent drain, so they are tick-aligned: they buffer like intents,
+/// they are not synchronous like commands. Per-tick intents also buffer and drain at <see cref="Step"/>, which then
 /// advances every body and pushes the tick's <see cref="WorldSnapshot"/> — plus, in any step that applied at least one
 /// edit, the new definition — to the attached <see cref="IClientSink"/>.
 /// </summary>
@@ -97,7 +97,7 @@ internal sealed class WorldServer {
     public WorldProfiles Profiles => m_profiles;
 
     /// <summary>The capability table — the ONE grant primitive the engagement view, the addon driver, and the grant
-    /// verbs read/write. Reads are loopback-local this arc; a socket transport moves grant changes onto the wire.</summary>
+    /// verbs read/write. Reads are loopback-local today; a socket transport moves grant changes onto the wire.</summary>
     public WorldGrants Grants => m_grants;
 
     /// <summary>The journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
@@ -355,7 +355,7 @@ internal sealed class WorldServer {
                 continue;
             }
 
-            // Server-side Drive enforcement on the per-tick path (the §2.7 keystone): a submission whose principal does
+            // Server-side Drive enforcement on the per-tick path: a submission whose principal does
             // not hold Drive over the target body is dropped, loud ONCE per denial episode (a revoked driver keeps
             // submitting; we log its first refused tick, then the body idles until re-granted). Allocation-free O(1).
             if (!m_grants.Allows(principal: submission.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: submission.EntityIndex))) {
@@ -405,7 +405,7 @@ internal sealed class WorldServer {
     // unchanged) → on success swap the live definition, rebuild the changed section's derived state, and journal it.
     private bool TryApplyMutation(WorldMutation mutation, ulong tick) {
         // Server-side Mutate enforcement: the principal must hold Mutate over the mutation's section. A denial is
-        // data-shaped (a missing grant row), never a new message kind — and it is loud and dropped (§2.6 audit).
+        // data-shaped (a missing grant row), never a new message kind — and it is loud and dropped.
         var section = SectionOf(mutation: mutation);
 
         if (!m_grants.Allows(principal: mutation.Principal, capability: WorldCapability.Mutate, subject: GrantSubject.Section(section: section))) {
@@ -436,7 +436,7 @@ internal sealed class WorldServer {
         Install(definition: candidate, rebuildPopulation: AffectsPopulation(mutation: mutation));
         m_journal.Add(item: new JournalEntry(Tick: tick, Mutation: mutation));
 
-        // The D7 asymmetry, presented: a defaults-class mutation edits what the NEXT boot wakes on while the live
+        // A defaults-class mutation edits what the NEXT boot wakes on while the live
         // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
         // SetAuthoringDefaults is the honest exception to the binary split: ONE whole-row mutation carries BOTH
         // classes at once (WorldAuthoringDefaults' own remarks name which field is which) — the headroom/repeat-cap
@@ -546,8 +546,8 @@ internal sealed class WorldServer {
         EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"{Describe(mutation: mutation)} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation));
     }
 
-    // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now" —
-    // the settled D7 asymmetry). Everything else, cameras included, applies live on delivery.
+    // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
+    // Everything else, cameras included, applies live on delivery.
     private static bool IsDocumentDefaults(WorldMutation mutation) => mutation is
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults;
 
@@ -791,7 +791,7 @@ internal sealed class WorldServer {
 
                 return true;
             case WorldMutation.UpsertCreation m: {
-                // The UIE-6 hash contract at the compose boundary: canonicalize (validate + normalize + hash) the
+                // The hash contract at the compose boundary: canonicalize (validate + normalize + hash) the
                 // carried document, REJECT a hash the pipeline did not itself compute, and store the canonical pair —
                 // so a stored row's doc and hash always come from the SAME canonical result.
                 Puck.Authoring.CanonicalDocument<Puck.Authoring.CreationDocument> canonical;
@@ -850,9 +850,9 @@ internal sealed class WorldServer {
 
                 return true;
             case WorldMutation.RemovePlacement m: {
-                // The no-cascade guard, extended for the audio arc: a placement a speaker anchors to rejects loudly
-                // naming the dependents (the RemoveCreation precedent — full-document revalidation would also catch
-                // the dangling anchor, but the guard names WHO depends rather than echoing a validator path).
+                // The no-cascade guard: a placement a speaker anchors to rejects loudly naming the dependents, never
+                // silently unanchoring the speaker (full-document revalidation would also catch the dangling anchor,
+                // but the guard names WHO depends rather than echoing a validator path).
                 if (DescribeSpeakersAnchoredTo(speakers: current.Speakers, placementId: m.Id) is { } anchored) {
                     candidate = current;
                     reason = $"placement '{m.Id}' anchors speaker(s) {anchored} — remove or re-anchor them first";
@@ -887,7 +887,7 @@ internal sealed class WorldServer {
 
                 return true;
             case WorldMutation.UpsertTune m: {
-                // The UIE-6 hash contract at the compose boundary (the UpsertCreation pattern verbatim): canonicalize
+                // The hash contract at the compose boundary, identical to UpsertCreation's: canonicalize
                 // the carried puck.audio.v1 document, REJECT a hash the pipeline did not itself compute, store the pair.
                 Puck.Authoring.CanonicalDocument<Puck.Authoring.AudioDocument> canonical;
 

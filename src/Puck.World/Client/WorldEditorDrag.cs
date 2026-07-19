@@ -9,7 +9,7 @@ namespace Puck.World.Client;
 /// The drag preview channel — the client-local pending-row overlay every continuous manipulation rides. A grab copies
 /// the selected row (or a spawn act creates a ghost row) into a per-seat pending slot; stick/verb motion moves the
 /// pending position through <see cref="GridSnap"/>; the frame source composes the pending rows over the delivered
-/// definition so the EXISTING rebuild path renders the preview (drag-cadence rebuild ≈ the proven seat-recolor cost);
+/// definition so the EXISTING rebuild path renders the preview (drag-cadence rebuild ≈ the seat-recolor cost);
 /// and release submits exactly ONE whole-row mutation over the link (the wire-boundary drag coalescing — a 10-second
 /// drag is one journal entry, one undo step). Cancel clears the pending row: the drag never existed.
 /// </summary>
@@ -18,8 +18,8 @@ namespace Puck.World.Client;
 /// equals the frozen expected row: identical document truth, no pixel pop) or a REJECTION (the server's edit echo
 /// correlates back through <see cref="NoteRejected"/>: the row snaps honestly back while the rejection toast narrates
 /// why). An UNRELATED delivery — another principal's mutation advancing the definition revision — leaves the frozen
-/// preview standing (UIE-3: the old global revision watch retired it early, snapping the row back before the released
-/// act resolved). The frame deadline stays as the honest fallback for a missing response. Single-threaded on the
+/// preview standing (a preview retires only on its own act's apply/rejection/deadline, never an unrelated delivery).
+/// The frame deadline stays as the honest fallback for a missing response. Single-threaded on the
 /// window-pump thread, like every editor type here.</remarks>
 internal sealed class WorldEditorDrag {
     private const float DefaultSnapPitch = 0.5f;

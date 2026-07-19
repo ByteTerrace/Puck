@@ -5,7 +5,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The <c>world.save</c> session-capture fold (§2.1 session write-back). A running world holds live SESSION state that is
+/// The <c>world.save</c> session-capture fold. A running world holds live SESSION state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
 /// live census the population verb moves (<see cref="WorldPopulation.SimulatedCount"/> /
 /// <see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a runtime <c>screen.insert</c> booted onto declared
@@ -13,7 +13,7 @@ namespace Puck.World;
 /// (mutations already applied) with those three session dimensions folded into their document homes — so a save is a
 /// faithful snapshot of what is playing, and re-booting the saved file reproduces it.
 /// </summary>
-/// <remarks>SAVED-BYTES-ONLY (the brief's default): capture composes the snapshot the writer serializes; it never mutates
+/// <remarks>SAVED-BYTES-ONLY (the default policy): capture composes the snapshot the writer serializes; it never mutates
 /// the in-memory definition or the journal (a save is a snapshot, not a mutation). The fold is exactly IDEMPOTENT on a
 /// freshly booted world — live session state equals the document defaults at boot — so the ouroboros gate (load→save→load
 /// byte-identity) still holds after a save learns to fold. <see cref="DescribeDrift"/> is the honest cheap witness of
@@ -81,7 +81,7 @@ internal static class WorldSessionCapture {
         return captured;
     }
 
-    // The §D6 world.save hash recompute: every creation row re-crosses the ONE canonicalize pipeline so the persisted
+    // The world.save hash recompute: every creation row re-crosses the ONE canonicalize pipeline so the persisted
     // doc + hash come from the SAME CanonicalCreation. Rows are already canonical at compose time, so this is exactly
     // idempotent (no drift dimension) — it exists so the SAVED file's pin can never diverge from its embedded bytes.
     private static IReadOnlyList<WorldCreation> CaptureCreations(IReadOnlyList<WorldCreation> creations) {
@@ -102,7 +102,7 @@ internal static class WorldSessionCapture {
 
     /// <summary>A cheap, verb-time (never per-tick) description of which session dimensions have drifted from the loaded
     /// document's defaults: <c>none</c> when a save would reproduce the file, else a <c>+</c>-joined list of the drifted
-    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>) — the honest <c>world.status</c> session-drift hint.</summary>
+    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>, <c>audio</c>) — the honest <c>world.status</c> session-drift hint.</summary>
     /// <param name="definition">The server's live definition.</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table.</param>

@@ -8,7 +8,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// The sculpt STYLE console surface (§P6) — the assist-layer twins of the RT style page's chords plus the numeric
+/// The sculpt STYLE console surface — the assist-layer twins of the RT style page's chords plus the numeric
 /// setters: blend ops (with the group-of-one coercion), smooth radius, palette-slot assignment and palette-entry
 /// editing, mirror, the twist/bend/dilate/onion field knobs, and group link/ungroup. All client-local model state.
 /// A SEPARATE module to keep every class under its analyzer ceilings.

@@ -4,8 +4,8 @@ using Puck.Maths;
 namespace Puck.World.Audio;
 
 /// <summary>The per-voice state-variable filter response. <see cref="Bypass"/> is the neutral default every
-/// current <c>puck.synth.v1</c> patch converts to — patch-side filter fields are AP2's liftable extension; the
-/// runtime block already carries them so the DSP lands proven.</summary>
+/// current <c>puck.synth.v1</c> patch converts to — patch-side filter fields are not yet part of the document; the
+/// runtime block already carries them so the DSP works ahead of the document surface.</summary>
 public enum WorldVoiceFilterMode {
     /// <summary>No filtering — the voice output is the oscillator/envelope product unchanged.</summary>
     Bypass,
@@ -22,7 +22,7 @@ public enum WorldVoiceFilterMode {
 /// <see cref="SynthPatchDocument"/> converted ONCE at registration (never per sample): duty is pre-scaled to a Q32
 /// phase threshold with its DC term precomputed, and all frame/millihertz fields ride verbatim (they are already
 /// runtime units by the document's design). Filter parameters have no document fields yet — <see cref="FromDocument"/>
-/// sets <see cref="WorldVoiceFilterMode.Bypass"/>; AP2 lifts them into <c>puck.synth.v1</c> when wanted.
+/// sets <see cref="WorldVoiceFilterMode.Bypass"/>.
 /// </summary>
 /// <param name="Oscillator">The oscillator kind.</param>
 /// <param name="DutyThresholdQ32">The pulse duty as a Q32 phase threshold (phase below = high half).</param>
@@ -91,13 +91,13 @@ public readonly record struct WorldVoicePatch(
 }
 
 /// <summary>
-/// The world's deterministic voice synth (plan A9): 32 voices in a fixed struct array, zero steady-state
+/// The world's deterministic voice synth: 32 voices in a fixed struct array, zero steady-state
 /// allocation, fixed-point end to end. Sine is a <see cref="FixedComplex"/> rotor (one complex multiply per
 /// sample, renormalized at control ticks); pulse/saw/triangle are Q32 phase accumulators; noise is a
 /// <see cref="Pcg32XshRr"/> stream created from the trigger seed plus a one-pole tilt keyed by the patch's
 /// polynomial byte. The envelope runs in sample units; pitch (base + linear sweep + triangle-LFO vibrato, the
 /// hardware-kin choice) is re-evaluated every <see cref="ControlIntervalFrames"/> samples. Each voice ends in one
-/// Chamberlin state-variable filter — the arc's one new DSP element: <c>low += f·band; high = x − low − q·band;
+/// Chamberlin state-variable filter: <c>low += f·band; high = x − low − q·band;
 /// band += f·high</c> per sample, tap selected by mode, integer Q16 throughout.
 /// The same pure <see cref="Render"/> executes on the audio thread and the offline proof.
 /// Voice allocation: a free voice first; otherwise steal the QUIETEST (lowest current envelope level), ties
@@ -110,7 +110,7 @@ public sealed class WorldVoiceSynth {
     /// interval — vibrato and sweeps move at millihertz scales, so 64 samples (1.33 ms) is inaudibly coarse and
     /// keeps the per-sample path multiply-only.</summary>
     public const int ControlIntervalFrames = 64;
-    /// <summary>The mixer rate every frame unit in <c>puck.synth.v1</c> is denominated in (plan A1).</summary>
+    /// <summary>The mixer rate every frame unit in <c>puck.synth.v1</c> is denominated in.</summary>
     public const int SampleRate = 48_000;
 
     // 2π and the phase→radians bridge in Q16: rotor step angle = phaseIncrementQ32 · 2π >> 32.

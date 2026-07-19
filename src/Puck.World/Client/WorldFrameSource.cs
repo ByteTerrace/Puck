@@ -22,7 +22,7 @@ namespace Puck.World.Client;
 /// simulated count changes). A construction probe emits the complete 128-rig catalog and freezes the word, instance,
 /// and dynamic-transform envelopes; live programs contain active avatars only.</remarks>
 internal sealed class WorldFrameSource : ISdfFrameSource {
-    // BOOT-CONSUMED authoring policy (WorldAuthoringDefaults, P5.5): captured ONCE at construction into the fields
+    // BOOT-CONSUMED authoring policy (WorldAuthoringDefaults): captured ONCE at construction into the fields
     // below, from the boot definition's Authoring row — never re-read live. These feed the frozen render-envelope
     // probe (scene-row/screen-slot/placement-segment reservation), so a later SetAuthoringDefaults mutation is
     // journaled but cannot retroactively grow a running session's capacity floor; it narrates "next boot" honestly.
@@ -48,13 +48,13 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly WorldChangeShimmer m_shimmer = new();
     private readonly WorldEditorDrag m_drag;
     private readonly WorldWorkbench m_workbench;
-    // The animated-placement replay pool (§D6): reconciled at the delivery boundary, ticked on the render clock,
+    // The animated-placement replay pool: reconciled at the delivery boundary, ticked on the render clock,
     // packed after the avatar transforms every frame.
     private readonly WorldPlacementAnimator m_animator;
-    // The audio director (AP2): its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
+    // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every capture.
     private readonly WorldAudioDirector m_audio;
-    // The editor-gizmo feed (AP4): geometry-less rows (speakers) projected into each EDITING seat's viewport as
+    // The editor-gizmo feed: geometry-less rows (speakers) projected into each EDITING seat's viewport as
     // overlay chips — published every produced frame (leaving editor mode clears the chips), consumed by the
     // unified overlay's gizmo writer the same frame (CaptureFrame runs before the overlay's FeedTick/writers).
     private readonly EditorGizmoStore m_gizmos;
@@ -75,7 +75,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     private readonly float[] m_avatarGaitPhases = new float[WorldPopulation.MaxPopulation];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldPopulation.MaxPopulation];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldPopulation.MaxPopulation];
-    // The seat.join cue's edge detector (A11b): a slot's roster presence last frame.
+    // The seat.join cue's edge detector: a slot's roster presence last frame.
     private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
     private readonly WorldRenderSettings m_settings;
@@ -105,11 +105,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
     /// <param name="editor">The per-seat editor mode (camera rig swap + the sole-editor layout policy).</param>
     /// <param name="targeting">The editor selection state (the render highlight + rebuild watch).</param>
     /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
-    /// <param name="animator">The animated-placement replay pool (§D6).</param>
-    /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch, §P6).</param>
+    /// <param name="animator">The animated-placement replay pool.</param>
+    /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch).</param>
     /// <param name="audio">The audio director — the emitter derivation reconciled at the delivery boundary and the
-    /// per-frame snapshot publisher (AP2).</param>
-    /// <param name="gizmos">The editor-gizmo store the per-frame speaker-chip projections publish into (AP4).</param>
+    /// per-frame snapshot publisher.</param>
+    /// <param name="gizmos">The editor-gizmo store the per-frame speaker-chip projections publish into.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldPlacementAnimator animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
@@ -133,7 +133,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         }
 
         m_audio = audio;
-        // The machine-source resolver (audio plan A4/AP3): the director diffs the binder's LIVE machines by
+        // The machine-source resolver: the director diffs the binder's LIVE machines by
         // reference each produced frame, so a boot/eject/live-swap rebinds the mixer source and a machine booting
         // late into a referenced slot self-heals. Wired here — the produce path's composition point — and only ever
         // invoked from the director's pump-thread Publish.
@@ -292,7 +292,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             if (definitionRevision != m_builtDefinitionRevision) {
                 m_binder.ReconcileCameras(cameras: m_client.Definition.Cameras);
                 m_binder.ReconcileScreens(screens: m_client.Definition.Screens);
-                // The animated-placement pool reconciles at the same delivery boundary (the P4 template): cheap pose
+                // The animated-placement pool reconciles at the same delivery boundary: cheap pose
                 // edits write in place, creation-content changes release + recreate, removals release (symmetric).
                 m_animator.Reconcile(placements: m_client.Definition.Placements, creations: m_client.Definition.Creations);
                 // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and
@@ -304,16 +304,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
             // The editor's pending rows compose over the delivered truth: the EXISTING rebuild path renders the drag
             // preview at drag cadence, and release retires the overlay against the identical committed document — no
-            // second render path. MEASURED (UIE-5, 2026-07-18, Release 1280x800, both backends, world.timing's
-            // capture bucket): a continuous drag's whole-program rebuild+upload costs ~0.07-0.12 ms/frame at 1-4
-            // avatars and ~1.5-2.4 ms worst-of-60 at the 128-avatar ceiling (first-grab spike ~10 ms), with
-            // presentation FPS pinned at 117.0 avg / >=114 worst throughout and GPU frame time unchanged. Verdict:
-            // the full-rebuild path stays; a cheaper preview transform is not demanded by the evidence.
+            // second render path. The full-rebuild path stays: the evidence does not demand a cheaper preview transform.
             m_program = Build(
                 scene: m_drag.ComposeScene(live: m_client.Definition.Scene),
                 screens: m_drag.ComposeScreens(live: m_client.Definition.Screens),
                 // The sculpt preview composes OVER the drag-composed rows: the bench's synthetic creation +
-                // placement render through the same stamp path a committed row uses (§P6's stamp-equals-preview).
+                // placement render through the same stamp path a committed row uses (stamp-equals-preview).
                 placements: m_workbench.ComposePlacements(live: m_drag.ComposePlacements(live: m_client.Definition.Placements)),
                 creations: m_workbench.ComposeCreations(live: m_client.Definition.Creations),
                 probeWorstCase: false,
@@ -375,7 +371,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
 
                 m_avatarGaitPhases[index] += (travelled * 8.0f);
 
-                // The player.footstep cue (A11b): LOCAL seat avatars fire one at-site cue per gait-phase half-cycle
+                // The player.footstep cue: LOCAL seat avatars fire one at-site cue per gait-phase half-cycle
                 // wrap — one footfall per π of phase (a stride swings one leg through), so cadence follows walking
                 // speed and an idle avatar is silent. Presentation-side by design: the phase is the same
                 // distance-driven presentation state that swings the limbs.
@@ -415,7 +411,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 continue;
             }
 
-            // The seat.join cue (A11b): the roster arrival edge, at the seat avatar's spawn pose.
+            // The seat.join cue: the roster arrival edge, at the seat avatar's spawn pose.
             if (!m_seatWasJoined[slot]) {
                 m_seatWasJoined[slot] = true;
                 m_audio.SubmitCue(eventToken: WorldAudioCue.SeatJoin, site: m_client.Position(index: slot));
@@ -431,10 +427,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
-            // so "focus" listens where the active view looks (audio plan A5).
+            // so "focus" listens where the active view looks.
             m_seatCameraPoses[slot] = new WorldSeatCameraPose(Joined: true, Eye: eye, Forward: (target - eye));
 
-            // The speaker gizmos (AP4): EDITOR-MODE-ONLY chips at each speaker's resolved pose, projected through
+            // The speaker gizmos: EDITOR-MODE-ONLY chips at each speaker's resolved pose, projected through
             // the SAME camera this seat renders with. Pending drag rows compose over the delivered truth, so a
             // dragged chip tracks its snapped position live.
             if (m_editor.IsEditing(slot: slot)) {
@@ -447,8 +443,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
         m_gizmos.Publish(frame: new OverlayGizmoFrame(Seats: m_gizmoSeats.AsMemory(start: 0, length: gizmoSeatCount)));
 
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
-        // poses read the packed leaf transforms; the listener reads the seat cameras (plan A3 — once per produced
-        // frame, from the produce path where render poses are already resolved). The presentation delta ages the
+        // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
+        // frame, from the produce path where render poses are already resolved. The presentation delta ages the
         // transient cue pool (visual-only clock use — audio is presentation).
         _ = m_audio.Publish(transforms: m_transforms, seats: m_seatCameraPoses, deltaSeconds: deltaSeconds);
 
@@ -464,8 +460,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
             DisableAmbientOcclusion = !m_settings.AmbientOcclusion,
             DisableSoftShadows = (m_settings.ShadowReach <= 0f),
             // Ambient occlusion — the world.ao toggle rides the DisableAmbientOcclusion lane.
-            // Far-field isolators (world.far-field): both features ship ON, so the frame DISABLES only when the settings
-            // clear them — the "off" sides of the owner's paired A/B.
+            // Far-field isolators (world.far-field): both features ship ON, so the frame's flags are the negated
+            // "disable" side of each toggle.
             DisableFarBound = !m_settings.FarBound,
             DisableShadowFarExit = !m_settings.ShadowFarExit,
             DynamicTransforms = m_transforms,
@@ -790,7 +786,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource {
                 .ResetPoint();
         }
 
-        // The placement stamps (§D6): the construction probe reserves (boot static segments + the authoring headroom)
+        // The placement stamps: the construction probe reserves (boot static segments + the authoring headroom)
         // worst-case stamps, and the APPLY-TIME MEASURE charges a candidate's static placements at that same
         // worst-case unit — max(candidate segments, the reservation) — so the placement term stays CONSTANT between
         // probe and measure while placements are inside their headroom. That constancy is load-bearing: a cheaper

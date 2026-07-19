@@ -7,17 +7,17 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The creation-asset console surface (§D6/P5) — the assist-layer twins of the place page's place-by-name chords.
+/// The creation-asset console surface — the assist-layer twins of the place page's place-by-name chords.
 /// <c>editor.import</c> reads a creation FILE through the ONE <see cref="CreationCanonicalizer"/> pipeline and inlines
-/// an <c>UpsertCreation</c> (doc + hash from the SAME <see cref="CanonicalDocument{TDocument}"/> — the UIE-6 contract);
+/// an <c>UpsertCreation</c> (doc + hash always come from the same canonicalize call);
 /// <c>editor.creations</c> lists the world's creation rows; <c>editor.creation.next</c>/<c>prev</c> cycle a per-seat
 /// ARMED creation (the place page's D-pad chords); <c>editor.spawn.creation</c> begins a ghost drag of the armed (or
-/// named) creation at the editor focus — the P3 ghost/spawn pattern, committed by <c>editor.grab</c> as one
+/// named) creation at the editor focus — the ghost/spawn pattern, committed by <c>editor.grab</c> as one
 /// <c>UpsertPlacement</c>. A SEPARATE module to keep every class under its analyzer ceilings.
 /// </summary>
 /// <remarks>Import routing is Simulation (it submits a mutation; the stdin barrier serializes a following
 /// <c>world.status</c>); the armed-cycle and list verbs are pure client state and stay Immediate. A CAS-ref import
-/// form stays deliberately unbuilt this arc — World names no content-store root; the file path IS the authoring
+/// form stays deliberately unbuilt — World names no content-store root; the file path IS the authoring
 /// cache's front door.</remarks>
 internal sealed class EditorCreationCommandModule(WorldEditorSession session, WorldEditorDrag drag, WorldClient client, IServerLink link) : ICommandModule {
     /// <summary>The armed-creation cycle-next act (D-pad Right on the place page).</summary>
@@ -89,7 +89,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
         var id = ((args.Length >= 2) ? args[1] : (canonical.Document.Name ?? "creation"));
         var slot = ((context.Parse is null) ? context.Slot : 0);
 
-        // Doc + hash from the SAME canonical result — the UIE-6 sentence, satisfied structurally.
+        // Doc + hash from the SAME canonical result — the hash-provenance contract, satisfied structurally.
         m_link.SubmitWorldMutation(mutation: new WorldMutation.UpsertCreation(
             Principal: WorldPrincipal.Seat(slot: slot),
             Creation: new WorldCreation(Id: id, Document: canonical.Document, Hash: canonical.Hash)

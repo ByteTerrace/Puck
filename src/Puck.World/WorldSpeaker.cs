@@ -5,10 +5,10 @@ using Puck.Authoring;
 namespace Puck.World;
 
 /// <summary>
-/// The signal a <see cref="WorldSpeaker"/>'s feed taps (audio plan A7) — a SHARED source identity, never an inline
+/// The signal a <see cref="WorldSpeaker"/>'s feed taps — a SHARED source identity, never an inline
 /// payload: the runtime drains each distinct source once per mix block and every feed tapping it shares that one
-/// pull, so "stereo = two rows sharing a source" costs one drain. The <c>$type</c> string is the JSON discriminator
-/// (the <see cref="WorldScreenSource"/> precedent); a new source kind is a new derived record plus its
+/// pull, so "stereo = two rows sharing a source" costs one drain. The <c>$type</c> string is the JSON discriminator,
+/// matching <see cref="WorldScreenSource"/>'s convention; a new source kind is a new derived record plus its
 /// <see cref="JsonDerivedTypeAttribute"/> line.
 /// </summary>
 [JsonDerivedType(typeof(WorldSpeakerSource.None), typeDiscriminator: "none")]
@@ -37,12 +37,12 @@ internal abstract record WorldSpeakerSource {
     internal sealed record Tune(string TuneId) : WorldSpeakerSource;
 
     /// <summary>The world voice synth playing a patch asset (<see cref="WorldPatch"/>). Patches are MONO by
-    /// construction: the feed's channel selectors degenerate to <c>mix</c> — documented, never rejected (plan A7).</summary>
+    /// construction: the feed's channel selectors degenerate to <c>mix</c> — documented, never rejected.</summary>
     /// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> (must resolve).</param>
     internal sealed record Synth(string PatchId) : WorldSpeakerSource;
 }
 
-/// <summary>A speaker's feed — WHAT it plays (audio ruling 3): a shared source identity, a stereo channel selector,
+/// <summary>A speaker's feed — WHAT it plays: a shared source identity, a stereo channel selector,
 /// and a gain. Stereo separation is two independent speaker rows sharing one source with <c>left</c>/<c>right</c>
 /// selectors and different geometry — no group/attachment construct. Mono sources (the synth) degenerate every
 /// selector to <see cref="ChannelMix"/>.</summary>
@@ -63,13 +63,13 @@ internal sealed record WorldSpeakerFeed(WorldSpeakerSource Source, string Channe
 /// <summary>A point speaker's distance-attenuation policy, or <see langword="null"/> on the row to coalesce to the
 /// <see cref="WorldAudioDefaults"/> section (<c>DefaultSpeakerRadius</c>/<c>DefaultCurve</c>).</summary>
 /// <param name="Radius">The finite audible support radius in world units — at or beyond it the emitter is CULLED
-/// (finite support IS the cull, audio plan A1).</param>
+/// (finite support IS the cull).</param>
 /// <param name="Curve">The falloff curve token (<see cref="WorldAudioDefaults.CurveSmoothstep"/> is v1's whole
 /// vocabulary), or <see langword="null"/> for the audio-defaults curve.</param>
 internal sealed record WorldSpeakerAttenuation(float Radius, string? Curve);
 
 /// <summary>
-/// One placeable speaker in the world — the camera family's sibling (audio ruling 2): abstract, name-keyed,
+/// One placeable speaker in the world — the camera family's sibling: abstract, name-keyed,
 /// <c>$type</c>-discriminated, whole-row <c>UpsertSpeaker</c>/<c>RemoveSpeaker</c>. Routing chiasmus: screens
 /// consume cameras; speakers consume audio sources. Omni-only v1 (no cones — stereo separation is already the feed
 /// model). A new speaker kind is a new derived record plus its <see cref="JsonDerivedTypeAttribute"/> line.
@@ -107,8 +107,7 @@ internal abstract record WorldSpeaker(
     internal sealed record Anchored(string Name, WorldAnchor Anchor, Vector3 Offset, WorldSpeakerFeed Feed, WorldSpeakerAttenuation? Attenuation = null)
         : WorldSpeaker(Name: Name, Feed: Feed, Attenuation: Attenuation);
 
-    /// <summary>An ambient bed — a region PRESENCE, not a position (audio ruling 1's third shape as a speaker
-    /// <c>$type</c>, not a fourth concept): center-panned, its gain an envelope of the listener's distance from
+    /// <summary>An ambient bed — a region PRESENCE, not a position: center-panned, its gain an envelope of the listener's distance from
     /// <paramref name="Center"/> — full inside <paramref name="InnerRadius"/>, zero at <paramref name="Radius"/> —
     /// with its presence slew bounded by <paramref name="FadeSeconds"/>. Box extents become a later <c>$type</c>
     /// only if a sphere proves dishonest.</summary>
@@ -131,8 +130,8 @@ internal abstract record WorldSpeaker(
 
 /// <summary>
 /// One tune ASSET row — a whole <c>puck.audio.v1</c> document embedded INLINE-CANONICAL with its identity hash
-/// pinned beside it (the <see cref="WorldCreation"/> pattern verbatim, UIE-6): the compose boundary canonicalizes on
-/// upsert through <see cref="AudioCanonicalizer"/> and rejects a hash the pipeline did not itself compute; the
+/// pinned beside it (the same hash-pin/canonicalize contract as <see cref="WorldCreation"/>): the compose boundary
+/// canonicalizes on upsert through <see cref="AudioCanonicalizer"/> and rejects a hash the pipeline did not itself compute; the
 /// validator re-verifies the pin on every candidate; <c>world.save</c> re-canonicalizes. The hash doubles as the
 /// runtime restart discriminator: a content change restarts the tune's headless host, a rename does not.
 /// </summary>
@@ -144,8 +143,8 @@ internal sealed record WorldTune(string Id, AudioDocument Document, string Hash)
 
 /// <summary>
 /// One synth-patch ASSET row — a whole <c>puck.synth.v1</c> document embedded INLINE-CANONICAL with its identity
-/// hash pinned beside it (the <see cref="WorldCreation"/> pattern verbatim via <see cref="SynthPatchCanonicalizer"/>;
-/// see <see cref="WorldTune"/> for the shared pin/restart semantics).
+/// hash pinned beside it via <see cref="SynthPatchCanonicalizer"/>, the same pin/restart contract as
+/// <see cref="WorldCreation"/>; see <see cref="WorldTune"/> for the shared pin/restart semantics.
 /// </summary>
 /// <param name="Id">The row's stable string id — its mutation address; referenced by
 /// <see cref="WorldSpeakerSource.Synth"/> and by <see cref="WorldEmission.PatchId"/> facets.</param>
@@ -153,9 +152,9 @@ internal sealed record WorldTune(string Id, AudioDocument Document, string Hash)
 /// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes.</param>
 internal sealed record WorldPatch(string Id, SynthPatchDocument Document, string Hash);
 
-/// <summary>An emission FACET — a synth voice a world row itself makes (audio ruling 1: phenomena sound like
+/// <summary>An emission FACET — a synth voice a world row itself makes (phenomena sound like
 /// themselves; a creek is not a speaker). Nullable on <see cref="WorldSceneRow"/> and <see cref="WorldPlacement"/>
-/// (the repeat-facet precedent — a facet edit is the row's existing whole-row upsert). Under a repeat facet the
+/// — a facet edit is the row's existing whole-row upsert. Under a repeat facet the
 /// emission binds to the placement ROOT only (an 8×8 lattice must not become 64 voices; a per-copy flag is a future
 /// facet field, not a schema fork).</summary>
 /// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> (must resolve).</param>
@@ -165,10 +164,10 @@ internal sealed record WorldPatch(string Id, SynthPatchDocument Document, string
 internal sealed record WorldEmission(string PatchId, float Level, float? Radius = null);
 
 /// <summary>
-/// One world-event → sound binding (audio plan A11b) — a row of the Audio section's CUE TABLE: when the named engine
+/// One world-event → sound binding — a row of the Audio section's CUE TABLE: when the named engine
 /// event fires, the referenced patch voices through a short-lived TRANSIENT emitter placed per <see cref="Placement"/>.
-/// Event tokens are a CLOSED, published vocabulary of engine MECHANISMS (<see cref="EventTokens"/> — the leaf-role
-/// precedent): a genre ships different cue rows; new tokens appear only when the engine grows new mechanisms.
+/// Event tokens are a CLOSED, published vocabulary of engine MECHANISMS (<see cref="EventTokens"/>): a genre ships
+/// different cue rows; new tokens appear only when the engine grows new mechanisms.
 /// </summary>
 /// <param name="Event">The event token (must be one of <see cref="EventTokens"/>).</param>
 /// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> the cue voices (must resolve).</param>
@@ -215,8 +214,9 @@ internal sealed record WorldAudioCue(
     /// <summary>A local seat joined the roster.</summary>
     public const string SeatJoin = "seat.join";
 
-    /// <summary>The CLOSED cue-event vocabulary (the <see cref="WorldAvatarCatalog.HumanoidAnchorRoles"/> precedent):
-    /// the validator rejects any token outside it, and this list IS the published contract — new tokens appear only
+    /// <summary>The CLOSED cue-event vocabulary, the same closed-list discipline as
+    /// <see cref="WorldAvatarCatalog.HumanoidAnchorRoles"/>: the validator rejects any token outside it, and this
+    /// list IS the published contract — new tokens appear only
     /// when the engine grows new mechanisms, never per feature.</summary>
     public static readonly IReadOnlyList<string> EventTokens = [
         MutationApplied,
@@ -244,9 +244,9 @@ internal sealed record WorldAudioCue(
 }
 
 /// <summary>
-/// The world's audio host-section defaults (audio plan A11) — document defaults with the absence-coalesce convention
-/// (the <see cref="WorldStorageDefaults"/> precedent): absent-in-JSON coalesces to <see cref="Default"/>. These are
-/// document data, not editor policy; live master volume is the <c>world.volume</c> session lever (AP4): the lever
+/// The world's audio host-section defaults — document defaults with the same absence-coalesce convention every
+/// defaults section uses (see <see cref="WorldStorageDefaults"/>): absent-in-JSON coalesces to <see cref="Default"/>.
+/// These are document data, not editor policy; live master volume is the <c>world.volume</c> session lever: the lever
 /// owns "now" once touched, <see cref="MasterGain"/> owns boot, and <c>world.save</c> folds the lever back into
 /// <see cref="MasterGain"/> (the render-levers asymmetry).
 /// </summary>
@@ -257,10 +257,10 @@ internal sealed record WorldAudioCue(
 /// <param name="DefaultCurve">The falloff curve a point emitter coalesces to (<see cref="CurveSmoothstep"/> is v1's
 /// whole vocabulary — the mixer's squared-smoothstep finite-support law).</param>
 /// <param name="DefaultBedFadeSeconds">The presence slew bound a bed coalesces to when it declares none.</param>
-/// <param name="Listener">The listener policy (audio plan A5): <see cref="ListenerFocus"/> (the active view
+/// <param name="Listener">The listener policy: <see cref="ListenerFocus"/> (the active view
 /// camera's pose listens), <c>seat:&lt;n&gt;</c> (that seat's view camera), or a declared camera name — so a stage
 /// or museum world can pin its listener without touching the runtime.</param>
-/// <param name="Cues">THE CUE TABLE (audio plan A11b, default empty/absent): world events tied to sound as data —
+/// <param name="Cues">THE CUE TABLE (default empty/absent): world events tied to sound as data —
 /// see <see cref="WorldAudioCue"/>. <see langword="null"/> in JSON reads as empty and is omitted on write.</param>
 internal sealed record WorldAudioDefaults(
     float MasterGain,

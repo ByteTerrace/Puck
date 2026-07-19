@@ -6,8 +6,8 @@ namespace Puck.World;
 /// <summary>
 /// WHERE a placeable thing rides — the shared pose-target vocabulary a placeable camera
 /// (<see cref="WorldCamera.Anchored"/>) and a future placeable speaker both consume, distinct from HOW the thing
-/// looks at or emits from that pose (a rig, a feed). The <c>$type</c> string is the JSON discriminator (the
-/// <see cref="WorldCamera"/> precedent); a new anchor kind is a new derived record plus its
+/// looks at or emits from that pose (a rig, a feed). The <c>$type</c> string is the JSON discriminator, matching
+/// <see cref="WorldCamera"/>'s convention; a new anchor kind is a new derived record plus its
 /// <see cref="JsonDerivedTypeAttribute"/> line.
 /// </summary>
 [JsonDerivedType(typeof(WorldAnchor.Entity), typeDiscriminator: "entity")]
@@ -18,8 +18,7 @@ internal abstract record WorldAnchor {
     private WorldAnchor() {
     }
 
-    /// <summary>Rides one population entity's ROOT pose — a walking avatar's whole-body position and orientation
-    /// (today's only anchored-camera shape, migrated onto this union byte-for-byte).</summary>
+    /// <summary>Rides one population entity's ROOT pose — a walking avatar's whole-body position and orientation.</summary>
     /// <param name="Index">The 0-based entity index (validated 0..<see cref="WorldPopulation.MaxPopulation"/>-1).</param>
     internal sealed record Entity(int Index) : WorldAnchor;
 
@@ -34,8 +33,8 @@ internal abstract record WorldAnchor {
     internal sealed record EntityLeaf(int Index, string Leaf) : WorldAnchor;
 
     /// <summary>Rides a placement INSTANCE's stamped transform — a creation stamped into the world by reference (the
-    /// <see cref="Puck.Authoring.CreationCameraDocument"/> precedent), optionally narrowed to one of its own
-    /// authored shapes rather than the stamp's root.</summary>
+    /// same placement-reference shape <see cref="Puck.Authoring.CreationCameraDocument"/> uses), optionally narrowed
+    /// to one of its own authored shapes rather than the stamp's root.</summary>
     /// <param name="PlacementId">The referenced <see cref="WorldPlacement.Id"/> (must resolve).</param>
     /// <param name="ShapeId">The referenced creation's <c>ShapeDocument.Id</c> to ride, or <see langword="null"/> for
     /// the placement's own stamped root transform.</param>

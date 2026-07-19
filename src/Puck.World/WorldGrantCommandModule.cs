@@ -6,7 +6,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The capability-grant console surface — the dev reflection of the §2.7 principal/grant model: <c>world.grant</c> and
+/// The capability-grant console surface — the dev reflection of the principal/grant model: <c>world.grant</c> and
 /// <c>world.revoke</c> mutate the server's ONE grant table over the wire, and <c>world.grants</c> echoes it. Grant
 /// changes route <see cref="CommandRouting.Simulation"/> (they gate sim behavior) and apply SYNCHRONOUSLY at submit
 /// (like a command), so a following <c>world.grants</c> read behind the stdin barrier sees the settled table; the

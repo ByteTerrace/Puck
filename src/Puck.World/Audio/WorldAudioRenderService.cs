@@ -5,7 +5,7 @@ using Puck.World.Client;
 namespace Puck.World.Audio;
 
 /// <summary>
-/// The world speaker device (audio plan A2/AP3) — the <see cref="IHostedService"/> that turns the pure mixer into
+/// The world speaker device — the <see cref="IHostedService"/> that turns the pure mixer into
 /// sound. It owns one mixer instance and one governor thread: the governor opens the platform's default render
 /// endpoint through the factory seam, attaches the mixer to the director on success, and watches the stream; the
 /// endpoint's own pump thread then pulls each ≤256-frame quantum through <see cref="WorldAudioDirector.TryMixBlock"/>
@@ -13,12 +13,13 @@ namespace Puck.World.Audio;
 /// published). Failure posture is "plays silent, never crashes": a declined open or a mid-stream fault (device
 /// invalidation included) detaches the mixer, counts a rebind attempt, and retries the default endpoint every
 /// <see cref="RebindPeriodMilliseconds"/> until stop. A null factory (non-Windows) parks the service as
-/// <c>unsupported</c> — it never starts a thread. <see cref="StopAsync"/> is a deterministic bounded join (the
-/// <c>GamepadHostedService</c> template): stop signal → governor drains (device dispose joins ITS pump thread
+/// <c>unsupported</c> — it never starts a thread. <see cref="StopAsync"/> is a deterministic bounded join —
+/// one dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown:
+/// stop signal → governor drains (device dispose joins ITS pump thread
 /// bounded, then the mixer detaches) → join.
 /// </summary>
 internal sealed class WorldAudioRenderService : IHostedService {
-    /// <summary>The default-endpoint rebind cadence (plan A2's ~1 s) — a contract invariant, not a tunable: fast
+    /// <summary>The default-endpoint rebind cadence (~1 s) — a contract invariant, not a tunable: fast
     /// enough that plugging headphones in feels immediate, slow enough that a machine with no endpoint idles cheap.</summary>
     public const int RebindPeriodMilliseconds = 1000;
     /// <summary>How often the governor polls a healthy device for a parked fault — comfortably inside the rebind

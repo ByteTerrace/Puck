@@ -7,7 +7,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// The sculpt SHAPE console surface (§P6) — the assist-layer twins of the sculpt resting page's build chords plus
+/// The sculpt SHAPE console surface — the assist-layer twins of the sculpt resting page's build chords plus
 /// the typed-parameter setters a chord cannot express: add/duplicate/delete, the target cycle (which extends past
 /// shapes into chain goals), primitive re-typing, and exact transform placement (positions are WORKBENCH-LOCAL
 /// coordinates — the bench origin is the frame). Everything here is client-local model state; nothing crosses the

@@ -160,7 +160,7 @@ internal sealed class WorldEditorPicker {
         }
 
         // Speakers have no geometry: Fixed and Bed rows pick by a small proxy sphere at their authored point (the
-        // fixed-camera precedent); an ANCHORED row's live pose is not document data — select it by name over the
+        // same proxy-sphere approach fixed cameras use); an ANCHORED row's live pose is not document data — select it by name over the
         // console twin (editor.select speakers <name>), like anchored cameras.
         foreach (var speaker in definition.Speakers) {
             switch (speaker) {

@@ -600,7 +600,7 @@ internal sealed class WorldEditorSession {
 
     // Unwind a seat's COMPLETE client editor session without touching the (possibly departed) body: flip the binding
     // group back, drop the camera, forget the sticks, drop any live drag AND frozen released preview, and clear the
-    // selection — so explicit exit, controller departure, and slot reuse all start clean (UIE-1).
+    // selection — so explicit exit, controller departure, and slot reuse all start clean.
     private void Deactivate(int slot, Seat seat) {
         _ = m_bindings.SetActiveGroup(slot: slot, group: null);
         m_drag.Drop(slot: slot);

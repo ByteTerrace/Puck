@@ -8,19 +8,19 @@ using Puck.World.Server;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The World-side addon driver — the keystone that makes an addon a first-class PRINCIPAL (§2.7): it composes an
+/// The World-side addon driver — the keystone that makes an addon a first-class PRINCIPAL: it composes an
 /// <see cref="AddonHost"/> from the world document's <c>addons</c> rows (boot-time mount; Puck.Scripting is consumed,
 /// never modified), and each tick drives every enabled addon over the SAME <see cref="IServerLink"/> as a human seat —
-/// it writes the ABI snapshot for the body the addon holds Drive over, ticks the guest, translates its virtual-pad
-/// commands into a <see cref="PlayerIntent"/> (the demo's <c>AddonCommand → PlayerIntent</c> shape, reimplemented for
-/// World's channel set), and submits it with principal <c>addon:&lt;name&gt;</c>. The SERVER decides whether the
+/// it writes the ABI snapshot for the body the addon holds Drive over, ticks the guest, translates its decoded
+/// virtual-pad commands into a <see cref="PlayerIntent"/> over World's channel set, and submits it with principal
+/// <c>addon:&lt;name&gt;</c>. The SERVER decides whether the
 /// submission applies: while the addon holds Drive over the body it moves; on <c>world.revoke</c> the server drops its
 /// intents (loud, once) and the body idles — a non-human principal exercising the neutral contract end-to-end.
 /// </summary>
 /// <remarks>
 /// <para>The addon's body is the one it is granted Drive over — the grant IS the binding (there is no slot in the
 /// document row). The driver DISCOVERS that body from the grant table and keeps driving it; it never authorizes itself
-/// (capability checks live in the server, §2.7), so after a revoke it keeps submitting and the server keeps refusing.
+/// (capability checks live in the server), so after a revoke it keeps submitting and the server keeps refusing.
 /// While genuinely granted, the driver sets the body's <see cref="IntentSource"/> to <see cref="IntentSource.Live"/>
 /// once (the honest source for a driver that submits intents, like a remote client), so the wander producer yields to
 /// the submitted stream and a revoke leaves the body still (idle) rather than resuming wander.</para>
@@ -64,8 +64,8 @@ internal sealed class WorldAddonDriver : IDisposable {
             }
 
             // Deferred host construction: only pay the Wasmtime engine when a world enables an addon. The host owns the
-            // engine and the loader shares it (the loader compiles modules the host instantiates), exactly as the demo
-            // composes its runtime; the host disposes the engine on Dispose.
+            // engine and the loader shares it (the loader compiles modules the host instantiates); the host disposes
+            // the engine on Dispose.
             if (host is null) {
                 var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
 
@@ -160,12 +160,12 @@ internal sealed class WorldAddonDriver : IDisposable {
         m_host?.Dispose();
     }
 
-    // Translate one tick's decoded virtual-pad commands into World's PlayerIntent — the demo's AddonCommand→intent shape
-    // reimplemented for World's channel set. PadMove writes the intent's OWN frame (X → strafe, Y → forward, no Y
-    // negation, matching WorldEngagement.Translate); RightStick.X → the yaw Turn rate with the seat's look-right =
-    // negative-Turn sign; South/East → the Primary/Secondary action lanes (held on a Started/Active phase). The pad ids
-    // World has no channel for (North/West/shoulders/triggers) are ignored — a genre world binds a different SUBSET of
-    // the same neutral vocabulary, never a different message (§2.6).
+    // Translate one tick's decoded virtual-pad commands into World's PlayerIntent over World's channel set. PadMove
+    // writes the intent's OWN frame (X → strafe, Y → forward, no Y negation, matching WorldEngagement.Translate);
+    // RightStick.X → the yaw Turn rate with the seat's look-right = negative-Turn sign; South/East → the
+    // Primary/Secondary action lanes (held on a Started/Active phase). The pad ids World has no channel for
+    // (North/West/shoulders/triggers) are ignored — a genre world binds a different SUBSET of the same neutral
+    // vocabulary, never a different message.
     private static PlayerIntent Translate(ReadOnlySpan<AddonCommand> commands) {
         var forward = FixedQ4816.Zero;
         var strafe = FixedQ4816.Zero;

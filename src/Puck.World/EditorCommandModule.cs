@@ -5,7 +5,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// The editor-mode console surface — the assist-layer twin of every editor chord act (§chord-first: pad chords are
+/// The editor-mode console surface — the assist-layer twin of every editor chord act (pad chords are
 /// the primary interface; these verbs script and narrate the same acts over the pipe). <c>editor.enter</c>/<c>exit</c>
 /// flip a seat's mode through <see cref="WorldEditorSession"/> (binding mode layer + intent diversion + camera swap);
 /// the camera verbs (<c>editor.fly</c>/<c>orbit</c>/<c>cam.speed</c>/<c>cam.pose</c>) are the typed twins of the
@@ -79,7 +79,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         );
         yield return CommandDefinition.WithTrailingArgs(
             name: OrbitCommand,
-            description: "Selects the ORBIT editor camera for a seat (the chord twin is West on the LT camera page): editor.orbit [seat]. The left stick orbits the seat's avatar (P3 retargets the pivot onto the selection), the right stick's Y zooms.",
+            description: "Selects the ORBIT editor camera for a seat (the chord twin is West on the LT camera page): editor.orbit [seat]. The left stick orbits the seat's avatar (the orbit pivot may retarget onto the current selection); the right stick's Y zooms.",
             handler: (context, args) => ModeHandler(context: context, args: args, mode: EditorCameraMode.Orbit, verb: OrbitCommand)
         );
         yield return CommandDefinition.WithTrailingArgs(
@@ -136,12 +136,17 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         );
     }
 
-    // Resolve the acting seat: a PRESENT trailing [seat] token (1..4) is authoritative; an absent one falls back to
-    // the invocation's slot — the pressing device's seat for a bound chord act, and the text path's default seat 1
-    // (CommandContext.Slot is 0 there by contract). Token PRESENCE is the discriminator, never context.Parse: the
-    // registry's Immediate fast path hands trailing-args handlers a null Parse for TYPED lines too, so a Parse-null
-    // test silently ignored a typed seat token (the editor-edit proof's depart round caught it). Returns -1 with an
-    // error result on a malformed index. Internal: EditorSelectionCommandModule shares the same convention.
+    /// <summary>Resolves the acting seat: a PRESENT trailing [seat] token (1..4) is authoritative; an absent one falls
+    /// back to the invocation's slot — the pressing device's seat for a bound chord act, and the text path's default
+    /// seat 1 (<see cref="CommandContext.Slot"/> is 0 there by contract). Token PRESENCE is the discriminator, never
+    /// <see cref="CommandContext.Parse"/>: the registry's Immediate fast path hands trailing-args handlers a null
+    /// Parse for TYPED lines too, so a Parse-null test would silently ignore a typed seat token. Internal —
+    /// <see cref="EditorSelectionCommandModule"/> shares the same convention.</summary>
+    /// <param name="context">The invocation context.</param>
+    /// <param name="args">The verb args.</param>
+    /// <param name="at">The trailing seat token's index.</param>
+    /// <param name="verb">The verb name for error text.</param>
+    /// <returns>The resolved 0-based slot, or an error result on a malformed index (-1 slot).</returns>
     internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, string[] args, int at, string verb) {
         if (args.Length <= at) {
             return (Slot: context.Slot, Error: null);
@@ -204,7 +209,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
         var view = m_seatBindings.PageView(slot: slot);
         var eye = m_session.Eye(slot: slot);
-        // The selection/drag facts ride the same line — the scripted assertion point for the P3 acts.
+        // The selection/drag facts ride the same line — the scripted assertion point for selection/drag acts.
         var selection = "sel=none";
 
         if (m_targeting.Selected(slot: slot) is { } selected) {
@@ -403,7 +408,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     private static string ModeWord(EditorCameraMode mode) => ((mode == EditorCameraMode.Orbit) ? "orbit" : "fly");
 
-    // The shared FINITE parse boundary (UIE-2): NaN/infinity never enters camera, snap, or preview state — a
+    // The shared FINITE parse boundary: NaN/infinity never enters camera, snap, or preview state — a
     // non-finite center would poison the SDF rebuild and a NaN pitch slides past ordinary range guards.
     internal static bool TryFloat(string[] args, int at, out float value) {
         return (float.TryParse(s: args[at], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));

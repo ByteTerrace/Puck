@@ -19,7 +19,7 @@ internal sealed class WorldRenderProbe {
     public SdfWorldRender? Render { get; set; }
 
     /// <summary>The unified overlay decorator's pass-timing source, or <see langword="null"/> when the overlay was
-    /// not composed — <c>world.gpu</c> appends its previous drawn frame's overlay-pass milliseconds (the UIE-9
-    /// instrument) beside the engine's per-pass digest.</summary>
+    /// not composed — <c>world.gpu</c> appends its previous drawn frame's overlay-pass milliseconds beside the
+    /// engine's per-pass digest.</summary>
     public IPassTimingSource? Overlay { get; set; }
 }

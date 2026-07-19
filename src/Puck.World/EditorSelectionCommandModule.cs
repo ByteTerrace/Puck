@@ -7,8 +7,8 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The selection-and-manipulation console surface — the typed twin of every P3 chord act (§chord-first / the
-/// game-studio numeric-entry demand). Targeting verbs (<c>editor.select</c>/<c>pick</c>/<c>next</c>/<c>prev</c>/
+/// The selection-and-manipulation console surface — the typed twin of every chord act, driven by the
+/// game-studio numeric-entry need. Targeting verbs (<c>editor.select</c>/<c>pick</c>/<c>next</c>/<c>prev</c>/
 /// <c>deselect</c>) act on the client-local selection; the drag verbs (<c>editor.grab</c>/<c>drag</c>/<c>release</c>/
 /// <c>cancel</c>/<c>spawn.*</c>) drive the pending-row preview channel and commit ONE whole-row mutation on the
 /// release edge; the discrete verbs (<c>editor.move</c>/<c>nudge</c>/<c>place</c>/<c>delete</c>) submit an immediate
@@ -555,7 +555,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
 
         var focus = m_session.Focus(slot: slot);
 
-        // Place-by-name: a first token naming a world creation row stamps a placement of it (the §D6 instance act).
+        // Place-by-name: a first token naming a world creation row stamps a placement of it.
         if (args[0].ToUpperInvariant() is not ("BOULDER" or "SLAB")) {
             return PlaceCreation(slot: slot, args: args, focus: focus);
         }
@@ -769,7 +769,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
         _ => null,
     };
 
-    // The shared FINITE parse boundary (UIE-2) — the drag/move/place/snap twins of EditorCommandModule.TryFloat.
+    // The shared FINITE parse boundary — the drag/move/place/snap twins of EditorCommandModule.TryFloat.
     private static bool TryFloat(string token, out float value) =>
         (float.TryParse(s: token, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
 

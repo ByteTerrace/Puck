@@ -54,7 +54,7 @@ internal sealed class WorldEditorTargeting {
     public int Revision => m_revision;
 
     /// <summary>LIVE-CONSUMED: the proximity-candidate radius around a seat's editor focus point, world units — the
-    /// EXPLICIT candidate policy (UIE-10): cycling never walks the whole world. Rows beyond this reach are selected
+    /// explicit candidate policy: cycling never walks the whole world. Rows beyond this reach are selected
     /// by pick or by the <c>editor.select</c> console twin. Read fresh from the delivered definition's
     /// <see cref="WorldAuthoringDefaults.CandidateRadius"/> at every gather — a <c>world.authoring.set</c> mutation
     /// takes effect at the very next cycle, no restart.</summary>
@@ -150,7 +150,7 @@ internal sealed class WorldEditorTargeting {
 
     /// <summary>Cycles the selection through the BOUNDED proximity-candidate ring around the seat's editor focus
     /// point: the nearest at most <see cref="CandidateCap"/> rows within <see cref="CandidateRadius"/>, sorted
-    /// nearest-first (the chord cycle; UIE-10's explicit policy). With no current selection — or a selection outside
+    /// nearest-first (the chord cycle; the explicit candidate policy). With no current selection — or a selection outside
     /// the ring — the nearest candidate is taken regardless of direction.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="direction">+1 next (farther), -1 previous (nearer); wraps within the ring.</param>
@@ -322,9 +322,9 @@ internal sealed class WorldEditorTargeting {
 
                 return null;
             case WorldSection.Speakers:
-                // Fixed/Bed rows are their authored point; an anchored row resolves its anchor approximately (the
-                // anchored-camera precedent: root pose + raw offset — the orbit pivot and self-heal read, not the
-                // audio pose, which the director resolves exactly).
+                // Fixed/Bed rows are their authored point; an anchored row resolves its anchor approximately,
+                // matching how an anchored camera resolves: root pose + raw offset — the orbit pivot and self-heal
+                // read, not the audio pose, which the director resolves exactly.
                 foreach (var speaker in definition.Speakers) {
                     if (string.Equals(a: speaker.Name, b: selection.Id, comparisonType: StringComparison.Ordinal)) {
                         return (speaker switch {

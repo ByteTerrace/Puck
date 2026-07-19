@@ -7,12 +7,12 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The speaker authoring numeric twins (audio plan A11/AP4) — <c>editor.speaker.place/move/gain/channel/radius/delete</c>,
+/// The speaker authoring numeric twins — <c>editor.speaker.place/move/gain/channel/radius/delete</c>,
 /// name-addressed whole-row <see cref="WorldMutation.UpsertSpeaker"/>/<see cref="WorldMutation.RemoveSpeaker"/> acts
-/// beside the selection-driven channel (speakers also select, drag, move, and delete through the P3 machinery).
-/// CONSOLE-ONLY by an honest audit: every chord slot on the editor place page is already spoken for (grab/stamp/
+/// beside the selection-driven channel (speakers also select, drag, move, and delete through the selection/drag machinery).
+/// CONSOLE-ONLY: every chord slot on the editor place page is already spoken for (grab/stamp/
 /// cancel/snap on the face diamond, spawn ghosts + creation cycling on the D-pad), so the speaker verbs ride the
-/// console/binding-data seam rather than evicting a settled act. A SEPARATE module for the analyzer ceilings.
+/// console/binding-data seam rather than evicting an existing act. A SEPARATE module for the analyzer ceilings.
 /// </summary>
 /// <remarks>Mutation verbs route <see cref="CommandRouting.Simulation"/> (the stdin barrier serializes a following
 /// <c>world.speakers</c>/<c>speaker.state</c> read-after-write). Acts carry the ACTING SEAT principal and require the
