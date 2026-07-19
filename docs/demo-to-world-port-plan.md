@@ -1726,6 +1726,112 @@ free, since `SdfFieldEvaluator` already implements them. Any later arc wanting A
 line-of-sight, projectile casts, or spawn validity lands on them. This arc
 deliberately exposes but does not consume them.
 
+### Arc 2 execution record — EXECUTED
+
+**Landed the whole engine arc; the Demo deletion is seven `(c)` dispositions
+(Arc 1's precedent).** Verified by building the full solution in Release, running
+`Puck.World` for 2 s on the default (analytic) world, and running the arc's stdin
+verb script against an authored planetoid world.
+
+**Built:**
+
+- **`Server/WorldSolidField.cs`** — the SDF-backed `IContactField`. `TryBuild`
+  walks the document like `WorldEditorPicker.Build` (ground half-space first, then
+  boulders as **smooth-union** spheres carrying their `Smooth` radius, slabs as
+  smooth-union boxes, solid screens as oriented-frame boxes, solid placements as
+  reach-sized proxy spheres) and wraps the program in an `SdfFieldEvaluator`,
+  forwarding the constructor's `ArgumentException` message verbatim as the reject
+  reason. `Resolve` depenetrates the capsule's two sphere centers along the field
+  gradient (the gradient tap fires only on penetration — OQ-8 mitigation);
+  `TryUp` returns the gradient; `Probe` backs `world.collision.probe`. Immutable,
+  shared by reference; the evaluator holds no unmanaged handle, so a swap needs no
+  disposal.
+- **`WorldBody`** — the grounded integrator became **up-aware**: `ResolveUp`
+  reads `IContactField.TryUp` (held on a degenerate query), the attitude is the
+  yaw about that up, the planar target lies in the up-tangent plane, gravity acts
+  along `-up`, and the resolve decomposes the resolved velocity back against up.
+  A single `up == +Y` guard on the orientation line keeps the analytic/flat path
+  **byte-identical** (every other new expression reduces exactly when `up = +Y`);
+  a new `m_up` field defaults to `+Y`.
+- **`WorldPopulation`** — `CompileFixedTables`/`Rebuild` gained a pre-built-field
+  parameter; `ResolveContactField` selects null / analytic / field by the document;
+  a `SolidField` getter hands the boot build to the server (no double build).
+- **`WorldServer`** — owns the field lifecycle: `m_solids` + `m_solidRevision`,
+  `AffectsSolidField`, `TryBuildSolids`, a step-4b build-before-install (loud
+  apply-time rejection, no partial application), swap/undo field refresh, and
+  `SolidField`/`SolidRevision` reads. The field is built **once** per boundary.
+- **`SdfFieldEvaluator`** (the S2 escalation) — an additive
+  `TryFieldGradient(position, epsilon, out gradient)` overload; the interface
+  method delegates at the baked default, so `WorldCollision.GradientProbe` is a
+  real per-call lever (`0` = default). No behavior change for existing callers.
+- **Verbs** — `world.collision.probe <x> <y> <z>` and `world.collision.status`
+  (both Immediate), added to Arc 1's module.
+
+**Contradicted the plan / deviations:**
+
+1. **`TryUp` returns `+gradient`, not `−gradient`.** The target-shape text says
+   `−gradient`, but `IFieldEvaluator`'s documented gradient points AWAY from the
+   surface (= up) and `FieldWalkerBody` sets `Up = gradient`. Empirically the north
+   pole reads `up = (0, 1, 0)`. The `−` was a spec sign error; up is `+gradient`,
+   gravity is `−up`.
+2. **The R3 validator rejection is UNCHANGED, not deleted.** The target-shape text
+   says "delete R3's analytic-only rejection," but the binding ground-rule table
+   ("rejected by name under analytic, resolve under field") and the LANDED Arc 1
+   code already gate the rejection to `provider == Analytic`. Deleting it would
+   re-open the analytic schema-lie R3 exists to prevent. Arc 2 makes the FIELD side
+   resolve solid placements (the proxy sphere); the validator needed no edit.
+3. **No excision — seven `(c)` dispositions.** The "No excision" section assumed
+   (per OQ-15) that `OverworldWorld.cs` was gone before Arc 2. In THIS tree Arc 3
+   has not landed, so `OverworldWorld.cs` (1391 lines, OQ-14-pinned) survives and
+   folds the field-walker members into its determinism `HashState`
+   (`:1319-1324`) with a live public API (`ConfigureFieldEvaluator`/`SpawnFieldWalker`/…
+   consumed by `GravityCommandModule`). Excising is a rewrite of the pinned god
+   file's hash — exactly the risk Arc 1 declined. So, per the ground rules, the
+   algorithm is ported and the Demo files are dispositioned `(c)`, physical
+   deletion deferred to Arc 3's `OverworldWorld` teardown:
+   `Overworld/FieldWalkerBody.cs`, `Overworld/FieldWalkerTuning.cs`,
+   `Overworld/OverworldFrameSource.Gravity.cs`, `Gravity/GravityScenario.cs`,
+   `Gravity/WalkerInstanceEmitter.cs`, `Gravity/PlanetoidEmitter.cs`,
+   `GravityCommandModule.cs` — all pinned (directly or transitively) by the held
+   `OverworldWorld` / `OverworldFrameSource`. The Demo library keeps compiling.
+4. **`WorldSolidField.Revision` lives on the server, not the field.** The immutable,
+   shared field carries no revision; `WorldServer.SolidRevision` is the lifecycle
+   counter `world.collision.status` reads. The plan's 3-line `Install` swap also
+   needed the "switch to analytic → null field" case its `if (solids is not null)`
+   guard could not express — the server assigns `m_solids` unconditionally on a
+   solid-affecting boundary instead.
+5. **The SDF plane offset is `−GroundY`.** `SdfProgramBuilder.Plane`'s offset is the
+   negated ground height (SDF `= p.y − GroundY`); a first pass passing `+GroundY`
+   put the plane at `+1000` and swamped the field. (Caught and fixed in verification.)
+
+**Verification (planetoid world: planet boulder r7 + mound r1.6, provider field,
+groundY −1000, walker kit collider r0.35/h1.7):**
+
+- `world.collision.status` → `provider=field instructions=7 revision=1`.
+- `probe 0 8 0` → `distance=1.000 gradient=(0,1,0) material=1`; `probe 0 0 0` →
+  `distance=-7.000 gradient=(0,0,0)` (degenerate at the exact center — the safe
+  no-push case); `probe 0 7.35 0` → `distance=0.350`.
+- **Planetoid walk:** `player.pose 0 8 0` settles to `y=7.02` (foot: planet 7 +
+  skin), then `player.run 1 0 0 4.0` → `pos=(5.90, -3.66, 1.05)`, **`|pos|=7.02`**
+  — Y fell from 7.02 to −3.66 while the magnitude stayed exactly at the surface.
+  The signature no flat-plane model can produce.
+- **Smooth-union surface (the analytic provider cannot pass):** at
+  `(6.33, 3.64, 0)` both raw primitives are ~0.30 OUTSIDE, but the field reads
+  `distance=0.004` with a blended normal `(0.995, −0.097, 0)` — the fillet is
+  solid where convex proxies see 0.30 units of free space.
+- **Antipodal up (S3):** the south-pole rest read `roll=180°`, no NaN —
+  `FixedQuaternion.FromTo`'s existing antipodal branch handles `up == −Y`; no
+  `Puck.Maths` change was needed.
+- **Analytic regression:** the default (analytic) world's flat walk is unmoved —
+  `pose (3,0,3)` → `run` → `(3.52, 0.00, −2.63)`, **Y stays `0.00`**, grounded.
+- Live `world.collision.provider` / `world.undo` bump and restore the field
+  revision; `world.collision.status` tracks it.
+
+**OQ-8:** the contact cost stays unmeasured at 128-body scale; the plan's
+mitigations are in place (only collider-bearing kits pay; analytic is the default;
+the gradient tap fires only on penetration) and `BakedWorldQuery` is deliberately
+NOT built. The single-walker planetoid ran at frame rate.
+
 ---
 
 ## Arc 3 — Shell & root teardown

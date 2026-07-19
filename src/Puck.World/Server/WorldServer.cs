@@ -67,6 +67,14 @@ internal sealed class WorldServer {
     private WorldDefinition m_definition;
     private WorldDefinition m_base;
     private IClientSink? m_sink;
+    // The live SDF contact field under the FIELD provider (null under analytic / collision off) — the server OWNS this
+    // provider's lifecycle: it is built ONCE at apply time (for its loud excluded-op rejection) and handed to the
+    // population's rebuild, so a body's first step after a solid edit already solves against the new field. Adopted at
+    // construction from the population's boot build so it is never compiled twice for one boundary.
+    private WorldSolidField? m_solids;
+    // The solid-field revision — bumped each time m_solids is rebuilt (a solid-affecting edit under the field provider),
+    // the world.collision.status read-back. Starts at 1 when the boot world uses the field provider, else 0.
+    private int m_solidRevision;
 
     /// <summary>Initializes a new instance of the <see cref="WorldServer"/> class over the world it authoritatively owns.</summary>
     /// <param name="definition">The loaded world definition (the initial live definition and journal base).</param>
@@ -85,6 +93,10 @@ internal sealed class WorldServer {
         m_population = population;
         m_profiles = profiles;
         m_envelope = envelope;
+        // Adopt the population's boot-built field (the field provider compiled it once for the bodies it minted at
+        // construction) — the server owns it from here without a second build.
+        m_solids = population.SolidField;
+        m_solidRevision = ((m_solids is null) ? 0 : 1);
     }
 
     /// <summary>The live world definition this server runs — swapped in place as buffered edits apply.</summary>
@@ -103,6 +115,15 @@ internal sealed class WorldServer {
     /// <summary>The journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
     /// count, and the <c>world.undo</c> budget).</summary>
     public int JournalLength => m_journal.Count;
+
+    /// <summary>The live SDF contact field under the FIELD provider, or <see langword="null"/> under the analytic
+    /// provider / collision off — the <c>world.collision.probe</c>/<c>world.collision.status</c> reads' window onto the
+    /// surface the simulation itself solves against.</summary>
+    public WorldSolidField? SolidField => m_solids;
+
+    /// <summary>The solid-field revision — bumped each time the field is rebuilt (a solid-affecting edit under the field
+    /// provider). The <c>world.collision.status</c> read-back.</summary>
+    public int SolidRevision => m_solidRevision;
 
     /// <summary>An optional edit-echo tap invoked beside the loud stderr accept/reject lines — mutation outcomes,
     /// grant/revoke outcomes, and their document-only class — so a UI surface (the overlay toast, the editor HUD)
@@ -433,7 +454,28 @@ internal sealed class WorldServer {
             return false;
         }
 
-        Install(definition: candidate, rebuildPopulation: AffectsPopulation(mutation: mutation));
+        // Step 4b — the SDF contact field, built once here (before install) so the warp-free evaluator's excluded-op
+        // ceiling is a LOUD apply-time rejection (the definition and the field both stay byte-identical on failure)
+        // rather than a constructor throw at install. Only a solid-affecting mutation rebuilds it; otherwise the live
+        // field carries forward untouched.
+        var solids = m_solids;
+        var solidAffecting = AffectsSolidField(mutation: mutation);
+
+        if (solidAffecting && !TryBuildSolids(definition: candidate, solids: out solids, reason: out var solidReason)) {
+            Reject(mutation: mutation, reason: solidReason);
+
+            return false;
+        }
+
+        // Assign the field BEFORE the rebuild so a recompiled body's first step already solves against it. A field change
+        // forces a population rebuild (bodies must receive the new field reference) even when the mutation kind is not
+        // otherwise population-affecting; the analytic path is untouched (solidAffecting is inert without the field provider).
+        if (solidAffecting && !ReferenceEquals(objA: solids, objB: m_solids)) {
+            m_solids = solids;
+            m_solidRevision++;
+        }
+
+        Install(definition: candidate, rebuildPopulation: (AffectsPopulation(mutation: mutation) || (solidAffecting && UsesFieldProvider(definition: candidate))));
         m_journal.Add(item: new JournalEntry(Tick: tick, Mutation: mutation));
 
         // A defaults-class mutation edits what the NEXT boot wakes on while the live
@@ -477,6 +519,14 @@ internal sealed class WorldServer {
             return false;
         }
 
+        // A whole-document swap rebuilds the field wholesale (loud rejection on an unsupported solid, definition unchanged).
+        if (!TryBuildSolids(definition: definition, solids: out var swapSolids, reason: out var swapSolidReason)) {
+            Console.Error.WriteLine(value: $"[world.definition rejected: {swapSolidReason}]");
+
+            return false;
+        }
+
+        SwapSolids(solids: swapSolids);
         Install(definition: definition, rebuildPopulation: true);
         m_base = definition;
         m_journal.Clear();
@@ -521,6 +571,15 @@ internal sealed class WorldServer {
             kept.Add(item: entry);
         }
 
+        // The replayed candidate is a validated document the journal previously produced, so its solids rebuild; a
+        // failure stops loudly rather than installing a half-built field.
+        if (!TryBuildSolids(definition: candidate, solids: out var undoSolids, reason: out var undoSolidReason)) {
+            Console.Error.WriteLine(value: $"[world.undo: solid field rebuild failed — {undoSolidReason}]");
+
+            return false;
+        }
+
+        SwapSolids(solids: undoSolids);
         Install(definition: candidate, rebuildPopulation: true);
         m_journal.Clear();
         m_journal.AddRange(collection: kept);
@@ -537,7 +596,7 @@ internal sealed class WorldServer {
         m_definition = definition;
 
         if (rebuildPopulation) {
-            m_population.Rebuild(definition: definition);
+            m_population.Rebuild(definition: definition, solids: m_solids);
         }
     }
 
@@ -558,6 +617,44 @@ internal sealed class WorldServer {
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetWander or WorldMutation.SetSpawns or
         WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or WorldMutation.SetCollision;
+
+    // Build the SDF contact field for a candidate — null when collision is off or the analytic provider is selected (the
+    // analytic set is derived inside the population's compile, not here), the built field under the FIELD provider, or a
+    // named failure when a solid names an op the warp-free evaluator cannot interpret.
+    private static bool TryBuildSolids(WorldDefinition definition, out WorldSolidField? solids, out string reason) {
+        reason = string.Empty;
+
+        if (!UsesFieldProvider(definition: definition)) {
+            solids = null;
+
+            return true;
+        }
+
+        return WorldSolidField.TryBuild(definition: definition, built: out solids, reason: out reason);
+    }
+
+    // Adopt a wholesale-rebuilt field (a swap/undo), bumping the revision when the field actually moved so the status
+    // read-back tracks it. A swap into an analytic/off world clears the field.
+    private void SwapSolids(WorldSolidField? solids) {
+        if (!ReferenceEquals(objA: solids, objB: m_solids)) {
+            m_solids = solids;
+            m_solidRevision++;
+        }
+    }
+
+    // Whether the definition selects the SDF field contact provider (collision on, provider field).
+    private static bool UsesFieldProvider(WorldDefinition definition) =>
+        (definition.Collision is { Enabled: true, Provider: WorldContactProvider.Field });
+
+    // Whether a mutation can change the SDF contact field: the collision tuning (provider/probe/skin/slope), the ground
+    // plane (SetMotion positions the ground half-space), and every solid-bearing section (scene rows, screens, creations
+    // that reshape a stamp, placements). Coarse by section, matching AffectsPopulation/AffectsRenderEnvelope.
+    private static bool AffectsSolidField(WorldMutation mutation) => mutation is
+        WorldMutation.SetCollision or WorldMutation.SetMotion or
+        WorldMutation.SetScene or WorldMutation.UpsertSceneRow or WorldMutation.RemoveSceneRow or
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement;
 
     // Whether a mutation can grow the SDF program past the probed render envelope (scene rows / screen slabs /
     // creation stamps — an UpsertCreation re-shapes every live placement of it, so it measures too).

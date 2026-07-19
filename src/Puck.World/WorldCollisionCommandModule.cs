@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -162,6 +163,63 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.contacts: p{index} grounded={(body.Grounded ? "true" : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount}]"));
             }
         );
+        yield return CommandDefinition.WithTrailingArgs(
+            name: "world.collision.probe",
+            description: "Reads the live FIELD the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints the signed distance, material, and unit gradient (the up direction) at that point. Requires provider 'field'.",
+            handler: (_, args) => Probe(args: args)
+        );
+        yield return CommandDefinition.WithTrailingArgs(
+            name: "world.collision.status",
+            description: "Reports the contact-solver status (Immediate): enabled, provider, solid instruction count, field revision, contact skin, and the per-kit collider table.",
+            handler: (_, _) => Status()
+        );
+    }
+
+    // The live-field point read (world.collision.probe): sample distance/material/gradient exactly as the resolver does.
+    private CommandResult Probe(string[] args) {
+        if ((args.Length != 3)
+            || !float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var x)
+            || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var y)
+            || !float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var z)) {
+            return Usage(verb: "world.collision.probe", form: "<x> <y> <z>");
+        }
+
+        if (server.SolidField is not { } field) {
+            return new CommandResult(Output: "[world.collision.probe: no field — set collision on with provider 'field']");
+        }
+
+        var position = new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
+
+        if (!field.Probe(position: in position, distance: out var distance, material: out var material, gradient: out var gradient)) {
+            return new CommandResult(Output: "[world.collision.probe: the field has no geometry to answer against]");
+        }
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.collision.probe: ({x:0.###}, {y:0.###}, {z:0.###}) distance={(double)distance:0.000} material={material} gradient=({(double)gradient.X:0.000}, {(double)gradient.Y:0.000}, {(double)gradient.Z:0.000})]"
+        ));
+    }
+
+    // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
+    // collider table (radius x height) so the whole grounded-contact configuration is one Immediate read.
+    private CommandResult Status() {
+        var collision = (server.Definition.Collision ?? WorldCollision.None);
+        var provider = collision.Provider.ToString().ToLowerInvariant();
+        var instructions = (server.SolidField?.InstructionCount ?? 0);
+        var colliders = new List<string>();
+
+        foreach (var kit in server.Definition.Kits) {
+            if (kit.Collider is { } collider) {
+                colliders.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{kit.Name}(r={collider.Radius:0.##} h={collider.Height:0.##})"));
+            }
+        }
+
+        var kitTable = ((colliders.Count == 0) ? "none" : string.Join(separator: ", ", values: colliders));
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.collision.status: {(collision.Enabled ? "on" : "off")} provider={provider} instructions={instructions} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° colliders=[{kitTable}]]"
+        ));
     }
 
     // The solid-row census: count the spheres (solid boulders) and boxes (solid slabs + solid screens) the analytic

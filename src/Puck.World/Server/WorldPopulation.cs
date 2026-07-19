@@ -105,7 +105,10 @@ internal sealed class WorldPopulation {
         // running session value — this seeds only at construction, so a saved world's authored default is honored at boot.
         m_defaultPeerSource = definition.Population.DefaultPeerSource;
 
-        CompileFixedTables(definition: definition);
+        // The boot contact field: analytic is derived here; the field provider is compiled once (a bad-op world fails
+        // LOUDLY at boot, which is the honest boot-time counterpart of the live apply-time rejection). A live rebuild
+        // instead receives the server's pre-built field so a runtime edit never rebuilds it twice.
+        CompileFixedTables(definition: definition, solids: null);
 
         // Resolve the definition's kit→entity assignment policy ONCE into every entry's fixed kit index (precompute;
         // zero steady-state cost). The table policy resolves its kit-name cycle to row indices here; the hash policy
@@ -130,7 +133,7 @@ internal sealed class WorldPopulation {
     // motion/wander tunings, the derived drift deflection (DriftSpeed / MoveSpeed — deflection × speed = DriftSpeed, so
     // it crosses both tunings), the kit rows and their fixed compilations, and the resolved seat-kit row. Shared by the
     // constructor and Rebuild so a live retune quantizes through exactly the same path.
-    private void CompileFixedTables(WorldDefinition definition) {
+    private void CompileFixedTables(WorldDefinition definition, WorldSolidField? solids) {
         var authoredMotion = definition.Motion;
         var authoredWander = definition.Wander;
 
@@ -144,10 +147,36 @@ internal sealed class WorldPopulation {
             m_kits[kit] = FixedWorldKit.Compile(kit: definition.Kits[kit]);
         }
 
-        // Derive the analytic contact field from the document's solid rows + collision tuning (null when collision is
-        // off) — the ONE derivation both a fresh activation and a live body read.
-        m_contactField = WorldColliderSet.Build(definition: definition);
+        // Derive the contact field the definition selects — the ONE derivation both a fresh activation and a live body
+        // read. The field provider's program is handed in pre-built at runtime; at boot it is compiled here.
+        m_contactField = ResolveContactField(definition: definition, solids: solids);
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
+    }
+
+    // The document-selected contact field: null when collision is off (bodies keep their flat ground plane); the analytic
+    // convex-collider set under the default provider; the pre-built SDF field under the FIELD provider. At runtime the
+    // server hands the pre-built field (built once at apply time for its loud excluded-op rejection); at boot (solids ==
+    // null) the field is compiled here and a bad-op world fails loudly.
+    private static IContactField? ResolveContactField(WorldDefinition definition, WorldSolidField? solids) {
+        var collision = (definition.Collision ?? WorldCollision.None);
+
+        if (!collision.Enabled) {
+            return null;
+        }
+
+        if (collision.Provider == WorldContactProvider.Field) {
+            if (solids is not null) {
+                return solids;
+            }
+
+            if (!WorldSolidField.TryBuild(definition: definition, built: out var built, reason: out var reason)) {
+                throw new InvalidOperationException(message: $"the field contact provider could not compile the world's solids at boot: {reason}");
+            }
+
+            return built;
+        }
+
+        return WorldColliderSet.Build(definition: definition);
     }
 
     /// <summary>Recompiles the population's derived state after a sim-affecting section mutation (a live kit tune, a
@@ -157,13 +186,15 @@ internal sealed class WorldPopulation {
     /// pose/velocity/tape, only the compiled feel swaps. Bumps <see cref="Revision"/> so the client rebuilds the avatar
     /// program. New activations re-seed fully from these fresh tables.</summary>
     /// <param name="definition">The new live definition.</param>
+    /// <param name="solids">The server's pre-built SDF contact field for the FIELD provider (built once at apply time so
+    /// a runtime edit never rebuilds it twice), or <see langword="null"/> under the analytic provider / collision off.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public void Rebuild(WorldDefinition definition) {
+    public void Rebuild(WorldDefinition definition, WorldSolidField? solids) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_seatSpawns = definition.SpawnPoints;
 
-        CompileFixedTables(definition: definition);
+        CompileFixedTables(definition: definition, solids: solids);
 
         var assignmentTable = ResolveAssignmentTable(assignment: definition.Assignment);
 
@@ -228,6 +259,12 @@ internal sealed class WorldPopulation {
 
         return table;
     }
+
+    /// <summary>The boot-built SDF contact field when the definition selects the FIELD provider, else
+    /// <see langword="null"/> — the seam <see cref="WorldServer"/> adopts at construction so it owns the field lifecycle
+    /// without a second boot build. A live rebuild instead receives the server's field back through
+    /// <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>.</summary>
+    public WorldSolidField? SolidField => (m_contactField as WorldSolidField);
 
     /// <summary>A monotonically increasing counter bumped whenever the declared set or palette changes (a seat joining,
     /// leaving, or recoloring, or the simulated count moving), never on a per-frame pose write. The frame source combines

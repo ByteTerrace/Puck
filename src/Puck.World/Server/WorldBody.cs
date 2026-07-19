@@ -102,6 +102,11 @@ internal sealed class WorldBody {
     // keeps its flat ground-plane land) and the body's own capsule volume (null = a volumeless kit, never solved).
     private IContactField? m_contactField;
     private FixedWorldCollider? m_collider;
+    // The body's up axis — the direction its gravity opposes, its planar move plane is perpendicular to, and its attitude
+    // stands against. Constant +Y under the analytic provider (and collision off), so a flat world integrates
+    // byte-identically; the FIELD provider derives it from the surface gradient each grounded step (arbitrary-up /
+    // planetoid walking as a data choice), HELD from the previous step when a query is degenerate.
+    private FixedVector3 m_up = s_unitY;
     // The number of surfaces (ground plane + colliders) the last grounded Advance resolved this body against — the
     // world.contacts read-back. Zero while collision is off.
     private int m_lastContactCount;
@@ -772,11 +777,18 @@ internal sealed class WorldBody {
 
         m_yaw += angleStep.X;
 
-        var orientation = FixedQuaternion.FromAxisAngle(axis: s_unitY, angle: m_yaw);
+        // The body up axis: constant +Y under the analytic provider / collision off (the flat world, byte-identical);
+        // the field gradient at the foot under the FIELD provider (a planetoid, an inverted ceiling). The attitude is
+        // the yaw ABOUT that up — a pure yaw rotation when up is +Y (the exact prior orientation), tilted into the up
+        // frame otherwise. The `up == +Y` guard keeps the flat path bit-identical without relying on FromTo's rounding.
+        var up = ResolveUp();
+        var yawRotation = FixedQuaternion.FromAxisAngle(axis: s_unitY, angle: m_yaw);
+        var orientation = ((up == s_unitY) ? yawRotation : (FixedQuaternion.FromTo(from: s_unitY, to: up) * yawRotation));
         var facing = orientation.Rotate(vector: -s_unitZ);
         var right = orientation.Rotate(vector: s_unitX);
         // --- Shape: the commanded target planar velocity converges through the response table (the ramp), replacing
-        // the direct assignment an unopted world instant-snaps. ---
+        // the direct assignment an unopted world instant-snaps. The facing/right lie in the up-tangent plane, so the
+        // target is a tangent-plane velocity (its Y is zero when up is +Y). ---
         var planarTarget = (((facing * intent.MoveForward) + (right * intent.MoveStrafe)) * moveSpeed);
         var planarVelocity = ShapePlanarVelocity(target: planarTarget, intent: in intent, stepTicks: stepTicks);
 
@@ -805,12 +817,9 @@ internal sealed class WorldBody {
 
         // Semi-implicit Euler: gravity updates velocity first, then the exact engine-tick accumulator integrates the
         // resulting velocity. X/Z use the same carry path, so a constant one-unit/second walk advances exactly one raw
-        // unit per second rather than repeating one rounded per-step displacement.
-        var velocity = new FixedVector3(
-            X: planarVelocity.X,
-            Y: m_verticalVelocity,
-            Z: planarVelocity.Z
-        );
+        // unit per second rather than repeating one rounded per-step displacement. The tangential (planar) and normal
+        // (along up) parts recombine into the full velocity — for up = +Y this is exactly (planar.X, vertical, planar.Z).
+        var velocity = (planarVelocity + (up * m_verticalVelocity));
         var step = m_positionAccumulator.Integrate(
             ratePerSecond: velocity,
             elapsedTicks: stepTicks
@@ -821,14 +830,19 @@ internal sealed class WorldBody {
         // grounded (rather than reading it off a plane compare) and kills velocity into any resolved surface. With no
         // field (collision off) or a volumeless kit, the flat ground-plane land runs exactly as before, byte-identically.
         if ((m_contactField is { } field) && (m_collider is { } collider)) {
-            var resolvedVelocity = new FixedVector3(X: m_planarVelocity.X, Y: m_verticalVelocity, Z: m_planarVelocity.Z);
+            // Solve the FULL velocity (tangential + normal-along-up), then decompose the resolved result back against up.
+            // For up = +Y this reduces exactly to the flat pack/unpack: normal = resolved.Y, planar = (resolved.X, 0, resolved.Z).
+            var resolvedVelocity = (m_planarVelocity + (up * m_verticalVelocity));
 
             m_grounded = field.Resolve(position: ref nextPosition, velocity: ref resolvedVelocity, radius: collider.Radius, height: collider.Height);
             m_position = nextPosition;
-            m_planarVelocity = m_planarVelocity with { X = resolvedVelocity.X, Z = resolvedVelocity.Z };
 
-            if (resolvedVelocity.Y != m_verticalVelocity) {
-                m_verticalVelocity = resolvedVelocity.Y;
+            var resolvedNormal = FixedVector3.Dot(left: resolvedVelocity, right: up);
+
+            m_planarVelocity = (resolvedVelocity - (up * resolvedNormal));
+
+            if (resolvedNormal != m_verticalVelocity) {
+                m_verticalVelocity = resolvedNormal;
                 m_verticalVelocityAccumulator.Reset();
             }
 
@@ -857,6 +871,18 @@ internal sealed class WorldBody {
             m_grounded = false;
             m_lastContactCount = 0;
         }
+    }
+
+    // The body up axis this grounded step integrates against. The contact field answers it (constant +Y from the
+    // analytic provider, the surface gradient from the field provider); a degenerate field query leaves the held value
+    // untouched rather than snapping to something arbitrary. Only a collider-bearing kit with a field pays the query;
+    // everything else keeps +Y, so the flat world never calls TryUp and integrates byte-identically.
+    private FixedVector3 ResolveUp() {
+        if ((m_contactField is { } field) && (m_collider is not null) && field.TryUp(position: in m_position, up: out var up)) {
+            m_up = up;
+        }
+
+        return m_up;
     }
 
     // --- The response table (the Shape stage). ---
