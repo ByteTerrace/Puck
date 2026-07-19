@@ -572,6 +572,56 @@ Exit: `proof.cs sculpt` sculpts a creation from nothing over stdin, commits,
 stamps it, saves the world, reloads, and the creation round-trips losslessly
 (including previously-unauthorable carried fields).
 
+**LANDED (P6).** The sculpt model is `Puck.Authoring.SculptModel` — the
+destination reconception of the creator feature set (shapes, blends with the
+group-of-one coercion, the 16-slot palette with the golden-ratio default
+sweep, hold-style timeline frames, IK chains solved by the ported
+`ChainSolver`/`SculptChain` analytic two-bone + spine math — float host-side
+BY DESIGN, solving into caller-owned scratch), under a caller-supplied stamp
+budget with the local `EditHistory` ring on the settled push-after /
+drag-coalescing protocol. The oracle's ghost survives as the BRUSH (style the
+next add inherits; style target while nothing is selected) without its
+rendered placement UX; loads recapture chain rest geometry and deliberately
+never re-solve (ULP-stable round-trips); carried cameras/behavior/text-runs/
+extensions stash verbatim outside the undo ring. The workbench seam is the
+COMPOSE path, exactly as promised: `WorldWorkbench` overlays a synthetic
+creation row (frames stripped — the live pose) plus a placement at the bench
+origin onto the delivered rows, rendered through the SAME
+`WorldPlacementStamper`/`CreationGeometry` emission a committed stamp uses —
+and the proof pins stamp-equals-preview at 0.00 mean pixel diff. Capacity:
+bench entry pre-verifies the composed candidate against the probed envelope,
+ghost spawns fold the bench into their own candidates (all client-local
+overlays fit TOGETHER), and the worst-case measure covers any model within
+the 48-shape cap the model itself enforces; the HUD narrates `shapes n/48`.
+Sculpt mode is a page GROUP (`sculpt` — the editor group's five ordered
+trigger chords are all spoken for, and modes are page groups per P3.5):
+resting build page, LT bench (Commit/Easel/zoom), RT style, LT+RT frames,
+RT+LT rig; sticks + shoulder verticals ride every page (move drives the
+sculpt target in the camera frame, look orbits the bench pivot — which now
+aims through the QUANTIZED fly angles, so closing the bench hands fly a
+bit-identical view). Commit = `CreationCanonicalizer.Canonicalize` → ONE
+`UpsertCreation` (doc+hash from the same `CanonicalCreation`); live
+placements refresh on delivery — the proof shows the animated row recreating
+on a palette re-sculpt (still animating) and releasing when the frames
+delete (motion stops). The two undo domains narrate distinctly
+(`editor.sculpt.undo` = the local ring, journal frozen; `world.undo` = the
+committed history). The easel is data through existing seams:
+`editor.sculpt.easel` upserts a fixed bench camera and re-points an existing
+screen row at its view — two ordinary mutations through the P4 live
+reconcile, and the offscreen view renders the composed program, preview
+included (the first composed diegetic surface; runtime screens need a
+declared index, so the verb re-points rather than minting rows). ~40
+`editor.sculpt.*` verbs across four modules twin every chord act;
+`edit.undo`/`edit.redo` join the icon grammar as hairline hook arrows.
+Proven: `proof.cs sculpt` (both backends — sculpt-from-nothing, the ONE-entry
+commit with the hash echo pinned against the catalog, the pixel identity, the
+undo-domain split, the sculpted four-frame timeline animating its stamp
+(four DISTINCT poses — a repeated pose lets a frame delta land its twin and
+fake a stall), the live-refresh pair, the carrier round-trip of
+previously-unauthorable members, the easel's live bind, and the byte-stable
+ouroboros; the pixel bands dodge the default world's capture-fed screen slab,
+whose live desktop feed must never leak into a determinism band).
+
 ## 3. Deferred ledger (explicitly out of this arc)
 
 - **Walkability/collision/bounds** — own arc; sim-engine seam
