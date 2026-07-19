@@ -1287,14 +1287,7 @@ complete frames between the default every-fourth-frame refreshes. CPU-fed screen
 upload through `CpuSurfaceSource` or the machine's equivalent native-frame
 upload; window grabs stay on their dedicated latest-result-wins worker too.
 
-**Known screen limitations.** Two seams are declared but not implemented:
-**audio** — every `IScreenMachineEngine` host (`MachineHost`/`AdvancedMachineHost`)
-now implements the neutral `IAudioMachine` capability (gated on attachment, zero
-cost while no consumer reads it — the same capability the Demo's cabinets drain),
-but World has no engine-wide speaker/mixer device to drain it through yet, so a
-machine's audio routed to a spatialized SURFACE source (a cabinet you hear from
-across the plaza) is named-deferred, not built — `WorldScreenBinder.AdvanceMachines`
-marks the exact seam a future device hooks `IAudioMachine.ReadSamples` into; and
+**Known screen limitations.** One seam is declared but not implemented:
 **screen transforms** — a moving/re-posed screen slab is expressible (the surface carries a
 full world frame) but unused by World so far, so every screen is static and
 world-axis aligned. The neutral `MachineButtons` image already carries the
@@ -1303,11 +1296,11 @@ Start / Back→Select; the growth point is the `PlayerIntent` action-lane vocabu
 (only the Jump lane fills a button today — new lanes light up the rest in
 `WorldEngagement.Translate`, not a per-button verb).
 
-## Audio (the mixer core + the world data model — spatial audio arc AP1/AP2)
+## Audio (the mixer core, the world data model, and the device — spatial audio arc AP1-AP3)
 
 `Audio/` holds the pure mixing core the spatial audio arc builds on
-(`docs/reviews/2026-07-18-world-audio-arc-plan.md`); the world data model (AP2,
-below) sits on top of it, and the WASAPI device (AP3) lands next without
+(`docs/reviews/2026-07-18-world-audio-arc-plan.md`); the world data model (AP2)
+sits on top of it, and the WASAPI device (AP3, below) drives both without
 reshaping either.
 
 **The rate.** 48000 Hz, fixed (plan A1): device-native, exactly **200 frames
@@ -1380,11 +1373,61 @@ arrival (`SubmitTrigger` is the ONE trigger-production seam AP4's cue
 producers reuse), and publishes `WorldAudioSnapshot`s over a 4-slab rotation.
 Tune hosting (`TuneMachineSource` — the `Puck.Forge` compile chain over a
 synchronous Humble core) acquires while referenced and releases when
-orphaned, active once a mixer attaches (AP3's device pump; the offline proof
-today). Verbs: `world.speaker.set/remove`, `world.tune.set/remove`,
-`world.patch.set/remove`, `world.audio.set`, `world.speakers`, and
-`audio.emitters` (the deterministic derived-table dump). The document-side
-battery is `dotnet run src/Puck.World/scripts/proof.cs -- audio`.
+orphaned, active while a mixer is attached (the device pump live; the offline
+proof headlessly). Verbs: `world.speaker.set/remove`, `world.tune.set/remove`,
+`world.patch.set/remove`, `world.audio.set`, `world.speakers`,
+`audio.emitters` (the deterministic derived-table dump), and `audio.state`
+(the live device echo, below). The document-side battery is
+`dotnet run src/Puck.World/scripts/proof.cs -- audio`.
+
+**The device (AP3).** `Audio/WorldAudioRenderService` is the world speaker —
+an `IHostedService` (the `GamepadHostedService` teardown template, never a
+bare DI singleton) owning ONE mixer and one **governor thread**: it opens the
+default render endpoint through the `Puck.Platform.Audio` factory seam
+(`AudioRenderPlatform.CreateFactory()` — `null` off Windows, and the service
+parks as `unsupported` without starting a thread), attaches the mixer to the
+director on success, and watches the stream. The Windows device
+(`WasapiAudioRenderDevice`, cloned from the capture source's proven template)
+owns a second, dedicated MTA COM thread: enumerator → Activate →
+`Initialize(Shared, event-driven)` → `GetService(IAudioRenderClient)`, an
+init handshake, a bounded join on dispose. It requests OUR s16/stereo/48000
+format with `AUTOCONVERTPCM|SRC_DEFAULT_QUALITY` — on real endpoints 48000 is
+the shared-mode native rate so the convert is the trivial s16→float widen;
+the SRC flags are only the exotic-endpoint net. Per event wake the pump reads
+`GetCurrentPadding` and fills the free space in ≤256-frame quanta
+(`WorldAudioMixer.MaxBlockFrames`) DIRECTLY into `GetBuffer`'s mapping — zero
+copies, zero steady-state allocation — through
+`WorldAudioDirector.TryMixBlock` (latest-snapshot hold + `MixBlock` under the
+director's one reentrant gate; the gate also serializes reconciles and
+machine rebinds against the pump, uncontended in steady state).
+
+**Failure posture: plays silent, never crashes.** Any failing HRESULT
+(mid-stream device invalidation included) parks the device pump, the governor
+detaches the mixer, and the service retries the DEFAULT endpoint every ~1 s
+(`RebindPeriodMilliseconds` — a contract invariant); a fill-callback defect
+degrades to one silent quantum and a counted fault, never a dead stream.
+`audio.state` echoes the whole story — device token
+(`playing|silent|rebinding|unsupported|stopped`), frames delivered across
+device generations, rebind attempts, fill faults, bound sources, live
+voices, the monotone output-peak meter, dropped triggers, derived emitters,
+and the last fault.
+
+**Machine audio is ALWAYS ON** (plan A4, the flagged engine seam):
+`IScreenMachineEngine.Create` carries `audioSampleRate` and World boots every
+screen machine at 48000, accepting ~192 KB of ring + low-single-digit % CPU
+per booted machine so speakers bind at ANY time without a machine reboot
+(emulator snapshots are provably unaffected — core audio carries no state).
+The director resolves the binder's live machines by REFERENCE each produced
+frame (`MachineSourceResolver` → `WorldScreenBinder.AudioMachine`): a
+boot/eject/live-swap rebinds the stable `machine:<slot>` source key, and a
+cartridge booting late into an already-referenced slot self-heals with no
+verb. The live smoke is
+`dotnet run src/Puck.World/scripts/audio-device.cs` — in-process failure
+paths against mock factories (unsupported / declining-with-rebinds /
+mid-stream fault + reattach), the real endpoint delivering frames, and the
+full session: speaker row first, cartridge second, `audio.state`'s sources
+and peak going live — structural liveness only (sample content stays the
+offline hash proof's job).
 
 ## Engine boundaries worth knowing
 
