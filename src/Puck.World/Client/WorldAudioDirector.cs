@@ -235,6 +235,20 @@ internal sealed class WorldAudioDirector {
                 Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {(WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)}-row plan budget ({WorldAudioSnapshot.DefaultMaxEmitters}-row snapshot table minus the {TransientCueCapacity} reserved cue transients) — the overflow renders silent]");
             }
 
+            // largechange-01: validate the WHOLE derived plan against the mixer's bounded registries at the compose
+            // boundary — the patch set (per-emitter synth voices) and the distinct external-source identities the plan
+            // taps — so an overfull registry is a loud, contained warn here rather than a silent drop the mixer only
+            // discovers row-by-row at bind time.
+            if (m_patchSet.Count > WorldAudioMixer.MaxPatches) {
+                Console.Error.WriteLine(value: $"[world.audio: {m_patchSet.Count} derived synth patches exceed the {WorldAudioMixer.MaxPatches}-slot mixer patch table — the overflow renders silent]");
+            }
+
+            var distinctSources = CountDistinctExternalSources();
+
+            if (distinctSources > WorldAudioMixer.MaxSources) {
+                Console.Error.WriteLine(value: $"[world.audio: {distinctSources} derived machine/tune sources exceed the {WorldAudioMixer.MaxSources}-slot mixer source table — the overflow renders silent]");
+            }
+
             ApplyMixerBindings();
         }
     }
@@ -898,6 +912,21 @@ internal sealed class WorldAudioDirector {
         }
     }
 
+    // The distinct external (machine/tune) source identities the derived plan taps — the mixer binds one source slot
+    // per identity, so this is the plan's real demand on the bounded source table (largechange-01 compose-boundary
+    // validation). Synth-fed rows register a patch, not a source, so they do not count here.
+    private int CountDistinctExternalSources() {
+        var seen = new HashSet<WorldAudioSourceKey>();
+
+        foreach (var plan in m_plan) {
+            if (plan.Source.Kind is WorldAudioSourceKind.Machine or WorldAudioSourceKind.Tune) {
+                _ = seen.Add(item: plan.Source);
+            }
+        }
+
+        return seen.Count;
+    }
+
     // Drop registry rows whose key left the derived plan, so a re-authored row later re-enters from silence with a
     // fresh id rather than inheriting a stale ramp.
     private void RetireDepartedKeys() {
@@ -934,6 +963,16 @@ internal sealed class WorldAudioDirector {
         }
 
         mixer.MasterGainQ16 = MasterGainQ16;
+
+        // largechange-01 reclaim: retire patch slots whose id left the derived plan BEFORE re-registering the live set,
+        // so the bounded table is not filled by the carcasses of churned sound emitters across reconciles.
+        var livePatchIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var (id, _) in m_patchSet) {
+            _ = livePatchIds.Add(item: id);
+        }
+
+        mixer.RetirePatches(live: livePatchIds);
 
         foreach (var (id, patch) in m_patchSet) {
             mixer.RegisterPatch(id: id, patch: in patch);

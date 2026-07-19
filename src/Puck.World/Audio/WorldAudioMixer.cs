@@ -115,6 +115,12 @@ public sealed class WorldAudioMixer {
     /// by <c>speaker.state</c>.</summary>
     public int DroppedTriggerCount { get; private set; }
 
+    /// <summary>Gets the count of patch/source registrations refused because the table was full — honest, CONTAINED
+    /// loss (never a throw): a derived audio plan that overfills the registry drops the overflow rows and renders them
+    /// silent rather than crashing the reconcile. The compose boundary (<see cref="Client.WorldAudioDirector"/>) warns
+    /// before this fires; the count is the durable proof it happened.</summary>
+    public int DroppedRegistrationCount { get; private set; }
+
     /// <summary>Gets the running peak |output sample| since construction — the <c>audio.state</c> meter. Monotone
     /// by design: a nonzero value is durable proof the mix has produced signal (the live smoke's assertion), and a
     /// zero proves every block so far was silent.</summary>
@@ -135,10 +141,11 @@ public sealed class WorldAudioMixer {
         }
     }
 
-    /// <summary>Registers (or replaces) a synth patch under an id.</summary>
+    /// <summary>Registers (or replaces) a synth patch under an id. A full table is CONTAINED loss (largechange-01): the
+    /// overflow row is dropped and <see cref="DroppedRegistrationCount"/> increments — never a throw, so a derived plan
+    /// that outgrows the registry renders its overflow silent instead of crashing the reconcile.</summary>
     /// <param name="id">The patch id trigger events reference.</param>
     /// <param name="patch">The runtime parameter block.</param>
-    /// <exception cref="InvalidOperationException">The patch table is full.</exception>
     public void RegisterPatch(string id, in WorldVoicePatch patch) {
         ArgumentException.ThrowIfNullOrEmpty(argument: id);
 
@@ -151,7 +158,10 @@ public sealed class WorldAudioMixer {
         }
 
         if (m_patchCount >= MaxPatches) {
-            throw new InvalidOperationException(message: $"patch table full ({MaxPatches}); cannot register '{id}'.");
+            DroppedRegistrationCount++;
+            Console.Error.WriteLine(value: $"[world.audio: patch table full ({MaxPatches}); '{id}' dropped — its voice renders silent]");
+
+            return;
         }
 
         m_patchIds[m_patchCount] = id;
@@ -159,10 +169,36 @@ public sealed class WorldAudioMixer {
         m_patchCount++;
     }
 
-    /// <summary>Binds (or rebinds) a block source to a source identity.</summary>
+    /// <summary>Reclaims patch slots whose id left the live derived plan — the compose-boundary reclaim (largechange-01)
+    /// that keeps the bounded table from filling with the carcasses of churned sound emitters across reconciles. Compacts
+    /// the table in place, preserving the surviving rows.</summary>
+    /// <param name="live">The patch ids the current derived plan registers; every other slot is retired.</param>
+    public void RetirePatches(IReadOnlySet<string> live) {
+        ArgumentNullException.ThrowIfNull(argument: live);
+
+        var write = 0;
+
+        for (var read = 0; (read < m_patchCount); read++) {
+            if (!live.Contains(item: m_patchIds[read])) {
+                continue;
+            }
+
+            if (write != read) {
+                m_patchIds[write] = m_patchIds[read];
+                m_patches[write] = m_patches[read];
+            }
+
+            write++;
+        }
+
+        m_patchCount = write;
+    }
+
+    /// <summary>Binds (or rebinds) a block source to a source identity. A full table is CONTAINED loss (largechange-01):
+    /// the bind is dropped and <see cref="DroppedRegistrationCount"/> increments — never a throw, so an overfull source
+    /// registry renders the excess emitters silent instead of crashing the reconcile.</summary>
     /// <param name="key">The source identity emitters reference.</param>
     /// <param name="source">The pull seam.</param>
-    /// <exception cref="InvalidOperationException">The source table is full.</exception>
     public void SetSource(in WorldAudioSourceKey key, IAudioBlockSource source) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
@@ -170,7 +206,10 @@ public sealed class WorldAudioMixer {
 
         if (slot < 0) {
             if (m_sourceCount >= MaxSources) {
-                throw new InvalidOperationException(message: $"source table full ({MaxSources}); cannot bind {key.Kind} '{key.Id ?? key.Slot.ToString()}'.");
+                DroppedRegistrationCount++;
+                Console.Error.WriteLine(value: $"[world.audio: source table full ({MaxSources}); {key.Kind} '{key.Id ?? key.Slot.ToString()}' dropped — its emitters render silent]");
+
+                return;
             }
 
             slot = m_sourceCount++;
@@ -307,6 +346,14 @@ public sealed class WorldAudioMixer {
         return ((short)((sample < 0) ? -shaped : shaped));
     }
 
+    // One Q16 raw value squared back into a Q16 quantity ((r·2^16)^2 >> 16 = r^2·2^16), computed in Int128 and
+    // saturated to long — the overflow-safe form of `raw * raw >> 16` (largechange-15).
+    private static long SaturatingSquareQ16(long valueRaw) {
+        var wide = (((Int128)valueRaw * valueRaw) >> 16);
+
+        return ((wide > long.MaxValue) ? long.MaxValue : ((long)wide));
+    }
+
     private static void SmoothstepAttenuation(long d2Q16, long min2Q16, long max2Q16, out int attenuationQ16) {
         if (d2Q16 >= max2Q16) {
             attenuationQ16 = 0;
@@ -331,11 +378,13 @@ public sealed class WorldAudioMixer {
         var dyRaw = (emitter.Position.Y.Value - listener.Position.Y.Value);
         var dzRaw = (emitter.Position.Z.Value - listener.Position.Z.Value);
 
-        // Distance is 3D; azimuth ignores elevation. Squares stay exact in Int128, saturated to long.
+        // Distance is 3D; azimuth ignores elevation. Every square stays exact in Int128, saturated to long — a raw Q16
+        // long product overflows above a ~46 340-unit radius (largechange-15), so the radius squares saturate the same
+        // way the distance square does rather than wrapping into a spurious attenuation.
         var d2Wide = ((((Int128)dxRaw * dxRaw) + ((Int128)dyRaw * dyRaw) + ((Int128)dzRaw * dzRaw)) >> 16);
         var d2Q16 = ((d2Wide > long.MaxValue) ? long.MaxValue : ((long)d2Wide));
-        var min2Q16 = ((emitter.MinRadius.Value * emitter.MinRadius.Value) >> 16);
-        var max2Q16 = ((emitter.MaxRadius.Value * emitter.MaxRadius.Value) >> 16);
+        var min2Q16 = SaturatingSquareQ16(valueRaw: emitter.MinRadius.Value);
+        var max2Q16 = SaturatingSquareQ16(valueRaw: emitter.MaxRadius.Value);
 
         SmoothstepAttenuation(d2Q16: d2Q16, min2Q16: min2Q16, max2Q16: max2Q16, attenuationQ16: out var attenuationQ16);
 
