@@ -171,6 +171,20 @@
 //       furnished world, a relaunch --world <that file>, and a second save compare byte-identical (the inline-
 //       canonical embeds and the §D6 world.save hash recompute are byte-stable). Decodes the engine's own PNGs
 //       inline like ui-floor.
+//   audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]
+//       The AP2 audio document-side proof. Session A (baked default) authors the furnished audio set over stdin —
+//       patches/tune through the HASH-PIN handshake (a bogus hash rejects loudly NAMING the canonical sha256, which
+//       the proof then submits — the pin proven and satisfied in one gesture), every speaker $type (fixed stereo
+//       pair, a bed, an entityLeaf-anchored row on a published role token, a placement-anchored row), a scene-row
+//       emission facet, the audio defaults, and a sound-bearing proof-authored creation placed — asserting the
+//       journal dirty counter at every step and the audio.emitters derivation listing. Then the VALIDATOR REJECTION
+//       TABLE (unknown patch/tune ids, an undeclared screen, a bad leaf token, an unknown placement anchor, the bed
+//       radius rule, the gain ceiling, a bogus listener policy, an emission facet naming no patch — each loud, dirty
+//       unchanged), the NO-CASCADE GUARDS (RemoveTune/RemovePatch naming their dependents; RemovePlacement while a
+//       speaker anchors to it), an undo round (the departed speaker leaves the derivation), and a grants round
+//       (revoking console mutate section:speakers denies the mutation loudly; re-granting restores it). world.save
+//       compacts; session B relaunches --world <the saved file>, PINS the fresh-boot audio.emitters listing exactly
+//       (stable ids in document order), and a second save byte-compares — the ouroboros with audio sections.
 //   expodoc [--no-build] [--width W] [--height H] [--exit-after-seconds N]
 //       Phase 5 exit-bar proof for the second world + session write-back: (a) --world expo.world.json boots the loud
 //       "[world] definition: <expo path>" line; (b) a distinguishing world.status fact — expo's kit/screen counts differ
@@ -240,8 +254,9 @@ static class ProofApp {
                 "editor-cameras" => EditorCamerasProof.RunEditorCameras(opts: opts),
                 "placements" => PlacementsProof.RunPlacements(opts: opts),
                 "sculpt" => SculptProof.RunSculpt(opts: opts),
+                "audio" => AudioProof.RunAudio(opts: opts),
                 "--help" or "-h" or "help" => PrintHelp(),
-                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|sculpt)"),
+                _ => Fail(message: $"unknown subcommand '{subcommand}' (expected generate|run|compare|screens|worlddoc|mutate|grants|bindings|storage|expo-author|expodoc|record|ui-floor|editor-mode|editor-edit|editor-cameras|placements|sculpt|audio)"),
             };
         }
         catch (ArgException ex) {
@@ -273,6 +288,7 @@ static class ProofApp {
         Console.WriteLine(value: "  editor-cameras [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  placements [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
         Console.WriteLine(value: "  sculpt [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
+        Console.WriteLine(value: "  audio [--no-build] [--width W] [--height H] [--exit-after-seconds N]");
 
         return 0;
     }
@@ -8950,5 +8966,294 @@ static class SculptProof {
         _ = ComposedShotKit.Check(name: name, ok: true, detail: $"dirty {dirty}");
 
         return dirty;
+    }
+}
+
+// ============================================================================================
+// AUDIO — the AP2 document-side proof: the audio sections (speakers/tunes/patches/audio),
+// emission facets, creation sounds, the hash pins, the validator rejection table, the
+// no-cascade guards, undo/grants rounds, the audio.emitters derivation listing, and the
+// ouroboros with audio sections. Session/console machinery lives in ComposedShotKit.
+// ============================================================================================
+static class AudioProof {
+    static readonly Regex CanonicalSha = new(options: RegexOptions.Compiled, pattern: @"canonical sha256 '([0-9a-f]{64})'");
+    static readonly Regex DirtyEcho = new(options: RegexOptions.Compiled, pattern: @"\[world\.status:.*dirty (\d+) undoable");
+
+    const string ChirpDoc = """{"schema":"puck.synth.v1","oscillator":"Pulse","pitchMillihertz":1320000,"durationFrames":9600}""";
+    const string DroneDoc = """{"schema":"puck.synth.v1","oscillator":"Noise","polynomial":40,"pitchMillihertz":1000}""";
+    const string JingleDoc = """{"schema":"puck.audio.v1","name":"jingle"}""";
+    const string StatueDoc = """{"schema":"puck.creation.v1","name":"statue","shapes":[{"id":1,"type":"Sphere","position":{"x":0,"y":0.6,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1},"scale":{"x":1,"y":1,"z":1}}],"behavior":{"locomotion":"hover","sounds":[{"name":"hum","shapeId":1,"patch":{"schema":"puck.synth.v1","oscillator":"Sine","pitchMillihertz":220000},"level":1,"radius":6}]}}""";
+
+    // The fresh-boot derivation pin (session B): stable ids in document order — the whole listing, byte-for-byte.
+    const string ExpectedEmittersAfterReboot =
+        "[audio.emitters: 1 speaker:left point tune:jingle left gain=1 min=0 max=8" +
+        " | 2 speaker:right point tune:jingle right gain=1 min=0 max=8" +
+        " | 3 speaker:wind bed synth:drone mix gain=0.7 min=2 max=5" +
+        " | 4 speaker:hand-bell point synth:chirp mix gain=1 min=0 max=8" +
+        " | 5 speaker:statue-voice point synth:chirp mix gain=1 min=0 max=8" +
+        " | 6 scene:boulder-1 point synth:chirp mix gain=1 min=0 max=8" +
+        " | 7 placement:statue-1 point synth:drone mix gain=0.5 min=0 max=8" +
+        " | 8 sound:statue-1:hum point synth:sound:statue-1:hum mix gain=1 min=0 max=6]";
+
+    public static int RunAudio(ArgMap opts) {
+        var noBuild = opts.Flag(name: "--no-build");
+        var width = opts.GetInt(fallback: 640, name: "--width");
+        var height = opts.GetInt(fallback: 480, name: "--height");
+        var exitAfterSeconds = opts.GetInt(fallback: 240, name: "--exit-after-seconds");
+        var repoRoot = ProofApp.RepoRoot();
+        var exe = ComposedShotKit.BuildAndFindExe(repoRoot: repoRoot, noBuild: noBuild);
+
+        if (exe is null) {
+            return 2;
+        }
+
+        var pid = Environment.ProcessId;
+        var savePath = Path.Combine(Path.GetTempPath(), $"puck-world-audio-{pid}.world.json");
+        var resavePath = Path.Combine(Path.GetTempPath(), $"puck-world-audio-resave-{pid}.world.json");
+        var passed = true;
+
+        try {
+            passed &= SessionA(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, savePath: savePath);
+            passed &= (File.Exists(path: savePath)
+                ? SessionB(exe: exe, repoRoot: repoRoot, width: width, height: height, exitAfterSeconds: exitAfterSeconds, savePath: savePath, resavePath: resavePath)
+                : ComposedShotKit.Check(name: "session-b", ok: false, detail: $"{savePath} was never written"));
+        }
+        finally {
+            ComposedShotKit.TryDelete(path: savePath);
+            ComposedShotKit.TryDelete(path: resavePath);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(value: $"[proof] audio proof {(passed ? "PASS" : "FAIL")}");
+
+        return (passed ? 0 : 1);
+    }
+
+    static bool SessionA(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string savePath) {
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch);
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: ctx.Process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: ctx.Process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            Console.WriteLine(value: "[proof] === audio (a): the hash-pin handshake — a bogus pin rejects loudly naming the canonical sha256 ===");
+
+            var chirpHash = ProbeCanonicalHash(ctx: ctx, name: "patch-pin-rejects", line: WithHash(verb: "world.patch.set", id: "chirp", doc: ChirpDoc, hash: "0"), rejectNeedle: "UpsertPatch 'chirp'");
+            var droneHash = ProbeCanonicalHash(ctx: ctx, name: "patch-pin-rejects-drone", line: WithHash(verb: "world.patch.set", id: "drone", doc: DroneDoc, hash: "0"), rejectNeedle: "UpsertPatch 'drone'");
+            var jingleHash = ProbeCanonicalHash(ctx: ctx, name: "tune-pin-rejects", line: WithHash(verb: "world.tune.set", id: "jingle", doc: JingleDoc, hash: "0"), rejectNeedle: "UpsertTune 'jingle'");
+            var statueHash = ProbeCanonicalHash(ctx: ctx, name: "creation-pin-rejects", line: WithHash(verb: "world.creation.set", id: "statue", doc: StatueDoc, hash: "0"), rejectNeedle: "UpsertCreation 'statue'");
+
+            passed &= ((chirpHash is not null) && (droneHash is not null) && (jingleHash is not null) && (statueHash is not null));
+            passed &= ExpectDirty(ctx: ctx, name: "pins-changed-nothing", dirty: 0);
+
+            if (!passed) {
+                return false;
+            }
+
+            Console.WriteLine(value: "[proof] === audio (b): authoring the furnished set — every $type, all source kinds, facets, a sound-bearing creation ===");
+            passed &= Mutate(ctx: ctx, name: "patch-chirp", line: WithHash(verb: "world.patch.set", id: "chirp", doc: ChirpDoc, hash: chirpHash!), needle: "[world.mutation: UpsertPatch 'chirp' applied]", dirty: 1);
+            passed &= Mutate(ctx: ctx, name: "patch-drone", line: WithHash(verb: "world.patch.set", id: "drone", doc: DroneDoc, hash: droneHash!), needle: "[world.mutation: UpsertPatch 'drone' applied]", dirty: 2);
+            passed &= Mutate(ctx: ctx, name: "tune-jingle", line: WithHash(verb: "world.tune.set", id: "jingle", doc: JingleDoc, hash: jingleHash!), needle: "[world.mutation: UpsertTune 'jingle' applied]", dirty: 3);
+            passed &= Mutate(ctx: ctx, name: "speaker-left", line: """world.speaker.set {"$type":"fixed","name":"left","position":[-1.5,1,0],"feed":{"source":{"$type":"tune","tuneId":"jingle"},"channel":"left","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'left' applied]", dirty: 4);
+            passed &= Mutate(ctx: ctx, name: "speaker-right", line: """world.speaker.set {"$type":"fixed","name":"right","position":[1.5,1,0],"feed":{"source":{"$type":"tune","tuneId":"jingle"},"channel":"right","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'right' applied]", dirty: 5);
+            passed &= Mutate(ctx: ctx, name: "speaker-wind-bed", line: """world.speaker.set {"$type":"bed","name":"wind","center":[0,0,-6],"radius":5,"innerRadius":2,"feed":{"source":{"$type":"synth","patchId":"drone"},"channel":"mix","gain":0.7}}""", needle: "[world.mutation: UpsertSpeaker 'wind' applied]", dirty: 6);
+            passed &= Mutate(ctx: ctx, name: "speaker-leaf-anchor", line: """world.speaker.set {"$type":"anchored","name":"hand-bell","anchor":{"$type":"entityLeaf","index":0,"leaf":"left-hand"},"offset":[0,0.1,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'hand-bell' applied]", dirty: 7);
+            passed &= Mutate(ctx: ctx, name: "scene-emission-facet", line: """world.scene.row.set {"$type":"boulder","id":"boulder-1","center":[-1.2,0.72,-0.3],"emission":{"patchId":"chirp","level":1,"radius":8},"radius":0.9,"smooth":0.5}""", needle: "[world.mutation: UpsertSceneRow 'boulder-1' applied]", dirty: 8);
+            passed &= Mutate(ctx: ctx, name: "audio-defaults", line: """world.audio.set {"masterGain":0.8,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"seat:1"}""", needle: "[world.mutation: SetAudioDefaults applied]", dirty: 9);
+            passed &= Mutate(ctx: ctx, name: "creation-with-sounds", line: WithHash(verb: "world.creation.set", id: "statue", doc: StatueDoc, hash: statueHash!), needle: "[world.mutation: UpsertCreation 'statue' applied]", dirty: 10);
+            passed &= Mutate(ctx: ctx, name: "placement-with-emission", line: """world.placement.set {"id":"statue-1","creationId":"statue","position":[0,0,3],"yawDegrees":0,"scale":1,"emission":{"patchId":"drone","level":0.5}}""", needle: "[world.mutation: UpsertPlacement 'statue-1' applied]", dirty: 11);
+            passed &= Mutate(ctx: ctx, name: "speaker-placement-anchor", line: """world.speaker.set {"$type":"anchored","name":"statue-voice","anchor":{"$type":"placement","placementId":"statue-1","shapeId":1},"offset":[0,0.25,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'statue-voice' applied]", dirty: 12);
+
+            var emitters = AwaitEcho(ctx: ctx, line: "audio.emitters", needle: "[audio.emitters:");
+
+            passed &= ComposedShotKit.Check(name: "derivation-covers-every-family", ok: ((emitters is not null)
+                && emitters.Contains(value: "speaker:left point tune:jingle left")
+                && emitters.Contains(value: "speaker:wind bed synth:drone mix")
+                && emitters.Contains(value: "speaker:hand-bell point synth:chirp mix")
+                && emitters.Contains(value: "speaker:statue-voice point synth:chirp mix")
+                && emitters.Contains(value: "scene:boulder-1 point synth:chirp mix")
+                && emitters.Contains(value: "placement:statue-1 point synth:drone mix")
+                && emitters.Contains(value: "sound:statue-1:hum point synth:sound:statue-1:hum mix")), detail: (emitters?.Trim() ?? "(no audio.emitters echo)"));
+
+            Console.WriteLine(value: "[proof] === audio (c): the validator rejection table — each loud, the document unchanged ===");
+            passed &= Reject(ctx: ctx, name: "unknown-patch", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"nope"},"channel":"mix","gain":1}}""", needle: "names no patch row");
+            passed &= Reject(ctx: ctx, name: "unknown-tune", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"tune","tuneId":"nope"},"channel":"mix","gain":1}}""", needle: "names no tune row");
+            passed &= Reject(ctx: ctx, name: "undeclared-screen", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"machine","screenIndex":99},"channel":"mix","gain":1}}""", needle: "names no declared screen");
+            passed &= Reject(ctx: ctx, name: "bad-leaf-token", line: """world.speaker.set {"$type":"anchored","name":"bad","anchor":{"$type":"entityLeaf","index":0,"leaf":"tail"},"offset":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "names no humanoid role");
+            passed &= Reject(ctx: ctx, name: "unknown-placement-anchor", line: """world.speaker.set {"$type":"anchored","name":"bad","anchor":{"$type":"placement","placementId":"ghost"},"offset":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "names no placement row");
+            passed &= Reject(ctx: ctx, name: "bed-radius-rule", line: """world.speaker.set {"$type":"bed","name":"bad","center":[0,0,0],"radius":5,"innerRadius":5,"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "less than radius");
+            passed &= Reject(ctx: ctx, name: "gain-ceiling", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":99}}""", needle: "must be within [0, 8]");
+            passed &= Reject(ctx: ctx, name: "bad-channel", line: """world.speaker.set {"$type":"fixed","name":"bad","position":[0,0,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"middle","gain":1}}""", needle: "must be 'mix', 'left', or 'right'");
+            passed &= Reject(ctx: ctx, name: "bogus-listener", line: """world.audio.set {"masterGain":1,"defaultSpeakerRadius":8,"defaultCurve":"smoothstep","defaultBedFadeSeconds":0.5,"listener":"moon"}""", needle: "is not 'focus', 'seat:<n>', or a declared camera name");
+            passed &= Reject(ctx: ctx, name: "facet-unknown-patch", line: """world.scene.row.set {"$type":"boulder","id":"boulder-2","center":[0.6,0.88,0.5],"emission":{"patchId":"nope","level":1},"radius":1.1,"smooth":0.5}""", needle: "names no patch row");
+            passed &= ExpectDirty(ctx: ctx, name: "rejections-changed-nothing", dirty: 12);
+
+            Console.WriteLine(value: "[proof] === audio (d): the no-cascade guards name their dependents ===");
+            passed &= Reject(ctx: ctx, name: "tune-remove-guard", line: "world.tune.remove jingle", needle: "feeds speaker(s) 'left', 'right'");
+            passed &= Reject(ctx: ctx, name: "patch-remove-guard", line: "world.patch.remove drone", needle: "referenced by speaker(s) 'wind', placement 'statue-1'");
+            passed &= Reject(ctx: ctx, name: "placement-remove-guard", line: "world.placement.remove statue-1", needle: "anchors speaker(s) 'statue-voice'");
+            passed &= ExpectDirty(ctx: ctx, name: "guards-changed-nothing", dirty: 12);
+
+            Console.WriteLine(value: "[proof] === audio (e): undo + grants rounds ===");
+            passed &= Mutate(ctx: ctx, name: "undo-drops-speaker", line: "world.undo", needle: "[world.undo: dropped 1, 11 remaining]", dirty: 11);
+
+            var afterUndo = AwaitEcho(ctx: ctx, line: "audio.emitters", needle: "[audio.emitters:");
+
+            passed &= ComposedShotKit.Check(name: "undo-leaves-derivation", ok: ((afterUndo is not null) && !afterUndo.Contains(value: "statue-voice")), detail: ((afterUndo is null) ? "(no echo)" : "statue-voice departed the derivation"));
+            passed &= Mutate(ctx: ctx, name: "speaker-reapplied", line: """world.speaker.set {"$type":"anchored","name":"statue-voice","anchor":{"$type":"placement","placementId":"statue-1","shapeId":1},"offset":[0,0.25,0],"feed":{"source":{"$type":"synth","patchId":"chirp"},"channel":"mix","gain":1}}""", needle: "[world.mutation: UpsertSpeaker 'statue-voice' applied]", dirty: 12);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.revoke console mutate section:speakers", expect: "[world.revoke: console mutate section:speakers]", name: "revoke-speakers-section");
+            passed &= Reject(ctx: ctx, name: "denied-without-grant", line: "world.speaker.remove wind", needle: "cannot mutate section:speakers", rejectPrefix: "[world.grant denied:");
+            passed &= ExpectDirty(ctx: ctx, name: "denial-changed-nothing", dirty: 12);
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.grant console mutate section:speakers", expect: "[world.grant: console mutate section:speakers]", name: "regrant-speakers-section");
+            passed &= Mutate(ctx: ctx, name: "applies-after-regrant", line: "world.speaker.remove wind", needle: "[world.mutation: RemoveSpeaker 'wind' applied]", dirty: 13);
+            passed &= Mutate(ctx: ctx, name: "undo-restores-wind", line: "world.undo", needle: "[world.undo: dropped 1, 12 remaining]", dirty: 12);
+
+            Console.WriteLine(value: "[proof] === audio (f): world.save compacts the furnished world ===");
+
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: $"world.save {savePath}");
+
+            var saveLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "save-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+            passed &= ExpectDirty(ctx: ctx, name: "save-compacts", dirty: 0);
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: ctx.Process);
+        }
+
+        return passed;
+    }
+
+    static bool SessionB(string exe, string repoRoot, int width, int height, int exitAfterSeconds, string savePath, string resavePath) {
+        Console.WriteLine();
+        Console.WriteLine(value: "[proof] === audio (g): relaunch — the fresh-boot derivation pin + the ouroboros with audio sections ===");
+
+        var stopwatch = new Stopwatch();
+        var ctx = ComposedShotKit.Launch(exe: exe, repoRoot: repoRoot, backend: null, width: width, height: height, exitAfterSeconds: exitAfterSeconds, stopwatch: stopwatch, extraArgs: ["--world", savePath]);
+        var passed = true;
+
+        ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = false; ComposedShotKit.KillQuietly(process: ctx.Process); };
+        EventHandler exitHandler = (_, _) => ComposedShotKit.KillQuietly(process: ctx.Process);
+
+        Console.CancelKeyPress += cancelHandler;
+        AppDomain.CurrentDomain.ProcessExit += exitHandler;
+
+        try {
+            var bootLine = ComposedShotKit.Await(collector: ctx.Collector, mark: 0, predicate: l => (l.Contains(value: "[world] definition:") && l.Contains(value: savePath)), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "boots-from-saved-file", ok: (bootLine is not null), detail: (bootLine?.Trim() ?? "(no boot line naming the saved file)"));
+
+            if (!ComposedShotKit.WaitForConsole(ctx: ctx)) {
+                return false;
+            }
+
+            var emitters = AwaitEcho(ctx: ctx, line: "audio.emitters", needle: "[audio.emitters:");
+
+            // The collector stamps each line with its elapsed-time prefix, so the byte-exact pin matches the line TAIL.
+            passed &= ComposedShotKit.Check(name: "fresh-boot-derivation-pinned", ok: ((emitters is not null) && emitters.Trim().EndsWith(value: ExpectedEmittersAfterReboot, comparisonType: StringComparison.Ordinal)), detail: (emitters?.Trim() ?? "(no audio.emitters echo)"));
+
+            var speakers = AwaitEcho(ctx: ctx, line: "world.speakers", needle: "[world.speakers:");
+
+            passed &= ComposedShotKit.Check(name: "speakers-listing", ok: ((speakers is not null)
+                && speakers.Contains(value: "left fixed tune:jingle left gain=1")
+                && speakers.Contains(value: "wind bed synth:drone mix gain=0.7")
+                && speakers.Contains(value: "hand-bell anchored synth:chirp mix gain=1")
+                && speakers.Contains(value: "statue-voice anchored synth:chirp mix gain=1")), detail: (speakers?.Trim() ?? "(no world.speakers echo)"));
+
+            var mark = ctx.Collector.Count;
+
+            ComposedShotKit.Send(ctx: ctx, line: $"world.save {resavePath}");
+
+            var saveLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: "[world.save:"), deadlineSeconds: 30.0);
+
+            passed &= ComposedShotKit.Check(name: "resave-writes", ok: ((saveLine is not null) && !saveLine.Contains(value: "could not write")), detail: (saveLine?.Trim() ?? "(no world.save echo)"));
+
+            var identical = (File.Exists(path: resavePath) && File.ReadAllBytes(path: savePath).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: resavePath)));
+
+            passed &= ComposedShotKit.Check(name: "ouroboros-with-audio-sections", ok: identical, detail: (identical ? "save -> reboot -> save byte-identical (hash recompute included)" : "byte mismatch between the two saves"));
+        }
+        finally {
+            Console.CancelKeyPress -= cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit -= exitHandler;
+            ComposedShotKit.KillQuietly(process: ctx.Process);
+        }
+
+        return passed;
+    }
+
+    // One inline-JSON asset-row submission: {"id":..,"document":<doc>,"hash":..} — shared by the pin probes (hash "0")
+    // and the real submissions (the harvested canonical hash).
+    static string WithHash(string verb, string id, string doc, string hash) =>
+        (verb + " {\"id\":\"" + id + "\",\"document\":" + doc + ",\"hash\":\"" + hash + "\"}");
+
+    // Submit a *set verb carrying hash "0" and harvest the canonical sha256 the loud rejection names — the pin proven
+    // (a foreign hash never lands) and satisfied (the pipeline's own hash) in one gesture; dirty is unmoved.
+    static string? ProbeCanonicalHash(ComposedShotKit.Ctx ctx, string name, string line, string rejectNeedle) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        var rejected = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: "[world.mutation rejected:") && l.Contains(value: rejectNeedle)), deadlineSeconds: 20.0);
+        var match = ((rejected is null) ? null : CanonicalSha.Match(input: rejected));
+        var hash = (((match is not null) && match.Success) ? match.Groups[1].Value : null);
+
+        _ = ComposedShotKit.Check(name: name, ok: (hash is not null), detail: ((hash is not null) ? $"canonical {hash[..12]}... harvested from the loud pin rejection" : (rejected?.Trim() ?? "(no rejection echo)")));
+
+        return hash;
+    }
+
+    // A mutation followed by the barrier-ordered dirty read: the loud needle appeared and the journal length matches.
+    static bool Mutate(ComposedShotKit.Ctx ctx, string name, string line, string needle, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        var echoed = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: 20.0);
+        var ok = ComposedShotKit.Check(name: name, ok: (echoed is not null), detail: (echoed?.Trim() ?? $"(no '{needle}' echo)"));
+
+        return (ok & ExpectDirty(ctx: ctx, name: $"{name}-dirty", dirty: dirty));
+    }
+
+    // A rejected submission: the loud line carries the needle (validator/guard/grant), and nothing applied.
+    static bool Reject(ComposedShotKit.Ctx ctx, string name, string line, string needle, string rejectPrefix = "[world.mutation rejected:") {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        var rejected = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => (l.Contains(value: rejectPrefix) && l.Contains(value: needle)), deadlineSeconds: 20.0);
+
+        return ComposedShotKit.Check(name: name, ok: (rejected is not null), detail: (rejected?.Trim() ?? $"(no '{rejectPrefix} ...{needle}' echo)"));
+    }
+
+    static string? AwaitEcho(ComposedShotKit.Ctx ctx, string line, string needle) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: line);
+
+        return ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => l.Contains(value: needle), deadlineSeconds: 20.0);
+    }
+
+    static bool ExpectDirty(ComposedShotKit.Ctx ctx, string name, int dirty) {
+        var mark = ctx.Collector.Count;
+
+        ComposedShotKit.Send(ctx: ctx, line: "world.status");
+
+        var statusLine = ComposedShotKit.Await(collector: ctx.Collector, mark: mark, predicate: l => DirtyEcho.IsMatch(input: l), deadlineSeconds: 20.0);
+        var actual = ((statusLine is null) ? -1 : int.Parse(s: DirtyEcho.Match(input: statusLine).Groups[1].Value, provider: ProofApp.Inv));
+
+        return ComposedShotKit.Check(name: name, ok: (actual == dirty), detail: ((statusLine is null) ? "(no world.status echo)" : $"dirty {actual} (want {dirty})"));
     }
 }

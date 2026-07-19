@@ -613,6 +613,7 @@
           "Puck.Compositing": "[1.0.0, )",
           "Puck.DirectX": "[1.0.0, )",
           "Puck.DirectX.Presentation": "[1.0.0, )",
+          "Puck.Forge": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.HumbleGamingBrick": "[1.0.0, )",
           "Puck.Input": "[1.0.0, )",

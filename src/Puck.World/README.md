@@ -1303,11 +1303,12 @@ Start / Back→Select; the growth point is the `PlayerIntent` action-lane vocabu
 (only the Jump lane fills a button today — new lanes light up the rest in
 `WorldEngagement.Translate`, not a per-button verb).
 
-## Audio (the mixer core — spatial audio arc AP1)
+## Audio (the mixer core + the world data model — spatial audio arc AP1/AP2)
 
 `Audio/` holds the pure mixing core the spatial audio arc builds on
-(`docs/reviews/2026-07-18-world-audio-arc-plan.md`); the world data model (AP2)
-and the WASAPI device (AP3) land on top of it without reshaping.
+(`docs/reviews/2026-07-18-world-audio-arc-plan.md`); the world data model (AP2,
+below) sits on top of it, and the WASAPI device (AP3) lands next without
+reshaping either.
 
 **The rate.** 48000 Hz, fixed (plan A1): device-native, exactly **200 frames
 per 240 Hz sim step** (`WorldAudioMixer.FramesPerSimStep`), 21/20 engine ticks
@@ -1349,14 +1350,41 @@ are two drivers of the same code — the proof drives tune audio through a
 SYNCHRONOUS headless Humble core (never `QueuedMachineWorker`), steps the
 scripted pose table at the sim cadence, and SHA-256-hashes the raw s16 PCM.
 
-**The golden-hash doctrine.** The proof's printed PCM hash is
-self-referential: it proves the whole path is deterministic (two full fresh
+**The golden-hash doctrine.** The proof's printed PCM hashes are
+self-referential: they prove the whole path is deterministic (two full fresh
 runs must agree bit for bit), never that history is preserved — a deliberate
-mix-law correction is EXPECTED to change it; re-run and take the new value.
-Verify with `dotnet run src/Puck.World/scripts/audio-mix.cs` (the hash proof
-plus structural batteries: pan geometry, the cull contract, single-pull,
+mix-law correction is EXPECTED to change them; re-run and take the new values.
+Verify with `dotnet run src/Puck.World/scripts/audio-mix.cs` (the two hash
+proofs plus structural batteries: pan geometry, the cull contract, single-pull,
 soft-clip exactness, ramp bounds, seeded-synth reproducibility, voice steal,
-SVF, bed fade).
+SVF, bed fade, and the world-document fixture pipeline).
+
+**The world data model (AP2).** Sound is DOCUMENT data: `Speakers`
+(`WorldSpeaker`, `$type fixed|anchored|bed` — the camera family's audio
+sibling; a feed is a shared source identity + `mix|left|right` selector +
+gain, and anchored rows ride the shared `WorldAnchor` union, placements
+included), `Tunes` / `Patches` (inline-canonical `puck.audio.v1` /
+`puck.synth.v1` assets with pinned hashes — the creation-row pattern verbatim:
+a foreign hash rejects loudly at the compose boundary, the validator
+recomputes the pin, `world.save` re-canonicalizes), the `Audio` defaults row
+(master gain, attenuation coalescing, bed fade, the `focus|seat:<n>|<camera>`
+listener policy), nullable `Emission` facets on scene rows and placements
+(root-only under repeat), and `CreationBehaviorDocument.Sounds` (inline synth
+voices a placement auto-surfaces as emitters). `Client/WorldAudioDirector`
+derives the emitter table from the delivered definition with STABLE ids (a
+property edit keeps its id; a kind/anchor/source-identity change — asset hash
+included — re-enters from silence), resolves poses per produced frame (entity
+leaves from the REAL packed gait-swung transforms; placements from the
+stamped/animated transform), fires one seeded trigger per synth-fed emitter
+arrival (`SubmitTrigger` is the ONE trigger-production seam AP4's cue
+producers reuse), and publishes `WorldAudioSnapshot`s over a 4-slab rotation.
+Tune hosting (`TuneMachineSource` — the `Puck.Forge` compile chain over a
+synchronous Humble core) acquires while referenced and releases when
+orphaned, active once a mixer attaches (AP3's device pump; the offline proof
+today). Verbs: `world.speaker.set/remove`, `world.tune.set/remove`,
+`world.patch.set/remove`, `world.audio.set`, `world.speakers`, and
+`audio.emitters` (the deterministic derived-table dump). The document-side
+battery is `dotnet run src/Puck.World/scripts/proof.cs -- audio`.
 
 ## Engine boundaries worth knowing
 

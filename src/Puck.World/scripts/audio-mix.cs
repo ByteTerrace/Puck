@@ -26,7 +26,14 @@
 //   (f) the coefficient ramp — a gain step produces a monotone ramp with no per-sample jump above the ramp bound;
 //   (g) the synth — seeded reproducibility (bit-exact), envelope completion frees the voice, 40 triggers pin at 32
 //       voices (steal-quietest), the SVF low-pass measurably darkens noise, triggers are once-only under
-//       snapshot hold, and the bed fade bounds presence slew.
+//       snapshot hold, and the bed fade bounds presence slew;
+//   (h) THE WORLD-DOCUMENT PIPELINE (AP2) — a proof-authored FIXTURE WORLD (every speaker $type, all four source
+//       kinds, a scene-row + placement emission facet, a sound-bearing creation placed) serialized, reloaded through
+//       the strict loader/validator, derived by WorldAudioDirector (stable ids, arrival triggers, tune
+//       acquire/release hosting), published per step against a scripted listener orbit, and mixed — the
+//       document→derivation→MixBlock→hash pipeline end to end, its own golden PCM hash reproduced across two full
+//       fresh runs.
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Puck.Authoring;
@@ -34,7 +41,10 @@ using Puck.Forge.Tune;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.Maths;
+using Puck.SdfVm;
+using Puck.World;
 using Puck.World.Audio;
+using Puck.World.Client;
 
 const int Frames = WorldAudioMixer.FramesPerSimStep; // 200
 const int Steps = 480;                               // 2 s of timeline
@@ -468,6 +478,146 @@ short[] RenderSynth(WorldVoiceSynth synth, int totalFrames) {
 
     // Slew bound: 65536·200/4800 = 2730 coefficient/block -> ≤ ~683 on a 16384 source; unbounded ramps to ~11585.
     Check("bed-fade-bounds-presence-slew", (fadedPeak <= 700) && (instantPeak >= 11_000), $"faded peak={fadedPeak} (bound ~683), instant peak={instantPeak}");
+}
+
+// ---- (h) the world-document pipeline (AP2) -----------------------------------------------------------------------
+Console.WriteLine("[proof] === audio-mix (h): the fixture WORLD DOCUMENT drives derivation -> MixBlock -> hash ===");
+
+{
+    // The proof-authored fixture world (disposable content only): every speaker $type, all four source kinds, a
+    // scene-row emission facet, a placement emission facet, and a sound-bearing creation placed (its anchored
+    // speaker rides the placement's stamped shape transform).
+    var chirpPatch = SynthPatchCanonicalizer.Canonicalize(new SynthPatchDocument(
+        Schema: SynthPatchDocument.CurrentSchema, Name: "chirp", Oscillator: SynthOscillator.Pulse,
+        DutyThousandths: 250, Polynomial: null, AttackFrames: 480, DecayFrames: 4800, SustainThousandths: 300,
+        ReleaseFrames: 2400, PitchMillihertz: 1_320_000, DurationFrames: 9_600));
+    var droneBed = SynthPatchCanonicalizer.Canonicalize(new SynthPatchDocument(
+        Schema: SynthPatchDocument.CurrentSchema, Name: "drone", Oscillator: SynthOscillator.Noise,
+        DutyThousandths: null, Polynomial: 40, AttackFrames: 2400, DecayFrames: 0, SustainThousandths: 1000,
+        ReleaseFrames: 0, PitchMillihertz: 1_000));
+    var humInline = new SynthPatchDocument(
+        Schema: SynthPatchDocument.CurrentSchema, Name: "hum", Oscillator: SynthOscillator.Sine,
+        DutyThousandths: null, Polynomial: null, AttackFrames: 2400, DecayFrames: 0, SustainThousandths: 800,
+        ReleaseFrames: 0, PitchMillihertz: 220_000);
+    var tuneCanonical = AudioCanonicalizer.Canonicalize(tuneDocument);
+    var statue = CreationCanonicalizer.Canonicalize(new CreationDocument(
+        Schema: CreationDocument.CurrentSchema, Name: "statue", Intent: null, BakeStyle: null, Palette: null,
+        Shapes: [new ShapeDocument(Id: 1, Name: null, Type: AvatarPrimitive.Sphere, Position: new Vector3(0f, 0.6f, 0f), Rotation: Quaternion.Identity, Scale: Vector3.One, Material: null, Blend: null, Smooth: null, Group: null)],
+        Frames: null,
+        Behavior: new CreationBehaviorDocument(Locomotion: "hover", Faces: null, Sounds: [
+            new CreationSoundDocument(Name: "hum", ShapeId: 1, Patch: humInline, Level: 1f, Radius: 6f),
+        ])));
+
+    var sceneRows = new List<Puck.World.WorldSceneRow>(WorldDefinition.Default.Scene.Rows);
+
+    sceneRows[0] = (((WorldSceneRow.Boulder)sceneRows[0]) with { Emission = new WorldEmission(PatchId: "chirp", Level: 1f, Radius: 8f) });
+
+    var fixture = WorldDefinition.Default with {
+        Scene = (WorldDefinition.Default.Scene with { Rows = sceneRows }),
+        Patches = [
+            new WorldPatch(Id: "chirp", Document: chirpPatch.Document, Hash: chirpPatch.Hash),
+            new WorldPatch(Id: "drone", Document: droneBed.Document, Hash: droneBed.Hash),
+        ],
+        Tunes = [new WorldTune(Id: "sunny", Document: tuneCanonical.Document, Hash: tuneCanonical.Hash)],
+        Creations = [new WorldCreation(Id: "statue", Document: statue.Document, Hash: statue.Hash)],
+        Placements = [new WorldPlacement(Id: "statue-1", CreationId: "statue", Position: new Vector3(0f, 0f, 3f), YawDegrees: 0f, Scale: 1f, Emission: new WorldEmission(PatchId: "drone", Level: 0.5f, Radius: 6f))],
+        Speakers = [
+            new WorldSpeaker.Fixed(Name: "stereo-left", Position: new Vector3(-1.5f, 0f, 0f), Feed: new WorldSpeakerFeed(Source: new WorldSpeakerSource.Tune(TuneId: "sunny"), Channel: "left", Gain: 1f)),
+            new WorldSpeaker.Fixed(Name: "stereo-right", Position: new Vector3(1.5f, 0f, 0f), Feed: new WorldSpeakerFeed(Source: new WorldSpeakerSource.Tune(TuneId: "sunny"), Channel: "right", Gain: 1f)),
+            new WorldSpeaker.Anchored(Name: "statue-voice", Anchor: new WorldAnchor.Placement(PlacementId: "statue-1", ShapeId: 1), Offset: new Vector3(0f, 0.25f, 0f), Feed: new WorldSpeakerFeed(Source: new WorldSpeakerSource.Tune(TuneId: "sunny"), Channel: "mix", Gain: 0.5f)),
+            new WorldSpeaker.Bed(Name: "wind", Center: new Vector3(0f, 0f, -6f), Radius: 5f, InnerRadius: 2f, FadeSeconds: 0.1f, Feed: new WorldSpeakerFeed(Source: new WorldSpeakerSource.Synth(PatchId: "drone"), Channel: "mix", Gain: 0.7f)),
+            new WorldSpeaker.Fixed(Name: "cabinet", Position: new Vector3(-3f, 1.2f, -3f), Feed: new WorldSpeakerFeed(Source: new WorldSpeakerSource.Machine(ScreenIndex: 0), Channel: "mix", Gain: 1f)),
+            new WorldSpeaker.Fixed(Name: "mute", Position: new Vector3(0f, 0f, 8f), Feed: new WorldSpeakerFeed(Source: new WorldSpeakerSource.None(), Channel: "mix", Gain: 1f)),
+        ],
+        Audio = (WorldAudioDefaults.Default with { MasterGain = 0.8f }),
+    };
+
+    // The full document pipeline: canonical serialize -> the strict loader/validator (hash pins re-verified) -> the
+    // validated definition the derivation consumes.
+    var fixturePath = Path.Combine(Path.GetTempPath(), $"puck-audio-fixture-{Environment.ProcessId}.world.json");
+
+    _ = WorldDefinitionSerialization.Save(fixture, fixturePath);
+
+    if (!WorldDefinitionLoader.TryLoadFile(fixturePath, out var loadedFixture, out var loadReason)) {
+        Check("fixture-world-loads", false, loadReason);
+    } else {
+        Check("fixture-world-loads", true, $"{fixturePath} validated");
+
+        string RunWorldTimeline() {
+            _ = WorldDefinitionLoader.TryLoadFile(fixturePath, out var definition, out _);
+
+            var director = new WorldAudioDirector(client: null, animator: null);
+
+            director.ReconcileSpeakers(definition);
+
+            var mixer = new WorldAudioMixer();
+
+            director.AttachMixer(mixer);
+
+            var block = new short[Frames * 2];
+            using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var seats = new WorldSeatCameraPose[1];
+
+            try {
+                for (var step = 0; step < Steps; step++) {
+                    // The scripted listener orbit (radius 2, one revolution) through fixed-point SinCos, so the
+                    // float eye is an exact function of the step on every machine.
+                    var (sin, cos) = FixedQ4816.SinCos(QRaw((step * 411775L) / Steps));
+                    var eye = new Vector3((cos.Value * 2f) / 65536f, 0f, (sin.Value * 2f) / 65536f);
+
+                    seats[0] = new WorldSeatCameraPose(Joined: true, Eye: eye, Forward: -eye);
+
+                    var snapshot = director.Publish(transforms: ReadOnlySpan<DynamicTransform>.Empty, seats: seats);
+
+                    mixer.MixBlock(snapshot, block);
+                    sha.AppendData(MemoryMarshal.AsBytes(block.AsSpan()));
+
+                    if (step == 0) {
+                        Check("fixture-derives-nine-emitters", (snapshot.Emitters.Length == 9), $"emitters={snapshot.Emitters.Length} (6 speakers + scene facet + placement facet + creation sound)");
+                        Check("fixture-master-gain-flows", (mixer.MasterGainQ16 == 52429), $"MasterGainQ16={mixer.MasterGainQ16} (0.8 -> 52429)");
+                    }
+
+                    if (step == 1) {
+                        Check("fixture-arrival-voices-sound", (mixer.Synth.ActiveVoiceCount >= 3), $"active voices={mixer.Synth.ActiveVoiceCount} (chirp one-shot + drone loops x2 + hum loop)");
+                    }
+                }
+            } finally {
+                director.DetachMixer();
+            }
+
+            return Convert.ToHexString(sha.GetHashAndReset());
+        }
+
+        var worldHashFirst = RunWorldTimeline();
+        var worldHashSecond = RunWorldTimeline();
+
+        Console.WriteLine("[proof]");
+        Console.WriteLine($"[proof]   ============ GOLDEN WORLD-DOCUMENT PCM HASH (self-referential; re-goldens on a law change) ============");
+        Console.WriteLine($"[proof]   {worldHashFirst}");
+        Console.WriteLine($"[proof]   ====================================================================================================");
+        Console.WriteLine("[proof]");
+        Check("world-hash-reproduced", worldHashFirst == worldHashSecond, $"run2 {(worldHashFirst == worldHashSecond ? "==" : "!=")} run1");
+
+        {
+            // The derivation listing is a pure function of the document — assert its stable facts.
+            var director = new WorldAudioDirector(client: null, animator: null);
+
+            director.ReconcileSpeakers(loadedFixture);
+
+            var listing = director.DescribeEmitters();
+
+            Console.WriteLine($"[proof]   {listing}");
+            Check("fixture-derivation-listing", (listing.Contains("speaker:stereo-left point tune:sunny left")
+                && listing.Contains("speaker:wind bed synth:drone mix")
+                && listing.Contains("speaker:cabinet point machine:0 mix")
+                && listing.Contains("speaker:mute point none mix")
+                && listing.Contains("scene:boulder-1 point synth:chirp mix")
+                && listing.Contains("placement:statue-1 point synth:drone mix")
+                && listing.Contains("sound:statue-1:hum point synth:sound:statue-1:hum mix")), "all nine derivation keys present with their source tokens");
+        }
+
+        File.Delete(fixturePath);
+    }
 }
 
 Console.WriteLine($"[proof] audio-mix {((failures == 0) ? "PASS" : $"FAIL ({failures})")}");

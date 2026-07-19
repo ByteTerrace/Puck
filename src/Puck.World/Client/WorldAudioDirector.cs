@@ -181,19 +181,24 @@ internal sealed class WorldAudioDirector {
             ));
         }
 
-        for (var index = (m_pendingTriggers.Count - 1); (index >= 0); index--) {
+        // Pending triggers ride ASCENDING-sequence order — the mixer's once-only high-water mark walks the snapshot
+        // array in order, so a descending append would fire only the newest event and skip the rest.
+        var write = 0;
+
+        for (var index = 0; (index < m_pendingTriggers.Count); index++) {
             var pending = m_pendingTriggers[index];
 
-            if (!slab.TryAddTrigger(trigger: pending.Trigger)) {
-                continue; // Capacity refusal: the event stays pending for the next publish.
+            if (slab.TryAddTrigger(trigger: pending.Trigger)) {
+                pending.RemainingPublishes--;
             }
 
-            if (--pending.RemainingPublishes <= 0) {
-                m_pendingTriggers.RemoveAt(index: index);
-            } else {
-                m_pendingTriggers[index] = pending;
+            // A capacity refusal keeps the event pending (untouched) for the next publish.
+            if (pending.RemainingPublishes > 0) {
+                m_pendingTriggers[write++] = pending;
             }
         }
+
+        m_pendingTriggers.RemoveRange(index: write, count: (m_pendingTriggers.Count - write));
 
         m_buffer.Publish(frame: slab);
 
@@ -353,21 +358,34 @@ internal sealed class WorldAudioDirector {
         }
 
         if (arrived && (plan.Source.Kind == WorldAudioSourceKind.Synth) && (plan.Source.Id is { } patchId)) {
-            m_pendingTriggers.Add(item: new PendingTrigger {
-                Trigger = new WorldSynthTrigger(
-                    Sequence: ++m_nextTriggerSequence,
-                    PatchId: patchId,
-                    // The seed folds the key and the identity signature: the same authored content reproduces the
-                    // voice bit for bit; a content change re-seeds with the new identity.
-                    Seed: (Fnv64(text: plan.Key) ^ signature),
-                    GainQ16: 65536, // Unity: the emitter's own gain spatializes; a voice gain here would double-scale.
-                    EmitterId: plan.Id
-                ),
-                RemainingPublishes = TriggerPublishRetention,
-            });
+            // The seed folds the key and the identity signature: the same authored content reproduces the voice bit
+            // for bit; a content change re-seeds with the new identity. Gain stays unity — the emitter's own gain
+            // spatializes; a voice gain here would double-scale.
+            SubmitTrigger(patchId: patchId, seed: (Fnv64(text: plan.Key) ^ signature), gainQ16: 65536, emitterId: plan.Id);
         }
 
         m_plan.Add(item: plan);
+    }
+
+    /// <summary>Submits one seeded synth trigger request — THE one trigger-production seam: stamps the
+    /// strictly-increasing sequence and rides the pending ring onto the next published snapshots. Emitter-arrival
+    /// policy is just this seam's first caller; AP4's cue producers (world-event cues, footstep derivation, screen
+    /// lifecycle) feed the same sequence-stamped path.</summary>
+    /// <param name="patchId">The registered patch the voice plays.</param>
+    /// <param name="seed">The noise seed — the same seed reproduces the voice bit for bit.</param>
+    /// <param name="gainQ16">The voice gain, Q16 (65536 = unity).</param>
+    /// <param name="emitterId">The emitter the voice spatializes through.</param>
+    public void SubmitTrigger(string patchId, ulong seed, int gainQ16, int emitterId) {
+        m_pendingTriggers.Add(item: new PendingTrigger {
+            Trigger = new WorldSynthTrigger(
+                Sequence: ++m_nextTriggerSequence,
+                PatchId: patchId,
+                Seed: seed,
+                GainQ16: gainQ16,
+                EmitterId: emitterId
+            ),
+            RemainingPublishes = TriggerPublishRetention,
+        });
     }
 
     // Drop registry rows whose key left the derived plan, so a re-authored row later re-enters from silence with a
